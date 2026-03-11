@@ -1,0 +1,29 @@
+{
+  "id": "com.nuvio.lg",
+  "version": "1.0.8",
+  "requiredVersion": "5.0.0",
+  "vendor": "Nuvio",
+  "type": "web",
+  "main": "index.html",
+  "title": "Nuvio TV",
+  "description": "Nuvio TV for LG webOS devices.",
+  "keywords": [
+    "streaming",
+    "video",
+    "media",
+    "tv"
+  ],
+  "category": "entertainment",
+  "icon": "assets/images/icon.png",
+  "largeIcon": "assets/images/largeIcon.png",
+  "bgColor": "#0e0f12",
+  "splashBackground": "assets/images/splash.png",
+  "handlesRelaunch": true,
+  "resolution": "1920x1080",
+  "transparent": false,
+  "requiredPermissions": [
+    "media.operation",
+    "media.query",
+    "internet"
+  ]
+}
