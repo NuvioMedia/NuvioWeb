@@ -2,7 +2,21 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
-import { Environment } from "../../../platform/environment.js";
+import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { Platform } from "../../../platform/index.js";
+import {
+  activateLegacySidebarAction,
+  bindRootSidebarEvents,
+  focusWithoutAutoScroll,
+  getRootSidebarNodes,
+  getRootSidebarSelectedNode,
+  getSidebarProfileState,
+  isSelectedSidebarAction,
+  isRootSidebarNode,
+  renderRootSidebar,
+  setModernSidebarPillIconOnly,
+  setLegacySidebarExpanded
+} from "../../components/sidebarNavigation.js";
 
 function toTitleCase(value) {
   const raw = String(value || "").trim();
@@ -17,21 +31,6 @@ function formatAddonTypeLabel(value) {
   if (type === "series") return "Series";
   if (type === "movie") return "Movie";
   return toTitleCase(type);
-}
-
-function navIcon(action) {
-  const map = {
-    gotoHome: "assets/icons/sidebar_home.svg",
-    gotoSearch: "assets/icons/sidebar_search.svg",
-    gotoLibrary: "assets/icons/sidebar_library.svg",
-    gotoPlugin: "assets/icons/sidebar_plugin.svg",
-    gotoSettings: "assets/icons/sidebar_settings.svg"
-  };
-  return map[action] || map.gotoSearch;
-}
-
-function isBackEvent(event) {
-  return Environment.isBackEvent(event);
 }
 
 function isKey(event, code, aliases = []) {
@@ -66,6 +65,10 @@ export const DiscoverScreen = {
   async mount() {
     this.container = document.getElementById("discover");
     ScreenUtils.show(this.container);
+    this.sidebarProfile = await getSidebarProfileState();
+    this.layoutPrefs = LayoutPreferences.get();
+    this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
+    this.focusZone = this.focusZone || "content";
     this.loadToken = (this.loadToken || 0) + 1;
 
     this.typeOptions = [];
@@ -272,7 +275,11 @@ export const DiscoverScreen = {
     if (!target) return;
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
-    target.focus();
+    this.focusZone = "content";
+    focusWithoutAutoScroll(target);
+    if (!this.layoutPrefs?.modernSidebar) {
+      setLegacySidebarExpanded(this.container, false);
+    }
     this.lastFocusedAction = action;
   },
 
@@ -303,7 +310,11 @@ export const DiscoverScreen = {
     if (!target) return false;
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
-    target.focus();
+    this.focusZone = "content";
+    focusWithoutAutoScroll(target);
+    if (!this.layoutPrefs?.modernSidebar) {
+      setLegacySidebarExpanded(this.container, false);
+    }
     this.lastFocusedAction = String(target.dataset.action || "discoverFilterType");
     return true;
   },
@@ -323,9 +334,71 @@ export const DiscoverScreen = {
     }
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     firstCard.classList.add("focused");
-    firstCard.focus();
+    this.focusZone = "content";
+    focusWithoutAutoScroll(firstCard);
+    if (!this.layoutPrefs?.modernSidebar) {
+      setLegacySidebarExpanded(this.container, false);
+    }
     this.lastFocusedAction = String(firstCard.dataset.action || "openDetail");
     return true;
+  },
+
+  focusSidebarNode() {
+    const target = getRootSidebarSelectedNode(this.container, this.layoutPrefs)
+      || getRootSidebarNodes(this.container, this.layoutPrefs)[0]
+      || null;
+    if (!target) {
+      return false;
+    }
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    this.focusZone = "sidebar";
+    focusWithoutAutoScroll(target);
+    if (!this.layoutPrefs?.modernSidebar) {
+      setLegacySidebarExpanded(this.container, true);
+    }
+    return true;
+  },
+
+  async openSidebar() {
+    this.focusZone = "sidebar";
+    if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
+      this.sidebarExpanded = true;
+      await this.render();
+      return true;
+    }
+    return this.focusSidebarNode();
+  },
+
+  restoreContentFocus() {
+    const selector = this.lastFocusedAction
+      ? `.focusable[data-action="${this.lastFocusedAction}"]`
+      : ".discover-filter.focusable";
+    const target = this.container?.querySelector(selector)
+      || this.container?.querySelector(".discover-filter.focusable")
+      || this.container?.querySelector(".discover-card.focusable")
+      || null;
+    if (!target) {
+      return false;
+    }
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    this.focusZone = "content";
+    focusWithoutAutoScroll(target);
+    if (!this.layoutPrefs?.modernSidebar) {
+      setLegacySidebarExpanded(this.container, false);
+    }
+    return true;
+  },
+
+  async closeSidebarToContent() {
+    this.focusZone = "content";
+    if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
+      this.sidebarExpanded = false;
+      await this.render();
+      return true;
+    }
+    return this.restoreContentFocus();
   },
 
   getKindFromFilterAction(action) {
@@ -369,6 +442,8 @@ export const DiscoverScreen = {
   },
 
   render() {
+    this.layoutPrefs = LayoutPreferences.get();
+    this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     const currentFocused = this.container?.querySelector(".focusable.focused");
     if (currentFocused?.dataset?.action) {
       this.lastFocusedAction = String(currentFocused.dataset.action);
@@ -395,13 +470,13 @@ export const DiscoverScreen = {
 
     this.container.innerHTML = `
       <div class="discover-shell">
-        <aside class="search-sidebar">
-          <button class="search-nav-item focusable" data-action="gotoHome"><img src="${navIcon("gotoHome")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable active" data-action="gotoSearch"><img src="${navIcon("gotoSearch")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoLibrary"><img src="${navIcon("gotoLibrary")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoPlugin"><img src="${navIcon("gotoPlugin")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoSettings"><img src="${navIcon("gotoSettings")}" alt="" aria-hidden="true" /></button>
-        </aside>
+        ${renderRootSidebar({
+          selectedRoute: "search",
+          profile: this.sidebarProfile,
+          layout: this.layoutPrefs,
+          expanded: Boolean(this.sidebarExpanded),
+          pillIconOnly: Boolean(this.pillIconOnly)
+        })}
         <main class="discover-main">
           <h1 class="discover-title">Discover</h1>
           <section class="discover-filters">
@@ -418,11 +493,17 @@ export const DiscoverScreen = {
     `;
 
     ScreenUtils.indexFocusables(this.container);
+    bindRootSidebarEvents(this.container, {
+      currentRoute: "search",
+      onSelectedAction: () => this.closeSidebarToContent(),
+      onExpandSidebar: () => this.openSidebar()
+    });
     this.bindPointerEvents();
-    const selector = this.lastFocusedAction
-      ? `.focusable[data-action="${this.lastFocusedAction}"]`
-      : ".discover-filter.focusable";
-    ScreenUtils.setInitialFocus(this.container, selector);
+    if (this.focusZone === "sidebar") {
+      this.focusSidebarNode();
+    } else {
+      this.restoreContentFocus();
+    }
   },
 
   bindPointerEvents() {
@@ -462,14 +543,59 @@ export const DiscoverScreen = {
   },
 
   async onKeyDown(event) {
-    if (isBackEvent(event)) {
+    if (Platform.isBackEvent(event)) {
       event?.preventDefault?.();
       if (this.openPicker) {
         this.closePickerMenu();
         return;
       }
-      Router.back();
+      if (this.focusZone === "sidebar") {
+        Platform.exitApp();
+      } else {
+        await this.openSidebar();
+      }
       return;
+    }
+
+    const current = this.container.querySelector(".focusable.focused");
+    const code = Number(event?.keyCode || 0);
+    if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
+      if (code === 40) {
+        this.pillIconOnly = true;
+        setModernSidebarPillIconOnly(this.container, true);
+      } else if (code === 38) {
+        this.pillIconOnly = false;
+        setModernSidebarPillIconOnly(this.container, false);
+      }
+    }
+    if (this.focusZone === "sidebar") {
+      if (isUpKey(event) || isDownKey(event) || isRightKey(event)) {
+        event?.preventDefault?.();
+      }
+      if (isUpKey(event) || isDownKey(event)) {
+        const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+        const focusedIndex = Math.max(0, nodes.indexOf(current));
+        const nextIndex = Math.max(0, Math.min(nodes.length - 1, focusedIndex + (isUpKey(event) ? -1 : 1)));
+        const nextNode = nodes[nextIndex] || null;
+        if (nextNode) {
+          this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+          nextNode.classList.add("focused");
+          focusWithoutAutoScroll(nextNode);
+        }
+        return;
+      }
+      if (isRightKey(event)) {
+        await this.closeSidebarToContent();
+        return;
+      }
+      if (isEnterKey(event) && current && isRootSidebarNode(current)) {
+        event?.preventDefault?.();
+        activateLegacySidebarAction(String(current.dataset.action || ""), "search");
+        if (isSelectedSidebarAction(String(current.dataset.action || ""), "search")) {
+          await this.closeSidebarToContent();
+        }
+        return;
+      }
     }
 
     if (isUpKey(event) || isDownKey(event) || isLeftKey(event) || isRightKey(event)) {
@@ -506,16 +632,14 @@ export const DiscoverScreen = {
       return;
     }
 
-    const current = this.container.querySelector(".focusable.focused");
     const currentAction = String(current?.dataset?.action || "");
     const focusedFilterKind = this.getKindFromFilterAction(currentAction);
 
     if (focusedFilterKind) {
       if (isLeftKey(event)) {
         if (currentAction === "discoverFilterType") {
-          if (ScreenUtils.handleDpadNavigation(event, this.container)) {
-            return;
-          }
+          await this.openSidebar();
+          return;
         }
         this.moveFilterFocus(-1);
         return;
@@ -562,11 +686,13 @@ export const DiscoverScreen = {
     const action = String(current.dataset.action || "");
     this.lastFocusedAction = action;
 
-    if (action === "gotoHome") Router.navigate("home");
-    if (action === "gotoSearch") Router.navigate("search");
-    if (action === "gotoLibrary") Router.navigate("library");
-    if (action === "gotoPlugin") Router.navigate("plugin");
-    if (action === "gotoSettings") Router.navigate("settings");
+    if (isRootSidebarNode(current)) {
+      activateLegacySidebarAction(action, "search");
+      if (isSelectedSidebarAction(action, "search")) {
+        await this.closeSidebarToContent();
+      }
+      return;
+    }
     if (action === "discoverFilterType") this.openPickerMenu("type");
     if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
     if (action === "discoverFilterGenre") this.openPickerMenu("genre");

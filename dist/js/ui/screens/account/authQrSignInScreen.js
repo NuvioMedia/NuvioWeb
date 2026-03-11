@@ -2,15 +2,19 @@ import { Router } from "../../navigation/router.js";
 import { QrLoginService } from "../../../core/auth/qrLoginService.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { ScreenUtils } from "../../navigation/screen.js";
+import { AuthManager } from "../../../core/auth/authManager.js";
 
 let pollInterval = null;
 let countdownInterval = null;
+let activeQrSessionId = 0;
 
 export const AuthQrSignInScreen = {
 
   async mount({ onboardingMode = false } = {}) {
     this.container = document.getElementById("account");
     this.onboardingMode = Boolean(onboardingMode);
+    this.isSignedIn = AuthManager.isAuthenticated;
+    this.hasBackDestination = Router.stack.length > 0;
     ScreenUtils.show(this.container);
 
     this.container.innerHTML = `
@@ -22,9 +26,7 @@ export const AuthQrSignInScreen = {
 
           <div class="qr-copy-block">
             <h1 class="qr-title">Sign In With QR</h1>
-            <p class="qr-description">
-              Use your phone to sign in with email/password. TV stays QR-only for faster login.
-            </p>
+            <p id="qr-description" class="qr-description">${this.getLeftDescription()}</p>
           </div>
         </section>
 
@@ -32,17 +34,15 @@ export const AuthQrSignInScreen = {
           <div class="qr-card">
             <header class="qr-card-header">
               <h2 class="qr-card-title">Account Login</h2>
-              <p class="qr-card-subtitle">Scan QR, approve in browser, then return here.</p>
+              <p id="qr-card-subtitle" class="qr-card-subtitle">${this.getCardSubtitle()}</p>
             </header>
 
             <div id="qr-container" class="qr-code-frame"></div>
             <div id="qr-code-text" class="qr-code-text"></div>
             <div id="qr-status" class="qr-status">Waiting for approval on your phone...</div>
-            <div id="qr-expiry" class="qr-expiry"></div>
-
             <div class="qr-actions">
               <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">Refresh QR</button>
-              <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.onboardingMode ? "Continue without account" : "Back"}</button>
+              <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
             </div>
           </div>
         </section>
@@ -52,10 +52,10 @@ export const AuthQrSignInScreen = {
     document.getElementById("qr-refresh-btn").onclick = () => this.startQr();
     document.getElementById("qr-back-btn").onclick = () => {
       this.cleanup();
-      if (this.onboardingMode) {
-        Router.navigate("home");
-      } else {
+      if (this.hasBackDestination) {
         Router.back();
+      } else {
+        Router.navigate("home");
       }
     };
 
@@ -66,9 +66,14 @@ export const AuthQrSignInScreen = {
 
   async startQr() {
     this.stopIntervals();
-    this.setStatus("Waiting for approval on your phone...");
+    const sessionId = activeQrSessionId + 1;
+    activeQrSessionId = sessionId;
+    this.setStatus("Preparing QR login...");
 
     const result = await QrLoginService.start();
+    if (sessionId !== activeQrSessionId) {
+      return;
+    }
 
     if (!result) {
       const raw = QrLoginService.getLastError();
@@ -77,8 +82,8 @@ export const AuthQrSignInScreen = {
     }
 
     this.renderQr(result);
-    this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3);
-    this.startCountdown(result.expiresAt);
+    this.setStatus("Scan QR and sign in on your phone");
+    this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
   },
 
   renderQr({ qrImageUrl, code }) {
@@ -97,34 +102,27 @@ export const AuthQrSignInScreen = {
   },
 
   startCountdown(expiresAt) {
-    const expiryEl = document.getElementById("qr-expiry");
-    if (!expiryEl) {
-      return;
-    }
-
     const renderRemaining = () => {
       const remaining = expiresAt - Date.now();
       if (remaining <= 0) {
-        expiryEl.innerText = "QR expires in 00:00";
         if (countdownInterval) {
           clearInterval(countdownInterval);
           countdownInterval = null;
         }
         return;
       }
-
-      const minutes = Math.floor(remaining / 60000);
-      const seconds = Math.floor((remaining % 60000) / 1000);
-      expiryEl.innerText = `QR expires in ${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
     };
 
     renderRemaining();
     countdownInterval = setInterval(renderRemaining, 1000);
   },
 
-  startPolling(code, deviceNonce, pollIntervalSeconds = 3) {
+  startPolling(code, deviceNonce, pollIntervalSeconds = 3, sessionId) {
     pollInterval = setInterval(async () => {
       const status = await QrLoginService.poll(code, deviceNonce);
+      if (sessionId !== activeQrSessionId) {
+        return;
+      }
 
       if (status === "approved") {
         this.setStatus("Approved. Finishing login...");
@@ -132,13 +130,21 @@ export const AuthQrSignInScreen = {
         pollInterval = null;
 
         const exchange = await QrLoginService.exchange(code, deviceNonce);
+        if (sessionId !== activeQrSessionId) {
+          return;
+        }
 
         if (exchange) {
           LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
+          this.isSignedIn = true;
           Router.navigate("profileSelection");
         } else {
           this.setStatus(this.toFriendlyQrError(QrLoginService.getLastError()));
         }
+      }
+
+      if (status === "pending") {
+        this.setStatus("Waiting for approval on your phone...");
       }
 
       if (status === "expired") {
@@ -174,6 +180,30 @@ export const AuthQrSignInScreen = {
       return;
     }
     statusNode.innerText = text;
+  },
+
+  getLeftDescription() {
+    if (this.isSignedIn) {
+      return "Account linked on this TV.";
+    }
+    return "Use your phone to sign in with email/password. TV stays QR-only for faster login.";
+  },
+
+  getCardSubtitle() {
+    if (this.isSignedIn) {
+      return "Your synced data";
+    }
+    return "Scan QR, approve in browser, then return here.";
+  },
+
+  getBackButtonLabel() {
+    if (this.hasBackDestination) {
+      return "Back";
+    }
+    if (this.isSignedIn) {
+      return "Continue";
+    }
+    return "Continue without account";
   },
 
   onKeyDown(event) {

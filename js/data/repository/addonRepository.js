@@ -101,6 +101,20 @@ class AddonRepository {
     return true;
   }
 
+  async refreshAddon(url) {
+    const clean = this.canonicalizeUrl(url);
+    if (!clean) {
+      return { status: "error", message: "Invalid addon URL" };
+    }
+
+    this.manifestCache.delete(clean);
+    const result = await this.fetchAddon(clean);
+    if (result.status === "success") {
+      this.notifyAddonsChanged("refresh");
+    }
+    return result;
+  }
+
   async setAddonOrder(urls, options = {}) {
     const silent = Boolean(options?.silent);
     const normalized = (urls || []).map((url) => this.canonicalizeUrl(url)).filter(Boolean);

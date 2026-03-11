@@ -2,7 +2,34 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
-import { Environment } from "../../../platform/environment.js";
+import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { Platform } from "../../../platform/index.js";
+import {
+  activateLegacySidebarAction,
+  bindRootSidebarEvents,
+  focusWithoutAutoScroll,
+  getRootSidebarNodes,
+  getRootSidebarSelectedNode,
+  getSidebarProfileState,
+  isSelectedSidebarAction,
+  isRootSidebarNode,
+  renderRootSidebar,
+  setModernSidebarPillIconOnly,
+  setLegacySidebarExpanded
+} from "../../components/sidebarNavigation.js";
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 function toTitleCase(value) {
   const raw = String(value || "").trim();
@@ -12,6 +39,14 @@ function toTitleCase(value) {
 
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function escapeSelectorValue(value = "") {
+  const raw = String(value ?? "");
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(raw);
+  }
+  return raw.replace(/["\\]/g, "\\$&");
 }
 
 function formatCatalogRowTitle(catalogName, addonName, type) {
@@ -59,15 +94,29 @@ function formatDateLabel(item = {}) {
   return "";
 }
 
-function navIcon(action) {
-  const map = {
-    gotoHome: "assets/icons/sidebar_home.svg",
-    gotoSearch: "assets/icons/sidebar_search.svg",
-    gotoLibrary: "assets/icons/sidebar_library.svg",
-    gotoPlugin: "assets/icons/sidebar_plugin.svg",
-    gotoSettings: "assets/icons/sidebar_settings.svg"
-  };
-  return map[action] || map.gotoSearch;
+function formatReleaseYear(item = {}) {
+  const rawDate = formatDateLabel(item);
+  const matchFromFormatted = rawDate.match(/\b(19|20)\d{2}\b/);
+  if (matchFromFormatted) {
+    return matchFromFormatted[0];
+  }
+
+  const candidates = [
+    item.released,
+    item.releaseDate,
+    item.release_date,
+    item.releaseInfo,
+    item.year
+  ].filter(Boolean);
+
+  for (const value of candidates) {
+    const match = String(value).match(/\b(19|20)\d{2}\b/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return "";
 }
 
 async function withTimeout(promise, ms, fallbackValue) {
@@ -84,25 +133,180 @@ async function withTimeout(promise, ms, fallbackValue) {
   }
 }
 
+function buildRowStateKey(row = {}, rowIndex = 0) {
+  const parts = [
+    row.addonBaseUrl,
+    row.addonId,
+    row.catalogId,
+    row.catalogName,
+    row.type,
+    row.title,
+    rowIndex
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
+  return parts.join("|") || `row:${rowIndex}`;
+}
+
 export const SearchScreen = {
 
-  async mount(params = {}) {
+  getRouteStateKey() {
+    return "route:search";
+  },
+
+  clearRouteStateOnMount(params = {}) {
+    const incomingQuery = String(params.query || "").trim();
+    if (!incomingQuery) {
+      return false;
+    }
+    const previousQuery = String(this.query || "").trim();
+    return Boolean(previousQuery && previousQuery !== incomingQuery);
+  },
+
+  captureRouteState() {
+    this.captureLiveViewState();
+    const content = this.container?.querySelector(".search-content");
+    const rowScrollLeftByKey = {};
+    Array.from(this.container?.querySelectorAll(".search-results-row") || []).forEach((rowNode) => {
+      const rowKey = String(rowNode.dataset.rowKey || "").trim();
+      const track = rowNode.querySelector(".search-results-track");
+      if (rowKey && track) {
+        rowScrollLeftByKey[rowKey] = Number(track.scrollLeft || 0);
+      }
+    });
+    const focused = this.container?.querySelector(".focusable.focused");
+    return {
+      query: String(this.query || ""),
+      mode: String(this.mode || "idle"),
+      rows: Array.isArray(this.rows) ? this.rows.map((row, index) => ({
+        ...row,
+        stateKey: row.stateKey || buildRowStateKey(row, index)
+      })) : [],
+      focusZone: String(this.focusZone || "content"),
+      lastContentFocus: this.lastContentFocus ? { ...this.lastContentFocus } : null,
+      sidebarExpanded: Boolean(this.sidebarExpanded),
+      sidebarFocusIndex: Number.isFinite(this.sidebarFocusIndex) ? this.sidebarFocusIndex : 0,
+      pillIconOnly: Boolean(this.pillIconOnly),
+      contentScrollTop: Number(content?.scrollTop || 0),
+      rowScrollLeftByKey,
+      pendingAutoFocusResults: false,
+      voiceSearchSupported: Boolean(this.voiceSearchSupported),
+      focusedAction: String(focused?.dataset?.action || ""),
+      focusedRowKey: String(focused?.dataset?.rowKey || ""),
+      focusedItemId: String(focused?.dataset?.itemId || ""),
+      focusedNavZone: String(focused?.dataset?.navZone || ""),
+      focusedNavRow: Number(focused?.dataset?.navRow || 0),
+      focusedNavCol: Number(focused?.dataset?.navCol || 0)
+    };
+  },
+
+  hydrateFromRouteState(restoredState = null, params = {}) {
+    const incomingQuery = String(params.query || "").trim();
+    const hasExplicitQuery = Boolean(incomingQuery);
+    const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
+    this.query = hasExplicitQuery ? incomingQuery : String(snapshot?.query || "").trim();
+    this.mode = hasExplicitQuery
+      ? (incomingQuery.length >= 2 ? "search" : "idle")
+      : String(snapshot?.mode || (this.query.length >= 2 ? "search" : "idle"));
+    this.rows = Array.isArray(snapshot?.rows)
+      ? snapshot.rows.map((row, index) => ({
+        ...row,
+        stateKey: row.stateKey || buildRowStateKey(row, index)
+      }))
+      : [];
+    this.focusZone = String(snapshot?.focusZone || this.focusZone || "content");
+    this.lastContentFocus = snapshot?.lastContentFocus ? { ...snapshot.lastContentFocus } : this.lastContentFocus || null;
+    this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && snapshot?.sidebarExpanded);
+    this.sidebarFocusIndex = Number.isFinite(snapshot?.sidebarFocusIndex) ? snapshot.sidebarFocusIndex : 0;
+    this.pillIconOnly = Boolean(snapshot?.pillIconOnly);
+    this.contentScrollTop = Number(snapshot?.contentScrollTop || 0);
+    this.rowScrollLeftByKey = snapshot?.rowScrollLeftByKey && typeof snapshot.rowScrollLeftByKey === "object"
+      ? { ...snapshot.rowScrollLeftByKey }
+      : {};
+    this.pendingAutoFocusResults = false;
+    this.restoredFocusedDescriptor = snapshot ? {
+      action: String(snapshot.focusedAction || ""),
+      rowKey: String(snapshot.focusedRowKey || ""),
+      itemId: String(snapshot.focusedItemId || ""),
+      navZone: String(snapshot.focusedNavZone || ""),
+      navRow: Number(snapshot.focusedNavRow || 0),
+      navCol: Number(snapshot.focusedNavCol || 0)
+    } : null;
+  },
+
+  captureLiveViewState() {
+    const content = this.container?.querySelector(".search-content");
+    if (content) {
+      this.contentScrollTop = Number(content.scrollTop || 0);
+    }
+    const nextRowScroll = {};
+    Array.from(this.container?.querySelectorAll(".search-results-row") || []).forEach((rowNode) => {
+      const rowKey = String(rowNode.dataset.rowKey || "");
+      const track = rowNode.querySelector(".search-results-track");
+      if (rowKey && track) {
+        nextRowScroll[rowKey] = Number(track.scrollLeft || 0);
+      }
+    });
+    if (Object.keys(nextRowScroll).length) {
+      this.rowScrollLeftByKey = {
+        ...(this.rowScrollLeftByKey || {}),
+        ...nextRowScroll
+      };
+    }
+  },
+
+  async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("search");
     ScreenUtils.show(this.container);
-    this.query = String(params.query || "").trim();
-    this.mode = this.query.length >= 2 ? "search" : "idle";
+    this.searchRouteEnterPending = true;
+    this.activationGuardUntil = Date.now() + 220;
+    this.layoutPrefs = LayoutPreferences.get();
+    this.sidebarProfile = await getSidebarProfileState();
+    this.sidebarExpanded = false;
+    this.focusZone = "content";
+    this.sidebarFocusIndex = 0;
     this.rows = [];
+    this.lastContentFocus = null;
+    this.contentScrollTop = 0;
+    this.rowScrollLeftByKey = {};
+    this.restoredFocusedDescriptor = null;
+    this.voiceSearchSupported = typeof window !== "undefined"
+      && (typeof window.SpeechRecognition === "function" || typeof window.webkitSpeechRecognition === "function");
+    this.voiceSearchActive = false;
+    this.voiceRecognition = this.voiceRecognition || null;
+    this.searchToastTimer = null;
+    this.hydrateFromRouteState(navigationContext?.restoredState || null, params);
     this.loadToken = (this.loadToken || 0) + 1;
+    const hasExplicitQuery = Boolean(String(params.query || "").trim());
+    const restoredQuery = String(navigationContext?.restoredState?.query || "").trim();
+    const shouldUseRestoredState = Boolean(
+      navigationContext?.restoredState
+      && (!hasExplicitQuery || restoredQuery === String(params.query || "").trim())
+    );
+    if (shouldUseRestoredState) {
+      this.render();
+      return;
+    }
     this.renderLoading();
     await this.reloadRows();
   },
 
   renderLoading() {
     this.container.innerHTML = `
-      <div class="search-screen-shell">
-        <div class="search-loading">Loading...</div>
+      <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
+        ${renderRootSidebar({
+          selectedRoute: "search",
+          profile: this.sidebarProfile,
+          layout: this.layoutPrefs,
+          expanded: Boolean(this.sidebarExpanded),
+          pillIconOnly: Boolean(this.pillIconOnly)
+        })}
+        <main class="home-main search-content search-loading-shell">
+          <div class="search-loading">Loading...</div>
+        </main>
       </div>
     `;
+    this.searchRouteEnterPending = false;
   },
 
   async reloadRows() {
@@ -220,24 +424,26 @@ export const SearchScreen = {
     if (!Array.isArray(this.rows) || !this.rows.length) {
       if (this.mode === "search") {
         return `
-          <div class="search-empty-state small">
-            <img src="assets/icons/sidebar_search.svg" class="search-empty-icon" alt="" aria-hidden="true" />
+          <div class="search-empty-state search-empty-state-results">
+            <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
             <h2>No Results</h2>
-            <p>Try another keyword.</p>
+            <p>Try searching with different keywords</p>
           </div>
         `;
       }
       return `
         <div class="search-empty-state">
-          <img src="assets/icons/sidebar_search.svg" class="search-empty-icon" alt="" aria-hidden="true" />
+          <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
           <h2>Start Searching</h2>
-          <p>Enter at least 2 characters</p>
+          <p>${this.layoutPrefs?.searchDiscoverEnabled ? "Enter at least 2 characters" : "Discover is disabled. Enter at least 2 characters"}</p>
         </div>
       `;
     }
 
-    return this.rows.map((row, rowIndex) => `
-      <section class="search-results-row">
+    return this.rows.map((row, rowIndex) => {
+      const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
+      return `
+      <section class="search-results-row" data-row-key="${escapeHtml(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
         <div class="search-results-subtitle">${row.subtitle}</div>
         <div class="search-results-track">
@@ -246,49 +452,62 @@ export const SearchScreen = {
                      data-action="openDetail"
                      data-item-id="${item.id || ""}"
                      data-item-type="${item.type || row.type || "movie"}"
-                     data-item-title="${item.name || "Untitled"}">
+                     data-item-title="${item.name || "Untitled"}"
+                     data-row-key="${escapeHtml(rowKey)}">
               <div class="search-result-poster-wrap">
                 ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" />` : `<div class="search-result-poster placeholder"></div>`}
               </div>
               <div class="search-result-name">${item.name || "Untitled"}</div>
-              <div class="search-result-date">${formatDateLabel(item)}</div>
+              <div class="search-result-date">${formatReleaseYear(item)}</div>
             </article>
           `).join("")}
-          <article class="search-result-card search-seeall-card focusable"
-                   data-action="openCatalogSeeAll"
-                   data-addon-base-url="${row.addonBaseUrl || ""}"
-                   data-addon-id="${row.addonId || ""}"
-                   data-addon-name="${row.addonName || ""}"
-                   data-catalog-id="${row.catalogId || ""}"
-                   data-catalog-name="${row.catalogName || ""}"
-                   data-catalog-type="${row.type || "movie"}"
-                   data-row-index="${rowIndex}">
-            <div class="search-seeall-inner">
-              <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
-              <div class="search-seeall-label">See All</div>
-            </div>
-          </article>
+          ${(row.items || []).length >= 15 ? `
+            <article class="search-result-card search-seeall-card focusable"
+                     data-action="openCatalogSeeAll"
+                     data-addon-base-url="${row.addonBaseUrl || ""}"
+                     data-addon-id="${row.addonId || ""}"
+                     data-addon-name="${row.addonName || ""}"
+                     data-catalog-id="${row.catalogId || ""}"
+                     data-catalog-name="${row.catalogName || ""}"
+                     data-catalog-type="${row.type || "movie"}"
+                     data-row-index="${rowIndex}"
+                     data-row-key="${escapeHtml(rowKey)}">
+              <div class="search-seeall-inner">
+                <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
+                <div class="search-seeall-label">See All</div>
+              </div>
+            </article>
+          ` : ""}
         </div>
       </section>
-    `).join("");
+    `;
+    }).join("");
   },
 
   render() {
     const queryText = this.query || "";
     this.container.innerHTML = `
-      <div class="search-screen-shell">
-        <aside class="search-sidebar">
-          <button class="search-nav-item focusable" data-action="gotoHome"><img src="${navIcon("gotoHome")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable active" data-action="gotoSearch"><img src="${navIcon("gotoSearch")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoLibrary"><img src="${navIcon("gotoLibrary")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoPlugin"><img src="${navIcon("gotoPlugin")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoSettings"><img src="${navIcon("gotoSettings")}" alt="" aria-hidden="true" /></button>
-        </aside>
-
-        <main class="search-content">
-          <section class="search-header">
-            <button class="search-discover-btn focusable" data-action="openDiscover">
-              <img src="assets/icons/discover_compass.svg" alt="" aria-hidden="true" />
+      <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
+        ${renderRootSidebar({
+          selectedRoute: "search",
+          profile: this.sidebarProfile,
+          layout: this.layoutPrefs,
+          expanded: Boolean(this.sidebarExpanded),
+          pillIconOnly: Boolean(this.pillIconOnly)
+        })}
+        <main class="home-main search-content">
+          <section class="search-header${this.layoutPrefs?.searchDiscoverEnabled ? "" : " no-discover"}">
+            ${this.layoutPrefs?.searchDiscoverEnabled ? `
+              <button class="search-discover-btn focusable" data-action="openDiscover">
+                <span class="search-action-icon material-icons" aria-hidden="true">explore</span>
+              </button>
+            ` : ""}
+            <button
+              class="search-voice-btn focusable${this.voiceSearchActive ? " listening" : ""}"
+              data-action="openVoice"
+              aria-label="Voice search"
+            >
+              <span class="search-action-icon material-icons" aria-hidden="true">mic</span>
             </button>
             <input
               id="searchInput"
@@ -299,36 +518,45 @@ export const SearchScreen = {
               autocapitalize="off"
               spellcheck="false"
               placeholder="Search movies & series"
-              value="${queryText.replace(/"/g, "&quot;")}"
+              value="${escapeHtml(queryText)}"
             />
           </section>
           ${this.renderRows()}
         </main>
       </div>
     `;
+    this.searchRouteEnterPending = false;
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
+    bindRootSidebarEvents(this.container, {
+      currentRoute: "search",
+      onSelectedAction: () => this.closeSidebarToContent(),
+      onExpandSidebar: () => this.openSidebar()
+    });
     this.bindSearchInputEvents();
+    this.bindActionEvents();
     const input = this.container.querySelector("#searchInput");
     input?.blur?.();
-    ScreenUtils.setInitialFocus(this.container, ".search-discover-btn");
+    this.restoreScrollState();
+    const shouldFocusResults = Boolean(this.pendingAutoFocusResults && this.navModel?.rows?.[0]?.[0]);
+    if (this.focusZone === "sidebar") {
+      this.focusSidebarNode();
+    } else {
+      this.restoreContentFocus(shouldFocusResults);
+    }
+    this.pendingAutoFocusResults = false;
   },
 
   buildNavigationModel() {
-    const sidebar = Array.from(this.container?.querySelectorAll(".search-sidebar .focusable") || []);
     const header = [
       this.container?.querySelector(".search-discover-btn.focusable"),
+      this.container?.querySelector(".search-voice-btn.focusable"),
       this.container?.querySelector("#searchInput.focusable")
     ].filter(Boolean);
     const rows = Array.from(this.container?.querySelectorAll(".search-results-row .search-results-track") || [])
       .map((track) => Array.from(track.querySelectorAll(".search-result-card.focusable")))
       .filter((row) => row.length > 0);
-
-    sidebar.forEach((node, index) => {
-      node.dataset.navZone = "sidebar";
-      node.dataset.navIndex = String(index);
-    });
 
     header.forEach((node, index) => {
       node.dataset.navZone = "header";
@@ -336,15 +564,137 @@ export const SearchScreen = {
     });
 
     rows.forEach((rowNodes, rowIndex) => {
+      const rowKey = String(rowNodes[0]?.dataset?.rowKey || "");
       rowNodes.forEach((node, colIndex) => {
         node.dataset.navZone = "results";
         node.dataset.navRow = String(rowIndex);
         node.dataset.navCol = String(colIndex);
+        if (rowKey) {
+          node.dataset.rowKey = rowKey;
+        }
       });
     });
 
-    this.navModel = { sidebar, header, rows };
-    this.lastMainFocus = header[1] || header[0] || rows[0]?.[0] || null;
+    this.navModel = { header, rows };
+    if (!this.lastContentFocus) {
+      const fallback = this.getDefaultHeaderFocusTarget() || rows[0]?.[0] || null;
+      if (fallback) {
+        this.rememberContentFocus(fallback);
+      }
+    }
+  },
+
+  getDefaultHeaderFocusTarget() {
+    return this.container?.querySelector(".search-discover-btn.focusable")
+      || this.container?.querySelector("#searchInput.focusable")
+      || this.container?.querySelector(".search-voice-btn.focusable")
+      || null;
+  },
+
+  restoreScrollState() {
+    const content = this.container?.querySelector(".search-content");
+    if (content) {
+      content.scrollTop = Number(this.contentScrollTop || 0);
+    }
+    Array.from(this.container?.querySelectorAll(".search-results-row") || []).forEach((rowNode) => {
+      const rowKey = String(rowNode.dataset.rowKey || "");
+      const track = rowNode.querySelector(".search-results-track");
+      if (rowKey && track) {
+        track.scrollLeft = Number(this.rowScrollLeftByKey?.[rowKey] || 0);
+      }
+    });
+  },
+
+  rememberContentFocus(node) {
+    if (!node) {
+      return;
+    }
+    this.lastContentFocus = {
+      zone: String(node.dataset.navZone || ""),
+      row: Number(node.dataset.navRow || 0),
+      col: Number(node.dataset.navCol || 0),
+      action: String(node.dataset.action || "")
+    };
+  },
+
+  focusSidebarNode(preferredNode = null) {
+    const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+    const target = preferredNode
+      || getRootSidebarSelectedNode(this.container, this.layoutPrefs)
+      || nodes[0]
+      || null;
+    if (!target) {
+      return false;
+    }
+    this.sidebarFocusIndex = Math.max(0, nodes.indexOf(target));
+    this.focusNode(this.container?.querySelector(".focusable.focused") || null, target);
+    return true;
+  },
+
+  async openSidebar() {
+    this.captureLiveViewState();
+    const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+    const selected = getRootSidebarSelectedNode(this.container, this.layoutPrefs);
+    this.focusZone = "sidebar";
+    if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
+      this.sidebarExpanded = true;
+      this.render();
+      return true;
+    }
+    return this.focusSidebarNode(selected || nodes[0] || null);
+  },
+
+  async closeSidebarToContent() {
+    this.captureLiveViewState();
+    this.focusZone = "content";
+    if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
+      this.sidebarExpanded = false;
+      this.render();
+      return true;
+    }
+    return this.restoreContentFocus(false);
+  },
+
+  restoreContentFocus(preferResults = false) {
+    let target = null;
+    if (preferResults) {
+      target = this.container?.querySelector(".search-results-row .search-result-card.focusable") || null;
+    }
+    if (!target && !preferResults && this.mode !== "search") {
+      target = this.getDefaultHeaderFocusTarget();
+    }
+    if (!target && this.restoredFocusedDescriptor?.rowKey && this.restoredFocusedDescriptor?.itemId) {
+      target = this.container?.querySelector(
+        `.search-result-card.focusable[data-row-key="${escapeSelectorValue(this.restoredFocusedDescriptor.rowKey)}"][data-item-id="${escapeSelectorValue(this.restoredFocusedDescriptor.itemId)}"]`
+      ) || null;
+    }
+    if (!target && this.restoredFocusedDescriptor?.rowKey && this.restoredFocusedDescriptor?.action === "openCatalogSeeAll") {
+      target = this.container?.querySelector(
+        `.search-result-card.focusable.search-seeall-card[data-row-key="${escapeSelectorValue(this.restoredFocusedDescriptor.rowKey)}"]`
+      ) || null;
+    }
+    if (!target && this.lastContentFocus) {
+      if (this.lastContentFocus.zone === "results") {
+        target = this.container?.querySelector(
+          `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
+        ) || null;
+      } else if (this.lastContentFocus.zone === "header") {
+        target = this.container?.querySelector(
+          `.focusable[data-nav-zone="header"][data-nav-col="${this.lastContentFocus.col}"]`
+        ) || null;
+      }
+    }
+    if (!target) {
+      target = this.getDefaultHeaderFocusTarget()
+        || this.container?.querySelector(".search-result-card.focusable")
+        || null;
+    }
+    if (!target) {
+      return false;
+    }
+    this.focusNode(this.container?.querySelector(".focusable.focused") || null, target);
+    this.restoredFocusedDescriptor = null;
+    return true;
   },
 
   focusNode(current, target) {
@@ -356,15 +706,83 @@ export const SearchScreen = {
       if (node !== target) node.classList.remove("focused");
     });
     target.classList.add("focused");
-    target.focus();
+    focusWithoutAutoScroll(target);
     const zone = String(target.dataset.navZone || "");
-    if (zone === "header" || zone === "results") {
-      this.lastMainFocus = target;
+    const currentZone = String(current?.dataset?.navZone || "");
+    const sidebarFocused = isRootSidebarNode(target);
+    this.focusZone = sidebarFocused ? "sidebar" : "content";
+    if (!this.layoutPrefs?.modernSidebar) {
+      setLegacySidebarExpanded(this.container, sidebarFocused);
+    }
+    if (!sidebarFocused) {
+      this.rememberContentFocus(target);
+    }
+    if (zone === "header" && currentZone === "results") {
+      this.ensureHeaderVisible();
     }
     if (zone === "results") {
-      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      const row = target.closest(".search-results-row");
+      row?.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      this.ensureResultCardVisible(current, target);
     }
+    this.captureLiveViewState();
     return true;
+  },
+
+  ensureResultCardVisible(current, target) {
+    const track = target?.closest?.(".search-results-track");
+    if (!track || !target) {
+      return;
+    }
+
+    const targetLeft = Number(target.offsetLeft || 0);
+    const targetRight = targetLeft + Number(target.offsetWidth || 0);
+    const viewLeft = Number(track.scrollLeft || 0);
+    const viewRight = viewLeft + Number(track.clientWidth || 0);
+    const leftPad = 72;
+    const rightPad = 88;
+    const currentRow = Number(current?.dataset?.navRow ?? -1);
+    const targetRow = Number(target?.dataset?.navRow ?? -1);
+    const currentCol = Number(current?.dataset?.navCol ?? -1);
+    const targetCol = Number(target?.dataset?.navCol ?? -1);
+    const sameRow = currentRow >= 0 && currentRow === targetRow;
+
+    if (sameRow && targetCol > currentCol) {
+      if (targetRight > (viewRight - rightPad) || targetLeft < (viewLeft + leftPad)) {
+        track.scrollLeft = Math.max(0, targetLeft - leftPad);
+      }
+      return;
+    }
+
+    if (sameRow && targetCol < currentCol) {
+      if (targetLeft < (viewLeft + leftPad) || targetRight > (viewRight - rightPad)) {
+        track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
+      }
+      return;
+    }
+
+    if (targetRight > (viewRight - rightPad)) {
+      track.scrollLeft = Math.max(0, targetLeft - leftPad);
+      return;
+    }
+    if (targetLeft < (viewLeft + leftPad)) {
+      track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
+    }
+  },
+
+  ensureHeaderVisible() {
+    const content = this.container?.querySelector(".search-content");
+    const header = this.container?.querySelector(".search-header");
+    if (!content || !header) return;
+
+    const contentRect = content.getBoundingClientRect();
+    const headerRect = header.getBoundingClientRect();
+    const topInset = 22;
+    const visibleTop = contentRect.top + topInset;
+
+    if (headerRect.top < visibleTop) {
+      content.scrollTop += headerRect.top - visibleTop;
+    }
   },
 
   handleSearchDpad(event) {
@@ -387,26 +805,11 @@ export const SearchScreen = {
 
     event?.preventDefault?.();
 
-    if (zone === "sidebar") {
-      const sidebarIndex = Number(current.dataset.navIndex || 0);
-      if (direction === "up") {
-        return this.focusNode(current, nav.sidebar?.[Math.max(0, sidebarIndex - 1)] || current) || true;
-      }
-      if (direction === "down") {
-        return this.focusNode(current, nav.sidebar?.[Math.min((nav.sidebar?.length || 1) - 1, sidebarIndex + 1)] || current) || true;
-      }
-      if (direction === "right") {
-        const target = this.lastMainFocus || nav.header?.[1] || nav.header?.[0] || nav.rows?.[0]?.[0] || null;
-        return this.focusNode(current, target) || true;
-      }
-      return true;
-    }
-
     if (zone === "header") {
       const col = Number(current.dataset.navCol || 0);
       if (direction === "left") {
         if (col > 0) return this.focusNode(current, nav.header?.[col - 1] || current) || true;
-        return this.focusNode(current, nav.sidebar?.[1] || nav.sidebar?.[0] || current) || true;
+        return "sidebar";
       }
       if (direction === "right") {
         if (col < (nav.header?.length || 0) - 1) {
@@ -420,7 +823,7 @@ export const SearchScreen = {
         return this.focusNode(current, target) || true;
       }
       if (direction === "up") {
-        return this.focusNode(current, nav.sidebar?.[1] || nav.sidebar?.[0] || current) || true;
+        return true;
       }
       return true;
     }
@@ -434,7 +837,7 @@ export const SearchScreen = {
         if (col > 0) {
           return this.focusNode(current, rowNodes[col - 1] || current) || true;
         }
-        return this.focusNode(current, nav.sidebar?.[1] || nav.sidebar?.[0] || current) || true;
+        return "sidebar";
       }
       if (direction === "right") {
         const target = rowNodes[col + 1] || null;
@@ -473,6 +876,7 @@ export const SearchScreen = {
       if (this.query.length === 0 && this.mode !== "idle") {
         this.mode = "idle";
         this.loadToken = (this.loadToken || 0) + 1;
+        this.captureLiveViewState();
         this.renderLoading();
         this.reloadRows();
       }
@@ -483,10 +887,141 @@ export const SearchScreen = {
       event.preventDefault();
       this.query = String(input.value || "").trim();
       this.mode = this.query.length >= 2 ? "search" : "idle";
+      this.pendingAutoFocusResults = this.mode === "search";
       this.loadToken = (this.loadToken || 0) + 1;
+      this.captureLiveViewState();
       this.renderLoading();
       await this.reloadRows();
     });
+  },
+
+  bindActionEvents() {
+    this.container?.querySelectorAll("[data-action]").forEach((node) => {
+      if (node.__boundActionListeners) return;
+      node.__boundActionListeners = true;
+      if (node.dataset.action === "searchInput") return;
+      node.addEventListener("click", () => {
+        this.activateActionNode(node);
+      });
+    });
+  },
+
+  activateActionNode(node) {
+    if (!node) return;
+    if (Date.now() < Number(this.activationGuardUntil || 0)) return;
+    const action = String(node.dataset.action || "");
+    if (!action) return;
+
+    if (action === "openDetail") this.openDetailFromNode(node);
+    if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(node);
+    if (action === "openDiscover" && this.layoutPrefs?.searchDiscoverEnabled) Router.navigate("discover");
+    if (action === "openVoice") this.handleVoiceSearch();
+  },
+
+  ensureVoiceRecognition() {
+    if (this.voiceRecognition || !this.voiceSearchSupported) {
+      return this.voiceRecognition;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (typeof SpeechRecognition !== "function") {
+      return null;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    recognition.lang = navigator.language || "en-US";
+
+    recognition.onresult = async (event) => {
+      const recognized = String(event.results?.[0]?.[0]?.transcript || "").trim();
+      this.voiceSearchActive = false;
+      this.syncVoiceButtonState();
+      if (!recognized) {
+        this.showSearchToast("No speech detected. Try again.");
+        return;
+      }
+      this.query = recognized;
+      this.mode = this.query.length >= 2 ? "search" : "idle";
+      this.pendingAutoFocusResults = this.mode === "search";
+      this.loadToken = (this.loadToken || 0) + 1;
+      this.renderLoading();
+      await this.reloadRows();
+    };
+
+    recognition.onerror = (event) => {
+      this.voiceSearchActive = false;
+      this.syncVoiceButtonState();
+      const errorCode = String(event?.error || "");
+      if (errorCode === "aborted") return;
+      if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+        this.showSearchToast("Microphone permission is required for voice search.");
+        return;
+      }
+      if (errorCode === "no-speech") {
+        this.showSearchToast("No speech detected. Try again.");
+        return;
+      }
+      this.showSearchToast("Voice recognition failed. Try again.");
+    };
+
+    recognition.onend = () => {
+      this.voiceSearchActive = false;
+      this.syncVoiceButtonState();
+    };
+
+    this.voiceRecognition = recognition;
+    return recognition;
+  },
+
+  handleVoiceSearch() {
+    const recognition = this.ensureVoiceRecognition();
+    if (!recognition) {
+      this.showSearchToast("Voice search is unavailable on this device.");
+      return;
+    }
+
+    try {
+      if (this.voiceSearchActive) {
+        recognition.stop();
+        return;
+      }
+      this.voiceSearchActive = true;
+      this.syncVoiceButtonState();
+      recognition.start();
+    } catch (_) {
+      this.voiceSearchActive = false;
+      this.syncVoiceButtonState();
+      this.showSearchToast("Voice search is unavailable on this device.");
+    }
+  },
+
+  syncVoiceButtonState() {
+    const button = this.container?.querySelector(".search-voice-btn");
+    if (!button) return;
+    button.classList.toggle("listening", Boolean(this.voiceSearchActive));
+  },
+
+  showSearchToast(message) {
+    if (!this.container) return;
+    const shell = this.container.querySelector(".search-screen-shell");
+    if (!shell) return;
+    let toast = shell.querySelector(".search-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.className = "search-toast";
+      shell.appendChild(toast);
+    }
+    toast.textContent = String(message || "").trim();
+    toast.classList.add("visible");
+
+    if (this.searchToastTimer) {
+      clearTimeout(this.searchToastTimer);
+    }
+    this.searchToastTimer = setTimeout(() => {
+      toast?.classList.remove("visible");
+    }, 2600);
   },
 
   openDetailFromNode(node) {
@@ -510,13 +1045,63 @@ export const SearchScreen = {
   },
 
   async onKeyDown(event) {
-    if (Environment.isBackEvent(event)) {
-      event?.preventDefault?.();
-      Router.navigate("home");
+    if (Platform.isBackEvent(event)) {
+      event.preventDefault?.();
+      if (this.focusZone === "sidebar") {
+        Platform.exitApp();
+      } else {
+        await this.openSidebar();
+      }
       return;
     }
 
-    if (this.handleSearchDpad(event)) {
+    const code = Number(event?.keyCode || 0);
+    if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
+      if (code === 40) {
+        this.pillIconOnly = true;
+        setModernSidebarPillIconOnly(this.container, true);
+      } else if (code === 38) {
+        this.pillIconOnly = false;
+        setModernSidebarPillIconOnly(this.container, false);
+      }
+    }
+
+    if (this.focusZone === "sidebar") {
+      const current = this.container?.querySelector(".focusable.focused") || null;
+      const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+      if (code === 38 || code === 40 || code === 39) {
+        event.preventDefault?.();
+      }
+      if (code === 38 || code === 40) {
+        const focusedIndex = Math.max(0, nodes.indexOf(current));
+        const nextIndex = clamp(focusedIndex + (code === 38 ? -1 : 1), 0, Math.max(0, nodes.length - 1));
+        const nextNode = nodes[nextIndex] || current;
+        if (nextNode) {
+          this.sidebarFocusIndex = nextIndex;
+          this.focusNode(current, nextNode);
+        }
+        return;
+      }
+      if (code === 39) {
+        await this.closeSidebarToContent();
+        return;
+      }
+      if (code === 13 && current && isRootSidebarNode(current)) {
+        event.preventDefault?.();
+        activateLegacySidebarAction(String(current.dataset.action || ""), "search");
+        if (isSelectedSidebarAction(String(current.dataset.action || ""), "search")) {
+          await this.closeSidebarToContent();
+        }
+        return;
+      }
+    }
+
+    const dpadResult = this.handleSearchDpad(event);
+    if (dpadResult === "sidebar") {
+      await this.openSidebar();
+      return;
+    }
+    if (dpadResult) {
       return;
     }
 
@@ -524,20 +1109,13 @@ export const SearchScreen = {
       return;
     }
 
-    if (event.keyCode !== 13) return;
+    if (code !== 13) return;
     const current = this.container.querySelector(".focusable.focused");
     if (!current) return;
 
     const action = String(current.dataset.action || "");
-    if (action === "gotoHome") Router.navigate("home");
-    if (action === "gotoSearch") return;
-    if (action === "gotoLibrary") Router.navigate("library");
-    if (action === "gotoPlugin") Router.navigate("plugin");
-    if (action === "gotoSettings") Router.navigate("settings");
-    if (action === "openDetail") this.openDetailFromNode(current);
-    if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
-    if (action === "openDiscover") {
-      Router.navigate("discover");
+    if (action === "openDiscover" || action === "openVoice" || action === "openDetail" || action === "openCatalogSeeAll") {
+      this.activateActionNode(current);
     }
     if (action === "searchInput") {
       const input = this.container?.querySelector("#searchInput");
@@ -548,6 +1126,22 @@ export const SearchScreen = {
   },
 
   cleanup() {
+    if (this.searchToastTimer) {
+      clearTimeout(this.searchToastTimer);
+      this.searchToastTimer = null;
+    }
+    if (this.voiceRecognition) {
+      try {
+        this.voiceRecognition.onresult = null;
+        this.voiceRecognition.onerror = null;
+        this.voiceRecognition.onend = null;
+        this.voiceRecognition.stop();
+      } catch (_) {
+        // Ignore stop failures from inactive recognizers.
+      }
+      this.voiceRecognition = null;
+    }
+    this.voiceSearchActive = false;
     ScreenUtils.hide(this.container);
   }
 };

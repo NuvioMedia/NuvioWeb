@@ -36,6 +36,7 @@ function mapProfileRow(row = {}) {
     profileIndex: normalizedIndex,
     name: row.name || `Profile ${normalizedIndex}`,
     avatarColorHex: row.avatar_color_hex || row.avatarColorHex || "#1E88E5",
+    avatarId: row.avatar_id || row.avatarId || null,
     usesPrimaryAddons: typeof row.uses_primary_addons === "boolean"
       ? row.uses_primary_addons
       : Boolean(row.usesPrimaryAddons),
@@ -102,6 +103,7 @@ export const ProfileSyncService = {
               profile_index: Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
               name: profile.name,
               avatar_color_hex: profile.avatarColorHex || "#1E88E5",
+              avatar_id: profile.avatarId || null,
               uses_primary_addons: Boolean(profile.usesPrimaryAddons),
               uses_primary_plugins: Boolean(profile.usesPrimaryPlugins)
             };
@@ -121,6 +123,9 @@ export const ProfileSyncService = {
           profile_index: Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
           name: profile.name,
           avatar_color_hex: profile.avatarColorHex || "#1E88E5",
+          avatar_id: profile.avatarId || null,
+          uses_primary_addons: Boolean(profile.usesPrimaryAddons),
+          uses_primary_plugins: Boolean(profile.usesPrimaryPlugins),
           is_primary: Boolean(profile.isPrimary)
         };
       });
@@ -130,8 +135,9 @@ export const ProfileSyncService = {
         profile_index: row.profile_index,
         name: row.name,
         avatar_color_hex: row.avatar_color_hex,
-        uses_primary_addons: row.profile_index !== 1,
-        uses_primary_plugins: row.profile_index !== 1
+        avatar_id: row.avatar_id || null,
+        uses_primary_addons: Boolean(row.uses_primary_addons),
+        uses_primary_plugins: Boolean(row.uses_primary_plugins)
       }));
       try {
         await SupabaseApi.delete(FALLBACK_TABLE, `user_id=eq.${encodeURIComponent(ownerId)}`, true);

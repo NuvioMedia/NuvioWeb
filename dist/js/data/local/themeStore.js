@@ -6,8 +6,42 @@ const LEGACY_DEFAULT_ACCENT = "#ff3d00";
 
 const DEFAULT_THEME = {
   mode: "dark",
-  accentColor: "#f5f8fc"
+  themeName: "WHITE",
+  accentColor: "#ffffff",
+  fontFamily: "INTER",
+  language: null
 };
+
+const THEME_BY_ACCENT = new Map([
+  ["#ffffff", "WHITE"],
+  ["#f5f5f5", "WHITE"],
+  ["#f5f8fc", "WHITE"],
+  ["#ff4d4f", "CRIMSON"],
+  ["#ff5252", "CRIMSON"],
+  ["#42a5f5", "OCEAN"],
+  ["#ba68c8", "VIOLET"],
+  ["#ab47bc", "VIOLET"],
+  ["#66bb6a", "EMERALD"],
+  ["#ffca28", "AMBER"],
+  ["#ffa726", "AMBER"],
+  ["#ec407a", "ROSE"]
+]);
+
+function normalizeTheme(settings = {}) {
+  const accent = String(settings?.accentColor || DEFAULT_THEME.accentColor).toLowerCase();
+  const themeName = String(
+    settings?.themeName
+    || THEME_BY_ACCENT.get(accent)
+    || DEFAULT_THEME.themeName
+  ).toUpperCase();
+
+  return {
+    ...DEFAULT_THEME,
+    ...settings,
+    themeName,
+    accentColor: accent
+  };
+}
 
 export const ThemeStore = {
 
@@ -20,19 +54,13 @@ export const ThemeStore = {
       const migrated = { ...stored, accentColor: DEFAULT_THEME.accentColor };
       LocalStore.set(KEY, migrated);
       LocalStore.set(ACCENT_MIGRATION_FLAG_KEY, true);
-      return {
-        ...DEFAULT_THEME,
-        ...migrated
-      };
+      return normalizeTheme(migrated);
     }
-    return {
-      ...DEFAULT_THEME,
-      ...stored
-    };
+    return normalizeTheme(stored);
   },
 
   set(partial) {
-    LocalStore.set(KEY, { ...this.get(), ...(partial || {}) });
+    LocalStore.set(KEY, normalizeTheme({ ...this.get(), ...(partial || {}) }));
   }
 
 };

@@ -1,13 +1,13 @@
 <div align="center">
 
-  <img src="https://github.com/tapframe/NuvioTV/raw/dev/assets/brand/app_logo_wordmark.png" alt="NuvioTV webOS" width="300" />
+  <img src="https://github.com/tapframe/NuvioTV/raw/dev/assets/brand/app_logo_wordmark.png" alt="NuvioTV Web" width="300" />
   <br />
   <br />
 
   <p>
-    A modern <b>LG webOS</b> media player powered by the Stremio addon ecosystem.
+    A modern <b>web version</b> of Nuvio TV powered by the Stremio addon ecosystem.
     <br />
-    Stremio Addon ecosystem • webOS optimized • Playback-focused experience
+    Shared web app • TV wrapper ready • Playback-focused experience
   </p>
 
   <p>
@@ -18,111 +18,201 @@
 
 ## About
 
-**NuvioTV webOS** is an experimental LG webOS TV client focused on playback and TV-first navigation.
+**NuvioTV Web** is the shared web app source for the Nuvio TV experience. It runs in a browser and can also be packaged inside TV wrapper projects such as **LG webOS** and **Samsung Tizen**.
 
 It acts as a client-side interface that can integrate with the **Stremio addon ecosystem** for content discovery and source resolution through user-installed extensions.
 
-> This repository is a **separate webOS-focused codebase** (HTML/CSS/JS) and is **not** the Android TV app.
+> This repository is the shared web codebase, not the wrapper project itself.
 
-## Upstream / Credits (Thank you tapframe)
+## Origins / Credits
 
-This project is a webOS port / re-implementation inspired by the original Android TV project:
+This project is part of the Nuvio TV ecosystem and has two important roots:
 
-- **tapframe/NuvioTV** (Official Android TV Repository)  
-  https://github.com/tapframe/NuvioTV :contentReference[oaicite:1]{index=1}
+- **tapframe/NuvioTV**  
+  The original Android TV project that inspired the TV-first product direction.  
+  https://github.com/tapframe/NuvioTV
 
-All credits for the original Android TV implementation go to **tapframe** and contributors.  
-This webOS version is **not affiliated** with tapframe and is provided as an independent community effort.
+- **WhiteGiso/NuvioTV-WebOS**  
+  The community webOS codebase that served as the starting inspiration/base for this shared web version.
+  https://github.com/WhiteGiso/NuvioTV-WebOS
 
-## Installation (LG webOS)
+This repository expands on that foundation into a shared web app that can be reused across platforms.
 
-⚠️ **Status: Beta**  
-This project is currently in early beta. Builds may be unstable or incomplete.
+## Repository Structure
 
-### Download
+- `js/` app logic, platform adapters, player code
+- `css/` shared styling
+- `assets/` icons, branding, bundled libs
+- `scripts/` build and sync tooling
+- `dist/` generated build output
 
-Precompiled `.ipk` packages will be available in the **Releases** section of this repository:
-
-👉 https://github.com/WhiteGiso/NuvioTV-WebOS/releases
-
-Download the latest `.ipk` file compatible with your webOS TV.
-
----
-
-### Installing on LG webOS TV (Developer Mode)
-
-To install the application on your LG TV, you must enable **Developer Mode**.
-
-#### 1️⃣ Install the Developer Mode App
-
-On your LG TV:
-
-1. Open the **LG Content Store**
-2. Search for **"Developer Mode"**
-3. Install the official *Developer Mode* app by LG
-4. Launch it and log in with your LG developer account  
-   (You can create one at https://webostv.developer.lge.com/)
-
-#### 2️⃣ Enable Developer Mode
-
-Inside the Developer Mode app:
-
-- Enable **Developer Mode**
-- Enable **Key Server**
-- Note your TV's **IP Address**
-- Restart the TV when prompted
-
----
-
-#### 3️⃣ Install the IPK Package
-
-Using your computer:
-
-1. Install the **webOS TV CLI** from LG
-2. Connect your TV:
-   ```bash
-   ares-setup-device
-3. Install the app:
-   ```bash
-   ares-install NuvioTV_webOS.ipk
-
-Typical webOS development workflow uses `appinfo.json` in the app root. :contentReference[oaicite:2]{index=2}
-
-## Development (LG webOS)
+## Development
 
 ### Prerequisites
-- webOS TV CLI / SDK
-- A webOS TV device in Developer Mode (or emulator)
 
-### Run locally
-- Is needed `index.html` with a local web server and test in browser first
-- Then package and install to webOS TV (documentation links in `/docs` or README updates)
+- Node.js
+- Python 3 for a simple local static server
+- webOS CLI if you want to package/test on LG
+- Tizen Studio if you want to package/test on Samsung
+
+### Run the Web App Locally
+
+```bash
+npm install
+npm run build
+python3 -m http.server 8080 -d dist
+```
+
+Open `http://127.0.0.1:8080`.
+
+## Creating a webOS Wrapper Project
+
+Create a separate webOS project folder with at least:
+
+```text
+YourWebOSProject/
+  appinfo.json
+  index.html
+  main.js
+```
+
+Recommended files:
+
+- `appinfo.json`: webOS app metadata
+- `index.html`: loads the shared app assets
+- `main.js`: optional webOS bootstrap logic
+
+For full webOS platform support, also include LG platform scripts in the wrapper project, especially if you want app exit handling or AVPlay integration.
+
+Minimal packaged `index.html` example:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Nuvio TV</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/themes.css" />
+</head>
+<body>
+  <script>window.__NUVIO_PLATFORM__ = "webos";</script>
+  <script src="js/runtime/env.js"></script>
+  <script src="webOSTVjs-1.2.12/webOSTV.js"></script>
+  <script defer src="app.bundle.js"></script>
+</body>
+</html>
+```
+
+After that, sync the shared web build into the wrapper:
+
+```bash
+npm run build
+npm run sync -- --webos --path /absolute/path/to/YourWebOSProject
+```
+
+Then package/install that wrapper with your normal webOS CLI workflow.
+
+## Creating a Tizen Wrapper Project
+
+Create a separate Tizen project folder with at least:
+
+```text
+YourTizenProject/
+  config.xml
+  index.html
+  main.js
+```
+
+Recommended files:
+
+- `config.xml`: Tizen app manifest
+- `index.html`: loads wrapper bootstrap and shared assets
+- `main.js`: registers TV keys and loads the bundled app
+
+Minimal `index.html` example:
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Nuvio TV Tizen</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/themes.css" />
+</head>
+<body>
+  <script src="js/runtime/env.js"></script>
+  <script defer src="main.js"></script>
+</body>
+</html>
+```
+
+Minimal `main.js` example:
+
+```js
+window.__NUVIO_PLATFORM__ = "tizen";
+
+var tvInput = window.tizen && window.tizen.tvinputdevice;
+if (tvInput && typeof tvInput.registerKey === "function") {
+  ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"]
+    .forEach(function registerKey(keyName) {
+      try {
+        tvInput.registerKey(keyName);
+      } catch (_) {}
+    });
+}
+
+var script = document.createElement("script");
+script.src = "./app.bundle.js";
+script.defer = true;
+document.body.appendChild(script);
+```
+
+Then sync the shared web build into the wrapper:
+
+```bash
+npm run build
+npm run sync -- --tizen --path /absolute/path/to/YourTizenProject
+```
+
+Then package/install that wrapper with Tizen Studio or your normal Samsung TV workflow.
+
+## Sync Command
+
+The universal sync command copies the built web app into a wrapper project:
+
+```bash
+npm run sync -- --webos --path /absolute/path/to/project
+npm run sync -- --tizen --path /absolute/path/to/project
+```
+
+It syncs:
+
+- `assets/`
+- `css/`
+- `js/`
+- `app.bundle.js`
+
+## Hosted vs Packaged
+
+- This repo can be hosted as a normal website.
+- TV wrappers can either package the synced build locally or redirect to a hosted URL.
+- The sync command is for packaged-wrapper workflows.
 
 ## Legal & Disclaimer
 
-This project functions solely as a client-side interface for browsing metadata and playing media provided by user-installed extensions and/or user-provided sources.  
+This project functions solely as a client-side interface for browsing metadata and playing media provided by user-installed extensions and/or user-provided sources.
+
 It is intended for content the user owns or is otherwise authorized to access.
 
 This project is not affiliated with third-party extensions or content providers and does not host, store, or distribute any media content.
 
-(For the upstream Android TV project legal page, see tapframe/NuvioTV.) :contentReference[oaicite:3]{index=3}
-
 ## License
 
-- Upstream Android TV project: see **tapframe/NuvioTV** repository license. :contentReference[oaicite:4]{index=4}
-- This webOS repository: **(choose and state your license here)**  
-  - If you include upstream code/assets: keep GPL-3.0 compatibility.
-  - If it’s a clean-room re-implementation: you may choose another license, while still keeping proper attribution.
-
-<!-- MARKDOWN LINKS & IMAGES -->
-<!-- TODO: replace YOUR_GITHUB_USER and YOUR_REPO with your actual repo -->
-[contributors-shield]: https://img.shields.io/github/contributors/YOUR_GITHUB_USER/YOUR_REPO.svg?style=for-the-badge
-[contributors-url]: https://github.com/YOUR_GITHUB_USER/YOUR_REPO/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/YOUR_GITHUB_USER/YOUR_REPO.svg?style=for-the-badge
-[forks-url]: https://github.com/YOUR_GITHUB_USER/YOUR_REPO/network/members
-[stars-shield]: https://img.shields.io/github/stars/YOUR_GITHUB_USER/YOUR_REPO.svg?style=for-the-badge
-[stars-url]: https://github.com/YOUR_GITHUB_USER/YOUR_REPO/stargazers
-[issues-shield]: https://img.shields.io/github/issues/YOUR_GITHUB_USER/YOUR_REPO.svg?style=for-the-badge
-[issues-url]: https://github.com/YOUR_GITHUB_USER/YOUR_REPO/issues
-[license-shield]: https://img.shields.io/github/license/YOUR_GITHUB_USER/YOUR_REPO.svg?style=for-the-badge
-[license-url]: ./LICENSE
+- Upstream Android TV project: see **tapframe/NuvioTV**
+- Shared web / wrapper ecosystem: choose and document the final license for this repository

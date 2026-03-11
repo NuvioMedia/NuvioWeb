@@ -11,9 +11,36 @@ function isJwtLike(token) {
   return value.split(".").length === 3;
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const [, payload] = String(token || "").split(".");
+    if (!payload) {
+      return null;
+    }
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function isJwtExpired(token, leewaySeconds = 30) {
+  if (!isJwtLike(token)) {
+    return true;
+  }
+  const payload = decodeJwtPayload(token);
+  const exp = Number(payload?.exp || 0);
+  if (!Number.isFinite(exp) || exp <= 0) {
+    return false;
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return exp <= (nowSeconds + leewaySeconds);
+}
+
 function getBearerToken() {
   const token = SessionStore.accessToken;
-  if (isJwtLike(token)) {
+  if (isJwtLike(token) && !isJwtExpired(token, 0)) {
     return token;
   }
   return SUPABASE_ANON_KEY;
@@ -126,10 +153,22 @@ async function ensureQrSessionAuthenticated() {
     SessionStore.refreshToken = null;
   }
   if (SessionStore.accessToken && !SessionStore.isAnonymousSession) {
-    return true;
+    if (!isJwtExpired(SessionStore.accessToken)) {
+      return true;
+    }
+    const refreshed = await AuthManager.refreshSessionIfNeeded();
+    if (refreshed && SessionStore.accessToken && !isJwtExpired(SessionStore.accessToken)) {
+      return true;
+    }
+    SessionStore.clear();
   }
   if (SessionStore.accessToken && SessionStore.isAnonymousSession) {
-    return true;
+    if (!isJwtExpired(SessionStore.accessToken)) {
+      return true;
+    }
+    SessionStore.accessToken = null;
+    SessionStore.refreshToken = null;
+    SessionStore.isAnonymousSession = false;
   }
 
   const commonHeaders = {

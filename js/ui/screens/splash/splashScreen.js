@@ -24,14 +24,14 @@ export const SplashScreen = {
     const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
 
     if (!hasSeenQr && authState !== AuthState.AUTHENTICATED) {
-      Router.navigate("authQrSignIn");
+      Router.navigate("authQrSignIn", { onboardingMode: true });
       return;
     }
 
     if (authState === AuthState.AUTHENTICATED) {
       Router.navigate("profileSelection");
     } else {
-      Router.navigate("authQrSignIn");
+      Router.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
     }
   },
 

@@ -415,13 +415,13 @@
       const authState = AuthManager.getAuthState();
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       if (!hasSeenQr && authState !== AuthState.AUTHENTICATED) {
-        Router.navigate("authQrSignIn");
+        Router.navigate("authQrSignIn", { onboardingMode: true });
         return;
       }
       if (authState === AuthState.AUTHENTICATED) {
         Router.navigate("profileSelection");
       } else {
-        Router.navigate("authQrSignIn");
+        Router.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
       }
     },
     cleanup() {
@@ -809,6 +809,18 @@
       this.notifyAddonsChanged("remove");
       return true;
     }
+    async refreshAddon(url) {
+      const clean = this.canonicalizeUrl(url);
+      if (!clean) {
+        return { status: "error", message: "Invalid addon URL" };
+      }
+      this.manifestCache.delete(clean);
+      const result = await this.fetchAddon(clean);
+      if (result.status === "success") {
+        this.notifyAddonsChanged("refresh");
+      }
+      return result;
+    }
     async setAddonOrder(urls, options = {}) {
       const silent = Boolean(options == null ? void 0 : options.silent);
       const normalized = (urls || []).map((url) => this.canonicalizeUrl(url)).filter(Boolean);
@@ -1138,7 +1150,12 @@
     return {
       ...profile,
       id: String(normalizedIndex),
-      profileIndex: normalizedIndex
+      profileIndex: normalizedIndex,
+      avatarColorHex: String((profile == null ? void 0 : profile.avatarColorHex) || "#1E88E5"),
+      avatarId: (profile == null ? void 0 : profile.avatarId) || (profile == null ? void 0 : profile.avatar_id) || null,
+      isPrimary: Boolean((profile == null ? void 0 : profile.isPrimary) || normalizedIndex === 1),
+      usesPrimaryAddons: Boolean(profile == null ? void 0 : profile.usesPrimaryAddons),
+      usesPrimaryPlugins: Boolean(profile == null ? void 0 : profile.usesPrimaryPlugins)
     };
   }
   var ProfileManager = {
@@ -1158,6 +1175,68 @@
     },
     async setActiveProfile(id) {
       LocalStore.set(ACTIVE_PROFILE_ID_KEY, String(id));
+    },
+    async createProfile({
+      name,
+      avatarColorHex = "#1E88E5",
+      avatarId = null,
+      usesPrimaryAddons = false,
+      usesPrimaryPlugins = false
+    } = {}) {
+      const trimmedName = String(name || "").trim();
+      if (!trimmedName) {
+        return false;
+      }
+      const profiles = await this.getProfiles();
+      if (profiles.length >= 4) {
+        return false;
+      }
+      const nextIndex = profiles.reduce((max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)), 0) + 1;
+      const nextProfiles = [
+        ...profiles,
+        normalizeProfile({
+          id: nextIndex,
+          profileIndex: nextIndex,
+          name: trimmedName,
+          avatarColorHex,
+          avatarId,
+          isPrimary: false,
+          usesPrimaryAddons,
+          usesPrimaryPlugins
+        }, profiles.length)
+      ];
+      LocalStore.set(PROFILES_KEY, nextProfiles);
+      return true;
+    },
+    async updateProfile(profile) {
+      const profiles = await this.getProfiles();
+      const nextProfiles = profiles.map((entry, index) => {
+        if (String(entry.id) !== String(profile == null ? void 0 : profile.id)) {
+          return entry;
+        }
+        return normalizeProfile({
+          ...entry,
+          ...profile
+        }, index);
+      });
+      LocalStore.set(PROFILES_KEY, nextProfiles);
+      return true;
+    },
+    async deleteProfile(id) {
+      const normalizedId = String(id || "");
+      if (!normalizedId || normalizedId === "1") {
+        return false;
+      }
+      const profiles = await this.getProfiles();
+      const nextProfiles = profiles.filter((profile) => String(profile.id) !== normalizedId);
+      if (nextProfiles.length === profiles.length) {
+        return false;
+      }
+      LocalStore.set(PROFILES_KEY, nextProfiles);
+      if (this.getActiveProfileId() === normalizedId) {
+        LocalStore.set(ACTIVE_PROFILE_ID_KEY, "1");
+      }
+      return true;
     },
     getActiveProfileId() {
       const raw = LocalStore.get(ACTIVE_PROFILE_ID_KEY, null);
@@ -1210,19 +1289,53 @@
   // js/data/local/layoutPreferences.js
   var KEY = "layoutPreferences";
   var DEFAULTS = {
-    homeLayout: "classic",
+    homeLayout: "modern",
     heroSectionEnabled: true,
-    posterLabelsEnabled: true
+    searchDiscoverEnabled: true,
+    posterLabelsEnabled: true,
+    catalogAddonNameEnabled: true,
+    catalogTypeSuffixEnabled: true,
+    modernLandscapePostersEnabled: false,
+    focusedPosterBackdropExpandEnabled: false,
+    focusedPosterBackdropExpandDelaySeconds: 3,
+    focusedPosterBackdropTrailerEnabled: false,
+    focusedPosterBackdropTrailerMuted: true,
+    focusedPosterBackdropTrailerPlaybackTarget: "hero_media",
+    posterCardWidthDp: 126,
+    posterCardCornerRadiusDp: 12,
+    collapseSidebar: false,
+    modernSidebar: false,
+    modernSidebarBlur: false,
+    hideUnreleasedContent: false
   };
+  function normalizeLayoutPreferences(value = {}) {
+    var _a, _b, _c;
+    const merged = {
+      ...DEFAULTS,
+      ...value || {}
+    };
+    const modernSidebar = Boolean(merged.modernSidebar);
+    return {
+      ...merged,
+      modernLandscapePostersEnabled: Boolean(merged.modernLandscapePostersEnabled),
+      focusedPosterBackdropExpandEnabled: Boolean(merged.focusedPosterBackdropExpandEnabled),
+      focusedPosterBackdropExpandDelaySeconds: Math.max(0, Number((_a = merged.focusedPosterBackdropExpandDelaySeconds) != null ? _a : 3) || 0),
+      focusedPosterBackdropTrailerEnabled: Boolean(merged.focusedPosterBackdropTrailerEnabled),
+      focusedPosterBackdropTrailerMuted: merged.focusedPosterBackdropTrailerMuted !== false,
+      focusedPosterBackdropTrailerPlaybackTarget: String(merged.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase() === "expanded_card" ? "expanded_card" : "hero_media",
+      posterCardWidthDp: Math.max(72, Number((_b = merged.posterCardWidthDp) != null ? _b : 126) || 126),
+      posterCardCornerRadiusDp: Math.max(0, Number((_c = merged.posterCardCornerRadiusDp) != null ? _c : 12) || 12),
+      collapseSidebar: modernSidebar ? false : Boolean(merged.collapseSidebar),
+      modernSidebar,
+      modernSidebarBlur: modernSidebar ? Boolean(merged.modernSidebarBlur) : Boolean(merged.modernSidebarBlur)
+    };
+  }
   var LayoutPreferences = {
     get() {
-      return {
-        ...DEFAULTS,
-        ...LocalStore.get(KEY, {}) || {}
-      };
+      return normalizeLayoutPreferences(LocalStore.get(KEY, {}) || {});
     },
     set(partial) {
-      LocalStore.set(KEY, { ...this.get(), ...partial || {} });
+      LocalStore.set(KEY, normalizeLayoutPreferences({ ...this.get(), ...partial || {} }));
     }
   };
 
@@ -1356,9 +1469,15 @@
     }
     return `${IMAGE_BASE_URL}${path}`;
   }
+  function mapCompanies(items = []) {
+    return (Array.isArray(items) ? items : []).map((company) => ({
+      name: (company == null ? void 0 : company.name) || "",
+      logo: toImageUrl((company == null ? void 0 : company.logo_path) || (company == null ? void 0 : company.logo) || null)
+    })).filter((company) => company.name || company.logo);
+  }
   var TmdbMetadataService = {
     async fetchEnrichment({ tmdbId, contentType, language = null } = {}) {
-      var _a, _b;
+      var _a, _b, _c, _d;
       const settings = TmdbSettingsStore.get();
       const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY2 || "").trim();
       if (!settings.enabled || !apiKey || !tmdbId) {
@@ -1366,7 +1485,7 @@
       }
       const type = resolveType(contentType);
       const lang = language || settings.language || "en-US";
-      const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits&include_image_language=${encodeURIComponent(lang)},null`;
+      const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings&include_image_language=${encodeURIComponent(lang)},null`;
       const url = `${TMDB_BASE_URL2}/${type}/${encodeURIComponent(String(tmdbId))}?${params}`;
       const response = await fetch(url);
       if (!response.ok) {
@@ -1375,10 +1494,11 @@
       const data = await response.json();
       const logoPath = Array.isArray((_a = data == null ? void 0 : data.images) == null ? void 0 : _a.logos) ? (_b = data.images.logos[0]) == null ? void 0 : _b.file_path : null;
       const releaseYear = type === "tv" ? String(data.first_air_date || "").slice(0, 4) : String(data.release_date || "").slice(0, 4);
-      const companies = Array.isArray(data == null ? void 0 : data.production_companies) ? data.production_companies.map((company) => ({
-        name: (company == null ? void 0 : company.name) || "",
-        logo: toImageUrl((company == null ? void 0 : company.logo_path) || null)
-      })).filter((company) => company.name || company.logo) : [];
+      const companies = mapCompanies(data == null ? void 0 : data.production_companies);
+      const networks = mapCompanies(data == null ? void 0 : data.networks);
+      const spokenLanguage = Array.isArray(data == null ? void 0 : data.spoken_languages) ? data.spoken_languages[0] : null;
+      const countryValue = Array.isArray(data == null ? void 0 : data.origin_country) && data.origin_country.length ? data.origin_country.join(", ") : Array.isArray(data == null ? void 0 : data.production_countries) ? data.production_countries.map((item) => (item == null ? void 0 : item.iso_3166_1) || (item == null ? void 0 : item.name) || "").filter(Boolean).join(", ") : "";
+      const runtimeValue = type === "tv" ? Number((Array.isArray(data == null ? void 0 : data.episode_run_time) ? data.episode_run_time[0] : 0) || 0) : Number((data == null ? void 0 : data.runtime) || 0);
       return {
         localizedTitle: data.title || data.name || null,
         description: data.overview || null,
@@ -1388,8 +1508,15 @@
         genres: Array.isArray(data.genres) ? data.genres.map((genre) => genre.name).filter(Boolean) : [],
         rating: typeof data.vote_average === "number" ? data.vote_average : null,
         releaseInfo: releaseYear || null,
+        runtime: Number.isFinite(runtimeValue) && runtimeValue > 0 ? `${runtimeValue} min` : null,
+        country: countryValue || null,
+        language: (spokenLanguage == null ? void 0 : spokenLanguage.iso_639_1) || (spokenLanguage == null ? void 0 : spokenLanguage.english_name) || null,
         credits: data.credits || null,
-        companies
+        companies,
+        productionCompanies: companies,
+        networks,
+        collectionId: ((_c = data == null ? void 0 : data.belongs_to_collection) == null ? void 0 : _c.id) ? String(data.belongs_to_collection.id) : null,
+        collectionName: ((_d = data == null ? void 0 : data.belongs_to_collection) == null ? void 0 : _d.name) || null
       };
     },
     async fetchSeasonRatings({ tmdbId, seasonNumber, language = null } = {}) {
@@ -1410,6 +1537,29 @@
         episode: Number((episode == null ? void 0 : episode.episode_number) || 0),
         rating: typeof (episode == null ? void 0 : episode.vote_average) === "number" ? Number(episode.vote_average.toFixed(1)) : null
       })).filter((item) => item.episode > 0);
+    },
+    async fetchMovieCollection({ collectionId, language = null } = {}) {
+      const settings = TmdbSettingsStore.get();
+      const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY2 || "").trim();
+      if (!settings.enabled || !apiKey || !collectionId) {
+        return [];
+      }
+      const lang = language || settings.language || "en-US";
+      const url = `${TMDB_BASE_URL2}/collection/${encodeURIComponent(String(collectionId))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}`;
+      const response = await fetch(url);
+      if (!response.ok) {
+        return [];
+      }
+      const data = await response.json();
+      return (Array.isArray(data == null ? void 0 : data.parts) ? data.parts : []).map((item) => ({
+        id: (item == null ? void 0 : item.id) ? String(item.id) : "",
+        type: "movie",
+        name: (item == null ? void 0 : item.title) || (item == null ? void 0 : item.name) || "Untitled",
+        poster: toImageUrl((item == null ? void 0 : item.poster_path) || null),
+        background: toImageUrl((item == null ? void 0 : item.backdrop_path) || null),
+        landscapePoster: toImageUrl((item == null ? void 0 : item.backdrop_path) || null),
+        releaseInfo: String((item == null ? void 0 : item.release_date) || "").slice(0, 4) || ""
+      })).filter((item) => item.id);
     }
   };
 
@@ -1497,801 +1647,6 @@
     }
   };
   var metaRepository = new MetaRepository();
-
-  // js/ui/screens/home/homeScreen.js
-  function isSearchOnlyCatalog(catalog) {
-    return (catalog.extra || []).some((extra) => extra.name === "search" && extra.isRequired);
-  }
-  function catalogKey(catalog) {
-    return `${catalog.addonId}|${catalog.type}|${catalog.catalogId}|${catalog.catalogName}`;
-  }
-  function toTitleCase(value) {
-    const raw = String(value || "").trim();
-    if (!raw) {
-      return "";
-    }
-    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-  }
-  function escapeRegExp(value) {
-    return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-  function formatCatalogRowTitle(catalogName, addonName, type) {
-    const typeLabel = toTitleCase(type || "movie") || "Movie";
-    let base = String(catalogName || "").trim();
-    if (!base) {
-      return typeLabel;
-    }
-    const addon = String(addonName || "").trim();
-    const cleanedAddon = addon.replace(/\baddon\b/i, "").trim();
-    const cleanupTerms = [
-      addon,
-      cleanedAddon,
-      "The Movie Database Addon",
-      "TMDB Addon",
-      "Addon"
-    ].filter(Boolean);
-    cleanupTerms.forEach((term) => {
-      const regex = new RegExp(`\\s*-?\\s*${escapeRegExp(term)}\\s*`, "ig");
-      base = base.replace(regex, " ");
-    });
-    base = base.replace(/\s{2,}/g, " ").trim();
-    if (!base) {
-      return typeLabel;
-    }
-    const endsWithType = new RegExp(`\\b${escapeRegExp(typeLabel)}$`, "i").test(base);
-    if (endsWithType) {
-      return base;
-    }
-    return `${base} - ${typeLabel}`;
-  }
-  function prettyId(value) {
-    const raw = String(value || "").trim();
-    if (!raw) {
-      return "Untitled";
-    }
-    if (raw.includes(":")) {
-      return raw.split(":").pop() || raw;
-    }
-    return raw;
-  }
-  function profileInitial(name) {
-    const raw = String(name || "").trim();
-    const first = raw.charAt(0);
-    return first ? first.toUpperCase() : "P";
-  }
-  async function withTimeout(promise, ms, fallbackValue) {
-    let timer = null;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise((resolve) => {
-          timer = setTimeout(() => resolve(fallbackValue), ms);
-        })
-      ]);
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
-  }
-  function navIconSvg(action) {
-    const iconByAction = {
-      gotoHome: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z",
-      gotoSearch: "M15.5 14h-.8l-.3-.3A6.5 6.5 0 1 0 14 15.5l.3.3v.8L20 22l2-2-6.5-6.5zM6.5 11A4.5 4.5 0 1 1 11 15.5 4.5 4.5 0 0 1 6.5 11z",
-      gotoLibrary: "M5 4h14a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 0 1 2-2z",
-      gotoPlugin: "M19 11h-1V9a2 2 0 0 0-2-2h-2V5a2 2 0 0 0-4 0v2H8a2 2 0 0 0-2 2v2H5a2 2 0 0 0 0 4h1v2a2 2 0 0 0 2 2h2v1a2 2 0 0 0 4 0v-1h2a2 2 0 0 0 2-2v-2h1a2 2 0 0 0 0-4z",
-      gotoSettings: "M19.1 12.9c.1-.3.1-.6.1-.9s0-.6-.1-.9l2.1-1.6a.5.5 0 0 0 .1-.6l-2-3.5a.5.5 0 0 0-.6-.2l-2.5 1a7 7 0 0 0-1.6-.9l-.4-2.6a.5.5 0 0 0-.5-.4h-4a.5.5 0 0 0-.5.4l-.4 2.6a7 7 0 0 0-1.6.9l-2.5-1a.5.5 0 0 0-.6.2l-2 3.5a.5.5 0 0 0 .1.6l2.1 1.6c-.1.3-.1.6-.1.9s0 .6.1.9L2.3 14.5a.5.5 0 0 0-.1.6l2 3.5a.5.5 0 0 0 .6.2l2.5-1c.5.4 1 .7 1.6.9l.4 2.6a.5.5 0 0 0 .5.4h4a.5.5 0 0 0 .5-.4l.4-2.6c.6-.2 1.1-.5 1.6-.9l2.5 1a.5.5 0 0 0 .6-.2l2-3.5a.5.5 0 0 0-.1-.6l-2.1-1.6zM12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7z",
-      gotoAccount: "M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4zm0 2c-4.4 0-8 2-8 4.5V21h16v-2.5C20 16 16.4 14 12 14z",
-      toggleLayout: "M3 5h8v6H3zm10 0h8v6h-8zM3 13h8v6H3zm10 0h8v6h-8z"
-    };
-    const path = iconByAction[action] || iconByAction.gotoHome;
-    return `
-    <svg viewBox="0 0 24 24" class="home-nav-icon" aria-hidden="true" focusable="false">
-      <path d="${path}" fill="currentColor"></path>
-    </svg>
-  `;
-  }
-  var HomeScreen = {
-    stopHeroRotation() {
-      if (this.heroRotateTimer) {
-        clearInterval(this.heroRotateTimer);
-        this.heroRotateTimer = null;
-      }
-    },
-    startHeroRotation() {
-      this.stopHeroRotation();
-      if (!Array.isArray(this.heroCandidates) || this.heroCandidates.length <= 1) {
-        return;
-      }
-      this.heroRotateTimer = setInterval(() => {
-        this.rotateHero();
-      }, 9e3);
-    },
-    rotateHero() {
-      if (!Array.isArray(this.heroCandidates) || this.heroCandidates.length <= 1) {
-        return;
-      }
-      this.heroIndex = (Number(this.heroIndex) + 1) % this.heroCandidates.length;
-      this.heroItem = this.heroCandidates[this.heroIndex];
-      this.applyHeroToDom();
-    },
-    applyHeroToDom() {
-      var _a, _b;
-      const heroNode = (_a = this.container) == null ? void 0 : _a.querySelector(".home-hero-card");
-      if (!heroNode) {
-        return;
-      }
-      const hero = this.heroItem || ((_b = this.heroCandidates) == null ? void 0 : _b[0]) || null;
-      heroNode.dataset.itemId = (hero == null ? void 0 : hero.id) || "";
-      heroNode.dataset.itemType = (hero == null ? void 0 : hero.type) || "movie";
-      heroNode.dataset.itemTitle = (hero == null ? void 0 : hero.name) || "Untitled";
-      const title = heroNode.querySelector(".home-hero-title");
-      if (title) {
-        title.textContent = (hero == null ? void 0 : hero.name) || "No featured item";
-      }
-      const description = heroNode.querySelector(".home-hero-description");
-      if (description) {
-        description.textContent = (hero == null ? void 0 : hero.description) || "";
-      }
-      const desiredImage = (hero == null ? void 0 : hero.background) || (hero == null ? void 0 : hero.poster) || "";
-      let backdrop = heroNode.querySelector(".featured-backdrop");
-      if (desiredImage) {
-        if (!backdrop) {
-          backdrop = document.createElement("img");
-          backdrop.className = "featured-backdrop";
-          backdrop.alt = (hero == null ? void 0 : hero.name) || "featured";
-          heroNode.insertBefore(backdrop, heroNode.firstChild);
-        }
-        backdrop.src = desiredImage;
-        backdrop.alt = (hero == null ? void 0 : hero.name) || "featured";
-      } else {
-        backdrop == null ? void 0 : backdrop.remove();
-      }
-    },
-    setSidebarExpanded(expanded) {
-      var _a;
-      const sidebar = (_a = this.container) == null ? void 0 : _a.querySelector(".home-sidebar");
-      if (!sidebar) {
-        return;
-      }
-      sidebar.classList.toggle("expanded", Boolean(expanded));
-    },
-    isSidebarNode(node) {
-      var _a;
-      return String(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.navZone) || "") === "sidebar";
-    },
-    isMainNode(node) {
-      var _a;
-      return String(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.navZone) || "") === "main";
-    },
-    focusWithoutAutoScroll(target) {
-      if (!target || typeof target.focus !== "function") {
-        return;
-      }
-      try {
-        target.focus({ preventScroll: true });
-      } catch (_) {
-        target.focus();
-      }
-    },
-    ensureMainVerticalVisibility(target) {
-      var _a;
-      const main = (_a = this.container) == null ? void 0 : _a.querySelector(".home-main");
-      if (!main || !target || !main.contains(target)) {
-        return;
-      }
-      const rect = target.getBoundingClientRect();
-      const mainRect = main.getBoundingClientRect();
-      const pad = 14;
-      if (rect.bottom > mainRect.bottom - pad) {
-        main.scrollTop += Math.ceil(rect.bottom - mainRect.bottom + pad);
-      } else if (rect.top < mainRect.top + pad) {
-        main.scrollTop -= Math.ceil(mainRect.top + pad - rect.top);
-      }
-    },
-    ensureTrackHorizontalVisibility(target, direction = null) {
-      var _a;
-      const track = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, ".home-track");
-      if (!track) {
-        return;
-      }
-      const targetLeft = target.offsetLeft;
-      const targetRight = targetLeft + target.offsetWidth;
-      const viewLeft = track.scrollLeft;
-      const viewRight = viewLeft + track.clientWidth;
-      const step = target.offsetWidth + 18;
-      if (targetRight > viewRight) {
-        const overshoot = targetRight - viewRight;
-        const delta = direction === "right" ? Math.max(step, overshoot) : overshoot;
-        track.scrollLeft = Math.min(track.scrollWidth - track.clientWidth, viewLeft + delta);
-        return;
-      }
-      if (targetLeft < viewLeft) {
-        const overshoot = viewLeft - targetLeft;
-        const delta = direction === "left" ? Math.max(step, overshoot) : overshoot;
-        track.scrollLeft = Math.max(0, viewLeft - delta);
-      }
-    },
-    focusNode(current, target, direction = null) {
-      if (!current || !target || current === target) {
-        return false;
-      }
-      current.classList.remove("focused");
-      target.classList.add("focused");
-      this.focusWithoutAutoScroll(target);
-      this.setSidebarExpanded(this.isSidebarNode(target));
-      if (this.isMainNode(target)) {
-        this.lastMainFocus = target;
-        this.ensureTrackHorizontalVisibility(target, direction);
-        this.ensureMainVerticalVisibility(target);
-      }
-      return true;
-    },
-    buildNavigationModel() {
-      var _a, _b, _c, _d;
-      const sidebar = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".home-sidebar .focusable")) || []);
-      const rows = [];
-      const hero = (_b = this.container) == null ? void 0 : _b.querySelector(".home-hero-card.focusable");
-      if (hero) {
-        rows.push([hero]);
-      }
-      const trackSections = Array.from(((_c = this.container) == null ? void 0 : _c.querySelectorAll(".home-main .home-row")) || []);
-      trackSections.forEach((section) => {
-        const track = section.querySelector(".home-track");
-        if (!track) {
-          return;
-        }
-        const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
-        if (cards.length) {
-          rows.push(cards);
-        }
-      });
-      sidebar.forEach((node, index) => {
-        node.dataset.navZone = "sidebar";
-        node.dataset.navIndex = String(index);
-      });
-      rows.forEach((rowNodes, rowIndex) => {
-        rowNodes.forEach((node, colIndex) => {
-          node.dataset.navZone = "main";
-          node.dataset.navRow = String(rowIndex);
-          node.dataset.navCol = String(colIndex);
-        });
-      });
-      this.navModel = { sidebar, rows };
-      this.lastMainFocus = ((_d = rows[0]) == null ? void 0 : _d[0]) || null;
-    },
-    handleHomeDpad(event) {
-      var _a, _b;
-      const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
-      const direction = keyCode === 38 ? "up" : keyCode === 40 ? "down" : keyCode === 37 ? "left" : keyCode === 39 ? "right" : null;
-      if (!direction) {
-        return false;
-      }
-      const nav = this.navModel;
-      if (!nav) {
-        return false;
-      }
-      const all = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".focusable")) || []);
-      const current = this.container.querySelector(".focusable.focused") || all[0];
-      if (!current) {
-        return false;
-      }
-      const isSidebar = this.isSidebarNode(current);
-      if (typeof (event == null ? void 0 : event.preventDefault) === "function") {
-        event.preventDefault();
-      }
-      if (isSidebar) {
-        const sidebarIndex = Number(current.dataset.navIndex || 0);
-        if (direction === "up") {
-          const target = nav.sidebar[Math.max(0, sidebarIndex - 1)] || current;
-          return this.focusNode(current, target, direction) || true;
-        }
-        if (direction === "down") {
-          const target = nav.sidebar[Math.min(nav.sidebar.length - 1, sidebarIndex + 1)] || current;
-          return this.focusNode(current, target, direction) || true;
-        }
-        if (direction === "right") {
-          const target = this.lastMainFocus && this.isMainNode(this.lastMainFocus) ? this.lastMainFocus : ((_b = nav.rows[0]) == null ? void 0 : _b[0]) || null;
-          return this.focusNode(current, target, direction) || true;
-        }
-        return true;
-      }
-      const row = Number(current.dataset.navRow || 0);
-      const col = Number(current.dataset.navCol || 0);
-      const rowNodes = nav.rows[row] || [];
-      if (direction === "left") {
-        const targetInRow = rowNodes[col - 1] || null;
-        if (this.focusNode(current, targetInRow, direction)) {
-          return true;
-        }
-        const sidebarFallback = nav.sidebar[Math.min(row, nav.sidebar.length - 1)] || nav.sidebar[0] || null;
-        return this.focusNode(current, sidebarFallback, direction) || true;
-      }
-      if (direction === "right") {
-        const target = rowNodes[col + 1] || null;
-        return this.focusNode(current, target, direction) || true;
-      }
-      if (direction === "up" || direction === "down") {
-        const delta = direction === "up" ? -1 : 1;
-        const targetRow = row + delta;
-        const targetRowNodes = nav.rows[targetRow] || null;
-        if (!targetRowNodes || !targetRowNodes.length) {
-          return true;
-        }
-        const target = targetRowNodes[Math.min(col, targetRowNodes.length - 1)] || targetRowNodes[0];
-        return this.focusNode(current, target, direction) || true;
-      }
-      return false;
-    },
-    async mount() {
-      this.container = document.getElementById("home");
-      ScreenUtils.show(this.container);
-      const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
-      const profileChanged = activeProfileId3 !== String(this.loadedProfileId || "");
-      if (profileChanged) {
-        this.hasLoadedOnce = false;
-      }
-      if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
-        this.homeLoadToken = (this.homeLoadToken || 0) + 1;
-        this.render();
-        this.loadData({ background: true }).catch((error) => {
-          console.warn("Home background refresh failed", error);
-        });
-        return;
-      }
-      this.homeLoadToken = (this.homeLoadToken || 0) + 1;
-      this.container.innerHTML = `
-      <div class="home-boot">
-        <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
-        <div class="home-boot-shimmer"></div>
-      </div>
-    `;
-      await this.loadData({ background: false });
-    },
-    async loadData(options = {}) {
-      const background = Boolean(options == null ? void 0 : options.background);
-      const token = this.homeLoadToken;
-      const prefs = LayoutPreferences.get();
-      this.layoutMode = prefs.homeLayout || "classic";
-      const addons = await addonRepository.getInstalledAddons();
-      const catalogDescriptors = [];
-      addons.forEach((addon) => {
-        addon.catalogs.filter((catalog) => !isSearchOnlyCatalog(catalog)).slice(0, 8).forEach((catalog) => {
-          catalogDescriptors.push({
-            addonBaseUrl: addon.baseUrl,
-            addonId: addon.id,
-            addonName: addon.displayName,
-            catalogId: catalog.id,
-            catalogName: catalog.name,
-            type: catalog.apiType
-          });
-        });
-      });
-      const initialDescriptors = catalogDescriptors.slice(0, 8);
-      const deferredDescriptors = catalogDescriptors.slice(8);
-      const initialRows = await this.fetchCatalogRows(initialDescriptors);
-      if (token !== this.homeLoadToken) {
-        return;
-      }
-      this.rows = this.sortAndFilterRows(initialRows);
-      this.continueWatching = await watchProgressRepository.getRecent(10);
-      if (token !== this.homeLoadToken) {
-        return;
-      }
-      this.continueWatchingDisplay = this.continueWatching.map((item) => ({
-        ...item,
-        title: prettyId(item.contentId),
-        poster: null
-      }));
-      this.heroCandidates = this.collectHeroCandidates(this.rows);
-      this.heroIndex = 0;
-      this.heroItem = this.heroCandidates[0] || this.pickHeroItem(this.rows);
-      this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
-      const profiles = await ProfileManager.getProfiles();
-      const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === this.loadedProfileId) || profiles[0] || null;
-      this.activeProfileName = String((activeProfile == null ? void 0 : activeProfile.name) || "Profile").trim() || "Profile";
-      this.activeProfileInitial = profileInitial(this.activeProfileName);
-      this.hasLoadedOnce = true;
-      this.render();
-      if (deferredDescriptors.length) {
-        this.fetchCatalogRows(deferredDescriptors).then((extraRows) => {
-          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-            return;
-          }
-          const combinedByKey = /* @__PURE__ */ new Map();
-          [...this.rows, ...extraRows].forEach((row) => {
-            combinedByKey.set(row.homeCatalogKey, row);
-          });
-          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
-          this.heroCandidates = this.collectHeroCandidates(this.rows);
-          this.render();
-        }).catch((error) => {
-          console.warn("Deferred home rows load failed", error);
-        });
-      }
-      this.enrichHero(this.heroCandidates[0] || null).then(() => {
-        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-          return;
-        }
-        this.applyHeroToDom();
-      }).catch((error) => {
-        console.warn("Hero async enrichment failed", error);
-      });
-      this.enrichContinueWatching(this.continueWatching).then((enriched) => {
-        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-          return;
-        }
-        this.continueWatchingDisplay = enriched;
-        this.render();
-      }).catch((error) => {
-        console.warn("Continue watching async enrichment failed", error);
-      });
-    },
-    async fetchCatalogRows(descriptors = []) {
-      const rowResults = await Promise.all((descriptors || []).map(async (catalog) => {
-        const result = await withTimeout(catalogRepository.getCatalog({
-          addonBaseUrl: catalog.addonBaseUrl,
-          addonId: catalog.addonId,
-          addonName: catalog.addonName,
-          catalogId: catalog.catalogId,
-          catalogName: catalog.catalogName,
-          type: catalog.type,
-          skip: 0,
-          supportsSkip: true
-        }), 3500, { status: "error", message: "timeout" });
-        return { ...catalog, result };
-      }));
-      return rowResults.filter((row) => row.result.status === "success").map((row) => ({
-        ...row,
-        homeCatalogKey: catalogKey(row)
-      }));
-    },
-    sortAndFilterRows(rows = []) {
-      const allKeys = rows.map((row) => row.homeCatalogKey);
-      const orderedKeys = HomeCatalogStore.ensureOrderKeys(allKeys);
-      const enabledRows = rows.filter((row) => !HomeCatalogStore.isDisabled(row.homeCatalogKey));
-      const orderIndex = new Map(orderedKeys.map((key, index) => [key, index]));
-      enabledRows.sort((left, right) => {
-        const l = orderIndex.has(left.homeCatalogKey) ? orderIndex.get(left.homeCatalogKey) : Number.MAX_SAFE_INTEGER;
-        const r = orderIndex.has(right.homeCatalogKey) ? orderIndex.get(right.homeCatalogKey) : Number.MAX_SAFE_INTEGER;
-        return l - r;
-      });
-      return enabledRows;
-    },
-    render() {
-      var _a;
-      const heroItem = this.heroItem || ((_a = this.heroCandidates) == null ? void 0 : _a[this.heroIndex]) || this.pickHeroItem(this.rows);
-      const progressHtml = this.renderContinueWatching(this.continueWatchingDisplay || []);
-      this.container.innerHTML = `
-      <div class="home-shell home-enter">
-        <aside class="home-sidebar">
-          <div class="home-brand-wrap">
-            <img src="assets/brand/app_logo_wordmark.png" class="home-brand-logo-main" alt="Nuvio" />
-          </div>
-          <div class="home-nav-list">
-            <button class="home-nav-item focusable" data-action="gotoHome" aria-label="Home"><span class="home-nav-icon-wrap">${navIconSvg("gotoHome")}</span><span class="home-nav-label">Home</span></button>
-            <button class="home-nav-item focusable" data-action="gotoSearch" aria-label="Search"><span class="home-nav-icon-wrap">${navIconSvg("gotoSearch")}</span><span class="home-nav-label">Search</span></button>
-            <button class="home-nav-item focusable" data-action="gotoLibrary" aria-label="Library"><span class="home-nav-icon-wrap">${navIconSvg("gotoLibrary")}</span><span class="home-nav-label">Library</span></button>
-            <button class="home-nav-item focusable" data-action="gotoPlugin" aria-label="Addons"><span class="home-nav-icon-wrap">${navIconSvg("gotoPlugin")}</span><span class="home-nav-label">Addons</span></button>
-            <button class="home-nav-item focusable" data-action="gotoSettings" aria-label="Settings"><span class="home-nav-icon-wrap">${navIconSvg("gotoSettings")}</span><span class="home-nav-label">Settings</span></button>
-          </div>
-          <button class="home-profile-pill focusable" data-action="gotoAccount" aria-label="Account">
-            <span class="home-profile-avatar">${this.activeProfileInitial || "P"}</span>
-            <span class="home-profile-name">${this.activeProfileName || "Profile"}</span>
-          </button>
-        </aside>
-
-        <main class="home-main">
-          <section class="home-hero">
-            <div class="home-hero-card focusable"
-                data-action="openDetail"
-                data-item-id="${(heroItem == null ? void 0 : heroItem.id) || ""}"
-                data-item-type="${(heroItem == null ? void 0 : heroItem.type) || "movie"}"
-                data-item-title="${(heroItem == null ? void 0 : heroItem.name) || "Untitled"}">
-              ${(heroItem == null ? void 0 : heroItem.background) ? `<img class="featured-backdrop" src="${heroItem.background}" alt="${(heroItem == null ? void 0 : heroItem.name) || "featured"}" />` : ""}
-              <div class="home-hero-title">${(heroItem == null ? void 0 : heroItem.name) || "No featured item"}</div>
-              <div class="home-hero-description">${(heroItem == null ? void 0 : heroItem.description) || ""}</div>
-            </div>
-          </section>
-
-          ${progressHtml}
-
-          <section class="home-catalogs" id="homeCatalogRows"></section>
-        </main>
-      </div>
-    `;
-      const rowsContainer = this.container.querySelector("#homeCatalogRows");
-      if (rowsContainer) {
-        this.catalogSeeAllMap = /* @__PURE__ */ new Map();
-        this.rows.forEach((rowData) => {
-          var _a2, _b;
-          const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-          this.catalogSeeAllMap.set(seeAllId, {
-            addonBaseUrl: rowData.addonBaseUrl || "",
-            addonId: rowData.addonId || "",
-            addonName: rowData.addonName || "",
-            catalogId: rowData.catalogId || "",
-            catalogName: rowData.catalogName || "",
-            type: rowData.type || "movie",
-            initialItems: Array.isArray((_b = (_a2 = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a2.data) == null ? void 0 : _b.items) ? rowData.result.data.items : []
-          });
-          const section = document.createElement("section");
-          section.className = "home-row home-row-enter";
-          section.style.animationDelay = `${Math.min(460, (rowsContainer.children.length + 1) * 42)}ms`;
-          section.innerHTML = `
-          <div class="home-row-head">
-            <h3 class="home-row-title">${formatCatalogRowTitle(rowData.catalogName, rowData.addonName, rowData.type)}</h3>
-          </div>
-        `;
-          const track = document.createElement("div");
-          track.className = "home-track";
-          rowData.result.data.items.slice(0, this.layoutMode === "grid" ? 12 : 16).forEach((item) => {
-            const card = document.createElement("article");
-            card.className = "home-content-card focusable";
-            card.dataset.action = "openDetail";
-            card.dataset.itemId = item.id;
-            card.dataset.itemType = rowData.type;
-            card.dataset.itemTitle = item.name;
-            card.innerHTML = `
-            ${item.poster ? `<img class="content-poster" src="${item.poster}" alt="${item.name || "content"}" />` : `<div class="content-poster placeholder"></div>`}
-          `;
-            card.addEventListener("click", () => {
-              this.openDetailFromNode(card);
-            });
-            track.appendChild(card);
-          });
-          const seeAllCard = document.createElement("article");
-          seeAllCard.className = "home-content-card home-seeall-card focusable";
-          seeAllCard.dataset.action = "openCatalogSeeAll";
-          seeAllCard.dataset.seeAllId = seeAllId;
-          seeAllCard.dataset.addonBaseUrl = rowData.addonBaseUrl || "";
-          seeAllCard.dataset.addonId = rowData.addonId || "";
-          seeAllCard.dataset.addonName = rowData.addonName || "";
-          seeAllCard.dataset.catalogId = rowData.catalogId || "";
-          seeAllCard.dataset.catalogName = rowData.catalogName || "";
-          seeAllCard.dataset.catalogType = rowData.type || "";
-          seeAllCard.innerHTML = `
-          <div class="home-seeall-card-inner">
-            <div class="home-seeall-arrow" aria-hidden="true">&#8594;</div>
-            <div class="home-seeall-label">See All</div>
-          </div>
-        `;
-          seeAllCard.addEventListener("click", () => {
-            this.openCatalogSeeAllFromNode(seeAllCard);
-          });
-          track.appendChild(seeAllCard);
-          section.appendChild(track);
-          rowsContainer.appendChild(section);
-        });
-      }
-      this.container.querySelectorAll(".home-sidebar .focusable").forEach((item) => {
-        item.addEventListener("focus", () => {
-          this.setSidebarExpanded(true);
-        });
-        item.addEventListener("click", () => {
-          const action = item.dataset.action;
-          if (action === "gotoHome") return;
-          if (action === "gotoLibrary") Router.navigate("library");
-          if (action === "gotoSearch") Router.navigate("search");
-          if (action === "gotoPlugin") Router.navigate("plugin");
-          if (action === "gotoSettings") Router.navigate("settings");
-          if (action === "gotoAccount") Router.navigate("profileSelection");
-        });
-      });
-      ScreenUtils.indexFocusables(this.container);
-      this.buildNavigationModel();
-      ScreenUtils.setInitialFocus(this.container, ".home-main .focusable");
-      const current = this.container.querySelector(".home-main .focusable.focused");
-      if (current && this.isMainNode(current)) {
-        this.lastMainFocus = current;
-      }
-      this.setSidebarExpanded(false);
-      this.startHeroRotation();
-    },
-    renderContinueWatching(items) {
-      if (!items.length) {
-        return `
-        <section class="home-row">
-          <h3 class="home-row-title">Continue Watching</h3>
-          <p class="home-empty">No saved progress yet.</p>
-        </section>
-      `;
-      }
-      const cards = items.map((item) => {
-        const positionMs = Number(item.positionMs || 0);
-        const durationMs = Number(item.durationMs || 0);
-        const positionMin = Math.floor(positionMs / 6e4);
-        const durationMin = Math.floor(durationMs / 6e4);
-        const remaining = Math.max(0, durationMin - positionMin);
-        const hasDuration = durationMs > 0;
-        const progress = hasDuration ? Math.max(0, Math.min(1, positionMs / durationMs)) : 0;
-        const leftText = hasDuration ? `${remaining}m left` : "Continue";
-        const progressText = hasDuration ? `${positionMin}m / ${durationMin || "?"}m` : `${positionMin}m watched`;
-        return `
-        <article class="home-content-card home-progress-card focusable" data-action="resumeProgress"
-             data-item-id="${item.contentId}"
-             data-item-type="${item.contentType || "movie"}"
-             data-item-title="${item.title || prettyId(item.contentId)}">
-          <div class="home-progress-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}>
-            <span class="home-progress-left">${leftText}</span>
-          </div>
-          <div class="home-progress-meta">
-            <div class="home-content-title">${item.title || prettyId(item.contentId)}</div>
-            <div class="home-content-type">${progressText}</div>
-            <div class="home-progress-track">
-              <div class="home-progress-fill" style="width:${Math.round(progress * 100)}%"></div>
-            </div>
-          </div>
-        </article>
-      `;
-      }).join("");
-      return `
-      <section class="home-row">
-        <h3 class="home-row-title">Continue Watching</h3>
-        <div class="home-track">${cards}</div>
-      </section>
-    `;
-    },
-    async enrichContinueWatching(items = []) {
-      const enriched = await Promise.all((items || []).map(async (item) => {
-        try {
-          const result = await withTimeout(
-            metaRepository.getMetaFromAllAddons(item.contentType || "movie", item.contentId),
-            1800,
-            { status: "error", message: "timeout" }
-          );
-          if ((result == null ? void 0 : result.status) === "success" && (result == null ? void 0 : result.data)) {
-            return {
-              ...item,
-              title: result.data.name || prettyId(item.contentId),
-              poster: result.data.poster || result.data.background || null
-            };
-          }
-        } catch (error) {
-          console.warn("Continue watching enrichment failed", error);
-        }
-        return {
-          ...item,
-          title: prettyId(item.contentId),
-          poster: null
-        };
-      }));
-      return enriched;
-    },
-    pickHeroItem(rows) {
-      var _a, _b, _c;
-      for (const row of rows) {
-        const first = (_c = (_b = (_a = row.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) == null ? void 0 : _c[0];
-        if (first) {
-          return first;
-        }
-      }
-      return null;
-    },
-    collectHeroCandidates(rows) {
-      const flat = [];
-      rows.forEach((row) => {
-        var _a, _b;
-        (((_b = (_a = row == null ? void 0 : row.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) || []).slice(0, 4).forEach((item) => {
-          if (!(item == null ? void 0 : item.id) || flat.some((entry) => entry.id === item.id)) {
-            return;
-          }
-          flat.push(item);
-        });
-      });
-      return flat.slice(0, 10);
-    },
-    async enrichHero(baseHero = null) {
-      const hero = baseHero || this.pickHeroItem(this.rows);
-      if (!hero) {
-        this.heroItem = null;
-        return;
-      }
-      const settings = TmdbSettingsStore.get();
-      if (!settings.enabled || !settings.apiKey) {
-        this.heroItem = hero;
-        return;
-      }
-      try {
-        const tmdbId = await withTimeout(TmdbService.ensureTmdbId(hero.id, hero.type), 2200, null);
-        if (!tmdbId) {
-          this.heroItem = hero;
-          return;
-        }
-        const enriched = await withTimeout(TmdbMetadataService.fetchEnrichment({
-          tmdbId,
-          contentType: hero.type,
-          language: settings.language
-        }), 2400, null);
-        if (!enriched) {
-          this.heroItem = hero;
-          return;
-        }
-        this.heroItem = {
-          ...hero,
-          name: settings.useBasicInfo ? enriched.localizedTitle || hero.name : hero.name,
-          description: settings.useBasicInfo ? enriched.description || hero.description : hero.description,
-          background: settings.useArtwork ? enriched.backdrop || hero.background : hero.background,
-          poster: settings.useArtwork ? enriched.poster || hero.poster : hero.poster,
-          logo: settings.useArtwork ? enriched.logo || hero.logo : hero.logo
-        };
-      } catch (error) {
-        console.warn("Hero TMDB enrichment failed", error);
-        this.heroItem = hero;
-      }
-    },
-    openDetailFromNode(node) {
-      const itemId = node.dataset.itemId;
-      if (!itemId) {
-        return;
-      }
-      Router.navigate("detail", {
-        itemId,
-        itemType: node.dataset.itemType || "movie",
-        fallbackTitle: node.dataset.itemTitle || "Untitled"
-      });
-    },
-    openCatalogSeeAllFromNode(node) {
-      var _a, _b;
-      if (!node) {
-        return;
-      }
-      const seeAllId = String(node.dataset.seeAllId || "");
-      const mapped = ((_b = (_a = this.catalogSeeAllMap) == null ? void 0 : _a.get) == null ? void 0 : _b.call(_a, seeAllId)) || null;
-      if (mapped) {
-        Router.navigate("catalogSeeAll", mapped);
-        return;
-      }
-      Router.navigate("catalogSeeAll", {
-        addonBaseUrl: node.dataset.addonBaseUrl || "",
-        addonId: node.dataset.addonId || "",
-        addonName: node.dataset.addonName || "",
-        catalogId: node.dataset.catalogId || "",
-        catalogName: node.dataset.catalogName || "",
-        type: node.dataset.catalogType || "movie",
-        initialItems: []
-      });
-    },
-    onKeyDown(event) {
-      if (this.handleHomeDpad(event)) {
-        return;
-      }
-      if (event.keyCode === 76) {
-        this.layoutMode = this.layoutMode === "grid" ? "classic" : "grid";
-        LayoutPreferences.set({ homeLayout: this.layoutMode });
-        this.render();
-        return;
-      }
-      if (event.keyCode !== 13) {
-        return;
-      }
-      const current = this.container.querySelector(".focusable.focused");
-      if (!current) {
-        return;
-      }
-      const action = current.dataset.action;
-      if (action === "gotoHome") return;
-      if (action === "gotoLibrary") Router.navigate("library");
-      if (action === "gotoSearch") Router.navigate("search");
-      if (action === "gotoPlugin") Router.navigate("plugin");
-      if (action === "gotoSettings") Router.navigate("settings");
-      if (action === "gotoAccount") Router.navigate("profileSelection");
-      if (action === "openDetail") this.openDetailFromNode(current);
-      if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
-      if (action === "resumeProgress") {
-        Router.navigate("detail", {
-          itemId: current.dataset.itemId,
-          itemType: current.dataset.itemType || "movie",
-          fallbackTitle: current.dataset.itemTitle || current.dataset.itemId || "Untitled"
-        });
-      }
-    },
-    cleanup() {
-      this.homeLoadToken = (this.homeLoadToken || 0) + 1;
-      this.stopHeroRotation();
-      ScreenUtils.hide(this.container);
-    }
-  };
 
   // js/platform/sharedKeys.js
   var ROTATED_DPAD_KEY = "rotatedDpadMapping";
@@ -2567,6 +1922,2497 @@
     prepareVideoElement(videoElement) {
       var _a, _b;
       return (_b = (_a = getAdapter()).prepareVideoElement) == null ? void 0 : _b.call(_a, videoElement);
+    }
+  };
+
+  // js/ui/screens/home/modernHomeLayout.js
+  var MODERN_HOME_CONSTANTS = {
+    heroFocusDelayMs: 90,
+    heroRapidNavThresholdMs: 130,
+    heroRapidSettleMs: 170,
+    keyRepeatThrottleMs: 80,
+    rowFocusInset: 40,
+    trackEdgePadding: 52
+  };
+  function renderModernHomeLayout({
+    rows = [],
+    heroItem = null,
+    heroCandidates = [],
+    continueWatchingItems = [],
+    showHeroSection = false,
+    showPosterLabels = true,
+    showCatalogTypeSuffix = true,
+    buildModernHeroPresentation: buildModernHeroPresentation2,
+    renderContinueWatchingSection: renderContinueWatchingSection2,
+    createPosterCardMarkup: createPosterCardMarkup2,
+    createSeeAllCardMarkup: createSeeAllCardMarkup2,
+    formatCatalogRowTitle: formatCatalogRowTitle3,
+    escapeHtml: escapeHtml12,
+    escapeAttribute: escapeAttribute2
+  } = {}) {
+    const catalogSeeAllMap = /* @__PURE__ */ new Map();
+    const sectionsMarkup = [];
+    rows.forEach((rowData, rowIndex) => {
+      var _a, _b;
+      const items = Array.isArray((_b = (_a = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) ? rowData.result.data.items : [];
+      if (!items.length) {
+        return;
+      }
+      const rowKey = buildModernRowKey(rowData);
+      const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
+      catalogSeeAllMap.set(seeAllId, {
+        addonBaseUrl: rowData.addonBaseUrl || "",
+        addonId: rowData.addonId || "",
+        addonName: rowData.addonName || "",
+        catalogId: rowData.catalogId || "",
+        catalogName: rowData.catalogName || "",
+        type: rowData.type || "movie",
+        initialItems: items
+      });
+      const hasSeeAll = items.length >= 15;
+      const visibleItems = items.slice(0, 15);
+      const rowTitle = formatCatalogRowTitle3(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+      const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup2(
+        item,
+        rowIndex,
+        itemIndex,
+        rowData.type,
+        showPosterLabels,
+        "modern"
+      )).join("");
+      sectionsMarkup.push(`
+      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml12(rowKey)}" data-row-index="${rowIndex}">
+        <div class="home-row-head">
+          <h2 class="home-row-title">${escapeHtml12(rowTitle)}</h2>
+        </div>
+        <div class="home-track" data-track-row-key="${escapeHtml12(rowKey)}">
+          ${cardsMarkup}
+          ${hasSeeAll ? createSeeAllCardMarkup2(seeAllId, rowData) : ""}
+        </div>
+      </section>
+    `);
+    });
+    return {
+      catalogSeeAllMap,
+      markup: `
+      <section class="home-modern-stage">
+        ${showHeroSection ? renderModernHeroMarkup({
+        heroItem,
+        heroCandidates,
+        buildModernHeroPresentation: buildModernHeroPresentation2,
+        escapeHtml: escapeHtml12,
+        escapeAttribute: escapeAttribute2
+      }) : ""}
+        <div class="home-modern-rows-viewport">
+          <div class="home-modern-rows-scroll">
+            ${renderContinueWatchingSection2(continueWatchingItems, { rowKey: "continue_watching" })}
+            ${sectionsMarkup.join("")}
+          </div>
+        </div>
+      </section>
+    `
+    };
+  }
+  function buildModernNavigationRows(container) {
+    const rows = [];
+    const continueTrack = container == null ? void 0 : container.querySelector(".home-row-continue .home-track");
+    if (continueTrack) {
+      const continueNodes = Array.from(continueTrack.querySelectorAll(".home-content-card.focusable"));
+      if (continueNodes.length) {
+        rows.push(continueNodes);
+      }
+    }
+    const rowSections = Array.from((container == null ? void 0 : container.querySelectorAll(".home-modern-row")) || []);
+    rowSections.forEach((section) => {
+      const track = section.querySelector(".home-track");
+      if (!track) {
+        return;
+      }
+      const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
+      if (cards.length) {
+        rows.push(cards);
+      }
+    });
+    return rows;
+  }
+  function buildModernRowKey(rowData = {}) {
+    return `${rowData.addonId || ""}_${rowData.type || ""}_${rowData.catalogId || ""}`;
+  }
+  function buildHeroIndicators(items = [], activeItem = null) {
+    if (!Array.isArray(items) || items.length <= 1) {
+      return "";
+    }
+    const activeId = String((activeItem == null ? void 0 : activeItem.id) || "");
+    const activeIndex = items.findIndex((item) => String((item == null ? void 0 : item.id) || "") === activeId);
+    return items.map((_, index) => `
+    <span class="home-hero-indicator${index === activeIndex ? " is-active" : ""}"></span>
+  `).join("");
+  }
+  function renderModernHeroMarkup({
+    heroItem,
+    heroCandidates,
+    buildModernHeroPresentation: buildModernHeroPresentation2,
+    escapeHtml: escapeHtml12,
+    escapeAttribute: escapeAttribute2
+  }) {
+    const display = buildModernHeroPresentation2(heroItem);
+    if (!display) {
+      return "";
+    }
+    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml12(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
+    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml12(token)}</span>`);
+    if (display.showImdbPrimary) {
+      primaryRightParts.push(`
+      <span class="home-hero-imdb">
+        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+        <span>${escapeHtml12(display.imdbText)}</span>
+      </span>
+    `);
+    }
+    const secondaryParts = [];
+    if (display.secondaryHighlightText) {
+      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml12(display.secondaryHighlightText)}</span>`);
+    }
+    display.badges.forEach((badge) => {
+      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml12(badge)}</span>`);
+    });
+    if (display.showImdbSecondary) {
+      secondaryParts.push(`
+      <span class="home-hero-imdb">
+        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+        <span>${escapeHtml12(display.imdbText)}</span>
+      </span>
+    `);
+    }
+    if (display.languageText) {
+      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml12(display.languageText)}</span>`);
+    }
+    return `
+    <section class="home-hero home-hero-modern">
+      <article class="home-hero-card home-modern-hero-card"
+               data-item-id="${escapeAttribute2((heroItem == null ? void 0 : heroItem.id) || "")}"
+               data-item-type="${escapeAttribute2((heroItem == null ? void 0 : heroItem.type) || "movie")}"
+               data-item-title="${escapeAttribute2((heroItem == null ? void 0 : heroItem.name) || "Untitled")}">
+        <div class="home-modern-hero-media">
+          <div class="home-hero-backdrop-wrap">
+            ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute2(display.backdrop)}" alt="${escapeAttribute2(display.title)}" />` : '<div class="home-hero-backdrop placeholder"></div>'}
+          </div>
+          <div class="home-hero-trailer-layer"></div>
+        </div>
+        <div class="home-hero-copy home-modern-hero-copy">
+          <div class="home-hero-brand">
+            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title)}" />` : ""}
+            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml12(display.title)}</h1>
+          </div>
+          <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">
+            <div class="home-modern-hero-meta-group">
+              ${primaryLeft}
+            </div>
+            <div class="home-modern-hero-meta-group">
+              ${primaryRightParts.join('<span class="home-hero-dot">\u2022</span>')}
+            </div>
+          </div>
+          <div class="home-modern-hero-secondary${display.secondaryHighlightText || display.badges.length || display.showImdbSecondary || display.languageText ? "" : " is-empty"}">
+            ${secondaryParts.join('<span class="home-hero-dot">\u2022</span>')}
+          </div>
+          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml12(display.description)}</p>
+        </div>
+        <div class="home-hero-indicators">${buildHeroIndicators(heroCandidates, heroItem)}</div>
+      </article>
+    </section>
+  `;
+  }
+
+  // js/core/addons/homeCatalogs.js
+  function isSearchOnlyCatalog(catalog) {
+    return Array.isArray(catalog == null ? void 0 : catalog.extra) && catalog.extra.some(
+      (entry) => String((entry == null ? void 0 : entry.name) || "").toLowerCase() === "search" && Boolean(entry == null ? void 0 : entry.isRequired)
+    );
+  }
+  function buildCatalogOrderKey(addonId, type, catalogId) {
+    return `${addonId}_${type}_${catalogId}`;
+  }
+  function buildCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName) {
+    return `${addonBaseUrl}_${type}_${catalogId}_${catalogName}`;
+  }
+  function toDisplayTypeLabel(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  }
+  function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKeys = []) {
+    const defaultEntries = [];
+    const seenKeys = /* @__PURE__ */ new Set();
+    const disabledSet = new Set(disabledKeys || []);
+    (addons || []).forEach((addon) => {
+      (addon.catalogs || []).filter((catalog) => !isSearchOnlyCatalog(catalog)).forEach((catalog) => {
+        const key = buildCatalogOrderKey(addon.id, catalog.apiType, catalog.id);
+        if (seenKeys.has(key)) {
+          return;
+        }
+        seenKeys.add(key);
+        defaultEntries.push({
+          key,
+          disableKey: buildCatalogDisableKey(addon.baseUrl, catalog.apiType, catalog.id, catalog.name),
+          addonBaseUrl: addon.baseUrl,
+          addonId: addon.id,
+          addonName: addon.displayName,
+          catalogId: catalog.id,
+          catalogName: catalog.name,
+          type: catalog.apiType,
+          isDisabled: false
+        });
+      });
+    });
+    const entryByKey = new Map(defaultEntries.map((entry) => [entry.key, entry]));
+    const defaultOrderKeys = defaultEntries.map((entry) => entry.key);
+    const savedValid = (savedOrderKeys || []).filter((key, index, array) => array.indexOf(key) === index && entryByKey.has(key));
+    const savedSet = new Set(savedValid);
+    const effectiveOrder = [...savedValid, ...defaultOrderKeys.filter((key) => !savedSet.has(key))];
+    return effectiveOrder.map((key) => entryByKey.get(key)).filter(Boolean).map((entry, index, array) => ({
+      ...entry,
+      isDisabled: disabledSet.has(entry.disableKey),
+      canMoveUp: index > 0,
+      canMoveDown: index < array.length - 1
+    }));
+  }
+
+  // js/ui/components/sidebarNavigation.js
+  var ROOT_SIDEBAR_ITEMS = [
+    { action: "gotoHome", route: "home", label: "Home", iconType: "material", iconName: "home" },
+    {
+      action: "gotoSearch",
+      route: "search",
+      label: "Search",
+      iconType: "svg",
+      viewBox: "0 0 20 20",
+      iconMarkup: '<path fill-rule="evenodd" d="M4 9a5 5 0 1110 0A5 5 0 014 9zm5-7a7 7 0 104.2 12.6.999.999 0 00.093.107l3 3a1 1 0 001.414-1.414l-3-3a.999.999 0 00-.107-.093A7 7 0 009 2z"/>'
+    },
+    {
+      action: "gotoLibrary",
+      route: "library",
+      label: "Library",
+      iconType: "svg",
+      viewBox: "0 0 24 24",
+      iconMarkup: '<path d="M8.50989 2.00001H15.49C15.7225 1.99995 15.9007 1.99991 16.0565 2.01515C17.1643 2.12352 18.0711 2.78958 18.4556 3.68678H5.54428C5.92879 2.78958 6.83555 2.12352 7.94337 2.01515C8.09917 1.99991 8.27741 1.99995 8.50989 2.00001Z"/><path d="M6.31052 4.72312C4.91989 4.72312 3.77963 5.56287 3.3991 6.67691C3.39117 6.70013 3.38356 6.72348 3.37629 6.74693C3.77444 6.62636 4.18881 6.54759 4.60827 6.49382C5.68865 6.35531 7.05399 6.35538 8.64002 6.35547L8.75846 6.35547L15.5321 6.35547C17.1181 6.35538 18.4835 6.35531 19.5639 6.49382C19.9833 6.54759 20.3977 6.62636 20.7958 6.74693C20.7886 6.72348 20.781 6.70013 20.773 6.67691C20.3925 5.56287 19.2522 4.72312 17.8616 4.72312H6.31052Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M8.67239 7.54204H15.3276C18.7024 7.54204 20.3898 7.54204 21.3377 8.52887C22.2855 9.5157 22.0625 11.0403 21.6165 14.0896L21.1935 16.9811C20.8437 19.3724 20.6689 20.568 19.7717 21.284C18.8745 22 17.5512 22 14.9046 22H9.09536C6.44881 22 5.12553 22 4.22834 21.284C3.33115 20.568 3.15626 19.3724 2.80648 16.9811L2.38351 14.0896C1.93748 11.0403 1.71447 9.5157 2.66232 8.52887C3.61017 7.54204 5.29758 7.54204 8.67239 7.54204ZM8 18.0001C8 17.5859 8.3731 17.2501 8.83333 17.2501H15.1667C15.6269 17.2501 16 17.5859 16 18.0001C16 18.4144 15.6269 18.7502 15.1667 18.7502H8.83333C8.3731 18.7502 8 18.4144 8 18.0001Z"/>'
+    },
+    {
+      action: "gotoPlugin",
+      route: "plugin",
+      label: "Addons",
+      iconType: "svg",
+      viewBox: "0 0 24 24",
+      iconMarkup: '<path d="M2,9 C2,7.34315 3.34315,6 5,6 L7.85279,6 C8.15014,6 8.33369,5.69148 8.21898,5.41714 C8.16269,5.28251 8.11486,5.14448 8.0827,5 C7.75165,3.51305 8.87451,2 10.5,2 C12.1255,2 13.2483,3.51305 12.9173,5 C12.8851,5.14448 12.8373,5.28251 12.781,5.41714 C12.6663,5.69148 12.8499,6 13.1472,6 L15,6 C16.6569,6 18,7.34315 18,9 L18,10.8528 C18,11.1501 18.3085,11.3337 18.5829,11.219 C18.7175,11.1627 18.8555,11.1149 19,11.0827 C20.4869,10.7517 22,11.8745 22,13.5 C22,15.1255 20.4869,16.2483 19,15.9173 C18.8555,15.8851 18.7175,15.8373 18.5829,15.781 C18.3085,15.6663 18,15.8499 18,16.1472 L18,19 C18,20.6569 16.6569,22 15,22 L13.1066,22 C12.8194,22 12.6341,21.7088 12.7164,21.4337 C12.7583,21.2937 12.7892,21.1502 12.8021,21 C12.9129,19.7075 11.8988,18.5 10.5,18.5 C9.1012,18.5 8.08712,19.7075 8.1979,21 C8.21078,21.1502 8.2417,21.2937 8.28358,21.4337 C8.36589,21.7088 8.18055,22 7.89338,22 L5,22 C3.34315,22 2,20.6569 2,19 L2,16.1066 C2,15.8194 2.29121,15.6341 2.56632,15.7164 C2.7063,15.7583 2.84976,15.7892 3,15.8021 C4.29252,15.9129 5.5,14.8988 5.5,13.5 C5.5,12.1012 4.29252,11.0871 3,11.1979 C2.84976,11.2108 2.7063,11.2417 2.56633,11.2836 C2.29121,11.3659 2,11.1806 2,10.8934 L2,9 Z"/>'
+    },
+    {
+      action: "gotoSettings",
+      route: "settings",
+      label: "Settings",
+      iconType: "svg",
+      viewBox: "0 0 24 24",
+      iconMarkup: '<path fill-rule="evenodd" clip-rule="evenodd" d="M14.2788 2.15224C13.9085 2 13.439 2 12.5 2C11.561 2 11.0915 2 10.7212 2.15224C10.2274 2.35523 9.83509 2.74458 9.63056 3.23463C9.53719 3.45834 9.50065 3.7185 9.48635 4.09799C9.46534 4.65568 9.17716 5.17189 8.69017 5.45093C8.20318 5.72996 7.60864 5.71954 7.11149 5.45876C6.77318 5.2813 6.52789 5.18262 6.28599 5.15102C5.75609 5.08178 5.22018 5.22429 4.79616 5.5472C4.47814 5.78938 4.24339 6.1929 3.7739 6.99993C3.30441 7.80697 3.06967 8.21048 3.01735 8.60491C2.94758 9.1308 3.09118 9.66266 3.41655 10.0835C3.56506 10.2756 3.77377 10.437 4.0977 10.639C4.57391 10.936 4.88032 11.4419 4.88029 12C4.88026 12.5581 4.57386 13.0639 4.0977 13.3608C3.77372 13.5629 3.56497 13.7244 3.41645 13.9165C3.09108 14.3373 2.94749 14.8691 3.01725 15.395C3.06957 15.7894 3.30432 16.193 3.7738 17C4.24329 17.807 4.47804 18.2106 4.79606 18.4527C5.22008 18.7756 5.75599 18.9181 6.28589 18.8489C6.52778 18.8173 6.77305 18.7186 7.11133 18.5412C7.60852 18.2804 8.2031 18.27 8.69012 18.549C9.17714 18.8281 9.46533 19.3443 9.48635 19.9021C9.50065 20.2815 9.53719 20.5417 9.63056 20.7654C9.83509 21.2554 10.2274 21.6448 10.7212 21.8478C11.0915 22 11.561 22 12.5 22C13.439 22 13.9085 22 14.2788 21.8478C14.7726 21.6448 15.1649 21.2554 15.3694 20.7654C15.4628 20.5417 15.4994 20.2815 15.5137 19.902C15.5347 19.3443 15.8228 18.8281 16.3098 18.549C16.7968 18.2699 17.3914 18.2804 17.8886 18.5412C18.2269 18.7186 18.4721 18.8172 18.714 18.8488C19.2439 18.9181 19.7798 18.7756 20.2038 18.4527C20.5219 18.2105 20.7566 17.807 21.2261 16.9999C21.6956 16.1929 21.9303 15.7894 21.9827 15.395C22.0524 14.8691 21.9088 14.3372 21.5835 13.9164C21.4349 13.7243 21.2262 13.5628 20.9022 13.3608C20.4261 13.0639 20.1197 12.558 20.1197 11.9999C20.1197 11.4418 20.4261 10.9361 20.9022 10.6392C21.2263 10.4371 21.435 10.2757 21.5836 10.0835C21.9089 9.66273 22.0525 9.13087 21.9828 8.60497C21.9304 8.21055 21.6957 7.80703 21.2262 7C20.7567 6.19297 20.522 5.78945 20.2039 5.54727C19.7799 5.22436 19.244 5.08185 18.7141 5.15109C18.4722 5.18269 18.2269 5.28136 17.8887 5.4588C17.3915 5.71959 16.7969 5.73002 16.3099 5.45096C15.8229 5.17191 15.5347 4.65566 15.5136 4.09794C15.4993 3.71848 15.4628 3.45833 15.3694 3.23463C15.1649 2.74458 14.7726 2.35523 14.2788 2.15224ZM12.5 15C14.1695 15 15.5228 13.6569 15.5228 12C15.5228 10.3431 14.1695 9 12.5 9C10.8305 9 9.47716 10.3431 9.47716 12C9.47716 13.6569 10.8305 15 12.5 15Z"/>'
+    }
+  ];
+  function profileInitial(name) {
+    const raw = String(name || "").trim();
+    return raw ? raw.charAt(0).toUpperCase() : "P";
+  }
+  function iconMarkup(item, className = "root-sidebar-icon") {
+    if ((item == null ? void 0 : item.iconType) === "material") {
+      return `<span class="${className} root-sidebar-icon-material material-icons" aria-hidden="true">${item.iconName}</span>`;
+    }
+    return `
+    <svg class="${className} root-sidebar-icon-svg"
+         viewBox="${(item == null ? void 0 : item.viewBox) || "0 0 24 24"}"
+         aria-hidden="true"
+         focusable="false">
+      ${(item == null ? void 0 : item.iconMarkup) || ""}
+    </svg>
+  `;
+  }
+  function getSelectedItem(routeName = "") {
+    return ROOT_SIDEBAR_ITEMS.find((item) => item.route === String(routeName || "")) || ROOT_SIDEBAR_ITEMS[0];
+  }
+  function getItemForAction(action = "") {
+    return ROOT_SIDEBAR_ITEMS.find((item) => item.action === String(action || "")) || null;
+  }
+  async function getSidebarProfileState() {
+    const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
+    const profiles = await ProfileManager.getProfiles();
+    const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId3) || profiles[0] || null;
+    return {
+      activeProfileName: String((activeProfile == null ? void 0 : activeProfile.name) || "Profile").trim() || "Profile",
+      activeProfileInitial: profileInitial((activeProfile == null ? void 0 : activeProfile.name) || "Profile"),
+      activeProfileColorHex: String((activeProfile == null ? void 0 : activeProfile.avatarColorHex) || "#1E88E5"),
+      showProfileSelector: profiles.length > 1
+    };
+  }
+  function activateLegacySidebarAction(action, currentRoute = "") {
+    const normalizedAction = String(action || "");
+    if (!normalizedAction) {
+      return;
+    }
+    if (normalizedAction === "gotoAccount") {
+      Router.navigate("profileSelection");
+      return;
+    }
+    const target = getItemForAction(normalizedAction);
+    if (!target || target.route === currentRoute) {
+      return;
+    }
+    Router.navigate(target.route);
+  }
+  function isSelectedSidebarAction(action, selectedRoute = "") {
+    var _a;
+    return ((_a = getItemForAction(action)) == null ? void 0 : _a.route) === String(selectedRoute || "");
+  }
+  function renderLegacySidebar({
+    selectedRoute = "home",
+    profile = null,
+    layout = {}
+  } = {}) {
+    const selectedItem = getSelectedItem(selectedRoute);
+    const profileState = profile || {};
+    const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
+    const collapsible = Boolean(layout == null ? void 0 : layout.collapseSidebar);
+    return `
+    <aside class="home-sidebar root-sidebar root-sidebar-legacy"
+           data-selected-route="${selectedRoute}"
+           data-collapsible="${collapsible ? "true" : "false"}">
+      ${showProfileSelector ? `
+        <button class="home-profile-pill focusable"
+                data-action="gotoAccount"
+                aria-label="Switch profile">
+          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+          <span class="home-profile-name">${profileState.activeProfileName || "Profile"}</span>
+        </button>
+      ` : ""}
+      <div class="home-nav-list">
+        ${ROOT_SIDEBAR_ITEMS.map((item) => `
+          <button class="home-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
+                  data-action="${item.action}"
+                  aria-label="${item.label}">
+            <span class="home-nav-icon-wrap">${iconMarkup(item, "home-nav-icon")}</span>
+            <span class="home-nav-label">${item.label}</span>
+          </button>
+        `).join("")}
+      </div>
+    </aside>
+  `;
+  }
+  function renderModernSidebar({
+    selectedRoute = "home",
+    profile = null,
+    expanded = false,
+    pillIconOnly = false,
+    blurEnabled = false
+  } = {}) {
+    const selectedItem = getSelectedItem(selectedRoute);
+    const profileState = profile || {};
+    const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
+    const showPill = selectedRoute !== "search";
+    const keepPillExpanded = selectedRoute === "settings";
+    return `
+    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}" data-selected-route="${selectedRoute}">
+      ${showPill ? `
+        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="Expand sidebar">
+          <img class="modern-sidebar-pill-chevron" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
+          <span class="modern-sidebar-pill-chip">
+            <span class="modern-sidebar-pill-icon-wrap">${iconMarkup(selectedItem, "modern-sidebar-pill-icon")}</span>
+            <span class="modern-sidebar-pill-label">${selectedItem.label}</span>
+          </span>
+        </button>
+      ` : ""}
+      ${expanded ? `
+        <aside class="modern-sidebar-panel">
+          ${showProfileSelector ? `
+            <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="Switch profile">
+              <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+              <span class="modern-sidebar-profile-name">${profileState.activeProfileName || "Profile"}</span>
+            </button>
+          ` : ""}
+          <div class="modern-sidebar-nav-list">
+            ${ROOT_SIDEBAR_ITEMS.map((item) => `
+              <button class="modern-sidebar-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
+                      data-action="${item.action}"
+                      aria-label="${item.label}">
+                <span class="modern-sidebar-nav-icon-circle">
+                  ${iconMarkup(item, "modern-sidebar-nav-icon")}
+                </span>
+                <span class="modern-sidebar-nav-label">${item.label}</span>
+              </button>
+            `).join("")}
+          </div>
+        </aside>
+      ` : ""}
+    </div>
+  `;
+  }
+  function renderRootSidebar({
+    selectedRoute = "home",
+    profile = null,
+    layout = {},
+    expanded = false,
+    pillIconOnly = false
+  } = {}) {
+    if (layout == null ? void 0 : layout.modernSidebar) {
+      return renderModernSidebar({
+        selectedRoute,
+        profile,
+        expanded,
+        pillIconOnly,
+        blurEnabled: Boolean(layout == null ? void 0 : layout.modernSidebarBlur)
+      });
+    }
+    return renderLegacySidebar({ selectedRoute, profile, layout });
+  }
+  function bindRootSidebarEvents(container, {
+    currentRoute = "",
+    onExpandSidebar = null,
+    onSelectedAction = null
+  } = {}) {
+    container == null ? void 0 : container.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((node) => {
+      node.onclick = async () => {
+        const action = String(node.dataset.action || "");
+        activateLegacySidebarAction(action, currentRoute);
+        if (isSelectedSidebarAction(action, currentRoute) && typeof onSelectedAction === "function") {
+          await onSelectedAction(node);
+        }
+      };
+    });
+    container == null ? void 0 : container.querySelectorAll(".modern-sidebar-pill[data-action='expandSidebar']").forEach((node) => {
+      node.onclick = () => {
+        if (typeof onExpandSidebar === "function") {
+          onExpandSidebar(node);
+        }
+      };
+    });
+  }
+  function setLegacySidebarExpanded(container, expanded) {
+    const sidebar = container == null ? void 0 : container.querySelector(".home-sidebar");
+    if (!sidebar) {
+      return;
+    }
+    sidebar.classList.toggle("expanded", Boolean(expanded));
+  }
+  function getLegacySidebarNodes(container) {
+    return Array.from((container == null ? void 0 : container.querySelectorAll(".home-sidebar .focusable")) || []).filter((node) => !node.closest(".modern-sidebar-panel"));
+  }
+  function getLegacySidebarSelectedNode(container) {
+    return (container == null ? void 0 : container.querySelector(".home-sidebar .home-nav-item.selected")) || (container == null ? void 0 : container.querySelector(".home-sidebar .home-nav-item")) || (container == null ? void 0 : container.querySelector(".home-sidebar .focusable")) || null;
+  }
+  function getModernSidebarNodes(container) {
+    return Array.from((container == null ? void 0 : container.querySelectorAll(".modern-sidebar-panel .focusable")) || []);
+  }
+  function getModernSidebarSelectedNode(container) {
+    return (container == null ? void 0 : container.querySelector(".modern-sidebar-panel .modern-sidebar-nav-item.selected")) || (container == null ? void 0 : container.querySelector(".modern-sidebar-panel .modern-sidebar-nav-item")) || (container == null ? void 0 : container.querySelector(".modern-sidebar-panel .focusable")) || null;
+  }
+  function getRootSidebarNodes(container, layout = {}) {
+    return (layout == null ? void 0 : layout.modernSidebar) ? getModernSidebarNodes(container) : getLegacySidebarNodes(container);
+  }
+  function getRootSidebarSelectedNode(container, layout = {}) {
+    return (layout == null ? void 0 : layout.modernSidebar) ? getModernSidebarSelectedNode(container) : getLegacySidebarSelectedNode(container);
+  }
+  function isRootSidebarNode(node) {
+    var _a;
+    return Boolean((_a = node == null ? void 0 : node.closest) == null ? void 0 : _a.call(node, ".home-sidebar, .modern-sidebar-panel"));
+  }
+  function setModernSidebarPillIconOnly(container, iconOnly, keepExpanded = false) {
+    const pill = container == null ? void 0 : container.querySelector(".modern-sidebar-pill");
+    if (!pill || keepExpanded) {
+      return;
+    }
+    pill.classList.toggle("icon-only", Boolean(iconOnly));
+  }
+  function focusWithoutAutoScroll(node) {
+    if (!node || typeof node.focus !== "function") {
+      return;
+    }
+    try {
+      node.focus({ preventScroll: true });
+    } catch (_) {
+      node.focus();
+    }
+  }
+
+  // js/ui/screens/home/homeScreen.js
+  var HERO_ROTATE_FIRST_DELAY_MS = 2e4;
+  var HERO_ROTATE_INTERVAL_MS = 1e4;
+  var HOME_LAYOUT_SEQUENCE = ["modern", "grid", "classic"];
+  function escapeHtml(value) {
+    return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function escapeAttribute(value) {
+    return escapeHtml(value).replace(/'/g, "&#39;");
+  }
+  function toTitleCase(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  }
+  function formatCatalogRowTitle(catalogName, type, showTypeSuffix = true) {
+    const rawBase = String(catalogName || "").trim();
+    const base = rawBase ? rawBase.charAt(0).toUpperCase() + rawBase.slice(1) : "";
+    const typeLabel = toTitleCase(type || "movie") || "Movie";
+    if (!base) {
+      return typeLabel;
+    }
+    if (!showTypeSuffix) {
+      return base;
+    }
+    return new RegExp(`\\b${typeLabel}$`, "i").test(base) ? base : `${base} - ${typeLabel}`;
+  }
+  function prettyId(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "Untitled";
+    }
+    if (raw.includes(":")) {
+      return raw.split(":").pop() || raw;
+    }
+    return raw;
+  }
+  function firstNonEmpty(...values) {
+    for (const value of values) {
+      const normalized = String(value || "").trim();
+      if (normalized) {
+        return normalized;
+      }
+    }
+    return "";
+  }
+  function uniqueById(items = []) {
+    const seen = /* @__PURE__ */ new Set();
+    return items.filter((item) => {
+      const id = String((item == null ? void 0 : item.id) || (item == null ? void 0 : item.contentId) || "").trim();
+      if (!id || seen.has(id)) {
+        return false;
+      }
+      seen.add(id);
+      return true;
+    });
+  }
+  function resolveImdbRating(item) {
+    var _a, _b, _c, _d;
+    const direct = (_d = (_c = (_b = (_a = item == null ? void 0 : item.imdbRating) != null ? _a : item == null ? void 0 : item.episodeImdbRating) != null ? _b : item == null ? void 0 : item.imdb_rating) != null ? _c : item == null ? void 0 : item.rating) != null ? _d : null;
+    if (direct == null || direct === "") {
+      return null;
+    }
+    const value = Number(direct);
+    if (!Number.isFinite(value) || value <= 0) {
+      return null;
+    }
+    return value.toFixed(1);
+  }
+  function extractYear(item) {
+    const candidates = [
+      item == null ? void 0 : item.releaseInfo,
+      item == null ? void 0 : item.released,
+      item == null ? void 0 : item.releaseDate,
+      item == null ? void 0 : item.release_date,
+      item == null ? void 0 : item.year
+    ];
+    for (const candidate of candidates) {
+      const match = String(candidate || "").match(/\b(19|20)\d{2}\b/);
+      if (match) {
+        return match[0];
+      }
+    }
+    return "";
+  }
+  function formatRuntimeText(item) {
+    var _a, _b, _c, _d;
+    const value = Number(
+      (_d = (_c = (_b = (_a = item == null ? void 0 : item.runtimeMinutes) != null ? _a : item == null ? void 0 : item.runtime) != null ? _b : item == null ? void 0 : item.durationMinutes) != null ? _c : item == null ? void 0 : item.duration_minutes) != null ? _d : 0
+    );
+    if (!Number.isFinite(value) || value <= 0) {
+      return "";
+    }
+    const hours = Math.floor(value / 60);
+    const minutes = Math.round(value % 60);
+    if (hours > 0 && minutes > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    if (hours > 0) {
+      return `${hours}h`;
+    }
+    return `${minutes}m`;
+  }
+  function formatEpisodeCode(season, episode) {
+    if (Number.isFinite(season) && Number.isFinite(episode)) {
+      return `S${season}E${episode}`;
+    }
+    if (Number.isFinite(episode)) {
+      return `E${episode}`;
+    }
+    return "";
+  }
+  function resolveYoutubeId(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    const directMatch = raw.match(/^[A-Za-z0-9_-]{11}$/);
+    if (directMatch) {
+      return directMatch[0];
+    }
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([A-Za-z0-9_-]{11})/i,
+      /(?:youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/i
+    ];
+    for (const pattern of patterns) {
+      const match = raw.match(pattern);
+      if (match == null ? void 0 : match[1]) {
+        return match[1];
+      }
+    }
+    return "";
+  }
+  function buildYoutubeEmbedUrl(videoId) {
+    var _a, _b;
+    const cleanId = resolveYoutubeId(videoId);
+    if (!cleanId) {
+      return "";
+    }
+    const params = new URLSearchParams({
+      autoplay: "1",
+      mute: "1",
+      controls: "0",
+      loop: "1",
+      playlist: cleanId,
+      playsinline: "1",
+      rel: "0",
+      modestbranding: "1",
+      enablejsapi: "1"
+    });
+    const origin = String(((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.origin) || "").trim();
+    const href = String(((_b = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _b.href) || "").trim();
+    if (/^https?:\/\//i.test(origin)) {
+      params.set("origin", origin);
+    }
+    if (/^https?:\/\//i.test(href)) {
+      params.set("widget_referrer", href);
+    }
+    return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
+  }
+  function resolveTrailerSource(meta = {}) {
+    const trailerStreams = Array.isArray(meta == null ? void 0 : meta.trailerStreams) ? meta.trailerStreams : [];
+    const directVideo = trailerStreams.find((entry) => {
+      const url = String((entry == null ? void 0 : entry.url) || (entry == null ? void 0 : entry.videoUrl) || (entry == null ? void 0 : entry.stream) || "").trim();
+      return /^https?:\/\//i.test(url);
+    });
+    if (directVideo) {
+      return {
+        kind: "video",
+        url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
+      };
+    }
+    const trailerCandidates = [
+      ...Array.isArray(meta == null ? void 0 : meta.trailers) ? meta.trailers : [],
+      ...Array.isArray(meta == null ? void 0 : meta.videos) ? meta.videos : []
+    ];
+    for (const entry of trailerCandidates) {
+      const ytId = resolveYoutubeId(
+        (entry == null ? void 0 : entry.ytId) || (entry == null ? void 0 : entry.youtubeId) || (entry == null ? void 0 : entry.source) || (entry == null ? void 0 : entry.url) || (entry == null ? void 0 : entry.link) || ""
+      );
+      if (ytId) {
+        return {
+          kind: "youtube",
+          ytId,
+          embedUrl: buildYoutubeEmbedUrl(ytId)
+        };
+      }
+    }
+    const fallbackId = resolveYoutubeId(Array.isArray(meta == null ? void 0 : meta.trailerYtIds) ? meta.trailerYtIds[0] : "");
+    if (!fallbackId) {
+      return null;
+    }
+    return {
+      kind: "youtube",
+      ytId: fallbackId,
+      embedUrl: buildYoutubeEmbedUrl(fallbackId)
+    };
+  }
+  function withTimeout(promise, ms, fallbackValue) {
+    let timer = null;
+    return Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallbackValue), ms);
+      })
+    ]).finally(() => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+  }
+  function buildProgressStatus(item) {
+    const durationMs = Number((item == null ? void 0 : item.durationMs) || 0);
+    const positionMs = Number((item == null ? void 0 : item.positionMs) || 0);
+    if (!durationMs || !positionMs) {
+      return "Continue";
+    }
+    const remainingMinutes = Math.max(0, Math.round((durationMs - positionMs) / 6e4));
+    const progress = Math.max(0, Math.min(1, positionMs / durationMs));
+    if (progress >= 0.85 || remainingMinutes <= 10) {
+      return "Almost done";
+    }
+    if (remainingMinutes > 0) {
+      return `${remainingMinutes}m left`;
+    }
+    return "Continue";
+  }
+  function buildProgressFraction(item) {
+    const durationMs = Number((item == null ? void 0 : item.durationMs) || 0);
+    const positionMs = Number((item == null ? void 0 : item.positionMs) || 0);
+    if (!durationMs || !positionMs) {
+      return 0;
+    }
+    return Math.max(0, Math.min(1, positionMs / durationMs));
+  }
+  function normalizeCatalogItem(item, fallbackType = "movie") {
+    var _a, _b;
+    if (!item) {
+      return null;
+    }
+    return {
+      ...item,
+      id: String(item.id || "").trim(),
+      type: String(item.type || item.apiType || fallbackType || "movie").trim() || "movie",
+      apiType: String(item.apiType || item.type || fallbackType || "movie").trim() || "movie",
+      name: firstNonEmpty(item.name, item.title, prettyId(item.id)),
+      poster: firstNonEmpty(item.poster, item.backdrop, item.backdropUrl, item.thumbnail),
+      background: firstNonEmpty(item.background, item.backdrop, item.backdropUrl, item.poster, item.thumbnail),
+      logo: firstNonEmpty(item.logo),
+      description: firstNonEmpty(item.description, item.overview, item.plot),
+      releaseInfo: firstNonEmpty(item.releaseInfo, item.released),
+      genres: Array.isArray(item.genres) ? item.genres.filter(Boolean) : [],
+      runtimeMinutes: Number((_b = (_a = item.runtimeMinutes) != null ? _a : item.runtime) != null ? _b : 0) || 0,
+      imdbRating: resolveImdbRating(item),
+      ageRating: firstNonEmpty(item.ageRating, item.age_rating),
+      status: firstNonEmpty(item.status),
+      language: firstNonEmpty(item.language),
+      country: firstNonEmpty(item.country)
+    };
+  }
+  function normalizeContinueWatchingItem(item) {
+    var _a, _b;
+    if (!item) {
+      return null;
+    }
+    const title = firstNonEmpty(item.title, item.name, prettyId(item.contentId));
+    const type = String(item.contentType || item.type || "movie").trim() || "movie";
+    const isSeries = type.toLowerCase() === "series";
+    return {
+      ...item,
+      heroSource: "continueWatching",
+      id: String(item.contentId || item.id || "").trim(),
+      contentId: String(item.contentId || item.id || "").trim(),
+      type,
+      apiType: type,
+      name: title,
+      title,
+      poster: isSeries ? firstNonEmpty(item.poster, item.episodeThumbnail, item.thumbnail, item.backdrop, item.background) : firstNonEmpty(item.poster, item.backdrop, item.background, item.thumbnail, item.episodeThumbnail),
+      background: isSeries ? firstNonEmpty(item.background, item.backdrop, item.poster, item.episodeThumbnail, item.thumbnail) : firstNonEmpty(item.background, item.backdrop, item.poster, item.thumbnail, item.episodeThumbnail),
+      logo: firstNonEmpty(item.logo),
+      description: firstNonEmpty(item.description),
+      releaseInfo: firstNonEmpty(item.releaseInfo),
+      genres: Array.isArray(item.genres) ? item.genres.filter(Boolean) : [],
+      runtimeMinutes: Number((_b = (_a = item.runtimeMinutes) != null ? _a : item.runtime) != null ? _b : 0) || 0,
+      imdbRating: resolveImdbRating(item),
+      ageRating: firstNonEmpty(item.ageRating, item.age_rating),
+      status: firstNonEmpty(item.status),
+      language: firstNonEmpty(item.language),
+      country: firstNonEmpty(item.country),
+      progressStatus: buildProgressStatus(item),
+      progressFraction: buildProgressFraction(item),
+      episodeCode: formatEpisodeCode(item.season, item.episode),
+      episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
+    };
+  }
+  function buildHeroDisplayModel(hero, layoutMode) {
+    const year = extractYear(hero);
+    const imdb = resolveImdbRating(hero);
+    const genres = Array.isArray(hero == null ? void 0 : hero.genres) ? hero.genres.filter(Boolean).slice(0, 3) : [];
+    const typeLabel = toTitleCase((hero == null ? void 0 : hero.type) || (hero == null ? void 0 : hero.apiType) || "movie") || "Movie";
+    const isContinueWatchingHero = (hero == null ? void 0 : hero.heroSource) === "continueWatching";
+    const metaPrimary = [];
+    const metaSecondary = [];
+    let chips = [];
+    if (layoutMode === "modern") {
+      if (isContinueWatchingHero) {
+        const episodeLabel = [hero == null ? void 0 : hero.episodeCode, hero == null ? void 0 : hero.episodeTitle].filter(Boolean).join(" \xB7 ");
+        metaPrimary.push(episodeLabel || typeLabel, genres[0], year);
+        metaSecondary.push(String((hero == null ? void 0 : hero.progressStatus) || "").toUpperCase());
+        if (imdb) {
+          metaSecondary.push({ imdb });
+        }
+      } else {
+        metaPrimary.push(typeLabel, genres[0], formatRuntimeText(hero), year);
+        if (imdb) {
+          metaSecondary.push({ imdb });
+        }
+        chips = [];
+      }
+    } else {
+      if (imdb) {
+        metaPrimary.push({ imdb });
+      }
+      if (year) {
+        metaPrimary.push(year);
+      }
+      chips = genres;
+    }
+    return {
+      title: (hero == null ? void 0 : hero.name) || "Untitled",
+      description: firstNonEmpty(hero == null ? void 0 : hero.description) || " ",
+      logo: firstNonEmpty(hero == null ? void 0 : hero.logo),
+      backdrop: firstNonEmpty(hero == null ? void 0 : hero.background, hero == null ? void 0 : hero.backdrop, hero == null ? void 0 : hero.backdropUrl, hero == null ? void 0 : hero.poster),
+      metaPrimary: metaPrimary.filter(Boolean),
+      metaSecondary: metaSecondary.filter(Boolean),
+      chips
+    };
+  }
+  function buildModernHeroPresentation(hero) {
+    const isContinueWatchingHero = (hero == null ? void 0 : hero.heroSource) === "continueWatching";
+    const normalized = isContinueWatchingHero ? normalizeContinueWatchingItem(hero) : normalizeCatalogItem(hero);
+    if (!normalized) {
+      return null;
+    }
+    const isSeries = String(normalized.type || normalized.apiType || "").toLowerCase() === "series";
+    const genres = Array.isArray(normalized.genres) ? normalized.genres.filter(Boolean) : [];
+    const contentTypeText = toTitleCase(normalized.type || normalized.apiType || "movie");
+    const runtimeText = formatRuntimeText(normalized);
+    const yearText = extractYear(normalized);
+    const imdbText = resolveImdbRating(normalized);
+    const statusBadge = firstNonEmpty(normalized.status).toUpperCase();
+    const ageRatingBadge = firstNonEmpty(normalized.ageRating);
+    const languageText = firstNonEmpty(normalized.language).toUpperCase();
+    const secondaryHighlightText = isContinueWatchingHero ? firstNonEmpty(normalized.progressStatus).toUpperCase() : "";
+    const leadingMeta = isContinueWatchingHero ? [[normalized.episodeCode, normalized.episodeTitle].filter(Boolean).join(" \xB7 ") || contentTypeText].filter(Boolean) : [contentTypeText, genres[0]].filter(Boolean);
+    const trailingMeta = isContinueWatchingHero ? [yearText].filter(Boolean) : [runtimeText, yearText].filter(Boolean);
+    const badges = isContinueWatchingHero ? [] : [ageRatingBadge, statusBadge].filter(Boolean);
+    const showImdbPrimary = Boolean(imdbText) && !isSeries && !badges.length && !secondaryHighlightText;
+    const showImdbSecondary = Boolean(imdbText) && !showImdbPrimary;
+    return {
+      title: normalized.name || "Untitled",
+      logo: firstNonEmpty(normalized.logo),
+      description: firstNonEmpty(normalized.description) || "",
+      backdrop: firstNonEmpty(
+        normalized.background,
+        normalized.backdrop,
+        normalized.backdropUrl,
+        normalized.poster,
+        normalized.thumbnail,
+        normalized.episodeThumbnail
+      ),
+      leadingMeta,
+      trailingMeta,
+      secondaryHighlightText,
+      badges,
+      languageText,
+      showImdbPrimary,
+      showImdbSecondary,
+      imdbText
+    };
+  }
+  function renderModernHeroMetaGroup(tokens = []) {
+    return tokens.filter(Boolean).map((token) => `<span>${escapeHtml(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
+  }
+  function renderModernHeroPrimary(display) {
+    const left = renderModernHeroMetaGroup(display.leadingMeta);
+    const rightTokens = display.trailingMeta.filter(Boolean).map((token) => `<span>${escapeHtml(token)}</span>`);
+    if (display.showImdbPrimary) {
+      rightTokens.push(`
+      <span class="home-hero-imdb">
+        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+        <span>${escapeHtml(display.imdbText)}</span>
+      </span>
+    `);
+    }
+    return `
+    <div class="home-modern-hero-meta-group">${left}</div>
+    <div class="home-modern-hero-meta-group">${rightTokens.join('<span class="home-hero-dot">\u2022</span>')}</div>
+  `;
+  }
+  function renderModernHeroSecondary(display) {
+    const parts = [];
+    if (display.secondaryHighlightText) {
+      parts.push(`<span class="home-modern-hero-highlight">${escapeHtml(display.secondaryHighlightText)}</span>`);
+    }
+    display.badges.forEach((badge) => {
+      parts.push(`<span class="home-modern-hero-badge">${escapeHtml(badge)}</span>`);
+    });
+    if (display.showImdbSecondary) {
+      parts.push(`
+      <span class="home-hero-imdb">
+        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+        <span>${escapeHtml(display.imdbText)}</span>
+      </span>
+    `);
+    }
+    if (display.languageText) {
+      parts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml(display.languageText)}</span>`);
+    }
+    return parts.join('<span class="home-hero-dot">\u2022</span>');
+  }
+  function renderMetaTokens(tokens = []) {
+    return tokens.map((token) => {
+      if (token && typeof token === "object" && token.imdb) {
+        return `
+        <span class="home-hero-imdb">
+          <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+          <span>${escapeHtml(token.imdb)}</span>
+        </span>
+      `;
+      }
+      return `<span>${escapeHtml(token)}</span>`;
+    }).join('<span class="home-hero-dot">\u2022</span>');
+  }
+  function buildHeroIndicators2(items = [], activeItem) {
+    if (!Array.isArray(items) || items.length <= 1) {
+      return "";
+    }
+    const activeId = String((activeItem == null ? void 0 : activeItem.id) || "");
+    const matchedIndex = items.findIndex((item) => String((item == null ? void 0 : item.id) || "") === activeId);
+    const activeIndex = matchedIndex >= 0 ? matchedIndex : 0;
+    return items.map((_, index) => `
+    <span class="home-hero-indicator${index === activeIndex ? " is-active" : ""}"></span>
+  `).join("");
+  }
+  function renderHeroMarkup(layoutMode, heroItem, heroCandidates) {
+    const display = buildHeroDisplayModel(heroItem, layoutMode);
+    const isInteractive = layoutMode !== "modern";
+    return `
+    <section class="home-hero home-hero-${escapeAttribute(layoutMode)}">
+      <article class="home-hero-card${isInteractive ? " focusable" : ""}"
+               ${isInteractive ? `data-action="openDetail"
+               data-item-id="${escapeAttribute((heroItem == null ? void 0 : heroItem.id) || "")}"
+               data-item-type="${escapeAttribute((heroItem == null ? void 0 : heroItem.type) || "movie")}"
+               data-item-title="${escapeAttribute((heroItem == null ? void 0 : heroItem.name) || "Untitled")}"` : ""}>
+        <div class="home-hero-backdrop-wrap">
+          ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" />` : '<div class="home-hero-backdrop placeholder"></div>'}
+        </div>
+        <div class="home-hero-copy">
+          <div class="home-hero-brand">
+            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title)}" />` : ""}
+            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml(display.title)}</h1>
+          </div>
+          <div class="home-hero-meta-primary${display.metaPrimary.length ? "" : " is-empty"}">${renderMetaTokens(display.metaPrimary)}</div>
+          <div class="home-hero-chip-row${display.chips.length ? "" : " is-empty"}">${display.chips.map((chip) => `<span class="home-hero-chip">${escapeHtml(chip)}</span>`).join("")}</div>
+          <div class="home-hero-meta-secondary${display.metaSecondary.length ? "" : " is-empty"}">${renderMetaTokens(display.metaSecondary)}</div>
+          <p class="home-hero-description">${escapeHtml(display.description)}</p>
+        </div>
+        <div class="home-hero-indicators">${buildHeroIndicators2(heroCandidates, heroItem)}</div>
+      </article>
+    </section>
+  `;
+  }
+  function buildPosterSubtitle(item, layoutMode) {
+    const normalized = normalizeCatalogItem(item);
+    return firstNonEmpty(normalized.releaseInfo, "");
+  }
+  function buildExpandedPosterMeta(item) {
+    var _a;
+    const normalized = normalizeCatalogItem(item);
+    const parts = [];
+    const typeLabel = toTitleCase(normalized.type || normalized.apiType || "movie");
+    if (typeLabel) {
+      parts.push(typeLabel);
+    }
+    if ((_a = normalized.genres) == null ? void 0 : _a[0]) {
+      parts.push(normalized.genres[0]);
+    }
+    const year = extractYear(normalized);
+    if (year) {
+      parts.push(year);
+    }
+    const imdb = resolveImdbRating(normalized);
+    if (imdb) {
+      parts.push(`IMDb ${imdb}`);
+    }
+    return parts.join("  \xB7  ");
+  }
+  function renderRowHeader(title, subtitle = "") {
+    return `
+    <div class="home-row-head">
+      <h2 class="home-row-title">${escapeHtml(title)}</h2>
+      ${subtitle ? `<div class="home-row-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+    </div>
+  `;
+  }
+  function renderContinueWatchingCard(item, index) {
+    const normalized = normalizeContinueWatchingItem(item);
+    const subtitle = firstNonEmpty(normalized.episodeTitle, normalized.releaseInfo, toTitleCase(normalized.type));
+    return `
+    <article class="home-content-card home-continue-card focusable"
+             data-action="resumeProgress"
+             data-cw-index="${index}"
+             data-item-id="${escapeAttribute(normalized.contentId)}"
+             data-item-type="${escapeAttribute(normalized.type || "movie")}"
+             data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
+      <div class="home-continue-media"${normalized.poster ? ` style="background-image:url('${escapeAttribute(normalized.poster)}')"` : ""}>
+        <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || "Continue")}</span>
+        <div class="home-continue-copy">
+          ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
+          <div class="home-continue-title">${escapeHtml(normalized.title)}</div>
+          <div class="home-continue-subtitle">${escapeHtml(subtitle || "Continue watching")}</div>
+        </div>
+        <div class="home-continue-progress"><span style="width:${Math.round((normalized.progressFraction || 0) * 100)}%"></span></div>
+      </div>
+    </article>
+  `;
+  }
+  function renderContinueWatchingSection(items = [], options = {}) {
+    if (!items.length) {
+      return "";
+    }
+    const rowKey = String((options == null ? void 0 : options.rowKey) || "").trim();
+    return `
+    <section class="home-row home-row-continue"${rowKey ? ` data-row-key="${escapeAttribute(rowKey)}"` : ""}>
+      <div class="home-row-head">
+        <h2 class="home-row-title">Continue Watching</h2>
+      </div>
+      <div class="home-track home-track-continue"${rowKey ? ` data-track-row-key="${escapeAttribute(rowKey)}"` : ""}>
+        ${items.map((item, index) => renderContinueWatchingCard(item, index)).join("")}
+      </div>
+    </section>
+  `;
+  }
+  function createSeeAllCardMarkup(seeAllId, rowData) {
+    return `
+    <article class="home-content-card home-seeall-card focusable"
+             data-action="openCatalogSeeAll"
+             data-see-all-id="${escapeAttribute(seeAllId)}"
+             data-addon-base-url="${escapeAttribute(rowData.addonBaseUrl || "")}"
+             data-addon-id="${escapeAttribute(rowData.addonId || "")}"
+             data-addon-name="${escapeAttribute(rowData.addonName || "")}"
+             data-catalog-id="${escapeAttribute(rowData.catalogId || "")}"
+             data-catalog-name="${escapeAttribute(rowData.catalogName || "")}"
+             data-catalog-type="${escapeAttribute(rowData.type || "")}">
+      <div class="home-seeall-card-inner">
+        <div class="home-seeall-arrow" aria-hidden="true">&#8594;</div>
+        <div class="home-seeall-label">See All</div>
+      </div>
+    </article>
+  `;
+  }
+  function groupNodesByOffsetTop(nodes = []) {
+    const grouped = [];
+    nodes.forEach((node) => {
+      const top = Math.round(node.offsetTop);
+      const bucket = grouped.find((entry) => Math.abs(entry.top - top) <= 6);
+      if (bucket) {
+        bucket.nodes.push(node);
+        return;
+      }
+      grouped.push({ top, nodes: [node] });
+    });
+    grouped.sort((left, right) => left.top - right.top);
+    return grouped.map((entry) => entry.nodes);
+  }
+  function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic") {
+    const normalized = normalizeCatalogItem(item, itemType);
+    const subtitle = buildPosterSubtitle(normalized, layoutMode);
+    const expandedMeta = buildExpandedPosterMeta(normalized);
+    const backdropSrc = firstNonEmpty(normalized.background, normalized.backdrop, normalized.backdropUrl, normalized.poster);
+    const posterSrc = firstNonEmpty(normalized.poster, normalized.thumbnail, normalized.backdrop, normalized.backdropUrl);
+    return `
+    <article class="home-content-card home-poster-card focusable"
+             data-action="openDetail"
+             data-row-index="${rowIndex}"
+             data-item-index="${itemIndex}"
+             data-item-id="${escapeAttribute(normalized.id)}"
+             data-item-type="${escapeAttribute(normalized.type || itemType || "movie")}"
+             data-item-title="${escapeAttribute(normalized.name || "Untitled")}"
+             data-poster-src="${escapeAttribute(posterSrc || "")}"
+             data-backdrop-src="${escapeAttribute(backdropSrc || "")}"
+             data-logo-src="${escapeAttribute(normalized.logo || "")}">
+      <div class="home-poster-frame">
+        ${posterSrc ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" alt="${escapeAttribute(normalized.name || "content")}" />` : '<div class="content-poster placeholder"></div>'}
+        <div class="home-poster-trailer-layer"></div>
+        <div class="home-poster-expanded-gradient"></div>
+        <div class="home-poster-expanded-brand">
+          ${normalized.logo ? `<img class="home-poster-expanded-logo" src="${escapeAttribute(normalized.logo)}" alt="${escapeAttribute(normalized.name || "content")}" />` : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
+        </div>
+      </div>
+      <div class="home-poster-expanded-copy">
+        ${expandedMeta ? `<div class="home-poster-expanded-meta">${escapeHtml(expandedMeta)}</div>` : ""}
+        ${normalized.description ? `<div class="home-poster-expanded-description">${escapeHtml(normalized.description)}</div>` : ""}
+      </div>
+      ${showLabels ? `
+        <div class="home-poster-copy">
+          <div class="home-poster-title">${escapeHtml(normalized.name || "Untitled")}</div>
+          ${subtitle ? `<div class="home-poster-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+        </div>
+      ` : ""}
+    </article>
+  `;
+  }
+  var HomeScreen = {
+    captureCurrentFocusState() {
+      var _a, _b;
+      if (!this.container || this.layoutMode !== "modern") {
+        return null;
+      }
+      const viewport = this.container.querySelector(".home-modern-rows-viewport");
+      if (!viewport) {
+        return null;
+      }
+      const focused = this.container.querySelector(".home-main .focusable.focused");
+      const section = ((_a = focused == null ? void 0 : focused.closest) == null ? void 0 : _a.call(focused, "[data-row-key]")) || null;
+      const trackStates = Object.fromEntries(
+        Array.from(this.container.querySelectorAll("[data-track-row-key]")).map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft]).filter(([key]) => key)
+      );
+      const rowKey = String(((_b = section == null ? void 0 : section.dataset) == null ? void 0 : _b.rowKey) || "");
+      let itemIndex = -1;
+      if (focused) {
+        const track = focused.closest(".home-track");
+        if (track) {
+          itemIndex = Array.from(track.querySelectorAll(".home-content-card.focusable")).indexOf(focused);
+        }
+      }
+      return {
+        layoutMode: "modern",
+        mainScrollTop: viewport.scrollTop,
+        rowKey,
+        itemIndex,
+        trackStates
+      };
+    },
+    restoreModernFocusState(state = null) {
+      var _a, _b, _c;
+      const focusState = (state == null ? void 0 : state.layoutMode) === "modern" ? state : ((_a = this.savedFocusStates) == null ? void 0 : _a.modern) || null;
+      if (!focusState || this.layoutMode !== "modern") {
+        return false;
+      }
+      const viewport = (_b = this.container) == null ? void 0 : _b.querySelector(".home-modern-rows-viewport");
+      if (!viewport) {
+        return false;
+      }
+      Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
+        const track = this.container.querySelector(`[data-track-row-key="${rowKey}"]`);
+        if (track) {
+          track.scrollLeft = Number(scrollLeft || 0);
+        }
+      });
+      const rowSection = focusState.rowKey ? this.container.querySelector(`[data-row-key="${focusState.rowKey}"]`) : null;
+      const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      const desiredScrollTop = rowSection ? rowSection.offsetTop : Number(focusState.mainScrollTop || 0);
+      viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
+      const targetTrack = ((_c = rowSection == null ? void 0 : rowSection.querySelector) == null ? void 0 : _c.call(rowSection, ".home-track")) || null;
+      const targetNodes = Array.from((targetTrack == null ? void 0 : targetTrack.querySelectorAll(".home-content-card.focusable")) || []);
+      const fallback = this.container.querySelector(".home-main .home-continue-card.focusable, .home-main .home-poster-card.focusable");
+      const target = targetNodes[focusState.itemIndex] || targetNodes[0] || fallback;
+      if (!target) {
+        return false;
+      }
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      target.classList.add("focused");
+      this.focusWithoutAutoScroll(target);
+      this.lastMainFocus = target;
+      this.ensureMainVerticalVisibility(target);
+      this.scheduleModernHeroUpdate(target);
+      this.scheduleFocusedPosterFlow(target);
+      return true;
+    },
+    cancelScrollAnimation(container, axis = "x") {
+      const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
+      const state = map.get(container);
+      const key = axis === "y" ? "y" : "x";
+      if (state == null ? void 0 : state[key]) {
+        cancelAnimationFrame(state[key]);
+        state[key] = null;
+      }
+    },
+    animateScroll(container, axis, targetValue, duration = 150) {
+      var _a, _b;
+      if (!container) {
+        return;
+      }
+      const property = axis === "y" ? "scrollTop" : "scrollLeft";
+      const max = axis === "y" ? Math.max(0, container.scrollHeight - container.clientHeight) : Math.max(0, container.scrollWidth - container.clientWidth);
+      const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+      const startValue = Number(container[property] || 0);
+      if (Math.abs(startValue - nextValue) <= 1) {
+        container[property] = nextValue;
+        return;
+      }
+      const prefersReducedMotion = (_b = (_a = globalThis == null ? void 0 : globalThis.matchMedia) == null ? void 0 : _a.call(globalThis, "(prefers-reduced-motion: reduce)")) == null ? void 0 : _b.matches;
+      if (prefersReducedMotion) {
+        container[property] = nextValue;
+        return;
+      }
+      const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+      const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
+      const key = axis === "y" ? "y" : "x";
+      const existing = map.get(container) || {};
+      if (existing[key]) {
+        cancelAnimationFrame(existing[key]);
+      }
+      const startTime = performance.now();
+      const tick = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        container[property] = Math.round(startValue + (nextValue - startValue) * easeOutCubic(progress));
+        if (progress < 1) {
+          existing[key] = requestAnimationFrame(tick);
+          map.set(container, existing);
+        } else {
+          existing[key] = null;
+          map.set(container, existing);
+        }
+      };
+      existing[key] = requestAnimationFrame(tick);
+      map.set(container, existing);
+    },
+    getRowFocusInset() {
+      if (this.layoutMode === "modern") {
+        return MODERN_HOME_CONSTANTS.rowFocusInset;
+      }
+      if (this.layoutMode === "grid") {
+        return 24;
+      }
+      return 32;
+    },
+    getTrackEdgePadding() {
+      if (this.layoutMode === "modern") {
+        return MODERN_HOME_CONSTANTS.trackEdgePadding;
+      }
+      if (this.layoutMode === "grid") {
+        return 24;
+      }
+      return 48;
+    },
+    stopHeroRotation() {
+      if (this.heroRotateTimer) {
+        clearInterval(this.heroRotateTimer);
+        this.heroRotateTimer = null;
+      }
+      if (this.heroRotateTimeout) {
+        clearTimeout(this.heroRotateTimeout);
+        this.heroRotateTimeout = null;
+      }
+    },
+    cancelPendingHeroFocus() {
+      if (this.heroFocusDelayTimer) {
+        clearTimeout(this.heroFocusDelayTimer);
+        this.heroFocusDelayTimer = null;
+      }
+    },
+    startHeroRotation() {
+      this.stopHeroRotation();
+      if (this.layoutMode === "modern") {
+        return;
+      }
+      if (!Array.isArray(this.heroCandidates) || this.heroCandidates.length <= 1) {
+        return;
+      }
+      this.heroRotateTimeout = setTimeout(() => {
+        this.rotateHero(1);
+        this.heroRotateTimer = setInterval(() => {
+          this.rotateHero(1);
+        }, HERO_ROTATE_INTERVAL_MS);
+      }, HERO_ROTATE_FIRST_DELAY_MS);
+    },
+    rotateHero(step = 1) {
+      if (!Array.isArray(this.heroCandidates) || this.heroCandidates.length <= 1) {
+        return;
+      }
+      const total = this.heroCandidates.length;
+      this.heroIndex = (Number(this.heroIndex || 0) + step + total) % total;
+      this.heroItem = this.heroCandidates[this.heroIndex];
+      this.applyHeroToDom();
+    },
+    applyHeroToDom() {
+      var _a, _b;
+      const heroNode = (_a = this.container) == null ? void 0 : _a.querySelector(".home-hero-card");
+      if (!heroNode) {
+        return;
+      }
+      const hero = this.heroItem || ((_b = this.heroCandidates) == null ? void 0 : _b[0]) || null;
+      if (!hero) {
+        return;
+      }
+      const display = this.layoutMode === "modern" ? buildModernHeroPresentation(hero) : buildHeroDisplayModel(hero, this.layoutMode);
+      if (!display) {
+        return;
+      }
+      heroNode.dataset.itemId = (hero == null ? void 0 : hero.id) || "";
+      heroNode.dataset.itemType = (hero == null ? void 0 : hero.type) || "movie";
+      heroNode.dataset.itemTitle = (hero == null ? void 0 : hero.name) || "Untitled";
+      const backdrop = heroNode.querySelector(".home-hero-backdrop");
+      if (backdrop) {
+        const src = display.backdrop || "";
+        if (src) {
+          backdrop.setAttribute("src", src);
+          backdrop.setAttribute("alt", display.title || "featured");
+          backdrop.classList.remove("placeholder");
+        } else {
+          backdrop.removeAttribute("src");
+          backdrop.classList.add("placeholder");
+        }
+      }
+      const logoNode = heroNode.querySelector(".home-hero-logo");
+      const brandNode = heroNode.querySelector(".home-hero-brand");
+      if (display.logo) {
+        if (logoNode) {
+          logoNode.setAttribute("src", display.logo);
+          logoNode.setAttribute("alt", display.title || "logo");
+        } else if (brandNode) {
+          brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" />`);
+        }
+      } else if (logoNode) {
+        logoNode.remove();
+      }
+      const titleNode = heroNode.querySelector(".home-hero-title-text");
+      if (titleNode) {
+        titleNode.textContent = display.title || "Untitled";
+        titleNode.classList.toggle("is-hidden", Boolean(display.logo));
+      }
+      if (this.layoutMode === "modern") {
+        const primaryNode = heroNode.querySelector(".home-modern-hero-meta-line");
+        if (primaryNode) {
+          primaryNode.innerHTML = renderModernHeroPrimary(display);
+          primaryNode.classList.toggle(
+            "is-empty",
+            !display.leadingMeta.length && !display.trailingMeta.length && !display.showImdbPrimary
+          );
+        }
+        const secondaryNode = heroNode.querySelector(".home-modern-hero-secondary");
+        if (secondaryNode) {
+          secondaryNode.innerHTML = renderModernHeroSecondary(display);
+          secondaryNode.classList.toggle(
+            "is-empty",
+            !display.secondaryHighlightText && !display.badges.length && !display.showImdbSecondary && !display.languageText
+          );
+        }
+      } else {
+        const primaryNode = heroNode.querySelector(".home-hero-meta-primary");
+        if (primaryNode) {
+          primaryNode.innerHTML = renderMetaTokens(display.metaPrimary);
+          primaryNode.classList.toggle("is-empty", !display.metaPrimary.length);
+        }
+        const secondaryNode = heroNode.querySelector(".home-hero-meta-secondary");
+        if (secondaryNode) {
+          secondaryNode.innerHTML = renderMetaTokens(display.metaSecondary);
+          secondaryNode.classList.toggle("is-empty", !display.metaSecondary.length);
+        }
+        const chipNode = heroNode.querySelector(".home-hero-chip-row");
+        if (chipNode) {
+          chipNode.innerHTML = display.chips.map((chip) => `<span class="home-hero-chip">${escapeHtml(chip)}</span>`).join("");
+          chipNode.classList.toggle("is-empty", !display.chips.length);
+        }
+      }
+      const descriptionNode = heroNode.querySelector(".home-hero-description");
+      if (descriptionNode) {
+        descriptionNode.textContent = display.description || " ";
+      }
+      const indicators = heroNode.querySelector(".home-hero-indicators");
+      if (indicators) {
+        indicators.innerHTML = buildHeroIndicators2(this.heroCandidates, hero);
+      }
+    },
+    setSidebarExpanded(expanded) {
+      var _a;
+      if ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) {
+        this.sidebarExpanded = Boolean(expanded);
+        return;
+      }
+      setLegacySidebarExpanded(this.container, expanded);
+    },
+    isSidebarNode(node) {
+      var _a;
+      return String(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.navZone) || "") === "sidebar";
+    },
+    isMainNode(node) {
+      var _a;
+      return String(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.navZone) || "") === "main";
+    },
+    focusWithoutAutoScroll(target) {
+      focusWithoutAutoScroll(target);
+    },
+    getInitialFocusSelector() {
+      if (this.layoutMode === "grid") {
+        return ".home-main .home-hero-card.focusable, .home-main .home-continue-card.focusable, .home-main .home-grid-track .home-content-card.focusable";
+      }
+      if (this.layoutMode === "classic") {
+        return ".home-main .home-hero-card.focusable, .home-main .home-continue-card.focusable, .home-main .home-poster-card.focusable";
+      }
+      if (this.layoutMode === "modern") {
+        return ".home-main .home-continue-card.focusable, .home-main .home-poster-card.focusable";
+      }
+      return ".home-main .focusable";
+    },
+    getNodeHeroSource(node) {
+      var _a, _b, _c, _d, _e, _f;
+      if (!node) {
+        return null;
+      }
+      if (node.classList.contains("home-hero-card")) {
+        return this.heroItem || ((_a = this.heroCandidates) == null ? void 0 : _a[0]) || null;
+      }
+      if (node.dataset.cwIndex != null) {
+        return normalizeContinueWatchingItem(((_b = this.continueWatchingDisplay) == null ? void 0 : _b[Number(node.dataset.cwIndex)]) || null);
+      }
+      if (node.dataset.rowIndex != null && node.dataset.itemIndex != null) {
+        const row = ((_c = this.rows) == null ? void 0 : _c[Number(node.dataset.rowIndex)]) || null;
+        const item = ((_f = (_e = (_d = row == null ? void 0 : row.result) == null ? void 0 : _d.data) == null ? void 0 : _e.items) == null ? void 0 : _f[Number(node.dataset.itemIndex)]) || null;
+        return normalizeCatalogItem(item, (row == null ? void 0 : row.type) || "movie");
+      }
+      return null;
+    },
+    scheduleModernHeroUpdate(node) {
+      if (this.layoutMode !== "modern") {
+        return;
+      }
+      const hero = this.getNodeHeroSource(node);
+      if (!hero || !hero.id) {
+        return;
+      }
+      this.cancelPendingHeroFocus();
+      const now = Date.now();
+      const previous = Number(this.lastModernHeroNavAt || 0);
+      const delay = previous > 0 && now - previous < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs ? MODERN_HOME_CONSTANTS.heroRapidSettleMs : MODERN_HOME_CONSTANTS.heroFocusDelayMs;
+      this.lastModernHeroNavAt = now;
+      this.heroFocusDelayTimer = setTimeout(() => {
+        this.heroItem = hero;
+        const matchedIndex = this.heroCandidates.findIndex((item) => String((item == null ? void 0 : item.id) || "") === String(hero.id || ""));
+        if (matchedIndex >= 0) {
+          this.heroIndex = matchedIndex;
+        }
+        this.applyHeroToDom();
+      }, delay);
+    },
+    isModernPosterNode(node) {
+      var _a;
+      return this.layoutMode === "modern" && Boolean((_a = node == null ? void 0 : node.classList) == null ? void 0 : _a.contains("home-poster-card"));
+    },
+    clearTrailerLayer(container) {
+      var _a;
+      if (!container) {
+        return;
+      }
+      const activeVideo = container.querySelector("video");
+      if (activeVideo) {
+        try {
+          activeVideo.pause();
+          activeVideo.removeAttribute("src");
+          (_a = activeVideo.load) == null ? void 0 : _a.call(activeVideo);
+        } catch (_) {
+        }
+      }
+      container.innerHTML = "";
+      container.classList.remove("is-active");
+    },
+    mountTrailerLayer(container, source) {
+      var _a;
+      if (!container || !source) {
+        return;
+      }
+      this.clearTrailerLayer(container);
+      if (source.kind === "youtube" && source.embedUrl) {
+        container.innerHTML = `
+        <iframe class="home-inline-trailer-frame"
+                src="${escapeAttribute(source.embedUrl)}"
+                title="Trailer preview"
+                allow="autoplay; encrypted-media; picture-in-picture"
+                allowfullscreen
+                referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      `;
+        container.classList.add("is-active");
+        return;
+      }
+      if (source.kind === "video" && source.url) {
+        container.innerHTML = `
+        <video class="home-inline-trailer-video" autoplay muted loop playsinline>
+          <source src="${escapeAttribute(source.url)}" />
+        </video>
+      `;
+        const video = container.querySelector("video");
+        if (video) {
+          const activate = () => container.classList.add("is-active");
+          video.addEventListener("loadeddata", activate, { once: true });
+          const playAttempt = (_a = video.play) == null ? void 0 : _a.call(video);
+          if (playAttempt == null ? void 0 : playAttempt.catch) {
+            playAttempt.catch(() => {
+            });
+          }
+        } else {
+          container.classList.add("is-active");
+        }
+      }
+    },
+    collapseFocusedPoster(node = this.expandedPosterNode) {
+      var _a, _b, _c;
+      const target = node || null;
+      if (target) {
+        target.classList.remove("is-expanded", "is-trailer-active");
+        const image = target.querySelector(".content-poster");
+        if (image && image.tagName === "IMG") {
+          const posterSrc = String(target.dataset.posterSrc || "").trim();
+          if (posterSrc) {
+            image.setAttribute("src", posterSrc);
+          }
+        }
+        this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
+      }
+      const heroLayer = (_a = this.container) == null ? void 0 : _a.querySelector(".home-hero-trailer-layer");
+      this.clearTrailerLayer(heroLayer);
+      (_c = (_b = this.container) == null ? void 0 : _b.querySelector(".home-modern-hero-media")) == null ? void 0 : _c.classList.remove("trailer-active");
+      if (this.expandedPosterNode === target) {
+        this.expandedPosterNode = null;
+      }
+    },
+    expandFocusedPoster(node) {
+      if (!this.isModernPosterNode(node)) {
+        return;
+      }
+      if (this.expandedPosterNode && this.expandedPosterNode !== node) {
+        this.collapseFocusedPoster(this.expandedPosterNode);
+      }
+      const image = node.querySelector(".content-poster");
+      if (image && image.tagName === "IMG") {
+        const backdropSrc = String(node.dataset.backdropSrc || "").trim();
+        if (backdropSrc) {
+          image.setAttribute("src", backdropSrc);
+        }
+      }
+      node.classList.add("is-expanded");
+      this.expandedPosterNode = node;
+    },
+    async getTrailerSourceForItem(item) {
+      const itemId = String((item == null ? void 0 : item.id) || (item == null ? void 0 : item.contentId) || "").trim();
+      const itemType = String((item == null ? void 0 : item.type) || (item == null ? void 0 : item.apiType) || "movie").trim() || "movie";
+      if (!itemId) {
+        return null;
+      }
+      const cache = this.trailerPreviewCache || (this.trailerPreviewCache = /* @__PURE__ */ new Map());
+      const cacheKey = `${itemType}:${itemId}`;
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey) || null;
+      }
+      try {
+        const result = await withTimeout(
+          metaRepository.getMetaFromAllAddons(itemType, itemId),
+          2200,
+          { status: "error", message: "timeout" }
+        );
+        const source = (result == null ? void 0 : result.status) === "success" ? resolveTrailerSource((result == null ? void 0 : result.data) || {}) : null;
+        cache.set(cacheKey, source || null);
+        return source || null;
+      } catch (error) {
+        console.warn("Home trailer preview lookup failed", error);
+        cache.set(cacheKey, null);
+        return null;
+      }
+    },
+    async activateFocusedPosterFlow(node) {
+      var _a, _b;
+      if (!this.isModernPosterNode(node) || !node.classList.contains("focused")) {
+        return;
+      }
+      const prefs = this.layoutPrefs || {};
+      const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled);
+      const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled);
+      const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
+      if (shouldExpand) {
+        this.expandFocusedPoster(node);
+      }
+      if (!shouldPreviewTrailer) {
+        return;
+      }
+      const sourceItem = this.getNodeHeroSource(node);
+      const source = await this.getTrailerSourceForItem(sourceItem);
+      if (!source || !node.classList.contains("focused")) {
+        return;
+      }
+      if (trailerTarget === "expanded_card" && shouldExpand) {
+        const trailerLayer = node.querySelector(".home-poster-trailer-layer");
+        if (trailerLayer) {
+          this.mountTrailerLayer(trailerLayer, source);
+          node.classList.add("is-trailer-active");
+        }
+        return;
+      }
+      const heroLayer = (_a = this.container) == null ? void 0 : _a.querySelector(".home-hero-trailer-layer");
+      const heroMedia = (_b = this.container) == null ? void 0 : _b.querySelector(".home-modern-hero-media");
+      if (heroLayer && heroMedia) {
+        this.mountTrailerLayer(heroLayer, source);
+        heroMedia.classList.add("trailer-active");
+      }
+    },
+    cancelFocusedPosterFlow() {
+      if (this.focusedPosterTimer) {
+        clearTimeout(this.focusedPosterTimer);
+        this.focusedPosterTimer = null;
+      }
+    },
+    scheduleFocusedPosterFlow(node) {
+      var _a;
+      if (this.layoutMode !== "modern") {
+        return;
+      }
+      this.cancelFocusedPosterFlow();
+      const prefs = this.layoutPrefs || {};
+      const shouldRun = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.focusedPosterBackdropTrailerEnabled);
+      if (!shouldRun) {
+        this.collapseFocusedPoster();
+        return;
+      }
+      if (!this.isModernPosterNode(node)) {
+        this.collapseFocusedPoster();
+        return;
+      }
+      if (this.expandedPosterNode && this.expandedPosterNode !== node) {
+        this.collapseFocusedPoster(this.expandedPosterNode);
+      }
+      const delayMs = Math.max(0, Number((_a = prefs.focusedPosterBackdropExpandDelaySeconds) != null ? _a : 3)) * 1e3;
+      this.focusedPosterTimer = setTimeout(() => {
+        this.activateFocusedPosterFlow(node).catch((error) => {
+          console.warn("Focused poster flow failed", error);
+        });
+      }, delayMs);
+    },
+    resetFocusedPosterFlow(node) {
+      if (this.layoutMode !== "modern") {
+        return;
+      }
+      this.cancelFocusedPosterFlow();
+      if (this.isModernPosterNode(node)) {
+        this.collapseFocusedPoster(node);
+        this.scheduleFocusedPosterFlow(node);
+        return;
+      }
+      this.collapseFocusedPoster();
+    },
+    openSidebar() {
+      var _a, _b;
+      if ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) {
+        if (this.sidebarExpanded) {
+          return true;
+        }
+        this.sidebarExpanded = true;
+        this.render();
+        const target2 = getModernSidebarSelectedNode(this.container);
+        if (target2) {
+          target2.classList.add("focused");
+          this.focusWithoutAutoScroll(target2);
+        }
+        return true;
+      }
+      const target = getLegacySidebarSelectedNode(this.container);
+      if (target) {
+        (_b = this.container) == null ? void 0 : _b.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+        target.classList.add("focused");
+        this.focusWithoutAutoScroll(target);
+        this.setSidebarExpanded(true);
+        return true;
+      }
+      return false;
+    },
+    closeSidebarToContent() {
+      var _a, _b, _c, _d, _e, _f, _g, _h;
+      if ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) {
+        if (!this.sidebarExpanded) {
+          return false;
+        }
+        const target2 = this.lastMainFocus && this.isMainNode(this.lastMainFocus) ? this.lastMainFocus : ((_d = (_c = (_b = this.navModel) == null ? void 0 : _b.rows) == null ? void 0 : _c[0]) == null ? void 0 : _d[0]) || null;
+        this.sidebarExpanded = false;
+        this.render();
+        if (target2) {
+          target2.classList.add("focused");
+          this.focusWithoutAutoScroll(target2);
+          this.ensureTrackHorizontalVisibility(target2, "right");
+          this.ensureMainVerticalVisibility(target2);
+        }
+        return true;
+      }
+      const current = (_e = this.container) == null ? void 0 : _e.querySelector(".home-sidebar .focusable.focused");
+      const target = this.lastMainFocus && this.isMainNode(this.lastMainFocus) ? this.lastMainFocus : ((_h = (_g = (_f = this.navModel) == null ? void 0 : _f.rows) == null ? void 0 : _g[0]) == null ? void 0 : _h[0]) || null;
+      return this.focusNode(current, target, "right") || true;
+    },
+    ensureMainVerticalVisibility(target) {
+      var _a, _b, _c;
+      const main = this.layoutMode === "modern" ? (_a = this.container) == null ? void 0 : _a.querySelector(".home-modern-rows-viewport") : (_b = this.container) == null ? void 0 : _b.querySelector(".home-main");
+      if (!main || !target || !((_c = this.container) == null ? void 0 : _c.contains(target))) {
+        return;
+      }
+      const row = target.closest(".home-row");
+      const anchor = row || target.closest(".home-hero") || target;
+      const mainRect = main.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      const inset = this.getRowFocusInset();
+      const visibleTop = mainRect.top + inset;
+      const visibleBottom = mainRect.bottom - 24;
+      const anchorTop = anchorRect.top - mainRect.top + main.scrollTop;
+      const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop;
+      if (this.layoutMode === "modern") {
+        const centeredScrollTop = anchorTop - Math.max(0, (main.clientHeight - anchor.offsetHeight) / 2);
+        this.animateScroll(main, "y", centeredScrollTop, 150);
+        return;
+      }
+      if (anchorRect.top < visibleTop) {
+        this.animateScroll(main, "y", anchorTop - inset, 150);
+        return;
+      }
+      if (anchorRect.bottom > visibleBottom) {
+        const targetScrollTop = anchorBottom - main.clientHeight + 24;
+        this.animateScroll(main, "y", targetScrollTop, 150);
+      }
+    },
+    ensureTrackHorizontalVisibility(target, direction = null) {
+      var _a;
+      const track = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, ".home-track");
+      if (!track) {
+        return;
+      }
+      const edgePadding = this.getTrackEdgePadding();
+      const targetLeft = target.offsetLeft;
+      const targetRight = targetLeft + target.offsetWidth;
+      const viewLeft = track.scrollLeft;
+      const viewRight = viewLeft + track.clientWidth;
+      const visibleLeft = viewLeft + edgePadding;
+      const visibleRight = viewRight - edgePadding;
+      if (targetRight > visibleRight) {
+        const nextLeft = direction === "right" ? targetRight - track.clientWidth + edgePadding : targetLeft - edgePadding;
+        this.animateScroll(track, "x", nextLeft, 140);
+        return;
+      }
+      if (targetLeft < visibleLeft) {
+        this.animateScroll(track, "x", targetLeft - edgePadding, 140);
+      }
+    },
+    focusNode(current, target, direction = null) {
+      if (!current || !target || current === target) {
+        return false;
+      }
+      current.classList.remove("focused");
+      target.classList.add("focused");
+      this.focusWithoutAutoScroll(target);
+      this.setSidebarExpanded(this.isSidebarNode(target));
+      if (this.isMainNode(target)) {
+        this.lastMainFocus = target;
+        this.ensureTrackHorizontalVisibility(target, direction);
+        this.ensureMainVerticalVisibility(target);
+        this.scheduleModernHeroUpdate(target);
+        this.scheduleFocusedPosterFlow(target);
+      } else {
+        this.cancelPendingHeroFocus();
+        this.cancelFocusedPosterFlow();
+        this.collapseFocusedPoster();
+      }
+      return true;
+    },
+    buildNavigationModel() {
+      var _a, _b, _c, _d, _e, _f, _g;
+      const sidebar = ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) ? Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll(".modern-sidebar-panel .focusable")) || []) : Array.from(((_c = this.container) == null ? void 0 : _c.querySelectorAll(".home-sidebar .focusable")) || []);
+      const rows = [];
+      if (this.layoutMode === "modern") {
+        rows.push(...buildModernNavigationRows(this.container));
+      } else {
+        const hero = (_d = this.container) == null ? void 0 : _d.querySelector(".home-hero-card.focusable");
+        if (hero) {
+          rows.push([hero]);
+        }
+        const trackSections = Array.from(((_e = this.container) == null ? void 0 : _e.querySelectorAll(".home-main .home-row")) || []);
+        trackSections.forEach((section) => {
+          const track = section.querySelector(".home-track");
+          if (!track) {
+            return;
+          }
+          const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
+          if (cards.length) {
+            rows.push(cards);
+          }
+        });
+      }
+      if (this.layoutMode === "grid") {
+        const gridTracks = Array.from(((_f = this.container) == null ? void 0 : _f.querySelectorAll(".home-grid-track")) || []);
+        gridTracks.forEach((track) => {
+          const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
+          groupNodesByOffsetTop(cards).forEach((rowNodes) => {
+            if (rowNodes.length) {
+              rows.push(rowNodes);
+            }
+          });
+        });
+      }
+      sidebar.forEach((node, index) => {
+        node.dataset.navZone = "sidebar";
+        node.dataset.navIndex = String(index);
+      });
+      rows.forEach((rowNodes, rowIndex) => {
+        rowNodes.forEach((node, colIndex) => {
+          node.dataset.navZone = "main";
+          node.dataset.navRow = String(rowIndex);
+          node.dataset.navCol = String(colIndex);
+        });
+      });
+      this.navModel = { sidebar, rows };
+      this.lastMainFocus = ((_g = rows[0]) == null ? void 0 : _g[0]) || null;
+    },
+    handleHomeDpad(event) {
+      var _a, _b, _c;
+      const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
+      const direction = keyCode === 38 ? "up" : keyCode === 40 ? "down" : keyCode === 37 ? "left" : keyCode === 39 ? "right" : null;
+      if (!direction) {
+        return false;
+      }
+      const nav = this.navModel;
+      if (!nav) {
+        return false;
+      }
+      const all = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".focusable")) || []);
+      const current = this.container.querySelector(".focusable.focused") || all[0];
+      if (!current) {
+        return false;
+      }
+      const isSidebar = this.isSidebarNode(current);
+      if (typeof (event == null ? void 0 : event.preventDefault) === "function") {
+        event.preventDefault();
+      }
+      if (event == null ? void 0 : event.repeat) {
+        const now = Date.now();
+        if (Number(this.lastDirectionalKeyAt || 0) > 0 && now - Number(this.lastDirectionalKeyAt || 0) < MODERN_HOME_CONSTANTS.keyRepeatThrottleMs) {
+          return true;
+        }
+        this.lastDirectionalKeyAt = now;
+      }
+      if (!isSidebar && current.classList.contains("home-hero-card") && (direction === "left" || direction === "right")) {
+        if (((_b = this.heroCandidates) == null ? void 0 : _b.length) > 1) {
+          this.rotateHero(direction === "right" ? 1 : -1);
+        }
+        return true;
+      }
+      if (isSidebar) {
+        const sidebarIndex = Number(current.dataset.navIndex || 0);
+        if (direction === "up") {
+          const target = nav.sidebar[Math.max(0, sidebarIndex - 1)] || current;
+          return this.focusNode(current, target, direction) || true;
+        }
+        if (direction === "down") {
+          const target = nav.sidebar[Math.min(nav.sidebar.length - 1, sidebarIndex + 1)] || current;
+          return this.focusNode(current, target, direction) || true;
+        }
+        if (direction === "right") {
+          return this.closeSidebarToContent() || true;
+        }
+        return true;
+      }
+      const row = Number(current.dataset.navRow || 0);
+      const col = Number(current.dataset.navCol || 0);
+      const rowNodes = nav.rows[row] || [];
+      if (direction === "left") {
+        const targetInRow = rowNodes[col - 1] || null;
+        if (this.focusNode(current, targetInRow, direction)) {
+          return true;
+        }
+        const sidebarFallback = getLegacySidebarSelectedNode(this.container) || getModernSidebarSelectedNode(this.container) || nav.sidebar[0] || null;
+        if (((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar) && !this.sidebarExpanded) {
+          this.lastMainFocus = current;
+          return this.openSidebar();
+        }
+        return this.focusNode(current, sidebarFallback, direction) || true;
+      }
+      if (direction === "right") {
+        const target = rowNodes[col + 1] || null;
+        return this.focusNode(current, target, direction) || true;
+      }
+      if (direction === "up" || direction === "down") {
+        const delta = direction === "up" ? -1 : 1;
+        const targetRow = row + delta;
+        const targetRowNodes = nav.rows[targetRow] || null;
+        if (!targetRowNodes || !targetRowNodes.length) {
+          return true;
+        }
+        const target = targetRowNodes[Math.min(col, targetRowNodes.length - 1)] || targetRowNodes[0];
+        return this.focusNode(current, target, direction) || true;
+      }
+      return false;
+    },
+    async mount() {
+      this.container = document.getElementById("home");
+      ScreenUtils.show(this.container);
+      this.homeRouteEnterPending = true;
+      const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
+      const profileChanged = activeProfileId3 !== String(this.loadedProfileId || "");
+      if (profileChanged) {
+        this.hasLoadedOnce = false;
+      }
+      if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
+        this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+        this.render();
+        this.loadData({ background: true }).catch((error) => {
+          console.warn("Home background refresh failed", error);
+        });
+        return;
+      }
+      this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+      this.container.innerHTML = `
+      <div class="home-boot">
+        <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
+        <div class="home-boot-shimmer"></div>
+      </div>
+    `;
+      await this.loadData({ background: false });
+    },
+    async loadData() {
+      var _a;
+      const token = this.homeLoadToken;
+      const prefs = LayoutPreferences.get();
+      this.layoutPrefs = prefs;
+      this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
+      this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
+      const addons = await addonRepository.getInstalledAddons();
+      const catalogDescriptors = [];
+      addons.forEach((addon) => {
+        addon.catalogs.filter((catalog) => !isSearchOnlyCatalog(catalog)).slice(0, 8).forEach((catalog) => {
+          catalogDescriptors.push({
+            addonBaseUrl: addon.baseUrl,
+            addonId: addon.id,
+            addonName: addon.displayName,
+            catalogId: catalog.id,
+            catalogName: catalog.name,
+            type: catalog.apiType
+          });
+        });
+      });
+      const initialDescriptors = catalogDescriptors.slice(0, 8);
+      const deferredDescriptors = catalogDescriptors.slice(8);
+      const initialRows = await this.fetchCatalogRows(initialDescriptors);
+      if (token !== this.homeLoadToken) {
+        return;
+      }
+      this.rows = this.sortAndFilterRows(initialRows);
+      this.continueWatching = await watchProgressRepository.getRecent(10);
+      if (token !== this.homeLoadToken) {
+        return;
+      }
+      this.continueWatchingDisplay = this.continueWatching.map((item) => ({
+        ...item,
+        title: prettyId(item.contentId)
+      }));
+      this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+      this.heroIndex = 0;
+      this.heroItem = this.pickInitialHero();
+      this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
+      this.sidebarProfile = await getSidebarProfileState();
+      this.hasLoadedOnce = true;
+      this.render();
+      if (deferredDescriptors.length) {
+        this.fetchCatalogRows(deferredDescriptors).then((extraRows) => {
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+            return;
+          }
+          const combinedByKey = /* @__PURE__ */ new Map();
+          [...this.rows, ...extraRows].forEach((row) => {
+            combinedByKey.set(row.homeCatalogKey, row);
+          });
+          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
+          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+          if (!this.heroItem) {
+            this.heroItem = this.pickInitialHero();
+          }
+          this.render();
+        }).catch((error) => {
+          console.warn("Deferred home rows load failed", error);
+        });
+      }
+      if (this.layoutMode !== "modern") {
+        this.enrichHero(this.heroCandidates[0] || null).then(() => {
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+            return;
+          }
+          this.applyHeroToDom();
+        }).catch((error) => {
+          console.warn("Hero async enrichment failed", error);
+        });
+      }
+      this.enrichContinueWatching(this.continueWatching).then((enriched) => {
+        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+          return;
+        }
+        this.continueWatchingDisplay = enriched.map((item) => normalizeContinueWatchingItem(item));
+        if (this.layoutMode === "modern" && (!this.heroItem || this.heroItem.heroSource === "continueWatching")) {
+          this.heroItem = this.pickInitialHero();
+        }
+        this.render();
+      }).catch((error) => {
+        console.warn("Continue watching async enrichment failed", error);
+      });
+    },
+    pickInitialHero() {
+      var _a, _b;
+      if (this.layoutMode === "modern") {
+        const continueHero = normalizeContinueWatchingItem(((_a = this.continueWatchingDisplay) == null ? void 0 : _a[0]) || ((_b = this.continueWatching) == null ? void 0 : _b[0]) || null);
+        if (continueHero) {
+          return continueHero;
+        }
+      }
+      return this.heroCandidates[0] || this.pickHeroItem(this.rows);
+    },
+    async fetchCatalogRows(descriptors = []) {
+      const rowResults = await Promise.all((descriptors || []).map(async (catalog) => {
+        const result = await withTimeout(catalogRepository.getCatalog({
+          addonBaseUrl: catalog.addonBaseUrl,
+          addonId: catalog.addonId,
+          addonName: catalog.addonName,
+          catalogId: catalog.catalogId,
+          catalogName: catalog.catalogName,
+          type: catalog.type,
+          skip: 0,
+          supportsSkip: true
+        }), 3500, { status: "error", message: "timeout" });
+        return { ...catalog, result };
+      }));
+      return rowResults.filter((row) => row.result.status === "success").map((row) => ({
+        ...row,
+        homeCatalogKey: buildCatalogOrderKey(row.addonId, row.type, row.catalogId),
+        homeCatalogDisableKey: buildCatalogDisableKey(
+          row.addonBaseUrl,
+          row.type,
+          row.catalogId,
+          row.catalogName
+        )
+      }));
+    },
+    sortAndFilterRows(rows = []) {
+      const allKeys = rows.map((row) => row.homeCatalogKey);
+      const orderedKeys = HomeCatalogStore.ensureOrderKeys(allKeys);
+      const enabledRows = rows.filter((row) => !HomeCatalogStore.isDisabled(row.homeCatalogDisableKey));
+      const orderIndex = new Map(orderedKeys.map((key, index) => [key, index]));
+      enabledRows.sort((left, right) => {
+        const l = orderIndex.has(left.homeCatalogKey) ? orderIndex.get(left.homeCatalogKey) : Number.MAX_SAFE_INTEGER;
+        const r = orderIndex.has(right.homeCatalogKey) ? orderIndex.get(right.homeCatalogKey) : Number.MAX_SAFE_INTEGER;
+        return l - r;
+      });
+      return enabledRows;
+    },
+    render() {
+      var _a, _b, _c, _d, _e, _f;
+      const retainedFocusState = this.captureCurrentFocusState();
+      this.cancelFocusedPosterFlow();
+      this.expandedPosterNode = null;
+      const heroItem = normalizeCatalogItem(this.heroItem || ((_a = this.heroCandidates) == null ? void 0 : _a[this.heroIndex]) || this.pickHeroItem(this.rows), "movie");
+      const showHeroSection = Boolean((_b = this.layoutPrefs) == null ? void 0 : _b.heroSectionEnabled) && Boolean(heroItem);
+      const layoutClass = `home-layout-${this.layoutMode}`;
+      const showPosterLabels = ((_c = this.layoutPrefs) == null ? void 0 : _c.posterLabelsEnabled) !== false;
+      const showCatalogAddonName = ((_d = this.layoutPrefs) == null ? void 0 : _d.catalogAddonNameEnabled) !== false;
+      const showCatalogTypeSuffix = ((_e = this.layoutPrefs) == null ? void 0 : _e.catalogTypeSuffixEnabled) !== false;
+      this.teardownGridStickyHeader();
+      let mainContentMarkup = "";
+      let modernLayoutPayload = null;
+      if (this.layoutMode === "modern") {
+        modernLayoutPayload = renderModernHomeLayout({
+          rows: this.rows,
+          heroItem,
+          heroCandidates: this.heroCandidates,
+          continueWatchingItems: this.continueWatchingDisplay || [],
+          showHeroSection,
+          showPosterLabels,
+          showCatalogTypeSuffix,
+          buildModernHeroPresentation,
+          renderContinueWatchingSection,
+          createPosterCardMarkup,
+          createSeeAllCardMarkup,
+          formatCatalogRowTitle,
+          escapeHtml,
+          escapeAttribute
+        });
+        this.catalogSeeAllMap = modernLayoutPayload.catalogSeeAllMap;
+        mainContentMarkup = modernLayoutPayload.markup;
+      } else {
+        const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || []);
+        mainContentMarkup = `
+        ${showHeroSection ? renderHeroMarkup(this.layoutMode, heroItem, this.heroCandidates) : ""}
+        ${continueHtml}
+        ${this.layoutMode === "grid" ? '<div class="home-grid-sticky" id="homeGridSticky"></div>' : ""}
+        <section class="home-catalogs${this.layoutMode === "grid" ? " home-grid-catalogs" : ""}" id="homeCatalogRows"></section>
+      `;
+      }
+      this.container.innerHTML = `
+      <div class="home-shell home-screen-shell ${layoutClass}">
+        ${renderRootSidebar({
+        selectedRoute: "home",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      })}
+
+        <main class="home-main home-screen-main">
+          <div class="home-route-content${this.homeRouteEnterPending ? " home-route-content-enter" : ""}">
+            ${mainContentMarkup}
+          </div>
+        </main>
+      </div>
+    `;
+      const rowsContainer = this.container.querySelector("#homeCatalogRows");
+      if (rowsContainer && this.layoutMode !== "modern") {
+        this.catalogSeeAllMap = /* @__PURE__ */ new Map();
+        this.rows.forEach((rowData, rowIndex) => {
+          var _a2, _b2;
+          const items = Array.isArray((_b2 = (_a2 = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a2.data) == null ? void 0 : _b2.items) ? rowData.result.data.items : [];
+          if (!items.length) {
+            return;
+          }
+          const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
+          this.catalogSeeAllMap.set(seeAllId, {
+            addonBaseUrl: rowData.addonBaseUrl || "",
+            addonId: rowData.addonId || "",
+            addonName: rowData.addonName || "",
+            catalogId: rowData.catalogId || "",
+            catalogName: rowData.catalogName || "",
+            type: rowData.type || "movie",
+            initialItems: items
+          });
+          const section = document.createElement("section");
+          section.className = this.layoutMode === "grid" ? "home-grid-section" : "home-row";
+          const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+          const rowSubtitle = this.layoutMode === "classic" && showCatalogAddonName && rowData.addonName ? `from ${rowData.addonName}` : "";
+          if (this.layoutMode === "grid") {
+            section.dataset.sectionTitle = rowTitle;
+            section.innerHTML = `
+            <div class="home-grid-section-divider">${escapeHtml(rowTitle)}</div>
+            <div class="home-grid-track"></div>
+          `;
+          } else {
+            section.innerHTML = `
+            ${renderRowHeader(rowTitle, rowSubtitle)}
+            <div class="home-track"></div>
+          `;
+          }
+          const track = section.querySelector(this.layoutMode === "grid" ? ".home-grid-track" : ".home-track");
+          const hasSeeAll = items.length >= 15;
+          const visibleItems = this.layoutMode === "grid" ? hasSeeAll ? items.slice(0, 14) : items.slice(0, 15) : items.slice(0, 15);
+          visibleItems.forEach((item, itemIndex) => {
+            track.insertAdjacentHTML(
+              "beforeend",
+              createPosterCardMarkup(item, rowIndex, itemIndex, rowData.type, showPosterLabels, this.layoutMode)
+            );
+          });
+          if (hasSeeAll) {
+            track.insertAdjacentHTML("beforeend", createSeeAllCardMarkup(seeAllId, rowData));
+          }
+          rowsContainer.appendChild(section);
+        });
+      }
+      this.container.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((item) => {
+        item.addEventListener("focus", () => {
+          this.setSidebarExpanded(true);
+        });
+      });
+      bindRootSidebarEvents(this.container, {
+        currentRoute: "home",
+        onSelectedAction: () => this.closeSidebarToContent(),
+        onExpandSidebar: () => this.openSidebar()
+      });
+      this.container.querySelectorAll(".home-main .focusable").forEach((item) => {
+        item.addEventListener("focus", () => {
+          if (this.isMainNode(item)) {
+            this.lastMainFocus = item;
+          }
+          this.scheduleModernHeroUpdate(item);
+          this.scheduleFocusedPosterFlow(item);
+        });
+        item.addEventListener("click", () => {
+          const action = item.dataset.action;
+          if (action === "openDetail") {
+            this.openDetailFromNode(item);
+          }
+          if (action === "openCatalogSeeAll") {
+            this.openCatalogSeeAllFromNode(item);
+          }
+          if (action === "resumeProgress") {
+            Router.navigate("detail", {
+              itemId: item.dataset.itemId,
+              itemType: item.dataset.itemType || "movie",
+              fallbackTitle: item.dataset.itemTitle || item.dataset.itemId || "Untitled"
+            });
+          }
+        });
+      });
+      ScreenUtils.indexFocusables(this.container);
+      this.buildNavigationModel();
+      const restoredFocus = this.layoutMode === "modern" ? this.restoreModernFocusState(retainedFocusState) : false;
+      if (!restoredFocus) {
+        ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
+        const current = this.container.querySelector(".home-main .focusable.focused");
+        if (current && this.isMainNode(current)) {
+          this.lastMainFocus = current;
+          this.scheduleModernHeroUpdate(current);
+          this.scheduleFocusedPosterFlow(current);
+        }
+      }
+      if (!((_f = this.layoutPrefs) == null ? void 0 : _f.modernSidebar)) {
+        this.setSidebarExpanded(false);
+      }
+      if (this.layoutMode === "grid") {
+        this.setupGridStickyHeader(showHeroSection);
+      }
+      this.startHeroRotation();
+      this.homeRouteEnterPending = false;
+    },
+    teardownGridStickyHeader() {
+      if (this.gridStickyCleanup) {
+        this.gridStickyCleanup();
+        this.gridStickyCleanup = null;
+      }
+    },
+    setupGridStickyHeader(showHeroSection) {
+      var _a, _b, _c, _d;
+      const main = (_a = this.container) == null ? void 0 : _a.querySelector(".home-main");
+      const sticky = (_b = this.container) == null ? void 0 : _b.querySelector("#homeGridSticky");
+      const sections = Array.from(((_c = this.container) == null ? void 0 : _c.querySelectorAll(".home-grid-section[data-section-title]")) || []);
+      if (!main || !sticky || !sections.length) {
+        return;
+      }
+      const hero = showHeroSection ? (_d = this.container) == null ? void 0 : _d.querySelector(".home-hero") : null;
+      const heroHeight = hero ? hero.offsetHeight : 0;
+      const update = () => {
+        const threshold = main.scrollTop + 72;
+        let activeTitle = "";
+        sections.forEach((section) => {
+          if (section.offsetTop <= threshold) {
+            activeTitle = String(section.dataset.sectionTitle || "");
+          }
+        });
+        const shouldShow = activeTitle && (!showHeroSection || main.scrollTop > Math.max(0, heroHeight - 48));
+        sticky.textContent = activeTitle;
+        sticky.classList.toggle("is-visible", Boolean(shouldShow));
+      };
+      main.addEventListener("scroll", update, { passive: true });
+      update();
+      this.gridStickyCleanup = () => {
+        main.removeEventListener("scroll", update);
+      };
+    },
+    async enrichContinueWatching(items = []) {
+      const enriched = await Promise.all((items || []).map(async (item) => {
+        var _a, _b;
+        try {
+          const result = await withTimeout(
+            metaRepository.getMetaFromAllAddons(item.contentType || "movie", item.contentId),
+            1800,
+            { status: "error", message: "timeout" }
+          );
+          if ((result == null ? void 0 : result.status) === "success" && (result == null ? void 0 : result.data)) {
+            return {
+              ...item,
+              title: result.data.name || prettyId(item.contentId),
+              poster: result.data.poster || result.data.thumbnail || result.data.background || result.data.backdrop || null,
+              background: result.data.background || result.data.backdrop || result.data.thumbnail || result.data.poster || null,
+              backdrop: result.data.backdrop || result.data.background || null,
+              thumbnail: result.data.thumbnail || result.data.poster || null,
+              logo: result.data.logo || null,
+              description: result.data.description || "",
+              releaseInfo: result.data.releaseInfo || "",
+              imdbRating: resolveImdbRating(result.data),
+              genres: Array.isArray(result.data.genres) ? result.data.genres : [],
+              runtimeMinutes: Number((_b = (_a = result.data.runtimeMinutes) != null ? _a : result.data.runtime) != null ? _b : 0) || 0,
+              ageRating: firstNonEmpty(result.data.ageRating, result.data.age_rating),
+              status: firstNonEmpty(result.data.status),
+              language: firstNonEmpty(result.data.language),
+              country: firstNonEmpty(result.data.country)
+            };
+          }
+        } catch (error) {
+          console.warn("Continue watching enrichment failed", error);
+        }
+        return {
+          ...item,
+          title: prettyId(item.contentId),
+          poster: null,
+          background: null,
+          logo: null,
+          description: "",
+          releaseInfo: "",
+          genres: [],
+          runtimeMinutes: 0
+        };
+      }));
+      return enriched;
+    },
+    pickHeroItem(rows) {
+      var _a, _b, _c;
+      for (const row of rows) {
+        const first = (_c = (_b = (_a = row.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) == null ? void 0 : _c[0];
+        if (first) {
+          return normalizeCatalogItem(first, row.type || "movie");
+        }
+      }
+      return null;
+    },
+    collectHeroCandidates(rows) {
+      const flat = [];
+      rows.forEach((row) => {
+        var _a, _b;
+        (((_b = (_a = row == null ? void 0 : row.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) || []).slice(0, 4).forEach((item) => {
+          if (!(item == null ? void 0 : item.id) || flat.some((entry) => entry.id === item.id)) {
+            return;
+          }
+          flat.push(item);
+        });
+      });
+      return flat.slice(0, 10);
+    },
+    async enrichHero(baseHero = null) {
+      const hero = normalizeCatalogItem(baseHero || this.pickHeroItem(this.rows), "movie");
+      if (!hero) {
+        this.heroItem = null;
+        return;
+      }
+      const settings = TmdbSettingsStore.get();
+      if (!settings.enabled || !settings.apiKey) {
+        this.heroItem = hero;
+        return;
+      }
+      try {
+        const tmdbId = await withTimeout(TmdbService.ensureTmdbId(hero.id, hero.type), 2200, null);
+        if (!tmdbId) {
+          this.heroItem = hero;
+          return;
+        }
+        const enriched = await withTimeout(TmdbMetadataService.fetchEnrichment({
+          tmdbId,
+          contentType: hero.type,
+          language: settings.language
+        }), 2400, null);
+        if (!enriched) {
+          this.heroItem = hero;
+          return;
+        }
+        this.heroItem = normalizeCatalogItem({
+          ...hero,
+          name: settings.useBasicInfo ? enriched.localizedTitle || hero.name : hero.name,
+          description: settings.useBasicInfo ? enriched.description || hero.description : hero.description,
+          background: settings.useArtwork ? enriched.backdrop || hero.background : hero.background,
+          poster: settings.useArtwork ? enriched.poster || hero.poster : hero.poster,
+          logo: settings.useArtwork ? enriched.logo || hero.logo : hero.logo,
+          genres: settings.useBasicInfo ? enriched.genres || hero.genres : hero.genres,
+          releaseInfo: settings.useBasicInfo ? enriched.releaseInfo || hero.releaseInfo : hero.releaseInfo
+        }, hero.type || "movie");
+      } catch (error) {
+        console.warn("Hero TMDB enrichment failed", error);
+        this.heroItem = hero;
+      }
+    },
+    openDetailFromNode(node) {
+      const itemId = node.dataset.itemId;
+      if (!itemId) {
+        return;
+      }
+      Router.navigate("detail", {
+        itemId,
+        itemType: node.dataset.itemType || "movie",
+        fallbackTitle: node.dataset.itemTitle || "Untitled"
+      });
+    },
+    openCatalogSeeAllFromNode(node) {
+      var _a, _b;
+      if (!node) {
+        return;
+      }
+      const seeAllId = String(node.dataset.seeAllId || "");
+      const mapped = ((_b = (_a = this.catalogSeeAllMap) == null ? void 0 : _a.get) == null ? void 0 : _b.call(_a, seeAllId)) || null;
+      if (mapped) {
+        Router.navigate("catalogSeeAll", mapped);
+        return;
+      }
+      Router.navigate("catalogSeeAll", {
+        addonBaseUrl: node.dataset.addonBaseUrl || "",
+        addonId: node.dataset.addonId || "",
+        addonName: node.dataset.addonName || "",
+        catalogId: node.dataset.catalogId || "",
+        catalogName: node.dataset.catalogName || "",
+        type: node.dataset.catalogType || "movie",
+        initialItems: []
+      });
+    },
+    onKeyDown(event) {
+      var _a, _b, _c, _d, _e;
+      const currentFocusedNode = ((_a = this.container) == null ? void 0 : _a.querySelector(".focusable.focused")) || null;
+      if (Platform.isBackEvent(event)) {
+        (_b = event.preventDefault) == null ? void 0 : _b.call(event);
+        if (this.layoutMode === "modern") {
+          this.resetFocusedPosterFlow(currentFocusedNode);
+        }
+        const sidebarFocused = Boolean(
+          ((_c = this.container) == null ? void 0 : _c.querySelector(".modern-sidebar-panel .focusable.focused")) || ((_d = this.container) == null ? void 0 : _d.querySelector(".home-sidebar .focusable.focused"))
+        );
+        if (sidebarFocused) {
+          Platform.exitApp();
+        } else {
+          this.openSidebar();
+        }
+        return;
+      }
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (((_e = this.layoutPrefs) == null ? void 0 : _e.modernSidebar) && !this.sidebarExpanded) {
+        if (code === 40) {
+          this.pillIconOnly = true;
+          setModernSidebarPillIconOnly(this.container, true);
+        } else if (code === 38) {
+          this.pillIconOnly = false;
+          setModernSidebarPillIconOnly(this.container, false);
+        }
+      }
+      if (this.layoutMode === "modern" && [13, 37, 38, 39, 40].includes(code)) {
+        this.resetFocusedPosterFlow(currentFocusedNode);
+      }
+      if (this.handleHomeDpad(event)) {
+        return;
+      }
+      if (code === 76) {
+        const currentIndex = HOME_LAYOUT_SEQUENCE.indexOf(this.layoutMode);
+        const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % HOME_LAYOUT_SEQUENCE.length : 0;
+        this.layoutMode = HOME_LAYOUT_SEQUENCE[nextIndex];
+        LayoutPreferences.set({ homeLayout: this.layoutMode });
+        this.heroItem = this.pickInitialHero();
+        this.render();
+        return;
+      }
+      if (code !== 13) {
+        return;
+      }
+      const current = this.container.querySelector(".focusable.focused");
+      if (!current) {
+        return;
+      }
+      const action = current.dataset.action;
+      if (String(current.dataset.navZone || "") === "sidebar") {
+        activateLegacySidebarAction(action, "home");
+        return;
+      }
+      if (action === "openDetail") this.openDetailFromNode(current);
+      if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
+      if (action === "resumeProgress") {
+        Router.navigate("detail", {
+          itemId: current.dataset.itemId,
+          itemType: current.dataset.itemType || "movie",
+          fallbackTitle: current.dataset.itemTitle || current.dataset.itemId || "Untitled"
+        });
+      }
+    },
+    cleanup() {
+      const currentState = this.captureCurrentFocusState();
+      if (currentState) {
+        this.savedFocusStates = {
+          ...this.savedFocusStates || {},
+          modern: currentState
+        };
+      }
+      this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+      this.stopHeroRotation();
+      this.cancelPendingHeroFocus();
+      this.cancelFocusedPosterFlow();
+      this.collapseFocusedPoster();
+      this.teardownGridStickyHeader();
+      ScreenUtils.hide(this.container);
     }
   };
 
@@ -4934,7 +6780,7 @@
     const normalized = String(value || "movie").toLowerCase();
     return normalized === "tv" ? "series" : normalized;
   }
-  function escapeHtml(value) {
+  function escapeHtml2(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   function qualityLabelFromText(value) {
@@ -5787,8 +7633,8 @@
         <div class="player-loading-gradient"></div>
         <div class="player-loading-center">
           ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
-          <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
-          ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml(this.params.playerSubtitle)}</div>` : ""}
+          <div class="player-loading-title">${escapeHtml2(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
+          ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml2(this.params.playerSubtitle)}</div>` : ""}
         </div>
       </div>
 
@@ -5817,8 +7663,8 @@
 
         <div class="player-controls-bottom">
           <div class="player-meta">
-            <div class="player-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Untitled")}</div>
-            <div class="player-subtitle">${escapeHtml(this.params.playerSubtitle || this.params.episodeLabel || this.params.itemType || "")}</div>
+            <div class="player-title">${escapeHtml2(this.params.playerTitle || this.params.itemId || "Untitled")}</div>
+            <div class="player-subtitle">${escapeHtml2(this.params.playerSubtitle || this.params.episodeLabel || this.params.itemType || "")}</div>
           </div>
 
           <div class="player-progress-track">
@@ -6037,8 +7883,8 @@
       wrap.innerHTML = controls.map((control) => `
       <button class="player-control-btn focusable"
               data-action="${control.action}"
-              title="${escapeHtml(control.title || "")}">
-        ${control.icon ? `<img class="player-control-icon" src="${control.icon}" alt="" aria-hidden="true" />` : `<span class="player-control-label">${escapeHtml(control.label || "")}</span>`}
+              title="${escapeHtml2(control.title || "")}">
+        ${control.icon ? `<img class="player-control-icon" src="${control.icon}" alt="" aria-hidden="true" />` : `<span class="player-control-label">${escapeHtml2(control.label || "")}</span>`}
       </button>
     `).join("");
       const preferred = wrap.querySelector(`.player-control-btn[data-action="${currentAction}"]`) || wrap.querySelector(".player-control-btn");
@@ -7016,15 +8862,15 @@
       <div class="player-dialog-tabs">
         ${tabs.map((tab) => `
           <div class="player-dialog-tab${tab.id === this.subtitleDialogTab ? " selected" : ""}">
-            ${escapeHtml(tab.label)}
+            ${escapeHtml2(tab.label)}
           </div>
         `).join("")}
       </div>
       <div class="player-dialog-list">
         ${entries.map((entry, index) => `
           <div class="player-dialog-item${entry.selected ? " selected" : ""}${index === focusIndex ? " focused" : ""}${entry.disabled ? " disabled" : ""}">
-            <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
-            <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
+            <div class="player-dialog-item-main">${escapeHtml2(entry.label || "")}</div>
+            <div class="player-dialog-item-sub">${escapeHtml2(entry.secondary || "")}</div>
             <div class="player-dialog-item-check">${entry.selected ? "&#10003;" : ""}</div>
           </div>
         `).join("")}
@@ -7237,8 +9083,8 @@
         const focused = index === this.audioDialogIndex;
         return `
             <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
-              <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
+              <div class="player-dialog-item-main">${escapeHtml2(entry.label || "")}</div>
+              <div class="player-dialog-item-sub">${escapeHtml2(entry.secondary || "")}</div>
               <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
             </div>
           `;
@@ -7409,7 +9255,7 @@
         const focused = this.sourcesFocus.zone === "filter" && this.sourcesFocus.index === index;
         return `
             <div class="player-sources-filter${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              ${escapeHtml(filter === "all" ? "All" : filter)}
+              ${escapeHtml2(filter === "all" ? "All" : filter)}
             </div>
           `;
       }).join("")}
@@ -7417,7 +9263,7 @@
 
       <div class="player-sources-list">
         ${this.sourcesLoading ? `<div class="player-sources-empty">Loading sources...</div>` : ""}
-        ${this.sourcesError ? `<div class="player-sources-empty">${escapeHtml(this.sourcesError)}</div>` : ""}
+        ${this.sourcesError ? `<div class="player-sources-empty">${escapeHtml2(this.sourcesError)}</div>` : ""}
         ${!this.sourcesLoading && !filtered.length ? `<div class="player-sources-empty">No sources found.</div>` : filtered.map((stream, index) => {
         var _a;
         const focused = this.sourcesFocus.zone === "list" && this.sourcesFocus.index === index;
@@ -7425,15 +9271,15 @@
         return `
               <article class="player-source-card${focused ? " focused" : ""}${isCurrent ? " selected" : ""}">
                 <div class="player-source-main">
-                  <div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>
-                  <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
+                  <div class="player-source-title">${escapeHtml2(stream.label || "Stream")}</div>
+                  <div class="player-source-desc">${escapeHtml2(stream.description || stream.addonName || "")}</div>
                   <div class="player-source-tags">
-                    <span class="player-source-tag">${escapeHtml(qualityLabelFromText(`${stream.label} ${stream.description}`))}</span>
-                    <span class="player-source-tag">${escapeHtml(String(stream.sourceType || "stream") || "stream")}</span>
+                    <span class="player-source-tag">${escapeHtml2(qualityLabelFromText(`${stream.label} ${stream.description}`))}</span>
+                    <span class="player-source-tag">${escapeHtml2(String(stream.sourceType || "stream") || "stream")}</span>
                   </div>
                 </div>
                 <div class="player-source-side">
-                  <div class="player-source-addon">${escapeHtml(stream.addonName || "Addon")}</div>
+                  <div class="player-source-addon">${escapeHtml2(stream.addonName || "Addon")}</div>
                   ${isCurrent ? `<div class="player-source-playing">Playing</div>` : ""}
                 </div>
               </article>
@@ -7603,8 +9449,8 @@
       <div class="player-parental-list">
         ${this.parentalWarnings.map((warning, index) => `
           <div class="player-parental-item" style="animation-delay:${index * 120}ms">
-            <span class="player-parental-label">${escapeHtml(warning.label)}</span>
-            <span class="player-parental-severity">${escapeHtml(warning.severity)}</span>
+            <span class="player-parental-label">${escapeHtml2(warning.label)}</span>
+            <span class="player-parental-severity">${escapeHtml2(warning.severity)}</span>
           </div>
         `).join("")}
       </div>
@@ -7666,8 +9512,8 @@
         const selectedClass = selected ? " selected" : "";
         return `
         <div class="player-episode-item${selectedClass}">
-          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml(episode.title || "Episode")}</div>
-          <div class="player-episode-item-subtitle">${escapeHtml(episode.overview || "")}</div>
+          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml2(episode.title || "Episode")}</div>
+          <div class="player-episode-item-subtitle">${escapeHtml2(episode.overview || "")}</div>
         </div>
       `;
       }).join("");
@@ -8262,9 +10108,34 @@
     const value = String(token || "").trim();
     return value.split(".").length === 3;
   }
+  function decodeJwtPayload(token) {
+    try {
+      const [, payload] = String(token || "").split(".");
+      if (!payload) {
+        return null;
+      }
+      const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+      return JSON.parse(atob(padded));
+    } catch (e) {
+      return null;
+    }
+  }
+  function isJwtExpired(token, leewaySeconds = 30) {
+    if (!isJwtLike(token)) {
+      return true;
+    }
+    const payload = decodeJwtPayload(token);
+    const exp = Number((payload == null ? void 0 : payload.exp) || 0);
+    if (!Number.isFinite(exp) || exp <= 0) {
+      return false;
+    }
+    const nowSeconds = Math.floor(Date.now() / 1e3);
+    return exp <= nowSeconds + leewaySeconds;
+  }
   function getBearerToken() {
     const token = SessionStore.accessToken;
-    if (isJwtLike(token)) {
+    if (isJwtLike(token) && !isJwtExpired(token, 0)) {
       return token;
     }
     return SUPABASE_ANON_KEY;
@@ -8367,10 +10238,22 @@
       SessionStore.refreshToken = null;
     }
     if (SessionStore.accessToken && !SessionStore.isAnonymousSession) {
-      return true;
+      if (!isJwtExpired(SessionStore.accessToken)) {
+        return true;
+      }
+      const refreshed = await AuthManager.refreshSessionIfNeeded();
+      if (refreshed && SessionStore.accessToken && !isJwtExpired(SessionStore.accessToken)) {
+        return true;
+      }
+      SessionStore.clear();
     }
     if (SessionStore.accessToken && SessionStore.isAnonymousSession) {
-      return true;
+      if (!isJwtExpired(SessionStore.accessToken)) {
+        return true;
+      }
+      SessionStore.accessToken = null;
+      SessionStore.refreshToken = null;
+      SessionStore.isAnonymousSession = false;
     }
     const commonHeaders = {
       "Content-Type": "application/json",
@@ -8580,10 +10463,13 @@
   // js/ui/screens/account/authQrSignInScreen.js
   var pollInterval = null;
   var countdownInterval = null;
+  var activeQrSessionId = 0;
   var AuthQrSignInScreen = {
     async mount({ onboardingMode = false } = {}) {
       this.container = document.getElementById("account");
       this.onboardingMode = Boolean(onboardingMode);
+      this.isSignedIn = AuthManager.isAuthenticated;
+      this.hasBackDestination = Router.stack.length > 0;
       ScreenUtils.show(this.container);
       this.container.innerHTML = `
       <div class="qr-layout">
@@ -8594,9 +10480,7 @@
 
           <div class="qr-copy-block">
             <h1 class="qr-title">Sign In With QR</h1>
-            <p class="qr-description">
-              Use your phone to sign in with email/password. TV stays QR-only for faster login.
-            </p>
+            <p id="qr-description" class="qr-description">${this.getLeftDescription()}</p>
           </div>
         </section>
 
@@ -8604,17 +10488,15 @@
           <div class="qr-card">
             <header class="qr-card-header">
               <h2 class="qr-card-title">Account Login</h2>
-              <p class="qr-card-subtitle">Scan QR, approve in browser, then return here.</p>
+              <p id="qr-card-subtitle" class="qr-card-subtitle">${this.getCardSubtitle()}</p>
             </header>
 
             <div id="qr-container" class="qr-code-frame"></div>
             <div id="qr-code-text" class="qr-code-text"></div>
             <div id="qr-status" class="qr-status">Waiting for approval on your phone...</div>
-            <div id="qr-expiry" class="qr-expiry"></div>
-
             <div class="qr-actions">
               <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">Refresh QR</button>
-              <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.onboardingMode ? "Continue without account" : "Back"}</button>
+              <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
             </div>
           </div>
         </section>
@@ -8623,10 +10505,10 @@
       document.getElementById("qr-refresh-btn").onclick = () => this.startQr();
       document.getElementById("qr-back-btn").onclick = () => {
         this.cleanup();
-        if (this.onboardingMode) {
-          Router.navigate("home");
-        } else {
+        if (this.hasBackDestination) {
           Router.back();
+        } else {
+          Router.navigate("home");
         }
       };
       ScreenUtils.indexFocusables(this.container);
@@ -8635,16 +10517,21 @@
     },
     async startQr() {
       this.stopIntervals();
-      this.setStatus("Waiting for approval on your phone...");
+      const sessionId = activeQrSessionId + 1;
+      activeQrSessionId = sessionId;
+      this.setStatus("Preparing QR login...");
       const result = await QrLoginService.start();
+      if (sessionId !== activeQrSessionId) {
+        return;
+      }
       if (!result) {
         const raw = QrLoginService.getLastError();
         this.setStatus(this.toFriendlyQrError(raw));
         return;
       }
       this.renderQr(result);
-      this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3);
-      this.startCountdown(result.expiresAt);
+      this.setStatus("Scan QR and sign in on your phone");
+      this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
     },
     renderQr({ qrImageUrl, code }) {
       const qrContainer = document.getElementById("qr-container");
@@ -8658,41 +10545,43 @@
       codeText.innerText = `Code: ${code}`;
     },
     startCountdown(expiresAt) {
-      const expiryEl = document.getElementById("qr-expiry");
-      if (!expiryEl) {
-        return;
-      }
       const renderRemaining = () => {
         const remaining = expiresAt - Date.now();
         if (remaining <= 0) {
-          expiryEl.innerText = "QR expires in 00:00";
           if (countdownInterval) {
             clearInterval(countdownInterval);
             countdownInterval = null;
           }
           return;
         }
-        const minutes = Math.floor(remaining / 6e4);
-        const seconds = Math.floor(remaining % 6e4 / 1e3);
-        expiryEl.innerText = `QR expires in ${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
       };
       renderRemaining();
       countdownInterval = setInterval(renderRemaining, 1e3);
     },
-    startPolling(code, deviceNonce, pollIntervalSeconds = 3) {
+    startPolling(code, deviceNonce, pollIntervalSeconds = 3, sessionId) {
       pollInterval = setInterval(async () => {
         const status = await QrLoginService.poll(code, deviceNonce);
+        if (sessionId !== activeQrSessionId) {
+          return;
+        }
         if (status === "approved") {
           this.setStatus("Approved. Finishing login...");
           clearInterval(pollInterval);
           pollInterval = null;
           const exchange = await QrLoginService.exchange(code, deviceNonce);
+          if (sessionId !== activeQrSessionId) {
+            return;
+          }
           if (exchange) {
             LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
+            this.isSignedIn = true;
             Router.navigate("profileSelection");
           } else {
             this.setStatus(this.toFriendlyQrError(QrLoginService.getLastError()));
           }
+        }
+        if (status === "pending") {
+          this.setStatus("Waiting for approval on your phone...");
         }
         if (status === "expired") {
           this.setStatus("QR expired. Refresh to retry.");
@@ -8724,6 +10613,27 @@
         return;
       }
       statusNode.innerText = text;
+    },
+    getLeftDescription() {
+      if (this.isSignedIn) {
+        return "Account linked on this TV.";
+      }
+      return "Use your phone to sign in with email/password. TV stays QR-only for faster login.";
+    },
+    getCardSubtitle() {
+      if (this.isSignedIn) {
+        return "Your synced data";
+      }
+      return "Scan QR, approve in browser, then return here.";
+    },
+    getBackButtonLabel() {
+      if (this.hasBackDestination) {
+        return "Back";
+      }
+      if (this.isSignedIn) {
+        return "Continue";
+      }
+      return "Continue without account";
     },
     onKeyDown(event) {
       var _a;
@@ -8905,6 +10815,7 @@
       profileIndex: normalizedIndex,
       name: row.name || `Profile ${normalizedIndex}`,
       avatarColorHex: row.avatar_color_hex || row.avatarColorHex || "#1E88E5",
+      avatarId: row.avatar_id || row.avatarId || null,
       usesPrimaryAddons: typeof row.uses_primary_addons === "boolean" ? row.uses_primary_addons : Boolean(row.usesPrimaryAddons),
       usesPrimaryPlugins: typeof row.uses_primary_plugins === "boolean" ? row.uses_primary_plugins : Boolean(row.usesPrimaryPlugins),
       isPrimary: typeof row.is_primary === "boolean" ? row.is_primary : normalizedIndex === 1
@@ -8962,6 +10873,7 @@
                 profile_index: Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
                 name: profile.name,
                 avatar_color_hex: profile.avatarColorHex || "#1E88E5",
+                avatar_id: profile.avatarId || null,
                 uses_primary_addons: Boolean(profile.usesPrimaryAddons),
                 uses_primary_plugins: Boolean(profile.usesPrimaryPlugins)
               };
@@ -8980,6 +10892,9 @@
             profile_index: Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
             name: profile.name,
             avatar_color_hex: profile.avatarColorHex || "#1E88E5",
+            avatar_id: profile.avatarId || null,
+            uses_primary_addons: Boolean(profile.usesPrimaryAddons),
+            uses_primary_plugins: Boolean(profile.usesPrimaryPlugins),
             is_primary: Boolean(profile.isPrimary)
           };
         });
@@ -8988,8 +10903,9 @@
           profile_index: row.profile_index,
           name: row.name,
           avatar_color_hex: row.avatar_color_hex,
-          uses_primary_addons: row.profile_index !== 1,
-          uses_primary_plugins: row.profile_index !== 1
+          avatar_id: row.avatar_id || null,
+          uses_primary_addons: Boolean(row.uses_primary_addons),
+          uses_primary_plugins: Boolean(row.uses_primary_plugins)
         }));
         try {
           await SupabaseApi.delete(FALLBACK_TABLE2, `user_id=eq.${encodeURIComponent(ownerId)}`, true);
@@ -9842,62 +11758,771 @@
     }
   };
 
+  // js/data/remote/supabase/avatarRepository.js
+  var AVATAR_BUCKET = "avatars";
+  var cachedCatalog = null;
+  function avatarImageUrl(storagePath = "") {
+    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
+    if (!normalizedPath) {
+      return null;
+    }
+    return `${String(SUPABASE_URL || "").replace(/\/+$/, "")}/storage/v1/object/public/${AVATAR_BUCKET}/${normalizedPath}`;
+  }
+  function mapAvatar(row = {}) {
+    return {
+      id: String(row.id || ""),
+      displayName: String(row.display_name || row.displayName || "Avatar"),
+      imageUrl: avatarImageUrl(row.storage_path || row.storagePath || ""),
+      category: String(row.category || "all").trim().toLowerCase(),
+      sortOrder: Number(row.sort_order || row.sortOrder || 0),
+      bgColor: row.bg_color || row.bgColor || null
+    };
+  }
+  var AvatarRepository = {
+    async getAvatarCatalog() {
+      if (Array.isArray(cachedCatalog) && cachedCatalog.length) {
+        return cachedCatalog;
+      }
+      const response = await SupabaseApi.rpc("get_avatar_catalog", {}, false);
+      cachedCatalog = (Array.isArray(response) ? response : []).map((row) => mapAvatar(row)).filter((avatar) => avatar.id && avatar.imageUrl).sort((left, right) => {
+        const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
+        if (orderDelta !== 0) {
+          return orderDelta;
+        }
+        return String(left.displayName).localeCompare(String(right.displayName));
+      });
+      return cachedCatalog;
+    },
+    getAvatarImageUrl(avatarId, catalog = cachedCatalog || []) {
+      var _a;
+      const normalizedId = String(avatarId || "").trim();
+      if (!normalizedId) {
+        return null;
+      }
+      return ((_a = catalog.find((avatar) => avatar.id === normalizedId)) == null ? void 0 : _a.imageUrl) || null;
+    },
+    invalidateCache() {
+      cachedCatalog = null;
+    }
+  };
+
   // js/core/profile/profileSelectionScreen.js
+  var PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
+  var DEFAULT_PROFILE_COLOR = "#1E88E5";
+  function escapeHtml3(value) {
+    return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function getProfileInitial(name) {
+    const trimmed = String(name || "").trim();
+    return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
+  }
+  function clampChannel(value) {
+    return Math.min(255, Math.max(0, Math.round(value)));
+  }
+  function parseHexColor(colorHex, fallback = { r: 30, g: 136, b: 229 }) {
+    const value = String(colorHex || "").trim();
+    const match = value.match(/^#([0-9a-f]{6})$/i);
+    if (!match) {
+      return fallback;
+    }
+    const normalized = match[1];
+    return {
+      r: parseInt(normalized.slice(0, 2), 16),
+      g: parseInt(normalized.slice(2, 4), 16),
+      b: parseInt(normalized.slice(4, 6), 16)
+    };
+  }
+  function mixColors(baseColor, accentColor, weight) {
+    const normalizedWeight = Math.min(1, Math.max(0, Number(weight) || 0));
+    return {
+      r: clampChannel(baseColor.r * (1 - normalizedWeight) + accentColor.r * normalizedWeight),
+      g: clampChannel(baseColor.g * (1 - normalizedWeight) + accentColor.g * normalizedWeight),
+      b: clampChannel(baseColor.b * (1 - normalizedWeight) + accentColor.b * normalizedWeight)
+    };
+  }
+  function colorToRgba(color, alpha = 1) {
+    const normalizedAlpha = Math.min(1, Math.max(0, Number(alpha) || 0));
+    return `rgba(${clampChannel(color.r)}, ${clampChannel(color.g)}, ${clampChannel(color.b)}, ${normalizedAlpha})`;
+  }
+  function categoryLabel(category) {
+    switch (String(category || "").toLowerCase()) {
+      case "all":
+        return "All";
+      case "anime":
+        return "Anime";
+      case "animation":
+        return "Animation";
+      case "movie":
+        return "Movie";
+      case "tv":
+        return "TV";
+      case "gaming":
+        return "Gaming";
+      default:
+        return String(category || "Other").replace(/^./, (match) => match.toUpperCase());
+    }
+  }
+  function getAvatarCategories(avatars) {
+    const normalizedCategories = (Array.isArray(avatars) ? avatars : []).map((avatar) => String((avatar == null ? void 0 : avatar.category) || "").trim().toLowerCase()).filter(Boolean);
+    const uniqueCategories = Array.from(new Set(normalizedCategories));
+    return [
+      "all",
+      ...PINNED_AVATAR_CATEGORIES.filter((category) => uniqueCategories.includes(category)),
+      ...uniqueCategories.filter((category) => !PINNED_AVATAR_CATEGORIES.includes(category)).sort((left, right) => left.localeCompare(right))
+    ];
+  }
+  function isTextInput(node) {
+    if (!node) {
+      return false;
+    }
+    const tagName = String(node.tagName || "").toLowerCase();
+    return tagName === "input" || tagName === "textarea";
+  }
   var ProfileSelectionScreen = {
-    async mount() {
+    async mount(params = {}) {
       this.container = document.getElementById("profileSelection");
       if (!this.container) {
         console.error("Missing #profileSelection container");
         return;
       }
       this.container.style.display = "block";
+      this.screenMode = String((params == null ? void 0 : params.mode) || "selection").toLowerCase();
+      this.returnRoute = String((params == null ? void 0 : params.returnRoute) || "");
+      this.isManagementMode = this.screenMode === "management";
+      this.activeProfileId = String(ProfileManager.getActiveProfileId() || "1");
+      this.focusKey = "";
+      this.pendingFocusKey = "";
+      this.lastProfileFocusKey = "profile:1";
+      this.optionsProfileId = null;
+      this.deleteProfileId = null;
+      this.editorState = null;
+      this.avatarCatalog = [];
       await ProfileSyncService.pull();
       this.profiles = await ProfileManager.getProfiles();
-      if (this.profiles.length === 1) {
+      this.lastProfileFocusKey = `profile:${this.activeProfileId || "1"}`;
+      if (!this.isManagementMode && this.profiles.length === 1) {
         await this.activateProfile(this.profiles[0].id);
         return;
       }
+      await this.loadAvatarCatalog();
+      this.render();
+    },
+    async loadAvatarCatalog() {
+      try {
+        this.avatarCatalog = await AvatarRepository.getAvatarCatalog();
+      } catch (error) {
+        console.warn("Failed to load avatar catalog", error);
+        this.avatarCatalog = [];
+      }
+      this.avatarImageUrlsById = this.avatarCatalog.reduce((accumulator, avatar) => {
+        accumulator[avatar.id] = avatar.imageUrl;
+        return accumulator;
+      }, {});
+    },
+    getProfileById(profileId) {
+      return (this.profiles || []).find((profile) => String(profile.id) === String(profileId)) || null;
+    },
+    getVisibleProfiles() {
+      return Array.isArray(this.profiles) ? this.profiles : [];
+    },
+    getAvatarImageUrl(avatarId) {
+      var _a;
+      const normalizedId = String(avatarId || "").trim();
+      if (!normalizedId) {
+        return null;
+      }
+      return ((_a = this.avatarImageUrlsById) == null ? void 0 : _a[normalizedId]) || null;
+    },
+    getEditorSelectedAvatar() {
+      var _a;
+      if (!((_a = this.editorState) == null ? void 0 : _a.selectedAvatarId)) {
+        return null;
+      }
+      return this.avatarCatalog.find((avatar) => avatar.id === this.editorState.selectedAvatarId) || null;
+    },
+    getFilteredEditorAvatars() {
+      var _a;
+      const category = String(((_a = this.editorState) == null ? void 0 : _a.category) || "all");
+      if (category === "all") {
+        return this.avatarCatalog;
+      }
+      return this.avatarCatalog.filter((avatar) => avatar.category === category);
+    },
+    render() {
+      const canAddProfile = this.isManagementMode && this.getVisibleProfiles().length < 4;
+      const title = this.isManagementMode ? "Manage Profiles" : "Who's watching?";
+      const subtitle = this.isManagementMode ? "Select a profile to edit, switch, or create a new one" : "Select a profile to continue";
+      const hint = this.isManagementMode ? "Select a profile to manage" : "Hold to manage profile";
       this.container.innerHTML = `
       <div class="profile-screen">
-        <img src="assets/brand/app_logo_wordmark.png" class="profile-logo"/>
+        <img src="assets/brand/app_logo_wordmark.png" class="profile-logo" alt="Nuvio"/>
 
-        <h1 class="profile-title">Who's watching?</h1>
-        <p class="profile-subtitle">Select a profile to continue</p>
+        <h1 class="profile-title">${escapeHtml3(title)}</h1>
+        <p class="profile-subtitle">${escapeHtml3(subtitle)}</p>
 
-        <div class="profile-grid" id="profileGrid"></div>
+        <div class="profile-grid" id="profileGrid">
+          ${this.getVisibleProfiles().map((profile) => this.renderProfileCard(profile)).join("")}
+          ${canAddProfile ? this.renderAddProfileCard() : ""}
+        </div>
 
-        <p class="profile-hint">Use D-pad to choose a profile</p>
+        <p class="profile-hint">${escapeHtml3(hint)}</p>
       </div>
+      ${this.renderEditorOverlay()}
+      ${this.renderOptionsDialog()}
+      ${this.renderDeleteDialog()}
     `;
-      const grid = document.getElementById("profileGrid");
-      this.profiles.forEach((profile) => {
-        const card = document.createElement("div");
-        card.className = "profile-card focusable";
-        card.dataset.profileId = profile.id;
-        card.tabIndex = 0;
-        card.innerHTML = `
+      this.bindEvents();
+      this.restoreFocus();
+    },
+    renderProfileCard(profile) {
+      const avatarUrl = this.getAvatarImageUrl(profile.avatarId);
+      return `
+      <div class="profile-card profile-focusable focusable"
+           data-profile-id="${escapeHtml3(profile.id)}"
+           data-focus-key="profile:${escapeHtml3(profile.id)}"
+           tabindex="0">
         <div class="profile-avatar-ring">
-          <div class="profile-avatar"
-               style="background:${profile.avatarColorHex}">
-            ${profile.name.charAt(0).toUpperCase()}
+          <div class="profile-avatar" style="background:${escapeHtml3(profile.avatarColorHex || DEFAULT_PROFILE_COLOR)}">
+            ${avatarUrl ? `<img class="profile-avatar-image" src="${escapeHtml3(avatarUrl)}" alt="${escapeHtml3(profile.name)}"/>` : escapeHtml3(getProfileInitial(profile.name))}
           </div>
           ${profile.isPrimary ? `<span class="profile-primary-dot" aria-hidden="true">&#9733;</span>` : ""}
         </div>
-        <div class="profile-name">${profile.name}</div>
-        ${profile.isPrimary ? `<div class="profile-badge">PRIMARY</div>` : ""}
-      `;
-        card.addEventListener("focus", () => {
-          document.querySelectorAll(".profile-card").forEach((c) => c.classList.remove("focused"));
-          card.classList.add("focused");
-          this.updateBackground(profile.avatarColorHex);
-        });
+        <div class="profile-name">${escapeHtml3(profile.name)}</div>
+        ${profile.isPrimary ? `<div class="profile-badge">PRIMARY</div>` : `<div class="profile-badge-slot" aria-hidden="true"></div>`}
+      </div>
+    `;
+    },
+    renderAddProfileCard() {
+      return `
+      <div class="profile-card profile-card-add profile-focusable focusable"
+           data-profile-id="add"
+           data-focus-key="profile:add"
+           tabindex="0">
+        <div class="profile-avatar-ring">
+          <div class="profile-avatar profile-avatar-add" aria-hidden="true"></div>
+        </div>
+        <div class="profile-name">Add Profile</div>
+        <div class="profile-badge-slot" aria-hidden="true"></div>
+      </div>
+    `;
+    },
+    renderEditorOverlay() {
+      if (!this.editorState) {
+        return "";
+      }
+      const editorTitle = this.editorState.mode === "edit" ? "Edit Profile" : "Create Profile";
+      const editorButtonLabel = this.editorState.mode === "edit" ? "Save" : "Create";
+      const previewName = String(this.editorState.name || "").trim() || "Profile name";
+      const selectedAvatar = this.getEditorSelectedAvatar();
+      const previewAvatarUrl = (selectedAvatar == null ? void 0 : selectedAvatar.imageUrl) || this.getAvatarImageUrl(this.editorState.selectedAvatarId) || null;
+      const overlayHeading = this.editorState.mode === "edit" ? `
+          <div class="profile-editor-heading-stack">
+            <span class="profile-editor-heading-kicker">${escapeHtml3(editorTitle)}</span>
+            <span class="profile-editor-heading-name">${escapeHtml3(this.editorState.originalName || previewName)}</span>
+          </div>
+        ` : `<span class="profile-editor-heading-title">${escapeHtml3(editorTitle)}</span>`;
+      const categories = getAvatarCategories(this.avatarCatalog);
+      const filteredAvatars = this.getFilteredEditorAvatars();
+      return `
+      <div class="profile-editor-backdrop" data-action="dismiss-overlay">
+        <div class="profile-editor-panel" data-overlay-root="editor">
+          <div class="profile-editor-header">
+            ${overlayHeading}
+            <button class="profile-overlay-button profile-overlay-button-primary profile-overlay-focusable${this.isEditorSubmitDisabled() ? " is-disabled" : ""}"
+                    type="button"
+                    data-action="submit-editor"
+                    data-focus-key="editor:submit"
+                    ${this.isEditorSubmitDisabled() ? "disabled" : ""}
+                    tabindex="0">
+              ${escapeHtml3(editorButtonLabel)}
+            </button>
+          </div>
+
+          <div class="profile-editor-body">
+            <div class="profile-editor-preview">
+              <div class="profile-editor-preview-avatar" style="background:${escapeHtml3(this.editorState.selectedColorHex || DEFAULT_PROFILE_COLOR)}">
+                ${previewAvatarUrl ? `<img class="profile-editor-preview-image" src="${escapeHtml3(previewAvatarUrl)}" alt="${escapeHtml3(previewName)}"/>` : escapeHtml3(getProfileInitial(previewName))}
+              </div>
+
+              <div class="profile-editor-preview-name${String(this.editorState.name || "").trim() ? "" : " is-placeholder"}" data-role="editor-preview-name">${escapeHtml3(previewName)}</div>
+
+              <label class="profile-editor-field-shell">
+                <span class="sr-only">Profile name</span>
+                <input class="profile-editor-name-input profile-overlay-focusable"
+                       type="text"
+                       maxlength="20"
+                       value="${escapeHtml3(this.editorState.name || "")}"
+                       placeholder="Profile name"
+                       data-role="editor-name-input"
+                       data-focus-key="editor:name"
+                       tabindex="0"/>
+              </label>
+
+              <button class="profile-overlay-button profile-overlay-button-secondary profile-overlay-focusable"
+                      type="button"
+                      data-action="cancel-editor"
+                      data-focus-key="editor:cancel"
+                      tabindex="0">
+                Cancel
+              </button>
+            </div>
+
+            <div class="profile-editor-divider" aria-hidden="true"></div>
+
+            <div class="profile-editor-avatar-pane">
+              <div class="profile-editor-avatar-title">Choose Avatar</div>
+
+              <div class="profile-editor-category-row">
+                ${categories.map((category) => `
+                  <button class="profile-avatar-category profile-overlay-focusable${this.editorState.category === category ? " is-selected" : ""}"
+                          type="button"
+                          data-action="select-avatar-category"
+                          data-category="${escapeHtml3(category)}"
+                          data-focus-key="editor:category:${escapeHtml3(category)}"
+                          tabindex="0">
+                    ${escapeHtml3(categoryLabel(category))}
+                  </button>
+                `).join("")}
+              </div>
+
+              ${filteredAvatars.length ? `
+                <div class="profile-editor-avatar-grid">
+                  ${filteredAvatars.map((avatar) => `
+                    <button class="profile-avatar-tile profile-overlay-focusable${this.editorState.selectedAvatarId === avatar.id ? " is-selected" : ""}"
+                            type="button"
+                            data-action="select-avatar"
+                            data-avatar-id="${escapeHtml3(avatar.id)}"
+                            data-focus-key="editor:avatar:${escapeHtml3(avatar.id)}"
+                            tabindex="0">
+                      <img class="profile-avatar-tile-image" src="${escapeHtml3(avatar.imageUrl)}" alt="${escapeHtml3(avatar.displayName)}"/>
+                    </button>
+                  `).join("")}
+                </div>
+              ` : `
+                <div class="profile-editor-avatar-empty">
+                  Choose Avatar
+                </div>
+              `}
+
+              <div class="profile-editor-avatar-hint" data-role="editor-avatar-hint">
+                ${escapeHtml3(this.editorState.focusedAvatarName || "Focus an avatar to view its name")}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    },
+    renderOptionsDialog() {
+      const profile = this.getProfileById(this.optionsProfileId);
+      if (!profile) {
+        return "";
+      }
+      return `
+      <div class="profile-dialog-backdrop" data-action="dismiss-options-dialog">
+        <div class="profile-dialog profile-dialog-small" data-overlay-root="options">
+          <div class="profile-dialog-title">Profile Options</div>
+          <div class="profile-dialog-actions">
+            <button class="profile-dialog-button profile-focusable focusable"
+                    type="button"
+                    data-action="open-edit-profile"
+                    data-profile-id="${escapeHtml3(profile.id)}"
+                    data-focus-key="options:edit"
+                    tabindex="0">
+              Edit
+            </button>
+            ${profile.isPrimary ? "" : `
+              <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
+                      type="button"
+                      data-action="confirm-delete-profile"
+                      data-profile-id="${escapeHtml3(profile.id)}"
+                      data-focus-key="options:delete"
+                      tabindex="0">
+                Delete
+              </button>
+            `}
+          </div>
+        </div>
+      </div>
+    `;
+    },
+    renderDeleteDialog() {
+      const profile = this.getProfileById(this.deleteProfileId);
+      if (!profile) {
+        return "";
+      }
+      return `
+      <div class="profile-dialog-backdrop" data-action="dismiss-delete-dialog">
+        <div class="profile-dialog profile-dialog-medium" data-overlay-root="delete">
+          <div class="profile-dialog-title">Delete Profile?</div>
+          <p class="profile-dialog-subtitle">
+            This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone.
+          </p>
+          <div class="profile-dialog-actions">
+            <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
+                    type="button"
+                    data-action="delete-profile"
+                    data-profile-id="${escapeHtml3(profile.id)}"
+                    data-focus-key="delete:confirm"
+                    tabindex="0">
+              Delete Profile
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    },
+    bindEvents() {
+      const gridCards = Array.from(this.container.querySelectorAll(".profile-card"));
+      gridCards.forEach((card) => {
+        card.addEventListener("focus", () => this.handleFocusableFocus(card));
         card.addEventListener("click", async () => {
-          await this.activateProfile(profile.id);
+          await this.activateFocusedNode(card);
         });
-        grid.appendChild(card);
       });
-      ScreenUtils.indexFocusables(this.container, ".profile-card");
-      ScreenUtils.setInitialFocus(this.container, ".profile-card");
+      Array.from(this.container.querySelectorAll(".profile-overlay-focusable, .profile-dialog-button")).forEach((node) => {
+        node.addEventListener("focus", () => this.handleFocusableFocus(node));
+        node.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          await this.activateFocusedNode(node);
+        });
+      });
+      const nameInput = this.container.querySelector("[data-role='editor-name-input']");
+      if (nameInput) {
+        nameInput.addEventListener("input", (event) => {
+          var _a;
+          const nextValue = String(((_a = event.target) == null ? void 0 : _a.value) || "").slice(0, 20);
+          this.editorState.name = nextValue;
+          if (event.target.value !== nextValue) {
+            event.target.value = nextValue;
+          }
+          this.syncEditorPreview();
+        });
+      }
+      const editorBackdrop = this.container.querySelector(".profile-editor-backdrop");
+      if (editorBackdrop) {
+        editorBackdrop.addEventListener("click", (event) => {
+          if (event.target === editorBackdrop) {
+            this.closeEditor();
+          }
+        });
+      }
+      Array.from(this.container.querySelectorAll(".profile-dialog-backdrop")).forEach((backdrop) => {
+        backdrop.addEventListener("click", (event) => {
+          if (event.target !== backdrop) {
+            return;
+          }
+          if (backdrop.querySelector("[data-overlay-root='options']")) {
+            this.closeOptionsDialog();
+          } else {
+            this.closeDeleteDialog();
+          }
+        });
+      });
+    },
+    handleFocusableFocus(node) {
+      Array.from(this.container.querySelectorAll(".profile-focusable.focused, .profile-overlay-focusable.focused")).forEach((entry) => {
+        if (entry !== node) {
+          entry.classList.remove("focused");
+        }
+      });
+      node.classList.add("focused");
+      this.focusKey = String(node.dataset.focusKey || "");
+      const profileId = node.dataset.profileId;
+      const avatarId = node.dataset.avatarId;
+      const category = node.dataset.category;
+      if (profileId && profileId !== "add") {
+        const profile = this.getProfileById(profileId);
+        if (profile) {
+          this.lastProfileFocusKey = `profile:${profile.id}`;
+          this.updateBackground(profile.avatarColorHex || DEFAULT_PROFILE_COLOR);
+        }
+      } else if (profileId === "add") {
+        this.lastProfileFocusKey = "profile:add";
+        this.updateBackground("#555555");
+      }
+      if (avatarId && this.editorState) {
+        const avatar = this.avatarCatalog.find((entry) => entry.id === avatarId) || null;
+        this.editorState.focusedAvatarName = (avatar == null ? void 0 : avatar.displayName) || null;
+        const hintNode = this.container.querySelector("[data-role='editor-avatar-hint']");
+        if (hintNode) {
+          hintNode.textContent = this.editorState.focusedAvatarName || "Focus an avatar to view its name";
+        }
+        node.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      if (category) {
+        node.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+    },
+    restoreFocus() {
+      const defaultFocusKey = this.getDefaultFocusKey();
+      const target = this.findFocusableByKey(this.pendingFocusKey || defaultFocusKey || this.focusKey);
+      this.pendingFocusKey = "";
+      if (!target) {
+        const fallback = this.container.querySelector(".profile-card, .profile-overlay-focusable, .profile-dialog-button");
+        if (!fallback) {
+          return;
+        }
+        fallback.classList.add("focused");
+        fallback.focus();
+        return;
+      }
+      target.classList.add("focused");
+      target.focus();
+    },
+    getDefaultFocusKey() {
+      if (this.deleteProfileId) {
+        return "delete:confirm";
+      }
+      if (this.optionsProfileId) {
+        return "options:edit";
+      }
+      if (this.editorState) {
+        return "editor:name";
+      }
+      if (this.lastProfileFocusKey) {
+        return this.lastProfileFocusKey;
+      }
+      if (this.focusKey) {
+        return this.focusKey;
+      }
+      return `profile:${this.activeProfileId || "1"}`;
+    },
+    findFocusableByKey(focusKey) {
+      if (!focusKey) {
+        return null;
+      }
+      return Array.from(this.container.querySelectorAll("[data-focus-key]")).find((node) => String(node.dataset.focusKey || "") === String(focusKey)) || null;
+    },
+    updateBackground(colorHex) {
+      var _a;
+      const screen = (_a = this.container) == null ? void 0 : _a.querySelector(".profile-screen");
+      if (!screen) {
+        return;
+      }
+      const rootStyles = getComputedStyle(document.documentElement);
+      const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
+      const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
+      const accent = parseHexColor(colorHex, parseHexColor(DEFAULT_PROFILE_COLOR));
+      const gradientTop = mixColors(elevated, accent, 0.3);
+      const gradientMid = mixColors(background, accent, 0.14);
+      screen.style.background = `
+      linear-gradient(180deg, ${colorToRgba(gradientTop, 1)} 0%, ${colorToRgba(gradientMid, 1)} 42%, ${colorToRgba(background, 1)} 100%),
+      linear-gradient(90deg, ${colorToRgba(accent, 0.26)} 0%, ${colorToRgba(accent, 0.08)} 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%)
+    `;
+    },
+    syncEditorPreview() {
+      if (!this.editorState) {
+        return;
+      }
+      const previewName = String(this.editorState.name || "").trim() || "Profile name";
+      const previewNameNode = this.container.querySelector("[data-role='editor-preview-name']");
+      if (previewNameNode) {
+        previewNameNode.textContent = previewName;
+        previewNameNode.classList.toggle("is-placeholder", !String(this.editorState.name || "").trim());
+      }
+      const submitButton = this.container.querySelector("[data-action='submit-editor']");
+      if (submitButton) {
+        const disabled = this.isEditorSubmitDisabled();
+        submitButton.disabled = disabled;
+        submitButton.classList.toggle("is-disabled", disabled);
+      }
+    },
+    isEditorSubmitDisabled() {
+      var _a;
+      return !String(((_a = this.editorState) == null ? void 0 : _a.name) || "").trim();
+    },
+    openCreateEditor() {
+      this.optionsProfileId = null;
+      this.deleteProfileId = null;
+      this.editorState = {
+        mode: "create",
+        profileId: null,
+        originalName: "",
+        name: "",
+        selectedColorHex: DEFAULT_PROFILE_COLOR,
+        selectedAvatarId: null,
+        baseColorHex: DEFAULT_PROFILE_COLOR,
+        category: "all",
+        focusedAvatarName: null
+      };
+      this.pendingFocusKey = "editor:name";
+      this.render();
+    },
+    openEditEditor(profile) {
+      if (!profile) {
+        return;
+      }
+      this.optionsProfileId = null;
+      this.deleteProfileId = null;
+      this.editorState = {
+        mode: "edit",
+        profileId: String(profile.id),
+        originalName: String(profile.name || ""),
+        name: String(profile.name || ""),
+        selectedColorHex: String(profile.avatarColorHex || DEFAULT_PROFILE_COLOR),
+        selectedAvatarId: profile.avatarId || null,
+        baseColorHex: String(profile.avatarColorHex || DEFAULT_PROFILE_COLOR),
+        category: "all",
+        focusedAvatarName: null
+      };
+      this.pendingFocusKey = "editor:name";
+      this.render();
+    },
+    closeEditor() {
+      this.editorState = null;
+      this.pendingFocusKey = this.lastProfileFocusKey || "profile:1";
+      this.render();
+    },
+    openOptionsDialog(profile) {
+      if (!profile) {
+        return;
+      }
+      this.editorState = null;
+      this.deleteProfileId = null;
+      this.optionsProfileId = String(profile.id);
+      this.pendingFocusKey = "options:edit";
+      this.render();
+    },
+    closeOptionsDialog() {
+      const profileId = this.optionsProfileId;
+      this.optionsProfileId = null;
+      this.pendingFocusKey = profileId ? `profile:${profileId}` : this.lastProfileFocusKey || "profile:1";
+      this.render();
+    },
+    openDeleteDialog(profile) {
+      if (!profile || profile.isPrimary) {
+        return;
+      }
+      this.optionsProfileId = null;
+      this.deleteProfileId = String(profile.id);
+      this.pendingFocusKey = "delete:confirm";
+      this.render();
+    },
+    closeDeleteDialog() {
+      const profileId = this.deleteProfileId;
+      this.deleteProfileId = null;
+      this.pendingFocusKey = profileId ? `profile:${profileId}` : this.lastProfileFocusKey || "profile:1";
+      this.render();
+    },
+    async submitEditor() {
+      if (!this.editorState || this.isEditorSubmitDisabled()) {
+        return;
+      }
+      const editorState = { ...this.editorState };
+      const trimmedName = String(editorState.name || "").trim();
+      const focusProfileId = editorState.mode === "edit" ? editorState.profileId : String(this.getVisibleProfiles().reduce((max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)), 0) + 1);
+      this.editorState = null;
+      this.pendingFocusKey = `profile:${focusProfileId}`;
+      this.render();
+      let success = false;
+      if (editorState.mode === "edit") {
+        const existing = this.getProfileById(editorState.profileId);
+        if (!existing) {
+          await this.reloadProfiles();
+          return;
+        }
+        success = await ProfileManager.updateProfile({
+          ...existing,
+          name: trimmedName,
+          avatarColorHex: editorState.selectedColorHex || DEFAULT_PROFILE_COLOR,
+          avatarId: editorState.selectedAvatarId || null
+        });
+      } else {
+        success = await ProfileManager.createProfile({
+          name: trimmedName,
+          avatarColorHex: editorState.selectedColorHex || DEFAULT_PROFILE_COLOR,
+          avatarId: editorState.selectedAvatarId || null
+        });
+      }
+      if (success !== false) {
+        await ProfileSyncService.push();
+      }
+      await this.reloadProfiles(`profile:${focusProfileId}`);
+    },
+    async deleteProfile(profileId) {
+      const profile = this.getProfileById(profileId);
+      if (!profile || profile.isPrimary) {
+        return;
+      }
+      this.deleteProfileId = null;
+      this.render();
+      const deleted = await ProfileManager.deleteProfile(profile.id);
+      if (deleted !== false) {
+        await ProfileSyncService.push();
+      }
+      const remainingProfiles = await ProfileManager.getProfiles();
+      const fallbackProfile = remainingProfiles.find((entry) => Number(entry.profileIndex || entry.id || 0) < Number(profile.profileIndex || profile.id || 0)) || remainingProfiles[0] || null;
+      this.profiles = remainingProfiles;
+      this.pendingFocusKey = fallbackProfile ? `profile:${fallbackProfile.id}` : "";
+      this.render();
+    },
+    async reloadProfiles(focusKey = "") {
+      this.profiles = await ProfileManager.getProfiles();
+      this.activeProfileId = String(ProfileManager.getActiveProfileId() || this.activeProfileId || "1");
+      this.pendingFocusKey = focusKey;
+      this.render();
+    },
+    async activateFocusedNode(node) {
+      var _a, _b;
+      const action = String(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.action) || "");
+      const profileId = (_b = node == null ? void 0 : node.dataset) == null ? void 0 : _b.profileId;
+      if (action === "cancel-editor") {
+        this.closeEditor();
+        return;
+      }
+      if (action === "submit-editor") {
+        await this.submitEditor();
+        return;
+      }
+      if (action === "select-avatar-category" && this.editorState) {
+        this.editorState.category = String(node.dataset.category || "all");
+        this.pendingFocusKey = `editor:category:${this.editorState.category}`;
+        this.render();
+        return;
+      }
+      if (action === "select-avatar" && this.editorState) {
+        const avatar = this.avatarCatalog.find((entry) => entry.id === node.dataset.avatarId);
+        if (!avatar) {
+          return;
+        }
+        if (this.editorState.selectedAvatarId === avatar.id) {
+          this.editorState.selectedAvatarId = null;
+          this.editorState.selectedColorHex = this.editorState.mode === "edit" ? this.editorState.baseColorHex || DEFAULT_PROFILE_COLOR : DEFAULT_PROFILE_COLOR;
+        } else {
+          this.editorState.selectedAvatarId = avatar.id;
+          this.editorState.selectedColorHex = avatar.bgColor || DEFAULT_PROFILE_COLOR;
+        }
+        this.editorState.focusedAvatarName = avatar.displayName;
+        this.pendingFocusKey = `editor:avatar:${avatar.id}`;
+        this.render();
+        return;
+      }
+      if (action === "open-edit-profile") {
+        this.openEditEditor(this.getProfileById(profileId));
+        return;
+      }
+      if (action === "confirm-delete-profile") {
+        this.openDeleteDialog(this.getProfileById(profileId));
+        return;
+      }
+      if (action === "delete-profile") {
+        await this.deleteProfile(profileId);
+        return;
+      }
+      if (profileId === "add") {
+        this.openCreateEditor();
+        return;
+      }
+      const profile = this.getProfileById(profileId);
+      if (!profile) {
+        return;
+      }
+      if (this.isManagementMode) {
+        this.openOptionsDialog(profile);
+        return;
+      }
+      await this.activateProfile(profile.id);
     },
     async activateProfile(profileId) {
       if (!profileId) {
@@ -9907,31 +12532,68 @@
       await StartupSyncService.syncPull();
       Router.navigate("home");
     },
-    updateBackground(colorHex) {
-      const screen = document.querySelector(".profile-screen");
-      if (!screen) {
-        return;
-      }
-      screen.style.background = `
-      radial-gradient(circle at 20% 0%, ${colorHex}2e 0%, transparent 56%),
-      linear-gradient(90deg, #1b466f 0%, #0a1727 62%, #050b14 100%)
-    `;
-    },
     async onKeyDown(event) {
+      var _a, _b;
       if (!this.container) {
         return;
+      }
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      const originalKeyCode = Number((event == null ? void 0 : event.originalKeyCode) || code || 0);
+      const overlayRoot = this.container.querySelector("[data-overlay-root='delete']") || this.container.querySelector("[data-overlay-root='options']") || this.container.querySelector("[data-overlay-root='editor']");
+      if (overlayRoot) {
+        const overlaySelector = overlayRoot.dataset.overlayRoot === "editor" ? ".profile-overlay-focusable:not(.is-disabled)" : ".profile-dialog-button";
+        if (ScreenUtils.handleDpadNavigation(event, overlayRoot, overlaySelector)) {
+          return;
+        }
+        if (code !== 13) {
+          return;
+        }
+        const focused = overlayRoot.querySelector(`${overlaySelector}.focused`) || document.activeElement;
+        if (!focused || isTextInput(focused) && overlayRoot.dataset.overlayRoot === "editor") {
+          return;
+        }
+        await this.activateFocusedNode(focused);
+        return;
+      }
+      const wantsManageOptions = !this.isManagementMode && (code === 13 && (event == null ? void 0 : event.repeat) || originalKeyCode === 82 || code === 93);
+      if (wantsManageOptions) {
+        const current2 = this.container.querySelector(".profile-card.focused");
+        const profileId = (_a = current2 == null ? void 0 : current2.dataset) == null ? void 0 : _a.profileId;
+        if (profileId && profileId !== "add") {
+          const profile = this.getProfileById(profileId);
+          if (profile) {
+            (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
+            this.openOptionsDialog(profile);
+            return;
+          }
+        }
       }
       if (ScreenUtils.handleDpadNavigation(event, this.container, ".profile-card")) {
         return;
       }
-      if (event.keyCode !== 13) {
+      if (code !== 13) {
         return;
       }
       const current = this.container.querySelector(".profile-card.focused");
       if (!current) {
         return;
       }
-      await this.activateProfile(current.dataset.profileId);
+      await this.activateFocusedNode(current);
+    },
+    consumeBackRequest() {
+      if (this.deleteProfileId) {
+        this.closeDeleteDialog();
+        return true;
+      }
+      if (this.optionsProfileId) {
+        this.closeOptionsDialog();
+        return true;
+      }
+      if (this.editorState) {
+        this.closeEditor();
+        return true;
+      }
+      return false;
     },
     cleanup() {
       const container = document.getElementById("profileSelection");
@@ -9940,6 +12602,30 @@
       }
       container.style.display = "none";
       container.innerHTML = "";
+    }
+  };
+
+  // js/data/local/playerSettingsStore.js
+  var KEY6 = "playerSettings";
+  var DEFAULTS4 = {
+    autoplayNextEpisode: true,
+    subtitlesEnabled: true,
+    subtitleLanguage: "system",
+    preferredAudioLanguage: "system",
+    preferredQuality: "auto",
+    preferredPlayer: "auto",
+    trailerAutoplay: false,
+    subtitleRenderMode: "native"
+  };
+  var PlayerSettingsStore = {
+    get() {
+      return {
+        ...DEFAULTS4,
+        ...LocalStore.get(KEY6, {}) || {}
+      };
+    },
+    set(partial) {
+      LocalStore.set(KEY6, { ...this.get(), ...partial || {} });
     }
   };
 
@@ -10079,7 +12765,7 @@
     </span>
   `;
   }
-  function resolveImdbRating(meta = {}) {
+  function resolveImdbRating2(meta = {}) {
     var _a, _b;
     if ((meta == null ? void 0 : meta.imdbRating) != null && String(meta.imdbRating).trim() !== "") {
       return meta.imdbRating;
@@ -10114,15 +12800,19 @@
     return anyEpisode ? Number(anyEpisode.runtimeMinutes || 0) : 0;
   }
   function renderPlayGlyph() {
+    return `<img class="series-btn-svg" src="assets/icons/ic_player_play.svg" alt="" aria-hidden="true" />`;
+  }
+  function renderTrailerGlyph() {
     return `<img class="series-btn-svg" src="assets/icons/trailer_play_button.svg" alt="" aria-hidden="true" />`;
   }
   function ratingToneClass(value) {
     const num = Number(value || 0);
-    if (num >= 8.5) return "excellent";
+    if (num >= 9) return "excellent";
     if (num >= 8) return "great";
-    if (num >= 7) return "good";
-    if (num >= 6) return "mixed";
-    if (num > 0) return "bad";
+    if (num >= 7.5) return "good";
+    if (num >= 7) return "mixed";
+    if (num >= 6) return "bad";
+    if (num > 0) return "poor";
     return "normal";
   }
   function getAddonIconPath(addonName = "") {
@@ -10147,20 +12837,214 @@
     }
     return "";
   }
+  function escapeHtml4(value = "") {
+    return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function escapeSelectorValue(value = "") {
+    const raw = String(value != null ? value : "");
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
+  }
+  function normalizeCountryLabel(raw = "") {
+    return String(raw || "").split(",").map((part) => {
+      const trimmed = part.trim();
+      return /^[A-Za-z]{2,3}$/.test(trimmed) ? trimmed.toUpperCase() : trimmed;
+    }).filter(Boolean).join(", ");
+  }
+  function normalizePreviewItem(item = {}, fallbackType = "movie") {
+    return {
+      id: String(item.id || ""),
+      name: item.name || item.title || "Untitled",
+      type: item.type || item.apiType || fallbackType,
+      poster: item.landscapePoster || item.background || item.poster || "",
+      releaseInfo: item.releaseInfo || item.year || ""
+    };
+  }
+  function resolveYoutubeId2(value = "") {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) {
+      return raw;
+    }
+    const watchMatch = raw.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+    if (watchMatch == null ? void 0 : watchMatch[1]) {
+      return watchMatch[1];
+    }
+    const shortMatch = raw.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+    if (shortMatch == null ? void 0 : shortMatch[1]) {
+      return shortMatch[1];
+    }
+    const embedMatch = raw.match(/embed\/([a-zA-Z0-9_-]{11})/);
+    if (embedMatch == null ? void 0 : embedMatch[1]) {
+      return embedMatch[1];
+    }
+    return "";
+  }
+  function buildYoutubeEmbedUrl2(ytId = "") {
+    var _a, _b;
+    const cleanId = String(ytId || "").trim();
+    if (!cleanId) {
+      return "";
+    }
+    const params = new URLSearchParams({
+      autoplay: "1",
+      mute: "1",
+      controls: "0",
+      loop: "1",
+      playlist: cleanId,
+      playsinline: "1",
+      rel: "0",
+      modestbranding: "1",
+      enablejsapi: "1"
+    });
+    const origin = String(((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.origin) || "").trim();
+    const href = String(((_b = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _b.href) || "").trim();
+    if (/^https?:\/\//i.test(origin)) {
+      params.set("origin", origin);
+    }
+    if (/^https?:\/\//i.test(href)) {
+      params.set("widget_referrer", href);
+    }
+    return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
+  }
+  function resolveTrailerSource2(meta = {}) {
+    const trailerStreams = Array.isArray(meta == null ? void 0 : meta.trailerStreams) ? meta.trailerStreams : [];
+    const directVideo = trailerStreams.find((entry) => {
+      const url = String((entry == null ? void 0 : entry.url) || (entry == null ? void 0 : entry.videoUrl) || (entry == null ? void 0 : entry.stream) || "").trim();
+      return /^https?:\/\//i.test(url);
+    });
+    if (directVideo) {
+      return {
+        kind: "video",
+        url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
+      };
+    }
+    const trailerCandidates = [
+      ...Array.isArray(meta == null ? void 0 : meta.trailers) ? meta.trailers : [],
+      ...Array.isArray(meta == null ? void 0 : meta.videos) ? meta.videos : []
+    ];
+    for (const entry of trailerCandidates) {
+      const ytId2 = resolveYoutubeId2(
+        (entry == null ? void 0 : entry.ytId) || (entry == null ? void 0 : entry.youtubeId) || (entry == null ? void 0 : entry.source) || (entry == null ? void 0 : entry.url) || (entry == null ? void 0 : entry.link) || ""
+      );
+      if (ytId2) {
+        return {
+          kind: "youtube",
+          ytId: ytId2,
+          embedUrl: buildYoutubeEmbedUrl2(ytId2)
+        };
+      }
+    }
+    const ytId = resolveYoutubeId2(Array.isArray(meta == null ? void 0 : meta.trailerYtIds) ? meta.trailerYtIds[0] : "");
+    if (!ytId) {
+      return null;
+    }
+    return {
+      kind: "youtube",
+      ytId,
+      embedUrl: buildYoutubeEmbedUrl2(ytId)
+    };
+  }
+  function formatCompactDate(value = "") {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      return raw;
+    }
+    return parsed.toLocaleDateString(void 0, {
+      month: "short",
+      day: "numeric",
+      year: "numeric"
+    });
+  }
+  function captureHorizontalScrollMap(container) {
+    const state = {};
+    Array.from((container == null ? void 0 : container.querySelectorAll("[data-scroll-key]")) || []).forEach((node) => {
+      const key = String(node.dataset.scrollKey || "").trim();
+      if (!key) {
+        return;
+      }
+      state[key] = Number(node.scrollLeft || 0);
+    });
+    return state;
+  }
   var MetaDetailsScreen = {
-    async mount(params = {}) {
-      this.container = document.getElementById("detail");
-      ScreenUtils.show(this.container);
-      this.params = params;
-      this.pendingEpisodeSelection = null;
-      this.pendingMovieSelection = null;
-      this.streamChooserFocus = null;
-      this.streamChooserLoadToken = 0;
-      this.isLoadingDetail = true;
-      this.detailLoadToken = (this.detailLoadToken || 0) + 1;
-      this.seriesInsightTab = this.seriesInsightTab || "cast";
-      this.movieInsightTab = this.movieInsightTab || "cast";
-      this.selectedRatingSeason = this.selectedRatingSeason || 1;
+    getRouteStateKey(params = {}) {
+      const itemId = String((params == null ? void 0 : params.itemId) || "").trim();
+      if (!itemId) {
+        return null;
+      }
+      return `detail:${String((params == null ? void 0 : params.itemType) || "movie").trim() || "movie"}:${itemId}`;
+    },
+    captureRouteState() {
+      var _a, _b, _c;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-content");
+      return {
+        params: this.params ? { ...this.params } : {},
+        meta: this.meta ? { ...this.meta } : null,
+        isSavedInLibrary: Boolean(this.isSavedInLibrary),
+        isMarkedWatched: Boolean(this.isMarkedWatched),
+        episodes: Array.isArray(this.episodes) ? [...this.episodes] : [],
+        castItems: Array.isArray(this.castItems) ? [...this.castItems] : [],
+        moreLikeThisItems: Array.isArray(this.moreLikeThisItems) ? [...this.moreLikeThisItems] : [],
+        collectionItems: Array.isArray(this.collectionItems) ? [...this.collectionItems] : [],
+        collectionName: String(this.collectionName || ""),
+        seriesRatingsBySeason: this.seriesRatingsBySeason ? { ...this.seriesRatingsBySeason } : {},
+        nextEpisodeToWatch: this.nextEpisodeToWatch ? { ...this.nextEpisodeToWatch } : null,
+        trailerSource: this.trailerSource ? { ...this.trailerSource } : null,
+        selectedSeason: Number(this.selectedSeason || 0),
+        selectedRatingSeason: Number(this.selectedRatingSeason || 0),
+        seriesInsightTab: String(this.seriesInsightTab || "cast"),
+        movieInsightTab: String(this.movieInsightTab || "cast"),
+        pendingFocusRestore: this.captureDetailFocus(),
+        contentScrollTop: Number((content == null ? void 0 : content.scrollTop) || 0),
+        trackScrollLeftByKey: captureHorizontalScrollMap(this.container),
+        episodeProgressEntries: Array.from(((_c = (_b = this.episodeProgressMap) == null ? void 0 : _b.entries) == null ? void 0 : _c.call(_b)) || []),
+        watchedEpisodeKeys: Array.from(this.watchedEpisodeKeys || [])
+      };
+    },
+    hydrateFromRouteState(restoredState = null, params = {}) {
+      var _a, _b;
+      const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
+      const restoredItemId = String(((_a = snapshot == null ? void 0 : snapshot.params) == null ? void 0 : _a.itemId) || "").trim();
+      const nextItemId = String((params == null ? void 0 : params.itemId) || "").trim();
+      if (!(snapshot == null ? void 0 : snapshot.meta) || !restoredItemId || restoredItemId !== nextItemId) {
+        return false;
+      }
+      this.params = params || {};
+      this.meta = { ...snapshot.meta };
+      this.isSavedInLibrary = Boolean(snapshot.isSavedInLibrary);
+      this.isMarkedWatched = Boolean(snapshot.isMarkedWatched);
+      this.episodes = Array.isArray(snapshot.episodes) ? [...snapshot.episodes] : [];
+      this.castItems = Array.isArray(snapshot.castItems) ? [...snapshot.castItems] : [];
+      this.moreLikeThisItems = Array.isArray(snapshot.moreLikeThisItems) ? [...snapshot.moreLikeThisItems] : [];
+      this.collectionItems = Array.isArray(snapshot.collectionItems) ? [...snapshot.collectionItems] : [];
+      this.collectionName = String(snapshot.collectionName || "");
+      this.seriesRatingsBySeason = snapshot.seriesRatingsBySeason ? { ...snapshot.seriesRatingsBySeason } : {};
+      this.nextEpisodeToWatch = snapshot.nextEpisodeToWatch ? { ...snapshot.nextEpisodeToWatch } : null;
+      this.trailerSource = snapshot.trailerSource ? { ...snapshot.trailerSource } : resolveTrailerSource2(this.meta);
+      this.selectedSeason = Number(snapshot.selectedSeason || ((_b = this.episodes[0]) == null ? void 0 : _b.season) || 1);
+      this.selectedRatingSeason = Number(snapshot.selectedRatingSeason || this.selectedSeason || 1);
+      this.seriesInsightTab = String(snapshot.seriesInsightTab || "cast");
+      this.movieInsightTab = String(snapshot.movieInsightTab || "cast");
+      this.pendingFocusRestore = snapshot.pendingFocusRestore ? { ...snapshot.pendingFocusRestore } : null;
+      this.restoredContentScrollTop = Number(snapshot.contentScrollTop || 0);
+      this.restoredTrackScrollLeftByKey = snapshot.trackScrollLeftByKey && typeof snapshot.trackScrollLeftByKey === "object" ? { ...snapshot.trackScrollLeftByKey } : {};
+      this.episodeProgressMap = new Map(Array.isArray(snapshot.episodeProgressEntries) ? snapshot.episodeProgressEntries : []);
+      this.watchedEpisodeKeys = new Set(Array.isArray(snapshot.watchedEpisodeKeys) ? snapshot.watchedEpisodeKeys : []);
+      return true;
+    },
+    bindBackHandler() {
+      if (this.backHandler) {
+        document.removeEventListener("keydown", this.backHandler, true);
+      }
       this.backHandler = (event) => {
         if (!isBackEvent2(event)) {
           return;
@@ -10180,6 +13064,36 @@
         Router.back();
       };
       document.addEventListener("keydown", this.backHandler, true);
+    },
+    async mount(params = {}, navigationContext = {}) {
+      this.container = document.getElementById("detail");
+      ScreenUtils.show(this.container);
+      this.stopTrailerPlayback({ keepDom: false });
+      this.params = params;
+      this.pendingEpisodeSelection = null;
+      this.pendingMovieSelection = null;
+      this.streamChooserFocus = null;
+      this.streamChooserLoadToken = 0;
+      this.isLoadingDetail = true;
+      this.detailLoadToken = (this.detailLoadToken || 0) + 1;
+      this.seriesInsightTab = "cast";
+      this.movieInsightTab = "cast";
+      this.selectedRatingSeason = 1;
+      this.selectedSeason = 1;
+      this.collectionItems = [];
+      this.collectionName = "";
+      this.trailerSource = null;
+      this.isTrailerPlaying = false;
+      this.episodeProgressMap = /* @__PURE__ */ new Map();
+      this.watchedEpisodeKeys = /* @__PURE__ */ new Set();
+      this.restoredContentScrollTop = 0;
+      this.restoredTrackScrollLeftByKey = {};
+      this.bindBackHandler();
+      if (this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params)) {
+        this.isLoadingDetail = false;
+        this.render(this.meta, this.pendingFocusRestore);
+        return;
+      }
       this.container.innerHTML = `
       <div class="detail-loading-shell" aria-label="Loading detail">
         <div class="detail-loading-top">
@@ -10222,10 +13136,12 @@
         { status: "error", message: "timeout" }
       );
       const meta = metaResult.status === "success" ? metaResult.data : { id: itemId, type: itemType, name: fallbackTitle, description: "" };
-      const [isSaved, progress, watchedItem] = await Promise.all([
+      const [isSaved, progress, watchedItem, allProgressItems, allWatchedItems] = await Promise.all([
         savedLibraryRepository.isSaved(itemId),
         watchProgressRepository.getProgressByContentId(itemId),
-        watchedItemsRepository.isWatched(itemId)
+        watchedItemsRepository.isWatched(itemId),
+        watchProgressRepository.getAll(),
+        watchedItemsRepository.getAll()
       ]);
       if (token !== this.detailLoadToken) {
         return;
@@ -10237,11 +13153,15 @@
       this.meta = meta;
       this.episodes = normalizeEpisodes((meta == null ? void 0 : meta.videos) || []);
       this.castItems = extractCast(meta);
+      this.buildEpisodeState(allProgressItems, allWatchedItems);
       this.selectedSeason = this.selectedSeason || ((_a = this.episodes[0]) == null ? void 0 : _a.season) || 1;
       this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
       this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
       this.moreLikeThisItems = [];
+      this.collectionItems = [];
+      this.collectionName = "";
       this.streamItems = [];
+      this.trailerSource = resolveTrailerSource2(meta);
       if (itemType === "series" || itemType === "tv") {
         this.seriesRatingsBySeason = {};
       } else {
@@ -10250,7 +13170,7 @@
       this.render(meta);
       this.isLoadingDetail = false;
       (async () => {
-        var _a2, _b;
+        var _a2, _b, _c, _d;
         const enrichedMeta = await withTimeout2(this.enrichMeta(meta), 4e3, meta);
         if (token !== this.detailLoadToken) {
           return;
@@ -10258,6 +13178,8 @@
         this.meta = enrichedMeta || meta;
         this.episodes = normalizeEpisodes(((_a2 = this.meta) == null ? void 0 : _a2.videos) || []);
         this.castItems = extractCast(this.meta);
+        this.buildEpisodeState(allProgressItems, allWatchedItems);
+        this.trailerSource = resolveTrailerSource2(this.meta);
         if (!this.castItems.length) {
           const fallbackCast = await withTimeout2(this.fetchTmdbCastFallback(this.meta), 3200, []);
           if (Array.isArray(fallbackCast) && fallbackCast.length) {
@@ -10273,6 +13195,8 @@
         ];
         if (itemType === "series" || itemType === "tv") {
           tasks.push(withTimeout2(this.fetchSeriesRatingsBySeason(this.meta), 5e3, {}));
+        } else {
+          tasks.push(withTimeout2(this.fetchMovieCollection(this.meta), 5e3, { items: [], name: "" }));
         }
         const results = await Promise.all(tasks);
         if (token !== this.detailLoadToken) {
@@ -10281,6 +13205,9 @@
         this.moreLikeThisItems = Array.isArray(results[0]) ? results[0] : [];
         if (itemType === "series" || itemType === "tv") {
           this.seriesRatingsBySeason = results[1] || {};
+        } else {
+          this.collectionItems = Array.isArray((_c = results[1]) == null ? void 0 : _c.items) ? results[1].items : [];
+          this.collectionName = ((_d = results[1]) == null ? void 0 : _d.name) || "";
         }
         this.render(this.meta);
       })().catch((error) => {
@@ -10362,8 +13289,61 @@
       }
       return this.episodes[currentIndex + 1] || this.episodes[currentIndex] || this.episodes[0];
     },
-    async enrichMeta(meta) {
+    buildEpisodeState(progressItems = [], watchedItems = []) {
       var _a;
+      const progressMap = /* @__PURE__ */ new Map();
+      const watchedKeys = /* @__PURE__ */ new Set();
+      const contentId = String(((_a = this.params) == null ? void 0 : _a.itemId) || "");
+      (Array.isArray(progressItems) ? progressItems : []).forEach((entry) => {
+        if (String((entry == null ? void 0 : entry.contentId) || "") !== contentId) {
+          return;
+        }
+        const season = Number((entry == null ? void 0 : entry.season) || 0);
+        const episode = Number((entry == null ? void 0 : entry.episode) || 0);
+        if (!season || !episode) {
+          return;
+        }
+        const key = `${season}:${episode}`;
+        progressMap.set(key, entry);
+        const position = Number((entry == null ? void 0 : entry.positionMs) || 0);
+        const duration = Number((entry == null ? void 0 : entry.durationMs) || 0);
+        if (duration > 0 && position >= duration) {
+          watchedKeys.add(key);
+        }
+      });
+      (Array.isArray(watchedItems) ? watchedItems : []).forEach((entry) => {
+        const season = Number((entry == null ? void 0 : entry.season) || 0);
+        const episode = Number((entry == null ? void 0 : entry.episode) || 0);
+        if (String((entry == null ? void 0 : entry.contentId) || "") === contentId && season && episode) {
+          watchedKeys.add(`${season}:${episode}`);
+        }
+      });
+      this.episodeProgressMap = progressMap;
+      this.watchedEpisodeKeys = watchedKeys;
+    },
+    async fetchMovieCollection(meta = {}) {
+      var _a, _b, _c, _d;
+      try {
+        const collectionId = (meta == null ? void 0 : meta.collectionId) || ((_a = meta == null ? void 0 : meta.belongsToCollection) == null ? void 0 : _a.id) || ((_b = meta == null ? void 0 : meta.belongs_to_collection) == null ? void 0 : _b.id);
+        if (!collectionId) {
+          return { name: "", items: [] };
+        }
+        const items = await TmdbMetadataService.fetchMovieCollection({
+          collectionId,
+          language: TmdbSettingsStore.get().language
+        });
+        const normalized = (Array.isArray(items) ? items : []).map((item) => normalizePreviewItem(item, "movie")).filter((item) => item.id && item.id !== String(meta.id || "")).slice(0, 18);
+        return {
+          name: (meta == null ? void 0 : meta.collectionName) || ((_c = meta == null ? void 0 : meta.belongsToCollection) == null ? void 0 : _c.name) || ((_d = meta == null ? void 0 : meta.belongs_to_collection) == null ? void 0 : _d.name) || "",
+          items: normalized
+        };
+      } catch (error) {
+        console.warn("Movie collection enrichment failed", error);
+        return { name: "", items: [] };
+      }
+    },
+    async enrichMeta(meta) {
+      var _a, _b, _c, _d, _e;
       const settings = TmdbSettingsStore.get();
       if (!settings.enabled || !settings.apiKey || !(meta == null ? void 0 : meta.id)) {
         return meta;
@@ -10390,9 +13370,17 @@
           logo: settings.useArtwork ? enrichment.logo || meta.logo : meta.logo,
           genres: settings.useDetails && ((_a = enrichment.genres) == null ? void 0 : _a.length) ? enrichment.genres : meta.genres,
           releaseInfo: settings.useDetails ? enrichment.releaseInfo || meta.releaseInfo : meta.releaseInfo,
+          runtime: settings.useDetails ? enrichment.runtime || meta.runtime : meta.runtime,
+          country: settings.useDetails ? enrichment.country || meta.country : meta.country,
+          language: settings.useDetails ? enrichment.language || meta.language : meta.language,
           tmdbRating: typeof enrichment.rating === "number" ? Number(enrichment.rating.toFixed(1)) : meta.tmdbRating || null,
           credits: enrichment.credits || meta.credits || null,
-          companies: Array.isArray(enrichment.companies) ? enrichment.companies : meta.companies || []
+          companies: Array.isArray(enrichment.companies) ? enrichment.companies : meta.companies || [],
+          productionCompanies: Array.isArray(enrichment.productionCompanies) ? enrichment.productionCompanies : Array.isArray(meta.productionCompanies) ? meta.productionCompanies : [],
+          networks: Array.isArray(enrichment.networks) ? enrichment.networks : Array.isArray(meta.networks) ? meta.networks : [],
+          collectionId: enrichment.collectionId || meta.collectionId || ((_b = meta == null ? void 0 : meta.belongsToCollection) == null ? void 0 : _b.id) || ((_c = meta == null ? void 0 : meta.belongs_to_collection) == null ? void 0 : _c.id) || null,
+          collectionName: enrichment.collectionName || meta.collectionName || ((_d = meta == null ? void 0 : meta.belongsToCollection) == null ? void 0 : _d.name) || ((_e = meta == null ? void 0 : meta.belongs_to_collection) == null ? void 0 : _e.name) || "",
+          belongsToCollection: enrichment.collectionId ? { id: enrichment.collectionId, name: enrichment.collectionName || "" } : meta.belongsToCollection || meta.belongs_to_collection || null
         };
       } catch (error) {
         console.warn("Meta TMDB enrichment failed", error);
@@ -10507,66 +13495,168 @@
       (incoming || []).forEach(push);
       return merged;
     },
-    render(meta) {
+    render(meta, focusRestore = void 0) {
+      if (focusRestore !== void 0) {
+        this.pendingFocusRestore = focusRestore;
+      } else if (!this.pendingFocusRestore) {
+        this.pendingFocusRestore = this.captureDetailFocus();
+      }
       const isSeries = meta.type === "series" || meta.type === "tv";
       if (isSeries) {
         this.renderSeriesLayout(meta);
+        if (this.pendingEpisodeSelection) {
+          this.renderEpisodeStreamChooser();
+        }
         return;
       }
       this.renderMovieLayout(meta);
+      if (this.pendingMovieSelection) {
+        this.renderMovieStreamChooser();
+      }
     },
     renderSeriesLayout(meta) {
       var _a, _b, _c;
       const backdrop = meta.background || meta.poster || "";
-      const logoOrTitle = meta.logo ? `<img src="${meta.logo}" class="series-detail-logo" alt="${meta.name || "logo"}" />` : `<h1 class="series-detail-title">${meta.name || "Untitled"}</h1>`;
       const nextEpisodeLabel = this.nextEpisodeToWatch ? `Next S${this.nextEpisodeToWatch.season}E${this.nextEpisodeToWatch.episode}` : "Play";
-      const imdbBadge = renderImdbBadge(resolveImdbRating(meta));
-      const runtimeText = formatRuntimeMinutes(
-        meta.runtime || meta.runtimeMinutes || resolveEpisodeRuntimeForSeason(this.episodes, this.selectedSeason) || 0
-      );
-      const metaInfo = [
-        ...Array.isArray(meta.genres) ? meta.genres.slice(0, 3) : [],
-        runtimeText,
-        meta.releaseInfo || ""
-      ].filter(Boolean).join(" \u2022 ");
-      const writerLine = Array.isArray(meta.writers) ? meta.writers.slice(0, 2).join(", ") : meta.writer || "";
-      const countryLine = Array.isArray(meta.country) ? meta.country.slice(0, 2).join(", ") : meta.country || "";
+      const creditLine = Array.isArray(meta.director) && meta.director.length ? meta.director.slice(0, 2).join(", ") : Array.isArray(meta.writer) && meta.writer.length ? meta.writer.slice(0, 2).join(", ") : meta.director || meta.writer || "";
+      const creditPrefix = Array.isArray(meta.director) && meta.director.length ? "Creator" : "Writer";
       if (!this.selectedRatingSeason || !((_a = this.seriesRatingsBySeason) == null ? void 0 : _a[this.selectedRatingSeason])) {
         this.selectedRatingSeason = this.selectedSeason || ((_c = (_b = this.episodes) == null ? void 0 : _b[0]) == null ? void 0 : _c.season) || 1;
       }
       this.container.innerHTML = `
-      <div class="series-detail-shell">
-        <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop}')"` : ""}></div>
+      <div class="series-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
+        <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="detail-trailer-layer"></div>
         <div class="series-detail-vignette"></div>
+        <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content">
-          ${logoOrTitle}
-          <div class="series-detail-actions">
-            <button class="series-primary-btn focusable" data-action="playDefault">
-              <span class="series-btn-icon">${renderPlayGlyph()}</span>
-              <span>${nextEpisodeLabel}</span>
-            </button>
-            <button class="series-circle-btn focusable" data-action="toggleLibrary">
-              ${this.isSavedInLibrary ? "-" : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`}
-            </button>
-          </div>
-          ${writerLine ? `<p class="series-detail-support">Writer: ${writerLine}</p>` : ""}
-          <p class="series-detail-description">${meta.description || "No description."}</p>
-          <p class="series-detail-meta">${metaInfo}${imdbBadge}</p>
-          ${countryLine ? `<p class="series-detail-support">${countryLine}</p>` : ""}
-
-          <div class="series-season-row">${this.renderSeasonButtons()}</div>
-          <div class="series-episode-track">${this.renderEpisodeCards()}</div>
+          ${this.renderHeroSection({
+        meta,
+        playLabel: nextEpisodeLabel,
+        creditLine,
+        creditPrefix,
+        showWatchedButton: false
+      })}
+          <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
+          <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
           ${this.renderSeriesInsightSection()}
-          ${this.renderCompanyLogosSection(meta)}
-          ${this.renderMoreLikeThisSection()}
+          ${this.renderCompanySections(meta)}
         </div>
 
         <div id="episodeStreamChooserMount"></div>
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
-      ScreenUtils.setInitialFocus(this.container);
+      if (!this.pendingFocusRestore) {
+        ScreenUtils.setInitialFocus(this.container);
+      }
+      this.bindDetailChrome();
+    },
+    renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
+      const logoOrTitle = meta.logo ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml4(meta.name || "logo")}" />` : `<h1 class="series-detail-title">${escapeHtml4(meta.name || "Untitled")}</h1>`;
+      const externalRatings = this.renderExternalRatingsRow(meta);
+      const trailerButton = this.trailerSource ? `
+          <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="Play trailer">
+            ${renderTrailerGlyph()}
+          </button>
+        ` : "";
+      return `
+      <section class="detail-hero-section">
+        <div class="detail-hero-brand">
+          ${logoOrTitle}
+          <p class="detail-trailer-hint">Press back to return to details</p>
+        </div>
+        <div class="series-detail-actions">
+          <button class="series-primary-btn focusable" data-action="playDefault">
+            <span class="series-btn-icon">${renderPlayGlyph()}</span>
+            <span>${escapeHtml4(playLabel)}</span>
+          </button>
+          <button class="series-circle-btn focusable" data-action="toggleLibrary">
+            ${this.isSavedInLibrary ? "&#10003;" : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`}
+          </button>
+          ${showWatchedButton ? `<button class="series-circle-btn focusable" data-action="toggleWatched">${this.isMarkedWatched ? "&#10003;" : "&#9675;"}</button>` : ""}
+          ${trailerButton}
+        </div>
+        ${creditLine ? `<p class="series-detail-support">${escapeHtml4(creditPrefix)}: ${escapeHtml4(creditLine)}</p>` : ""}
+        ${externalRatings}
+        <p class="series-detail-description">${escapeHtml4(meta.description || "No description.")}</p>
+        ${this.renderHeroMetaRows(meta)}
+      </section>
+    `;
+    },
+    renderHeroMetaRows(meta) {
+      const genresText = Array.isArray(meta == null ? void 0 : meta.genres) ? meta.genres.filter(Boolean).join(" \u2022 ") : "";
+      const yearText = String((meta == null ? void 0 : meta.releaseInfo) || "").split("-")[0] || "";
+      const imdbValue = resolveImdbRating2(meta);
+      const imdbText = imdbValue != null && String(imdbValue).trim() !== "" ? String(imdbValue).replace(",", ".") : "";
+      const runtimeText = String((meta == null ? void 0 : meta.runtime) || "").trim() || formatRuntimeMinutes((meta == null ? void 0 : meta.runtimeMinutes) || resolveEpisodeRuntimeForSeason(this.episodes, this.selectedSeason));
+      const countryText = normalizeCountryLabel(Array.isArray(meta == null ? void 0 : meta.country) ? meta.country.join(", ") : (meta == null ? void 0 : meta.country) || "");
+      const languageText = String((meta == null ? void 0 : meta.language) || "").trim().toUpperCase();
+      const ageRating = String((meta == null ? void 0 : meta.ageRating) || "").trim();
+      const status = String((meta == null ? void 0 : meta.status) || "").trim().toUpperCase();
+      const primaryParts = [
+        genresText ? `<span>${escapeHtml4(genresText)}</span>` : "",
+        yearText ? `<span>${escapeHtml4(yearText)}</span>` : "",
+        imdbText ? renderImdbBadge(imdbText) : ""
+      ].filter(Boolean);
+      const secondaryParts = [];
+      if (ageRating && status) {
+        secondaryParts.push(`
+        <span class="detail-meta-badge combined">
+          <span>${escapeHtml4(ageRating)}</span>
+          <span class="detail-meta-badge-divider"></span>
+          <span class="strong">${escapeHtml4(status)}</span>
+        </span>
+      `);
+      } else {
+        if (ageRating) {
+          secondaryParts.push(`<span class="detail-meta-badge">${escapeHtml4(ageRating)}</span>`);
+        }
+        if (status) {
+          secondaryParts.push(`<span class="detail-meta-badge strong">${escapeHtml4(status)}</span>`);
+        }
+      }
+      [runtimeText, countryText, languageText].filter(Boolean).forEach((value) => {
+        secondaryParts.push(`<span>${escapeHtml4(value)}</span>`);
+      });
+      return `
+      <div class="detail-meta-stack">
+        ${primaryParts.length ? `<div class="detail-meta-row">${primaryParts.join('<span class="detail-meta-dot"></span>')}</div>` : ""}
+        ${secondaryParts.length ? `<div class="detail-meta-row secondary">${secondaryParts.join('<span class="detail-meta-dot"></span>')}</div>` : ""}
+      </div>
+    `;
+    },
+    renderExternalRatingsRow(meta = {}) {
+      const ratings = (meta == null ? void 0 : meta.mdbListRatings) || {};
+      const items = [
+        ["trakt", getAddonIconPath("trakt"), ratings.trakt],
+        ["imdb", "assets/icons/imdb_logo_2016.svg", ratings.imdb],
+        ["tmdb", "assets/icons/mdblist_tmdb.svg", ratings.tmdb],
+        ["letterboxd", "assets/icons/mdblist_letterboxd.svg", ratings.letterboxd],
+        ["tomatoes", "assets/icons/mdblist_tomatoes.svg", ratings.tomatoes]
+      ].filter(([, , value]) => value != null && String(value).trim() !== "");
+      if (!items.length) {
+        return "";
+      }
+      return `
+      <div class="detail-ratings-row">
+        ${items.map(([label, icon, value]) => `
+          <span class="detail-rating-item">
+            <img src="${icon}" alt="${escapeHtml4(label)}" />
+            <span>${escapeHtml4(Number.isFinite(Number(value)) ? Number(value).toFixed(label === "trakt" || label === "tomatoes" ? 0 : 1).replace(/\.0$/, label === "trakt" || label === "tomatoes" ? "" : ".0") : String(value))}</span>
+          </span>
+        `).join("")}
+      </div>
+    `;
+    },
+    renderCompanySections(meta = {}) {
+      const production = this.renderCompanyLogosSection(meta.productionCompanies || meta.production_companies || [], "Production");
+      const networks = this.renderCompanyLogosSection(meta.networks || [], "Network");
+      if (meta.type === "series" || meta.type === "tv") {
+        return `${networks}${production}`;
+      }
+      return `${production}${networks}`;
     },
     renderDefaultLayout(meta, streamItems) {
       const isSeries = meta.type === "series" || meta.type === "tv";
@@ -10632,58 +13722,44 @@
     },
     renderMovieLayout(meta) {
       const backdrop = meta.background || meta.poster || "";
-      const logoOrTitle = meta.logo ? `<img src="${meta.logo}" class="series-detail-logo" alt="${meta.name || "logo"}" />` : `<h1 class="series-detail-title">${meta.name || "Untitled"}</h1>`;
       const directorLine = Array.isArray(meta.director) ? meta.director.slice(0, 2).join(", ") : meta.director || "";
-      const countryLine = Array.isArray(meta.country) ? meta.country.slice(0, 2).join(", ") : meta.country || "";
-      const durationText = formatRuntimeMinutes(meta.runtime || meta.runtimeMinutes || 0);
-      const imdbBadge = renderImdbBadge(resolveImdbRating(meta));
-      const metaInfo = [
-        ...Array.isArray(meta.genres) ? meta.genres.slice(0, 3) : [],
-        durationText,
-        meta.releaseInfo || ""
-      ].filter(Boolean).join(" \u2022 ");
       this.container.innerHTML = `
-      <div class="series-detail-shell movie-detail-shell">
-        <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop}')"` : ""}></div>
+      <div class="series-detail-shell movie-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
+        <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="detail-trailer-layer"></div>
         <div class="series-detail-vignette"></div>
+        <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content movie-detail-content">
-          ${logoOrTitle}
-          <div class="series-detail-actions">
-            <button class="series-primary-btn focusable" data-action="playDefault">
-              <span class="series-btn-icon">${renderPlayGlyph()}</span>
-              <span>Play</span>
-            </button>
-            <button class="series-circle-btn focusable" data-action="toggleLibrary">
-              ${this.isSavedInLibrary ? "-" : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`}
-            </button>
-            <button class="series-circle-btn focusable" data-action="toggleWatched">${this.isMarkedWatched ? "&#10003;" : "&#9675;"}</button>
-          </div>
-          ${directorLine ? `<p class="series-detail-support">Director: ${directorLine}</p>` : ""}
-          <p class="series-detail-description">${meta.description || "No description."}</p>
-          <p class="series-detail-meta">${metaInfo}${imdbBadge}</p>
-          ${countryLine ? `<p class="series-detail-support">${countryLine}</p>` : ""}
-
+          ${this.renderHeroSection({
+        meta,
+        playLabel: "Play",
+        creditLine: directorLine,
+        creditPrefix: "Director",
+        showWatchedButton: true
+      })}
           ${this.renderMovieInsightSection(meta)}
-          ${this.renderCompanyLogosSection(meta)}
-          ${this.renderMoreLikeThisSection()}
+          ${this.renderCompanySections(meta)}
         </div>
         <div id="movieStreamChooserMount"></div>
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
-      ScreenUtils.setInitialFocus(this.container, ".movie-detail-content .focusable");
+      if (!this.pendingFocusRestore) {
+        ScreenUtils.setInitialFocus(this.container, ".movie-detail-content .focusable");
+      }
+      this.bindDetailChrome();
     },
     renderMovieInsightSection(meta) {
-      const tabs = `
-      <div class="series-insight-tabs">
-        <button class="series-insight-tab focusable${this.movieInsightTab === "cast" ? " selected" : ""}" data-action="setMovieInsightTab" data-tab="cast">Creator and Cast</button>
-        <span class="series-insight-divider">|</span>
-        <button class="series-insight-tab focusable${this.movieInsightTab === "ratings" ? " selected" : ""}" data-action="setMovieInsightTab" data-tab="ratings">Ratings</button>
-      </div>
-    `;
+      const tabItems = [
+        ["cast", "Creator and Cast"],
+        ["ratings", "Ratings"],
+        ...this.moreLikeThisItems.length ? [["morelike", "More Like This"]] : [],
+        ...this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : []
+      ];
+      const tabs = tabItems.length > 1 ? this.renderPeopleTabs("movie", this.movieInsightTab, tabItems) : "";
       if (this.movieInsightTab === "ratings") {
-        const imdbValue = resolveImdbRating(meta);
+        const imdbValue = resolveImdbRating2(meta);
         const imdb = imdbValue != null && String(imdbValue).trim() !== "" ? String(imdbValue) : "-";
         const tmdb = Number.isFinite(Number(meta == null ? void 0 : meta.tmdbRating)) ? String(meta.tmdbRating) : "-";
         return `
@@ -10702,6 +13778,22 @@
         </section>
       `;
       }
+      if (this.movieInsightTab === "collection") {
+        return `
+        <section class="series-insight-section">
+          ${tabs}
+          ${this.renderPreviewRail(this.collectionItems, "movie", "collection:movie")}
+        </section>
+      `;
+      }
+      if (this.movieInsightTab === "morelike") {
+        return `
+        <section class="series-insight-section">
+          ${tabs}
+          ${this.renderPreviewRail(this.moreLikeThisItems, "movie", "morelike:movie")}
+        </section>
+      `;
+      }
       return `
       <section class="series-insight-section movie-cast-section">
         ${tabs}
@@ -10710,18 +13802,31 @@
     `;
     },
     renderSeriesInsightSection() {
-      const tabs = `
-      <div class="series-insight-tabs">
-        <button class="series-insight-tab focusable${this.seriesInsightTab === "cast" ? " selected" : ""}" data-action="setSeriesInsightTab" data-tab="cast">Creator and Cast</button>
-        <span class="series-insight-divider">|</span>
-        <button class="series-insight-tab focusable${this.seriesInsightTab === "ratings" ? " selected" : ""}" data-action="setSeriesInsightTab" data-tab="ratings">Ratings</button>
-      </div>
-    `;
+      const tabItems = [
+        ["cast", "Creator and Cast"],
+        ["ratings", "Ratings"],
+        ...this.moreLikeThisItems.length ? [["morelike", "More Like This"]] : [],
+        ...this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : []
+      ];
+      const tabs = tabItems.length > 1 ? this.renderPeopleTabs("series", this.seriesInsightTab, tabItems) : "";
       return `
       <section class="series-insight-section">
         ${tabs}
-        ${this.seriesInsightTab === "ratings" ? this.renderSeriesRatingsPanel() : this.renderSeriesCastTrack("series")}
+        ${this.seriesInsightTab === "ratings" ? this.renderSeriesRatingsPanel() : this.seriesInsightTab === "collection" ? this.renderPreviewRail(this.collectionItems, "series", "collection:series") : this.seriesInsightTab === "morelike" ? this.renderPreviewRail(this.moreLikeThisItems, "series", "morelike:series") : this.renderSeriesCastTrack("series")}
       </section>
+    `;
+    },
+    renderPeopleTabs(kind, activeTab, items = []) {
+      const normalized = items.filter(([, label]) => Boolean(label));
+      return `
+      <div class="series-insight-tabs" data-scroll-key="people-tabs:${kind}">
+        ${normalized.map(([tab, label], index) => `
+          ${index > 0 ? '<span class="series-insight-divider">|</span>' : ""}
+          <button class="series-insight-tab focusable${activeTab === tab ? " selected" : ""}"
+                  data-action="${kind === "series" ? "setSeriesInsightTab" : "setMovieInsightTab"}"
+                  data-tab="${tab}">${escapeHtml4(label)}</button>
+        `).join("")}
+      </div>
     `;
     },
     renderSeriesCastTrack(kind = "series") {
@@ -10733,15 +13838,16 @@
       <article class="movie-cast-card focusable series-cast-card"
                data-action="openCastDetail"
                data-cast-id="${person.tmdbId || ""}"
-               data-cast-name="${person.name || ""}"
-               data-cast-role="${person.character || ""}"
+               data-cast-key="${escapeHtml4(String(person.tmdbId || `${person.name || ""}:${person.character || ""}`))}"
+               data-cast-name="${escapeHtml4(person.name || "")}"
+               data-cast-role="${escapeHtml4(person.character || "")}"
                data-cast-photo="${person.photo || ""}">
         <div class="movie-cast-avatar"${person.photo ? ` style="background-image:url('${String(person.photo).replace(/'/g, "%27")}')"` : ""}></div>
-        <div class="movie-cast-name">${person.name || ""}</div>
-        <div class="movie-cast-role">${person.character || ""}</div>
+        <div class="movie-cast-name">${escapeHtml4(person.name || "")}</div>
+        <div class="movie-cast-role">${escapeHtml4(person.character || "")}</div>
       </article>
     `).join("");
-      return `<div class="${className}">${cards}</div>`;
+      return `<div class="${className}" data-scroll-key="cast:${kind}">${cards}</div>`;
     },
     renderSeriesRatingsPanel() {
       var _a;
@@ -10759,14 +13865,16 @@
               data-season="${season}">S${season}</button>
     `).join("");
       const chips = ratings.length ? ratings.map((entry) => `
-          <div class="series-episode-rating-chip ${ratingToneClass(entry.rating)}">
+          <div class="series-episode-rating-chip focusable ${ratingToneClass(entry.rating)}"
+               data-rating-episode="${Number(entry.episode || 0)}">
             <span class="series-episode-rating-ep">E${entry.episode}</span>
-            <span class="series-episode-rating-val">${entry.rating != null ? String(entry.rating).replace(".", ",") : "-"}</span>
+            <span class="series-episode-rating-val">${entry.rating != null ? String(entry.rating).replace(".", ".") : "-"}</span>
           </div>
         `).join("") : `<div class="series-insight-empty">No episode ratings in this season.</div>`;
       return `
-      <div class="series-rating-seasons">${seasonButtons}</div>
-      <div class="series-episode-ratings-grid">${chips}</div>
+      <div class="series-rating-seasons" data-scroll-key="rating-seasons">${seasonButtons}</div>
+      <div class="series-rating-summary">Season ${this.selectedRatingSeason} \u2022 ${ratings.length} episodes</div>
+      <div class="series-episode-ratings-grid" data-scroll-key="rating-chips:${this.selectedRatingSeason}">${chips}</div>
     `;
     },
     renderSeasonButtons() {
@@ -10792,16 +13900,38 @@
       if (!selectedSeasonEpisodes.length) {
         return "<p>No episodes for selected season.</p>";
       }
-      return selectedSeasonEpisodes.map((episode) => `
-      <article class="series-episode-card focusable"
-           data-action="openEpisodeStreams"
-           data-video-id="${episode.id}">
-        <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail}')"` : ""}></div>
-        <div class="series-episode-badge">S${String(episode.season).padStart(2, "0")}E${String(episode.episode).padStart(2, "0")}</div>
-        <div class="series-episode-title">${episode.title}</div>
-        <div class="series-episode-overview">${episode.overview || "Episode"}</div>
-      </article>
-    `).join("");
+      return selectedSeasonEpisodes.map((episode) => {
+        var _a2, _b, _c, _d;
+        const progress = this.episodeProgressMap.get(`${episode.season}:${episode.episode}`) || null;
+        const position = Number((progress == null ? void 0 : progress.positionMs) || 0);
+        const duration = Number((progress == null ? void 0 : progress.durationMs) || 0);
+        const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
+        const isWatched = this.watchedEpisodeKeys.has(`${episode.season}:${episode.episode}`);
+        const rating = (_d = (_c = (_b = (_a2 = this.seriesRatingsBySeason) == null ? void 0 : _a2[episode.season]) == null ? void 0 : _b.find((entry) => Number((entry == null ? void 0 : entry.episode) || 0) === Number(episode.episode || 0))) == null ? void 0 : _c.rating) != null ? _d : null;
+        const dateLabel = formatCompactDate(episode.released || "");
+        const metaParts = [
+          episode.runtimeMinutes > 0 ? `<span>${escapeHtml4(formatRuntimeMinutes(episode.runtimeMinutes))}</span>` : "",
+          rating != null ? `<span class="series-episode-rating-inline">${renderImdbBadge(String(Number(rating).toFixed(1)))}</span>` : "",
+          dateLabel ? `<span class="series-episode-date">${escapeHtml4(dateLabel)}</span>` : ""
+        ].filter(Boolean).join("");
+        return `
+        <article class="series-episode-card focusable${isWatched ? " watched" : ""}"
+             data-action="openEpisodeStreams"
+             data-video-id="${episode.id}">
+          <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail.replace(/'/g, "%27")}')"` : ""}>
+            <div class="series-episode-overlay"></div>
+            ${isWatched ? `<div class="series-episode-status complete">&#10003;</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
+            <div class="series-episode-copy">
+              <div class="series-episode-badge">EPISODE ${Number(episode.episode || 0)}</div>
+              <div class="series-episode-title">${escapeHtml4(episode.title)}</div>
+              <div class="series-episode-overview">${escapeHtml4(episode.overview || "Episode")}</div>
+              ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
+              ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
+            </div>
+          </div>
+        </article>
+      `;
+      }).join("");
     },
     renderCastCards() {
       if (!Array.isArray(this.castItems) || !this.castItems.length) {
@@ -10814,39 +13944,32 @@
       </div>
     `).join("");
     },
-    renderMoreLikeCards() {
-      if (!Array.isArray(this.moreLikeThisItems) || !this.moreLikeThisItems.length) {
+    renderPreviewRail(items = [], fallbackType = "movie", railKey = "morelike") {
+      if (!Array.isArray(items) || !items.length) {
         return "";
       }
-      return this.moreLikeThisItems.map((item) => {
+      const cards = items.map((rawItem) => {
         var _a;
+        const item = normalizePreviewItem(rawItem, fallbackType);
         return `
       <article class="detail-morelike-card focusable"
            data-action="openMoreLikeDetail"
            data-item-id="${item.id}"
            data-item-type="${item.type || ((_a = this.params) == null ? void 0 : _a.itemType) || "movie"}"
-           data-item-title="${item.name || "Untitled"}">
-        <div class="detail-morelike-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-        <div class="detail-morelike-name">${item.name || "Untitled"}</div>
-        <div class="detail-morelike-type">${item.type || "-"}</div>
+           data-item-title="${escapeHtml4(item.name || "Untitled")}">
+        <div class="detail-morelike-poster"${item.poster ? ` style="background-image:url('${item.poster.replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="detail-morelike-name">${escapeHtml4(item.name || "Untitled")}</div>
+        ${item.releaseInfo ? `<div class="detail-morelike-type">${escapeHtml4(item.releaseInfo)}</div>` : ""}
       </article>
     `;
       }).join("");
+      return `<div class="detail-morelike-track" data-scroll-key="${escapeHtml4(railKey)}">${cards}</div>`;
     },
-    renderMoreLikeThisSection() {
-      const cards = this.renderMoreLikeCards();
-      if (!cards) {
-        return "";
-      }
-      return `
-      <section class="detail-morelike-section">
-        <h3 class="detail-morelike-title">More Like This</h3>
-        <div class="detail-morelike-track">${cards}</div>
-      </section>
-    `;
+    renderMoreLikeCards() {
+      var _a;
+      return this.renderPreviewRail(this.moreLikeThisItems, ((_a = this.params) == null ? void 0 : _a.itemType) || "movie");
     },
-    renderCompanyLogosSection(meta = {}) {
-      const rawCompanies = Array.isArray(meta == null ? void 0 : meta.companies) ? meta.companies : Array.isArray(meta == null ? void 0 : meta.productionCompanies) ? meta.productionCompanies : Array.isArray(meta == null ? void 0 : meta.production_companies) ? meta.production_companies : [];
+    renderCompanyLogosSection(rawCompanies = [], title = "Studios") {
       const toLogo = (logo) => {
         const value = String(logo || "").trim();
         if (!value) {
@@ -10868,115 +13991,241 @@
         return "";
       }
       const logos = companies.slice(0, 10).map((company) => `
-      <article class="detail-company-card">
-        ${company.logo ? `<img src="${company.logo}" alt="${company.name || "Company"}" />` : `<span>${company.name || ""}</span>`}
+      <article class="detail-company-card focusable"
+               data-company-name="${escapeHtml4(company.name || "")}">
+        ${company.logo ? `<img src="${company.logo}" alt="${escapeHtml4(company.name || "Company")}" />` : `<span>${escapeHtml4(company.name || "")}</span>`}
       </article>
     `).join("");
       return `
       <section class="detail-company-section">
-        <h3 class="detail-company-title">Studios</h3>
-        <div class="detail-company-track">${logos}</div>
+        <h3 class="detail-company-title">${escapeHtml4(title)}</h3>
+        <div class="detail-company-track" data-scroll-key="company:${escapeHtml4(String(title || "").toLowerCase())}">${logos}</div>
       </section>
     `;
     },
+    bindDetailChrome() {
+      var _a;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-content");
+      if (!content) {
+        return;
+      }
+      if (this.detailScrollHandler) {
+        content.removeEventListener("scroll", this.detailScrollHandler);
+      }
+      this.detailScrollHandler = () => {
+        var _a2;
+        const shell = (_a2 = this.container) == null ? void 0 : _a2.querySelector(".series-detail-shell");
+        if (!shell) {
+          return;
+        }
+        shell.classList.toggle("detail-scrolled", content.scrollTop > 160);
+      };
+      content.addEventListener("scroll", this.detailScrollHandler, { passive: true });
+      if (this.detailFocusHandler) {
+        this.container.removeEventListener("focusin", this.detailFocusHandler, true);
+      }
+      this.detailFocusHandler = (event) => {
+        var _a2, _b, _c, _d, _e;
+        const target = event == null ? void 0 : event.target;
+        if (!(target instanceof HTMLElement) || !((_a2 = this.container) == null ? void 0 : _a2.contains(target))) {
+          return;
+        }
+        if (target.matches(".series-season-btn.focusable")) {
+          const season = Number(target.dataset.season || 0);
+          if (season > 0 && season !== this.selectedSeason) {
+            this.selectedSeason = season;
+            this.render(this.meta, { selector: `.series-season-btn[data-season="${season}"]` });
+          }
+          return;
+        }
+        if (target.matches(".series-insight-tab.focusable")) {
+          const tab = String(target.dataset.tab || "");
+          if (!tab) {
+            return;
+          }
+          if ((((_b = this.meta) == null ? void 0 : _b.type) === "series" || ((_c = this.meta) == null ? void 0 : _c.type) === "tv") && tab !== this.seriesInsightTab) {
+            this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
+            this.render(this.meta, { selector: `.series-insight-tab[data-tab="${this.seriesInsightTab}"]` });
+            return;
+          }
+          if (((_d = this.meta) == null ? void 0 : _d.type) !== "series" && ((_e = this.meta) == null ? void 0 : _e.type) !== "tv" && tab !== this.movieInsightTab) {
+            this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
+            this.render(this.meta, { selector: `.series-insight-tab[data-tab="${this.movieInsightTab}"]` });
+          }
+          return;
+        }
+        if (target.matches(".series-rating-season.focusable")) {
+          const season = Number(target.dataset.season || 0);
+          if (season > 0 && season !== this.selectedRatingSeason) {
+            this.selectedRatingSeason = season;
+            this.render(this.meta, { selector: `.series-rating-season[data-season="${season}"]` });
+          }
+        }
+      };
+      this.container.addEventListener("focusin", this.detailFocusHandler, true);
+      this.detailScrollHandler();
+      this.restoreChromeState();
+      this.syncTrailerDom();
+      this.restartTrailerAutoplayTimer();
+      this.restorePendingFocus();
+    },
+    restoreChromeState() {
+      var _a, _b;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-content");
+      if (content) {
+        content.scrollTop = Number(this.restoredContentScrollTop || 0);
+      }
+      Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll("[data-scroll-key]")) || []).forEach((node) => {
+        var _a2;
+        const key = String(node.dataset.scrollKey || "");
+        if (!key) {
+          return;
+        }
+        node.scrollLeft = Number(((_a2 = this.restoredTrackScrollLeftByKey) == null ? void 0 : _a2[key]) || 0);
+      });
+    },
+    captureDetailFocus() {
+      if (!this.container) {
+        return null;
+      }
+      const current = this.container.querySelector(".focusable.focused");
+      const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      const target = current || (active && this.container.contains(active) ? active : null);
+      if (!(target instanceof HTMLElement) || !target.closest(".series-detail-content")) {
+        return null;
+      }
+      const action = String(target.dataset.action || "");
+      if (action === "selectSeason") {
+        const season = Number(target.dataset.season || 0);
+        return season > 0 ? { selector: `.series-season-btn[data-season="${season}"]` } : null;
+      }
+      if (action === "setSeriesInsightTab" || action === "setMovieInsightTab") {
+        const tab = String(target.dataset.tab || "");
+        return tab ? { selector: `.series-insight-tab[data-tab="${tab}"]` } : null;
+      }
+      if (action === "selectRatingSeason") {
+        const season = Number(target.dataset.season || 0);
+        return season > 0 ? { selector: `.series-rating-season[data-season="${season}"]` } : null;
+      }
+      if (action === "openEpisodeStreams") {
+        const videoId = String(target.dataset.videoId || "");
+        return videoId ? { selector: `.series-episode-card[data-video-id="${escapeSelectorValue(videoId)}"]` } : null;
+      }
+      if (action === "openCastDetail") {
+        const castKey = String(target.dataset.castKey || "");
+        return castKey ? { selector: `.series-cast-card[data-cast-key="${escapeSelectorValue(castKey)}"]` } : null;
+      }
+      if (action === "openMoreLikeDetail") {
+        const itemId = String(target.dataset.itemId || "");
+        return itemId ? { selector: `.detail-morelike-card[data-item-id="${escapeSelectorValue(itemId)}"]` } : null;
+      }
+      if (target.matches(".detail-company-card.focusable")) {
+        const companyName = String(target.dataset.companyName || "");
+        return companyName ? { selector: `.detail-company-card[data-company-name="${escapeSelectorValue(companyName)}"]` } : null;
+      }
+      if (target.matches(".series-episode-rating-chip.focusable")) {
+        const episode = Number(target.dataset.ratingEpisode || 0);
+        return episode > 0 ? { selector: `.series-episode-rating-chip[data-rating-episode="${episode}"]` } : null;
+      }
+      if (action) {
+        return { selector: `.series-detail-actions [data-action="${action}"]` };
+      }
+      return null;
+    },
+    restorePendingFocus() {
+      const descriptor = this.pendingFocusRestore;
+      this.pendingFocusRestore = null;
+      if (!(descriptor == null ? void 0 : descriptor.selector) || !this.container) {
+        return false;
+      }
+      const target = this.container.querySelector(descriptor.selector);
+      if (!(target instanceof HTMLElement)) {
+        return false;
+      }
+      return this.focusInList([target], 0);
+    },
+    restartTrailerAutoplayTimer() {
+      if (this.trailerAutoplayTimer) {
+        clearTimeout(this.trailerAutoplayTimer);
+        this.trailerAutoplayTimer = null;
+      }
+      if (!this.trailerSource || this.isTrailerPlaying || this.pendingEpisodeSelection || this.pendingMovieSelection || !PlayerSettingsStore.get().trailerAutoplay) {
+        return;
+      }
+      this.trailerAutoplayTimer = setTimeout(() => {
+        this.playTrailer();
+      }, 7e3);
+    },
+    syncTrailerDom() {
+      var _a, _b;
+      const shell = (_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-shell");
+      const layer = (_b = this.container) == null ? void 0 : _b.querySelector(".detail-trailer-layer");
+      if (!shell || !layer) {
+        return;
+      }
+      shell.classList.toggle("detail-trailer-active", Boolean(this.isTrailerPlaying));
+      if (!this.isTrailerPlaying || !this.trailerSource) {
+        layer.innerHTML = "";
+        return;
+      }
+      if (this.trailerSource.kind === "youtube") {
+        layer.innerHTML = `
+        <iframe
+          class="detail-trailer-frame"
+          src="${this.trailerSource.embedUrl}"
+          title="Trailer"
+          allow="autoplay; encrypted-media; picture-in-picture"
+          referrerpolicy="origin-when-cross-origin"
+          allowfullscreen
+        ></iframe>
+      `;
+        return;
+      }
+      layer.innerHTML = `
+      <video class="detail-trailer-video" autoplay muted loop playsinline>
+        <source src="${this.trailerSource.url}" />
+      </video>
+    `;
+    },
+    playTrailer() {
+      if (!this.trailerSource) {
+        return;
+      }
+      this.isTrailerPlaying = true;
+      this.syncTrailerDom();
+    },
+    stopTrailerPlayback({ keepDom = false } = {}) {
+      var _a, _b;
+      if (this.trailerAutoplayTimer) {
+        clearTimeout(this.trailerAutoplayTimer);
+        this.trailerAutoplayTimer = null;
+      }
+      this.isTrailerPlaying = false;
+      if (!keepDom) {
+        const layer = (_a = this.container) == null ? void 0 : _a.querySelector(".detail-trailer-layer");
+        if (layer) {
+          layer.innerHTML = "";
+        }
+      }
+      const shell = (_b = this.container) == null ? void 0 : _b.querySelector(".series-detail-shell");
+      if (shell) {
+        shell.classList.remove("detail-trailer-active");
+      }
+    },
     async openEpisodeStreamChooser(videoId) {
-      var _a, _b, _c, _d;
       if (!videoId || !this.meta) {
         return;
       }
+      this.stopTrailerPlayback({ keepDom: false });
       const episode = this.episodes.find((entry) => entry.id === videoId) || null;
-      const requestKey = (this.streamChooserLoadToken || 0) + 1;
-      this.streamChooserLoadToken = requestKey;
-      this.pendingEpisodeSelection = {
-        videoId,
-        episode,
-        streams: [],
-        addonFilter: "all",
-        loading: true,
-        requestKey
-      };
-      this.streamChooserFocus = { zone: "filter", index: 0 };
-      this.pendingMovieSelection = null;
-      this.renderEpisodeStreamChooser();
-      const streamResult = await streamRepository.getStreamsFromAllAddons(
-        ((_a = this.params) == null ? void 0 : _a.itemType) || "series",
-        videoId,
-        {
-          itemId: String(((_b = this.params) == null ? void 0 : _b.itemId) || ""),
-          season: (_c = episode == null ? void 0 : episode.season) != null ? _c : null,
-          episode: (_d = episode == null ? void 0 : episode.episode) != null ? _d : null,
-          onChunk: (chunkResult) => {
-            if (!this.pendingEpisodeSelection || this.pendingEpisodeSelection.videoId !== videoId || this.pendingEpisodeSelection.requestKey !== requestKey) {
-              return;
-            }
-            const chunkItems = this.flattenStreams(chunkResult);
-            if (!chunkItems.length) {
-              return;
-            }
-            this.pendingEpisodeSelection.streams = this.mergeStreamItems(
-              this.pendingEpisodeSelection.streams,
-              chunkItems
-            );
-            this.renderEpisodeStreamChooser();
-          }
-        }
-      );
-      const streamItems = this.flattenStreams(streamResult);
-      if (!this.pendingEpisodeSelection || this.pendingEpisodeSelection.videoId !== videoId || this.pendingEpisodeSelection.requestKey !== requestKey) {
+      if (!episode) {
         return;
       }
-      this.pendingEpisodeSelection = {
-        ...this.pendingEpisodeSelection,
-        streams: this.mergeStreamItems(this.pendingEpisodeSelection.streams, streamItems),
-        loading: false
-      };
-      this.renderEpisodeStreamChooser();
+      this.navigateToStreamScreenForEpisode(episode);
     },
     async openMovieStreamChooser() {
-      var _a, _b, _c;
-      const requestKey = (this.streamChooserLoadToken || 0) + 1;
-      this.streamChooserLoadToken = requestKey;
-      this.pendingMovieSelection = {
-        streams: [],
-        addonFilter: "all",
-        loading: true,
-        requestKey
-      };
-      this.streamChooserFocus = { zone: "filter", index: 0 };
-      this.pendingEpisodeSelection = null;
-      this.renderMovieStreamChooser();
-      const streamResult = await streamRepository.getStreamsFromAllAddons(
-        ((_a = this.params) == null ? void 0 : _a.itemType) || "movie",
-        (_b = this.params) == null ? void 0 : _b.itemId,
-        {
-          itemId: String(((_c = this.params) == null ? void 0 : _c.itemId) || ""),
-          onChunk: (chunkResult) => {
-            if (!this.pendingMovieSelection || this.pendingMovieSelection.requestKey !== requestKey) {
-              return;
-            }
-            const chunkItems = this.flattenStreams(chunkResult);
-            if (!chunkItems.length) {
-              return;
-            }
-            this.pendingMovieSelection.streams = this.mergeStreamItems(
-              this.pendingMovieSelection.streams,
-              chunkItems
-            );
-            this.renderMovieStreamChooser();
-          }
-        }
-      );
-      const streams = this.flattenStreams(streamResult);
-      this.streamItems = streams;
-      if (!this.pendingMovieSelection || this.pendingMovieSelection.requestKey !== requestKey) {
-        return;
-      }
-      this.pendingMovieSelection = {
-        ...this.pendingMovieSelection,
-        streams: this.mergeStreamItems(this.pendingMovieSelection.streams, streams),
-        loading: false
-      };
-      this.renderMovieStreamChooser();
+      this.stopTrailerPlayback({ keepDom: false });
+      this.navigateToStreamScreenForMovie();
     },
     getActivePendingSelection() {
       return this.pendingEpisodeSelection || this.pendingMovieSelection || null;
@@ -11111,6 +14360,11 @@
       this.render(this.meta);
     },
     consumeBackRequest() {
+      if (this.isTrailerPlaying) {
+        this.stopTrailerPlayback();
+        this.restartTrailerAutoplayTimer();
+        return true;
+      }
       if (this.pendingEpisodeSelection || this.pendingMovieSelection) {
         this.closeEpisodeStreamChooser();
         return true;
@@ -11154,21 +14408,23 @@
       });
     },
     navigateToStreamScreenForEpisode(episode) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
       if (!(episode == null ? void 0 : episode.id)) {
         return;
       }
       const currentIndex = this.episodes.findIndex((entry) => entry.id === episode.id);
       const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
+      const streamBackdrop = ((_a = this.meta) == null ? void 0 : _a.background) || ((_b = this.meta) == null ? void 0 : _b.landscapePoster) || ((_c = this.meta) == null ? void 0 : _c.poster) || null;
       Router.navigate("stream", {
-        itemId: ((_a = this.params) == null ? void 0 : _a.itemId) || null,
+        itemId: ((_d = this.params) == null ? void 0 : _d.itemId) || null,
         itemType: "series",
-        itemTitle: ((_b = this.meta) == null ? void 0 : _b.name) || ((_c = this.params) == null ? void 0 : _c.fallbackTitle) || ((_d = this.params) == null ? void 0 : _d.itemId) || "Untitled",
-        backdrop: ((_e = this.meta) == null ? void 0 : _e.background) || ((_f = this.meta) == null ? void 0 : _f.poster) || null,
-        poster: ((_g = this.meta) == null ? void 0 : _g.poster) || null,
-        logo: ((_h = this.meta) == null ? void 0 : _h.logo) || null,
-        parentalWarnings: ((_i = this.meta) == null ? void 0 : _i.parentalWarnings) || null,
-        parentalGuide: ((_j = this.meta) == null ? void 0 : _j.parentalGuide) || null,
+        itemTitle: ((_e = this.meta) == null ? void 0 : _e.name) || ((_f = this.params) == null ? void 0 : _f.fallbackTitle) || ((_g = this.params) == null ? void 0 : _g.itemId) || "Untitled",
+        backdrop: streamBackdrop,
+        poster: ((_h = this.meta) == null ? void 0 : _h.poster) || null,
+        logo: ((_i = this.meta) == null ? void 0 : _i.logo) || null,
+        runtime: episode.runtimeMinutes || null,
+        parentalWarnings: ((_j = this.meta) == null ? void 0 : _j.parentalWarnings) || null,
+        parentalGuide: ((_k = this.meta) == null ? void 0 : _k.parentalGuide) || null,
         videoId: episode.id,
         season: episode.season,
         episode: episode.episode,
@@ -11179,18 +14435,22 @@
       });
     },
     navigateToStreamScreenForMovie() {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+      const releaseYear = ((_b = String(((_a = this.meta) == null ? void 0 : _a.releaseInfo) || "").match(/\b(19|20)\d{2}\b/)) == null ? void 0 : _b[0]) || "";
+      const streamBackdrop = ((_c = this.meta) == null ? void 0 : _c.background) || ((_d = this.meta) == null ? void 0 : _d.landscapePoster) || ((_e = this.meta) == null ? void 0 : _e.poster) || null;
       Router.navigate("stream", {
-        itemId: ((_a = this.params) == null ? void 0 : _a.itemId) || null,
+        itemId: ((_f = this.params) == null ? void 0 : _f.itemId) || null,
         itemType: "movie",
-        itemTitle: ((_b = this.meta) == null ? void 0 : _b.name) || ((_c = this.params) == null ? void 0 : _c.fallbackTitle) || ((_d = this.params) == null ? void 0 : _d.itemId) || "Untitled",
-        itemSubtitle: Array.isArray((_e = this.meta) == null ? void 0 : _e.genres) ? this.meta.genres.slice(0, 3).join(" \u2022 ") : "",
-        backdrop: ((_f = this.meta) == null ? void 0 : _f.background) || ((_g = this.meta) == null ? void 0 : _g.poster) || null,
-        poster: ((_h = this.meta) == null ? void 0 : _h.poster) || null,
-        logo: ((_i = this.meta) == null ? void 0 : _i.logo) || null,
-        parentalWarnings: ((_j = this.meta) == null ? void 0 : _j.parentalWarnings) || null,
-        parentalGuide: ((_k = this.meta) == null ? void 0 : _k.parentalGuide) || null,
-        videoId: ((_l = this.params) == null ? void 0 : _l.itemId) || null,
+        itemTitle: ((_g = this.meta) == null ? void 0 : _g.name) || ((_h = this.params) == null ? void 0 : _h.fallbackTitle) || ((_i = this.params) == null ? void 0 : _i.itemId) || "Untitled",
+        itemSubtitle: "",
+        genres: Array.isArray((_j = this.meta) == null ? void 0 : _j.genres) ? this.meta.genres.slice(0, 3).join(" \u2022 ") : "",
+        year: releaseYear,
+        backdrop: streamBackdrop,
+        poster: ((_k = this.meta) == null ? void 0 : _k.poster) || null,
+        logo: ((_l = this.meta) == null ? void 0 : _l.logo) || null,
+        parentalWarnings: ((_m = this.meta) == null ? void 0 : _m.parentalWarnings) || null,
+        parentalGuide: ((_n = this.meta) == null ? void 0 : _n.parentalGuide) || null,
+        videoId: ((_o = this.params) == null ? void 0 : _o.itemId) || null,
         episodes: []
       });
     },
@@ -11245,7 +14505,7 @@
       this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
       target.classList.add("focused");
       target.focus();
-      const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons");
+      const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons, .detail-morelike-track, .detail-company-track, .series-season-row, .series-insight-tabs");
       if (horizontalTrack) {
         const targetLeft = target.offsetLeft;
         const targetRight = targetLeft + target.offsetWidth;
@@ -11259,14 +14519,15 @@
           horizontalTrack.scrollLeft = Math.max(0, targetLeft - edgePadding);
         }
         const detailContent = (_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-content");
-        if (detailContent && detailContent.contains(target)) {
-          const rect = target.getBoundingClientRect();
+        if (detailContent && detailContent.contains(horizontalTrack)) {
+          const rect = horizontalTrack.getBoundingClientRect();
           const contentRect = detailContent.getBoundingClientRect();
-          const pad = 16;
-          if (rect.bottom > contentRect.bottom - pad) {
-            detailContent.scrollTop += Math.ceil(rect.bottom - contentRect.bottom + pad);
-          } else if (rect.top < contentRect.top + pad) {
-            detailContent.scrollTop -= Math.ceil(contentRect.top + pad - rect.top);
+          const topPad = 72;
+          const bottomPad = 120;
+          if (rect.bottom > contentRect.bottom - bottomPad) {
+            detailContent.scrollTop += Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
+          } else if (rect.top < contentRect.top + topPad) {
+            detailContent.scrollTop -= Math.ceil(contentRect.top + topPad - rect.top);
           }
         }
       } else if (typeof target.scrollIntoView === "function") {
@@ -11433,6 +14694,7 @@
       return true;
     },
     handleSeriesDpad(event) {
+      var _a, _b, _c, _d, _e, _f, _g;
       if (!this.meta || this.meta.type !== "series" && this.meta.type !== "tv" || this.pendingEpisodeSelection || this.pendingMovieSelection) {
         return false;
       }
@@ -11451,7 +14713,10 @@
       const insightTabs = Array.from(this.container.querySelectorAll(".series-insight-tabs .series-insight-tab.focusable"));
       const castCards = Array.from(this.container.querySelectorAll(".series-cast-track .series-cast-card.focusable"));
       const ratingSeasons = Array.from(this.container.querySelectorAll(".series-rating-seasons .series-rating-season.focusable"));
+      const ratingChips = Array.from(this.container.querySelectorAll(".series-episode-ratings-grid .series-episode-rating-chip.focusable"));
       const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+      const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
+      const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
       if (typeof event.preventDefault === "function") {
         event.preventDefault();
       }
@@ -11500,6 +14765,20 @@
         if (direction === "down" && insightTabs.length) {
           return this.focusInList(insightTabs, 0) || true;
         }
+        if (direction === "down") {
+          if (this.seriesInsightTab === "ratings" && ratingSeasons.length) {
+            return this.focusInList(ratingSeasons, 0) || true;
+          }
+          if (castCards.length) {
+            return this.focusInList(castCards, 0) || true;
+          }
+          if (moreLikeCards.length) {
+            return this.focusInList(moreLikeCards, 0) || true;
+          }
+          if ((_a = companyCards[0]) == null ? void 0 : _a.length) {
+            return this.focusInList(companyCards[0], 0) || true;
+          }
+        }
         return true;
       }
       const tabIndex = insightTabs.indexOf(current);
@@ -11521,6 +14800,9 @@
           if (moreLikeCards.length) {
             return this.focusInList(moreLikeCards, 0) || true;
           }
+          if ((_b = companyCards[0]) == null ? void 0 : _b.length) {
+            return this.focusInList(companyCards[0], 0) || true;
+          }
         }
         return true;
       }
@@ -11528,9 +14810,19 @@
       if (castIndex >= 0) {
         if (direction === "left") return this.focusInList(castCards, castIndex - 1) || true;
         if (direction === "right") return this.focusInList(castCards, castIndex + 1) || true;
-        if (direction === "up") return this.focusInList(insightTabs, 0) || true;
+        if (direction === "up") {
+          if (insightTabs.length) {
+            return this.focusInList(insightTabs, 0) || true;
+          }
+          if (episodes.length) {
+            return this.focusInList(episodes, Math.min(castIndex, episodes.length - 1)) || true;
+          }
+        }
         if (direction === "down" && moreLikeCards.length) {
           return this.focusInList(moreLikeCards, Math.min(castIndex, moreLikeCards.length - 1)) || true;
+        }
+        if (direction === "down" && ((_c = companyCards[0]) == null ? void 0 : _c.length)) {
+          return this.focusInList(companyCards[0], Math.min(castIndex, companyCards[0].length - 1)) || true;
         }
         return true;
       }
@@ -11538,9 +14830,42 @@
       if (ratingSeasonIndex >= 0) {
         if (direction === "left") return this.focusInList(ratingSeasons, ratingSeasonIndex - 1) || true;
         if (direction === "right") return this.focusInList(ratingSeasons, ratingSeasonIndex + 1) || true;
-        if (direction === "up") return this.focusInList(insightTabs, 1) || true;
+        if (direction === "up") {
+          if (insightTabs.length) {
+            return this.focusInList(insightTabs, 1) || true;
+          }
+          if (episodes.length) {
+            return this.focusInList(episodes, Math.min(ratingSeasonIndex, episodes.length - 1)) || true;
+          }
+        }
+        if (direction === "down" && ratingChips.length) {
+          return this.focusInList(ratingChips, Math.min(ratingSeasonIndex, ratingChips.length - 1)) || true;
+        }
         if (direction === "down" && moreLikeCards.length) {
           return this.focusInList(moreLikeCards, Math.min(ratingSeasonIndex, moreLikeCards.length - 1)) || true;
+        }
+        return true;
+      }
+      const ratingChipIndex = ratingChips.indexOf(current);
+      if (ratingChipIndex >= 0) {
+        if (direction === "left") return this.focusInList(ratingChips, ratingChipIndex - 1) || true;
+        if (direction === "right") return this.focusInList(ratingChips, ratingChipIndex + 1) || true;
+        if (direction === "up") {
+          if (ratingSeasons.length) {
+            return this.focusInList(ratingSeasons, Math.min(ratingChipIndex, ratingSeasons.length - 1)) || true;
+          }
+          if (insightTabs.length) {
+            return this.focusInList(insightTabs, 1) || true;
+          }
+          if (episodes.length) {
+            return this.focusInList(episodes, Math.min(ratingChipIndex, episodes.length - 1)) || true;
+          }
+        }
+        if (direction === "down" && moreLikeCards.length) {
+          return this.focusInList(moreLikeCards, Math.min(ratingChipIndex, moreLikeCards.length - 1)) || true;
+        }
+        if (direction === "down" && ((_d = companyCards[0]) == null ? void 0 : _d.length)) {
+          return this.focusInList(companyCards[0], Math.min(ratingChipIndex, companyCards[0].length - 1)) || true;
         }
         return true;
       }
@@ -11549,19 +14874,64 @@
         if (direction === "left") return this.focusInList(moreLikeCards, moreLikeIndex - 1) || true;
         if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
         if (direction === "up") {
+          if (this.seriesInsightTab === "ratings" && ratingChips.length) {
+            return this.focusInList(ratingChips, Math.min(moreLikeIndex, ratingChips.length - 1)) || true;
+          }
           if (this.seriesInsightTab === "ratings" && ratingSeasons.length) {
             return this.focusInList(ratingSeasons, Math.min(moreLikeIndex, ratingSeasons.length - 1)) || true;
           }
           if (castCards.length) {
             return this.focusInList(castCards, Math.min(moreLikeIndex, castCards.length - 1)) || true;
           }
-          return this.focusInList(insightTabs, 0) || true;
+          if (insightTabs.length) {
+            return this.focusInList(insightTabs, 0) || true;
+          }
+          if (episodes.length) {
+            return this.focusInList(episodes, Math.min(moreLikeIndex, episodes.length - 1)) || true;
+          }
+        }
+        if (direction === "down" && ((_e = companyCards[0]) == null ? void 0 : _e.length)) {
+          return this.focusInList(companyCards[0], Math.min(moreLikeIndex, companyCards[0].length - 1)) || true;
+        }
+        return true;
+      }
+      for (let trackIndex = 0; trackIndex < companyCards.length; trackIndex += 1) {
+        const cards = companyCards[trackIndex];
+        const companyIndex = cards.indexOf(current);
+        if (companyIndex < 0) {
+          continue;
+        }
+        if (direction === "left") return this.focusInList(cards, companyIndex - 1) || true;
+        if (direction === "right") return this.focusInList(cards, companyIndex + 1) || true;
+        if (direction === "up") {
+          if (trackIndex > 0 && ((_f = companyCards[trackIndex - 1]) == null ? void 0 : _f.length)) {
+            return this.focusInList(companyCards[trackIndex - 1], Math.min(companyIndex, companyCards[trackIndex - 1].length - 1)) || true;
+          }
+          if (moreLikeCards.length) {
+            return this.focusInList(moreLikeCards, Math.min(companyIndex, moreLikeCards.length - 1)) || true;
+          }
+          if (this.seriesInsightTab === "ratings" && ratingChips.length) {
+            return this.focusInList(ratingChips, Math.min(companyIndex, ratingChips.length - 1)) || true;
+          }
+          if (castCards.length) {
+            return this.focusInList(castCards, Math.min(companyIndex, castCards.length - 1)) || true;
+          }
+          if (insightTabs.length) {
+            return this.focusInList(insightTabs, 0) || true;
+          }
+          if (episodes.length) {
+            return this.focusInList(episodes, Math.min(companyIndex, episodes.length - 1)) || true;
+          }
+        }
+        if (direction === "down" && trackIndex < companyCards.length - 1 && ((_g = companyCards[trackIndex + 1]) == null ? void 0 : _g.length)) {
+          return this.focusInList(companyCards[trackIndex + 1], Math.min(companyIndex, companyCards[trackIndex + 1].length - 1)) || true;
         }
         return true;
       }
       return false;
     },
     handleMovieDpad(event) {
+      var _a, _b, _c, _d, _e, _f;
       if (!this.meta || this.meta.type === "series" || this.meta.type === "tv" || this.pendingEpisodeSelection || this.pendingMovieSelection) {
         return false;
       }
@@ -11578,6 +14948,8 @@
       const tabs = Array.from(this.container.querySelectorAll(".series-insight-tabs .series-insight-tab.focusable"));
       const cast = Array.from(this.container.querySelectorAll(".movie-cast-track .movie-cast-card.focusable"));
       const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+      const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
+      const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
       if (typeof (event == null ? void 0 : event.preventDefault) === "function") {
         event.preventDefault();
       }
@@ -11595,6 +14967,9 @@
           if (moreLikeCards.length) {
             return this.focusInList(moreLikeCards, actionIndex) || true;
           }
+          if ((_a = companyCards[0]) == null ? void 0 : _a.length) {
+            return this.focusInList(companyCards[0], Math.min(actionIndex, companyCards[0].length - 1)) || true;
+          }
         }
         return true;
       }
@@ -11606,6 +14981,7 @@
         if (direction === "down") {
           if (cast.length) return this.focusInList(cast, Math.min(tabIndex, cast.length - 1)) || true;
           if (moreLikeCards.length) return this.focusInList(moreLikeCards, Math.min(tabIndex, moreLikeCards.length - 1)) || true;
+          if ((_b = companyCards[0]) == null ? void 0 : _b.length) return this.focusInList(companyCards[0], Math.min(tabIndex, companyCards[0].length - 1)) || true;
         }
         return true;
       }
@@ -11622,6 +14998,9 @@
         if (direction === "down" && moreLikeCards.length) {
           return this.focusInList(moreLikeCards, Math.min(castIndex, moreLikeCards.length - 1)) || true;
         }
+        if (direction === "down" && ((_c = companyCards[0]) == null ? void 0 : _c.length)) {
+          return this.focusInList(companyCards[0], Math.min(castIndex, companyCards[0].length - 1)) || true;
+        }
         return true;
       }
       const moreLikeIndex = moreLikeCards.indexOf(current);
@@ -11637,12 +15016,43 @@
           }
           return this.focusInList(actions, Math.min(moreLikeIndex, actions.length - 1)) || true;
         }
+        if (direction === "down" && ((_d = companyCards[0]) == null ? void 0 : _d.length)) {
+          return this.focusInList(companyCards[0], Math.min(moreLikeIndex, companyCards[0].length - 1)) || true;
+        }
+        return true;
+      }
+      for (let trackIndex = 0; trackIndex < companyCards.length; trackIndex += 1) {
+        const cards = companyCards[trackIndex];
+        const companyIndex = cards.indexOf(current);
+        if (companyIndex < 0) {
+          continue;
+        }
+        if (direction === "left") return this.focusInList(cards, companyIndex - 1) || true;
+        if (direction === "right") return this.focusInList(cards, companyIndex + 1) || true;
+        if (direction === "up") {
+          if (trackIndex > 0 && ((_e = companyCards[trackIndex - 1]) == null ? void 0 : _e.length)) {
+            return this.focusInList(companyCards[trackIndex - 1], Math.min(companyIndex, companyCards[trackIndex - 1].length - 1)) || true;
+          }
+          if (moreLikeCards.length) {
+            return this.focusInList(moreLikeCards, Math.min(companyIndex, moreLikeCards.length - 1)) || true;
+          }
+          if (cast.length) {
+            return this.focusInList(cast, Math.min(companyIndex, cast.length - 1)) || true;
+          }
+          if (tabs.length) {
+            return this.focusInList(tabs, 0) || true;
+          }
+          return this.focusInList(actions, Math.min(companyIndex, actions.length - 1)) || true;
+        }
+        if (direction === "down" && trackIndex < companyCards.length - 1 && ((_f = companyCards[trackIndex + 1]) == null ? void 0 : _f.length)) {
+          return this.focusInList(companyCards[trackIndex + 1], Math.min(companyIndex, companyCards[trackIndex + 1].length - 1)) || true;
+        }
         return true;
       }
       return false;
     },
     async onKeyDown(event) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z, _A, _B, _C, _D, _E, _F, _G, _H, _I, _J, _K;
       if (!this.container) {
         return;
       }
@@ -11657,12 +15067,20 @@
         Router.back();
         return;
       }
+      if (this.isTrailerPlaying) {
+        if (getDpadDirection(event) || event.keyCode === 13) {
+          (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+          return;
+        }
+      } else {
+        this.restartTrailerAutoplayTimer();
+      }
       if (this.pendingEpisodeSelection || this.pendingMovieSelection) {
         if (this.handleStreamChooserDpad(event)) {
           return;
         }
         if (getDpadDirection(event)) {
-          (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+          (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
           return;
         }
       }
@@ -11689,19 +15107,28 @@
       }
       if (action === "openSearch") {
         Router.navigate("search", {
-          query: ((_b = this.params) == null ? void 0 : _b.fallbackTitle) || ((_c = this.params) == null ? void 0 : _c.itemId) || ""
+          query: ((_c = this.params) == null ? void 0 : _c.fallbackTitle) || ((_d = this.params) == null ? void 0 : _d.itemId) || ""
         });
         return;
       }
       if (action === "playDefault") {
-        if (((_d = this.params) == null ? void 0 : _d.itemType) === "series" || ((_e = this.params) == null ? void 0 : _e.itemType) === "tv") {
-          const targetEpisode = this.nextEpisodeToWatch || ((_f = this.episodes) == null ? void 0 : _f.find((entry) => entry.season === this.selectedSeason)) || ((_g = this.episodes) == null ? void 0 : _g[0]) || null;
+        if (((_e = this.params) == null ? void 0 : _e.itemType) === "series" || ((_f = this.params) == null ? void 0 : _f.itemType) === "tv") {
+          const targetEpisode = this.nextEpisodeToWatch || ((_g = this.episodes) == null ? void 0 : _g.find((entry) => entry.season === this.selectedSeason)) || ((_h = this.episodes) == null ? void 0 : _h[0]) || null;
           if (targetEpisode == null ? void 0 : targetEpisode.id) {
             await this.openEpisodeStreamChooser(targetEpisode.id);
           }
           return;
         }
         await this.openMovieStreamChooser();
+        return;
+      }
+      if (action === "toggleTrailer") {
+        if (this.isTrailerPlaying) {
+          this.stopTrailerPlayback();
+          this.restartTrailerAutoplayTimer();
+        } else {
+          this.playTrailer();
+        }
         return;
       }
       if (action === "selectSeason") {
@@ -11715,7 +15142,7 @@
       if (action === "setSeriesInsightTab") {
         const tab = String(current.dataset.tab || "cast");
         if (tab !== this.seriesInsightTab) {
-          this.seriesInsightTab = tab === "ratings" ? "ratings" : "cast";
+          this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
           this.render(this.meta);
         }
         return;
@@ -11723,7 +15150,7 @@
       if (action === "setMovieInsightTab") {
         const tab = String(current.dataset.tab || "cast");
         if (tab !== this.movieInsightTab) {
-          this.movieInsightTab = tab === "ratings" ? "ratings" : "cast";
+          this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
           this.render(this.meta);
         }
         return;
@@ -11781,29 +15208,29 @@
       }
       if (action === "toggleLibrary") {
         await savedLibraryRepository.toggle({
-          contentId: (_h = this.params) == null ? void 0 : _h.itemId,
-          contentType: ((_i = this.params) == null ? void 0 : _i.itemType) || "movie",
-          title: ((_j = this.meta) == null ? void 0 : _j.name) || ((_k = this.params) == null ? void 0 : _k.fallbackTitle) || ((_l = this.params) == null ? void 0 : _l.itemId) || "Untitled",
-          poster: ((_m = this.meta) == null ? void 0 : _m.poster) || null,
-          background: ((_n = this.meta) == null ? void 0 : _n.background) || null
+          contentId: (_i = this.params) == null ? void 0 : _i.itemId,
+          contentType: ((_j = this.params) == null ? void 0 : _j.itemType) || "movie",
+          title: ((_k = this.meta) == null ? void 0 : _k.name) || ((_l = this.params) == null ? void 0 : _l.fallbackTitle) || ((_m = this.params) == null ? void 0 : _m.itemId) || "Untitled",
+          poster: ((_n = this.meta) == null ? void 0 : _n.poster) || null,
+          background: ((_o = this.meta) == null ? void 0 : _o.background) || null
         });
         await this.loadDetail();
         return;
       }
       if (action === "toggleWatched") {
         if (this.isMarkedWatched) {
-          await watchedItemsRepository.unmark((_o = this.params) == null ? void 0 : _o.itemId);
-          await watchProgressRepository.removeProgress((_p = this.params) == null ? void 0 : _p.itemId);
+          await watchedItemsRepository.unmark((_p = this.params) == null ? void 0 : _p.itemId);
+          await watchProgressRepository.removeProgress((_q = this.params) == null ? void 0 : _q.itemId);
         } else {
           await watchedItemsRepository.mark({
-            contentId: (_q = this.params) == null ? void 0 : _q.itemId,
-            contentType: ((_r = this.params) == null ? void 0 : _r.itemType) || "movie",
-            title: ((_s = this.meta) == null ? void 0 : _s.name) || ((_t = this.params) == null ? void 0 : _t.fallbackTitle) || "Untitled",
+            contentId: (_r = this.params) == null ? void 0 : _r.itemId,
+            contentType: ((_s = this.params) == null ? void 0 : _s.itemType) || "movie",
+            title: ((_t = this.meta) == null ? void 0 : _t.name) || ((_u = this.params) == null ? void 0 : _u.fallbackTitle) || "Untitled",
             watchedAt: Date.now()
           });
           await watchProgressRepository.saveProgress({
-            contentId: (_u = this.params) == null ? void 0 : _u.itemId,
-            contentType: ((_v = this.params) == null ? void 0 : _v.itemType) || "movie",
+            contentId: (_v = this.params) == null ? void 0 : _v.itemId,
+            contentType: ((_w = this.params) == null ? void 0 : _w.itemType) || "movie",
             videoId: null,
             positionMs: 100,
             durationMs: 100,
@@ -11816,14 +15243,14 @@
       if (action === "playStream" && current.dataset.streamUrl) {
         Router.navigate("player", {
           streamUrl: current.dataset.streamUrl,
-          itemId: (_w = this.params) == null ? void 0 : _w.itemId,
-          itemType: (_x = this.params) == null ? void 0 : _x.itemType,
-          season: (_z = (_y = this.nextEpisodeToWatch) == null ? void 0 : _y.season) != null ? _z : null,
-          episode: (_B = (_A = this.nextEpisodeToWatch) == null ? void 0 : _A.episode) != null ? _B : null,
-          playerTitle: ((_C = this.meta) == null ? void 0 : _C.name) || ((_D = this.params) == null ? void 0 : _D.fallbackTitle) || ((_E = this.params) == null ? void 0 : _E.itemId) || "Untitled",
-          playerSubtitle: ((_F = this.params) == null ? void 0 : _F.itemType) === "series" ? ((_G = this.nextEpisodeToWatch) == null ? void 0 : _G.title) || "" : "",
-          playerBackdropUrl: ((_H = this.meta) == null ? void 0 : _H.background) || ((_I = this.meta) == null ? void 0 : _I.poster) || null,
-          playerLogoUrl: ((_J = this.meta) == null ? void 0 : _J.logo) || null,
+          itemId: (_x = this.params) == null ? void 0 : _x.itemId,
+          itemType: (_y = this.params) == null ? void 0 : _y.itemType,
+          season: (_A = (_z = this.nextEpisodeToWatch) == null ? void 0 : _z.season) != null ? _A : null,
+          episode: (_C = (_B = this.nextEpisodeToWatch) == null ? void 0 : _B.episode) != null ? _C : null,
+          playerTitle: ((_D = this.meta) == null ? void 0 : _D.name) || ((_E = this.params) == null ? void 0 : _E.fallbackTitle) || ((_F = this.params) == null ? void 0 : _F.itemId) || "Untitled",
+          playerSubtitle: ((_G = this.params) == null ? void 0 : _G.itemType) === "series" ? ((_H = this.nextEpisodeToWatch) == null ? void 0 : _H.title) || "" : "",
+          playerBackdropUrl: ((_I = this.meta) == null ? void 0 : _I.background) || ((_J = this.meta) == null ? void 0 : _J.poster) || null,
+          playerLogoUrl: ((_K = this.meta) == null ? void 0 : _K.logo) || null,
           episodes: this.episodes || [],
           streamCandidates: this.streamItems || []
         });
@@ -11839,6 +15266,18 @@
     },
     cleanup() {
       this.detailLoadToken = (this.detailLoadToken || 0) + 1;
+      this.stopTrailerPlayback({ keepDom: false });
+      if (this.detailScrollHandler && this.container) {
+        const content = this.container.querySelector(".series-detail-content");
+        if (content) {
+          content.removeEventListener("scroll", this.detailScrollHandler);
+        }
+        this.detailScrollHandler = null;
+      }
+      if (this.detailFocusHandler && this.container) {
+        this.container.removeEventListener("focusin", this.detailFocusHandler, true);
+        this.detailFocusHandler = null;
+      }
       if (this.backHandler) {
         document.removeEventListener("keydown", this.backHandler, true);
         this.backHandler = null;
@@ -11847,254 +15286,1673 @@
     }
   };
 
-  // js/ui/screens/library/libraryScreen.js
-  function profileInitial2(name) {
-    const raw = String(name || "").trim();
-    return raw ? raw.charAt(0).toUpperCase() : "P";
-  }
-  function navIconSvg2(action) {
-    const iconAssetByAction = {
-      gotoHome: "assets/icons/sidebar_home.svg",
-      gotoSearch: "assets/icons/sidebar_search.svg",
-      gotoLibrary: "assets/icons/sidebar_library.svg",
-      gotoPlugin: "assets/icons/sidebar_plugin.svg",
-      gotoSettings: "assets/icons/sidebar_settings.svg"
-    };
-    return `<img class="home-nav-icon" src="${iconAssetByAction[action] || iconAssetByAction.gotoLibrary}" alt="" aria-hidden="true" />`;
-  }
-  async function withTimeout3(promise, ms, fallbackValue) {
-    let timer = null;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise((resolve) => {
-          timer = setTimeout(() => resolve(fallbackValue), ms);
-        })
-      ]);
-    } finally {
-      if (timer) clearTimeout(timer);
+  // js/data/repository/libraryRepository.js
+  var LibrarySourceMode = {
+    LOCAL: "local",
+    TRAKT: "trakt"
+  };
+  var LibrarySortOptionKey = {
+    DEFAULT: "default",
+    ADDED_DESC: "added_desc",
+    ADDED_ASC: "added_asc",
+    TITLE_ASC: "title_asc",
+    TITLE_DESC: "title_desc"
+  };
+  var LibraryListPrivacy = {
+    PRIVATE: "private",
+    LINK: "link",
+    FRIENDS: "friends",
+    PUBLIC: "public"
+  };
+  var LibraryListType = {
+    WATCHLIST: "watchlist",
+    PERSONAL: "personal"
+  };
+  var REMOTE_STORE_KEY = "libraryTraktState";
+  var WATCHLIST_KEY = "watchlist";
+  var PERSONAL_KEY_PREFIX = "personal:";
+  var REMOTE_LIST_LIMIT = 24;
+  var META_TIMEOUT_MS = 2200;
+  var META_BATCH_SIZE = 6;
+  function isMissingResourceError2(error) {
+    if (!error) {
+      return false;
     }
+    if (error.status === 404) {
+      return true;
+    }
+    const message = String(error.message || "");
+    return message.includes("PGRST205") || message.includes("PGRST202") || message.includes("Could not find the table") || message.includes("Could not find the function");
+  }
+  function withTimeout3(promise, ms, fallbackValue) {
+    let timer = null;
+    return Promise.race([
+      promise,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallbackValue), ms);
+      })
+    ]).finally(() => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+  }
+  async function resolveProfileId6() {
+    const activeId = String(ProfileManager.getActiveProfileId() || "1");
+    const direct = Number(activeId);
+    if (Number.isFinite(direct) && direct > 0) {
+      return Math.trunc(direct);
+    }
+    const profiles = await ProfileManager.getProfiles();
+    const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeId);
+    const candidate = Number((activeProfile == null ? void 0 : activeProfile.profileIndex) || (activeProfile == null ? void 0 : activeProfile.id) || 1);
+    return Number.isFinite(candidate) && candidate > 0 ? Math.trunc(candidate) : 1;
+  }
+  async function resolveRemoteStoreKey() {
+    const profileId = await resolveProfileId6();
+    let ownerId = "guest";
+    if (AuthManager.isAuthenticated) {
+      try {
+        ownerId = String(await AuthManager.getEffectiveUserId());
+      } catch (error) {
+        ownerId = "guest";
+      }
+    }
+    return `${REMOTE_STORE_KEY}:${ownerId}:${profileId}`;
+  }
+  function createEmptyRemoteState() {
+    return {
+      nextListId: 1,
+      lists: [],
+      listItems: {}
+    };
+  }
+  function cloneState(state) {
+    return {
+      nextListId: Number((state == null ? void 0 : state.nextListId) || 1),
+      lists: Array.isArray(state == null ? void 0 : state.lists) ? state.lists.map((entry) => ({ ...entry })) : [],
+      listItems: Object.fromEntries(Object.entries((state == null ? void 0 : state.listItems) || {}).map(([key, value]) => [
+        key,
+        Array.isArray(value) ? value.map((item) => ({ ...item })) : []
+      ]))
+    };
+  }
+  async function readRemoteState() {
+    const key = await resolveRemoteStoreKey();
+    const stored = LocalStore.get(key, null);
+    return cloneState(stored || createEmptyRemoteState());
+  }
+  async function writeRemoteState(state) {
+    const key = await resolveRemoteStoreKey();
+    LocalStore.set(key, cloneState(state));
+  }
+  function makeTypeLabel(type) {
+    const key = String(type || "").trim().toLowerCase();
+    if (!key) {
+      return "Unknown";
+    }
+    if (key === "movie") {
+      return "Movie";
+    }
+    if (key === "series") {
+      return "Series";
+    }
+    return key.replace(/[_-]+/g, " ").split(" ").filter(Boolean).map((token) => token.charAt(0).toUpperCase() + token.slice(1)).join(" ");
+  }
+  function normalizeSavedItem(item = {}) {
+    return {
+      contentId: String(item.contentId || item.itemId || item.id || ""),
+      contentType: String(item.contentType || item.itemType || item.type || "movie"),
+      title: String(item.title || item.name || item.contentId || item.itemId || "Untitled"),
+      poster: item.poster || null,
+      background: item.background || null,
+      description: item.description || "",
+      releaseInfo: item.releaseInfo || "",
+      imdbRating: item.imdbRating == null ? null : Number(item.imdbRating),
+      genres: Array.isArray(item.genres) ? item.genres : [],
+      addonBaseUrl: item.addonBaseUrl || null,
+      updatedAt: Number(item.updatedAt || item.listedAt || Date.now())
+    };
+  }
+  function toRemoteListItem(item = {}, extra = {}) {
+    const normalized = normalizeSavedItem(item);
+    return {
+      ...normalized,
+      listedAt: Number(extra.listedAt || normalized.updatedAt || Date.now()),
+      traktRank: extra.traktRank == null ? null : Number(extra.traktRank)
+    };
+  }
+  function mergeItemIntoMap(target, listKey, baseItem, listedAt, traktRank) {
+    var _a, _b;
+    const key = `${baseItem.contentType}:${baseItem.contentId}`;
+    const existing = target.get(key);
+    const nextListMeta = {
+      ...(existing == null ? void 0 : existing.listMeta) || {},
+      [listKey]: {
+        listedAt: Number(listedAt || Date.now()),
+        traktRank: traktRank == null ? null : Number(traktRank)
+      }
+    };
+    const nextListKeys = Array.from(/* @__PURE__ */ new Set([...(existing == null ? void 0 : existing.listKeys) || [], listKey]));
+    target.set(key, {
+      id: baseItem.contentId,
+      type: baseItem.contentType,
+      name: baseItem.title || (existing == null ? void 0 : existing.name) || baseItem.contentId,
+      poster: baseItem.poster || (existing == null ? void 0 : existing.poster) || null,
+      background: baseItem.background || (existing == null ? void 0 : existing.background) || null,
+      description: baseItem.description || (existing == null ? void 0 : existing.description) || "",
+      releaseInfo: baseItem.releaseInfo || (existing == null ? void 0 : existing.releaseInfo) || "",
+      imdbRating: baseItem.imdbRating == null ? (_a = existing == null ? void 0 : existing.imdbRating) != null ? _a : null : Number(baseItem.imdbRating),
+      genres: Array.isArray(baseItem.genres) && baseItem.genres.length ? baseItem.genres : (existing == null ? void 0 : existing.genres) || [],
+      addonBaseUrl: baseItem.addonBaseUrl || (existing == null ? void 0 : existing.addonBaseUrl) || null,
+      listKeys: nextListKeys,
+      listedAt: Number(listedAt || (existing == null ? void 0 : existing.listedAt) || Date.now()),
+      traktRank: traktRank == null ? (_b = existing == null ? void 0 : existing.traktRank) != null ? _b : null : Number(traktRank),
+      listMeta: nextListMeta
+    });
+  }
+  async function hydrateEntries(entries) {
+    const nextEntries = entries.map((entry) => ({ ...entry, listKeys: [...entry.listKeys], listMeta: { ...entry.listMeta || {} } }));
+    for (let index = 0; index < nextEntries.length; index += META_BATCH_SIZE) {
+      const batch = nextEntries.slice(index, index + META_BATCH_SIZE);
+      await Promise.all(batch.map(async (entry) => {
+        var _a;
+        if (entry.poster && entry.name && entry.description) {
+          return;
+        }
+        const result = await withTimeout3(
+          metaRepository.getMetaFromAllAddons(entry.type, entry.id),
+          META_TIMEOUT_MS,
+          { status: "error", message: "timeout" }
+        );
+        if ((result == null ? void 0 : result.status) !== "success" || !(result == null ? void 0 : result.data)) {
+          return;
+        }
+        const meta = result.data;
+        entry.name = entry.name || meta.name || entry.id;
+        entry.poster = entry.poster || meta.poster || meta.background || null;
+        entry.background = entry.background || meta.background || null;
+        entry.description = entry.description || meta.description || "";
+        entry.releaseInfo = entry.releaseInfo || meta.releaseInfo || "";
+        entry.genres = ((_a = entry.genres) == null ? void 0 : _a.length) ? entry.genres : Array.isArray(meta.genres) ? meta.genres : [];
+      }));
+    }
+    return nextEntries;
+  }
+  function buildPersonalListTab(list = {}) {
+    return {
+      key: String(list.key || ""),
+      title: String(list.title || "Untitled"),
+      type: LibraryListType.PERSONAL,
+      traktListId: String(list.traktListId || list.key || "").replace(PERSONAL_KEY_PREFIX, ""),
+      slug: list.slug || null,
+      description: list.description || null,
+      privacy: list.privacy || LibraryListPrivacy.PRIVATE,
+      sortBy: list.sortBy || null,
+      sortHow: list.sortHow || null
+    };
+  }
+  async function getRemotePersonalTabs() {
+    const state = await readRemoteState();
+    return state.lists.map((entry) => buildPersonalListTab(entry)).slice(0, REMOTE_LIST_LIMIT);
+  }
+  async function getLocalEntries() {
+    const savedItems = await savedLibraryRepository.getAll(1e3);
+    const entriesMap = /* @__PURE__ */ new Map();
+    savedItems.forEach((item) => {
+      const normalized = normalizeSavedItem(item);
+      mergeItemIntoMap(entriesMap, "local", normalized, normalized.updatedAt, null);
+    });
+    return hydrateEntries(Array.from(entriesMap.values()));
+  }
+  async function getRemoteEntries() {
+    const [watchlistItems, personalState] = await Promise.all([
+      savedLibraryRepository.getAll(1e3),
+      readRemoteState()
+    ]);
+    const entriesMap = /* @__PURE__ */ new Map();
+    watchlistItems.forEach((item, index) => {
+      const normalized = normalizeSavedItem(item);
+      mergeItemIntoMap(
+        entriesMap,
+        WATCHLIST_KEY,
+        normalized,
+        normalized.updatedAt,
+        index
+      );
+    });
+    personalState.lists.forEach((list) => {
+      var _a;
+      const listKey = String(list.key || "");
+      const items = Array.isArray((_a = personalState.listItems) == null ? void 0 : _a[listKey]) ? personalState.listItems[listKey] : [];
+      items.forEach((item, index) => {
+        const normalized = normalizeSavedItem(item);
+        mergeItemIntoMap(
+          entriesMap,
+          listKey,
+          normalized,
+          Number(item.listedAt || normalized.updatedAt || Date.now()),
+          index
+        );
+      });
+    });
+    return hydrateEntries(Array.from(entriesMap.values()));
+  }
+  function membershipMapFromEntries(entries, listTabs) {
+    const allKeys = listTabs.map((tab) => tab.key);
+    return (item) => {
+      const itemKey = `${item.itemType || item.type || "movie"}:${item.itemId || item.id || ""}`;
+      const found = entries.find((entry) => `${entry.type}:${entry.id}` === itemKey);
+      return {
+        listMembership: Object.fromEntries(allKeys.map((key) => {
+          var _a;
+          return [key, Boolean((_a = found == null ? void 0 : found.listKeys) == null ? void 0 : _a.includes(key))];
+        }))
+      };
+    };
+  }
+  function upsertPersonalItem(state, listKey, item) {
+    const nextState = cloneState(state);
+    const list = Array.isArray(nextState.listItems[listKey]) ? nextState.listItems[listKey] : [];
+    const normalized = toRemoteListItem(item, { listedAt: Date.now() });
+    nextState.listItems[listKey] = [
+      normalized,
+      ...list.filter((entry) => !(String(entry.contentId) === normalized.contentId && String(entry.contentType) === normalized.contentType))
+    ];
+    return nextState;
+  }
+  function removePersonalItem(state, listKey, item) {
+    const nextState = cloneState(state);
+    const current = Array.isArray(nextState.listItems[listKey]) ? nextState.listItems[listKey] : [];
+    nextState.listItems[listKey] = current.filter((entry) => {
+      return !(String(entry.contentId) === String(item.itemId || item.id || "") && String(entry.contentType || "movie") === String(item.itemType || item.type || "movie"));
+    });
+    return nextState;
+  }
+  var LibraryRepository = class {
+    async getSourceMode() {
+      return AuthManager.isAuthenticated ? LibrarySourceMode.TRAKT : LibrarySourceMode.LOCAL;
+    }
+    async getListTabs() {
+      const sourceMode = await this.getSourceMode();
+      if (sourceMode === LibrarySourceMode.LOCAL) {
+        return [];
+      }
+      const personalTabs = await getRemotePersonalTabs();
+      return [
+        {
+          key: WATCHLIST_KEY,
+          title: "Watchlist",
+          type: LibraryListType.WATCHLIST,
+          traktListId: null,
+          slug: null,
+          description: null,
+          privacy: null,
+          sortBy: null,
+          sortHow: null
+        },
+        ...personalTabs
+      ];
+    }
+    async getItems() {
+      const sourceMode = await this.getSourceMode();
+      return sourceMode === LibrarySourceMode.TRAKT ? getRemoteEntries() : getLocalEntries();
+    }
+    async getMembershipSnapshot(item) {
+      const sourceMode = await this.getSourceMode();
+      if (sourceMode === LibrarySourceMode.LOCAL) {
+        const exists = await savedLibraryRepository.isSaved(item.itemId || item.id || "");
+        return { listMembership: { local: exists } };
+      }
+      const [entries, listTabs] = await Promise.all([this.getItems(), this.getListTabs()]);
+      return membershipMapFromEntries(entries, listTabs)(item);
+    }
+    async applyMembershipChanges(item, changes) {
+      var _a;
+      const sourceMode = await this.getSourceMode();
+      if (sourceMode === LibrarySourceMode.LOCAL) {
+        const shouldSave = Object.values((changes == null ? void 0 : changes.desiredMembership) || {}).some(Boolean);
+        if (shouldSave) {
+          await savedLibraryRepository.save(normalizeSavedItem(item));
+        } else {
+          await savedLibraryRepository.remove(item.itemId || item.id || "");
+        }
+        return;
+      }
+      const desiredMembership = (changes == null ? void 0 : changes.desiredMembership) || {};
+      const currentSnapshot = await this.getMembershipSnapshot(item);
+      let remoteState = await readRemoteState();
+      for (const [listKey, desired] of Object.entries(desiredMembership)) {
+        const before = ((_a = currentSnapshot.listMembership) == null ? void 0 : _a[listKey]) === true;
+        const after = desired === true;
+        if (before === after) {
+          continue;
+        }
+        if (listKey === WATCHLIST_KEY) {
+          if (after) {
+            await savedLibraryRepository.save(normalizeSavedItem(item));
+          } else {
+            await savedLibraryRepository.remove(item.itemId || item.id || "");
+          }
+          continue;
+        }
+        remoteState = after ? upsertPersonalItem(remoteState, listKey, item) : removePersonalItem(remoteState, listKey, item);
+      }
+      await writeRemoteState(remoteState);
+      if (AuthManager.isAuthenticated) {
+        try {
+          await SavedLibrarySyncService.push();
+        } catch (error) {
+          console.warn("LibraryRepository applyMembershipChanges push failed", error);
+        }
+      }
+    }
+    async createPersonalList(name, description, privacy) {
+      const state = await readRemoteState();
+      const nextId = Number(state.nextListId || 1);
+      const listKey = `${PERSONAL_KEY_PREFIX}${nextId}`;
+      state.nextListId = nextId + 1;
+      state.lists = [
+        ...state.lists,
+        {
+          key: listKey,
+          title: String(name || "Untitled"),
+          description: description || null,
+          privacy: privacy || LibraryListPrivacy.PRIVATE,
+          traktListId: String(nextId)
+        }
+      ];
+      state.listItems[listKey] = state.listItems[listKey] || [];
+      await writeRemoteState(state);
+      return listKey;
+    }
+    async updatePersonalList(listId, name, description, privacy) {
+      const state = await readRemoteState();
+      state.lists = state.lists.map((list) => {
+        if (String(list.traktListId || list.key).replace(PERSONAL_KEY_PREFIX, "") !== String(listId)) {
+          return list;
+        }
+        return {
+          ...list,
+          title: String(name || list.title || "Untitled"),
+          description: description || null,
+          privacy: privacy || list.privacy || LibraryListPrivacy.PRIVATE
+        };
+      });
+      await writeRemoteState(state);
+    }
+    async deletePersonalList(listId) {
+      const state = await readRemoteState();
+      const match = state.lists.find((list) => {
+        return String(list.traktListId || list.key).replace(PERSONAL_KEY_PREFIX, "") === String(listId);
+      });
+      if (!match) {
+        return;
+      }
+      state.lists = state.lists.filter((list) => list.key !== match.key);
+      delete state.listItems[match.key];
+      await writeRemoteState(state);
+    }
+    async reorderPersonalLists(orderedListIds = []) {
+      const state = await readRemoteState();
+      const byId = new Map(state.lists.map((list) => [
+        String(list.traktListId || list.key).replace(PERSONAL_KEY_PREFIX, ""),
+        list
+      ]));
+      const reordered = orderedListIds.map((id) => byId.get(String(id).replace(PERSONAL_KEY_PREFIX, ""))).filter(Boolean);
+      const untouched = state.lists.filter((list) => !reordered.some((entry) => entry.key === list.key));
+      state.lists = [...reordered, ...untouched];
+      await writeRemoteState(state);
+    }
+    async refreshNow() {
+      if (!AuthManager.isAuthenticated) {
+        return false;
+      }
+      try {
+        await SavedLibrarySyncService.pull();
+        return true;
+      } catch (error) {
+        if (!isMissingResourceError2(error)) {
+          console.warn("LibraryRepository refreshNow failed", error);
+        }
+        return false;
+      }
+    }
+  };
+  var libraryRepository = new LibraryRepository();
+  var libraryTypeLabel = makeTypeLabel;
+
+  // js/ui/screens/library/libraryController.js
+  var ALL_KEY = "__all__";
+  var MESSAGE_CLEAR_MS = 2400;
+  var LIBRARY_SORT_OPTIONS = [
+    { key: LibrarySortOptionKey.DEFAULT, label: "Trakt Order" },
+    { key: LibrarySortOptionKey.ADDED_DESC, label: "Added \u2193" },
+    { key: LibrarySortOptionKey.ADDED_ASC, label: "Added \u2191" },
+    { key: LibrarySortOptionKey.TITLE_ASC, label: "Title A-Z" },
+    { key: LibrarySortOptionKey.TITLE_DESC, label: "Title Z-A" }
+  ];
+  var LIBRARY_PRIVACY_OPTIONS = [
+    LibraryListPrivacy.PRIVATE,
+    LibraryListPrivacy.LINK,
+    LibraryListPrivacy.FRIENDS,
+    LibraryListPrivacy.PUBLIC
+  ];
+  var persistedPosterFocusKey = null;
+  function makeInitialState() {
+    return {
+      sourceMode: LibrarySourceMode.LOCAL,
+      allItems: [],
+      visibleItems: [],
+      listTabs: [],
+      availableTypeTabs: [{ key: ALL_KEY, label: "All" }],
+      availableSortOptions: LIBRARY_SORT_OPTIONS.filter((option) => option.key !== LibrarySortOptionKey.DEFAULT),
+      selectedListKey: null,
+      selectedTypeKey: ALL_KEY,
+      selectedSortKey: LibrarySortOptionKey.ADDED_DESC,
+      expandedPicker: null,
+      pickerFocusIndex: 0,
+      isLoading: true,
+      isSyncing: false,
+      transientMessage: null,
+      errorMessage: null,
+      showManageDialog: false,
+      manageSelectedListKey: null,
+      listEditorState: null,
+      showDeleteConfirm: false,
+      pendingOperation: false,
+      lastFocusedPosterKey: persistedPosterFocusKey
+    };
+  }
+  function typeLabelForEmptyState(key) {
+    if (!key || key === ALL_KEY) {
+      return "all";
+    }
+    return libraryTypeLabel(key).toLowerCase();
+  }
+  function normalizeTypeTabs(items) {
+    const seen = /* @__PURE__ */ new Set();
+    const tabs = [{ key: ALL_KEY, label: "All" }];
+    items.forEach((item) => {
+      const key = String(item.type || "").trim().toLowerCase();
+      if (!key || seen.has(key)) {
+        return;
+      }
+      seen.add(key);
+      tabs.push({
+        key,
+        label: libraryTypeLabel(key)
+      });
+    });
+    return tabs;
+  }
+  function sortForState(items, state) {
+    const selectedTypeKey = state.selectedTypeKey;
+    const typeFiltered = items.filter((item) => {
+      return selectedTypeKey === ALL_KEY || String(item.type || "").trim().toLowerCase() === selectedTypeKey;
+    });
+    const listFiltered = state.sourceMode === LibrarySourceMode.TRAKT && state.selectedListKey ? typeFiltered.filter((item) => Array.isArray(item.listKeys) && item.listKeys.includes(state.selectedListKey)) : typeFiltered;
+    const listMetaValue = (item, field) => {
+      var _a, _b, _c;
+      if (!state.selectedListKey) {
+        return field === "listedAt" ? Number(item.listedAt || 0) : item.traktRank;
+      }
+      return (_c = (_b = (_a = item.listMeta) == null ? void 0 : _a[state.selectedListKey]) == null ? void 0 : _b[field]) != null ? _c : field === "listedAt" ? Number(item.listedAt || 0) : item.traktRank;
+    };
+    const byNameAsc = (left, right) => {
+      const nameResult = String(left.name || left.id).localeCompare(String(right.name || right.id), void 0, { sensitivity: "base" });
+      if (nameResult !== 0) {
+        return nameResult;
+      }
+      return String(left.id).localeCompare(String(right.id), void 0, { sensitivity: "base" });
+    };
+    const sorted = [...listFiltered];
+    sorted.sort((left, right) => {
+      var _a, _b;
+      switch (state.selectedSortKey) {
+        case LibrarySortOptionKey.DEFAULT: {
+          const rankDiff = Number((_a = listMetaValue(left, "traktRank")) != null ? _a : Number.MAX_SAFE_INTEGER) - Number((_b = listMetaValue(right, "traktRank")) != null ? _b : Number.MAX_SAFE_INTEGER);
+          if (rankDiff !== 0) {
+            return rankDiff;
+          }
+          const addedDiff = Number(listMetaValue(right, "listedAt") || 0) - Number(listMetaValue(left, "listedAt") || 0);
+          if (addedDiff !== 0) {
+            return addedDiff;
+          }
+          return byNameAsc(left, right);
+        }
+        case LibrarySortOptionKey.ADDED_ASC: {
+          const addedDiff = Number(listMetaValue(left, "listedAt") || 0) - Number(listMetaValue(right, "listedAt") || 0);
+          if (addedDiff !== 0) {
+            return addedDiff;
+          }
+          return byNameAsc(left, right);
+        }
+        case LibrarySortOptionKey.TITLE_ASC:
+          return byNameAsc(left, right);
+        case LibrarySortOptionKey.TITLE_DESC:
+          return byNameAsc(right, left);
+        case LibrarySortOptionKey.ADDED_DESC:
+        default: {
+          const addedDiff = Number(listMetaValue(right, "listedAt") || 0) - Number(listMetaValue(left, "listedAt") || 0);
+          if (addedDiff !== 0) {
+            return addedDiff;
+          }
+          return byNameAsc(left, right);
+        }
+      }
+    });
+    return sorted;
+  }
+  function copyEditorState(state) {
+    return state ? {
+      mode: state.mode,
+      listId: state.listId || null,
+      name: state.name || "",
+      description: state.description || "",
+      privacy: state.privacy || LibraryListPrivacy.PRIVATE
+    } : null;
+  }
+  var LibraryController = class {
+    constructor(onChange = () => {
+    }) {
+      this.onChange = onChange;
+      this.state = makeInitialState();
+      this.messageTimer = null;
+    }
+    async init() {
+      await this.reload();
+    }
+    dispose() {
+      if (this.messageTimer) {
+        clearTimeout(this.messageTimer);
+        this.messageTimer = null;
+      }
+    }
+    getState() {
+      return {
+        ...this.state,
+        listTabs: [...this.state.listTabs],
+        availableTypeTabs: [...this.state.availableTypeTabs],
+        availableSortOptions: [...this.state.availableSortOptions],
+        allItems: [...this.state.allItems],
+        visibleItems: [...this.state.visibleItems],
+        listEditorState: copyEditorState(this.state.listEditorState)
+      };
+    }
+    setState(patch) {
+      this.state = {
+        ...this.state,
+        ...patch
+      };
+      this.state.visibleItems = sortForState(this.state.allItems, this.state);
+      this.onChange(this.getState());
+    }
+    async reload(options = {}) {
+      var _a, _b;
+      const preserveOverlay = options.preserveOverlay === true;
+      if (!preserveOverlay) {
+        this.state = {
+          ...this.state,
+          isLoading: true
+        };
+        this.onChange(this.getState());
+      }
+      const [sourceMode, listTabs, allItems] = await Promise.all([
+        libraryRepository.getSourceMode(),
+        libraryRepository.getListTabs(),
+        libraryRepository.getItems()
+      ]);
+      const nextSelectedListKey = sourceMode === LibrarySourceMode.TRAKT ? this.state.selectedListKey && listTabs.some((item) => item.key === this.state.selectedListKey) ? this.state.selectedListKey : ((_a = listTabs[0]) == null ? void 0 : _a.key) || null : null;
+      const typeItems = sourceMode === LibrarySourceMode.TRAKT && nextSelectedListKey ? allItems.filter((item) => {
+        var _a2;
+        return (_a2 = item.listKeys) == null ? void 0 : _a2.includes(nextSelectedListKey);
+      }) : allItems;
+      const availableTypeTabs = normalizeTypeTabs(typeItems);
+      const availableSortOptions = sourceMode === LibrarySourceMode.TRAKT ? LIBRARY_SORT_OPTIONS : LIBRARY_SORT_OPTIONS.filter((option) => option.key !== LibrarySortOptionKey.DEFAULT);
+      const selectedTypeKey = availableTypeTabs.some((item) => item.key === this.state.selectedTypeKey) ? this.state.selectedTypeKey : ALL_KEY;
+      const selectedSortKey = availableSortOptions.some((item) => item.key === this.state.selectedSortKey) ? this.state.selectedSortKey : sourceMode === LibrarySourceMode.TRAKT ? LibrarySortOptionKey.DEFAULT : LibrarySortOptionKey.ADDED_DESC;
+      const manageSelectedListKey = this.state.manageSelectedListKey && listTabs.some((item) => item.key === this.state.manageSelectedListKey && item.type === "personal") ? this.state.manageSelectedListKey : ((_b = listTabs.find((item) => item.type === "personal")) == null ? void 0 : _b.key) || null;
+      this.state = {
+        ...this.state,
+        sourceMode,
+        allItems,
+        listTabs,
+        availableTypeTabs,
+        availableSortOptions,
+        selectedListKey: nextSelectedListKey,
+        selectedTypeKey,
+        selectedSortKey,
+        manageSelectedListKey,
+        isLoading: false,
+        isSyncing: false,
+        expandedPicker: preserveOverlay ? this.state.expandedPicker : null,
+        pickerFocusIndex: 0
+      };
+      this.state.visibleItems = sortForState(this.state.allItems, this.state);
+      this.onChange(this.getState());
+    }
+    getSourceLabel() {
+      return this.state.sourceMode === LibrarySourceMode.TRAKT ? "TRAKT" : "LOCAL";
+    }
+    getSelectedTypeLabel() {
+      var _a;
+      return ((_a = this.state.availableTypeTabs.find((item) => item.key === this.state.selectedTypeKey)) == null ? void 0 : _a.label) || "All";
+    }
+    getSelectedSortLabel() {
+      var _a;
+      return ((_a = this.state.availableSortOptions.find((item) => item.key === this.state.selectedSortKey)) == null ? void 0 : _a.label) || "Added \u2193";
+    }
+    getSelectedListLabel() {
+      var _a;
+      return ((_a = this.state.listTabs.find((item) => item.key === this.state.selectedListKey)) == null ? void 0 : _a.title) || "Select";
+    }
+    getEmptyStateTitle() {
+      return `No ${typeLabelForEmptyState(this.state.selectedTypeKey)} yet`;
+    }
+    getEmptyStateSubtitle() {
+      return "Start saving your favorites to see them here";
+    }
+    getPickerOptions(picker) {
+      if (picker === "list") {
+        return this.state.listTabs.map((item) => ({ value: item.key, label: item.title }));
+      }
+      if (picker === "type") {
+        return this.state.availableTypeTabs.map((item) => ({ value: item.key, label: item.label }));
+      }
+      if (picker === "sort") {
+        return this.state.availableSortOptions.map((item) => ({ value: item.key, label: item.label }));
+      }
+      return [];
+    }
+    togglePicker(picker) {
+      const nextExpanded = this.state.expandedPicker === picker ? null : picker;
+      const options = this.getPickerOptions(picker);
+      let pickerFocusIndex = 0;
+      if (nextExpanded) {
+        const currentValue = picker === "list" ? this.state.selectedListKey : picker === "type" ? this.state.selectedTypeKey : this.state.selectedSortKey;
+        const optionIndex = Math.max(0, options.findIndex((item) => item.value === currentValue));
+        pickerFocusIndex = optionIndex;
+      }
+      this.setState({
+        expandedPicker: nextExpanded,
+        pickerFocusIndex
+      });
+    }
+    closePicker() {
+      if (!this.state.expandedPicker) {
+        return false;
+      }
+      this.setState({
+        expandedPicker: null,
+        pickerFocusIndex: 0
+      });
+      return true;
+    }
+    movePickerFocus(direction) {
+      const options = this.getPickerOptions(this.state.expandedPicker);
+      if (!options.length) {
+        return;
+      }
+      const delta = direction === "up" ? -1 : 1;
+      const nextIndex = Math.max(0, Math.min(options.length - 1, Number(this.state.pickerFocusIndex || 0) + delta));
+      this.setState({ pickerFocusIndex: nextIndex });
+    }
+    selectOpenPickerOption() {
+      const picker = this.state.expandedPicker;
+      if (!picker) {
+        return;
+      }
+      const options = this.getPickerOptions(picker);
+      const option = options[Number(this.state.pickerFocusIndex || 0)];
+      if (!option) {
+        return;
+      }
+      if (picker === "list") {
+        this.selectList(option.value);
+        return;
+      }
+      if (picker === "type") {
+        this.selectType(option.value);
+        return;
+      }
+      if (picker === "sort") {
+        this.selectSort(option.value);
+      }
+    }
+    selectList(key) {
+      const typeItems = this.state.allItems.filter((item) => {
+        var _a;
+        return (_a = item.listKeys) == null ? void 0 : _a.includes(key);
+      });
+      const availableTypeTabs = normalizeTypeTabs(typeItems);
+      this.setState({
+        selectedListKey: key,
+        availableTypeTabs,
+        selectedTypeKey: ALL_KEY,
+        expandedPicker: null,
+        pickerFocusIndex: 0
+      });
+    }
+    selectType(key) {
+      this.setState({
+        selectedTypeKey: key,
+        expandedPicker: null,
+        pickerFocusIndex: 0
+      });
+    }
+    selectSort(key) {
+      this.state = {
+        ...this.state,
+        selectedSortKey: key,
+        expandedPicker: null,
+        pickerFocusIndex: 0
+      };
+      this.state.visibleItems = sortForState(this.state.allItems, this.state);
+      const firstItem = this.state.visibleItems[0] || null;
+      this.state.lastFocusedPosterKey = firstItem ? `${firstItem.type}:${firstItem.id}` : null;
+      persistedPosterFocusKey = this.state.lastFocusedPosterKey;
+      this.onChange(this.getState());
+    }
+    setFocusedPosterKey(key) {
+      this.state.lastFocusedPosterKey = key || null;
+      persistedPosterFocusKey = this.state.lastFocusedPosterKey;
+    }
+    openManageLists() {
+      var _a;
+      this.setState({
+        showManageDialog: true,
+        errorMessage: null,
+        expandedPicker: null,
+        manageSelectedListKey: this.state.manageSelectedListKey || ((_a = this.state.listTabs.find((item) => item.type === "personal")) == null ? void 0 : _a.key) || null
+      });
+    }
+    closeManageLists() {
+      this.setState({
+        showManageDialog: false,
+        listEditorState: null,
+        showDeleteConfirm: false,
+        errorMessage: null
+      });
+    }
+    selectManageList(key) {
+      this.setState({
+        manageSelectedListKey: key
+      });
+    }
+    startCreateList() {
+      this.setState({
+        listEditorState: {
+          mode: "create",
+          listId: null,
+          name: "",
+          description: "",
+          privacy: LibraryListPrivacy.PRIVATE
+        },
+        errorMessage: null
+      });
+    }
+    startEditList() {
+      const selected = this.state.listTabs.find((item) => item.key === this.state.manageSelectedListKey && item.type === "personal");
+      if (!selected) {
+        return;
+      }
+      this.setState({
+        listEditorState: {
+          mode: "edit",
+          listId: selected.traktListId || selected.key.replace("personal:", ""),
+          name: selected.title,
+          description: selected.description || "",
+          privacy: selected.privacy || LibraryListPrivacy.PRIVATE
+        },
+        errorMessage: null
+      });
+    }
+    updateEditorField(field, value, options = {}) {
+      if (!this.state.listEditorState) {
+        return;
+      }
+      this.state.listEditorState = {
+        ...this.state.listEditorState,
+        [field]: value
+      };
+      if (options.silent === true) {
+        return;
+      }
+      this.onChange(this.getState());
+    }
+    closeEditor() {
+      this.setState({
+        listEditorState: null
+      });
+    }
+    promptDeleteList() {
+      this.setState({
+        showDeleteConfirm: true
+      });
+    }
+    closeDeleteConfirm() {
+      this.setState({
+        showDeleteConfirm: false
+      });
+    }
+    async submitEditor() {
+      const editor = this.state.listEditorState;
+      if (!editor) {
+        return;
+      }
+      const name = String(editor.name || "").trim();
+      if (!name) {
+        this.setError("List name is required");
+        return;
+      }
+      this.setState({ pendingOperation: true, errorMessage: null });
+      try {
+        if (editor.mode === "create") {
+          const newKey = await libraryRepository.createPersonalList(name, editor.description.trim() || null, editor.privacy);
+          this.setTransientMessage("List created");
+          await this.reload({ preserveOverlay: true });
+          this.setState({
+            pendingOperation: false,
+            listEditorState: null,
+            manageSelectedListKey: newKey
+          });
+        } else {
+          await libraryRepository.updatePersonalList(editor.listId, name, editor.description.trim() || null, editor.privacy);
+          this.setTransientMessage("List updated");
+          await this.reload({ preserveOverlay: true });
+          this.setState({
+            pendingOperation: false,
+            listEditorState: null
+          });
+        }
+      } catch (error) {
+        this.setState({ pendingOperation: false });
+        this.setError((error == null ? void 0 : error.message) || "Failed to save list");
+      }
+    }
+    async deleteSelectedList() {
+      const selected = this.state.listTabs.find((item) => item.key === this.state.manageSelectedListKey && item.type === "personal");
+      if (!selected) {
+        return;
+      }
+      this.setState({ pendingOperation: true, errorMessage: null });
+      try {
+        await libraryRepository.deletePersonalList(selected.traktListId || selected.key.replace("personal:", ""));
+        this.setTransientMessage("List deleted");
+        await this.reload({ preserveOverlay: true });
+        this.setState({
+          pendingOperation: false,
+          showDeleteConfirm: false
+        });
+      } catch (error) {
+        this.setState({ pendingOperation: false });
+        this.setError((error == null ? void 0 : error.message) || "Failed to delete list");
+      }
+    }
+    async moveSelectedList(direction) {
+      const personalTabs = this.state.listTabs.filter((item) => item.type === "personal");
+      const currentIndex = personalTabs.findIndex((item) => item.key === this.state.manageSelectedListKey);
+      if (currentIndex < 0) {
+        return;
+      }
+      const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+      if (nextIndex < 0 || nextIndex >= personalTabs.length) {
+        return;
+      }
+      const reordered = [...personalTabs];
+      const [selected] = reordered.splice(currentIndex, 1);
+      reordered.splice(nextIndex, 0, selected);
+      this.setState({ pendingOperation: true, errorMessage: null });
+      try {
+        await libraryRepository.reorderPersonalLists(reordered.map((item) => item.traktListId || item.key.replace("personal:", "")));
+        this.setTransientMessage("List order updated");
+        await this.reload({ preserveOverlay: true });
+        this.setState({
+          pendingOperation: false,
+          manageSelectedListKey: selected.key
+        });
+      } catch (error) {
+        this.setState({ pendingOperation: false });
+        this.setError((error == null ? void 0 : error.message) || "Failed to reorder lists");
+      }
+    }
+    async refreshNow() {
+      this.setState({ isSyncing: true, errorMessage: null });
+      try {
+        await libraryRepository.refreshNow();
+        this.setTransientMessage("Library synced");
+        await this.reload({ preserveOverlay: true });
+        this.setState({ isSyncing: false });
+      } catch (error) {
+        this.setState({ isSyncing: false });
+        this.setError((error == null ? void 0 : error.message) || "Failed to refresh library");
+      }
+    }
+    setError(message) {
+      this.setState({
+        errorMessage: message,
+        transientMessage: message
+      });
+      this.scheduleMessageClear();
+    }
+    setTransientMessage(message) {
+      this.setState({
+        transientMessage: message,
+        errorMessage: null
+      });
+      this.scheduleMessageClear();
+    }
+    clearTransientMessage() {
+      this.setState({
+        transientMessage: null
+      });
+    }
+    scheduleMessageClear() {
+      if (this.messageTimer) {
+        clearTimeout(this.messageTimer);
+      }
+      this.messageTimer = setTimeout(() => {
+        this.messageTimer = null;
+        this.clearTransientMessage();
+      }, MESSAGE_CLEAR_MS);
+    }
+  };
+
+  // js/ui/screens/library/libraryScreen.js
+  function escapeHtml5(value) {
+    return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function bookmarkOutlineSvg() {
+    return `
+    <svg viewBox="0 0 80 80" class="library-empty-icon" aria-hidden="true" focusable="false">
+      <path d="M25 15h30c3.3 0 6 2.7 6 6v40L40 51 19 61V21c0-3.3 2.7-6 6-6z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="5.5"
+            stroke-linecap="round"
+            stroke-linejoin="round" />
+    </svg>
+  `;
+  }
+  function chevronSvg(open) {
+    return `
+    <svg viewBox="0 0 24 24" class="library-picker-chevron" aria-hidden="true" focusable="false">
+      <path d="${open ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.75"
+            stroke-linecap="round"
+            stroke-linejoin="round" />
+    </svg>
+  `;
+  }
+  function isTextField(node) {
+    const tagName = String((node == null ? void 0 : node.tagName) || "").toLowerCase();
+    return tagName === "input" || tagName === "textarea" || tagName === "select";
+  }
+  function selectorValue(value) {
+    const raw = String(value || "");
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
   }
   var LibraryScreen = {
     async mount() {
       this.container = document.getElementById("library");
       ScreenUtils.show(this.container);
-      this.selectedType = this.selectedType || "all";
-      const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
-      const profiles = await ProfileManager.getProfiles();
-      const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId3) || profiles[0] || null;
-      this.activeProfileName = String((activeProfile == null ? void 0 : activeProfile.name) || "Profile").trim() || "Profile";
-      this.activeProfileInitial = profileInitial2(this.activeProfileName);
-      this.renderLoading();
-      await this.loadData();
+      this.controller = new LibraryController(() => this.render());
+      this.libraryRouteEnterPending = true;
+      this.sidebarProfile = await getSidebarProfileState();
+      this.layoutPrefs = LayoutPreferences.get();
+      this.sidebarExpanded = false;
+      this.pillIconOnly = false;
+      this.focusZone = "content";
+      this.lastMainFocus = null;
       this.render();
+      this.bindEvents();
+      await this.controller.init();
+      this.controller.closePicker();
+    },
+    bindEvents() {
+      if (!this.container || this.container.__libraryEventsBound) {
+        return;
+      }
+      this.container.__libraryEventsBound = true;
+      this.container.addEventListener("click", async (event) => {
+        var _a, _b;
+        const target = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".focusable, .library-dialog-input, .library-dialog-textarea");
+        if (!target || !this.container.contains(target)) {
+          return;
+        }
+        if (target.classList.contains("focusable")) {
+          this.setFocusedNode(target);
+        }
+        await this.activateNode(target);
+      });
+      this.container.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!target) {
+          return;
+        }
+        if (target.matches(".library-dialog-input[data-editor-field], .library-dialog-textarea[data-editor-field]")) {
+          this.controller.updateEditorField(String(target.dataset.editorField || ""), target.value, { silent: true });
+        }
+      });
+    },
+    setFocusedNode(target) {
+      var _a, _b;
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) {
+          node.classList.remove("focused");
+        }
+      });
+      target.classList.add("focused");
+      target.focus();
+      const sidebarFocused = this.isSidebarNode(target);
+      this.focusZone = sidebarFocused ? "sidebar" : "content";
+      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, sidebarFocused);
+      }
+      if (!sidebarFocused) {
+        this.lastMainFocus = target;
+      }
+      if (target.dataset.focusKey) {
+        this.controller.setFocusedPosterKey(target.dataset.focusKey);
+      }
     },
     renderLoading() {
       this.container.innerHTML = `
-      <div class="library-shell">
-        <div class="library-loading">Loading library...</div>
-      </div>
-    `;
-    },
-    async loadData() {
-      const [savedItems, progressItems] = await Promise.all([
-        savedLibraryRepository.getAll(120),
-        watchProgressRepository.getRecent(80)
-      ]);
-      this.savedItems = savedItems || [];
-      this.progressItems = progressItems || [];
-      const ids = /* @__PURE__ */ new Map();
-      this.savedItems.forEach((item) => {
-        ids.set(`${item.contentType || "movie"}::${item.contentId}`, {
-          contentId: item.contentId,
-          contentType: item.contentType || "movie"
-        });
-      });
-      this.progressItems.forEach((item) => {
-        ids.set(`${item.contentType || "movie"}::${item.contentId}`, {
-          contentId: item.contentId,
-          contentType: item.contentType || "movie"
-        });
-      });
-      const metaEntries = await Promise.all(Array.from(ids.values()).map(async (entry) => {
-        const result = await withTimeout3(
-          metaRepository.getMetaFromAllAddons(entry.contentType, entry.contentId),
-          2200,
-          { status: "error", message: "timeout" }
-        );
-        if ((result == null ? void 0 : result.status) === "success" && (result == null ? void 0 : result.data)) {
-          return [entry.contentId, {
-            title: result.data.name || entry.contentId,
-            poster: result.data.poster || result.data.background || "",
-            type: result.data.type || entry.contentType
-          }];
-        }
-        return [entry.contentId, { title: entry.contentId, poster: "", type: entry.contentType }];
-      }));
-      this.metaMap = new Map(metaEntries);
-    },
-    typeAllowed(type) {
-      if (this.selectedType === "all") return true;
-      return String(type || "").toLowerCase() === this.selectedType;
-    },
-    filteredSaved() {
-      return (this.savedItems || []).filter((item) => this.typeAllowed(item.contentType || "movie"));
-    },
-    filteredProgress() {
-      return (this.progressItems || []).filter((item) => this.typeAllowed(item.contentType || "movie"));
-    },
-    renderSavedCards() {
-      const items = this.filteredSaved();
-      if (!items.length) {
-        return `<p class="home-empty">No saved items.</p>`;
-      }
-      return `
-      <div class="home-track">
-        ${items.map((item) => {
-        var _a, _b;
-        const meta = ((_b = (_a = this.metaMap) == null ? void 0 : _a.get) == null ? void 0 : _b.call(_a, item.contentId)) || {};
-        return `
-            <article class="home-content-card focusable"
-                     data-action="openDetail"
-                     data-item-id="${item.contentId}"
-                     data-item-type="${item.contentType || "movie"}"
-                     data-item-title="${meta.title || item.contentId}">
-              ${meta.poster ? `<img class="content-poster" src="${meta.poster}" alt="${meta.title || item.contentId}" />` : `<div class="content-poster placeholder"></div>`}
-            </article>
-          `;
-      }).join("")}
-      </div>
-    `;
-    },
-    renderProgressCards() {
-      const items = this.filteredProgress();
-      if (!items.length) {
-        return `<p class="home-empty">No continue watching items.</p>`;
-      }
-      return `
-      <div class="home-track">
-        ${items.map((item) => {
-        var _a, _b;
-        const meta = ((_b = (_a = this.metaMap) == null ? void 0 : _a.get) == null ? void 0 : _b.call(_a, item.contentId)) || {};
-        const positionMin = Math.floor(Number(item.positionMs || 0) / 6e4);
-        const durationMin = Math.floor(Number(item.durationMs || 0) / 6e4);
-        const remaining = Math.max(0, durationMin - positionMin);
-        const progress = durationMin > 0 ? Math.max(0, Math.min(1, positionMin / durationMin)) : 0;
-        return `
-            <article class="home-content-card home-progress-card focusable"
-                     data-action="openDetail"
-                     data-item-id="${item.contentId}"
-                     data-item-type="${item.contentType || "movie"}"
-                     data-item-title="${meta.title || item.contentId}">
-              <div class="home-progress-poster"${meta.poster ? ` style="background-image:url('${meta.poster}')"` : ""}>
-                <span class="home-progress-left">${durationMin > 0 ? `${remaining}m left` : "Continue"}</span>
-              </div>
-              <div class="home-progress-meta">
-                <div class="home-content-title">${meta.title || item.contentId}</div>
-                <div class="home-content-type">${positionMin}m / ${durationMin || "?"}m</div>
-                <div class="home-progress-track">
-                  <div class="home-progress-fill" style="width:${Math.round(progress * 100)}%"></div>
-                </div>
-              </div>
-            </article>
-          `;
-      }).join("")}
-      </div>
-    `;
-    },
-    render() {
-      this.container.innerHTML = `
-      <div class="home-shell library-shell">
-        <aside class="home-sidebar expanded">
-          <div class="home-brand-wrap">
-            <img src="assets/brand/app_logo_wordmark.png" class="home-brand-logo-main" alt="Nuvio" />
-          </div>
-          <div class="home-nav-list">
-            <button class="home-nav-item focusable" data-action="gotoHome"><span class="home-nav-icon-wrap">${navIconSvg2("gotoHome")}</span><span class="home-nav-label">Home</span></button>
-            <button class="home-nav-item focusable" data-action="gotoSearch"><span class="home-nav-icon-wrap">${navIconSvg2("gotoSearch")}</span><span class="home-nav-label">Search</span></button>
-            <button class="home-nav-item focusable" data-action="gotoLibrary"><span class="home-nav-icon-wrap">${navIconSvg2("gotoLibrary")}</span><span class="home-nav-label">Library</span></button>
-            <button class="home-nav-item focusable" data-action="gotoPlugin"><span class="home-nav-icon-wrap">${navIconSvg2("gotoPlugin")}</span><span class="home-nav-label">Addons</span></button>
-            <button class="home-nav-item focusable" data-action="gotoSettings"><span class="home-nav-icon-wrap">${navIconSvg2("gotoSettings")}</span><span class="home-nav-label">Settings</span></button>
-          </div>
-          <button class="home-profile-pill focusable" data-action="gotoAccount">
-            <span class="home-profile-avatar">${this.activeProfileInitial || "P"}</span>
-            <span class="home-profile-name">${this.activeProfileName || "Profile"}</span>
-          </button>
-        </aside>
-
+      <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}">
+        ${this.renderSidebar()}
         <main class="home-main library-main">
-          <section class="library-topbar">
-            <h2 class="library-title">Library</h2>
-            <div class="library-type-tabs">
-              <button class="library-type-tab focusable${this.selectedType === "all" ? " selected" : ""}" data-action="setType" data-type="all">All</button>
-              <button class="library-type-tab focusable${this.selectedType === "movie" ? " selected" : ""}" data-action="setType" data-type="movie">Movie</button>
-              <button class="library-type-tab focusable${this.selectedType === "series" ? " selected" : ""}" data-action="setType" data-type="series">Series</button>
-            </div>
-          </section>
-
-          <section class="home-row">
-            <h3 class="home-row-title">Continue Watching</h3>
-            ${this.renderProgressCards()}
-          </section>
-
-          <section class="home-row">
-            <h3 class="home-row-title">Saved</h3>
-            ${this.renderSavedCards()}
+          <section class="library-loading-state">
+            <div class="library-loading-spinner" aria-hidden="true"></div>
+            <div class="library-loading-label">Syncing library...</div>
           </section>
         </main>
       </div>
     `;
-      ScreenUtils.indexFocusables(this.container);
-      ScreenUtils.setInitialFocus(this.container, ".library-type-tabs .focusable");
+      this.libraryRouteEnterPending = false;
     },
-    onKeyDown(event) {
+    renderSidebar() {
+      return renderRootSidebar({
+        selectedRoute: "library",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      });
+    },
+    renderPicker(picker, title, value, options, widthClass = "") {
+      const state = this.controller.getState();
+      const open = state.expandedPicker === picker;
+      return `
+      <div class="library-picker${open ? " open" : ""} ${widthClass}">
+        <button class="library-picker-anchor focusable library-primary"
+                data-action="togglePicker"
+                data-picker="${picker}">
+          <span class="library-picker-copy">
+            <span class="library-picker-title">${escapeHtml5(title)}</span>
+            <span class="library-picker-value">${escapeHtml5(value)}</span>
+          </span>
+          <span class="library-picker-icon">${chevronSvg(open)}</span>
+        </button>
+        ${open ? `
+          <div class="library-picker-menu" role="listbox" aria-label="${escapeHtml5(title)}">
+            ${options.map((option, index) => `
+              <button class="library-picker-option focusable${index === Number(state.pickerFocusIndex || 0) ? " library-picker-option-target" : ""}"
+                      data-action="selectPickerOption"
+                      data-picker="${picker}"
+                      data-option-index="${index}">
+                ${escapeHtml5(option.label)}
+              </button>
+            `).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `;
+    },
+    renderGrid(items) {
+      return `
+      <section class="library-grid-wrap">
+        <div class="library-grid">
+          ${items.map((item) => {
+        const focusKey = `${item.type}:${item.id}`;
+        return `
+              <article class="library-grid-card focusable"
+                       data-action="openDetail"
+                       data-item-id="${escapeHtml5(item.id)}"
+                       data-item-type="${escapeHtml5(item.type || "movie")}"
+                       data-item-title="${escapeHtml5(item.name || item.id || "Untitled")}"
+                       data-focus-key="${escapeHtml5(focusKey)}">
+                <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml5(item.poster)}')"` : ""}></div>
+                <div class="library-grid-title">${escapeHtml5(item.name || item.id || "Untitled")}</div>
+              </article>
+            `;
+      }).join("")}
+        </div>
+      </section>
+    `;
+    },
+    renderEmptyState() {
+      return `
+      <section class="library-empty-state">
+        ${bookmarkOutlineSvg()}
+        <h3 class="library-empty-title">${escapeHtml5(this.controller.getEmptyStateTitle())}</h3>
+        <p class="library-empty-subtitle">${escapeHtml5(this.controller.getEmptyStateSubtitle())}</p>
+      </section>
+    `;
+    },
+    renderActions(state) {
+      if (state.sourceMode !== "trakt") {
+        return "";
+      }
+      return `
+      <section class="library-actions-row">
+        <button class="library-action-button focusable library-primary"
+                data-action="openManageLists"
+                ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
+          Manage Lists
+        </button>
+        <button class="library-action-button focusable library-primary"
+                data-action="refreshLibrary"
+                ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
+          ${state.isSyncing ? "Syncing..." : "Sync"}
+        </button>
+      </section>
+    `;
+    },
+    renderManageListsDialog(state) {
+      if (!state.showManageDialog) {
+        return "";
+      }
+      const personalTabs = state.listTabs.filter((item) => item.type === "personal");
+      return `
+      <div class="library-overlay">
+        <section class="library-dialog library-manage-dialog">
+          <h3 class="library-dialog-title">Manage Trakt Lists</h3>
+          ${state.errorMessage ? `<p class="library-dialog-error">${escapeHtml5(state.errorMessage)}</p>` : ""}
+          <div class="library-manage-list">
+            ${personalTabs.length ? personalTabs.map((tab) => `
+                  <button class="library-manage-list-button focusable${tab.key === state.manageSelectedListKey ? " selected" : ""}"
+                          data-action="selectManageList"
+                          data-list-key="${escapeHtml5(tab.key)}"
+                          ${state.pendingOperation ? "disabled" : ""}>
+                    ${escapeHtml5(tab.title)}
+                  </button>
+                `).join("") : `<div class="library-manage-empty">No lists yet.</div>`}
+          </div>
+          <div class="library-dialog-actions">
+            <button class="library-action-button focusable" data-action="createList" ${state.pendingOperation ? "disabled" : ""}>Create</button>
+            <button class="library-action-button focusable" data-action="editList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Edit</button>
+            <button class="library-action-button focusable" data-action="moveListUp" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Move Up</button>
+            <button class="library-action-button focusable" data-action="moveListDown" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Move Down</button>
+          </div>
+          <div class="library-dialog-actions">
+            <button class="library-action-button focusable danger" data-action="deleteList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Delete</button>
+            <button class="library-action-button focusable" data-action="closeManageLists" ${state.pendingOperation ? "disabled" : ""}>Close</button>
+          </div>
+        </section>
+      </div>
+    `;
+    },
+    renderListEditorDialog(state) {
+      if (!state.listEditorState) {
+        return "";
+      }
+      const editor = state.listEditorState;
+      return `
+      <div class="library-overlay">
+        <section class="library-dialog library-list-editor">
+          <h3 class="library-dialog-title">${editor.mode === "create" ? "Create List" : "Edit List"}</h3>
+          <label class="library-dialog-field">
+            <span class="library-dialog-field-label">Name</span>
+            <input class="library-dialog-input focusable"
+                   data-editor-field="name"
+                   value="${escapeHtml5(editor.name)}"
+                   ${state.pendingOperation ? "disabled" : ""} />
+          </label>
+          <label class="library-dialog-field">
+            <span class="library-dialog-field-label">Description</span>
+            <textarea class="library-dialog-textarea focusable"
+                      data-editor-field="description"
+                      ${state.pendingOperation ? "disabled" : ""}>${escapeHtml5(editor.description)}</textarea>
+          </label>
+          <div class="library-dialog-field">
+            <span class="library-dialog-field-label">Privacy</span>
+            <div class="library-privacy-row">
+              ${LIBRARY_PRIVACY_OPTIONS.map((privacy) => `
+                <button class="library-privacy-button focusable${privacy === editor.privacy ? " selected" : ""}"
+                        data-action="selectPrivacy"
+                        data-privacy="${privacy}"
+                        ${state.pendingOperation ? "disabled" : ""}>
+                  ${escapeHtml5(privacy.charAt(0).toUpperCase() + privacy.slice(1))}
+                </button>
+              `).join("")}
+            </div>
+          </div>
+          <div class="library-dialog-actions stacked">
+            <button class="library-action-button focusable"
+                    data-action="saveListEditor"
+                    ${state.pendingOperation ? "disabled" : ""}>
+              ${state.pendingOperation ? "Saving..." : "Save"}
+            </button>
+            <button class="library-action-button focusable"
+                    data-action="cancelListEditor"
+                    ${state.pendingOperation ? "disabled" : ""}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      </div>
+    `;
+    },
+    renderDeleteDialog(state) {
+      if (!state.showDeleteConfirm) {
+        return "";
+      }
+      return `
+      <div class="library-overlay">
+        <section class="library-dialog library-delete-dialog">
+          <h3 class="library-dialog-title">Delete List</h3>
+          <p class="library-dialog-subtitle">This will permanently delete the selected list.</p>
+          <div class="library-dialog-actions stacked">
+            <button class="library-action-button focusable danger"
+                    data-action="confirmDeleteList"
+                    ${state.pendingOperation ? "disabled" : ""}>
+              Delete
+            </button>
+            <button class="library-action-button focusable"
+                    data-action="cancelDeleteList"
+                    ${state.pendingOperation ? "disabled" : ""}>
+              Cancel
+            </button>
+          </div>
+        </section>
+      </div>
+    `;
+    },
+    render() {
+      var _a, _b;
+      this.layoutPrefs = LayoutPreferences.get();
+      this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
+      const state = this.controller.getState();
+      if (state.isLoading) {
+        this.renderLoading();
+        ScreenUtils.indexFocusables(this.container);
+        if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+          setLegacySidebarExpanded(this.container, false);
+        }
+        return;
+      }
+      const pickerMarkup = [
+        state.sourceMode === "trakt" ? this.renderPicker("list", "List", this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex") : "",
+        this.renderPicker("type", "Type", this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide"),
+        this.renderPicker("sort", "Sort", this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide")
+      ].filter(Boolean).join("");
+      this.container.innerHTML = `
+      <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}">
+        ${this.renderSidebar()}
+        <main class="home-main library-main">
+          <section class="library-page">
+            <header class="library-page-header">
+              <h1 class="library-page-title">Library</h1>
+              <div class="library-page-source">${escapeHtml5(this.controller.getSourceLabel())}</div>
+            </header>
+
+            <section class="library-picker-row">
+              ${pickerMarkup}
+            </section>
+
+            ${this.renderActions(state)}
+
+            ${state.visibleItems.length ? this.renderGrid(state.visibleItems) : this.renderEmptyState()}
+
+            ${state.transientMessage ? `<div class="library-toast">${escapeHtml5(state.transientMessage)}</div>` : ""}
+          </section>
+        </main>
+        ${this.renderManageListsDialog(state)}
+        ${this.renderListEditorDialog(state)}
+        ${this.renderDeleteDialog(state)}
+      </div>
+    `;
+      this.libraryRouteEnterPending = false;
+      ScreenUtils.indexFocusables(this.container);
+      bindRootSidebarEvents(this.container, {
+        currentRoute: "library",
+        onSelectedAction: () => this.focusMainNode(),
+        onExpandSidebar: () => this.focusSidebarNode()
+      });
+      this.restoreFocus();
+    },
+    getMainFocusSelector(node) {
+      if (!node) {
+        return "";
+      }
+      if (node.dataset.focusKey) {
+        return `.focusable[data-focus-key="${selectorValue(node.dataset.focusKey)}"]`;
+      }
+      if (node.dataset.action === "togglePicker" && node.dataset.picker) {
+        return `.library-picker-anchor[data-picker="${selectorValue(node.dataset.picker)}"]`;
+      }
+      if (node.dataset.action) {
+        return `.focusable[data-action="${selectorValue(node.dataset.action)}"]`;
+      }
+      return "";
+    },
+    resolveLastMainFocus() {
+      var _a, _b, _c, _d;
+      const selector = this.getMainFocusSelector(this.lastMainFocus);
+      return (selector ? (_a = this.container) == null ? void 0 : _a.querySelector(selector) : null) || ((_b = this.container) == null ? void 0 : _b.querySelector(".library-picker-anchor.focusable")) || ((_c = this.container) == null ? void 0 : _c.querySelector(".library-grid-card.focusable")) || ((_d = this.container) == null ? void 0 : _d.querySelector(".home-main .focusable")) || null;
+    },
+    restoreFocus() {
+      var _a, _b, _c;
+      const state = this.controller.getState();
+      let selector = null;
+      if (state.listEditorState) {
+        selector = ".library-list-editor .focusable";
+      } else if (state.showDeleteConfirm) {
+        selector = ".library-delete-dialog .focusable";
+      } else if (state.showManageDialog) {
+        selector = state.manageSelectedListKey ? `.library-manage-list-button[data-list-key="${selectorValue(state.manageSelectedListKey)}"]` : ".library-manage-dialog .focusable";
+      } else if (state.expandedPicker) {
+        selector = `.library-picker.open .library-picker-option[data-option-index="${Number(state.pickerFocusIndex || 0)}"]`;
+      } else if (state.lastFocusedPosterKey) {
+        selector = `.library-grid-card[data-focus-key="${selectorValue(state.lastFocusedPosterKey)}"]`;
+      } else {
+        selector = null;
+      }
+      const target = (selector ? (_a = this.container) == null ? void 0 : _a.querySelector(selector) : null) || (this.focusZone === "sidebar" ? getRootSidebarSelectedNode(this.container, this.layoutPrefs) : null) || (this.focusZone === "content" ? this.resolveLastMainFocus() : null) || ((_b = this.container) == null ? void 0 : _b.querySelector(".library-primary.focusable")) || getRootSidebarSelectedNode(this.container, this.layoutPrefs) || ((_c = this.container) == null ? void 0 : _c.querySelector(".focusable"));
+      if (!target) {
+        return;
+      }
+      this.setFocusedNode(target);
+    },
+    getFocusScopeSelector() {
+      const state = this.controller.getState();
+      if (state.listEditorState) {
+        return ".library-list-editor .focusable";
+      }
+      if (state.showDeleteConfirm) {
+        return ".library-delete-dialog .focusable";
+      }
+      if (state.showManageDialog) {
+        return ".library-manage-dialog .focusable";
+      }
+      if (state.expandedPicker) {
+        return ".library-picker.open .focusable";
+      }
+      return ".focusable";
+    },
+    isSidebarNode(node) {
+      return isRootSidebarNode(node);
+    },
+    async focusSidebarNode(preferredNode = null) {
       var _a;
+      this.focusZone = "sidebar";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
+        this.sidebarExpanded = true;
+        await this.render();
+        return true;
+      }
+      const target = preferredNode || getRootSidebarSelectedNode(this.container, this.layoutPrefs) || getRootSidebarNodes(this.container, this.layoutPrefs)[0] || null;
+      if (!target) {
+        return false;
+      }
+      this.setFocusedNode(target);
+      return true;
+    },
+    async focusMainNode(preferredNode = null) {
+      var _a;
+      this.focusZone = "content";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
+        this.sidebarExpanded = false;
+        await this.render();
+        return true;
+      }
+      const target = preferredNode || this.resolveLastMainFocus() || null;
+      if (!target) {
+        return false;
+      }
+      this.setFocusedNode(target);
+      return true;
+    },
+    shouldTransferToSidebar(node) {
+      var _a;
+      if (!node || this.isSidebarNode(node)) {
+        return false;
+      }
+      const main = (_a = this.container) == null ? void 0 : _a.querySelector(".home-main");
+      if (!main || !main.contains(node)) {
+        return false;
+      }
+      const nodeRect = node.getBoundingClientRect();
+      const mainRect = main.getBoundingClientRect();
+      return nodeRect.left - mainRect.left <= 140;
+    },
+    closeTopOverlay() {
+      const state = this.controller.getState();
+      if (state.listEditorState) {
+        this.controller.closeEditor();
+        return true;
+      }
+      if (state.showDeleteConfirm) {
+        this.controller.closeDeleteConfirm();
+        return true;
+      }
+      if (state.showManageDialog) {
+        this.controller.closeManageLists();
+        return true;
+      }
+      if (state.expandedPicker) {
+        this.controller.closePicker();
+        return true;
+      }
+      return false;
+    },
+    async activateNode(node) {
+      if (!node) {
+        return;
+      }
+      const action = String(node.dataset.action || "");
+      if (!action) {
+        return;
+      }
+      if (action === "gotoHome") {
+        activateLegacySidebarAction(action, "library");
+        if (isSelectedSidebarAction(action, "library")) {
+          await this.focusMainNode();
+        }
+        return;
+      }
+      if (action === "gotoSearch" || action === "gotoLibrary" || action === "gotoPlugin" || action === "gotoSettings" || action === "gotoAccount") {
+        activateLegacySidebarAction(action, "library");
+        if (isSelectedSidebarAction(action, "library")) {
+          await this.focusMainNode();
+        }
+        return;
+      }
+      if (action === "togglePicker") {
+        this.controller.togglePicker(String(node.dataset.picker || ""));
+        return;
+      }
+      if (action === "selectPickerOption") {
+        const picker = String(node.dataset.picker || "");
+        const index = Number(node.dataset.optionIndex || 0);
+        this.controller.setState({
+          pickerFocusIndex: index,
+          expandedPicker: picker
+        });
+        this.controller.selectOpenPickerOption();
+        if (picker === "sort") {
+          requestAnimationFrame(() => {
+            var _a, _b, _c;
+            (_c = (_b = (_a = this.container) == null ? void 0 : _a.querySelector(".home-main")) == null ? void 0 : _b.scrollTo) == null ? void 0 : _c.call(_b, { top: 0, left: 0, behavior: "auto" });
+          });
+        }
+        return;
+      }
+      if (action === "openDetail") {
+        const focusKey = String(node.dataset.focusKey || "");
+        if (focusKey) {
+          this.controller.setFocusedPosterKey(focusKey);
+        }
+        Router.navigate("detail", {
+          itemId: node.dataset.itemId,
+          itemType: node.dataset.itemType || "movie",
+          fallbackTitle: node.dataset.itemTitle || "Untitled"
+        });
+        return;
+      }
+      if (action === "openManageLists") {
+        this.controller.openManageLists();
+        return;
+      }
+      if (action === "refreshLibrary") {
+        await this.controller.refreshNow();
+        return;
+      }
+      if (action === "selectManageList") {
+        this.controller.selectManageList(String(node.dataset.listKey || ""));
+        return;
+      }
+      if (action === "createList") {
+        this.controller.startCreateList();
+        return;
+      }
+      if (action === "editList") {
+        this.controller.startEditList();
+        return;
+      }
+      if (action === "moveListUp") {
+        await this.controller.moveSelectedList("up");
+        return;
+      }
+      if (action === "moveListDown") {
+        await this.controller.moveSelectedList("down");
+        return;
+      }
+      if (action === "deleteList") {
+        this.controller.promptDeleteList();
+        return;
+      }
+      if (action === "closeManageLists") {
+        this.controller.closeManageLists();
+        return;
+      }
+      if (action === "selectPrivacy") {
+        this.controller.updateEditorField("privacy", String(node.dataset.privacy || "private"));
+        return;
+      }
+      if (action === "saveListEditor") {
+        await this.controller.submitEditor();
+        return;
+      }
+      if (action === "cancelListEditor") {
+        this.controller.closeEditor();
+        return;
+      }
+      if (action === "confirmDeleteList") {
+        await this.controller.deleteSelectedList();
+        return;
+      }
+      if (action === "cancelDeleteList") {
+        this.controller.closeDeleteConfirm();
+      }
+    },
+    async onKeyDown(event) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
       if (Environment.isBackEvent(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router.navigate("home");
+        if (this.closeTopOverlay()) {
+          return;
+        }
+        if (this.focusZone === "sidebar") {
+          Platform.exitApp();
+        } else {
+          await this.focusSidebarNode();
+        }
         return;
       }
-      if (ScreenUtils.handleDpadNavigation(event, this.container)) {
-        return;
-      }
-      if (event.keyCode !== 13) return;
-      const current = this.container.querySelector(".focusable.focused");
-      if (!current) return;
-      const action = String(current.dataset.action || "");
-      if (action === "gotoHome") Router.navigate("home");
-      if (action === "gotoSearch") Router.navigate("search");
-      if (action === "gotoLibrary") return;
-      if (action === "gotoPlugin") Router.navigate("plugin");
-      if (action === "gotoSettings") Router.navigate("settings");
-      if (action === "gotoAccount") Router.navigate("profileSelection");
-      if (action === "openDetail") {
-        Router.navigate("detail", {
-          itemId: current.dataset.itemId,
-          itemType: current.dataset.itemType || "movie",
-          fallbackTitle: current.dataset.itemTitle || "Untitled"
-        });
-      }
-      if (action === "setType") {
-        const nextType = String(current.dataset.type || "all");
-        if (nextType !== this.selectedType) {
-          this.selectedType = nextType;
-          this.render();
+      const state = this.controller.getState();
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar) && !this.sidebarExpanded) {
+        if (code === 40) {
+          this.pillIconOnly = true;
+          setModernSidebarPillIconOnly(this.container, true);
+        } else if (code === 38) {
+          this.pillIconOnly = false;
+          setModernSidebarPillIconOnly(this.container, false);
         }
       }
+      const activeNode = document.activeElement;
+      if (isTextField(activeNode) && ![37, 38, 39, 40].includes(code)) {
+        return;
+      }
+      const current = ((_c = this.container) == null ? void 0 : _c.querySelector(".focusable.focused")) || activeNode || null;
+      const sidebarLocked = state.listEditorState || state.showDeleteConfirm || state.showManageDialog || state.expandedPicker;
+      if (!sidebarLocked && code === 37 && current && this.shouldTransferToSidebar(current)) {
+        (_d = event == null ? void 0 : event.preventDefault) == null ? void 0 : _d.call(event);
+        await this.focusSidebarNode();
+        return;
+      }
+      if (!sidebarLocked && code === 39 && current && this.isSidebarNode(current)) {
+        (_e = event == null ? void 0 : event.preventDefault) == null ? void 0 : _e.call(event);
+        await this.focusMainNode();
+        return;
+      }
+      if (state.expandedPicker && (code === 38 || code === 40)) {
+        (_f = event == null ? void 0 : event.preventDefault) == null ? void 0 : _f.call(event);
+        this.controller.movePickerFocus(code === 38 ? "up" : "down");
+        return;
+      }
+      if (ScreenUtils.handleDpadNavigation(event, this.container, this.getFocusScopeSelector())) {
+        const current2 = ((_g = this.container) == null ? void 0 : _g.querySelector(`${this.getFocusScopeSelector()}.focused`)) || ((_h = this.container) == null ? void 0 : _h.querySelector(".focusable.focused"));
+        if ((_i = current2 == null ? void 0 : current2.dataset) == null ? void 0 : _i.focusKey) {
+          this.controller.setFocusedPosterKey(String(current2.dataset.focusKey));
+        }
+        return;
+      }
+      if (code !== 13) {
+        return;
+      }
+      const focused = ((_j = this.container) == null ? void 0 : _j.querySelector(`${this.getFocusScopeSelector()}.focused`)) || ((_k = this.container) == null ? void 0 : _k.querySelector(".focusable.focused"));
+      if (!focused) {
+        return;
+      }
+      await this.activateNode(focused);
     },
     cleanup() {
+      var _a, _b;
+      (_b = (_a = this.controller) == null ? void 0 : _a.dispose) == null ? void 0 : _b.call(_a);
+      this.controller = null;
       ScreenUtils.hide(this.container);
     }
   };
 
   // js/ui/screens/search/searchScreen.js
+  function clamp2(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function escapeHtml6(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
   function toTitleCase2(value) {
     const raw = String(value || "").trim();
     if (!raw) return "";
     return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
   }
-  function escapeRegExp2(value) {
+  function escapeRegExp(value) {
     return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  function escapeSelectorValue2(value = "") {
+    const raw = String(value != null ? value : "");
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(raw);
+    }
+    return raw.replace(/["\\]/g, "\\$&");
   }
   function formatCatalogRowTitle2(catalogName, addonName, type) {
     const typeLabel = toTitleCase2(type || "movie") || "Movie";
@@ -12103,12 +16961,12 @@
     const addon = String(addonName || "").trim();
     const cleanedAddon = addon.replace(/\baddon\b/i, "").trim();
     [addon, cleanedAddon, "The Movie Database Addon", "TMDB Addon", "Addon"].filter(Boolean).forEach((term) => {
-      const regex = new RegExp(`\\s*-?\\s*${escapeRegExp2(term)}\\s*`, "ig");
+      const regex = new RegExp(`\\s*-?\\s*${escapeRegExp(term)}\\s*`, "ig");
       base = base.replace(regex, " ");
     });
     base = base.replace(/\s{2,}/g, " ").trim();
     if (!base) return typeLabel;
-    const endsWithType = new RegExp(`\\b${escapeRegExp2(typeLabel)}$`, "i").test(base);
+    const endsWithType = new RegExp(`\\b${escapeRegExp(typeLabel)}$`, "i").test(base);
     return endsWithType ? base : `${base} - ${typeLabel}`;
   }
   function formatDateLabel(item = {}) {
@@ -12136,15 +16994,26 @@
     }
     return "";
   }
-  function navIcon(action) {
-    const map = {
-      gotoHome: "assets/icons/sidebar_home.svg",
-      gotoSearch: "assets/icons/sidebar_search.svg",
-      gotoLibrary: "assets/icons/sidebar_library.svg",
-      gotoPlugin: "assets/icons/sidebar_plugin.svg",
-      gotoSettings: "assets/icons/sidebar_settings.svg"
-    };
-    return map[action] || map.gotoSearch;
+  function formatReleaseYear(item = {}) {
+    const rawDate = formatDateLabel(item);
+    const matchFromFormatted = rawDate.match(/\b(19|20)\d{2}\b/);
+    if (matchFromFormatted) {
+      return matchFromFormatted[0];
+    }
+    const candidates = [
+      item.released,
+      item.releaseDate,
+      item.release_date,
+      item.releaseInfo,
+      item.year
+    ].filter(Boolean);
+    for (const value of candidates) {
+      const match = String(value).match(/\b(19|20)\d{2}\b/);
+      if (match) {
+        return match[0];
+      }
+    }
+    return "";
   }
   async function withTimeout4(promise, ms, fallbackValue) {
     let timer = null;
@@ -12159,23 +17028,166 @@
       if (timer) clearTimeout(timer);
     }
   }
+  function buildRowStateKey(row = {}, rowIndex = 0) {
+    const parts = [
+      row.addonBaseUrl,
+      row.addonId,
+      row.catalogId,
+      row.catalogName,
+      row.type,
+      row.title,
+      rowIndex
+    ].map((value) => String(value || "").trim()).filter(Boolean);
+    return parts.join("|") || `row:${rowIndex}`;
+  }
   var SearchScreen = {
-    async mount(params = {}) {
+    getRouteStateKey() {
+      return "route:search";
+    },
+    clearRouteStateOnMount(params = {}) {
+      const incomingQuery = String(params.query || "").trim();
+      if (!incomingQuery) {
+        return false;
+      }
+      const previousQuery = String(this.query || "").trim();
+      return Boolean(previousQuery && previousQuery !== incomingQuery);
+    },
+    captureRouteState() {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      this.captureLiveViewState();
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".search-content");
+      const rowScrollLeftByKey = {};
+      Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll(".search-results-row")) || []).forEach((rowNode) => {
+        const rowKey = String(rowNode.dataset.rowKey || "").trim();
+        const track = rowNode.querySelector(".search-results-track");
+        if (rowKey && track) {
+          rowScrollLeftByKey[rowKey] = Number(track.scrollLeft || 0);
+        }
+      });
+      const focused = (_c = this.container) == null ? void 0 : _c.querySelector(".focusable.focused");
+      return {
+        query: String(this.query || ""),
+        mode: String(this.mode || "idle"),
+        rows: Array.isArray(this.rows) ? this.rows.map((row, index) => ({
+          ...row,
+          stateKey: row.stateKey || buildRowStateKey(row, index)
+        })) : [],
+        focusZone: String(this.focusZone || "content"),
+        lastContentFocus: this.lastContentFocus ? { ...this.lastContentFocus } : null,
+        sidebarExpanded: Boolean(this.sidebarExpanded),
+        sidebarFocusIndex: Number.isFinite(this.sidebarFocusIndex) ? this.sidebarFocusIndex : 0,
+        pillIconOnly: Boolean(this.pillIconOnly),
+        contentScrollTop: Number((content == null ? void 0 : content.scrollTop) || 0),
+        rowScrollLeftByKey,
+        pendingAutoFocusResults: false,
+        voiceSearchSupported: Boolean(this.voiceSearchSupported),
+        focusedAction: String(((_d = focused == null ? void 0 : focused.dataset) == null ? void 0 : _d.action) || ""),
+        focusedRowKey: String(((_e = focused == null ? void 0 : focused.dataset) == null ? void 0 : _e.rowKey) || ""),
+        focusedItemId: String(((_f = focused == null ? void 0 : focused.dataset) == null ? void 0 : _f.itemId) || ""),
+        focusedNavZone: String(((_g = focused == null ? void 0 : focused.dataset) == null ? void 0 : _g.navZone) || ""),
+        focusedNavRow: Number(((_h = focused == null ? void 0 : focused.dataset) == null ? void 0 : _h.navRow) || 0),
+        focusedNavCol: Number(((_i = focused == null ? void 0 : focused.dataset) == null ? void 0 : _i.navCol) || 0)
+      };
+    },
+    hydrateFromRouteState(restoredState = null, params = {}) {
+      var _a;
+      const incomingQuery = String(params.query || "").trim();
+      const hasExplicitQuery = Boolean(incomingQuery);
+      const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
+      this.query = hasExplicitQuery ? incomingQuery : String((snapshot == null ? void 0 : snapshot.query) || "").trim();
+      this.mode = hasExplicitQuery ? incomingQuery.length >= 2 ? "search" : "idle" : String((snapshot == null ? void 0 : snapshot.mode) || (this.query.length >= 2 ? "search" : "idle"));
+      this.rows = Array.isArray(snapshot == null ? void 0 : snapshot.rows) ? snapshot.rows.map((row, index) => ({
+        ...row,
+        stateKey: row.stateKey || buildRowStateKey(row, index)
+      })) : [];
+      this.focusZone = String((snapshot == null ? void 0 : snapshot.focusZone) || this.focusZone || "content");
+      this.lastContentFocus = (snapshot == null ? void 0 : snapshot.lastContentFocus) ? { ...snapshot.lastContentFocus } : this.lastContentFocus || null;
+      this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && (snapshot == null ? void 0 : snapshot.sidebarExpanded));
+      this.sidebarFocusIndex = Number.isFinite(snapshot == null ? void 0 : snapshot.sidebarFocusIndex) ? snapshot.sidebarFocusIndex : 0;
+      this.pillIconOnly = Boolean(snapshot == null ? void 0 : snapshot.pillIconOnly);
+      this.contentScrollTop = Number((snapshot == null ? void 0 : snapshot.contentScrollTop) || 0);
+      this.rowScrollLeftByKey = (snapshot == null ? void 0 : snapshot.rowScrollLeftByKey) && typeof snapshot.rowScrollLeftByKey === "object" ? { ...snapshot.rowScrollLeftByKey } : {};
+      this.pendingAutoFocusResults = false;
+      this.restoredFocusedDescriptor = snapshot ? {
+        action: String(snapshot.focusedAction || ""),
+        rowKey: String(snapshot.focusedRowKey || ""),
+        itemId: String(snapshot.focusedItemId || ""),
+        navZone: String(snapshot.focusedNavZone || ""),
+        navRow: Number(snapshot.focusedNavRow || 0),
+        navCol: Number(snapshot.focusedNavCol || 0)
+      } : null;
+    },
+    captureLiveViewState() {
+      var _a, _b;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".search-content");
+      if (content) {
+        this.contentScrollTop = Number(content.scrollTop || 0);
+      }
+      const nextRowScroll = {};
+      Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll(".search-results-row")) || []).forEach((rowNode) => {
+        const rowKey = String(rowNode.dataset.rowKey || "");
+        const track = rowNode.querySelector(".search-results-track");
+        if (rowKey && track) {
+          nextRowScroll[rowKey] = Number(track.scrollLeft || 0);
+        }
+      });
+      if (Object.keys(nextRowScroll).length) {
+        this.rowScrollLeftByKey = {
+          ...this.rowScrollLeftByKey || {},
+          ...nextRowScroll
+        };
+      }
+    },
+    async mount(params = {}, navigationContext = {}) {
+      var _a;
       this.container = document.getElementById("search");
       ScreenUtils.show(this.container);
-      this.query = String(params.query || "").trim();
-      this.mode = this.query.length >= 2 ? "search" : "idle";
+      this.searchRouteEnterPending = true;
+      this.activationGuardUntil = Date.now() + 220;
+      this.layoutPrefs = LayoutPreferences.get();
+      this.sidebarProfile = await getSidebarProfileState();
+      this.sidebarExpanded = false;
+      this.focusZone = "content";
+      this.sidebarFocusIndex = 0;
       this.rows = [];
+      this.lastContentFocus = null;
+      this.contentScrollTop = 0;
+      this.rowScrollLeftByKey = {};
+      this.restoredFocusedDescriptor = null;
+      this.voiceSearchSupported = typeof window !== "undefined" && (typeof window.SpeechRecognition === "function" || typeof window.webkitSpeechRecognition === "function");
+      this.voiceSearchActive = false;
+      this.voiceRecognition = this.voiceRecognition || null;
+      this.searchToastTimer = null;
+      this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params);
       this.loadToken = (this.loadToken || 0) + 1;
+      const hasExplicitQuery = Boolean(String(params.query || "").trim());
+      const restoredQuery = String(((_a = navigationContext == null ? void 0 : navigationContext.restoredState) == null ? void 0 : _a.query) || "").trim();
+      const shouldUseRestoredState = Boolean(
+        (navigationContext == null ? void 0 : navigationContext.restoredState) && (!hasExplicitQuery || restoredQuery === String(params.query || "").trim())
+      );
+      if (shouldUseRestoredState) {
+        this.render();
+        return;
+      }
       this.renderLoading();
       await this.reloadRows();
     },
     renderLoading() {
       this.container.innerHTML = `
-      <div class="search-screen-shell">
-        <div class="search-loading">Loading...</div>
+      <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
+        ${renderRootSidebar({
+        selectedRoute: "search",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      })}
+        <main class="home-main search-content search-loading-shell">
+          <div class="search-loading">Loading...</div>
+        </main>
       </div>
     `;
+      this.searchRouteEnterPending = false;
     },
     async reloadRows() {
       const token = this.loadToken;
@@ -12290,26 +17302,29 @@
       });
     },
     renderRows() {
+      var _a;
       if (!Array.isArray(this.rows) || !this.rows.length) {
         if (this.mode === "search") {
           return `
-          <div class="search-empty-state small">
-            <img src="assets/icons/sidebar_search.svg" class="search-empty-icon" alt="" aria-hidden="true" />
+          <div class="search-empty-state search-empty-state-results">
+            <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
             <h2>No Results</h2>
-            <p>Try another keyword.</p>
+            <p>Try searching with different keywords</p>
           </div>
         `;
         }
         return `
         <div class="search-empty-state">
-          <img src="assets/icons/sidebar_search.svg" class="search-empty-icon" alt="" aria-hidden="true" />
+          <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
           <h2>Start Searching</h2>
-          <p>Enter at least 2 characters</p>
+          <p>${((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled) ? "Enter at least 2 characters" : "Discover is disabled. Enter at least 2 characters"}</p>
         </div>
       `;
       }
-      return this.rows.map((row, rowIndex) => `
-      <section class="search-results-row">
+      return this.rows.map((row, rowIndex) => {
+        const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
+        return `
+      <section class="search-results-row" data-row-key="${escapeHtml6(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
         <div class="search-results-subtitle">${row.subtitle}</div>
         <div class="search-results-track">
@@ -12318,49 +17333,62 @@
                      data-action="openDetail"
                      data-item-id="${item.id || ""}"
                      data-item-type="${item.type || row.type || "movie"}"
-                     data-item-title="${item.name || "Untitled"}">
+                     data-item-title="${item.name || "Untitled"}"
+                     data-row-key="${escapeHtml6(rowKey)}">
               <div class="search-result-poster-wrap">
                 ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" />` : `<div class="search-result-poster placeholder"></div>`}
               </div>
               <div class="search-result-name">${item.name || "Untitled"}</div>
-              <div class="search-result-date">${formatDateLabel(item)}</div>
+              <div class="search-result-date">${formatReleaseYear(item)}</div>
             </article>
           `).join("")}
-          <article class="search-result-card search-seeall-card focusable"
-                   data-action="openCatalogSeeAll"
-                   data-addon-base-url="${row.addonBaseUrl || ""}"
-                   data-addon-id="${row.addonId || ""}"
-                   data-addon-name="${row.addonName || ""}"
-                   data-catalog-id="${row.catalogId || ""}"
-                   data-catalog-name="${row.catalogName || ""}"
-                   data-catalog-type="${row.type || "movie"}"
-                   data-row-index="${rowIndex}">
-            <div class="search-seeall-inner">
-              <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
-              <div class="search-seeall-label">See All</div>
-            </div>
-          </article>
+          ${(row.items || []).length >= 15 ? `
+            <article class="search-result-card search-seeall-card focusable"
+                     data-action="openCatalogSeeAll"
+                     data-addon-base-url="${row.addonBaseUrl || ""}"
+                     data-addon-id="${row.addonId || ""}"
+                     data-addon-name="${row.addonName || ""}"
+                     data-catalog-id="${row.catalogId || ""}"
+                     data-catalog-name="${row.catalogName || ""}"
+                     data-catalog-type="${row.type || "movie"}"
+                     data-row-index="${rowIndex}"
+                     data-row-key="${escapeHtml6(rowKey)}">
+              <div class="search-seeall-inner">
+                <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
+                <div class="search-seeall-label">See All</div>
+              </div>
+            </article>
+          ` : ""}
         </div>
       </section>
-    `).join("");
+    `;
+      }).join("");
     },
     render() {
-      var _a;
+      var _a, _b, _c, _d, _e, _f;
       const queryText = this.query || "";
       this.container.innerHTML = `
-      <div class="search-screen-shell">
-        <aside class="search-sidebar">
-          <button class="search-nav-item focusable" data-action="gotoHome"><img src="${navIcon("gotoHome")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable active" data-action="gotoSearch"><img src="${navIcon("gotoSearch")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoLibrary"><img src="${navIcon("gotoLibrary")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoPlugin"><img src="${navIcon("gotoPlugin")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoSettings"><img src="${navIcon("gotoSettings")}" alt="" aria-hidden="true" /></button>
-        </aside>
-
-        <main class="search-content">
-          <section class="search-header">
-            <button class="search-discover-btn focusable" data-action="openDiscover">
-              <img src="assets/icons/discover_compass.svg" alt="" aria-hidden="true" />
+      <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
+        ${renderRootSidebar({
+        selectedRoute: "search",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      })}
+        <main class="home-main search-content">
+          <section class="search-header${((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled) ? "" : " no-discover"}">
+            ${((_b = this.layoutPrefs) == null ? void 0 : _b.searchDiscoverEnabled) ? `
+              <button class="search-discover-btn focusable" data-action="openDiscover">
+                <span class="search-action-icon material-icons" aria-hidden="true">explore</span>
+              </button>
+            ` : ""}
+            <button
+              class="search-voice-btn focusable${this.voiceSearchActive ? " listening" : ""}"
+              data-action="openVoice"
+              aria-label="Voice search"
+            >
+              <span class="search-action-icon material-icons" aria-hidden="true">mic</span>
             </button>
             <input
               id="searchInput"
@@ -12371,48 +17399,173 @@
               autocapitalize="off"
               spellcheck="false"
               placeholder="Search movies & series"
-              value="${queryText.replace(/"/g, "&quot;")}"
+              value="${escapeHtml6(queryText)}"
             />
           </section>
           ${this.renderRows()}
         </main>
       </div>
     `;
+      this.searchRouteEnterPending = false;
       ScreenUtils.indexFocusables(this.container);
       this.buildNavigationModel();
+      bindRootSidebarEvents(this.container, {
+        currentRoute: "search",
+        onSelectedAction: () => this.closeSidebarToContent(),
+        onExpandSidebar: () => this.openSidebar()
+      });
       this.bindSearchInputEvents();
+      this.bindActionEvents();
       const input = this.container.querySelector("#searchInput");
-      (_a = input == null ? void 0 : input.blur) == null ? void 0 : _a.call(input);
-      ScreenUtils.setInitialFocus(this.container, ".search-discover-btn");
+      (_c = input == null ? void 0 : input.blur) == null ? void 0 : _c.call(input);
+      this.restoreScrollState();
+      const shouldFocusResults = Boolean(this.pendingAutoFocusResults && ((_f = (_e = (_d = this.navModel) == null ? void 0 : _d.rows) == null ? void 0 : _e[0]) == null ? void 0 : _f[0]));
+      if (this.focusZone === "sidebar") {
+        this.focusSidebarNode();
+      } else {
+        this.restoreContentFocus(shouldFocusResults);
+      }
+      this.pendingAutoFocusResults = false;
     },
     buildNavigationModel() {
       var _a, _b, _c, _d, _e;
-      const sidebar = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".search-sidebar .focusable")) || []);
       const header = [
-        (_b = this.container) == null ? void 0 : _b.querySelector(".search-discover-btn.focusable"),
+        (_a = this.container) == null ? void 0 : _a.querySelector(".search-discover-btn.focusable"),
+        (_b = this.container) == null ? void 0 : _b.querySelector(".search-voice-btn.focusable"),
         (_c = this.container) == null ? void 0 : _c.querySelector("#searchInput.focusable")
       ].filter(Boolean);
       const rows = Array.from(((_d = this.container) == null ? void 0 : _d.querySelectorAll(".search-results-row .search-results-track")) || []).map((track) => Array.from(track.querySelectorAll(".search-result-card.focusable"))).filter((row) => row.length > 0);
-      sidebar.forEach((node, index) => {
-        node.dataset.navZone = "sidebar";
-        node.dataset.navIndex = String(index);
-      });
       header.forEach((node, index) => {
         node.dataset.navZone = "header";
         node.dataset.navCol = String(index);
       });
       rows.forEach((rowNodes, rowIndex) => {
+        var _a2, _b2;
+        const rowKey = String(((_b2 = (_a2 = rowNodes[0]) == null ? void 0 : _a2.dataset) == null ? void 0 : _b2.rowKey) || "");
         rowNodes.forEach((node, colIndex) => {
           node.dataset.navZone = "results";
           node.dataset.navRow = String(rowIndex);
           node.dataset.navCol = String(colIndex);
+          if (rowKey) {
+            node.dataset.rowKey = rowKey;
+          }
         });
       });
-      this.navModel = { sidebar, header, rows };
-      this.lastMainFocus = header[1] || header[0] || ((_e = rows[0]) == null ? void 0 : _e[0]) || null;
+      this.navModel = { header, rows };
+      if (!this.lastContentFocus) {
+        const fallback = this.getDefaultHeaderFocusTarget() || ((_e = rows[0]) == null ? void 0 : _e[0]) || null;
+        if (fallback) {
+          this.rememberContentFocus(fallback);
+        }
+      }
+    },
+    getDefaultHeaderFocusTarget() {
+      var _a, _b, _c;
+      return ((_a = this.container) == null ? void 0 : _a.querySelector(".search-discover-btn.focusable")) || ((_b = this.container) == null ? void 0 : _b.querySelector("#searchInput.focusable")) || ((_c = this.container) == null ? void 0 : _c.querySelector(".search-voice-btn.focusable")) || null;
+    },
+    restoreScrollState() {
+      var _a, _b;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".search-content");
+      if (content) {
+        content.scrollTop = Number(this.contentScrollTop || 0);
+      }
+      Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll(".search-results-row")) || []).forEach((rowNode) => {
+        var _a2;
+        const rowKey = String(rowNode.dataset.rowKey || "");
+        const track = rowNode.querySelector(".search-results-track");
+        if (rowKey && track) {
+          track.scrollLeft = Number(((_a2 = this.rowScrollLeftByKey) == null ? void 0 : _a2[rowKey]) || 0);
+        }
+      });
+    },
+    rememberContentFocus(node) {
+      if (!node) {
+        return;
+      }
+      this.lastContentFocus = {
+        zone: String(node.dataset.navZone || ""),
+        row: Number(node.dataset.navRow || 0),
+        col: Number(node.dataset.navCol || 0),
+        action: String(node.dataset.action || "")
+      };
+    },
+    focusSidebarNode(preferredNode = null) {
+      var _a;
+      const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+      const target = preferredNode || getRootSidebarSelectedNode(this.container, this.layoutPrefs) || nodes[0] || null;
+      if (!target) {
+        return false;
+      }
+      this.sidebarFocusIndex = Math.max(0, nodes.indexOf(target));
+      this.focusNode(((_a = this.container) == null ? void 0 : _a.querySelector(".focusable.focused")) || null, target);
+      return true;
+    },
+    async openSidebar() {
+      var _a;
+      this.captureLiveViewState();
+      const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+      const selected = getRootSidebarSelectedNode(this.container, this.layoutPrefs);
+      this.focusZone = "sidebar";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
+        this.sidebarExpanded = true;
+        this.render();
+        return true;
+      }
+      return this.focusSidebarNode(selected || nodes[0] || null);
+    },
+    async closeSidebarToContent() {
+      var _a;
+      this.captureLiveViewState();
+      this.focusZone = "content";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
+        this.sidebarExpanded = false;
+        this.render();
+        return true;
+      }
+      return this.restoreContentFocus(false);
+    },
+    restoreContentFocus(preferResults = false) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+      let target = null;
+      if (preferResults) {
+        target = ((_a = this.container) == null ? void 0 : _a.querySelector(".search-results-row .search-result-card.focusable")) || null;
+      }
+      if (!target && !preferResults && this.mode !== "search") {
+        target = this.getDefaultHeaderFocusTarget();
+      }
+      if (!target && ((_b = this.restoredFocusedDescriptor) == null ? void 0 : _b.rowKey) && ((_c = this.restoredFocusedDescriptor) == null ? void 0 : _c.itemId)) {
+        target = ((_d = this.container) == null ? void 0 : _d.querySelector(
+          `.search-result-card.focusable[data-row-key="${escapeSelectorValue2(this.restoredFocusedDescriptor.rowKey)}"][data-item-id="${escapeSelectorValue2(this.restoredFocusedDescriptor.itemId)}"]`
+        )) || null;
+      }
+      if (!target && ((_e = this.restoredFocusedDescriptor) == null ? void 0 : _e.rowKey) && ((_f = this.restoredFocusedDescriptor) == null ? void 0 : _f.action) === "openCatalogSeeAll") {
+        target = ((_g = this.container) == null ? void 0 : _g.querySelector(
+          `.search-result-card.focusable.search-seeall-card[data-row-key="${escapeSelectorValue2(this.restoredFocusedDescriptor.rowKey)}"]`
+        )) || null;
+      }
+      if (!target && this.lastContentFocus) {
+        if (this.lastContentFocus.zone === "results") {
+          target = ((_h = this.container) == null ? void 0 : _h.querySelector(
+            `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
+          )) || null;
+        } else if (this.lastContentFocus.zone === "header") {
+          target = ((_i = this.container) == null ? void 0 : _i.querySelector(
+            `.focusable[data-nav-zone="header"][data-nav-col="${this.lastContentFocus.col}"]`
+          )) || null;
+        }
+      }
+      if (!target) {
+        target = this.getDefaultHeaderFocusTarget() || ((_j = this.container) == null ? void 0 : _j.querySelector(".search-result-card.focusable")) || null;
+      }
+      if (!target) {
+        return false;
+      }
+      this.focusNode(((_k = this.container) == null ? void 0 : _k.querySelector(".focusable.focused")) || null, target);
+      this.restoredFocusedDescriptor = null;
+      return true;
     },
     focusNode(current, target) {
-      var _a;
+      var _a, _b, _c;
       if (!target) return false;
       if (current && current !== target) {
         current.classList.remove("focused");
@@ -12421,18 +17574,80 @@
         if (node !== target) node.classList.remove("focused");
       });
       target.classList.add("focused");
-      target.focus();
+      focusWithoutAutoScroll(target);
       const zone = String(target.dataset.navZone || "");
-      if (zone === "header" || zone === "results") {
-        this.lastMainFocus = target;
+      const currentZone = String(((_b = current == null ? void 0 : current.dataset) == null ? void 0 : _b.navZone) || "");
+      const sidebarFocused = isRootSidebarNode(target);
+      this.focusZone = sidebarFocused ? "sidebar" : "content";
+      if (!((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, sidebarFocused);
+      }
+      if (!sidebarFocused) {
+        this.rememberContentFocus(target);
+      }
+      if (zone === "header" && currentZone === "results") {
+        this.ensureHeaderVisible();
       }
       if (zone === "results") {
-        target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+        const row = target.closest(".search-results-row");
+        row == null ? void 0 : row.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+        this.ensureResultCardVisible(current, target);
       }
+      this.captureLiveViewState();
       return true;
     },
+    ensureResultCardVisible(current, target) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      const track = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, ".search-results-track");
+      if (!track || !target) {
+        return;
+      }
+      const targetLeft = Number(target.offsetLeft || 0);
+      const targetRight = targetLeft + Number(target.offsetWidth || 0);
+      const viewLeft = Number(track.scrollLeft || 0);
+      const viewRight = viewLeft + Number(track.clientWidth || 0);
+      const leftPad = 72;
+      const rightPad = 88;
+      const currentRow = Number((_c = (_b = current == null ? void 0 : current.dataset) == null ? void 0 : _b.navRow) != null ? _c : -1);
+      const targetRow = Number((_e = (_d = target == null ? void 0 : target.dataset) == null ? void 0 : _d.navRow) != null ? _e : -1);
+      const currentCol = Number((_g = (_f = current == null ? void 0 : current.dataset) == null ? void 0 : _f.navCol) != null ? _g : -1);
+      const targetCol = Number((_i = (_h = target == null ? void 0 : target.dataset) == null ? void 0 : _h.navCol) != null ? _i : -1);
+      const sameRow = currentRow >= 0 && currentRow === targetRow;
+      if (sameRow && targetCol > currentCol) {
+        if (targetRight > viewRight - rightPad || targetLeft < viewLeft + leftPad) {
+          track.scrollLeft = Math.max(0, targetLeft - leftPad);
+        }
+        return;
+      }
+      if (sameRow && targetCol < currentCol) {
+        if (targetLeft < viewLeft + leftPad || targetRight > viewRight - rightPad) {
+          track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
+        }
+        return;
+      }
+      if (targetRight > viewRight - rightPad) {
+        track.scrollLeft = Math.max(0, targetLeft - leftPad);
+        return;
+      }
+      if (targetLeft < viewLeft + leftPad) {
+        track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
+      }
+    },
+    ensureHeaderVisible() {
+      var _a, _b;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".search-content");
+      const header = (_b = this.container) == null ? void 0 : _b.querySelector(".search-header");
+      if (!content || !header) return;
+      const contentRect = content.getBoundingClientRect();
+      const headerRect = header.getBoundingClientRect();
+      const topInset = 22;
+      const visibleTop = contentRect.top + topInset;
+      if (headerRect.top < visibleTop) {
+        content.scrollTop += headerRect.top - visibleTop;
+      }
+    },
     handleSearchDpad(event) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
       const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
       const direction = keyCode === 38 ? "up" : keyCode === 40 ? "down" : keyCode === 37 ? "left" : keyCode === 39 ? "right" : null;
       if (!direction) {
@@ -12445,58 +17660,44 @@
       }
       const zone = String(current.dataset.navZone || "");
       (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
-      if (zone === "sidebar") {
-        const sidebarIndex = Number(current.dataset.navIndex || 0);
-        if (direction === "up") {
-          return this.focusNode(current, ((_c = nav.sidebar) == null ? void 0 : _c[Math.max(0, sidebarIndex - 1)]) || current) || true;
-        }
-        if (direction === "down") {
-          return this.focusNode(current, ((_e = nav.sidebar) == null ? void 0 : _e[Math.min((((_d = nav.sidebar) == null ? void 0 : _d.length) || 1) - 1, sidebarIndex + 1)]) || current) || true;
-        }
-        if (direction === "right") {
-          const target = this.lastMainFocus || ((_f = nav.header) == null ? void 0 : _f[1]) || ((_g = nav.header) == null ? void 0 : _g[0]) || ((_i = (_h = nav.rows) == null ? void 0 : _h[0]) == null ? void 0 : _i[0]) || null;
-          return this.focusNode(current, target) || true;
-        }
-        return true;
-      }
       if (zone === "header") {
         const col = Number(current.dataset.navCol || 0);
         if (direction === "left") {
-          if (col > 0) return this.focusNode(current, ((_j = nav.header) == null ? void 0 : _j[col - 1]) || current) || true;
-          return this.focusNode(current, ((_k = nav.sidebar) == null ? void 0 : _k[1]) || ((_l = nav.sidebar) == null ? void 0 : _l[0]) || current) || true;
+          if (col > 0) return this.focusNode(current, ((_c = nav.header) == null ? void 0 : _c[col - 1]) || current) || true;
+          return "sidebar";
         }
         if (direction === "right") {
-          if (col < (((_m = nav.header) == null ? void 0 : _m.length) || 0) - 1) {
-            return this.focusNode(current, ((_n = nav.header) == null ? void 0 : _n[col + 1]) || current) || true;
+          if (col < (((_d = nav.header) == null ? void 0 : _d.length) || 0) - 1) {
+            return this.focusNode(current, ((_e = nav.header) == null ? void 0 : _e[col + 1]) || current) || true;
           }
           return true;
         }
         if (direction === "down") {
-          const firstRow = ((_o = nav.rows) == null ? void 0 : _o[0]) || [];
+          const firstRow = ((_f = nav.rows) == null ? void 0 : _f[0]) || [];
           const target = firstRow[Math.min(col, Math.max(0, firstRow.length - 1))] || firstRow[0] || null;
           return this.focusNode(current, target) || true;
         }
         if (direction === "up") {
-          return this.focusNode(current, ((_p = nav.sidebar) == null ? void 0 : _p[1]) || ((_q = nav.sidebar) == null ? void 0 : _q[0]) || current) || true;
+          return true;
         }
         return true;
       }
       if (zone === "results") {
         const row = Number(current.dataset.navRow || 0);
         const col = Number(current.dataset.navCol || 0);
-        const rowNodes = ((_r = nav.rows) == null ? void 0 : _r[row]) || [];
+        const rowNodes = ((_g = nav.rows) == null ? void 0 : _g[row]) || [];
         if (direction === "left") {
           if (col > 0) {
             return this.focusNode(current, rowNodes[col - 1] || current) || true;
           }
-          return this.focusNode(current, ((_s = nav.sidebar) == null ? void 0 : _s[1]) || ((_t = nav.sidebar) == null ? void 0 : _t[0]) || current) || true;
+          return "sidebar";
         }
         if (direction === "right") {
           const target = rowNodes[col + 1] || null;
           return this.focusNode(current, target || current) || true;
         }
         if (direction === "down") {
-          const nextRowNodes = ((_u = nav.rows) == null ? void 0 : _u[row + 1]) || null;
+          const nextRowNodes = ((_h = nav.rows) == null ? void 0 : _h[row + 1]) || null;
           if (!nextRowNodes) {
             return true;
           }
@@ -12504,12 +17705,12 @@
           return this.focusNode(current, target) || true;
         }
         if (direction === "up") {
-          const prevRowNodes = ((_v = nav.rows) == null ? void 0 : _v[row - 1]) || null;
+          const prevRowNodes = ((_i = nav.rows) == null ? void 0 : _i[row - 1]) || null;
           if (prevRowNodes) {
             const target2 = prevRowNodes[Math.min(col, prevRowNodes.length - 1)] || prevRowNodes[0] || null;
             return this.focusNode(current, target2) || true;
           }
-          const target = ((_x = nav.header) == null ? void 0 : _x[Math.min(col, (((_w = nav.header) == null ? void 0 : _w.length) || 1) - 1)]) || ((_y = nav.header) == null ? void 0 : _y[0]) || null;
+          const target = ((_k = nav.header) == null ? void 0 : _k[Math.min(col, (((_j = nav.header) == null ? void 0 : _j.length) || 1) - 1)]) || ((_l = nav.header) == null ? void 0 : _l[0]) || null;
           return this.focusNode(current, target) || true;
         }
         return true;
@@ -12527,6 +17728,7 @@
         if (this.query.length === 0 && this.mode !== "idle") {
           this.mode = "idle";
           this.loadToken = (this.loadToken || 0) + 1;
+          this.captureLiveViewState();
           this.renderLoading();
           this.reloadRows();
         }
@@ -12536,10 +17738,130 @@
         event.preventDefault();
         this.query = String(input.value || "").trim();
         this.mode = this.query.length >= 2 ? "search" : "idle";
+        this.pendingAutoFocusResults = this.mode === "search";
         this.loadToken = (this.loadToken || 0) + 1;
+        this.captureLiveViewState();
         this.renderLoading();
         await this.reloadRows();
       });
+    },
+    bindActionEvents() {
+      var _a;
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll("[data-action]").forEach((node) => {
+        if (node.__boundActionListeners) return;
+        node.__boundActionListeners = true;
+        if (node.dataset.action === "searchInput") return;
+        node.addEventListener("click", () => {
+          this.activateActionNode(node);
+        });
+      });
+    },
+    activateActionNode(node) {
+      var _a;
+      if (!node) return;
+      if (Date.now() < Number(this.activationGuardUntil || 0)) return;
+      const action = String(node.dataset.action || "");
+      if (!action) return;
+      if (action === "openDetail") this.openDetailFromNode(node);
+      if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(node);
+      if (action === "openDiscover" && ((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled)) Router.navigate("discover");
+      if (action === "openVoice") this.handleVoiceSearch();
+    },
+    ensureVoiceRecognition() {
+      if (this.voiceRecognition || !this.voiceSearchSupported) {
+        return this.voiceRecognition;
+      }
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (typeof SpeechRecognition !== "function") {
+        return null;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      recognition.lang = navigator.language || "en-US";
+      recognition.onresult = async (event) => {
+        var _a, _b, _c;
+        const recognized = String(((_c = (_b = (_a = event.results) == null ? void 0 : _a[0]) == null ? void 0 : _b[0]) == null ? void 0 : _c.transcript) || "").trim();
+        this.voiceSearchActive = false;
+        this.syncVoiceButtonState();
+        if (!recognized) {
+          this.showSearchToast("No speech detected. Try again.");
+          return;
+        }
+        this.query = recognized;
+        this.mode = this.query.length >= 2 ? "search" : "idle";
+        this.pendingAutoFocusResults = this.mode === "search";
+        this.loadToken = (this.loadToken || 0) + 1;
+        this.renderLoading();
+        await this.reloadRows();
+      };
+      recognition.onerror = (event) => {
+        this.voiceSearchActive = false;
+        this.syncVoiceButtonState();
+        const errorCode = String((event == null ? void 0 : event.error) || "");
+        if (errorCode === "aborted") return;
+        if (errorCode === "not-allowed" || errorCode === "service-not-allowed") {
+          this.showSearchToast("Microphone permission is required for voice search.");
+          return;
+        }
+        if (errorCode === "no-speech") {
+          this.showSearchToast("No speech detected. Try again.");
+          return;
+        }
+        this.showSearchToast("Voice recognition failed. Try again.");
+      };
+      recognition.onend = () => {
+        this.voiceSearchActive = false;
+        this.syncVoiceButtonState();
+      };
+      this.voiceRecognition = recognition;
+      return recognition;
+    },
+    handleVoiceSearch() {
+      const recognition = this.ensureVoiceRecognition();
+      if (!recognition) {
+        this.showSearchToast("Voice search is unavailable on this device.");
+        return;
+      }
+      try {
+        if (this.voiceSearchActive) {
+          recognition.stop();
+          return;
+        }
+        this.voiceSearchActive = true;
+        this.syncVoiceButtonState();
+        recognition.start();
+      } catch (_) {
+        this.voiceSearchActive = false;
+        this.syncVoiceButtonState();
+        this.showSearchToast("Voice search is unavailable on this device.");
+      }
+    },
+    syncVoiceButtonState() {
+      var _a;
+      const button = (_a = this.container) == null ? void 0 : _a.querySelector(".search-voice-btn");
+      if (!button) return;
+      button.classList.toggle("listening", Boolean(this.voiceSearchActive));
+    },
+    showSearchToast(message) {
+      if (!this.container) return;
+      const shell = this.container.querySelector(".search-screen-shell");
+      if (!shell) return;
+      let toast = shell.querySelector(".search-toast");
+      if (!toast) {
+        toast = document.createElement("div");
+        toast.className = "search-toast";
+        shell.appendChild(toast);
+      }
+      toast.textContent = String(message || "").trim();
+      toast.classList.add("visible");
+      if (this.searchToastTimer) {
+        clearTimeout(this.searchToastTimer);
+      }
+      this.searchToastTimer = setTimeout(() => {
+        toast == null ? void 0 : toast.classList.remove("visible");
+      }, 2600);
     },
     openDetailFromNode(node) {
       Router.navigate("detail", {
@@ -12560,40 +17882,96 @@
       });
     },
     async onKeyDown(event) {
-      var _a, _b;
-      if (Environment.isBackEvent(event)) {
-        (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router.navigate("home");
+      var _a, _b, _c, _d, _e, _f;
+      if (Platform.isBackEvent(event)) {
+        (_a = event.preventDefault) == null ? void 0 : _a.call(event);
+        if (this.focusZone === "sidebar") {
+          Platform.exitApp();
+        } else {
+          await this.openSidebar();
+        }
         return;
       }
-      if (this.handleSearchDpad(event)) {
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar) && !this.sidebarExpanded) {
+        if (code === 40) {
+          this.pillIconOnly = true;
+          setModernSidebarPillIconOnly(this.container, true);
+        } else if (code === 38) {
+          this.pillIconOnly = false;
+          setModernSidebarPillIconOnly(this.container, false);
+        }
+      }
+      if (this.focusZone === "sidebar") {
+        const current2 = ((_c = this.container) == null ? void 0 : _c.querySelector(".focusable.focused")) || null;
+        const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+        if (code === 38 || code === 40 || code === 39) {
+          (_d = event.preventDefault) == null ? void 0 : _d.call(event);
+        }
+        if (code === 38 || code === 40) {
+          const focusedIndex = Math.max(0, nodes.indexOf(current2));
+          const nextIndex = clamp2(focusedIndex + (code === 38 ? -1 : 1), 0, Math.max(0, nodes.length - 1));
+          const nextNode = nodes[nextIndex] || current2;
+          if (nextNode) {
+            this.sidebarFocusIndex = nextIndex;
+            this.focusNode(current2, nextNode);
+          }
+          return;
+        }
+        if (code === 39) {
+          await this.closeSidebarToContent();
+          return;
+        }
+        if (code === 13 && current2 && isRootSidebarNode(current2)) {
+          (_e = event.preventDefault) == null ? void 0 : _e.call(event);
+          activateLegacySidebarAction(String(current2.dataset.action || ""), "search");
+          if (isSelectedSidebarAction(String(current2.dataset.action || ""), "search")) {
+            await this.closeSidebarToContent();
+          }
+          return;
+        }
+      }
+      const dpadResult = this.handleSearchDpad(event);
+      if (dpadResult === "sidebar") {
+        await this.openSidebar();
+        return;
+      }
+      if (dpadResult) {
         return;
       }
       if (ScreenUtils.handleDpadNavigation(event, this.container)) {
         return;
       }
-      if (event.keyCode !== 13) return;
+      if (code !== 13) return;
       const current = this.container.querySelector(".focusable.focused");
       if (!current) return;
       const action = String(current.dataset.action || "");
-      if (action === "gotoHome") Router.navigate("home");
-      if (action === "gotoSearch") return;
-      if (action === "gotoLibrary") Router.navigate("library");
-      if (action === "gotoPlugin") Router.navigate("plugin");
-      if (action === "gotoSettings") Router.navigate("settings");
-      if (action === "openDetail") this.openDetailFromNode(current);
-      if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
-      if (action === "openDiscover") {
-        Router.navigate("discover");
+      if (action === "openDiscover" || action === "openVoice" || action === "openDetail" || action === "openCatalogSeeAll") {
+        this.activateActionNode(current);
       }
       if (action === "searchInput") {
-        const input = (_b = this.container) == null ? void 0 : _b.querySelector("#searchInput");
+        const input = (_f = this.container) == null ? void 0 : _f.querySelector("#searchInput");
         if (input) {
           input.focus();
         }
       }
     },
     cleanup() {
+      if (this.searchToastTimer) {
+        clearTimeout(this.searchToastTimer);
+        this.searchToastTimer = null;
+      }
+      if (this.voiceRecognition) {
+        try {
+          this.voiceRecognition.onresult = null;
+          this.voiceRecognition.onerror = null;
+          this.voiceRecognition.onend = null;
+          this.voiceRecognition.stop();
+        } catch (_) {
+        }
+        this.voiceRecognition = null;
+      }
+      this.voiceSearchActive = false;
       ScreenUtils.hide(this.container);
     }
   };
@@ -12611,19 +17989,6 @@
     if (type === "series") return "Series";
     if (type === "movie") return "Movie";
     return toTitleCase3(type);
-  }
-  function navIcon2(action) {
-    const map = {
-      gotoHome: "assets/icons/sidebar_home.svg",
-      gotoSearch: "assets/icons/sidebar_search.svg",
-      gotoLibrary: "assets/icons/sidebar_library.svg",
-      gotoPlugin: "assets/icons/sidebar_plugin.svg",
-      gotoSettings: "assets/icons/sidebar_settings.svg"
-    };
-    return map[action] || map.gotoSearch;
-  }
-  function isBackEvent3(event) {
-    return Environment.isBackEvent(event);
   }
   function isKey(event, code, aliases = []) {
     const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
@@ -12648,8 +18013,13 @@
   }
   var DiscoverScreen = {
     async mount() {
+      var _a;
       this.container = document.getElementById("discover");
       ScreenUtils.show(this.container);
+      this.sidebarProfile = await getSidebarProfileState();
+      this.layoutPrefs = LayoutPreferences.get();
+      this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
+      this.focusZone = this.focusZone || "content";
       this.loadToken = (this.loadToken || 0) + 1;
       this.typeOptions = [];
       this.selectedType = "movie";
@@ -12830,12 +18200,16 @@
       }
     },
     focusFilter(action) {
-      var _a;
+      var _a, _b;
       const target = ((_a = this.container) == null ? void 0 : _a.querySelector(`.discover-filter[data-action="${action}"]`)) || null;
       if (!target) return;
       this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
       target.classList.add("focused");
-      target.focus();
+      this.focusZone = "content";
+      focusWithoutAutoScroll(target);
+      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, false);
+      }
       this.lastFocusedAction = action;
     },
     moveFilterFocus(delta) {
@@ -12846,7 +18220,7 @@
       this.focusFilter(filters[nextIndex]);
     },
     focusNearestFilterFromCard(cardNode) {
-      var _a;
+      var _a, _b;
       const filters = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".discover-filter.focusable")) || []);
       if (!filters.length || !cardNode) return false;
       const cardRect = cardNode.getBoundingClientRect();
@@ -12865,7 +18239,11 @@
       if (!target) return false;
       this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
       target.classList.add("focused");
-      target.focus();
+      this.focusZone = "content";
+      focusWithoutAutoScroll(target);
+      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, false);
+      }
       this.lastFocusedAction = String(target.dataset.action || "discoverFilterType");
       return true;
     },
@@ -12878,16 +18256,71 @@
       return Boolean(after && before !== after);
     },
     focusFirstContentCard() {
-      var _a;
+      var _a, _b;
       const firstCard = (_a = this.container) == null ? void 0 : _a.querySelector(".discover-grid .discover-card.focusable");
       if (!firstCard) {
         return false;
       }
       this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
       firstCard.classList.add("focused");
-      firstCard.focus();
+      this.focusZone = "content";
+      focusWithoutAutoScroll(firstCard);
+      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, false);
+      }
       this.lastFocusedAction = String(firstCard.dataset.action || "openDetail");
       return true;
+    },
+    focusSidebarNode() {
+      var _a;
+      const target = getRootSidebarSelectedNode(this.container, this.layoutPrefs) || getRootSidebarNodes(this.container, this.layoutPrefs)[0] || null;
+      if (!target) {
+        return false;
+      }
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      target.classList.add("focused");
+      this.focusZone = "sidebar";
+      focusWithoutAutoScroll(target);
+      if (!((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, true);
+      }
+      return true;
+    },
+    async openSidebar() {
+      var _a;
+      this.focusZone = "sidebar";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
+        this.sidebarExpanded = true;
+        await this.render();
+        return true;
+      }
+      return this.focusSidebarNode();
+    },
+    restoreContentFocus() {
+      var _a, _b, _c, _d;
+      const selector = this.lastFocusedAction ? `.focusable[data-action="${this.lastFocusedAction}"]` : ".discover-filter.focusable";
+      const target = ((_a = this.container) == null ? void 0 : _a.querySelector(selector)) || ((_b = this.container) == null ? void 0 : _b.querySelector(".discover-filter.focusable")) || ((_c = this.container) == null ? void 0 : _c.querySelector(".discover-card.focusable")) || null;
+      if (!target) {
+        return false;
+      }
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      target.classList.add("focused");
+      this.focusZone = "content";
+      focusWithoutAutoScroll(target);
+      if (!((_d = this.layoutPrefs) == null ? void 0 : _d.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, false);
+      }
+      return true;
+    },
+    async closeSidebarToContent() {
+      var _a;
+      this.focusZone = "content";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
+        this.sidebarExpanded = false;
+        await this.render();
+        return true;
+      }
+      return this.restoreContentFocus();
     },
     getKindFromFilterAction(action) {
       if (action === "discoverFilterType") return "type";
@@ -12925,9 +18358,11 @@
     `;
     },
     render() {
-      var _a, _b;
-      const currentFocused = (_a = this.container) == null ? void 0 : _a.querySelector(".focusable.focused");
-      if ((_b = currentFocused == null ? void 0 : currentFocused.dataset) == null ? void 0 : _b.action) {
+      var _a, _b, _c;
+      this.layoutPrefs = LayoutPreferences.get();
+      this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
+      const currentFocused = (_b = this.container) == null ? void 0 : _b.querySelector(".focusable.focused");
+      if ((_c = currentFocused == null ? void 0 : currentFocused.dataset) == null ? void 0 : _c.action) {
         this.lastFocusedAction = String(currentFocused.dataset.action);
       }
       const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
@@ -12944,13 +18379,13 @@
             `).join("") : `<div class="discover-empty">No content found.</div>`;
       this.container.innerHTML = `
       <div class="discover-shell">
-        <aside class="search-sidebar">
-          <button class="search-nav-item focusable" data-action="gotoHome"><img src="${navIcon2("gotoHome")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable active" data-action="gotoSearch"><img src="${navIcon2("gotoSearch")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoLibrary"><img src="${navIcon2("gotoLibrary")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoPlugin"><img src="${navIcon2("gotoPlugin")}" alt="" aria-hidden="true" /></button>
-          <button class="search-nav-item focusable" data-action="gotoSettings"><img src="${navIcon2("gotoSettings")}" alt="" aria-hidden="true" /></button>
-        </aside>
+        ${renderRootSidebar({
+        selectedRoute: "search",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      })}
         <main class="discover-main">
           <h1 class="discover-title">Discover</h1>
           <section class="discover-filters">
@@ -12966,9 +18401,17 @@
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
+      bindRootSidebarEvents(this.container, {
+        currentRoute: "search",
+        onSelectedAction: () => this.closeSidebarToContent(),
+        onExpandSidebar: () => this.openSidebar()
+      });
       this.bindPointerEvents();
-      const selector = this.lastFocusedAction ? `.focusable[data-action="${this.lastFocusedAction}"]` : ".discover-filter.focusable";
-      ScreenUtils.setInitialFocus(this.container, selector);
+      if (this.focusZone === "sidebar") {
+        this.focusSidebarNode();
+      } else {
+        this.restoreContentFocus();
+      }
     },
     bindPointerEvents() {
       if (!this.container || this.container.__discoverPointerBound) return;
@@ -13004,18 +18447,62 @@
       });
     },
     async onKeyDown(event) {
-      var _a, _b, _c, _d, _e, _f;
-      if (isBackEvent3(event)) {
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      if (Platform.isBackEvent(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
         if (this.openPicker) {
           this.closePickerMenu();
           return;
         }
-        Router.back();
+        if (this.focusZone === "sidebar") {
+          Platform.exitApp();
+        } else {
+          await this.openSidebar();
+        }
         return;
       }
+      const current = this.container.querySelector(".focusable.focused");
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar) && !this.sidebarExpanded) {
+        if (code === 40) {
+          this.pillIconOnly = true;
+          setModernSidebarPillIconOnly(this.container, true);
+        } else if (code === 38) {
+          this.pillIconOnly = false;
+          setModernSidebarPillIconOnly(this.container, false);
+        }
+      }
+      if (this.focusZone === "sidebar") {
+        if (isUpKey(event) || isDownKey(event) || isRightKey(event)) {
+          (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
+        }
+        if (isUpKey(event) || isDownKey(event)) {
+          const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+          const focusedIndex = Math.max(0, nodes.indexOf(current));
+          const nextIndex = Math.max(0, Math.min(nodes.length - 1, focusedIndex + (isUpKey(event) ? -1 : 1)));
+          const nextNode = nodes[nextIndex] || null;
+          if (nextNode) {
+            this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+            nextNode.classList.add("focused");
+            focusWithoutAutoScroll(nextNode);
+          }
+          return;
+        }
+        if (isRightKey(event)) {
+          await this.closeSidebarToContent();
+          return;
+        }
+        if (isEnterKey(event) && current && isRootSidebarNode(current)) {
+          (_d = event == null ? void 0 : event.preventDefault) == null ? void 0 : _d.call(event);
+          activateLegacySidebarAction(String(current.dataset.action || ""), "search");
+          if (isSelectedSidebarAction(String(current.dataset.action || ""), "search")) {
+            await this.closeSidebarToContent();
+          }
+          return;
+        }
+      }
       if (isUpKey(event) || isDownKey(event) || isLeftKey(event) || isRightKey(event)) {
-        (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
+        (_e = event == null ? void 0 : event.preventDefault) == null ? void 0 : _e.call(event);
       }
       if (this.openPicker) {
         if (isUpKey(event)) {
@@ -13027,9 +18514,9 @@
           return;
         }
         if (isEnterKey(event)) {
-          (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
-          (_d = event == null ? void 0 : event.stopPropagation) == null ? void 0 : _d.call(event);
-          (_e = event == null ? void 0 : event.stopImmediatePropagation) == null ? void 0 : _e.call(event);
+          (_f = event == null ? void 0 : event.preventDefault) == null ? void 0 : _f.call(event);
+          (_g = event == null ? void 0 : event.stopPropagation) == null ? void 0 : _g.call(event);
+          (_h = event == null ? void 0 : event.stopImmediatePropagation) == null ? void 0 : _h.call(event);
           this.selectCurrentPickerOption();
           return;
         }
@@ -13044,15 +18531,13 @@
         }
         return;
       }
-      const current = this.container.querySelector(".focusable.focused");
-      const currentAction = String(((_f = current == null ? void 0 : current.dataset) == null ? void 0 : _f.action) || "");
+      const currentAction = String(((_i = current == null ? void 0 : current.dataset) == null ? void 0 : _i.action) || "");
       const focusedFilterKind = this.getKindFromFilterAction(currentAction);
       if (focusedFilterKind) {
         if (isLeftKey(event)) {
           if (currentAction === "discoverFilterType") {
-            if (ScreenUtils.handleDpadNavigation(event, this.container)) {
-              return;
-            }
+            await this.openSidebar();
+            return;
           }
           this.moveFilterFocus(-1);
           return;
@@ -13095,11 +18580,13 @@
       if (!current) return;
       const action = String(current.dataset.action || "");
       this.lastFocusedAction = action;
-      if (action === "gotoHome") Router.navigate("home");
-      if (action === "gotoSearch") Router.navigate("search");
-      if (action === "gotoLibrary") Router.navigate("library");
-      if (action === "gotoPlugin") Router.navigate("plugin");
-      if (action === "gotoSettings") Router.navigate("settings");
+      if (isRootSidebarNode(current)) {
+        activateLegacySidebarAction(action, "search");
+        if (isSelectedSidebarAction(action, "search")) {
+          await this.closeSidebarToContent();
+        }
+        return;
+      }
       if (action === "discoverFilterType") this.openPickerMenu("type");
       if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
       if (action === "discoverFilterGenre") this.openPickerMenu("genre");
@@ -13118,534 +18605,1892 @@
   };
 
   // js/data/local/themeStore.js
-  var KEY6 = "themeSettings";
+  var KEY7 = "themeSettings";
   var ACCENT_MIGRATION_FLAG_KEY = "themeAccentMigratedToWhite";
   var LEGACY_DEFAULT_ACCENT = "#ff3d00";
   var DEFAULT_THEME = {
     mode: "dark",
-    accentColor: "#f5f8fc"
+    themeName: "WHITE",
+    accentColor: "#ffffff",
+    fontFamily: "INTER",
+    language: null
   };
+  var THEME_BY_ACCENT = /* @__PURE__ */ new Map([
+    ["#ffffff", "WHITE"],
+    ["#f5f5f5", "WHITE"],
+    ["#f5f8fc", "WHITE"],
+    ["#ff4d4f", "CRIMSON"],
+    ["#ff5252", "CRIMSON"],
+    ["#42a5f5", "OCEAN"],
+    ["#ba68c8", "VIOLET"],
+    ["#ab47bc", "VIOLET"],
+    ["#66bb6a", "EMERALD"],
+    ["#ffca28", "AMBER"],
+    ["#ffa726", "AMBER"],
+    ["#ec407a", "ROSE"]
+  ]);
+  function normalizeTheme(settings = {}) {
+    const accent = String((settings == null ? void 0 : settings.accentColor) || DEFAULT_THEME.accentColor).toLowerCase();
+    const themeName = String(
+      (settings == null ? void 0 : settings.themeName) || THEME_BY_ACCENT.get(accent) || DEFAULT_THEME.themeName
+    ).toUpperCase();
+    return {
+      ...DEFAULT_THEME,
+      ...settings,
+      themeName,
+      accentColor: accent
+    };
+  }
   var ThemeStore = {
     get() {
-      const stored = LocalStore.get(KEY6, {}) || {};
+      const stored = LocalStore.get(KEY7, {}) || {};
       if (String((stored == null ? void 0 : stored.accentColor) || "").toLowerCase() === LEGACY_DEFAULT_ACCENT && !LocalStore.get(ACCENT_MIGRATION_FLAG_KEY, false)) {
         const migrated = { ...stored, accentColor: DEFAULT_THEME.accentColor };
-        LocalStore.set(KEY6, migrated);
+        LocalStore.set(KEY7, migrated);
         LocalStore.set(ACCENT_MIGRATION_FLAG_KEY, true);
-        return {
-          ...DEFAULT_THEME,
-          ...migrated
-        };
+        return normalizeTheme(migrated);
       }
-      return {
-        ...DEFAULT_THEME,
-        ...stored
-      };
+      return normalizeTheme(stored);
     },
     set(partial) {
-      LocalStore.set(KEY6, { ...this.get(), ...partial || {} });
+      LocalStore.set(KEY7, normalizeTheme({ ...this.get(), ...partial || {} }));
     }
   };
 
   // js/ui/theme/themeColors.js
-  var ThemeColors = {
-    dark: {
-      "--bg-color": "#0e0f12",
+  var palettes = {
+    WHITE: {
+      "--bg-color": "#0d0d0d",
+      "--bg-elevated": "#1a1a1a",
+      "--card-bg": "#222222",
+      "--secondary-color": "#f5f5f5",
+      "--secondary-variant": "#e0e0e0",
+      "--on-secondary": "#111111",
       "--text-color": "#ffffff",
-      "--focus-color": "#f5f8fc",
-      "--card-bg": "#1a1c20"
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#ffffff",
+      "--focus-bg": "#303030"
+    },
+    CRIMSON: {
+      "--bg-color": "#0d0d0d",
+      "--bg-elevated": "#1a1a1a",
+      "--card-bg": "#241a1a",
+      "--secondary-color": "#e53935",
+      "--secondary-variant": "#c62828",
+      "--on-secondary": "#ffffff",
+      "--text-color": "#ffffff",
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#ff5252",
+      "--focus-bg": "#3d1a1a"
+    },
+    OCEAN: {
+      "--bg-color": "#0d0d0f",
+      "--bg-elevated": "#1a1a1e",
+      "--card-bg": "#1a1f24",
+      "--secondary-color": "#1e88e5",
+      "--secondary-variant": "#1565c0",
+      "--on-secondary": "#ffffff",
+      "--text-color": "#ffffff",
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#42a5f5",
+      "--focus-bg": "#1a2d3d"
+    },
+    VIOLET: {
+      "--bg-color": "#0d0d0f",
+      "--bg-elevated": "#1a1a1e",
+      "--card-bg": "#1f1a24",
+      "--secondary-color": "#8e24aa",
+      "--secondary-variant": "#6a1b9a",
+      "--on-secondary": "#ffffff",
+      "--text-color": "#ffffff",
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#ab47bc",
+      "--focus-bg": "#2d1a3d"
+    },
+    EMERALD: {
+      "--bg-color": "#0d0d0d",
+      "--bg-elevated": "#1a1a1a",
+      "--card-bg": "#1a241a",
+      "--secondary-color": "#43a047",
+      "--secondary-variant": "#2e7d32",
+      "--on-secondary": "#ffffff",
+      "--text-color": "#ffffff",
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#66bb6a",
+      "--focus-bg": "#1a3d1e"
+    },
+    AMBER: {
+      "--bg-color": "#0f0d0d",
+      "--bg-elevated": "#1e1a1a",
+      "--card-bg": "#24201a",
+      "--secondary-color": "#fb8c00",
+      "--secondary-variant": "#ef6c00",
+      "--on-secondary": "#ffffff",
+      "--text-color": "#ffffff",
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#ffa726",
+      "--focus-bg": "#3d2d1a"
+    },
+    ROSE: {
+      "--bg-color": "#0d0d0d",
+      "--bg-elevated": "#1a1a1a",
+      "--card-bg": "#241a1f",
+      "--secondary-color": "#d81b60",
+      "--secondary-variant": "#c2185b",
+      "--on-secondary": "#ffffff",
+      "--text-color": "#ffffff",
+      "--text-secondary": "#b3b3b3",
+      "--text-tertiary": "#808080",
+      "--border-color": "#333333",
+      "--focus-color": "#ec407a",
+      "--focus-bg": "#3d1a2d"
+    }
+  };
+  var ThemeColors = {
+    dark: palettes.WHITE,
+    palettes,
+    getPalette(themeName = "WHITE") {
+      return palettes[String(themeName || "WHITE").toUpperCase()] || palettes.WHITE;
     }
   };
 
   // js/ui/theme/themeManager.js
+  var FONT_STACKS = {
+    INTER: '"Inter", "Segoe UI", Arial, sans-serif',
+    DM_SANS: '"DM Sans", "Segoe UI", Arial, sans-serif',
+    OPEN_SANS: '"Open Sans", "Segoe UI", Arial, sans-serif'
+  };
   var ThemeManager = {
     apply() {
       const theme = ThemeStore.get();
-      const colors = ThemeColors[theme.mode] || ThemeColors.dark;
+      const colors = ThemeColors.getPalette(theme.themeName);
       Object.entries(colors).forEach(([key, value]) => {
         document.documentElement.style.setProperty(key, value);
       });
-      document.documentElement.style.setProperty("--focus-color", "#f5f8fc");
+      document.documentElement.style.setProperty(
+        "--app-font-family",
+        FONT_STACKS[String(theme.fontFamily || "INTER").toUpperCase()] || FONT_STACKS.INTER
+      );
     }
   };
 
-  // js/ui/screens/settings/themeSettings.js
-  var ThemeSettings = {
-    getItems() {
-      const theme = ThemeStore.get();
-      const setAccent = (accentColor) => {
-        ThemeStore.set({ accentColor });
-        ThemeManager.apply();
-      };
-      return [
-        {
-          id: "theme_apply_dark",
-          label: "Apply Dark Theme",
-          description: `Current accent: ${theme.accentColor}`,
-          action: () => {
-            ThemeStore.set({ mode: "dark" });
-            ThemeManager.apply();
-          }
-        },
-        {
-          id: "theme_accent_white",
-          label: "Accent White",
-          description: "Android default focus style",
-          action: () => setAccent("#f5f8fc")
-        },
-        {
-          id: "theme_accent_crimson",
-          label: "Accent Crimson",
-          description: "High contrast warm accent",
-          action: () => setAccent("#ff4d4f")
-        },
-        {
-          id: "theme_accent_ocean",
-          label: "Accent Ocean",
-          description: "Blue accent",
-          action: () => setAccent("#42a5f5")
-        },
-        {
-          id: "theme_accent_violet",
-          label: "Accent Violet",
-          description: "Purple accent",
-          action: () => setAccent("#ba68c8")
-        },
-        {
-          id: "theme_accent_emerald",
-          label: "Accent Emerald",
-          description: "Green accent",
-          action: () => setAccent("#66bb6a")
-        },
-        {
-          id: "theme_accent_amber",
-          label: "Accent Amber",
-          description: "Amber accent",
-          action: () => setAccent("#ffca28")
-        }
-      ];
-    }
+  // js/data/local/mdbListSettingsStore.js
+  var KEY8 = "mdbListSettings";
+  var DEFAULTS5 = {
+    enabled: false,
+    apiKey: ""
   };
-
-  // js/data/local/playerSettingsStore.js
-  var KEY7 = "playerSettings";
-  var DEFAULTS4 = {
-    autoplayNextEpisode: true,
-    subtitlesEnabled: true,
-    subtitleLanguage: "it",
-    preferredQuality: "auto"
-  };
-  var PlayerSettingsStore = {
+  var MdbListSettingsStore = {
     get() {
       return {
-        ...DEFAULTS4,
-        ...LocalStore.get(KEY7, {}) || {}
+        ...DEFAULTS5,
+        ...LocalStore.get(KEY8, {}) || {}
       };
     },
     set(partial) {
-      LocalStore.set(KEY7, { ...this.get(), ...partial || {} });
+      LocalStore.set(KEY8, { ...this.get(), ...partial || {} });
     }
   };
 
-  // js/ui/screens/settings/playbackSettings.js
-  var PlaybackSettings = {
-    getItems() {
-      const settings = PlayerSettingsStore.get();
-      const quality = String(settings.preferredQuality || "auto");
-      const qualityLabel = quality === "2160p" ? "2160p" : quality === "1080p" ? "1080p" : quality === "720p" ? "720p" : "Auto";
-      return [
-        {
-          id: "playback_toggle_autoplay",
-          label: `Autoplay Next: ${settings.autoplayNextEpisode ? "ON" : "OFF"}`,
-          description: "Toggle automatic next episode",
-          action: () => {
-            PlayerSettingsStore.set({
-              autoplayNextEpisode: !PlayerSettingsStore.get().autoplayNextEpisode
-            });
-          }
-        },
-        {
-          id: "playback_toggle_subtitles",
-          label: `Subtitles: ${settings.subtitlesEnabled ? "ON" : "OFF"}`,
-          description: "Toggle subtitles by default",
-          action: () => {
-            PlayerSettingsStore.set({
-              subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled
-            });
-          }
-        },
-        {
-          id: "playback_quality_cycle",
-          label: `Quality target: ${qualityLabel}`,
-          description: "Cycle Auto -> 2160p -> 1080p -> 720p",
-          action: () => {
-            const current = String(PlayerSettingsStore.get().preferredQuality || "auto");
-            const next = current === "auto" ? "2160p" : current === "2160p" ? "1080p" : current === "1080p" ? "720p" : "auto";
-            PlayerSettingsStore.set({ preferredQuality: next });
-          }
-        }
-      ];
+  // js/data/local/animeSkipSettingsStore.js
+  var KEY9 = "animeSkipSettings";
+  var DEFAULTS6 = {
+    enabled: false,
+    clientId: ""
+  };
+  var AnimeSkipSettingsStore = {
+    get() {
+      return {
+        ...DEFAULTS6,
+        ...LocalStore.get(KEY9, {}) || {}
+      };
+    },
+    set(partial) {
+      LocalStore.set(KEY9, { ...this.get(), ...partial || {} });
     }
   };
 
   // js/ui/screens/settings/settingsScreen.js
   var ROTATED_DPAD_KEY2 = "rotatedDpadMapping";
   var STRICT_DPAD_GRID_KEY2 = "strictDpadGridNavigation";
+  var SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
+  var SETTINGS_VERSION_LABEL = "0.1.0-web";
+  var PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
+  var SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
+  var THEME_OPTIONS = [
+    { id: "WHITE", label: "White", color: "#f5f5f5" },
+    { id: "CRIMSON", label: "Crimson", color: "#e53935" },
+    { id: "OCEAN", label: "Ocean", color: "#1e88e5" },
+    { id: "VIOLET", label: "Violet", color: "#8e24aa" },
+    { id: "EMERALD", label: "Emerald", color: "#43a047" },
+    { id: "AMBER", label: "Amber", color: "#fb8c00" },
+    { id: "ROSE", label: "Rose", color: "#d81b60" }
+  ];
+  var FONT_OPTIONS = [
+    { id: "INTER", label: "Inter" },
+    { id: "DM_SANS", label: "DM Sans" },
+    { id: "OPEN_SANS", label: "Open Sans" }
+  ];
+  var LANGUAGE_OPTIONS = [
+    { id: null, label: "System default" },
+    { id: "en", label: "English" },
+    { id: "it", label: "Italiano" },
+    { id: "es", label: "Espanol" }
+  ];
+  var HOME_LAYOUT_OPTIONS = [
+    { id: "modern", label: "Modern", caption: "Floating rows" },
+    { id: "grid", label: "Grid", caption: "Dense browse" },
+    { id: "classic", label: "Classic", caption: "Hero first" }
+  ];
   var SECTION_META = [
-    { id: "account", label: "Account", subtitle: "Account and sync status." },
+    { id: "account", label: "Account", subtitle: "Manage login, sync, and device link status." },
     { id: "profiles", label: "Profiles", subtitle: "Manage user profiles for this account." },
-    { id: "appearance", label: "Appearance", subtitle: "Choose theme and visual preferences." },
-    { id: "layout", label: "Layout", subtitle: "Home layout and navigation behavior." },
-    { id: "plugins", label: "Plugins", subtitle: "Manage repositories and plugin runtime." },
-    { id: "integration", label: "Integration", subtitle: "Cloud sync and metadata integration." },
-    { id: "playback", label: "Playback", subtitle: "Video, audio, and subtitle defaults." },
-    { id: "trakt", label: "Trakt", subtitle: "Trakt integration status." },
-    { id: "about", label: "About", subtitle: "App information and links." }
+    { id: "appearance", label: "Appearance", subtitle: "Choose your color theme, font and language" },
+    { id: "layout", label: "Layout", subtitle: "Adjust home layout, content visibility, and poster behavior" },
+    { id: "plugins", label: "Plugins", subtitle: "Manage repositories, providers, and plugin states." },
+    { id: "integration", label: "Integration", subtitle: "Choose TMDB or MDBList" },
+    { id: "playback", label: "Playback", subtitle: "Configure video playback and subtitle options" },
+    { id: "trakt", label: "Trakt", subtitle: "Manage Trakt authentication and sync preferences." },
+    { id: "about", label: "About", subtitle: "App information, credits, and legal links" }
   ];
-  var RAIL_ITEMS = [
-    { id: "home", label: "Home", action: () => Router.navigate("home") },
-    { id: "search", label: "Search", action: () => Router.navigate("search") },
-    { id: "library", label: "Library", action: () => Router.navigate("library") },
-    { id: "plugin", label: "Addons", action: () => Router.navigate("plugin") },
-    { id: "settings", label: "Settings", action: () => {
-    } }
-  ];
-  function clamp2(value, min, max) {
+  var SECTION_ICONS = {
+    account: "person",
+    profiles: "people",
+    appearance: "palette",
+    layout: "grid_view",
+    plugins: "build",
+    integration: "link",
+    playback: "settings",
+    trakt: "trakt",
+    about: "info"
+  };
+  var ROW_ICONS = {
+    external: '<path d="M14 3h7v7h-2V6.41l-9.29 9.3-1.42-1.42 9.3-9.29H14z"></path><path d="M5 5h7v2H7v10h10v-5h2v7H5z"></path>',
+    chevron: '<path d="m9 6 6 6-6 6"></path>',
+    expand: '<path d="m7 10 5 5 5-5"></path>',
+    qr: '<path d="M3 3h7v7H3zm2 2v3h3V5zm6-2h2v2h-2zm3 0h7v7h-7zm2 2v3h3V5zM3 14h7v7H3zm2 2v3h3v-3zm8-1h2v2h-2zm2 2h2v2h-2zm-4 0h2v2h-2zm8-3h2v2h-2zm-6 6h2v2h-2zm3-3h5v5h-5zm2 2v1h1v-1z"></path>',
+    phone: '<path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h10V5zm4 15h2v1h-2z"></path>',
+    plus: '<path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"></path>',
+    back: '<path d="m15 6-6 6 6 6"></path>',
+    check: '<path d="m5 13 4 4L19 7"></path>',
+    refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4"></path><path d="M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"></path>',
+    trash: '<path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12h10l1-12"></path><path d="M9 7V4h6v3"></path>'
+  };
+  function clamp3(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function railIconPath(actionId) {
-    if (actionId === "home") return "assets/icons/sidebar_home.svg";
-    if (actionId === "search") return "assets/icons/sidebar_search.svg";
-    if (actionId === "library") return "assets/icons/sidebar_library.svg";
-    if (actionId === "plugin") return "assets/icons/sidebar_plugin.svg";
-    return "assets/icons/sidebar_settings.svg";
+  function escapeHtml7(value) {
+    return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function iconSvg(path, className = "settings-inline-icon", viewBox = "0 0 24 24") {
+    return `<svg class="${className}" viewBox="${viewBox}" aria-hidden="true" focusable="false">${path}</svg>`;
+  }
+  function renderSectionNavIcon(sectionId) {
+    if (sectionId === "trakt") {
+      return '<img class="settings-nav-icon settings-nav-icon-image" src="assets/icons/trakt_tv_glyph.svg" alt="" aria-hidden="true" />';
+    }
+    const iconName = SECTION_ICONS[sectionId] || "settings";
+    return `<span class="settings-nav-icon settings-nav-icon-material material-icons" aria-hidden="true">${iconName}</span>`;
+  }
+  function maskValue(value, fallback) {
+    const trimmed = String(value || "").trim();
+    if (!trimmed) {
+      return fallback;
+    }
+    if (trimmed.length <= 4) {
+      return "\u2022\u2022\u2022\u2022";
+    }
+    return `\u2022\u2022\u2022\u2022\u2022\u2022${trimmed.slice(-4)}`;
+  }
+  function labelForFont(fontFamily) {
+    var _a;
+    return ((_a = FONT_OPTIONS.find((item) => item.id === String(fontFamily || "").toUpperCase())) == null ? void 0 : _a.label) || "Inter";
+  }
+  function labelForLanguage(language) {
+    var _a;
+    return ((_a = LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language))) == null ? void 0 : _a.label) || "System default";
+  }
+  function qualityLabel(value) {
+    const normalized = String(value || "auto").toLowerCase();
+    if (normalized === "2160p") return "2160p";
+    if (normalized === "1080p") return "1080p";
+    if (normalized === "720p") return "720p";
+    return "Auto";
+  }
+  function playerLabel(value) {
+    const normalized = String(value || "auto").toLowerCase();
+    if (normalized === "native") return "Native";
+    if (normalized === "hls") return "HLS.js";
+    if (normalized === "dash") return "dash.js";
+    return "Auto";
+  }
+  function renderModeLabel(value) {
+    return String(value || "native").toLowerCase() === "html" ? "HTML overlay" : "Native";
+  }
+  function escapeSelector(value) {
+    return String(value != null ? value : "").replace(/["\\]/g, "\\$&");
+  }
+  function plannedSubtitle(subtitle) {
+    return subtitle ? `${subtitle} Coming soon.` : "Coming soon.";
+  }
+  function focusKeySelector(selector, key) {
+    return `${selector}[data-focus-key="${escapeSelector(String(key))}"]`;
+  }
+  function scrollIntoNearestView(node) {
+    if (!node || typeof node.scrollIntoView !== "function") {
+      return;
+    }
+    try {
+      node.scrollIntoView({
+        block: "nearest",
+        inline: "nearest"
+      });
+    } catch (_) {
+      node.scrollIntoView();
+    }
+  }
+  function decodeJwtPayload2(token) {
+    try {
+      const [, payload] = String(token || "").split(".");
+      if (!payload) {
+        return null;
+      }
+      const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+      return JSON.parse(atob(padded));
+    } catch (e) {
+      return null;
+    }
+  }
+  function getSessionEmail() {
+    var _a;
+    const payload = decodeJwtPayload2(SessionStore.accessToken);
+    return String((payload == null ? void 0 : payload.email) || ((_a = payload == null ? void 0 : payload.user_metadata) == null ? void 0 : _a.email) || "").trim() || null;
+  }
+  function getVisibleSections(model) {
+    const isPrimaryProfileActive = String((model == null ? void 0 : model.activeProfileId) || "1") === "1";
+    return SECTION_META.filter((section) => {
+      if (section.id === "account" || section.id === "profiles" || section.id === "trakt") {
+        return isPrimaryProfileActive;
+      }
+      return true;
+    });
+  }
+  function scrollSettingsRailItem(node) {
+    var _a;
+    const rail = (_a = node == null ? void 0 : node.closest) == null ? void 0 : _a.call(node, ".settings-sidebar");
+    if (!rail || !node) {
+      return;
+    }
+    const clientHeight = rail.clientHeight || 0;
+    const maxScroll = Math.max(0, rail.scrollHeight - clientHeight);
+    if (!clientHeight || maxScroll <= 0) {
+      return;
+    }
+    const itemTop = node.offsetTop;
+    const itemHeight = node.offsetHeight || 0;
+    const targetCenter = clientHeight * 0.42;
+    const desiredTop = itemTop - (targetCenter - itemHeight / 2);
+    const nextScrollTop = clamp3(desiredTop, 0, maxScroll);
+    if (Math.abs(rail.scrollTop - nextScrollTop) < 1) {
+      return;
+    }
+    if (typeof rail.scrollTo === "function") {
+      rail.scrollTo({
+        top: nextScrollTop,
+        behavior: "smooth"
+      });
+      return;
+    }
+    rail.scrollTop = nextScrollTop;
+  }
+  function addonKindsLabel(addon) {
+    const kinds = Array.isArray(addon == null ? void 0 : addon.types) ? addon.types.filter(Boolean) : [];
+    if (!kinds.length) {
+      return "Repository";
+    }
+    return kinds.map((entry) => String(entry)).join(", ");
+  }
+  function createDefaultExpandedState(sectionId) {
+    if (sectionId === "layout") {
+      return {
+        homeLayout: false,
+        homeContent: false,
+        detailPage: false,
+        focusedPoster: false
+      };
+    }
+    if (sectionId === "playback") {
+      return {
+        general: false,
+        stream: false,
+        audio: false,
+        subtitles: false
+      };
+    }
+    return {};
+  }
+  function normalizeExpandedState(sectionId, value) {
+    const defaults = createDefaultExpandedState(sectionId);
+    if (!value || typeof value !== "object") {
+      return { ...defaults };
+    }
+    const normalized = { ...defaults };
+    Object.keys(defaults).forEach((key) => {
+      normalized[key] = Boolean(value[key]);
+    });
+    return normalized;
+  }
+  function normalizeExpandedSections(value) {
+    const source = value && typeof value === "object" ? value : {};
+    return {
+      layout: normalizeExpandedState("layout", source.layout),
+      playback: normalizeExpandedState("playback", source.playback)
+    };
+  }
+  function readSettingsUiState() {
+    const state = LocalStore.get(SETTINGS_UI_STATE_KEY, null);
+    return {
+      activeSection: typeof (state == null ? void 0 : state.activeSection) === "string" ? state.activeSection : null,
+      navIndex: Number.isFinite(state == null ? void 0 : state.navIndex) ? state.navIndex : null,
+      contentFocusKey: typeof (state == null ? void 0 : state.contentFocusKey) === "string" ? state.contentFocusKey : null,
+      integrationView: typeof (state == null ? void 0 : state.integrationView) === "string" ? state.integrationView : "hub",
+      expandedSections: normalizeExpandedSections(state == null ? void 0 : state.expandedSections)
+    };
   }
   var SettingsScreen = {
+    ensureShell() {
+      var _a, _b;
+      if ((_b = (_a = this.container) == null ? void 0 : _a.querySelector) == null ? void 0 : _b.call(_a, ".settings-shell")) {
+        return;
+      }
+      this.container.innerHTML = `
+      <div class="home-shell settings-shell">
+        <div class="settings-root-sidebar-slot" data-settings-root-sidebar></div>
+        <div class="settings-workspace">
+          <aside class="settings-sidebar" data-settings-nav></aside>
+          <section class="settings-content" data-settings-content></section>
+        </div>
+        <div data-settings-dialog></div>
+      </div>
+    `;
+    },
     async mount() {
       this.container = document.getElementById("settings");
       ScreenUtils.show(this.container);
-      this.activeSection = this.activeSection || "account";
-      this.focusZone = this.focusZone || "nav";
-      this.railIndex = Number.isFinite(this.railIndex) ? this.railIndex : RAIL_ITEMS.findIndex((item) => item.id === "settings");
-      if (this.railIndex < 0) {
-        this.railIndex = 0;
-      }
-      this.navIndex = Number.isFinite(this.navIndex) ? this.navIndex : SECTION_META.findIndex((s) => s.id === this.activeSection);
-      if (this.navIndex < 0) {
-        this.navIndex = 0;
-        this.activeSection = SECTION_META[0].id;
-      }
-      this.panelIndex = Number.isFinite(this.panelIndex) ? this.panelIndex : 0;
+      this.settingsRouteEnterPending = true;
+      this.sidebarProfile = await getSidebarProfileState();
+      const persistedUiState = readSettingsUiState();
+      this.activeSection = persistedUiState.activeSection || this.activeSection || null;
+      this.focusZone = "nav";
+      this.sidebarFocusIndex = Number.isFinite(this.sidebarFocusIndex) ? this.sidebarFocusIndex : 0;
+      this.navIndex = Number.isFinite(persistedUiState.navIndex) ? persistedUiState.navIndex : Number.isFinite(this.navIndex) ? this.navIndex : SECTION_META.findIndex((section) => section.id === this.activeSection);
+      this.contentFocusKey = persistedUiState.contentFocusKey || this.contentFocusKey || null;
+      this.pluginDraft = this.pluginDraft || "";
+      this.integrationView = persistedUiState.integrationView || this.integrationView || "hub";
+      this.expandedSections = normalizeExpandedSections(persistedUiState.expandedSections || this.expandedSections);
+      this.optionDialog = this.optionDialog || null;
+      this.dialogFocusIndex = Number.isFinite(this.dialogFocusIndex) ? this.dialogFocusIndex : 0;
+      this.sidebarExpanded = false;
+      this.pillIconOnly = false;
       await this.render();
+    },
+    ensureExpandedState(sectionId) {
+      this.expandedSections[sectionId] = normalizeExpandedState(sectionId, this.expandedSections[sectionId]);
+    },
+    persistUiState() {
+      LocalStore.set(SETTINGS_UI_STATE_KEY, {
+        activeSection: this.activeSection || null,
+        navIndex: Number.isFinite(this.navIndex) ? this.navIndex : null,
+        contentFocusKey: this.contentFocusKey || null,
+        integrationView: this.integrationView || "hub",
+        expandedSections: normalizeExpandedSections(this.expandedSections)
+      });
+    },
+    setActiveSection(sectionId) {
+      this.activeSection = sectionId || null;
+      this.persistUiState();
+    },
+    toggleExpandedSection(sectionId, groupId) {
+      this.ensureExpandedState(sectionId);
+      this.expandedSections[sectionId][groupId] = !Boolean(this.expandedSections[sectionId][groupId]);
+      this.persistUiState();
+    },
+    registerAction(focusKey, action) {
+      this.actionMap.set(focusKey, action);
+      return `data-focus-key="${escapeHtml7(focusKey)}"`;
     },
     async collectModel() {
       const addons = await addonRepository.getInstalledAddons();
       const profiles = await ProfileManager.getProfiles();
-      const tmdbSettings = TmdbSettingsStore.get();
-      const rotatedDpad = Boolean(LocalStore.get(ROTATED_DPAD_KEY2, true));
-      const strictDpadGrid = Boolean(LocalStore.get(STRICT_DPAD_GRID_KEY2, true));
-      const themeItems = ThemeSettings.getItems();
-      const playbackItems = PlaybackSettings.getItems();
+      const activeProfileId3 = ProfileManager.getActiveProfileId();
+      const pluginSources = PluginManager.listPluginSources();
       return {
         addons,
         profiles,
-        tmdbSettings,
-        rotatedDpad,
-        strictDpadGrid,
-        themeItems,
-        playbackItems,
+        activeProfileId: activeProfileId3,
+        accountEmail: getSessionEmail(),
+        pluginSources,
+        pluginsEnabled: PluginManager.pluginsEnabled,
+        theme: ThemeStore.get(),
+        player: PlayerSettingsStore.get(),
+        layout: LayoutPreferences.get(),
+        tmdb: TmdbSettingsStore.get(),
+        mdbList: MdbListSettingsStore.get(),
+        animeSkip: AnimeSkipSettingsStore.get(),
+        rotatedDpad: Boolean(LocalStore.get(ROTATED_DPAD_KEY2, true)),
+        strictDpadGrid: Boolean(LocalStore.get(STRICT_DPAD_GRID_KEY2, true)),
         authState: AuthManager.getAuthState()
       };
     },
-    buildSectionItems(sectionId, model) {
-      const items = [];
-      const addItem = (label, description, action) => {
-        const id = `action_${Math.random().toString(36).slice(2, 9)}`;
-        this.actionMap.set(id, action);
-        items.push({ id, label, description });
+    renderNav() {
+      return this.visibleSections.map((item, index) => `
+      <button class="settings-nav-item focusable${this.activeSection === item.id ? " selected" : ""}"
+              data-zone="nav"
+              data-nav-index="${index}"
+              data-focus-key="nav:${item.id}"
+              data-section="${item.id}">
+        <span class="settings-nav-leading">
+          ${renderSectionNavIcon(item.id)}
+          <span class="settings-nav-label">${escapeHtml7(item.label)}</span>
+        </span>
+        ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
+      </button>
+    `).join("");
+    },
+    renderSectionHeader(section) {
+      return `
+      <header class="settings-content-header">
+        <h1 class="settings-title">${escapeHtml7(section.label)}</h1>
+        <p class="settings-subtitle">${escapeHtml7(section.subtitle)}</p>
+      </header>
+    `;
+    },
+    renderActionRow({
+      focusKey,
+      title,
+      subtitle = "",
+      value = "",
+      icon = "chevron",
+      external = false,
+      classes = "",
+      disabled = false,
+      planned = false
+    }) {
+      const inert = disabled || planned;
+      const trailing = external ? "external" : icon;
+      const tailContent = [
+        planned ? `<span class="settings-row-badge">Soon</span>` : "",
+        value ? `<span class="settings-row-value">${escapeHtml7(value)}</span>` : "",
+        trailing ? iconSvg(ROW_ICONS[trailing], `settings-row-icon${external ? " is-external" : ""}`) : ""
+      ].filter(Boolean).join("");
+      return `
+      <button class="settings-action-row settings-content-focusable focusable${classes ? ` ${classes}` : ""}${inert ? " is-disabled" : ""}${planned ? " is-planned" : ""}"
+              data-zone="content"
+              ${this.registerAction(focusKey, inert ? () => {
+      } : this.actionMap.get(focusKey))}
+              data-role="action">
+        <span class="settings-row-copy">
+          <span class="settings-row-title">${escapeHtml7(title)}</span>
+          ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
+        </span>
+        ${tailContent ? `<span class="settings-row-tail">${tailContent}</span>` : ""}
+      </button>
+    `;
+    },
+    renderToggleRow({ focusKey, title, subtitle = "", checked = false, disabled = false, planned = false }) {
+      const inert = disabled || planned;
+      return `
+      <button class="settings-action-row settings-toggle-row settings-content-focusable focusable${inert ? " is-disabled" : ""}${planned ? " is-planned" : ""}"
+              data-zone="content"
+              ${this.registerAction(focusKey, inert ? () => {
+      } : this.actionMap.get(focusKey))}
+              data-role="toggle">
+        <span class="settings-row-copy">
+          <span class="settings-row-title">${escapeHtml7(title)}</span>
+          ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
+        </span>
+        <span class="settings-row-tail">
+          ${planned ? `<span class="settings-row-badge">Soon</span>` : ""}
+          <span class="settings-toggle-pill${checked ? " is-checked" : ""}">
+            <span class="settings-toggle-thumb"></span>
+          </span>
+        </span>
+      </button>
+    `;
+    },
+    renderThemeCard(theme, selected, focusKey) {
+      const selectedClass = selected ? " is-selected" : "";
+      return `
+      <button class="settings-theme-card settings-content-focusable focusable${selectedClass}"
+              data-zone="content"
+              ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
+        <span class="settings-theme-swatch-wrap">
+          <span class="settings-theme-swatch" style="background:${escapeHtml7(theme.color)};">
+            ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
+          </span>
+        </span>
+        <span class="settings-theme-name">${escapeHtml7(theme.label)}</span>
+        <span class="settings-theme-underline" style="background:${escapeHtml7(theme.color)};"></span>
+      </button>
+    `;
+    },
+    renderLayoutCard(option, selected, focusKey) {
+      return `
+      <button class="settings-layout-card settings-content-focusable focusable${selected ? " is-selected" : ""}"
+              data-zone="content"
+              ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
+        <span class="settings-layout-preview settings-layout-preview-${escapeHtml7(option.id)}"></span>
+        <span class="settings-layout-name">${escapeHtml7(option.label)}</span>
+        <span class="settings-layout-caption">${escapeHtml7(option.caption)}</span>
+      </button>
+    `;
+    },
+    renderPluginIconButton({ focusKey, icon, label, destructive = false, disabled = false, planned = false }) {
+      const inert = disabled || planned;
+      return `
+      <button class="settings-plugin-icon-button settings-content-focusable focusable${inert ? " is-disabled" : ""}${destructive ? " is-destructive" : ""}${planned ? " is-planned" : ""}"
+              data-zone="content"
+              aria-label="${escapeHtml7(label)}"
+              title="${escapeHtml7(label)}"
+              ${this.registerAction(focusKey, inert ? () => {
+      } : this.actionMap.get(focusKey))}>
+        ${planned ? '<span class="settings-plugin-icon-badge">Soon</span>' : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
+      </button>
+    `;
+    },
+    renderPluginRepositoryCard(addon, index) {
+      const streamResourceCount = Array.isArray(addon.resources) ? addon.resources.filter((resource) => (resource == null ? void 0 : resource.name) === "stream").length : 0;
+      return `
+      <article class="settings-plugin-repo-card">
+        <div class="settings-plugin-repo-copy">
+          <div class="settings-plugin-repo-title">${escapeHtml7(addon.displayName || addon.name || "Repository")}</div>
+          <div class="settings-plugin-repo-meta">
+            ${escapeHtml7(`${streamResourceCount} stream resource${streamResourceCount === 1 ? "" : "s"} \xB7 v${addon.version || "0.0.0"}`)}
+          </div>
+          <div class="settings-plugin-repo-url">${escapeHtml7(addon.baseUrl || addon.description || addonKindsLabel(addon))}</div>
+        </div>
+        <div class="settings-plugin-repo-actions">
+          ${this.renderPluginIconButton({
+        focusKey: `plugins:refresh:${index}`,
+        icon: "refresh",
+        label: "Refresh repository"
+      })}
+          ${this.renderPluginIconButton({
+        focusKey: `plugins:remove:${index}`,
+        icon: "trash",
+        label: "Remove repository",
+        destructive: true
+      })}
+        </div>
+      </article>
+    `;
+    },
+    openOptionDialog({ title, options, selectedId, onSelect, returnFocusKey }) {
+      this.optionDialog = {
+        title,
+        options: Array.isArray(options) ? options : [],
+        selectedId: selectedId != null ? selectedId : null,
+        onSelect,
+        returnFocusKey
       };
-      if (sectionId === "account") {
-        const signedIn = model.authState === "authenticated";
-        addItem(
-          signedIn ? "Signed in" : "Not signed in",
-          signedIn ? "Account linked on this TV." : "Open QR login to connect account.",
-          () => Router.navigate(signedIn ? "account" : "authQrSignIn")
-        );
-        addItem("Open account screen", "View sync overview and linked status", () => Router.navigate("account"));
-        if (signedIn) {
-          addItem("Sign out", "Disconnect account from this TV", async () => {
-            await AuthManager.signOut();
-            Router.navigate("authQrSignIn");
-          });
+      const selectedIndex = this.optionDialog.options.findIndex((option) => String(option.id) === String(selectedId));
+      this.dialogFocusIndex = clamp3(selectedIndex >= 0 ? selectedIndex : 0, 0, Math.max(0, this.optionDialog.options.length - 1));
+      this.focusZone = "dialog";
+    },
+    closeOptionDialog() {
+      if (!this.optionDialog) {
+        return;
+      }
+      this.contentFocusKey = this.optionDialog.returnFocusKey || this.contentFocusKey;
+      this.optionDialog = null;
+      this.focusZone = "content";
+    },
+    renderOptionDialog() {
+      if (!this.optionDialog) {
+        return "";
+      }
+      return `
+      <div class="settings-dialog-backdrop">
+        <div class="settings-dialog">
+          <div class="settings-dialog-title">${escapeHtml7(this.optionDialog.title || "Select option")}</div>
+          <div class="settings-dialog-list">
+            ${this.optionDialog.options.map((option, index) => `
+              <button class="settings-dialog-option settings-content-focusable focusable${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
+                      data-zone="dialog"
+                      data-dialog-index="${index}"
+                      data-dialog-option-id="${escapeHtml7(option.id)}">
+                <span class="settings-dialog-option-label">${escapeHtml7(option.label)}</span>
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      </div>
+    `;
+    },
+    renderCollapsibleRow({
+      focusKey,
+      title,
+      subtitle,
+      expanded,
+      bodyHtml = "",
+      classes = ""
+    }) {
+      return `
+      <div class="settings-collapsible${classes ? ` ${classes}` : ""}${expanded ? " is-open" : ""}">
+        <button class="settings-action-row settings-content-focusable focusable${expanded ? " is-open" : ""}"
+                data-zone="content"
+                ${this.registerAction(focusKey, this.actionMap.get(focusKey))}
+                data-role="section-toggle">
+          <span class="settings-row-copy">
+            <span class="settings-row-title">${escapeHtml7(title)}</span>
+            ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
+          </span>
+          <span class="settings-row-tail">
+            <span class="settings-row-value">${expanded ? "Open" : "Closed"}</span>
+            ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
+          </span>
+        </button>
+        ${expanded ? `<div class="settings-collapsible-body">${bodyHtml}</div>` : ""}
+      </div>
+    `;
+    },
+    renderAccountSection(model) {
+      const signedIn = model.authState === "authenticated";
+      this.actionMap.set("account:signin", () => Router.navigate("authQrSignIn"));
+      this.actionMap.set("account:signout", async () => {
+        await AuthManager.signOut();
+        Router.navigate("authQrSignIn");
+      });
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "account"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${signedIn ? `<div class="settings-account-status">
+                <span class="settings-account-status-label">Signed in</span>
+                <strong class="settings-account-status-value">${escapeHtml7(model.accountEmail || "Account linked on this TV")}</strong>
+              </div>` : `<p class="settings-account-note">Sync your library and preferences across devices.</p>
+              ${this.renderActionRow({
+        focusKey: "account:signin",
+        title: "Sign in with QR",
+        subtitle: "Open QR sign-in to connect this device."
+      })}`}
+          ${signedIn ? this.renderActionRow({
+        focusKey: "account:signout",
+        title: "Sign out",
+        subtitle: "Disconnect this TV from your account."
+      }) : ""}
+        </div>
+      </div>
+    `;
+    },
+    renderProfilesSection(model) {
+      this.actionMap.set("profiles:manage", () => Router.navigate("profileSelection", {
+        mode: "management",
+        returnRoute: "settings"
+      }));
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "profiles"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "profiles:manage",
+        title: "Manage Profiles",
+        subtitle: "",
+        icon: null,
+        classes: "settings-profile-manage-row"
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderAppearanceSection(model) {
+      THEME_OPTIONS.forEach((theme) => {
+        this.actionMap.set(`appearance:theme:${theme.id}`, () => {
+          ThemeStore.set({ themeName: theme.id });
+          ThemeManager.apply();
+        });
+      });
+      this.actionMap.set("appearance:font", () => {
+        this.openOptionDialog({
+          title: "Select font",
+          options: FONT_OPTIONS,
+          selectedId: model.theme.fontFamily,
+          returnFocusKey: "appearance:font",
+          onSelect: (option) => {
+            ThemeStore.set({ fontFamily: option.id });
+            ThemeManager.apply();
+          }
+        });
+      });
+      this.actionMap.set("appearance:language", () => {
+        this.openOptionDialog({
+          title: "Select language",
+          options: LANGUAGE_OPTIONS,
+          selectedId: model.theme.language,
+          returnFocusKey: "appearance:language",
+          onSelect: (option) => {
+            ThemeStore.set({ language: option.id });
+            ThemeManager.apply();
+          }
+        });
+      });
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "appearance"))}
+      <div class="settings-group-card settings-theme-grid-card">
+        <div class="settings-theme-grid">
+          ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
+        theme,
+        String(model.theme.themeName).toUpperCase() === theme.id,
+        `appearance:theme:${theme.id}`
+      )).join("")}
+        </div>
+      </div>
+      <div class="settings-group-card">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "appearance:font",
+        title: "App Font",
+        subtitle: "Choose your preferred font",
+        value: labelForFont(model.theme.fontFamily)
+      })}
+        </div>
+      </div>
+      <div class="settings-group-card">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "appearance:language",
+        title: "App Language",
+        subtitle: plannedSubtitle("Override system language"),
+        value: labelForLanguage(model.theme.language),
+        planned: true
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderLayoutSection(model) {
+      var _a;
+      this.ensureExpandedState("layout");
+      const expanded = this.expandedSections.layout;
+      this.actionMap.set("layout:toggle:homeLayout", () => {
+        this.toggleExpandedSection("layout", "homeLayout");
+      });
+      this.actionMap.set("layout:toggle:homeContent", () => {
+        this.toggleExpandedSection("layout", "homeContent");
+      });
+      this.actionMap.set("layout:toggle:detailPage", () => {
+        this.toggleExpandedSection("layout", "detailPage");
+      });
+      this.actionMap.set("layout:toggle:focusedPoster", () => {
+        this.toggleExpandedSection("layout", "focusedPoster");
+      });
+      HOME_LAYOUT_OPTIONS.forEach((option) => {
+        this.actionMap.set(`layout:layout:${option.id}`, () => {
+          LayoutPreferences.set({ homeLayout: option.id });
+        });
+      });
+      this.actionMap.set("layout:collapseSidebar", () => {
+        LayoutPreferences.set({ collapseSidebar: !LayoutPreferences.get().collapseSidebar });
+      });
+      this.actionMap.set("layout:modernSidebar", () => {
+        LayoutPreferences.set({ modernSidebar: !LayoutPreferences.get().modernSidebar });
+      });
+      this.actionMap.set("layout:modernSidebarBlur", () => {
+        LayoutPreferences.set({ modernSidebarBlur: !LayoutPreferences.get().modernSidebarBlur });
+      });
+      this.actionMap.set("layout:heroSection", () => {
+        LayoutPreferences.set({ heroSectionEnabled: !LayoutPreferences.get().heroSectionEnabled });
+      });
+      this.actionMap.set("layout:searchDiscover", () => {
+        LayoutPreferences.set({ searchDiscoverEnabled: !LayoutPreferences.get().searchDiscoverEnabled });
+      });
+      this.actionMap.set("layout:hideUnreleased", () => {
+        LayoutPreferences.set({ hideUnreleasedContent: !LayoutPreferences.get().hideUnreleasedContent });
+      });
+      this.actionMap.set("layout:posterLabels", () => {
+        LayoutPreferences.set({ posterLabelsEnabled: !LayoutPreferences.get().posterLabelsEnabled });
+      });
+      this.actionMap.set("layout:addonName", () => {
+        LayoutPreferences.set({ catalogAddonNameEnabled: !LayoutPreferences.get().catalogAddonNameEnabled });
+      });
+      this.actionMap.set("layout:catalogType", () => {
+        LayoutPreferences.set({ catalogTypeSuffixEnabled: !LayoutPreferences.get().catalogTypeSuffixEnabled });
+      });
+      this.actionMap.set("layout:modernLandscapePosters", () => {
+        LayoutPreferences.set({ modernLandscapePostersEnabled: !LayoutPreferences.get().modernLandscapePostersEnabled });
+      });
+      this.actionMap.set("layout:focusedPosterExpand", () => {
+        LayoutPreferences.set({ focusedPosterBackdropExpandEnabled: !LayoutPreferences.get().focusedPosterBackdropExpandEnabled });
+      });
+      this.actionMap.set("layout:focusedPosterExpandDelay", () => {
+        var _a2;
+        const options = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => ({
+          id: String(value),
+          label: `${value}s`
+        }));
+        this.openOptionDialog({
+          title: "Backdrop Expand Delay",
+          options,
+          selectedId: String((_a2 = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a2 : 3),
+          returnFocusKey: "layout:focusedPosterExpandDelay",
+          onSelect: (option) => {
+            LayoutPreferences.set({ focusedPosterBackdropExpandDelaySeconds: Number(option.id || 0) || 0 });
+          }
+        });
+      });
+      this.actionMap.set("layout:focusedPosterTrailer", () => {
+        LayoutPreferences.set({ focusedPosterBackdropTrailerEnabled: !LayoutPreferences.get().focusedPosterBackdropTrailerEnabled });
+      });
+      this.actionMap.set("layout:focusedPosterTrailerMuted", () => {
+        LayoutPreferences.set({ focusedPosterBackdropTrailerMuted: !LayoutPreferences.get().focusedPosterBackdropTrailerMuted });
+      });
+      this.actionMap.set("layout:focusedPosterTrailerTarget", () => {
+        const options = [
+          { id: "hero_media", label: "Hero Media" },
+          { id: "expanded_card", label: "Expanded Card" }
+        ];
+        this.openOptionDialog({
+          title: "Modern Trailer Playback Location",
+          options,
+          selectedId: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media"),
+          returnFocusKey: "layout:focusedPosterTrailerTarget",
+          onSelect: (option) => {
+            LayoutPreferences.set({ focusedPosterBackdropTrailerPlaybackTarget: String(option.id || "hero_media") });
+          }
+        });
+      });
+      const selectedLayout = String(model.layout.homeLayout || "").toLowerCase();
+      const isModernLayout = selectedLayout === "modern";
+      const isModernLandscape = isModernLayout && Boolean(model.layout.modernLandscapePostersEnabled);
+      const showAutoplayRow = Boolean(model.layout.focusedPosterBackdropExpandEnabled) || isModernLandscape;
+      const homeLayoutBody = `
+      <div class="settings-stack">
+        <div class="settings-layout-grid">
+          ${HOME_LAYOUT_OPTIONS.map((option) => this.renderLayoutCard(
+        option,
+        selectedLayout === option.id,
+        `layout:layout:${option.id}`
+      )).join("")}
+        </div>
+        ${isModernLayout ? this.renderToggleRow({
+        focusKey: "layout:modernLandscapePosters",
+        title: "Landscape Posters",
+        subtitle: "Switch between portrait and landscape cards for Modern view.",
+        checked: Boolean(model.layout.modernLandscapePostersEnabled)
+      }) : ""}
+      </div>
+    `;
+      const homeContentBody = `
+      <div class="settings-stack">
+        ${!model.layout.modernSidebar ? this.renderToggleRow({
+        focusKey: "layout:collapseSidebar",
+        title: "Collapse Sidebar",
+        subtitle: "Hide sidebar by default; show when focused.",
+        checked: Boolean(model.layout.collapseSidebar)
+      }) : ""}
+        ${this.renderToggleRow({
+        focusKey: "layout:modernSidebar",
+        title: "Modern Sidebar",
+        subtitle: "Enable floating sidebar navigation.",
+        checked: Boolean(model.layout.modernSidebar)
+      })}
+        ${model.layout.modernSidebar ? this.renderToggleRow({
+        focusKey: "layout:modernSidebarBlur",
+        title: "Modern Sidebar Blur",
+        subtitle: "Toggle blur effect for modern sidebar surfaces.",
+        checked: Boolean(model.layout.modernSidebarBlur)
+      }) : ""}
+        ${this.renderToggleRow({
+        focusKey: "layout:heroSection",
+        title: "Show Hero Section",
+        subtitle: "Display hero carousel at top of home.",
+        checked: Boolean(model.layout.heroSectionEnabled)
+      })}
+        ${this.renderToggleRow({
+        focusKey: "layout:searchDiscover",
+        title: "Show Discover in Search",
+        subtitle: "Show browse section when search is empty.",
+        checked: Boolean(model.layout.searchDiscoverEnabled)
+      })}
+        ${!isModernLayout ? this.renderToggleRow({
+        focusKey: "layout:posterLabels",
+        title: "Show Poster Labels",
+        subtitle: "Show titles under posters in rows, grid, and see-all.",
+        checked: Boolean(model.layout.posterLabelsEnabled)
+      }) : ""}
+        ${!isModernLayout ? this.renderToggleRow({
+        focusKey: "layout:addonName",
+        title: "Show Addon Name",
+        subtitle: "Show source name under catalog titles.",
+        checked: Boolean(model.layout.catalogAddonNameEnabled)
+      }) : ""}
+        ${this.renderToggleRow({
+        focusKey: "layout:catalogType",
+        title: "Show Catalog Type",
+        subtitle: "Show type suffix next to catalog name (Movie/Series).",
+        checked: Boolean(model.layout.catalogTypeSuffixEnabled)
+      })}
+        ${this.renderToggleRow({
+        focusKey: "layout:hideUnreleased",
+        title: "Hide Unreleased Content",
+        subtitle: "Hide movies and shows that haven't been released yet.",
+        checked: Boolean(model.layout.hideUnreleasedContent)
+      })}
+      </div>
+    `;
+      const detailPageBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+        focusKey: "layout:detail:blurUnwatched",
+        title: "Blur Unwatched Episodes",
+        subtitle: "Blur episode thumbnails until watched to avoid spoilers.",
+        checked: false,
+        disabled: true
+      })}
+        ${this.renderToggleRow({
+        focusKey: "layout:detail:trailerButton",
+        title: "Show Trailer Button",
+        subtitle: "Show trailer button on detail page (only when trailer is available).",
+        checked: false,
+        disabled: true
+      })}
+        ${this.renderToggleRow({
+        focusKey: "layout:detail:preferExternalMeta",
+        title: "Prefer meta from external addon",
+        subtitle: "Use metadata from external addon instead of catalog addon.",
+        checked: false,
+        disabled: true
+      })}
+      </div>
+    `;
+      const focusedPosterBody = `
+      <div class="settings-stack">
+        ${!isModernLandscape ? this.renderToggleRow({
+        focusKey: "layout:focusedPosterExpand",
+        title: "Expand Focused Poster to Backdrop",
+        subtitle: "Expand focused poster after idle delay.",
+        checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
+      }) : ""}
+        ${!isModernLandscape && Boolean(model.layout.focusedPosterBackdropExpandEnabled) ? this.renderActionRow({
+        focusKey: "layout:focusedPosterExpandDelay",
+        title: "Backdrop Expand Delay",
+        subtitle: "How long to wait before expanding focused cards.",
+        value: `${Number((_a = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a : 3)}s`
+      }) : ""}
+        ${showAutoplayRow ? this.renderToggleRow({
+        focusKey: "layout:focusedPosterTrailer",
+        title: isModernLayout ? "Autoplay Trailer" : "Autoplay Trailer in Expanded Card",
+        subtitle: isModernLayout ? "Play trailer preview for focused content when available." : "Play trailer inside expanded backdrop when available.",
+        checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
+      }) : ""}
+        ${showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderToggleRow({
+        focusKey: "layout:focusedPosterTrailerMuted",
+        title: "Play Trailer Muted",
+        subtitle: isModernLayout ? "Mute trailer audio during autoplay preview." : "Mute trailer audio in expanded cards.",
+        checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
+      }) : ""}
+        ${isModernLayout && showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderActionRow({
+        focusKey: "layout:focusedPosterTrailerTarget",
+        title: "Modern Trailer Playback Location",
+        subtitle: "Choose where trailer preview plays in Modern Home.",
+        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? "Expanded Card" : "Hero Media"
+      }) : ""}
+      </div>
+    `;
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "layout"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${this.renderCollapsibleRow({
+        focusKey: "layout:toggle:homeLayout",
+        title: "Home Layout",
+        subtitle: "Choose structure and hero source.",
+        expanded: Boolean(expanded.homeLayout),
+        bodyHtml: homeLayoutBody
+      })}
+          ${this.renderCollapsibleRow({
+        focusKey: "layout:toggle:homeContent",
+        title: "Home Content",
+        subtitle: "Control what appears on home and search.",
+        expanded: Boolean(expanded.homeContent),
+        bodyHtml: homeContentBody
+      })}
+          ${this.renderCollapsibleRow({
+        focusKey: "layout:toggle:detailPage",
+        title: "Detail Page",
+        subtitle: "Settings for the detail and episode screens.",
+        expanded: Boolean(expanded.detailPage),
+        bodyHtml: detailPageBody
+      })}
+          ${this.renderCollapsibleRow({
+        focusKey: "layout:toggle:focusedPoster",
+        title: "Focused Poster",
+        subtitle: "Advanced behavior for focused poster cards.",
+        expanded: Boolean(expanded.focusedPoster),
+        bodyHtml: focusedPosterBody
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderPluginsSection(model) {
+      this.actionMap.set("plugins:editDraft", () => {
+        const value = window.prompt("Add repository URL", this.pluginDraft || "https://example.com/manifest.json");
+        if (value === null) {
+          return;
         }
-        return items;
-      }
-      if (sectionId === "profiles") {
-        model.profiles.forEach((profile) => {
-          addItem(
-            `${profile.name}${String(profile.id) === String(ProfileManager.getActiveProfileId()) ? " (Active)" : ""}`,
-            profile.isPrimary ? "Primary profile" : "Secondary profile",
-            async () => {
-              await ProfileManager.setActiveProfile(profile.id);
-              await ProfileSyncService.pull();
+        this.pluginDraft = String(value).trim();
+      });
+      this.actionMap.set("plugins:addDraft", async () => {
+        if (!String(this.pluginDraft || "").trim()) {
+          return;
+        }
+        await addonRepository.addAddon(this.pluginDraft);
+        this.pluginDraft = "";
+      });
+      this.actionMap.set("plugins:phone", () => {
+      });
+      model.addons.forEach((addon, index) => {
+        this.actionMap.set(`plugins:refresh:${index}`, async () => {
+          await addonRepository.refreshAddon(addon.baseUrl || "");
+        });
+        this.actionMap.set(`plugins:remove:${index}`, async () => {
+          await addonRepository.removeAddon(addon.baseUrl || "");
+        });
+      });
+      model.pluginSources.forEach((source) => {
+        this.actionMap.set(`plugins:provider:${source.id}`, () => {
+          PluginManager.setPluginSourceEnabled(source.id, !source.enabled);
+        });
+      });
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-plugin-builder">
+          <div class="settings-plugin-builder-title">Add repository</div>
+          <div class="settings-plugin-builder-row">
+            <button class="settings-plugin-input settings-content-focusable focusable"
+                    data-zone="content"
+                    ${this.registerAction("plugins:editDraft", this.actionMap.get("plugins:editDraft"))}>
+              ${escapeHtml7(this.pluginDraft || "https://example.com/manifest.json")}
+            </button>
+            <button class="settings-plugin-add settings-content-focusable focusable${this.pluginDraft ? "" : " is-disabled"}"
+                    data-zone="content"
+                    ${this.registerAction("plugins:addDraft", this.actionMap.get("plugins:addDraft"))}>
+              ${iconSvg(ROW_ICONS.plus, "settings-plugin-add-icon")}
+              <span>Add</span>
+            </button>
+          </div>
+        </div>
+
+        ${this.renderActionRow({
+        focusKey: "plugins:phone",
+        title: "Manage from phone",
+        subtitle: plannedSubtitle("Scan a QR code to add or remove repositories from your phone"),
+        classes: "settings-plugins-phone",
+        icon: "phone",
+        planned: true
+      })}
+
+        <div class="settings-repository-heading">Repositories (${model.addons.length})</div>
+
+        ${model.addons.length ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>` : `<div class="settings-empty-state">
+              <p>No repositories added yet.</p>
+              <p>Add a repository to get started.</p>
+            </div>`}
+
+        ${model.pluginSources.length ? `
+          <div class="settings-repository-heading settings-plugin-provider-heading">Providers (${model.pluginSources.length})</div>
+          <div class="settings-stack">
+            ${model.pluginSources.map((source) => this.renderToggleRow({
+        focusKey: `plugins:provider:${source.id}`,
+        title: source.name || "Provider",
+        subtitle: source.urlTemplate || "Custom provider template",
+        checked: Boolean(source.enabled)
+      })).join("")}
+            ${this.renderActionRow({
+        focusKey: "plugins:provider:test",
+        title: "Provider testing",
+        subtitle: plannedSubtitle("Run local provider tests and inspect results."),
+        planned: true
+      })}
+          </div>
+        ` : ""}
+      </div>
+    `;
+    },
+    renderIntegrationHub() {
+      this.actionMap.set("integration:hub:tmdb", () => {
+        this.integrationView = "tmdb";
+        this.contentFocusKey = "integration:back";
+      });
+      this.actionMap.set("integration:hub:mdblist", () => {
+        this.integrationView = "mdblist";
+        this.contentFocusKey = "integration:back";
+      });
+      this.actionMap.set("integration:hub:animeskip", () => {
+        this.integrationView = "animeskip";
+        this.contentFocusKey = "integration:back";
+      });
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "integration"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "integration:hub:tmdb",
+        title: "TMDB",
+        subtitle: "Metadata enrichment controls"
+      })}
+          ${this.renderActionRow({
+        focusKey: "integration:hub:mdblist",
+        title: "MDBList",
+        subtitle: "External ratings providers"
+      })}
+          ${this.renderActionRow({
+        focusKey: "integration:hub:animeskip",
+        title: "Anime-Skip",
+        subtitle: "Anime intro/outro skip timestamps"
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderIntegrationDetail(model, key) {
+      this.actionMap.set("integration:back", () => {
+        this.integrationView = "hub";
+        this.contentFocusKey = "integration:hub:tmdb";
+      });
+      if (key === "tmdb") {
+        this.actionMap.set("integration:tmdb:enabled", () => {
+          TmdbSettingsStore.set({ enabled: !TmdbSettingsStore.get().enabled });
+        });
+        this.actionMap.set("integration:tmdb:artwork", () => {
+          TmdbSettingsStore.set({ useArtwork: !TmdbSettingsStore.get().useArtwork });
+        });
+        this.actionMap.set("integration:tmdb:basic", () => {
+          TmdbSettingsStore.set({ useBasicInfo: !TmdbSettingsStore.get().useBasicInfo });
+        });
+        this.actionMap.set("integration:tmdb:details", () => {
+          TmdbSettingsStore.set({ useDetails: !TmdbSettingsStore.get().useDetails });
+        });
+        this.actionMap.set("integration:tmdb:language", () => {
+          const options = [
+            { id: "en-US", label: "English" },
+            { id: "it-IT", label: "Italian" },
+            { id: "es-ES", label: "Spanish" }
+          ];
+          this.openOptionDialog({
+            title: "Select TMDB language",
+            options,
+            selectedId: TmdbSettingsStore.get().language,
+            returnFocusKey: "integration:tmdb:language",
+            onSelect: (option) => {
+              TmdbSettingsStore.set({ language: option.id });
             }
-          );
+          });
         });
-        addItem("Open profile selection", "Go back to profile chooser", () => Router.navigate("profileSelection"));
-        return items;
-      }
-      if (sectionId === "appearance") {
-        model.themeItems.forEach((item) => addItem(item.label, item.description, item.action));
-        return items;
-      }
-      if (sectionId === "layout") {
-        addItem("Reset home catalog prefs", "Restore catalog order and visibility", () => {
-          HomeCatalogStore.reset();
-        });
-        addItem(
-          `Remote D-Pad mapping: ${model.rotatedDpad ? "Rotated" : "Standard"}`,
-          "Switch if arrows feel swapped on your TV",
-          () => {
-            LocalStore.set(ROTATED_DPAD_KEY2, !Boolean(LocalStore.get(ROTATED_DPAD_KEY2, true)));
-          }
-        );
-        addItem(
-          `Remote grid navigation: ${model.strictDpadGrid ? "Strict" : "Flexible"}`,
-          "Strict matches Android-style row/column navigation",
-          () => {
-            LocalStore.set(STRICT_DPAD_GRID_KEY2, !Boolean(LocalStore.get(STRICT_DPAD_GRID_KEY2, true)));
-          }
-        );
-        return items;
-      }
-      if (sectionId === "plugins") {
-        addItem("Open plugins manager", "Manage plugin runtime and repositories", () => Router.navigate("plugin"));
-        addItem("Sync pull plugins", "Download plugin repositories from cloud", () => PluginSyncService.pull());
-        addItem("Sync push plugins", "Upload local plugin repositories to cloud", () => PluginSyncService.push());
-        return items;
-      }
-      if (sectionId === "integration") {
-        addItem(
-          `TMDB enrichment: ${model.tmdbSettings.enabled ? "ON" : "OFF"}`,
-          "Enable TMDB metadata enrichment",
-          () => TmdbSettingsStore.set({ enabled: !TmdbSettingsStore.get().enabled })
-        );
-        addItem(
-          `TMDB artwork: ${model.tmdbSettings.useArtwork ? "ON" : "OFF"}`,
-          "Use poster/logo/backdrop from TMDB",
-          () => TmdbSettingsStore.set({ useArtwork: !TmdbSettingsStore.get().useArtwork })
-        );
-        addItem("Set TMDB API key", model.tmdbSettings.apiKey ? "TMDB key configured" : "No TMDB key configured", () => {
-          const value = window.prompt("Insert TMDB API key", TmdbSettingsStore.get().apiKey || "");
+        this.actionMap.set("integration:tmdb:api", () => {
+          const value = window.prompt("TMDB API key", TmdbSettingsStore.get().apiKey || "");
           if (value !== null) {
             TmdbSettingsStore.set({ apiKey: String(value).trim() });
           }
         });
-        addItem("Sync pull all", "Download profiles/plugins/addons/library/progress", async () => {
-          await ProfileSyncService.pull();
-          await PluginSyncService.pull();
-          await LibrarySyncService.pull();
-          await SavedLibrarySyncService.pull();
-          await WatchedItemsSyncService.pull();
-          await WatchProgressSyncService.pull();
-        });
-        addItem("Sync push all", "Upload profiles/plugins/addons/library/progress", async () => {
-          await ProfileSyncService.push();
-          await PluginSyncService.push();
-          await LibrarySyncService.push();
-          await SavedLibrarySyncService.push();
-          await WatchedItemsSyncService.push();
-          await WatchProgressSyncService.push();
-        });
-        return items;
-      }
-      if (sectionId === "playback") {
-        model.playbackItems.forEach((item) => addItem(item.label, item.description, item.action));
-        return items;
-      }
-      if (sectionId === "trakt") {
-        addItem("Open account", "Manage Trakt from account section", () => Router.navigate("account"));
-        return items;
-      }
-      if (sectionId === "about") {
-        addItem("Nuvio webOS build", "Full webOS mode (Android parity migration)", () => {
-        });
-        addItem("Privacy policy", "Open privacy page", () => {
-          var _a;
-          (_a = window.open) == null ? void 0 : _a.call(window, "https://nuvioapp.space/privacy", "_blank");
-        });
-        return items;
-      }
-      return items;
-    },
-    async render() {
-      this.model = await this.collectModel();
-      this.actionMap = /* @__PURE__ */ new Map();
-      const section = SECTION_META.find((item) => item.id === this.activeSection) || SECTION_META[0];
-      const panelItems = this.buildSectionItems(section.id, this.model);
-      this.panelIndex = clamp2(this.panelIndex, 0, Math.max(panelItems.length - 1, 0));
-      this.navIndex = clamp2(this.navIndex, 0, SECTION_META.length - 1);
-      const navHtml = SECTION_META.map((item, index) => `
-      <button class="settings-nav-item focusable${this.activeSection === item.id ? " selected" : ""}"
-              data-zone="nav"
-              data-nav-index="${index}"
-              data-section="${item.id}">
-        <span class="settings-nav-label">${item.label}</span>
-        <span class="settings-nav-chevron">\u203A</span>
-      </button>
-    `).join("");
-      const panelHtml = panelItems.length ? panelItems.map((item, index) => `
-          <button class="settings-panel-item focusable"
-                  data-zone="panel"
-                  data-panel-index="${index}"
-                  data-action-id="${item.id}">
-            <span class="settings-panel-title">${item.label}</span>
-            <span class="settings-panel-subtitle">${item.description || ""}</span>
-            <span class="settings-panel-chevron">\u203A</span>
-          </button>
-        `).join("") : `<div class="settings-panel-empty">No options in this section.</div>`;
-      const railHtml = RAIL_ITEMS.map((item, index) => `
-      <button class="settings-rail-item focusable${item.id === "settings" ? " selected" : ""}"
-              data-zone="rail"
-              data-rail-index="${index}"
-              data-rail-action="${item.id}">
-        <img class="settings-rail-icon" src="${railIconPath(item.id)}" alt="" aria-hidden="true" />
-      </button>
-    `).join("");
-      this.container.innerHTML = `
-      <div class="settings-shell">
-        <aside class="settings-rail">
-          ${railHtml}
-        </aside>
-        <aside class="settings-sidebar">
-          ${navHtml}
-        </aside>
-        <section class="settings-content">
-          <h2 class="settings-title">${section.label}</h2>
-          <p class="settings-subtitle">${section.subtitle}</p>
-          <div class="settings-panel">
-            ${panelHtml}
+        return `
+        ${this.renderSectionHeader({ label: "TMDB", subtitle: "Metadata enrichment controls" })}
+        <div class="settings-group-card settings-group-card-fill">
+          <div class="settings-stack">
+            ${this.renderActionRow({
+          focusKey: "integration:back",
+          title: "Back to Integrations",
+          subtitle: "Return to integration list",
+          icon: "back"
+        })}
+            ${this.renderToggleRow({
+          focusKey: "integration:tmdb:enabled",
+          title: "Enable TMDB",
+          subtitle: "Turn metadata enrichment on or off.",
+          checked: Boolean(model.tmdb.enabled)
+        })}
+            ${this.renderToggleRow({
+          focusKey: "integration:tmdb:artwork",
+          title: "Artwork",
+          subtitle: "Posters, logos, and backdrops from TMDB.",
+          checked: Boolean(model.tmdb.useArtwork),
+          disabled: !model.tmdb.enabled
+        })}
+            ${this.renderToggleRow({
+          focusKey: "integration:tmdb:basic",
+          title: "Basic Info",
+          subtitle: "Genres, ratings, and overview from TMDB.",
+          checked: Boolean(model.tmdb.useBasicInfo),
+          disabled: !model.tmdb.enabled
+        })}
+            ${this.renderToggleRow({
+          focusKey: "integration:tmdb:details",
+          title: "Details",
+          subtitle: "Runtime, release date, country, and language from TMDB.",
+          checked: Boolean(model.tmdb.useDetails),
+          disabled: !model.tmdb.enabled
+        })}
+            ${this.renderActionRow({
+          focusKey: "integration:tmdb:language",
+          title: "TMDB Language",
+          subtitle: "Preferred metadata language",
+          value: model.tmdb.language || "en-US"
+        })}
+            ${this.renderActionRow({
+          focusKey: "integration:tmdb:api",
+          title: "API Key",
+          subtitle: "Configure TMDB credentials",
+          value: maskValue(model.tmdb.apiKey, "Not set")
+        })}
           </div>
-        </section>
+        </div>
+      `;
+      }
+      if (key === "mdblist") {
+        this.actionMap.set("integration:mdblist:enabled", () => {
+          MdbListSettingsStore.set({ enabled: !MdbListSettingsStore.get().enabled });
+        });
+        this.actionMap.set("integration:mdblist:key", () => {
+          const value = window.prompt("MDBList API key", MdbListSettingsStore.get().apiKey || "");
+          if (value !== null) {
+            MdbListSettingsStore.set({ apiKey: String(value).trim() });
+          }
+        });
+        return `
+        ${this.renderSectionHeader({ label: "MDBList", subtitle: "External ratings providers" })}
+        <div class="settings-group-card settings-group-card-fill">
+          <div class="settings-stack">
+            ${this.renderActionRow({
+          focusKey: "integration:back",
+          title: "Back to Integrations",
+          subtitle: "Return to integration list",
+          icon: "back"
+        })}
+            ${this.renderToggleRow({
+          focusKey: "integration:mdblist:enabled",
+          title: "Enable MDBList",
+          subtitle: plannedSubtitle("Use MDBList as an extra ratings provider."),
+          checked: Boolean(model.mdbList.enabled),
+          planned: true
+        })}
+            ${this.renderActionRow({
+          focusKey: "integration:mdblist:key",
+          title: "API Key",
+          subtitle: plannedSubtitle("Configure MDBList credentials"),
+          value: maskValue(model.mdbList.apiKey, "Not set"),
+          disabled: !model.mdbList.enabled,
+          planned: true
+        })}
+          </div>
+        </div>
+      `;
+      }
+      this.actionMap.set("integration:animeskip:enabled", () => {
+        AnimeSkipSettingsStore.set({ enabled: !AnimeSkipSettingsStore.get().enabled });
+      });
+      this.actionMap.set("integration:animeskip:id", () => {
+        const value = window.prompt("Anime-Skip client ID", AnimeSkipSettingsStore.get().clientId || "");
+        if (value !== null) {
+          AnimeSkipSettingsStore.set({ clientId: String(value).trim() });
+        }
+      });
+      return `
+      ${this.renderSectionHeader({ label: "Anime-Skip", subtitle: "Anime intro and outro skip timestamps" })}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "integration:back",
+        title: "Back to Integrations",
+        subtitle: "Return to integration list",
+        icon: "back"
+      })}
+          ${this.renderToggleRow({
+        focusKey: "integration:animeskip:enabled",
+        title: "Enable Anime-Skip",
+        subtitle: plannedSubtitle("Use Anime-Skip timestamps during playback."),
+        checked: Boolean(model.animeSkip.enabled),
+        planned: true
+      })}
+          ${this.renderActionRow({
+        focusKey: "integration:animeskip:id",
+        title: "Client ID",
+        subtitle: plannedSubtitle("Configure Anime-Skip client credentials"),
+        value: maskValue(model.animeSkip.clientId, "Not set"),
+        disabled: !model.animeSkip.enabled,
+        planned: true
+      })}
+        </div>
       </div>
     `;
+    },
+    renderIntegrationSection(model) {
+      if (this.integrationView && this.integrationView !== "hub") {
+        return this.renderIntegrationDetail(model, this.integrationView);
+      }
+      return this.renderIntegrationHub();
+    },
+    renderPlaybackSection(model) {
+      this.ensureExpandedState("playback");
+      const expanded = this.expandedSections.playback;
+      this.actionMap.set("playback:toggle:general", () => {
+        this.toggleExpandedSection("playback", "general");
+      });
+      this.actionMap.set("playback:toggle:stream", () => {
+        this.toggleExpandedSection("playback", "stream");
+      });
+      this.actionMap.set("playback:toggle:audio", () => {
+        this.toggleExpandedSection("playback", "audio");
+      });
+      this.actionMap.set("playback:toggle:subtitles", () => {
+        this.toggleExpandedSection("playback", "subtitles");
+      });
+      this.actionMap.set("playback:autoplay", () => {
+        PlayerSettingsStore.set({ autoplayNextEpisode: !PlayerSettingsStore.get().autoplayNextEpisode });
+      });
+      this.actionMap.set("playback:quality", () => {
+        const options = ["auto", "2160p", "1080p", "720p"];
+        this.openOptionDialog({
+          title: "Preferred quality",
+          options: options.map((option) => ({ id: option, label: qualityLabel(option) })),
+          selectedId: String(PlayerSettingsStore.get().preferredQuality || "auto"),
+          returnFocusKey: "playback:quality",
+          onSelect: (option) => {
+            PlayerSettingsStore.set({ preferredQuality: option.id });
+          }
+        });
+      });
+      this.actionMap.set("playback:player", () => {
+        const options = ["auto", "native", "hls", "dash"];
+        this.openOptionDialog({
+          title: "Player preference",
+          options: options.map((option) => ({ id: option, label: playerLabel(option) })),
+          selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
+          returnFocusKey: "playback:player",
+          onSelect: (option) => {
+            PlayerSettingsStore.set({ preferredPlayer: option.id });
+          }
+        });
+      });
+      this.actionMap.set("playback:trailer", () => {
+        PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
+      });
+      this.actionMap.set("playback:audioLanguage", () => {
+        const options = [
+          { id: "system", label: "System" },
+          { id: "en", label: "English" },
+          { id: "it", label: "Italian" }
+        ];
+        this.openOptionDialog({
+          title: "Preferred audio language",
+          options,
+          selectedId: PlayerSettingsStore.get().preferredAudioLanguage,
+          returnFocusKey: "playback:audioLanguage",
+          onSelect: (option) => {
+            PlayerSettingsStore.set({ preferredAudioLanguage: option.id });
+          }
+        });
+      });
+      this.actionMap.set("playback:subtitlesEnabled", () => {
+        PlayerSettingsStore.set({ subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled });
+      });
+      this.actionMap.set("playback:subtitleLanguage", () => {
+        const options = [
+          { id: "system", label: "System" },
+          { id: "en", label: "English" },
+          { id: "it", label: "Italian" }
+        ];
+        this.openOptionDialog({
+          title: "Preferred subtitle language",
+          options,
+          selectedId: PlayerSettingsStore.get().subtitleLanguage,
+          returnFocusKey: "playback:subtitleLanguage",
+          onSelect: (option) => {
+            PlayerSettingsStore.set({ subtitleLanguage: option.id });
+          }
+        });
+      });
+      this.actionMap.set("playback:renderMode", () => {
+        this.openOptionDialog({
+          title: "Subtitle render mode",
+          options: [
+            { id: "native", label: "Native" },
+            { id: "html", label: "HTML overlay" }
+          ],
+          selectedId: String(PlayerSettingsStore.get().subtitleRenderMode || "native").toLowerCase(),
+          returnFocusKey: "playback:renderMode",
+          onSelect: (option) => {
+            PlayerSettingsStore.set({ subtitleRenderMode: option.id });
+          }
+        });
+      });
+      const generalBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+        focusKey: "playback:autoplay",
+        title: "Autoplay Next Episode",
+        subtitle: "Automatically continue to the next episode.",
+        checked: Boolean(model.player.autoplayNextEpisode)
+      })}
+      </div>
+    `;
+      const streamBody = `
+      <div class="settings-stack">
+        ${this.renderActionRow({
+        focusKey: "playback:quality",
+        title: "Preferred Quality",
+        subtitle: "Choose the default quality target.",
+        value: qualityLabel(model.player.preferredQuality)
+      })}
+        ${this.renderActionRow({
+        focusKey: "playback:player",
+        title: "Preferred Player",
+        subtitle: "Select the playback engine priority.",
+        value: playerLabel(model.player.preferredPlayer)
+      })}
+      </div>
+    `;
+      const audioBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+        focusKey: "playback:trailer",
+        title: "Autoplay Trailer",
+        subtitle: "Play trailers automatically on focused content.",
+        checked: Boolean(model.player.trailerAutoplay)
+      })}
+        ${this.renderActionRow({
+        focusKey: "playback:audioLanguage",
+        title: "Preferred Audio",
+        subtitle: "Choose the default audio language.",
+        value: String(model.player.preferredAudioLanguage || "system").toUpperCase()
+      })}
+      </div>
+    `;
+      const subtitleBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+        focusKey: "playback:subtitlesEnabled",
+        title: "Enable Subtitles",
+        subtitle: "Turn subtitles on by default.",
+        checked: Boolean(model.player.subtitlesEnabled)
+      })}
+        ${this.renderActionRow({
+        focusKey: "playback:subtitleLanguage",
+        title: "Subtitle Language",
+        subtitle: "Preferred subtitle language.",
+        value: String(model.player.subtitleLanguage || "system").toUpperCase()
+      })}
+        ${this.renderActionRow({
+        focusKey: "playback:renderMode",
+        title: "Render Mode",
+        subtitle: "Choose how subtitles are drawn.",
+        value: renderModeLabel(model.player.subtitleRenderMode)
+      })}
+      </div>
+    `;
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "playback"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${this.renderCollapsibleRow({
+        focusKey: "playback:toggle:general",
+        title: "General",
+        subtitle: "Core playback behavior.",
+        expanded: Boolean(expanded.general),
+        bodyHtml: generalBody
+      })}
+          ${this.renderCollapsibleRow({
+        focusKey: "playback:toggle:stream",
+        title: "Player & Stream Selection",
+        subtitle: "Player preference, auto-play, and source filtering.",
+        expanded: Boolean(expanded.stream),
+        bodyHtml: streamBody
+      })}
+          ${this.renderCollapsibleRow({
+        focusKey: "playback:toggle:audio",
+        title: "Audio & Trailer",
+        subtitle: "Trailer behavior and audio controls.",
+        expanded: Boolean(expanded.audio),
+        bodyHtml: audioBody
+      })}
+          ${this.renderCollapsibleRow({
+        focusKey: "playback:toggle:subtitles",
+        title: "Subtitles",
+        subtitle: "Language, style, and render mode.",
+        expanded: Boolean(expanded.subtitles),
+        bodyHtml: subtitleBody
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderTraktSection() {
+      this.actionMap.set("trakt:open", () => Router.navigate("account"));
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "trakt"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "trakt:open",
+        title: "Open Trakt Settings",
+        subtitle: plannedSubtitle("Manage Trakt sign-in and continue watching sync."),
+        planned: true
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderAboutSection() {
+      this.actionMap.set("about:privacy", () => {
+        var _a;
+        (_a = window.open) == null ? void 0 : _a.call(window, PRIVACY_URL, "_blank");
+      });
+      this.actionMap.set("about:supporters", () => {
+        var _a;
+        (_a = window.open) == null ? void 0 : _a.call(window, SUPPORTERS_URL, "_blank");
+      });
+      return `
+      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "about"))}
+      <div class="settings-group-card settings-group-card-fill">
+        <div class="settings-about-brand">
+          <img class="settings-about-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
+          <p class="settings-about-copy">Made with &#10084; by Tapframe and friends</p>
+          <p class="settings-about-copy">Version ${escapeHtml7(SETTINGS_VERSION_LABEL)}</p>
+          <p class="settings-about-copy">Ported by edoedac0 and WhiteGiso.</p>
+        </div>
+        <div class="settings-stack">
+          ${this.renderActionRow({
+        focusKey: "about:privacy",
+        title: "Privacy Policy",
+        subtitle: "View our privacy policy",
+        external: true
+      })}
+          ${this.renderActionRow({
+        focusKey: "about:supporters",
+        title: "Supporters & Contributors",
+        subtitle: "Open recognition and project credits"
+      })}
+        </div>
+      </div>
+    `;
+    },
+    renderSection(section, model) {
+      if (section.id === "account") return this.renderAccountSection(model);
+      if (section.id === "profiles") return this.renderProfilesSection(model);
+      if (section.id === "appearance") return this.renderAppearanceSection(model);
+      if (section.id === "layout") return this.renderLayoutSection(model);
+      if (section.id === "plugins") return this.renderPluginsSection(model);
+      if (section.id === "integration") return this.renderIntegrationSection(model);
+      if (section.id === "playback") return this.renderPlaybackSection(model);
+      if (section.id === "trakt") return this.renderTraktSection(model);
+      return this.renderAboutSection(model);
+    },
+    async render() {
+      var _a, _b;
+      this.model = await this.collectModel();
+      this.layoutPrefs = this.model.layout;
+      this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
+      this.visibleSections = getVisibleSections(this.model);
+      this.actionMap = /* @__PURE__ */ new Map();
+      if (!this.visibleSections.length) {
+        this.visibleSections = [SECTION_META.find((item) => item.id === "appearance") || SECTION_META[0]];
+      }
+      if (!this.visibleSections.some((item) => item.id === this.activeSection)) {
+        this.setActiveSection(((_b = this.visibleSections[0]) == null ? void 0 : _b.id) || "appearance");
+      }
+      this.navIndex = clamp3(
+        Number.isFinite(this.navIndex) ? this.navIndex : this.visibleSections.findIndex((item) => item.id === this.activeSection),
+        0,
+        this.visibleSections.length - 1
+      );
+      const section = this.visibleSections.find((item) => item.id === this.activeSection) || this.visibleSections[0];
+      this.ensureExpandedState(section.id);
+      this.persistUiState();
+      this.ensureShell();
+      const shell = this.container.querySelector(".settings-shell");
+      if (shell) {
+        shell.classList.toggle("settings-route-enter", Boolean(this.settingsRouteEnterPending));
+        if (this.settingsRouteEnterPending) {
+          void shell.offsetWidth;
+        }
+      }
+      const rootSidebarSlot = this.container.querySelector("[data-settings-root-sidebar]");
+      const navSlot = this.container.querySelector("[data-settings-nav]");
+      const contentSlot = this.container.querySelector("[data-settings-content]");
+      const dialogSlot = this.container.querySelector("[data-settings-dialog]");
+      const rootSidebarHtml = renderRootSidebar({
+        selectedRoute: "settings",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      });
+      if (rootSidebarSlot && rootSidebarSlot.innerHTML !== rootSidebarHtml) {
+        rootSidebarSlot.innerHTML = rootSidebarHtml;
+      }
+      const navHtml = this.renderNav();
+      if (navSlot && navSlot.innerHTML !== navHtml) {
+        navSlot.innerHTML = navHtml;
+      }
+      const sectionChanged = this.renderedSectionId !== section.id;
+      this.renderedSectionId = section.id;
+      if (contentSlot) {
+        contentSlot.innerHTML = this.renderSection(section, this.model);
+        if (sectionChanged) {
+          contentSlot.classList.remove("is-section-transitioning");
+          void contentSlot.offsetWidth;
+          contentSlot.classList.add("is-section-transitioning");
+        } else {
+          contentSlot.classList.remove("is-section-transitioning");
+        }
+      }
+      const dialogHtml = this.renderOptionDialog();
+      if (dialogSlot && dialogSlot.innerHTML !== dialogHtml) {
+        dialogSlot.innerHTML = dialogHtml;
+      }
+      bindRootSidebarEvents(this.container, {
+        currentRoute: "settings",
+        onSelectedAction: () => this.closeSidebarToNav(),
+        onExpandSidebar: () => this.openSidebar()
+      });
       ScreenUtils.indexFocusables(this.container);
+      this.settingsRouteEnterPending = false;
       this.applyFocus();
     },
     applyFocus() {
-      const current = this.container.querySelector(".focusable.focused");
-      current == null ? void 0 : current.classList.remove("focused");
-      if (this.focusZone === "panel") {
-        const panel = Array.from(this.container.querySelectorAll(".settings-panel-item.focusable"));
-        const target2 = panel[this.panelIndex] || panel[0];
-        if (target2) {
-          target2.classList.add("focused");
-          target2.focus();
-          return;
+      var _a, _b;
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      const selectedNode = this.container.querySelector(".settings-nav-item.selected");
+      if (selectedNode) {
+        scrollSettingsRailItem(selectedNode);
+      }
+      if (this.optionDialog) {
+        const dialogNode = this.container.querySelector(`.settings-dialog-option[data-dialog-index="${this.dialogFocusIndex}"]`) || this.container.querySelector(".settings-dialog-option");
+        if (dialogNode) {
+          dialogNode.classList.add("focused");
+          dialogNode.focus();
         }
-        this.focusZone = "nav";
-      }
-      if (this.focusZone === "rail") {
-        const rail = Array.from(this.container.querySelectorAll(".settings-rail-item.focusable"));
-        const target2 = rail[this.railIndex] || rail[0];
-        if (target2) {
-          target2.classList.add("focused");
-          target2.focus();
-          return;
-        }
-        this.focusZone = "nav";
-      }
-      const nav = Array.from(this.container.querySelectorAll(".settings-nav-item.focusable"));
-      const target = nav[this.navIndex] || nav[0];
-      if (target) {
-        target.classList.add("focused");
-        target.focus();
-      }
-    },
-    async moveNav(delta) {
-      const next = clamp2(this.navIndex + delta, 0, SECTION_META.length - 1);
-      if (next === this.navIndex) {
         return;
       }
-      this.navIndex = next;
-      this.activeSection = SECTION_META[next].id;
-      this.panelIndex = 0;
+      if (this.focusZone === "sidebar") {
+        const sidebarNodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+        const sidebarNode = sidebarNodes[this.sidebarFocusIndex] || getRootSidebarSelectedNode(this.container, this.layoutPrefs);
+        if (sidebarNode) {
+          sidebarNode.classList.add("focused");
+          sidebarNode.focus();
+          if (!((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar)) {
+            setLegacySidebarExpanded(this.container, true);
+          }
+          return;
+        }
+        this.focusZone = "nav";
+      }
+      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, false);
+      }
+      if (this.focusZone === "content") {
+        const contentNode = this.contentFocusKey ? this.container.querySelector(focusKeySelector(".settings-content-focusable", this.contentFocusKey)) : null;
+        const fallbackContent = contentNode || this.container.querySelector(".settings-content-focusable");
+        if (fallbackContent) {
+          fallbackContent.classList.add("focused");
+          fallbackContent.focus();
+          scrollIntoNearestView(fallbackContent);
+          this.contentFocusKey = String(fallbackContent.dataset.focusKey || "");
+          return;
+        }
+        this.focusZone = "nav";
+      }
+      const navNode = this.container.querySelector(`.settings-nav-item[data-nav-index="${this.navIndex}"]`) || this.container.querySelector(".settings-nav-item");
+      if (navNode) {
+        navNode.classList.add("focused");
+        navNode.focus();
+        scrollSettingsRailItem(navNode);
+      }
+    },
+    async openSidebar() {
+      var _a;
+      this.focusZone = "sidebar";
+      const sidebarNodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+      const selectedSidebarNode = getRootSidebarSelectedNode(this.container, this.layoutPrefs);
+      this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selectedSidebarNode));
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
+        this.sidebarExpanded = true;
+        await this.render();
+        return;
+      }
+      this.applyFocus();
+    },
+    async closeSidebarToNav() {
+      var _a;
+      this.syncNavFocusToActive();
+      this.focusZone = "nav";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
+        this.sidebarExpanded = false;
+        await this.render();
+        return;
+      }
+      this.applyFocus();
+    },
+    moveNavFocus(index) {
+      this.navIndex = clamp3(index, 0, this.visibleSections.length - 1);
+      this.applyFocus();
+    },
+    async activateNavSelection() {
+      const section = this.visibleSections[this.navIndex];
+      if (!section) {
+        return;
+      }
+      this.setActiveSection(section.id);
+      this.integrationView = "hub";
+      this.contentFocusKey = null;
       await this.render();
     },
-    movePanel(delta) {
-      const panel = Array.from(this.container.querySelectorAll(".settings-panel-item.focusable"));
-      if (!panel.length) {
-        return;
+    syncNavFocusToActive() {
+      const activeIndex = this.visibleSections.findIndex((item) => item.id === this.activeSection);
+      if (activeIndex >= 0) {
+        this.navIndex = activeIndex;
       }
-      this.panelIndex = clamp2(this.panelIndex + delta, 0, panel.length - 1);
-      this.applyFocus();
     },
-    moveRail(delta) {
-      this.railIndex = clamp2(this.railIndex + delta, 0, RAIL_ITEMS.length - 1);
-      this.applyFocus();
-    },
-    async onKeyDown(event) {
-      var _a;
-      const code = Number((event == null ? void 0 : event.keyCode) || 0);
-      if (code === 38 || code === 40 || code === 37 || code === 39) {
-        if (typeof (event == null ? void 0 : event.preventDefault) === "function") {
-          event.preventDefault();
-        }
-        if (this.focusZone === "rail") {
-          if (code === 38) {
-            this.moveRail(-1);
-            return;
-          }
-          if (code === 40) {
-            this.moveRail(1);
-            return;
-          }
-          if (code === 39) {
-            this.focusZone = "nav";
-            this.applyFocus();
-            return;
-          }
-        } else if (this.focusZone === "nav") {
-          if (code === 38) {
-            await this.moveNav(-1);
-            return;
-          }
-          if (code === 40) {
-            await this.moveNav(1);
-            return;
-          }
-          if (code === 39) {
-            const panel = this.container.querySelectorAll(".settings-panel-item.focusable");
-            if (panel.length) {
-              this.focusZone = "panel";
-              this.panelIndex = clamp2(this.panelIndex, 0, panel.length - 1);
-              this.applyFocus();
-            }
-            return;
-          }
-          if (code === 37) {
-            this.focusZone = "rail";
-            this.applyFocus();
-            return;
-          }
-        } else {
-          if (code === 38) {
-            this.movePanel(-1);
-            return;
-          }
-          if (code === 40) {
-            this.movePanel(1);
-            return;
-          }
-          if (code === 37) {
-            this.focusZone = "nav";
-            this.applyFocus();
-            return;
-          }
-        }
-        return;
+    updateFocusedContentKey() {
+      const focused = this.container.querySelector(".settings-content-focusable.focused");
+      if (focused) {
+        this.contentFocusKey = String(focused.dataset.focusKey || "");
       }
-      if (code !== 13) {
+    },
+    moveContent(direction) {
+      const before = this.container.querySelector(".settings-content-focusable.focused");
+      ScreenUtils.moveFocusDirectional(this.container, direction, ".settings-content-focusable");
+      const after = this.container.querySelector(".settings-content-focusable.focused");
+      if (after) {
+        this.contentFocusKey = String(after.dataset.focusKey || "");
+      }
+      return before !== after;
+    },
+    async activateFocused() {
+      if (this.optionDialog) {
+        const option = this.optionDialog.options[this.dialogFocusIndex];
+        if (!option) {
+          return;
+        }
+        if (typeof this.optionDialog.onSelect === "function") {
+          await this.optionDialog.onSelect(option);
+        }
+        this.closeOptionDialog();
+        await this.render();
         return;
       }
       const current = this.container.querySelector(".focusable.focused");
@@ -13653,69 +20498,267 @@
         return;
       }
       const zone = String(current.dataset.zone || "");
-      if (zone === "rail") {
-        const actionId2 = String(current.dataset.railAction || "");
-        const action2 = (_a = RAIL_ITEMS.find((item) => item.id === actionId2)) == null ? void 0 : _a.action;
-        if (action2) {
-          await action2();
+      if (isRootSidebarNode(current)) {
+        activateLegacySidebarAction(String(current.dataset.action || ""), "settings");
+        if (isSelectedSidebarAction(String(current.dataset.action || ""), "settings")) {
+          await this.closeSidebarToNav();
         }
         return;
       }
       if (zone === "nav") {
-        const section = current.dataset.section;
-        const index = Number(current.dataset.navIndex || 0);
-        if (section && this.activeSection !== section) {
-          this.activeSection = section;
-          this.navIndex = clamp2(index, 0, SECTION_META.length - 1);
-          this.panelIndex = 0;
-          await this.render();
+        await this.activateNavSelection();
+        const firstContent = this.container.querySelector(".settings-content-focusable");
+        if (firstContent) {
+          this.focusZone = "content";
+          this.contentFocusKey = String(firstContent.dataset.focusKey || "");
+          this.applyFocus();
         }
         return;
       }
-      const actionId = current.dataset.actionId;
-      const action = this.actionMap.get(actionId);
+      const focusKey = String(current.dataset.focusKey || "");
+      const action = this.actionMap.get(focusKey);
       if (!action) {
         return;
       }
+      this.contentFocusKey = focusKey;
       await action();
       if (Router.getCurrent() === "settings") {
         await this.render();
-        this.focusZone = "panel";
+        this.focusZone = "content";
         this.applyFocus();
       }
     },
+    async onKeyDown(event) {
+      var _a, _b, _c, _d;
+      if (Platform.isBackEvent(event)) {
+        (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+        if (this.optionDialog) {
+          this.closeOptionDialog();
+          await this.render();
+          return;
+        }
+        if (this.focusZone === "sidebar") {
+          Platform.exitApp();
+        } else {
+          await this.openSidebar();
+        }
+        return;
+      }
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (this.optionDialog) {
+        if (code === 38 || code === 40) {
+          (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
+          const delta = code === 38 ? -1 : 1;
+          this.dialogFocusIndex = clamp3(
+            this.dialogFocusIndex + delta,
+            0,
+            Math.max(0, this.optionDialog.options.length - 1)
+          );
+          this.applyFocus();
+          return;
+        }
+        if (code === 37 || code === 39) {
+          (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
+          return;
+        }
+      }
+      if (code === 38 || code === 40 || code === 37 || code === 39) {
+        (_d = event == null ? void 0 : event.preventDefault) == null ? void 0 : _d.call(event);
+        if (this.focusZone === "sidebar") {
+          if (code === 38) {
+            this.sidebarFocusIndex = clamp3(this.sidebarFocusIndex - 1, 0, Math.max(0, getRootSidebarNodes(this.container, this.layoutPrefs).length - 1));
+            this.applyFocus();
+            return;
+          }
+          if (code === 40) {
+            this.sidebarFocusIndex = clamp3(this.sidebarFocusIndex + 1, 0, Math.max(0, getRootSidebarNodes(this.container, this.layoutPrefs).length - 1));
+            this.applyFocus();
+            return;
+          }
+          if (code === 39) {
+            await this.closeSidebarToNav();
+            return;
+          }
+        }
+        if (this.focusZone === "nav") {
+          if (code === 38) {
+            this.moveNavFocus(this.navIndex - 1);
+            return;
+          }
+          if (code === 40) {
+            this.moveNavFocus(this.navIndex + 1);
+            return;
+          }
+          if (code === 37) {
+            const sidebarNodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+            const selectedSidebarNode = getRootSidebarSelectedNode(this.container, this.layoutPrefs);
+            this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selectedSidebarNode));
+            await this.openSidebar();
+            return;
+          }
+          if (code === 39) {
+            const firstContent = this.container.querySelector(".settings-content-focusable");
+            if (firstContent) {
+              this.focusZone = "content";
+              this.contentFocusKey = String(firstContent.dataset.focusKey || "");
+              this.applyFocus();
+            }
+            return;
+          }
+        }
+        if (this.focusZone === "content") {
+          if (code === 37) {
+            const moved = this.moveContent("left");
+            if (!moved) {
+              this.syncNavFocusToActive();
+              this.focusZone = "nav";
+              this.applyFocus();
+            }
+            return;
+          }
+          if (code === 38) {
+            this.moveContent("up");
+            return;
+          }
+          if (code === 40) {
+            this.moveContent("down");
+            return;
+          }
+          if (code === 39) {
+            this.moveContent("right");
+            return;
+          }
+        }
+      }
+      if (code !== 13) {
+        return;
+      }
+      await this.activateFocused();
+    },
+    consumeBackRequest() {
+      if (!this.optionDialog) {
+        return false;
+      }
+      this.closeOptionDialog();
+      this.render();
+      return true;
+    },
     cleanup() {
+      LocalStore.remove(SETTINGS_UI_STATE_KEY);
+      this.activeSection = null;
+      this.focusZone = "nav";
+      this.sidebarFocusIndex = 0;
+      this.navIndex = -1;
+      this.contentFocusKey = null;
+      this.integrationView = "hub";
+      this.expandedSections = {};
+      this.optionDialog = null;
+      this.dialogFocusIndex = 0;
+      this.sidebarExpanded = false;
+      this.pillIconOnly = false;
+      this.renderedSectionId = null;
       ScreenUtils.hide(this.container);
     }
   };
 
+  // js/core/qr/qrCodeGenerator.js
+  var QrCodeGenerator = {
+    generate(canvas, content, size = 512) {
+      const qr = qrcode(0, "M");
+      qr.addData(content);
+      qr.make();
+      const ctx = canvas.getContext("2d");
+      canvas.width = size;
+      canvas.height = size;
+      const cornerRadius = size * 0.06;
+      ctx.clearRect(0, 0, size, size);
+      ctx.fillStyle = "#ffffff";
+      this.roundRect(ctx, 0, 0, size, size, cornerRadius);
+      ctx.fill();
+      const moduleCount = qr.getModuleCount();
+      const moduleSize = size / moduleCount;
+      const moduleRadius = moduleSize * 0.3;
+      ctx.fillStyle = "#000000";
+      for (let row = 0; row < moduleCount; row++) {
+        for (let col = 0; col < moduleCount; col++) {
+          if (qr.isDark(row, col)) {
+            const x = col * moduleSize;
+            const y = row * moduleSize;
+            this.roundRect(
+              ctx,
+              x,
+              y,
+              moduleSize,
+              moduleSize,
+              moduleRadius
+            );
+            ctx.fill();
+          }
+        }
+      }
+      const imageData = ctx.getImageData(0, 0, size, size);
+      ctx.clearRect(0, 0, size, size);
+      ctx.save();
+      this.roundRect(ctx, 0, 0, size, size, cornerRadius);
+      ctx.clip();
+      ctx.putImageData(imageData, 0, 0);
+      ctx.restore();
+    },
+    roundRect(ctx, x, y, width, height, radius) {
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + width - radius, y);
+      ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+      ctx.lineTo(x + width, y + height - radius);
+      ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+      ctx.lineTo(x + radius, y + height);
+      ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.closePath();
+    }
+  };
+
   // js/ui/screens/plugin/pluginScreen.js
-  var RAIL_ITEMS2 = [
-    { id: "home", action: () => Router.navigate("home") },
-    { id: "search", action: () => Router.navigate("search") },
-    { id: "library", action: () => Router.navigate("library") },
-    { id: "plugin", action: () => {
-    } },
-    { id: "settings", action: () => Router.navigate("settings") }
-  ];
-  function railIconPath2(actionId) {
-    if (actionId === "home") return "assets/icons/sidebar_home.svg";
-    if (actionId === "search") return "assets/icons/sidebar_search.svg";
-    if (actionId === "library") return "assets/icons/sidebar_library.svg";
-    if (actionId === "plugin") return "assets/icons/sidebar_plugin.svg";
-    return "assets/icons/sidebar_settings.svg";
-  }
-  function clamp3(value, min, max) {
+  function clamp4(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+  function escapeHtml8(value) {
+    return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function hasHomeVisibleCatalogs(addons) {
+    return addons.some((addon) => Array.isArray(addon.catalogs) && addon.catalogs.some((catalog) => !isSearchOnlyCatalog(catalog)));
+  }
+  function formatCatalogSummary(addon) {
+    const catalogCount = Array.isArray(addon == null ? void 0 : addon.catalogs) ? addon.catalogs.length : 0;
+    const types = Array.isArray(addon == null ? void 0 : addon.rawTypes) && addon.rawTypes.length > 0 ? addon.rawTypes : Array.isArray(addon == null ? void 0 : addon.types) ? addon.types : [];
+    return `Catalogs: ${catalogCount} - Types: ${types.join(", ") || "None"}`;
+  }
+  function getPhoneManagerUrl(addons) {
+    const base = String(PUBLIC_APP_URL || window.location.origin + window.location.pathname).trim();
+    if (!base) {
+      return "";
+    }
+    const url = new URL(base, window.location.href);
+    url.searchParams.set("addonsRemote", "1");
+    url.hash = "#addons";
+    url.searchParams.set("count", String(addons.length));
+    return url.toString();
   }
   var PluginScreen = {
     async mount() {
       this.container = document.getElementById("plugin");
       ScreenUtils.show(this.container);
-      this.focusZone = this.focusZone || "content";
-      this.railIndex = Number.isFinite(this.railIndex) ? this.railIndex : 3;
+      this.pluginRouteEnterPending = true;
+      this.sidebarProfile = await getSidebarProfileState();
+      this.layoutPrefs = LayoutPreferences.get();
+      this.focusZone = "content";
+      this.sidebarFocusIndex = Number.isFinite(this.sidebarFocusIndex) ? this.sidebarFocusIndex : 0;
+      this.sidebarExpanded = false;
+      this.pillIconOnly = false;
       this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
       this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
+      this.qrOverlayOpen = Boolean(this.qrOverlayOpen);
       await this.render();
     },
     async collectModel() {
@@ -13723,33 +20766,116 @@
       const addonUrls = addonRepository.getInstalledAddonUrls();
       return {
         addons,
-        addonUrls
+        addonUrls,
+        hasHomeVisibleCatalogs: hasHomeVisibleCatalogs(addons),
+        phoneManagerUrl: getPhoneManagerUrl(addons)
       };
     },
-    getRowMaxCol(row) {
-      if (row >= 3) {
-        return 2;
+    setRowColumns(row, cols) {
+      this.rowColumns.set(row, cols);
+    },
+    getAvailableRows() {
+      return [...this.rowColumns.keys()].sort((left, right) => left - right);
+    },
+    getAvailableCols(row) {
+      return this.rowColumns.get(row) || [0];
+    },
+    normalizeFocus() {
+      var _a;
+      const rows = this.getAvailableRows();
+      this.contentRow = rows.includes(this.contentRow) ? this.contentRow : rows[0] || 0;
+      const cols = this.getAvailableCols(this.contentRow);
+      this.contentCol = cols.includes(this.contentCol) ? this.contentCol : cols[0];
+      const sidebarNodes = ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
+      this.sidebarFocusIndex = clamp4(this.sidebarFocusIndex, 0, Math.max(0, sidebarNodes.length - 1));
+    },
+    ensureMainVisibility(target) {
+      var _a;
+      const container = (_a = this.container) == null ? void 0 : _a.querySelector(".addons-main");
+      if (!container || !target) {
+        return;
       }
-      return 0;
+      const anchor = target.closest(".addons-installed-card, .addons-large-row, .addons-install-card") || target;
+      const pad = 56;
+      const containerRect = container.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      const anchorTop = anchorRect.top - containerRect.top + container.scrollTop;
+      const anchorBottom = anchorRect.bottom - containerRect.top + container.scrollTop;
+      const viewTop = container.scrollTop;
+      const viewBottom = viewTop + container.clientHeight;
+      if (anchorBottom > viewBottom - pad) {
+        container.scrollTop = Math.min(
+          container.scrollHeight - container.clientHeight,
+          Math.max(0, anchorBottom - container.clientHeight + pad)
+        );
+      } else if (anchorTop < viewTop + pad) {
+        container.scrollTop = Math.max(0, anchorTop - pad);
+      }
+    },
+    renderQrCode() {
+      var _a;
+      if (!this.qrOverlayOpen || !this.model.phoneManagerUrl) {
+        return;
+      }
+      const canvas = (_a = this.container) == null ? void 0 : _a.querySelector(".addons-qr-canvas");
+      if (!canvas) {
+        return;
+      }
+      QrCodeGenerator.generate(canvas, this.model.phoneManagerUrl, 440);
+    },
+    async openQrOverlay() {
+      this.qrOverlayOpen = true;
+      await this.render();
+    },
+    async closeQrOverlay() {
+      if (!this.qrOverlayOpen) {
+        return false;
+      }
+      this.qrOverlayOpen = false;
+      await this.render();
+      return true;
+    },
+    bindContentEvents() {
+      var _a;
+      this.container.querySelectorAll(".addons-focusable[data-action-id]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          this.focusZone = "content";
+          this.contentRow = Number(node.dataset.row || 0);
+          this.contentCol = Number(node.dataset.col || 0);
+          this.applyFocus();
+          await this.activateFocused();
+        });
+      });
+      (_a = this.container.querySelector(".addons-qr-close")) == null ? void 0 : _a.addEventListener("click", async () => {
+        await this.closeQrOverlay();
+      });
     },
     async render() {
       this.model = await this.collectModel();
+      this.rowColumns = /* @__PURE__ */ new Map();
       this.actionMap = /* @__PURE__ */ new Map();
+      this.setRowColumns(0, [0]);
+      if (this.model.hasHomeVisibleCatalogs) {
+        this.setRowColumns(1, [0]);
+      }
+      const installedStartRow = this.model.hasHomeVisibleCatalogs ? 2 : 1;
       const addonRows = this.model.addons.map((addon, index) => {
         const baseUrl = addon.baseUrl || this.model.addonUrls[index] || "";
+        const row = installedStartRow + index;
         const upActionId = `addon_up_${index}`;
         const downActionId = `addon_down_${index}`;
         const removeActionId = `addon_remove_${index}`;
+        const focusCols = [];
         this.actionMap.set(upActionId, async () => {
           const urls = addonRepository.getInstalledAddonUrls();
           if (index <= 0 || index >= urls.length) {
             return;
           }
           const next = [...urls];
-          const tmp = next[index - 1];
-          next[index - 1] = next[index];
-          next[index] = tmp;
+          const moved = next.splice(index, 1)[0];
+          next.splice(index - 1, 0, moved);
           await addonRepository.setAddonOrder(next);
+          this.contentRow = row - 1;
           await this.render();
         });
         this.actionMap.set(downActionId, async () => {
@@ -13758,9 +20884,9 @@
             return;
           }
           const next = [...urls];
-          const tmp = next[index + 1];
-          next[index + 1] = next[index];
-          next[index] = tmp;
+          const moved = next.splice(index, 1)[0];
+          next.splice(index + 1, 0, moved);
+          this.contentRow = row + 1;
           await addonRepository.setAddonOrder(next);
           await this.render();
         });
@@ -13768,167 +20894,226 @@
           await addonRepository.removeAddon(baseUrl);
           await this.render();
         });
+        if (index > 0) {
+          focusCols.push(0);
+        }
+        if (index < this.model.addons.length - 1) {
+          focusCols.push(1);
+        }
+        focusCols.push(2);
+        this.setRowColumns(row, focusCols);
         return `
         <article class="addons-installed-card">
           <div class="addons-installed-head">
-            <div>
-              <h3>${addon.displayName || addon.name || "Unknown addon"}</h3>
-              <p class="addons-installed-version">v${addon.version || "0.0.0"}</p>
+            <div class="addons-installed-copy">
+              <h3>${escapeHtml8(addon.displayName || addon.name || "Unknown addon")}</h3>
+              <p class="addons-installed-version">v${escapeHtml8(addon.version || "0.0.0")}</p>
             </div>
             <div class="addons-installed-actions">
-              <button class="addons-action-btn addons-focusable"
+              <button type="button"
+                      class="addons-action-btn ${index > 0 ? "addons-focusable" : "is-disabled"}"
+                      ${index > 0 ? `data-zone="content" data-row="${row}" data-col="0" data-action-id="${upActionId}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
+                <span class="material-icons" aria-hidden="true">arrow_upward</span>
+              </button>
+              <button type="button"
+                      class="addons-action-btn ${index < this.model.addons.length - 1 ? "addons-focusable" : "is-disabled"}"
+                      ${index < this.model.addons.length - 1 ? `data-zone="content" data-row="${row}" data-col="1" data-action-id="${downActionId}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
+                <span class="material-icons" aria-hidden="true">arrow_downward</span>
+              </button>
+              <button type="button"
+                      class="addons-action-btn addons-focusable addons-remove-btn"
                       data-zone="content"
-                      data-row="${index + 3}"
-                      data-col="0"
-                      data-action-id="${upActionId}">Up</button>
-              <button class="addons-action-btn addons-focusable"
-                      data-zone="content"
-                      data-row="${index + 3}"
-                      data-col="1"
-                      data-action-id="${downActionId}">Down</button>
-              <button class="addons-action-btn addons-focusable addons-remove-btn"
-                      data-zone="content"
-                      data-row="${index + 3}"
+                      data-row="${row}"
                       data-col="2"
-                      data-action-id="${removeActionId}">Remove</button>
+                      data-action-id="${removeActionId}"
+                      tabindex="-1">Remove</button>
             </div>
           </div>
-          <p class="addons-installed-description">${addon.description || "No description available."}</p>
+          ${addon.description ? `<p class="addons-installed-description">${escapeHtml8(addon.description)}</p>` : ""}
+          <p class="addons-installed-meta">${escapeHtml8(baseUrl)}</p>
+          <p class="addons-installed-meta">${escapeHtml8(formatCatalogSummary(addon))}</p>
         </article>
       `;
       }).join("");
-      this.actionMap.set("install_addon", async () => {
-        const value = window.prompt("Install addon URL", "https://example.com/manifest.json");
-        if (value === null) {
-          return;
-        }
-        const clean = String(value).trim();
-        if (!clean) {
-          return;
-        }
-        await addonRepository.addAddon(clean);
-        await this.render();
+      this.actionMap.set("manage_from_phone", async () => {
+        await this.openQrOverlay();
       });
-      this.actionMap.set("manage_from_phone", () => Router.navigate("syncCode"));
-      this.actionMap.set("reorder_catalogs", () => Router.navigate("settings"));
+      this.actionMap.set("reorder_catalogs", async () => {
+        await Router.navigate("catalogOrder");
+      });
+      this.actionMap.set("close_qr_overlay", async () => {
+        await this.closeQrOverlay();
+      });
       this.container.innerHTML = `
-      <div class="addons-shell">
-        <aside class="addons-rail">
-          ${RAIL_ITEMS2.map((item, index) => `
-            <button class="addons-rail-item addons-focusable${item.id === "plugin" ? " selected" : ""}"
-                    data-zone="rail"
-                    data-rail-index="${index}"
-                    data-rail-action="${item.id}">
-              <img class="addons-rail-icon" src="${railIconPath2(item.id)}" alt="" aria-hidden="true" />
+      <div class="home-shell addons-shell${this.pluginRouteEnterPending ? " addons-route-enter" : ""}">
+        ${renderRootSidebar({
+        selectedRoute: "plugin",
+        profile: this.sidebarProfile,
+        layout: this.layoutPrefs,
+        expanded: Boolean(this.sidebarExpanded),
+        pillIconOnly: Boolean(this.pillIconOnly)
+      })}
+        <main class="home-main addons-main">
+          <div class="addons-panel">
+            <h1 class="addons-title">Addons</h1>
+            <button type="button"
+                    class="addons-large-row addons-focusable"
+                    data-zone="content"
+                    data-row="0"
+                    data-col="0"
+                    data-action-id="manage_from_phone"
+                    tabindex="-1">
+              <span class="addons-large-row-icon material-icons" aria-hidden="true">qr_code_2</span>
+              <span class="addons-large-row-copy">
+                <strong>Manage from phone</strong>
+                <small>Scan a QR code to manage addons and Home catalogs from your phone</small>
+              </span>
+              <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
             </button>
-          `).join("")}
-        </aside>
-        <main class="addons-main">
-          <h1 class="addons-title">Addons</h1>
-          <section class="addons-install-card">
-            <h2>Install addon</h2>
-            <div class="addons-install-row">
-              <div class="addons-install-input">https://example.com</div>
-              <button class="addons-install-btn addons-focusable"
+            ${this.model.hasHomeVisibleCatalogs ? `
+              <button type="button"
+                      class="addons-large-row addons-focusable"
                       data-zone="content"
-                      data-row="0"
+                      data-row="1"
                       data-col="0"
-                      data-action-id="install_addon">Install</button>
-            </div>
-          </section>
-          <button class="addons-large-row addons-focusable"
-                  data-zone="content"
-                  data-row="1"
-                  data-col="0"
-                  data-action-id="manage_from_phone">
-            <span class="addons-large-row-icon">QR</span>
-            <span>
-              <strong>Manage from phone</strong>
-              <small>Scan a QR code to manage addons and Home catalogs from your phone</small>
-            </span>
-            <span class="addons-large-row-tail">Open</span>
-          </button>
-          <button class="addons-large-row addons-focusable"
-                  data-zone="content"
-                  data-row="2"
-                  data-col="0"
-                  data-action-id="reorder_catalogs">
-            <span class="addons-large-row-icon">Cat</span>
-            <span>
-              <strong>Reorder home catalogs</strong>
-              <small>Controls catalog row order on Home (Classic + Modern + Grid)</small>
-            </span>
-            <span class="addons-large-row-tail">Sort</span>
-          </button>
-          <h2 class="addons-subtitle">Installed</h2>
-          <section class="addons-installed-list">
-            ${addonRows || `<div class="addons-empty">No addons installed yet.</div>`}
-          </section>
+                      data-action-id="reorder_catalogs"
+                      tabindex="-1">
+                <span class="addons-large-row-icon material-icons" aria-hidden="true">reorder</span>
+                <span class="addons-large-row-copy">
+                  <strong>Reorder home catalogs</strong>
+                  <small>Controls catalog row order on Home (Classic + Modern + Grid)</small>
+                </span>
+                <span class="addons-large-row-tail material-icons" aria-hidden="true">arrow_downward</span>
+              </button>
+            ` : ""}
+            <h2 class="addons-subtitle">Installed</h2>
+            <section class="addons-installed-list">
+              ${addonRows || '<div class="addons-empty">No addons installed. Add one to get started.</div>'}
+            </section>
+          </div>
         </main>
+        ${this.qrOverlayOpen ? `
+          <div class="addons-qr-overlay">
+            <div class="addons-qr-dialog">
+              <p class="addons-qr-instruction">Scan with your phone to manage addons and catalogs</p>
+              ${this.model.phoneManagerUrl ? '<canvas class="addons-qr-canvas" width="440" height="440" aria-label="QR code"></canvas>' : '<div class="addons-qr-error">Set `PUBLIC_APP_URL` to enable phone management QR links in web builds.</div>'}
+              ${this.model.phoneManagerUrl ? `<p class="addons-qr-url">${escapeHtml8(this.model.phoneManagerUrl)}</p>` : ""}
+              <button type="button" class="addons-qr-close addons-focusable focused" data-action-id="close_qr_overlay">
+                <span class="material-icons" aria-hidden="true">close</span>
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+        ` : ""}
       </div>
     `;
+      this.pluginRouteEnterPending = false;
+      bindRootSidebarEvents(this.container, {
+        currentRoute: "plugin",
+        onSelectedAction: () => this.closeSidebarToContent(),
+        onExpandSidebar: () => this.openSidebar()
+      });
+      this.bindContentEvents();
       this.normalizeFocus();
       this.applyFocus();
-    },
-    normalizeFocus() {
-      const maxRow = this.model.addons.length > 0 ? this.model.addons.length + 2 : 2;
-      this.contentRow = clamp3(this.contentRow, 0, maxRow);
-      this.contentCol = clamp3(this.contentCol, 0, this.getRowMaxCol(this.contentRow));
-      this.railIndex = clamp3(this.railIndex, 0, RAIL_ITEMS2.length - 1);
+      this.renderQrCode();
     },
     applyFocus() {
-      const current = this.container.querySelector(".addons-focusable.focused");
-      current == null ? void 0 : current.classList.remove("focused");
-      if (this.focusZone === "rail") {
-        const node = this.container.querySelector(`.addons-rail-item[data-rail-index="${this.railIndex}"]`);
+      var _a, _b, _c, _d;
+      this.container.querySelectorAll(".addons-focusable.focused, .focusable.focused").forEach((node) => node.classList.remove("focused"));
+      if (this.qrOverlayOpen) {
+        const closeButton = this.container.querySelector(".addons-qr-close");
+        if (closeButton) {
+          closeButton.classList.add("focused");
+          closeButton.focus();
+        }
+        return;
+      }
+      if (this.focusZone === "sidebar") {
+        const sidebarNodes = ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
+        const node = sidebarNodes[this.sidebarFocusIndex] || (((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar) ? getModernSidebarSelectedNode(this.container) : getLegacySidebarSelectedNode(this.container));
         if (node) {
           node.classList.add("focused");
           node.focus();
+          if (!((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar)) {
+            setLegacySidebarExpanded(this.container, true);
+          }
           return;
         }
         this.focusZone = "content";
       }
+      if (!((_d = this.layoutPrefs) == null ? void 0 : _d.modernSidebar)) {
+        setLegacySidebarExpanded(this.container, false);
+      }
       const target = this.container.querySelector(
         `.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="${this.contentCol}"]`
-      ) || this.container.querySelector(`.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="0"]`) || this.container.querySelector('.addons-focusable[data-zone="content"][data-row="0"][data-col="0"]');
+      ) || this.container.querySelector(
+        `.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="0"]`
+      ) || this.container.querySelector(".addons-focusable[data-zone='content']");
       if (target) {
         target.classList.add("focused");
+        this.ensureMainVisibility(target);
         target.focus();
       }
     },
     moveContent(deltaRow, deltaCol = 0) {
       if (deltaCol !== 0) {
-        const nextCol = clamp3(this.contentCol + deltaCol, 0, this.getRowMaxCol(this.contentRow));
-        this.contentCol = nextCol;
+        const cols2 = this.getAvailableCols(this.contentRow);
+        const currentIndex2 = Math.max(0, cols2.indexOf(this.contentCol));
+        this.contentCol = cols2[clamp4(currentIndex2 + deltaCol, 0, cols2.length - 1)];
         this.applyFocus();
         return;
       }
-      const maxRow = this.model.addons.length > 0 ? this.model.addons.length + 2 : 2;
-      const nextRow = clamp3(this.contentRow + deltaRow, 0, maxRow);
-      this.contentRow = nextRow;
-      this.contentCol = clamp3(this.contentCol, 0, this.getRowMaxCol(nextRow));
+      const rows = this.getAvailableRows();
+      const currentIndex = Math.max(0, rows.indexOf(this.contentRow));
+      this.contentRow = rows[clamp4(currentIndex + deltaRow, 0, rows.length - 1)] || 0;
+      const cols = this.getAvailableCols(this.contentRow);
+      this.contentCol = cols.includes(this.contentCol) ? this.contentCol : cols[0];
       this.applyFocus();
     },
-    moveRail(delta) {
-      this.railIndex = clamp3(this.railIndex + delta, 0, RAIL_ITEMS2.length - 1);
+    moveSidebar(delta) {
+      var _a;
+      const sidebarNodes = ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
+      this.sidebarFocusIndex = clamp4(this.sidebarFocusIndex + delta, 0, Math.max(0, sidebarNodes.length - 1));
+      this.applyFocus();
+    },
+    async openSidebar() {
+      var _a, _b, _c;
+      const sidebarNodes = ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
+      const selected = ((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar) ? getModernSidebarSelectedNode(this.container) : getLegacySidebarSelectedNode(this.container);
+      this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selected));
+      if (((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar) && !this.sidebarExpanded) {
+        this.sidebarExpanded = true;
+        this.focusZone = "sidebar";
+        await this.render();
+        return;
+      }
+      this.focusZone = "sidebar";
+      this.applyFocus();
+    },
+    async closeSidebarToContent() {
+      var _a;
+      this.focusZone = "content";
+      if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
+        this.sidebarExpanded = false;
+        await this.render();
+        return;
+      }
       this.applyFocus();
     },
     async activateFocused() {
-      var _a;
-      const current = this.container.querySelector(".addons-focusable.focused");
+      const current = this.container.querySelector(".addons-focusable.focused, .focusable.focused");
       if (!current) {
         return;
       }
-      if (String(current.dataset.zone || "") === "rail") {
-        const id = String(current.dataset.railAction || "");
-        const action2 = (_a = RAIL_ITEMS2.find((item) => item.id === id)) == null ? void 0 : _a.action;
-        if (action2) {
-          await action2();
+      if (isRootSidebarNode(current)) {
+        activateLegacySidebarAction(String(current.dataset.action || ""), "plugin");
+        if (isSelectedSidebarAction(String(current.dataset.action || ""), "plugin")) {
+          await this.closeSidebarToContent();
         }
         return;
       }
-      const actionId = String(current.dataset.actionId || "");
-      const action = this.actionMap.get(actionId);
+      const action = this.actionMap.get(String(current.dataset.actionId || ""));
       if (!action) {
         return;
       }
@@ -13938,16 +21123,59 @@
         this.applyFocus();
       }
     },
+    consumeBackRequest() {
+      if (!this.qrOverlayOpen) {
+        return false;
+      }
+      this.closeQrOverlay();
+      return true;
+    },
     async onKeyDown(event) {
-      var _a;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      if (this.qrOverlayOpen) {
+        if (Platform.isBackEvent(event)) {
+          (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+          await this.closeQrOverlay();
+          return;
+        }
+        const code2 = Number((event == null ? void 0 : event.keyCode) || 0);
+        if (code2 === 13) {
+          (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
+          await this.closeQrOverlay();
+        }
+        return;
+      }
+      if (Platform.isBackEvent(event)) {
+        (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
+        if (this.focusZone === "sidebar") {
+          Platform.exitApp();
+        } else {
+          await this.openSidebar();
+        }
+        return;
+      }
       const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (((_d = this.layoutPrefs) == null ? void 0 : _d.modernSidebar) && !this.sidebarExpanded) {
+        if (code === 40) {
+          this.pillIconOnly = true;
+          setModernSidebarPillIconOnly(this.container, true);
+        } else if (code === 38) {
+          this.pillIconOnly = false;
+          setModernSidebarPillIconOnly(this.container, false);
+        }
+      }
       if (code === 38 || code === 40 || code === 37 || code === 39) {
-        (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        if (this.focusZone === "rail") {
-          if (code === 38) this.moveRail(-1);
-          else if (code === 40) this.moveRail(1);
+        (_e = event == null ? void 0 : event.preventDefault) == null ? void 0 : _e.call(event);
+        if (this.focusZone === "sidebar") {
+          if (code === 38) this.moveSidebar(-1);
+          else if (code === 40) this.moveSidebar(1);
           else if (code === 39) {
             this.focusZone = "content";
+            if ((_f = this.layoutPrefs) == null ? void 0 : _f.modernSidebar) {
+              this.sidebarExpanded = false;
+              await this.render();
+              return;
+            }
             this.applyFocus();
           }
           return;
@@ -13958,16 +21186,242 @@
           if (this.contentCol > 0) {
             this.moveContent(0, -1);
           } else {
-            this.focusZone = "rail";
-            this.applyFocus();
+            const nodes = ((_g = this.layoutPrefs) == null ? void 0 : _g.modernSidebar) ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
+            const selected = ((_h = this.layoutPrefs) == null ? void 0 : _h.modernSidebar) ? getModernSidebarSelectedNode(this.container) : getLegacySidebarSelectedNode(this.container);
+            this.focusZone = "sidebar";
+            this.sidebarFocusIndex = Math.max(0, nodes.indexOf(selected));
+            if (((_i = this.layoutPrefs) == null ? void 0 : _i.modernSidebar) && !this.sidebarExpanded) {
+              this.sidebarExpanded = true;
+              await this.render();
+            } else {
+              this.applyFocus();
+            }
           }
-        } else if (code === 39) this.moveContent(0, 1);
+        } else if (code === 39) {
+          this.moveContent(0, 1);
+        }
         return;
       }
-      if (code !== 13) {
+      if (code === 13) {
+        await this.activateFocused();
+      }
+    },
+    cleanup() {
+      ScreenUtils.hide(this.container);
+    }
+  };
+
+  // js/ui/screens/plugin/catalogOrderScreen.js
+  function clamp5(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function escapeHtml9(value) {
+    return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  var CatalogOrderScreen = {
+    async mount() {
+      this.container = document.getElementById("catalogOrder");
+      ScreenUtils.show(this.container);
+      this.focusRow = Number.isFinite(this.focusRow) ? this.focusRow : 0;
+      this.focusCol = Number.isFinite(this.focusCol) ? this.focusCol : 0;
+      await this.render();
+    },
+    async collectModel() {
+      const addons = await addonRepository.getInstalledAddons();
+      const prefs = HomeCatalogStore.get();
+      return {
+        items: buildOrderedCatalogItems(addons, prefs.order, prefs.disabled)
+      };
+    },
+    setRowColumns(row, cols) {
+      this.rowColumns.set(row, cols);
+    },
+    getRows() {
+      return [...this.rowColumns.keys()].sort((left, right) => left - right);
+    },
+    getCols(row) {
+      return this.rowColumns.get(row) || [0];
+    },
+    normalizeFocus() {
+      const rows = this.getRows();
+      if (!rows.length) {
+        this.focusRow = 0;
+        this.focusCol = 0;
         return;
       }
-      await this.activateFocused();
+      this.focusRow = rows.includes(this.focusRow) ? this.focusRow : rows[clamp5(this.focusRow, 0, rows.length - 1)];
+      const cols = this.getCols(this.focusRow);
+      this.focusCol = cols.includes(this.focusCol) ? this.focusCol : cols[0];
+    },
+    ensureVisibility(target) {
+      var _a;
+      const container = (_a = this.container) == null ? void 0 : _a.querySelector(".catalog-order-main");
+      if (!container || !target) {
+        return;
+      }
+      const anchor = target.closest(".catalog-order-card") || target;
+      const pad = 56;
+      const containerRect = container.getBoundingClientRect();
+      const anchorRect = anchor.getBoundingClientRect();
+      const anchorTop = anchorRect.top - containerRect.top + container.scrollTop;
+      const anchorBottom = anchorRect.bottom - containerRect.top + container.scrollTop;
+      const viewTop = container.scrollTop;
+      const viewBottom = viewTop + container.clientHeight;
+      if (anchorBottom > viewBottom - pad) {
+        container.scrollTop = Math.min(
+          container.scrollHeight - container.clientHeight,
+          Math.max(0, anchorBottom - container.clientHeight + pad)
+        );
+      } else if (anchorTop < viewTop + pad) {
+        container.scrollTop = Math.max(0, anchorTop - pad);
+      }
+    },
+    applyFocus() {
+      var _a, _b, _c, _d;
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll(".catalog-order-focusable.focused").forEach((node) => node.classList.remove("focused"));
+      const target = ((_b = this.container) == null ? void 0 : _b.querySelector(
+        `.catalog-order-focusable[data-row="${this.focusRow}"][data-col="${this.focusCol}"]`
+      )) || ((_c = this.container) == null ? void 0 : _c.querySelector(
+        `.catalog-order-focusable[data-row="${this.focusRow}"][data-col="0"]`
+      )) || ((_d = this.container) == null ? void 0 : _d.querySelector(".catalog-order-focusable"));
+      if (!target) {
+        return;
+      }
+      target.classList.add("focused");
+      this.ensureVisibility(target);
+      target.focus();
+    },
+    async moveItem(key, direction) {
+      const current = this.model.items.map((item) => item.key);
+      const index = current.indexOf(key);
+      const nextIndex = index + direction;
+      if (index === -1 || nextIndex < 0 || nextIndex >= current.length) {
+        return;
+      }
+      const reordered = [...current];
+      const moved = reordered.splice(index, 1)[0];
+      reordered.splice(nextIndex, 0, moved);
+      HomeCatalogStore.setOrder(reordered);
+      this.focusRow = nextIndex;
+      await this.render();
+    },
+    async toggleItem(disableKey) {
+      HomeCatalogStore.toggleDisabled(disableKey);
+      await this.render();
+    },
+    async render() {
+      this.model = await this.collectModel();
+      this.rowColumns = /* @__PURE__ */ new Map();
+      const itemsHtml = this.model.items.map((item, index) => {
+        const cols = [];
+        if (item.canMoveUp) {
+          cols.push(0);
+        }
+        if (item.canMoveDown) {
+          cols.push(1);
+        }
+        cols.push(2);
+        this.setRowColumns(index, cols);
+        return `
+        <article class="catalog-order-card">
+          <div class="catalog-order-card-copy">
+            <h2>${escapeHtml9(item.catalogName)} - ${escapeHtml9(toDisplayTypeLabel(item.type))}</h2>
+            <p class="catalog-order-card-subtitle">${escapeHtml9(item.addonName)}</p>
+            ${item.isDisabled ? '<p class="catalog-order-card-disabled">Disabled on Home</p>' : ""}
+          </div>
+          <div class="catalog-order-card-actions">
+            <button type="button"
+                    class="catalog-order-action ${item.canMoveUp ? "catalog-order-focusable" : "is-disabled"}"
+                    ${item.canMoveUp ? `data-row="${index}" data-col="0" data-action="up" data-key="${escapeHtml9(item.key)}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
+              <span class="material-icons" aria-hidden="true">arrow_upward</span>
+            </button>
+            <button type="button"
+                    class="catalog-order-action ${item.canMoveDown ? "catalog-order-focusable" : "is-disabled"}"
+                    ${item.canMoveDown ? `data-row="${index}" data-col="1" data-action="down" data-key="${escapeHtml9(item.key)}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
+              <span class="material-icons" aria-hidden="true">arrow_downward</span>
+            </button>
+            <button type="button"
+                    class="catalog-order-action catalog-order-focusable catalog-order-toggle${item.isDisabled ? " is-disabled-state" : ""}"
+                    data-row="${index}"
+                    data-col="2"
+                    data-action="toggle"
+                    data-disable-key="${escapeHtml9(item.disableKey)}"
+                    tabindex="-1">${item.isDisabled ? "Enable" : "Disable"}</button>
+          </div>
+        </article>
+      `;
+      }).join("");
+      this.container.innerHTML = `
+      <div class="catalog-order-shell">
+        <main class="catalog-order-main">
+          <h1 class="catalog-order-title">Reorder Home Catalogs</h1>
+          <p class="catalog-order-subtitle">This controls catalog row order on Home (Classic + Modern + Grid).</p>
+          <section class="catalog-order-list">
+            ${this.model.items.length ? itemsHtml : '<p class="catalog-order-empty">No home catalogs available yet.</p>'}
+          </section>
+        </main>
+      </div>
+    `;
+      this.container.querySelectorAll(".catalog-order-focusable[data-action]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          this.focusRow = Number(node.dataset.row || 0);
+          this.focusCol = Number(node.dataset.col || 0);
+          this.applyFocus();
+          await this.activateFocused();
+        });
+      });
+      this.normalizeFocus();
+      this.applyFocus();
+    },
+    async activateFocused() {
+      var _a;
+      const current = (_a = this.container) == null ? void 0 : _a.querySelector(".catalog-order-focusable.focused");
+      if (!current) {
+        return;
+      }
+      const action = String(current.dataset.action || "");
+      if (action === "up") {
+        await this.moveItem(String(current.dataset.key || ""), -1);
+      } else if (action === "down") {
+        await this.moveItem(String(current.dataset.key || ""), 1);
+      } else if (action === "toggle") {
+        await this.toggleItem(String(current.dataset.disableKey || ""));
+      }
+    },
+    moveFocus(deltaRow, deltaCol = 0) {
+      if (deltaCol !== 0) {
+        const cols2 = this.getCols(this.focusRow);
+        const currentIndex2 = Math.max(0, cols2.indexOf(this.focusCol));
+        this.focusCol = cols2[clamp5(currentIndex2 + deltaCol, 0, cols2.length - 1)];
+        this.applyFocus();
+        return;
+      }
+      const rows = this.getRows();
+      const currentIndex = Math.max(0, rows.indexOf(this.focusRow));
+      this.focusRow = rows[clamp5(currentIndex + deltaRow, 0, rows.length - 1)] || 0;
+      const cols = this.getCols(this.focusRow);
+      this.focusCol = cols.includes(this.focusCol) ? this.focusCol : cols[0];
+      this.applyFocus();
+    },
+    async onKeyDown(event) {
+      var _a, _b;
+      if (Platform.isBackEvent(event)) {
+        (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+        await Router.back();
+        return;
+      }
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (code === 38 || code === 40 || code === 37 || code === 39) {
+        (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
+        if (code === 38) this.moveFocus(-1);
+        else if (code === 40) this.moveFocus(1);
+        else if (code === 37) this.moveFocus(0, -1);
+        else if (code === 39) this.moveFocus(0, 1);
+        return;
+      }
+      if (code === 13) {
+        await this.activateFocused();
+      }
     },
     cleanup() {
       ScreenUtils.hide(this.container);
@@ -13975,6 +21429,12 @@
   };
 
   // js/ui/screens/stream/streamScreen.js
+  function clamp6(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+  function escapeHtml10(value = "") {
+    return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
   function getDpadDirection2(event) {
     const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
     const key = String((event == null ? void 0 : event.key) || "").toLowerCase();
@@ -13984,15 +21444,54 @@
     if (keyCode === 40 || key === "arrowdown" || key === "down") return "down";
     return null;
   }
-  function isBackEvent4(event) {
+  function isBackEvent3(event) {
     return Environment.isBackEvent(event);
+  }
+  function normalizeType(itemType) {
+    const normalized = String(itemType || "movie").toLowerCase();
+    return normalized === "tv" ? "series" : normalized || "movie";
+  }
+  function supportsStreamResource(addon, type) {
+    return ((addon == null ? void 0 : addon.resources) || []).some((resource) => {
+      if ((resource == null ? void 0 : resource.name) !== "stream") {
+        return false;
+      }
+      if (!Array.isArray(resource.types) || !resource.types.length) {
+        return true;
+      }
+      return resource.types.some((resourceType) => String(resourceType || "").toLowerCase() === String(type || "").toLowerCase());
+    });
   }
   function detectQuality2(text = "") {
     const value = String(text).toLowerCase();
-    if (value.includes("2160") || value.includes("4k")) return "4K";
+    if (value.includes("2160") || value.includes("4k")) return "4k";
     if (value.includes("1080")) return "1080p";
     if (value.includes("720")) return "720p";
+    if (value.includes("480")) return "480p";
     return "Auto";
+  }
+  function formatBytes(value) {
+    const size = Number(value || 0);
+    if (!Number.isFinite(size) || size <= 0) {
+      return "";
+    }
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let amount = size;
+    let unitIndex = 0;
+    while (amount >= 1024 && unitIndex < units.length - 1) {
+      amount /= 1024;
+      unitIndex += 1;
+    }
+    const precision = unitIndex >= 3 ? 2 : unitIndex >= 2 ? 1 : 0;
+    return `${amount.toFixed(precision)} ${units[unitIndex]}`;
+  }
+  function normalizeEpisodeCode(season, episode) {
+    const seasonNumber = Number(season || 0);
+    const episodeNumber = Number(episode || 0);
+    if (seasonNumber <= 0 || episodeNumber <= 0) {
+      return "";
+    }
+    return `S${seasonNumber} E${episodeNumber}`;
   }
   function flattenStreams(streamResult) {
     if (!streamResult || streamResult.status !== "success") {
@@ -14001,29 +21500,44 @@
     return (streamResult.data || []).flatMap((group) => {
       const groupName = group.addonName || "Addon";
       return (group.streams || []).map((stream, index) => ({
-        id: `${groupName}-${index}-${stream.url || ""}`,
-        label: stream.title || stream.name || `${groupName} stream`,
-        description: stream.description || stream.name || "",
-        addonName: groupName,
-        addonLogo: group.addonLogo || stream.addonLogo || null,
+        id: stream.id || `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
+        name: stream.name || null,
+        title: stream.title || null,
+        description: stream.description || null,
+        url: stream.url || null,
+        ytId: stream.ytId || null,
+        infoHash: stream.infoHash || null,
+        fileIdx: stream.fileIdx || null,
+        externalUrl: stream.externalUrl || null,
+        behaviorHints: stream.behaviorHints || null,
+        sources: Array.isArray(stream.sources) ? stream.sources : [],
+        subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
+        addonName: stream.addonName || groupName,
+        addonLogo: stream.addonLogo || group.addonLogo || null,
         sourceType: stream.type || stream.source || "",
-        url: stream.url,
         raw: stream
-      })).filter((entry) => Boolean(entry.url));
+      })).filter((entry) => Boolean(entry.url || entry.externalUrl || entry.ytId));
     });
   }
   function mergeStreamItems2(existing = [], incoming = []) {
     const byKey = /* @__PURE__ */ new Set();
     const merged = [];
     const push = (item) => {
-      if (!(item == null ? void 0 : item.url)) {
+      var _a, _b;
+      if (!item) {
+        return;
+      }
+      const url = String(item.url || item.externalUrl || item.ytId || "").trim();
+      if (!url) {
         return;
       }
       const key = [
         String(item.addonName || "Addon"),
-        String(item.url || ""),
-        String(item.sourceType || ""),
-        String(item.label || "")
+        url,
+        String(item.infoHash || ""),
+        String((_a = item.fileIdx) != null ? _a : ""),
+        String(((_b = item.behaviorHints) == null ? void 0 : _b.filename) || ""),
+        String(item.name || item.title || item.description || "")
       ].join("::");
       if (byKey.has(key)) {
         return;
@@ -14035,66 +21549,350 @@
     (incoming || []).forEach(push);
     return merged;
   }
-  function normalizeType(itemType) {
-    const normalized = String(itemType || "movie").toLowerCase();
-    if (normalized === "tv") {
-      return "series";
+  function iconSvg2(kind) {
+    if (kind === "peers") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12c2.76 0 5-2.46 5-5.5S14.76 1 12 1 7 3.46 7 6.5 9.24 12 12 12Zm0 2c-4.42 0-8 2.46-8 5.5V23h16v-3.5c0-3.04-3.58-5.5-8-5.5Z" fill="currentColor"/></svg>';
     }
-    return normalized || "movie";
+    if (kind === "size") {
+      return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 3h13l3 3v15H4V3Zm13 1.5V7h2.5L17 4.5ZM8 10h8v2H8v-2Zm0 4h8v2H8v-2Z" fill="currentColor"/></svg>';
+    }
+    return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.18 7.18 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.49.42l-.37 2.54c-.58.23-1.13.54-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.7 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L2.82 14.52a.5.5 0 0 0-.12.64l1.92 3.32a.5.5 0 0 0 .6.22l2.39-.96c.5.4 1.05.72 1.63.94l.37 2.54a.5.5 0 0 0 .49.42h3.84a.5.5 0 0 0 .5-.42l.36-2.54c.58-.23 1.13-.54 1.63-.94l2.39.96a.5.5 0 0 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z" fill="currentColor"/></svg>';
+  }
+  function renderMetaItem(kind, value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "";
+    }
+    return `
+    <span class="stream-route-meta-item ${kind}">
+      <span class="stream-route-meta-icon">${iconSvg2(kind)}</span>
+      <span>${escapeHtml10(text)}</span>
+    </span>
+  `;
+  }
+  function extractPeerCount(stream = {}) {
+    var _a;
+    const text = String([
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      ((_a = stream.behaviorHints) == null ? void 0 : _a.filename) || ""
+    ].join(" "));
+    const patterns = [
+      /\bseed(?:ers?)?\s*[:\-]?\s*(\d{1,5})\b/i,
+      /\bpeers?\s*[:\-]?\s*(\d{1,5})\b/i,
+      /\b(\d{1,5})\s*seed(?:ers?)?\b/i,
+      /\b👤\s*(\d{1,5})\b/i
+    ];
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match == null ? void 0 : match[1]) {
+        return match[1];
+      }
+    }
+    return "";
+  }
+  function extractIndexerName(stream = {}) {
+    var _a;
+    const sources = Array.isArray(stream.sources) ? stream.sources : [];
+    for (const source of sources) {
+      const value = String(source || "").trim();
+      if (value) {
+        return value;
+      }
+    }
+    const searchText = String([
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      ((_a = stream.behaviorHints) == null ? void 0 : _a.filename) || ""
+    ].join(" "));
+    const known = [
+      "ThePirateBay",
+      "1337x",
+      "RARBG",
+      "YTS",
+      "EZTV",
+      "TorBox",
+      "Torrentio",
+      "Orion"
+    ];
+    return known.find((entry) => new RegExp(entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(searchText)) || "";
+  }
+  function getAddonBadgeLabel(name = "") {
+    const cleaned = String(name || "").trim();
+    if (!cleaned) {
+      return "?";
+    }
+    if (/torrentio|torbox|torrent/i.test(cleaned)) {
+      return "\xB5";
+    }
+    const letters = cleaned.split(/\s+/).map((part) => part.charAt(0).toUpperCase()).join("").slice(0, 2);
+    return letters || cleaned.charAt(0).toUpperCase();
+  }
+  function getStreamHeadline(stream = {}) {
+    const primary = [
+      stream.name,
+      stream.title,
+      stream.description
+    ].find((value) => String(value || "").trim());
+    if (!primary) {
+      return stream.addonName || "Unknown source";
+    }
+    const firstLine = String(primary).split(/\r?\n/)[0].trim();
+    return firstLine || (stream.addonName || "Unknown source");
+  }
+  function getStreamQuality(stream = {}) {
+    var _a;
+    const qualityCandidate = [
+      stream.name,
+      stream.title,
+      stream.description
+    ].map((value) => String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean)).flat().find((line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line));
+    if (qualityCandidate) {
+      return qualityCandidate;
+    }
+    return detectQuality2([
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      ((_a = stream.behaviorHints) == null ? void 0 : _a.filename) || "",
+      stream.sourceType || ""
+    ].join(" "));
+  }
+  function isMetaNoiseLine(line = "") {
+    const value = String(line || "").trim();
+    if (!value) {
+      return true;
+    }
+    if (/[👤💾⚙🧲]/u.test(value)) {
+      return true;
+    }
+    if (/(?:thepiratebay|torrentio|torbox|1337x|rarbg|yts|eztv|orion)/i.test(value) && /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)) {
+      return true;
+    }
+    if (/\b(?:seed(?:ers?)?|peers?)\b/i.test(value) && /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)) {
+      return true;
+    }
+    return false;
+  }
+  function getStreamDescriptionLines(stream = {}) {
+    var _a;
+    const candidates = [
+      stream.name,
+      stream.description,
+      stream.title,
+      (_a = stream.behaviorHints) == null ? void 0 : _a.filename
+    ].flatMap((value) => String(value || "").split(/\r?\n/)).map((value) => String(value || "").trim()).filter(Boolean);
+    const unique2 = [];
+    candidates.forEach((value) => {
+      if (!unique2.some((entry) => entry.toLowerCase() === value.toLowerCase())) {
+        unique2.push(value);
+      }
+    });
+    const headline = getStreamHeadline(stream).toLowerCase();
+    const quality = getStreamQuality(stream).toLowerCase();
+    return unique2.filter((entry) => {
+      const normalized = entry.toLowerCase();
+      return normalized !== headline && normalized !== quality && !isMetaNoiseLine(entry);
+    }).slice(0, 2);
+  }
+  function getOrderedFilterNames(sourceChips = [], streams = []) {
+    const ordered = [];
+    sourceChips.forEach((chip) => {
+      if ((chip == null ? void 0 : chip.name) && !ordered.includes(chip.name)) {
+        ordered.push(chip.name);
+      }
+    });
+    streams.forEach((stream) => {
+      const addonName = String((stream == null ? void 0 : stream.addonName) || "").trim();
+      if (addonName && !ordered.includes(addonName)) {
+        ordered.push(addonName);
+      }
+    });
+    return ordered;
   }
   var StreamScreen = {
-    async mount(params = {}) {
+    getBackdropUrl() {
+      var _a, _b, _c;
+      return ((_a = this.params) == null ? void 0 : _a.backdrop) || ((_b = this.params) == null ? void 0 : _b.landscapePoster) || ((_c = this.params) == null ? void 0 : _c.poster) || "";
+    },
+    getRouteStateKey(params = {}) {
+      const itemType = normalizeType(params == null ? void 0 : params.itemType);
+      const itemId = String((params == null ? void 0 : params.itemId) || "").trim();
+      const videoId = String((params == null ? void 0 : params.videoId) || "").trim();
+      if (!itemId && !videoId) {
+        return null;
+      }
+      return `stream:${itemType}:${itemId}:${videoId}`;
+    },
+    captureRouteState() {
+      var _a;
+      const list = (_a = this.container) == null ? void 0 : _a.querySelector(".stream-route-list");
+      return {
+        params: this.params ? { ...this.params } : {},
+        loading: Boolean(this.loading),
+        error: String(this.error || ""),
+        streams: Array.isArray(this.streams) ? this.streams.map((stream) => ({ ...stream })) : [],
+        addonFilter: String(this.addonFilter || "all"),
+        focusState: this.focusState ? { ...this.focusState } : { zone: "filter", index: 0 },
+        sourceChips: Array.isArray(this.sourceChips) ? this.sourceChips.map((chip) => ({ ...chip })) : [],
+        listScrollTop: Number((list == null ? void 0 : list.scrollTop) || 0)
+      };
+    },
+    async mount(params = {}, navigationContext = {}) {
       this.container = document.getElementById("stream");
       ScreenUtils.show(this.container);
       this.params = params || {};
+      this.loadToken = (this.loadToken || 0) + 1;
+      this.focusState = { zone: "filter", index: 0 };
+      this.listScrollTop = 0;
+      this.error = "";
       this.loading = true;
       this.streams = [];
+      this.sourceChips = [];
       this.addonFilter = "all";
-      this.focusState = { zone: "filter", index: 0 };
-      this.loadToken = (this.loadToken || 0) + 1;
+      const restored = (navigationContext == null ? void 0 : navigationContext.restoredState) && typeof navigationContext.restoredState === "object" ? navigationContext.restoredState : null;
+      if (restored) {
+        this.loading = Boolean(restored.loading);
+        this.error = String(restored.error || "");
+        this.streams = Array.isArray(restored.streams) ? restored.streams.map((stream) => ({ ...stream })) : [];
+        this.addonFilter = String(restored.addonFilter || "all");
+        this.focusState = restored.focusState ? { ...restored.focusState } : { zone: "filter", index: 0 };
+        this.sourceChips = Array.isArray(restored.sourceChips) ? restored.sourceChips.map((chip) => ({ ...chip })) : [];
+        this.listScrollTop = Number(restored.listScrollTop || 0);
+      }
       this.render();
+      if (restored && (navigationContext == null ? void 0 : navigationContext.isBackNavigation) && this.streams.length) {
+        this.loading = false;
+        this.render();
+        return;
+      }
       await this.loadStreams();
     },
     async loadStreams() {
-      var _a, _b, _c, _d, _e, _f, _g, _h;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       const token = this.loadToken;
       const itemType = normalizeType((_a = this.params) == null ? void 0 : _a.itemType);
       const videoId = String(((_b = this.params) == null ? void 0 : _b.videoId) || ((_c = this.params) == null ? void 0 : _c.itemId) || "");
+      this.loading = true;
+      this.error = "";
+      this.streams = [];
+      this.addonFilter = "all";
+      this.focusState = { zone: "filter", index: 0 };
+      this.listScrollTop = 0;
+      try {
+        const addons = await addonRepository.getInstalledAddons();
+        if (token !== this.loadToken) {
+          return;
+        }
+        this.sourceChips = addons.filter((addon) => supportsStreamResource(addon, itemType)).map((addon) => ({ name: addon.displayName, status: "loading" }));
+        this.render();
+      } catch (error) {
+        console.warn("Failed to resolve stream addons", error);
+      }
+      const markSuccessfulSources = (names = []) => {
+        if (!Array.isArray(names) || !names.length) {
+          return;
+        }
+        const successSet = new Set(names.map((name) => String(name || "").trim()).filter(Boolean));
+        const known = new Set(this.sourceChips.map((chip) => chip.name));
+        this.sourceChips = this.sourceChips.map((chip) => successSet.has(chip.name) ? { ...chip, status: "success" } : chip);
+        successSet.forEach((name) => {
+          if (!known.has(name)) {
+            this.sourceChips.push({ name, status: "success" });
+          }
+        });
+      };
       const options = {
         itemId: String(((_d = this.params) == null ? void 0 : _d.itemId) || ""),
         season: (_f = (_e = this.params) == null ? void 0 : _e.season) != null ? _f : null,
         episode: (_h = (_g = this.params) == null ? void 0 : _g.episode) != null ? _h : null,
         onChunk: (chunkResult) => {
-          if (token !== this.loadToken) {
+          if (token !== this.loadToken || (chunkResult == null ? void 0 : chunkResult.status) !== "success") {
             return;
           }
+          const groups = Array.isArray(chunkResult.data) ? chunkResult.data : [];
+          markSuccessfulSources(groups.map((group) => (group == null ? void 0 : group.addonName) || ""));
           const chunkItems = flattenStreams(chunkResult);
           if (!chunkItems.length) {
+            this.render();
             return;
           }
           this.streams = mergeStreamItems2(this.streams, chunkItems);
+          if (this.focusState.zone !== "card") {
+            this.focusState = { zone: "card", index: 0 };
+          }
           this.render();
         }
       };
-      const streamResult = await streamRepository.getStreamsFromAllAddons(itemType, videoId, options);
-      if (token !== this.loadToken) {
+      try {
+        const streamResult = await streamRepository.getStreamsFromAllAddons(itemType, videoId, options);
+        if (token !== this.loadToken) {
+          return;
+        }
+        this.streams = mergeStreamItems2(this.streams, flattenStreams(streamResult));
+        markSuccessfulSources(this.streams.map((stream) => stream.addonName));
+        this.sourceChips = this.sourceChips.map((chip) => chip.status === "loading" ? { ...chip, status: "error" } : chip);
+        this.loading = false;
+        if (this.streams.length) {
+          this.focusState = { zone: "card", index: clamp6(Number(((_i = this.focusState) == null ? void 0 : _i.index) || 0), 0, this.streams.length - 1) };
+        } else {
+          this.focusState = { zone: "filter", index: 0 };
+        }
+        this.render();
+        this.scheduleErrorChipCleanup();
+      } catch (error) {
+        if (token !== this.loadToken) {
+          return;
+        }
+        this.loading = false;
+        this.error = (error == null ? void 0 : error.message) || "Failed to load streams.";
+        this.sourceChips = this.sourceChips.map((chip) => chip.status === "loading" ? { ...chip, status: "error" } : chip);
+        this.render();
+        this.scheduleErrorChipCleanup();
+      }
+    },
+    scheduleErrorChipCleanup() {
+      if (this.errorChipTimer) {
+        clearTimeout(this.errorChipTimer);
+        this.errorChipTimer = null;
+      }
+      if (!this.sourceChips.some((chip) => chip.status === "error")) {
         return;
       }
-      this.streams = mergeStreamItems2(this.streams, flattenStreams(streamResult));
-      this.loading = false;
-      this.render();
+      this.errorChipTimer = setTimeout(() => {
+        this.sourceChips = this.sourceChips.filter((chip) => chip.status !== "error");
+        this.render();
+      }, 1600);
     },
-    getFilteredStreams() {
-      if (this.addonFilter === "all") {
+    getOrderedFilterNames() {
+      return getOrderedFilterNames(this.sourceChips, this.streams);
+    },
+    getFilteredStreams(filter = this.addonFilter) {
+      if (filter === "all") {
         return this.streams;
       }
-      return this.streams.filter((stream) => stream.addonName === this.addonFilter);
+      return this.streams.filter((stream) => stream.addonName === filter);
+    },
+    setAddonFilter(nextFilter, preferredZone = "filter", preferredIndex = 0) {
+      const targetFilter = String(nextFilter || "all");
+      this.addonFilter = targetFilter;
+      const filtered = this.getFilteredStreams(targetFilter);
+      if (preferredZone === "card" && filtered.length) {
+        this.focusState = { zone: "card", index: clamp6(preferredIndex, 0, filtered.length - 1) };
+      } else {
+        const ordered = ["all", ...this.getOrderedFilterNames()];
+        this.focusState = { zone: "filter", index: clamp6(ordered.indexOf(targetFilter), 0, Math.max(0, ordered.length - 1)) };
+      }
+      this.listScrollTop = 0;
+      this.render();
     },
     focusList(list, index) {
       if (!Array.isArray(list) || !list.length) {
         return false;
       }
-      const targetIndex = Math.max(0, Math.min(list.length - 1, index));
+      const targetIndex = clamp6(index, 0, list.length - 1);
       const target = list[targetIndex];
       if (!target) {
         return false;
@@ -14106,190 +21904,239 @@
       } catch (_) {
         target.focus();
       }
-      const verticalList = target.closest(".series-stream-list");
-      if (verticalList) {
+      const chipTrack = target.closest(".stream-route-chip-track");
+      if (chipTrack) {
+        const left = target.offsetLeft;
+        const right = left + target.offsetWidth;
+        const viewLeft = chipTrack.scrollLeft;
+        const viewRight = viewLeft + chipTrack.clientWidth;
+        const pad = 24;
+        if (right > viewRight - pad) {
+          chipTrack.scrollLeft = Math.max(0, right - chipTrack.clientWidth + pad);
+        } else if (left < viewLeft + pad) {
+          chipTrack.scrollLeft = Math.max(0, left - pad);
+        }
+      }
+      const listNode = target.closest(".stream-route-list");
+      if (listNode) {
         target.scrollIntoView({ block: "nearest", inline: "nearest" });
+        this.listScrollTop = Number(listNode.scrollTop || 0);
       }
       return true;
     },
     getFocusLists() {
-      const filters = Array.from(this.container.querySelectorAll(".series-stream-filter.focusable"));
-      const cards = Array.from(this.container.querySelectorAll(".series-stream-card.focusable"));
-      const selectedFilterIndex = Math.max(0, filters.findIndex((node) => node.classList.contains("selected")));
-      return { filters, cards, selectedFilterIndex };
-    },
-    syncFocusFromDom() {
-      const { filters, cards, selectedFilterIndex } = this.getFocusLists();
-      const active = document.activeElement;
-      const filterIndex = filters.findIndex((node) => node.classList.contains("focused") || node === active);
-      if (filterIndex >= 0) {
-        this.focusState = { zone: "filter", index: filterIndex };
-        return;
-      }
-      const cardIndex = cards.findIndex((node) => node.classList.contains("focused") || node === active);
-      if (cardIndex >= 0) {
-        this.focusState = { zone: "card", index: cardIndex };
-        return;
-      }
-      this.focusState = { zone: filters.length ? "filter" : "card", index: selectedFilterIndex };
+      const chips = Array.from(this.container.querySelectorAll(".stream-route-chip.focusable"));
+      const cards = Array.from(this.container.querySelectorAll(".stream-route-card.focusable"));
+      return { chips, cards };
     },
     applyFocus() {
       var _a, _b;
-      const { filters, cards, selectedFilterIndex } = this.getFocusLists();
-      if (!filters.length && !cards.length) {
+      const { chips, cards } = this.getFocusLists();
+      if (!chips.length && !cards.length) {
         return;
       }
-      let zone = ((_a = this.focusState) == null ? void 0 : _a.zone) || "filter";
-      let index = Number(((_b = this.focusState) == null ? void 0 : _b.index) || 0);
-      if (zone === "filter" && !filters.length && cards.length) {
-        zone = "card";
-        index = 0;
-      } else if (zone === "card" && !cards.length && filters.length) {
-        zone = "filter";
-        index = selectedFilterIndex;
-      }
-      if (zone === "filter") {
-        index = Math.max(0, Math.min(filters.length - 1, index));
-        this.focusState = { zone, index };
-        this.focusList(filters, index);
+      const zone = ((_a = this.focusState) == null ? void 0 : _a.zone) || (cards.length ? "card" : "filter");
+      const index = Number(((_b = this.focusState) == null ? void 0 : _b.index) || 0);
+      if (zone === "card" && cards.length) {
+        this.focusState = { zone: "card", index: clamp6(index, 0, cards.length - 1) };
+        this.focusList(cards, this.focusState.index);
         return;
       }
-      index = Math.max(0, Math.min(cards.length - 1, index));
-      this.focusState = { zone: "card", index };
-      this.focusList(cards, index);
+      this.focusState = { zone: "filter", index: clamp6(index, 0, Math.max(0, chips.length - 1)) };
+      this.focusList(chips, this.focusState.index);
+    },
+    restoreScrollPosition() {
+      var _a;
+      const list = (_a = this.container) == null ? void 0 : _a.querySelector(".stream-route-list");
+      if (!list) {
+        return;
+      }
+      list.scrollTop = Number(this.listScrollTop || 0);
     },
     getHeaderMeta() {
-      var _a, _b, _c, _d, _e, _f, _g, _h;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
       const isSeries = normalizeType((_a = this.params) == null ? void 0 : _a.itemType) === "series";
       const title = String(((_b = this.params) == null ? void 0 : _b.itemTitle) || ((_c = this.params) == null ? void 0 : _c.playerTitle) || "Untitled");
       const subtitle = isSeries ? String(((_d = this.params) == null ? void 0 : _d.episodeTitle) || ((_e = this.params) == null ? void 0 : _e.playerSubtitle) || "").trim() : String(((_f = this.params) == null ? void 0 : _f.itemSubtitle) || "").trim();
-      const episodeLabel = isSeries && Number.isFinite(Number((_g = this.params) == null ? void 0 : _g.season)) && Number.isFinite(Number((_h = this.params) == null ? void 0 : _h.episode)) ? `S${Number(this.params.season)} E${Number(this.params.episode)}` : "";
-      return { isSeries, title, subtitle, episodeLabel };
+      const episodeLabel = normalizeEpisodeCode((_g = this.params) == null ? void 0 : _g.season, (_h = this.params) == null ? void 0 : _h.episode);
+      const detailLine = isSeries ? "" : [String(((_i = this.params) == null ? void 0 : _i.genres) || "").trim(), String(((_j = this.params) == null ? void 0 : _j.year) || "").trim()].filter(Boolean).join(" \u2022 ");
+      return { isSeries, title, subtitle, episodeLabel, detailLine };
+    },
+    renderChip(name, selected, status) {
+      const chipStatus = String(status || "success");
+      const classes = [
+        "stream-route-chip",
+        "focusable",
+        selected ? "selected" : "",
+        chipStatus !== "success" ? chipStatus : ""
+      ].filter(Boolean).join(" ");
+      const spinner = chipStatus === "loading" ? '<span class="stream-route-chip-spinner" aria-hidden="true"></span>' : "";
+      return `
+      <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml10(name)}">
+        ${spinner}
+        <span>${escapeHtml10(name === "all" ? "All" : name)}</span>
+      </button>
+    `;
+    },
+    renderStreamCard(stream, index) {
+      var _a;
+      const headline = getStreamHeadline(stream);
+      const quality = getStreamQuality(stream);
+      const descriptionLines = getStreamDescriptionLines(stream);
+      const meta = [
+        renderMetaItem("peers", extractPeerCount(stream)),
+        renderMetaItem("size", formatBytes((_a = stream.behaviorHints) == null ? void 0 : _a.videoSize)),
+        renderMetaItem("source", extractIndexerName(stream))
+      ].filter(Boolean).join("");
+      const addonBadge = stream.addonLogo ? `<img src="${stream.addonLogo}" alt="${escapeHtml10(stream.addonName || "Addon")}" />` : `<span>${escapeHtml10(getAddonBadgeLabel(stream.addonName || ""))}</span>`;
+      return `
+      <article class="stream-route-card focusable${this.focusState.zone === "card" && this.focusState.index === index ? " focused" : ""}"
+               data-action="playStream"
+               data-stream-id="${escapeHtml10(stream.id)}">
+        <div class="stream-route-card-copy">
+          <div class="stream-route-card-heading">${escapeHtml10(headline)}</div>
+          <div class="stream-route-card-quality">${escapeHtml10(quality)}</div>
+          ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml10(line)}</div>`).join("")}
+          ${meta ? `<div class="stream-route-card-meta">${meta}</div>` : ""}
+        </div>
+        <div class="stream-route-card-side">
+          <div class="stream-route-addon-badge">${addonBadge}</div>
+          <div class="stream-route-addon-name">${escapeHtml10(stream.addonName || "Addon")}</div>
+        </div>
+      </article>
+    `;
+    },
+    renderLoadingCards() {
+      return Array.from({ length: 3 }).map(() => `
+      <div class="stream-route-card skeleton">
+        <div class="stream-route-skeleton-line wide"></div>
+        <div class="stream-route-skeleton-line short"></div>
+        <div class="stream-route-skeleton-line"></div>
+        <div class="stream-route-skeleton-line"></div>
+      </div>
+    `).join("");
     },
     render() {
-      var _a, _b, _c;
-      const { isSeries, title, subtitle, episodeLabel } = this.getHeaderMeta();
-      const addons = Array.from(new Set(this.streams.map((stream) => stream.addonName).filter(Boolean)));
-      const filtered = this.getFilteredStreams();
-      const backdrop = ((_a = this.params) == null ? void 0 : _a.backdrop) || ((_b = this.params) == null ? void 0 : _b.poster) || "";
-      const logo = ((_c = this.params) == null ? void 0 : _c.logo) || "";
-      const filterTabs = [
-        `<button class="series-stream-filter focusable${this.addonFilter === "all" ? " selected" : ""}" data-action="setFilter" data-addon="all">All</button>`,
-        ...addons.map((addon) => `
-        <button class="series-stream-filter focusable${this.addonFilter === addon ? " selected" : ""}" data-action="setFilter" data-addon="${addon}">
-          ${addon}
-        </button>
-      `)
+      var _a;
+      const { isSeries, title, subtitle, episodeLabel, detailLine } = this.getHeaderMeta();
+      const backdrop = this.getBackdropUrl();
+      const logo = ((_a = this.params) == null ? void 0 : _a.logo) || "";
+      const orderedFilters = this.getOrderedFilterNames();
+      const chips = [
+        this.renderChip("all", this.addonFilter === "all", "success"),
+        ...orderedFilters.map((name) => {
+          const chip = this.sourceChips.find((entry) => entry.name === name) || { name, status: "success" };
+          return this.renderChip(name, this.addonFilter === name, chip.status);
+        })
       ].join("");
-      const streamCards = filtered.length ? filtered.map((stream) => `
-          <article class="series-stream-card focusable" data-action="playStream" data-stream-id="${stream.id}">
-            <div class="series-stream-title">${stream.label || "Stream"}</div>
-            <div class="series-stream-desc">${stream.description || ""}</div>
-            <div class="series-stream-meta">
-              <span>${stream.addonName || "Addon"}${stream.sourceType ? ` - ${stream.sourceType}` : ""}</span>
-            </div>
-            <div class="series-stream-tags">
-              <span class="series-stream-tag">${detectQuality2(stream.label || stream.description || "")}</span>
-              <span class="series-stream-tag">${String(stream.sourceType || "").toLowerCase().includes("torrent") ? "Torrent" : "Stream"}</span>
-            </div>
-          </article>
-        `).join("") : this.loading ? `<div class="series-stream-empty">Loading streams...</div>` : `<div class="series-stream-empty">No streams found for this filter.</div>`;
+      const filtered = this.getFilteredStreams();
+      let body = "";
+      if (this.loading) {
+        body = this.renderLoadingCards();
+      } else if (this.error) {
+        body = `<div class="stream-route-empty">${escapeHtml10(this.error)}</div>`;
+      } else if (!filtered.length) {
+        body = `<div class="stream-route-empty">No sources found for this filter.</div>`;
+      } else {
+        body = filtered.map((stream, index) => this.renderStreamCard(stream, index)).join("");
+      }
       this.container.innerHTML = `
-      <div class="series-detail-shell stream-screen-shell">
-        <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop}')"` : ""}></div>
-        <div class="series-detail-vignette"></div>
-        <div class="series-stream-panel stream-screen-panel">
-          <div class="series-stream-left stream-screen-left">
-            ${logo ? `<img src="${logo}" class="series-stream-logo" alt="logo" />` : `<div class="series-stream-heading">${title}</div>`}
-            ${episodeLabel ? `<div class="series-stream-episode">${episodeLabel}</div>` : `<div class="series-stream-episode">${title}</div>`}
-            <div class="series-stream-episode-title">${subtitle || (isSeries ? "Select a source to start episode playback." : "Select a source to start playback.")}</div>
-          </div>
-          <div class="series-stream-right">
-            <div class="series-stream-filters">${filterTabs}</div>
-            <div class="series-stream-list">${streamCards}</div>
-          </div>
+      <div class="stream-route-shell">
+        <div class="stream-route-backdrop"${backdrop ? ` style="background-image:url('${String(backdrop).replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="stream-route-backdrop-dim"></div>
+        <div class="stream-route-left-gradient"></div>
+        <div class="stream-route-right-gradient"></div>
+        <div class="stream-route-content">
+          <section class="stream-route-left">
+            <div class="stream-route-left-inner">
+              ${logo ? `<img src="${logo}" class="stream-route-logo" alt="${escapeHtml10(title)}" />` : `<h1 class="stream-route-title">${escapeHtml10(title)}</h1>`}
+              ${episodeLabel ? `<div class="stream-route-episode-code">${escapeHtml10(episodeLabel)}</div>` : ""}
+              ${subtitle ? `<div class="stream-route-subtitle">${escapeHtml10(subtitle)}</div>` : ""}
+              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml10(detailLine)}</div>` : !isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml10(subtitle)}</div>` : ""}
+            </div>
+          </section>
+          <section class="stream-route-right">
+            <div class="stream-route-chip-wrap">
+              <div class="stream-route-chip-track">${chips}</div>
+            </div>
+            <div class="stream-route-panel-shell">
+              <div class="stream-route-panel">
+                <div class="stream-route-list">${body}</div>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
+      this.restoreScrollPosition();
       this.applyFocus();
     },
     playStream(streamId) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
       const filtered = this.getFilteredStreams();
       const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
-      if (!(selected == null ? void 0 : selected.url)) {
+      const targetUrl = (selected == null ? void 0 : selected.url) || (selected == null ? void 0 : selected.externalUrl) || "";
+      if (!targetUrl) {
         return;
       }
       const isSeries = normalizeType((_a = this.params) == null ? void 0 : _a.itemType) === "series";
       Router.navigate("player", {
-        streamUrl: selected.url,
+        streamUrl: targetUrl,
         itemId: ((_b = this.params) == null ? void 0 : _b.itemId) || null,
         itemType: isSeries ? "series" : "movie",
         videoId: ((_c = this.params) == null ? void 0 : _c.videoId) || null,
         episodeLabel: ((_d = this.params) == null ? void 0 : _d.season) && ((_e = this.params) == null ? void 0 : _e.episode) ? `S${this.params.season}E${this.params.episode}` : null,
         playerTitle: ((_f = this.params) == null ? void 0 : _f.itemTitle) || ((_g = this.params) == null ? void 0 : _g.playerTitle) || "Untitled",
         playerSubtitle: ((_h = this.params) == null ? void 0 : _h.episodeTitle) || ((_i = this.params) == null ? void 0 : _i.playerSubtitle) || "",
-        playerBackdropUrl: ((_j = this.params) == null ? void 0 : _j.backdrop) || ((_k = this.params) == null ? void 0 : _k.poster) || null,
-        playerLogoUrl: ((_l = this.params) == null ? void 0 : _l.logo) || null,
-        parentalWarnings: ((_m = this.params) == null ? void 0 : _m.parentalWarnings) || null,
-        parentalGuide: ((_n = this.params) == null ? void 0 : _n.parentalGuide) || null,
-        season: ((_o = this.params) == null ? void 0 : _o.season) == null ? null : Number(this.params.season),
-        episode: ((_p = this.params) == null ? void 0 : _p.episode) == null ? null : Number(this.params.episode),
-        episodes: Array.isArray((_q = this.params) == null ? void 0 : _q.episodes) ? this.params.episodes : [],
+        playerBackdropUrl: this.getBackdropUrl() || null,
+        playerLogoUrl: ((_j = this.params) == null ? void 0 : _j.logo) || null,
+        parentalWarnings: ((_k = this.params) == null ? void 0 : _k.parentalWarnings) || null,
+        parentalGuide: ((_l = this.params) == null ? void 0 : _l.parentalGuide) || null,
+        season: ((_m = this.params) == null ? void 0 : _m.season) == null ? null : Number(this.params.season),
+        episode: ((_n = this.params) == null ? void 0 : _n.episode) == null ? null : Number(this.params.episode),
+        episodes: Array.isArray((_o = this.params) == null ? void 0 : _o.episodes) ? this.params.episodes : [],
         streamCandidates: filtered,
-        nextEpisodeVideoId: ((_r = this.params) == null ? void 0 : _r.nextEpisodeVideoId) || null,
-        nextEpisodeLabel: ((_s = this.params) == null ? void 0 : _s.nextEpisodeLabel) || null
+        nextEpisodeVideoId: ((_p = this.params) == null ? void 0 : _p.nextEpisodeVideoId) || null,
+        nextEpisodeLabel: ((_q = this.params) == null ? void 0 : _q.nextEpisodeLabel) || null
       });
     },
     onKeyDown(event) {
       var _a, _b, _c, _d;
-      if (isBackEvent4(event)) {
+      if (isBackEvent3(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
         Router.back();
         return;
       }
       const direction = getDpadDirection2(event);
       if (direction) {
-        const { filters, cards, selectedFilterIndex } = this.getFocusLists();
-        const hasValidLocalFocus = this.focusState && (this.focusState.zone === "filter" && filters.length && Number(this.focusState.index) >= 0 && Number(this.focusState.index) < filters.length || this.focusState.zone === "card" && cards.length && Number(this.focusState.index) >= 0 && Number(this.focusState.index) < cards.length);
-        if (!hasValidLocalFocus) {
-          this.syncFocusFromDom();
-        }
-        let zone = ((_b = this.focusState) == null ? void 0 : _b.zone) || (filters.length ? "filter" : "card");
+        const { chips, cards } = this.getFocusLists();
+        const zone = ((_b = this.focusState) == null ? void 0 : _b.zone) || (cards.length ? "card" : "filter");
         let index = Number(((_c = this.focusState) == null ? void 0 : _c.index) || 0);
-        if (zone === "filter" && !filters.length && cards.length) {
-          zone = "card";
-          index = Math.min(cards.length - 1, Math.max(0, index));
-        } else if (zone === "card" && !cards.length && filters.length) {
-          zone = "filter";
-          index = selectedFilterIndex;
-        }
-        if (zone === "filter" && filters.length) {
-          const focusedFilterIndex = filters.findIndex((node) => node.classList.contains("focused") || node === document.activeElement);
-          if (focusedFilterIndex >= 0) {
-            index = focusedFilterIndex;
-          }
-        } else if (zone === "card" && cards.length) {
-          const focusedCardIndex = cards.findIndex((node) => node.classList.contains("focused") || node === document.activeElement);
-          if (focusedCardIndex >= 0) {
-            index = focusedCardIndex;
-          }
-        }
         (_d = event == null ? void 0 : event.preventDefault) == null ? void 0 : _d.call(event);
         if (zone === "filter") {
           if (direction === "left") {
-            this.focusState = { zone: "filter", index: Math.max(0, index - 1) };
-            this.applyFocus();
+            if (chips.length) {
+              const ordered = ["all", ...this.getOrderedFilterNames()];
+              const currentFilter = ordered[clamp6(index, 0, ordered.length - 1)] || "all";
+              const currentPosition = ordered.indexOf(currentFilter);
+              const nextFilter = ordered[clamp6(currentPosition - 1, 0, ordered.length - 1)];
+              this.setAddonFilter(nextFilter, "filter", clamp6(index - 1, 0, Math.max(0, chips.length - 1)));
+            }
             return;
           }
           if (direction === "right") {
-            this.focusState = { zone: "filter", index: Math.min(filters.length - 1, index + 1) };
-            this.applyFocus();
+            if (chips.length) {
+              const ordered = ["all", ...this.getOrderedFilterNames()];
+              const currentFilter = ordered[clamp6(index, 0, ordered.length - 1)] || "all";
+              const currentPosition = ordered.indexOf(currentFilter);
+              const nextFilter = ordered[clamp6(currentPosition + 1, 0, ordered.length - 1)];
+              this.setAddonFilter(nextFilter, "filter", clamp6(index + 1, 0, Math.max(0, chips.length - 1)));
+            }
             return;
           }
           if (direction === "down" && cards.length) {
-            this.focusState = { zone: "card", index: Math.min(index, cards.length - 1) };
+            this.focusState = { zone: "card", index: clamp6(index, 0, cards.length - 1) };
             this.applyFocus();
           }
           return;
@@ -14298,18 +22145,29 @@
           if (direction === "up") {
             if (index > 0) {
               this.focusState = { zone: "card", index: index - 1 };
-            } else if (filters.length) {
-              this.focusState = { zone: "filter", index: selectedFilterIndex };
+              this.applyFocus();
+              return;
             }
+            this.focusState = {
+              zone: "filter",
+              index: clamp6(["all", ...this.getOrderedFilterNames()].indexOf(this.addonFilter), 0, Math.max(0, chips.length - 1))
+            };
             this.applyFocus();
             return;
           }
           if (direction === "down") {
-            this.focusState = { zone: "card", index: Math.min(cards.length - 1, index + 1) };
+            this.focusState = { zone: "card", index: clamp6(index + 1, 0, Math.max(0, cards.length - 1)) };
             this.applyFocus();
             return;
           }
-          return;
+          if (direction === "left" || direction === "right") {
+            const ordered = ["all", ...this.getOrderedFilterNames()];
+            const currentIndex = Math.max(0, ordered.indexOf(this.addonFilter));
+            const delta = direction === "left" ? -1 : 1;
+            const nextFilter = ordered[clamp6(currentIndex + delta, 0, ordered.length - 1)] || "all";
+            this.setAddonFilter(nextFilter, "card", index);
+            return;
+          }
         }
         return;
       }
@@ -14322,10 +22180,8 @@
       }
       const action = String(current.dataset.action || "");
       if (action === "setFilter") {
-        this.addonFilter = current.dataset.addon || "all";
-        const order = ["all", ...Array.from(new Set(this.streams.map((stream) => stream.addonName).filter(Boolean)))];
-        this.focusState = { zone: "filter", index: Math.max(0, order.indexOf(this.addonFilter)) };
-        this.render();
+        const addon = String(current.dataset.addon || "all");
+        this.setAddonFilter(addon, "filter", Array.from(this.container.querySelectorAll(".stream-route-chip.focusable")).indexOf(current));
         return;
       }
       if (action === "playStream") {
@@ -14334,6 +22190,10 @@
     },
     cleanup() {
       this.loadToken = (this.loadToken || 0) + 1;
+      if (this.errorChipTimer) {
+        clearTimeout(this.errorChipTimer);
+        this.errorChipTimer = null;
+      }
       ScreenUtils.hide(this.container);
     }
   };
@@ -14354,7 +22214,7 @@
     }
     return value;
   }
-  function isBackEvent5(event) {
+  function isBackEvent4(event) {
     return Environment.isBackEvent(event);
   }
   function toType(mediaType) {
@@ -14503,7 +22363,7 @@
     },
     onKeyDown(event) {
       var _a;
-      if (isBackEvent5(event)) {
+      if (isBackEvent4(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
         Router.back();
         return;
@@ -14538,24 +22398,71 @@
   };
 
   // js/ui/screens/catalog/catalogSeeAllScreen.js
-  function isBackEvent6(event) {
+  function isBackEvent5(event) {
     return Environment.isBackEvent(event);
   }
-  function toTitleCase4(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return "";
-    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  function escapeHtml11(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   var CatalogSeeAllScreen = {
-    async mount(params = {}) {
+    getRouteStateKey(params = {}) {
+      const addonBaseUrl = String((params == null ? void 0 : params.addonBaseUrl) || "").trim();
+      const catalogId = String((params == null ? void 0 : params.catalogId) || "").trim();
+      const type = String((params == null ? void 0 : params.type) || "movie").trim() || "movie";
+      if (!addonBaseUrl || !catalogId) {
+        return null;
+      }
+      return `catalogSeeAll:${addonBaseUrl}:${catalogId}:${type}`;
+    },
+    captureRouteState() {
+      this.captureViewState();
+      return {
+        params: this.params ? { ...this.params } : {},
+        items: Array.isArray(this.items) ? [...this.items] : [],
+        nextSkip: Number(this.nextSkip || 0),
+        hasMore: Boolean(this.hasMore),
+        lastFocusedKey: this.lastFocusedKey ? String(this.lastFocusedKey) : null,
+        savedScrollTop: Number(this.savedScrollTop || 0)
+      };
+    },
+    hydrateFromRouteState(restoredState = null, params = {}) {
+      const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
+      if (!(snapshot == null ? void 0 : snapshot.params)) {
+        return false;
+      }
+      const currentKey = this.getRouteStateKey(params);
+      const snapshotKey = this.getRouteStateKey(snapshot.params);
+      if (!currentKey || !snapshotKey || currentKey !== snapshotKey) {
+        return false;
+      }
+      this.params = params || {};
+      this.items = Array.isArray(snapshot.items) ? [...snapshot.items] : [];
+      this.nextSkip = Number(snapshot.nextSkip || 0);
+      this.hasMore = Boolean(snapshot.hasMore);
+      this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
+      this.savedScrollTop = Number(snapshot.savedScrollTop || 0);
+      this.pendingRestoreFocus = true;
+      return true;
+    },
+    async mount(params = {}, navigationContext = {}) {
+      var _a;
       this.container = document.getElementById("catalogSeeAll");
       ScreenUtils.show(this.container);
       this.params = params || {};
       this.items = Array.isArray(params == null ? void 0 : params.initialItems) ? [...params.initialItems] : [];
       this.nextSkip = this.items.length ? 100 : 0;
+      this.layoutPrefs = LayoutPreferences.get();
       this.loading = false;
       this.hasMore = true;
+      this.lastFocusedKey = ((_a = this.items[0]) == null ? void 0 : _a.id) ? `item:${this.items[0].id}` : null;
+      this.pendingRestoreFocus = false;
+      this.savedScrollTop = 0;
       this.loadToken = (this.loadToken || 0) + 1;
+      if (this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params)) {
+        this.loading = false;
+        this.render();
+        return;
+      }
       this.render();
       if (!this.items.length) {
         await this.loadNextPage();
@@ -14573,6 +22480,8 @@
         return;
       }
       this.loading = true;
+      this.captureViewState();
+      this.pendingRestoreFocus = true;
       this.render();
       const token = this.loadToken;
       const skip = Math.max(0, Number(this.nextSkip || 0));
@@ -14609,49 +22518,117 @@
       }
       this.hasMore = incoming.length > 0;
       this.loading = false;
+      this.pendingRestoreFocus = true;
       this.render();
     },
+    captureViewState() {
+      var _a, _b, _c;
+      const shell = (_a = this.container) == null ? void 0 : _a.querySelector(".seeall-shell");
+      if (shell) {
+        this.savedScrollTop = shell.scrollTop;
+      }
+      const focused = (_b = this.container) == null ? void 0 : _b.querySelector(".seeall-card.focused");
+      if ((_c = focused == null ? void 0 : focused.dataset) == null ? void 0 : _c.focusKey) {
+        this.lastFocusedKey = focused.dataset.focusKey;
+      }
+    },
+    maybeAutoLoadMore(index) {
+      if (this.loading || !this.hasMore) {
+        return;
+      }
+      const remaining = this.items.length - 1 - Number(index || 0);
+      if (remaining <= 10) {
+        this.loadNextPage();
+      }
+    },
+    restoreFocusedCard() {
+      var _a, _b, _c, _d;
+      const shell = (_a = this.container) == null ? void 0 : _a.querySelector(".seeall-shell");
+      const target = (this.lastFocusedKey ? (_b = this.container) == null ? void 0 : _b.querySelector(`.seeall-card[data-focus-key="${this.lastFocusedKey}"]`) : null) || ((_c = this.container) == null ? void 0 : _c.querySelector(".seeall-card.focusable")) || null;
+      if (shell) {
+        shell.scrollTop = Number(this.savedScrollTop || 0);
+      }
+      if (!target) {
+        return;
+      }
+      (_d = this.container) == null ? void 0 : _d.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) node.classList.remove("focused");
+      });
+      target.classList.add("focused");
+      target.focus();
+      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+    },
     render() {
+      var _a;
       const descriptor = this.params || {};
-      const title = descriptor.catalogName ? `${descriptor.catalogName} - ${toTitleCase4(descriptor.type)}` : "Catalog";
-      const cards = this.items.length ? this.items.map((item) => `
+      const title = descriptor.catalogName || "Catalog";
+      const cards = this.items.length ? this.items.map((item, index) => {
+        var _a2;
+        return `
           <article class="seeall-card focusable"
                    data-action="openDetail"
-                   data-item-id="${item.id}"
+                   data-item-id="${item.id || ""}"
                    data-item-type="${item.type || descriptor.type || "movie"}"
-                   data-item-title="${item.name || "Untitled"}">
+                   data-item-title="${escapeHtml11(item.name || "Untitled")}"
+                   data-focus-key="item:${item.id || index}"
+                   data-item-index="${index}">
             <div class="seeall-card-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-            <div class="seeall-card-title">${item.name || "Untitled"}</div>
-            <div class="seeall-card-subtitle">${toTitleCase4(item.type || descriptor.type || "movie")}</div>
+            ${((_a2 = this.layoutPrefs) == null ? void 0 : _a2.posterLabelsEnabled) !== false ? `<div class="seeall-card-title">${escapeHtml11(item.name || "Untitled")}</div>` : ""}
           </article>
-        `).join("") : `<div class="seeall-empty">No items available.</div>`;
+        `;
+      }).join("") : `<div class="seeall-empty">No items available.</div>`;
       this.container.innerHTML = `
       <div class="seeall-shell">
         <header class="seeall-header">
-          <button class="seeall-back focusable" data-action="back">Back</button>
-          <h2 class="seeall-title">${title}</h2>
-          <button class="seeall-load-more focusable${!this.hasMore || this.loading ? " disabled" : ""}"
-                  data-action="loadMore"
-                  ${!this.hasMore || this.loading ? "disabled" : ""}>
-            ${this.loading ? "Loading..." : this.hasMore ? "Load More" : "No More"}
-          </button>
+          <h2 class="seeall-title">${escapeHtml11(title)}</h2>
+          ${((_a = this.layoutPrefs) == null ? void 0 : _a.catalogAddonNameEnabled) !== false && descriptor.addonName ? `<div class="seeall-subtitle">from ${escapeHtml11(descriptor.addonName)}</div>` : ""}
         </header>
         <section class="seeall-grid">
           ${cards}
         </section>
+        ${this.loading ? `<div class="seeall-loading">Loading...</div>` : ""}
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
+      this.bindCardEvents();
+      if (this.pendingRestoreFocus) {
+        this.pendingRestoreFocus = false;
+        this.restoreFocusedCard();
+        return;
+      }
       ScreenUtils.setInitialFocus(this.container);
+    },
+    bindCardEvents() {
+      var _a;
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll(".seeall-card.focusable").forEach((node) => {
+        if (node.__boundFocusHandlers) return;
+        node.__boundFocusHandlers = true;
+        node.addEventListener("focus", () => {
+          var _a2, _b;
+          this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
+          this.savedScrollTop = ((_b = (_a2 = this.container) == null ? void 0 : _a2.querySelector(".seeall-shell")) == null ? void 0 : _b.scrollTop) || 0;
+          this.maybeAutoLoadMore(node.dataset.itemIndex);
+        });
+        node.addEventListener("mouseenter", () => {
+          this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
+        });
+      });
     },
     async onKeyDown(event) {
       var _a;
-      if (isBackEvent6(event)) {
+      if (isBackEvent5(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
         Router.back();
         return;
       }
       if (ScreenUtils.handleDpadNavigation(event, this.container)) {
+        const focused = this.container.querySelector(".seeall-card.focused");
+        if (focused) {
+          this.lastFocusedKey = focused.dataset.focusKey || this.lastFocusedKey;
+          focused.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+          this.maybeAutoLoadMore(focused.dataset.itemIndex);
+        }
         return;
       }
       if (Number((event == null ? void 0 : event.keyCode) || 0) !== 13) {
@@ -14662,14 +22639,6 @@
         return;
       }
       const action = String(current.dataset.action || "");
-      if (action === "back") {
-        Router.back();
-        return;
-      }
-      if (action === "loadMore") {
-        await this.loadNextPage();
-        return;
-      }
       if (action === "openDetail") {
         Router.navigate("detail", {
           itemId: current.dataset.itemId,
@@ -14681,6 +22650,38 @@
     cleanup() {
       this.loadToken = (this.loadToken || 0) + 1;
       ScreenUtils.hide(this.container);
+    }
+  };
+
+  // js/ui/navigation/routeStateStore.js
+  var stateMap = /* @__PURE__ */ new Map();
+  var RouteStateStore = {
+    get(key) {
+      if (!key) return null;
+      return stateMap.has(key) ? stateMap.get(key) : null;
+    },
+    set(key, value) {
+      if (!key) return;
+      if (value == null) {
+        stateMap.delete(key);
+        return;
+      }
+      stateMap.set(key, value);
+    },
+    clear(key) {
+      if (!key) return;
+      stateMap.delete(key);
+    },
+    clearByPrefix(prefix) {
+      if (!prefix) return;
+      Array.from(stateMap.keys()).forEach((key) => {
+        if (String(key).startsWith(prefix)) {
+          stateMap.delete(key);
+        }
+      });
+    },
+    clearAll() {
+      stateMap.clear();
     }
   };
 
@@ -14713,9 +22714,55 @@
       discover: DiscoverScreen,
       settings: SettingsScreen,
       plugin: PluginScreen,
+      catalogOrder: CatalogOrderScreen,
       stream: StreamScreen,
       castDetail: CastDetailScreen,
       catalogSeeAll: CatalogSeeAllScreen
+    },
+    getRouteStateKey(routeName, params = {}) {
+      const screen = this.routes[routeName];
+      if (!(screen == null ? void 0 : screen.getRouteStateKey)) {
+        return null;
+      }
+      try {
+        return screen.getRouteStateKey(params || {});
+      } catch (error) {
+        console.warn("Failed to resolve route state key", routeName, error);
+        return null;
+      }
+    },
+    captureCurrentRouteState() {
+      if (!this.current) {
+        return;
+      }
+      const screen = this.routes[this.current];
+      if (!(screen == null ? void 0 : screen.captureRouteState)) {
+        return;
+      }
+      const key = this.getRouteStateKey(this.current, this.currentParams);
+      if (!key) {
+        return;
+      }
+      try {
+        RouteStateStore.set(key, screen.captureRouteState());
+      } catch (error) {
+        console.warn("Failed to capture route state", this.current, error);
+      }
+    },
+    resolveNavigationContext(routeName, params = {}, options = {}) {
+      var _a;
+      const screen = this.routes[routeName];
+      const key = this.getRouteStateKey(routeName, params);
+      const shouldClear = Boolean((_a = screen == null ? void 0 : screen.clearRouteStateOnMount) == null ? void 0 : _a.call(screen, params || {}));
+      if (shouldClear && key) {
+        RouteStateStore.clear(key);
+      }
+      return {
+        restoredState: !shouldClear && key ? RouteStateStore.get(key) : null,
+        routeStateKey: key,
+        fromHistory: Boolean(options == null ? void 0 : options.fromHistory),
+        isBackNavigation: Boolean(options == null ? void 0 : options.isBackNavigation)
+      };
     },
     init() {
       if (this.popstateBound) {
@@ -14739,14 +22786,16 @@
         if ((state == null ? void 0 : state.route) && this.routes[state.route]) {
           await this.navigate(state.route, state.params || {}, {
             fromHistory: true,
-            skipStackPush: true
+            skipStackPush: true,
+            isBackNavigation: true
           });
           return;
         }
         if (this.current && this.current !== "home" && this.routes.home) {
           await this.navigate("home", {}, {
             fromHistory: true,
-            skipStackPush: true
+            skipStackPush: true,
+            isBackNavigation: true
           });
         }
       });
@@ -14764,6 +22813,7 @@
       const previousRoute = this.current;
       const shouldSkipPush = skipStackPush || NON_BACKSTACK_ROUTES.has(previousRoute);
       if (this.current && this.current !== routeName) {
+        this.captureCurrentRouteState();
         (_b = (_a = this.routes[this.current]).cleanup) == null ? void 0 : _b.call(_a);
         if (!shouldSkipPush) {
           this.stack.push({
@@ -14772,11 +22822,13 @@
           });
         }
       } else if (this.current === routeName) {
+        this.captureCurrentRouteState();
         (_d = (_c = this.routes[this.current]).cleanup) == null ? void 0 : _d.call(_c);
       }
       this.current = routeName;
       this.currentParams = params || {};
-      await Screen.mount(this.currentParams);
+      const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
+      await Screen.mount(this.currentParams, navigationContext);
       if ((window == null ? void 0 : window.history) && typeof window.history.pushState === "function") {
         const state = { route: this.current, params: this.currentParams };
         if (!this.historyInitialized) {
@@ -14822,10 +22874,14 @@
       if (!previousRoute || !this.routes[previousRoute]) {
         return;
       }
+      this.captureCurrentRouteState();
       (_e = (_d = this.routes[this.current]).cleanup) == null ? void 0 : _e.call(_d);
       this.current = previousRoute;
       this.currentParams = previousParams;
-      await this.routes[previousRoute].mount(previousParams);
+      const navigationContext = this.resolveNavigationContext(previousRoute, previousParams, {
+        isBackNavigation: true
+      });
+      await this.routes[previousRoute].mount(previousParams, navigationContext);
     },
     getCurrent() {
       return this.current;
@@ -14932,6 +22988,7 @@
     <div id="discover" class="screen"></div>
     <div id="settings" class="screen"></div>
     <div id="plugin" class="screen"></div>
+    <div id="catalogOrder" class="screen"></div>
     <div id="player" class="screen">
       <video id="videoPlayer" autoplay playsinline webkit-playsinline preload="auto" style="width:100vw;height:100vh;background:black"></video>
     </div>
@@ -14997,7 +23054,10 @@
       }
       if (state === AuthState.SIGNED_OUT) {
         StartupSyncService.stop();
-        Router.navigate("authQrSignIn");
+        const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
+        Router.navigate("authQrSignIn", {
+          onboardingMode: !hasSeenQr
+        });
       }
       if (state === AuthState.AUTHENTICATED) {
         StartupSyncService.start();

@@ -9,6 +9,7 @@ import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { loadStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
+import { LocalStore } from "./core/storage/localStore.js";
 
 async function bootstrapApp() {
   renderAppShell();
@@ -32,7 +33,10 @@ async function bootstrapApp() {
 
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
-      Router.navigate("authQrSignIn");
+      const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
+      Router.navigate("authQrSignIn", {
+        onboardingMode: !hasSeenQr
+      });
     }
 
     if (state === AuthState.AUTHENTICATED) {

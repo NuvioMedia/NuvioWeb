@@ -5,8 +5,12 @@ const KEY = "playerSettings";
 const DEFAULTS = {
   autoplayNextEpisode: true,
   subtitlesEnabled: true,
-  subtitleLanguage: "it",
-  preferredQuality: "auto"
+  subtitleLanguage: "system",
+  preferredAudioLanguage: "system",
+  preferredQuality: "auto",
+  preferredPlayer: "auto",
+  trailerAutoplay: false,
+  subtitleRenderMode: "native"
 };
 
 export const PlayerSettingsStore = {

@@ -12,10 +12,12 @@ import { SearchScreen } from "../screens/search/searchScreen.js";
 import { DiscoverScreen } from "../screens/search/discoverScreen.js";
 import { SettingsScreen } from "../screens/settings/settingsScreen.js";
 import { PluginScreen } from "../screens/plugin/pluginScreen.js";
+import { CatalogOrderScreen } from "../screens/plugin/catalogOrderScreen.js";
 import { StreamScreen } from "../screens/stream/streamScreen.js";
 import { CastDetailScreen } from "../screens/cast/castDetailScreen.js";
 import { CatalogSeeAllScreen } from "../screens/catalog/catalogSeeAllScreen.js";
 import { Platform } from "../../platform/index.js";
+import { RouteStateStore } from "./routeStateStore.js";
 
 const NON_BACKSTACK_ROUTES = new Set([
   "splash",
@@ -48,9 +50,57 @@ export const Router = {
     discover: DiscoverScreen,
     settings: SettingsScreen,
     plugin: PluginScreen,
+    catalogOrder: CatalogOrderScreen,
     stream: StreamScreen,
     castDetail: CastDetailScreen,
     catalogSeeAll: CatalogSeeAllScreen
+  },
+
+  getRouteStateKey(routeName, params = {}) {
+    const screen = this.routes[routeName];
+    if (!screen?.getRouteStateKey) {
+      return null;
+    }
+    try {
+      return screen.getRouteStateKey(params || {});
+    } catch (error) {
+      console.warn("Failed to resolve route state key", routeName, error);
+      return null;
+    }
+  },
+
+  captureCurrentRouteState() {
+    if (!this.current) {
+      return;
+    }
+    const screen = this.routes[this.current];
+    if (!screen?.captureRouteState) {
+      return;
+    }
+    const key = this.getRouteStateKey(this.current, this.currentParams);
+    if (!key) {
+      return;
+    }
+    try {
+      RouteStateStore.set(key, screen.captureRouteState());
+    } catch (error) {
+      console.warn("Failed to capture route state", this.current, error);
+    }
+  },
+
+  resolveNavigationContext(routeName, params = {}, options = {}) {
+    const screen = this.routes[routeName];
+    const key = this.getRouteStateKey(routeName, params);
+    const shouldClear = Boolean(screen?.clearRouteStateOnMount?.(params || {}));
+    if (shouldClear && key) {
+      RouteStateStore.clear(key);
+    }
+    return {
+      restoredState: !shouldClear && key ? RouteStateStore.get(key) : null,
+      routeStateKey: key,
+      fromHistory: Boolean(options?.fromHistory),
+      isBackNavigation: Boolean(options?.isBackNavigation)
+    };
   },
 
   init() {
@@ -74,14 +124,16 @@ export const Router = {
       if (state?.route && this.routes[state.route]) {
         await this.navigate(state.route, state.params || {}, {
           fromHistory: true,
-          skipStackPush: true
+          skipStackPush: true,
+          isBackNavigation: true
         });
         return;
       }
       if (this.current && this.current !== "home" && this.routes.home) {
         await this.navigate("home", {}, {
           fromHistory: true,
-          skipStackPush: true
+          skipStackPush: true,
+          isBackNavigation: true
         });
       }
     });
@@ -104,6 +156,7 @@ export const Router = {
     const previousRoute = this.current;
     const shouldSkipPush = skipStackPush || NON_BACKSTACK_ROUTES.has(previousRoute);
     if (this.current && this.current !== routeName) {
+      this.captureCurrentRouteState();
       this.routes[this.current].cleanup?.();
       if (!shouldSkipPush) {
         this.stack.push({
@@ -112,13 +165,15 @@ export const Router = {
         });
       }
     } else if (this.current === routeName) {
+      this.captureCurrentRouteState();
       this.routes[this.current].cleanup?.();
     }
 
     this.current = routeName;
     this.currentParams = params || {};
+    const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
 
-    await Screen.mount(this.currentParams);
+    await Screen.mount(this.currentParams, navigationContext);
 
     if (window?.history && typeof window.history.pushState === "function") {
       const state = { route: this.current, params: this.currentParams };
@@ -172,11 +227,15 @@ export const Router = {
       return;
     }
 
+    this.captureCurrentRouteState();
     this.routes[this.current].cleanup?.();
     this.current = previousRoute;
     this.currentParams = previousParams;
+    const navigationContext = this.resolveNavigationContext(previousRoute, previousParams, {
+      isBackNavigation: true
+    });
 
-    await this.routes[previousRoute].mount(previousParams);
+    await this.routes[previousRoute].mount(previousParams, navigationContext);
   },
 
   getCurrent() {
