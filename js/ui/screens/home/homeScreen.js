@@ -11,7 +11,12 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { Platform } from "../../../platform/index.js";
-import { buildModernNavigationRows, MODERN_HOME_CONSTANTS, renderModernHomeLayout } from "./modernHomeLayout.js";
+import {
+  buildModernNavigationRows,
+  buildModernRowKey,
+  MODERN_HOME_CONSTANTS,
+  renderModernHomeLayout
+} from "./modernHomeLayout.js";
 import {
   buildCatalogDisableKey,
   buildCatalogOrderKey,
@@ -201,7 +206,8 @@ function buildYoutubeEmbedUrl(videoId) {
     playsinline: "1",
     rel: "0",
     modestbranding: "1",
-    enablejsapi: "1"
+    enablejsapi: "1",
+    vq: "hd2160"
   });
   const origin = String(globalThis?.location?.origin || "").trim();
   const href = String(globalThis?.location?.href || "").trim();
@@ -214,12 +220,42 @@ function buildYoutubeEmbedUrl(videoId) {
   return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
+function scoreTrailerStream(entry = {}) {
+  const text = [
+    entry?.quality,
+    entry?.label,
+    entry?.name,
+    entry?.title,
+    entry?.description,
+    entry?.resolution
+  ].map((value) => String(value || "")).join(" ").toLowerCase();
+  const width = Number(entry?.width || 0);
+  const height = Number(entry?.height || entry?.resolutionHeight || 0);
+  const bitrate = Number(entry?.bitrate || 0);
+  let score = 0;
+
+  if (width >= 3840 || height >= 2160 || /2160|4k|uhd/.test(text)) score += 120;
+  else if (width >= 2560 || height >= 1440 || /1440|2k|qhd/.test(text)) score += 90;
+  else if (width >= 1920 || height >= 1080 || /1080|full\s*hd|fhd/.test(text)) score += 70;
+  else if (width >= 1280 || height >= 720 || /720|hd\b/.test(text)) score += 45;
+  else if (width > 0 || height > 0) score += 20;
+
+  score += Math.max(0, Math.min(20, Math.round(bitrate / 500000)));
+
+  if (/hdr|dolby/.test(text)) score += 8;
+  if (/hevc|h265|av1/.test(text)) score += 6;
+
+  return score;
+}
+
 function resolveTrailerSource(meta = {}) {
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
-  const directVideo = trailerStreams.find((entry) => {
-    const url = String(entry?.url || entry?.videoUrl || entry?.stream || "").trim();
-    return /^https?:\/\//i.test(url);
-  });
+  const directVideo = trailerStreams
+    .filter((entry) => {
+      const url = String(entry?.url || entry?.videoUrl || entry?.stream || "").trim();
+      return /^https?:\/\//i.test(url);
+    })
+    .sort((left, right) => scoreTrailerStream(right) - scoreTrailerStream(left))[0];
   if (directVideo) {
     return {
       kind: "video",
@@ -569,7 +605,10 @@ function renderHeroMarkup(layoutMode, heroItem, heroCandidates) {
 
 function buildPosterSubtitle(item, layoutMode) {
   const normalized = normalizeCatalogItem(item);
-  return firstNonEmpty(normalized.releaseInfo, "");
+  if (layoutMode === "modern") {
+    return firstNonEmpty(normalized.releaseInfo, "");
+  }
+  return firstNonEmpty(extractYear(normalized), normalized.releaseInfo, "");
 }
 
 function buildExpandedPosterMeta(item) {
@@ -721,41 +760,77 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
 
 export const HomeScreen = {
   captureCurrentFocusState() {
-    if (!this.container || this.layoutMode !== "modern") {
+    const layoutMode = String(this.renderedLayoutMode || this.layoutMode || "").toLowerCase();
+    if (!this.container || !layoutMode) {
       return null;
     }
-    const viewport = this.container.querySelector(".home-modern-rows-viewport");
+    const viewport = layoutMode === "modern"
+      ? this.container.querySelector(".home-modern-rows-viewport")
+      : this.container.querySelector(".home-main");
     if (!viewport) {
       return null;
     }
+
     const focused = this.container.querySelector(".home-main .focusable.focused");
-    const section = focused?.closest?.("[data-row-key]") || null;
     const trackStates = Object.fromEntries(
       Array.from(this.container.querySelectorAll("[data-track-row-key]"))
         .map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft])
         .filter(([key]) => key)
     );
+    const section = focused?.closest?.("[data-row-key]") || null;
     const rowKey = String(section?.dataset?.rowKey || "");
     let itemIndex = -1;
+
     if (focused) {
-      const track = focused.closest(".home-track");
+      const track = focused.closest(".home-track, .home-grid-track");
       if (track) {
         itemIndex = Array.from(track.querySelectorAll(".home-content-card.focusable")).indexOf(focused);
       }
     }
+
+    const focusKind = focused?.classList?.contains("home-hero-card")
+      ? "hero"
+      : (focused?.dataset?.action === "resumeProgress"
+        ? "continue"
+        : (focused?.dataset?.action === "openCatalogSeeAll" ? "seeAll" : "item"));
+
     return {
-      layoutMode: "modern",
+      layoutMode,
       mainScrollTop: viewport.scrollTop,
       rowKey,
       itemIndex,
+      focusKind,
       trackStates
     };
   },
 
-  restoreModernFocusState(state = null) {
-    const focusState = state?.layoutMode === "modern"
+  persistCurrentFocusState() {
+    const currentState = this.captureCurrentFocusState();
+    if (!currentState?.layoutMode) {
+      return;
+    }
+    this.savedFocusStates = {
+      ...(this.savedFocusStates || {}),
+      [currentState.layoutMode]: currentState
+    };
+  },
+
+  restoreFocusState(state = null) {
+    const focusState = state?.layoutMode === this.layoutMode
       ? state
-      : (this.savedFocusStates?.modern || null);
+      : (this.savedFocusStates?.[this.layoutMode] || null);
+    if (!focusState) {
+      return false;
+    }
+
+    if (this.layoutMode === "modern") {
+      return this.restoreModernFocusState(focusState);
+    }
+
+    return this.restoreLegacyFocusState(focusState);
+  },
+
+  restoreModernFocusState(focusState) {
     if (!focusState || this.layoutMode !== "modern") {
       return false;
     }
@@ -796,6 +871,54 @@ export const HomeScreen = {
     this.ensureMainVerticalVisibility(target);
     this.scheduleModernHeroUpdate(target);
     this.scheduleFocusedPosterFlow(target);
+    return true;
+  },
+
+  restoreLegacyFocusState(focusState) {
+    if (!focusState || !["classic", "grid"].includes(this.layoutMode)) {
+      return false;
+    }
+
+    const main = this.container?.querySelector(".home-main");
+    if (!main) {
+      return false;
+    }
+
+    Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
+      const track = this.container.querySelector(`[data-track-row-key="${rowKey}"]`);
+      if (track) {
+        track.scrollLeft = Number(scrollLeft || 0);
+      }
+    });
+
+    const maxScrollTop = Math.max(0, main.scrollHeight - main.clientHeight);
+    main.scrollTop = Math.max(0, Math.min(maxScrollTop, Number(focusState.mainScrollTop || 0)));
+
+    let target = null;
+    if (focusState.focusKind === "hero") {
+      target = this.container.querySelector(".home-hero-card.focusable");
+    } else if (focusState.rowKey) {
+      const rowSection = this.container.querySelector(`[data-row-key="${focusState.rowKey}"]`);
+      const track = rowSection?.querySelector?.(".home-track") || rowSection?.querySelector?.(".home-grid-track") || null;
+      const rowNodes = Array.from(track?.querySelectorAll(".home-content-card.focusable") || []);
+      target = rowNodes[focusState.itemIndex] || rowNodes[0] || null;
+    }
+
+    const fallback = this.container.querySelector(this.getInitialFocusSelector());
+    target = target || fallback;
+    if (!target) {
+      return false;
+    }
+
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    this.focusWithoutAutoScroll(target);
+    this.lastMainFocus = target;
+    this.rememberMainRowFocus(target);
+    if (target.closest(".home-track, .home-grid-track")) {
+      this.ensureTrackHorizontalVisibility(target);
+    }
+    this.ensureMainVerticalVisibility(target);
     return true;
   },
 
@@ -902,9 +1025,13 @@ export const HomeScreen = {
       return;
     }
     this.heroRotateTimeout = setTimeout(() => {
-      this.rotateHero(1);
-      this.heroRotateTimer = setInterval(() => {
+      if (!this.container?.querySelector(".home-hero-card.focusable.focused")) {
         this.rotateHero(1);
+      }
+      this.heroRotateTimer = setInterval(() => {
+        if (!this.container?.querySelector(".home-hero-card.focusable.focused")) {
+          this.rotateHero(1);
+        }
       }, HERO_ROTATE_INTERVAL_MS);
     }, HERO_ROTATE_FIRST_DELAY_MS);
   },
@@ -1034,6 +1161,47 @@ export const HomeScreen = {
 
   isMainNode(node) {
     return String(node?.dataset?.navZone || "") === "main";
+  },
+
+  getNodeRowKey(node) {
+    if (!node) {
+      return "";
+    }
+    if (node.classList?.contains("home-hero-card")) {
+      return "__hero__";
+    }
+    return String(
+      node.dataset?.navRowKey
+      || node.dataset?.rowKey
+      || node.closest?.("[data-row-key]")?.dataset?.rowKey
+      || ""
+    );
+  },
+
+  rememberMainRowFocus(node) {
+    if (!this.isMainNode(node)) {
+      return;
+    }
+    const rowKey = this.getNodeRowKey(node);
+    if (!rowKey || rowKey === "__hero__") {
+      return;
+    }
+    this.lastFocusedItemIndexByRowKey = {
+      ...(this.lastFocusedItemIndexByRowKey || {}),
+      [rowKey]: Math.max(0, Number(node.dataset?.navCol || 0))
+    };
+  },
+
+  resolvePreferredNodeForRow(rowNodes = [], fallbackCol = 0) {
+    if (!Array.isArray(rowNodes) || !rowNodes.length) {
+      return null;
+    }
+    const rowKey = this.getNodeRowKey(rowNodes[0]);
+    const storedIndex = rowKey
+      ? Number(this.lastFocusedItemIndexByRowKey?.[rowKey])
+      : Number.NaN;
+    const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+    return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
   },
 
   focusWithoutAutoScroll(target) {
@@ -1362,7 +1530,7 @@ export const HomeScreen = {
     if (!main || !target || !this.container?.contains(target)) {
       return;
     }
-    const row = target.closest(".home-row");
+    const row = target.closest(".home-row, .home-grid-section");
     const anchor = row || target.closest(".home-hero") || target;
     const mainRect = main.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
@@ -1390,8 +1558,14 @@ export const HomeScreen = {
   },
 
   ensureTrackHorizontalVisibility(target, direction = null) {
-    const track = target?.closest?.(".home-track");
+    const track = target?.closest?.(".home-track, .home-grid-track");
     if (!track) {
+      return;
+    }
+    if (this.layoutMode !== "modern") {
+      const targetCenter = target.offsetLeft + (target.offsetWidth / 2);
+      const centeredLeft = targetCenter - (track.clientWidth / 2);
+      this.animateScroll(track, "x", centeredLeft, 160);
       return;
     }
     const edgePadding = this.getTrackEdgePadding();
@@ -1425,6 +1599,7 @@ export const HomeScreen = {
     this.setSidebarExpanded(this.isSidebarNode(target));
     if (this.isMainNode(target)) {
       this.lastMainFocus = target;
+      this.rememberMainRowFocus(target);
       this.ensureTrackHorizontalVisibility(target, direction);
       this.ensureMainVerticalVisibility(target);
       this.scheduleModernHeroUpdate(target);
@@ -1482,10 +1657,14 @@ export const HomeScreen = {
     });
 
     rows.forEach((rowNodes, rowIndex) => {
+      const rowKey = this.getNodeRowKey(rowNodes[0]);
       rowNodes.forEach((node, colIndex) => {
         node.dataset.navZone = "main";
         node.dataset.navRow = String(rowIndex);
         node.dataset.navCol = String(colIndex);
+        if (rowKey) {
+          node.dataset.navRowKey = rowKey;
+        }
       });
     });
 
@@ -1584,7 +1763,7 @@ export const HomeScreen = {
       if (!targetRowNodes || !targetRowNodes.length) {
         return true;
       }
-      const target = targetRowNodes[Math.min(col, targetRowNodes.length - 1)] || targetRowNodes[0];
+      const target = this.resolvePreferredNodeForRow(targetRowNodes, col);
       return this.focusNode(current, target, direction) || true;
     }
 
@@ -1801,7 +1980,9 @@ export const HomeScreen = {
       this.catalogSeeAllMap = modernLayoutPayload.catalogSeeAllMap;
       mainContentMarkup = modernLayoutPayload.markup;
     } else {
-      const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || []);
+      const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
+        rowKey: "continue_watching"
+      });
       mainContentMarkup = `
         ${showHeroSection ? renderHeroMarkup(this.layoutMode, heroItem, this.heroCandidates) : ""}
         ${continueHtml}
@@ -1848,7 +2029,10 @@ export const HomeScreen = {
         });
 
         const section = document.createElement("section");
+        const rowKey = buildModernRowKey(rowData);
         section.className = this.layoutMode === "grid" ? "home-grid-section" : "home-row";
+        section.dataset.rowKey = rowKey;
+        section.dataset.rowIndex = String(rowIndex);
         const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
         const rowSubtitle = this.layoutMode === "classic" && showCatalogAddonName && rowData.addonName
           ? `from ${rowData.addonName}`
@@ -1867,6 +2051,9 @@ export const HomeScreen = {
         }
 
         const track = section.querySelector(this.layoutMode === "grid" ? ".home-grid-track" : ".home-track");
+        if (track) {
+          track.dataset.trackRowKey = rowKey;
+        }
         const hasSeeAll = items.length >= 15;
         const visibleItems = this.layoutMode === "grid"
           ? (hasSeeAll ? items.slice(0, 14) : items.slice(0, 15))
@@ -1925,9 +2112,7 @@ export const HomeScreen = {
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
-    const restoredFocus = this.layoutMode === "modern"
-      ? this.restoreModernFocusState(retainedFocusState)
-      : false;
+    const restoredFocus = this.restoreFocusState(retainedFocusState);
     if (!restoredFocus) {
       ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
       const current = this.container.querySelector(".home-main .focusable.focused");
@@ -1945,6 +2130,7 @@ export const HomeScreen = {
     }
     this.startHeroRotation();
     this.homeRouteEnterPending = false;
+    this.renderedLayoutMode = this.layoutMode;
   },
 
   teardownGridStickyHeader() {
@@ -2166,6 +2352,7 @@ export const HomeScreen = {
       return;
     }
     if (code === 76) {
+      this.persistCurrentFocusState();
       const currentIndex = HOME_LAYOUT_SEQUENCE.indexOf(this.layoutMode);
       const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % HOME_LAYOUT_SEQUENCE.length : 0;
       this.layoutMode = HOME_LAYOUT_SEQUENCE[nextIndex];
@@ -2199,13 +2386,7 @@ export const HomeScreen = {
   },
 
   cleanup() {
-    const currentState = this.captureCurrentFocusState();
-    if (currentState) {
-      this.savedFocusStates = {
-        ...(this.savedFocusStates || {}),
-        modern: currentState
-      };
-    }
+    this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.stopHeroRotation();
     this.cancelPendingHeroFocus();

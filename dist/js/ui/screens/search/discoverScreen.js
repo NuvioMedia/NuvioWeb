@@ -328,18 +328,23 @@ export const DiscoverScreen = {
   },
 
   focusFirstContentCard() {
-    const firstCard = this.container?.querySelector(".discover-grid .discover-card.focusable");
-    if (!firstCard) {
+    const preferredSelector = this.lastFocusedDiscoverItemId
+      ? `.discover-grid .discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`
+      : "";
+    const target = (preferredSelector ? this.container?.querySelector(preferredSelector) : null)
+      || this.container?.querySelector(".discover-grid .discover-card.focusable");
+    if (!target) {
       return false;
     }
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
-    firstCard.classList.add("focused");
+    target.classList.add("focused");
     this.focusZone = "content";
-    focusWithoutAutoScroll(firstCard);
+    focusWithoutAutoScroll(target);
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
-    this.lastFocusedAction = String(firstCard.dataset.action || "openDetail");
+    this.lastFocusedAction = String(target.dataset.action || "openDetail");
+    this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
     return true;
   },
 
@@ -375,6 +380,9 @@ export const DiscoverScreen = {
       ? `.focusable[data-action="${this.lastFocusedAction}"]`
       : ".discover-filter.focusable";
     const target = this.container?.querySelector(selector)
+      || (this.lastFocusedDiscoverItemId
+        ? this.container?.querySelector(`.discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
+        : null)
       || this.container?.querySelector(".discover-filter.focusable")
       || this.container?.querySelector(".discover-card.focusable")
       || null;
@@ -533,6 +541,7 @@ export const DiscoverScreen = {
 
       const cardNode = event.target?.closest?.(".discover-card");
       if (cardNode) {
+        this.lastFocusedDiscoverItemId = String(cardNode.dataset.itemId || "");
         Router.navigate("detail", {
           itemId: cardNode.dataset.itemId,
           itemType: cardNode.dataset.itemType || "movie",
@@ -633,6 +642,9 @@ export const DiscoverScreen = {
     }
 
     const currentAction = String(current?.dataset?.action || "");
+    if (currentAction === "openDetail" && current?.dataset?.itemId) {
+      this.lastFocusedDiscoverItemId = String(current.dataset.itemId || "");
+    }
     const focusedFilterKind = this.getKindFromFilterAction(currentAction);
 
     if (focusedFilterKind) {

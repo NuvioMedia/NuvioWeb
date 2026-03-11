@@ -17,6 +17,21 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function groupNodesByOffsetTop(nodes = []) {
+  const grouped = [];
+  nodes.forEach((node) => {
+    const top = Math.round(node.offsetTop);
+    const bucket = grouped.find((entry) => Math.abs(entry.top - top) <= 6);
+    if (bucket) {
+      bucket.nodes.push(node);
+      return;
+    }
+    grouped.push({ top, nodes: [node] });
+  });
+  grouped.sort((left, right) => left.top - right.top);
+  return grouped.map((entry) => entry.nodes);
+}
+
 export const CatalogSeeAllScreen = {
 
   getRouteStateKey(params = {}) {
@@ -75,7 +90,7 @@ export const CatalogSeeAllScreen = {
     this.savedScrollTop = 0;
     this.loadToken = (this.loadToken || 0) + 1;
 
-    if (this.hydrateFromRouteState(navigationContext?.restoredState || null, params)) {
+    if (navigationContext?.isBackNavigation && this.hydrateFromRouteState(navigationContext?.restoredState || null, params)) {
       this.loading = false;
       this.render();
       return;
@@ -161,6 +176,104 @@ export const CatalogSeeAllScreen = {
     }
   },
 
+  buildNavigationModel() {
+    const cards = Array.from(this.container?.querySelectorAll(".seeall-card.focusable") || []);
+    const rows = groupNodesByOffsetTop(cards);
+    rows.forEach((rowNodes, rowIndex) => {
+      rowNodes.forEach((node, colIndex) => {
+        node.dataset.navRow = String(rowIndex);
+        node.dataset.navCol = String(colIndex);
+      });
+    });
+    this.navModel = { rows };
+  },
+
+  rememberRowFocus(node) {
+    if (!node?.dataset) {
+      return;
+    }
+    const row = Number(node.dataset.navRow || -1);
+    const col = Number(node.dataset.navCol || 0);
+    if (row < 0) {
+      return;
+    }
+    this.rowFocusedIndexByRow = {
+      ...(this.rowFocusedIndexByRow || {}),
+      [row]: Math.max(0, col)
+    };
+  },
+
+  resolvePreferredNodeForRow(rowNodes = []) {
+    if (!Array.isArray(rowNodes) || !rowNodes.length) {
+      return null;
+    }
+    const rowIndex = Number(rowNodes[0]?.dataset?.navRow || -1);
+    const storedIndex = rowIndex >= 0 ? Number(this.rowFocusedIndexByRow?.[rowIndex]) : Number.NaN;
+    const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+    return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
+  },
+
+  focusNode(target) {
+    if (!target) {
+      return false;
+    }
+    this.container?.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (node !== target) {
+        node.classList.remove("focused");
+      }
+    });
+    target.classList.add("focused");
+    target.focus();
+    this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+    this.rememberRowFocus(target);
+    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    this.maybeAutoLoadMore(target.dataset.itemIndex);
+    return true;
+  },
+
+  handleGridDpad(event) {
+    const code = Number(event?.keyCode || 0);
+    const direction = code === 38 ? "up"
+      : code === 40 ? "down"
+        : code === 37 ? "left"
+          : code === 39 ? "right"
+            : null;
+    if (!direction) {
+      return false;
+    }
+
+    const nav = this.navModel;
+    const current = this.container?.querySelector(".seeall-card.focused") || null;
+    if (!nav?.rows?.length || !current) {
+      return false;
+    }
+
+    event?.preventDefault?.();
+
+    const row = Number(current.dataset.navRow || 0);
+    const col = Number(current.dataset.navCol || 0);
+    const rowNodes = nav.rows[row] || [];
+
+    if (direction === "left") {
+      return this.focusNode(rowNodes[col - 1] || current) || true;
+    }
+
+    if (direction === "right") {
+      return this.focusNode(rowNodes[col + 1] || current) || true;
+    }
+
+    if (direction === "up" || direction === "down") {
+      const delta = direction === "up" ? -1 : 1;
+      const targetRowNodes = nav.rows[row + delta] || null;
+      if (!targetRowNodes?.length) {
+        return true;
+      }
+      return this.focusNode(this.resolvePreferredNodeForRow(targetRowNodes)) || true;
+    }
+
+    return false;
+  },
+
   restoreFocusedCard() {
     const shell = this.container?.querySelector(".seeall-shell");
     const target = (this.lastFocusedKey
@@ -182,6 +295,7 @@ export const CatalogSeeAllScreen = {
     });
     target.classList.add("focused");
     target.focus();
+    this.rememberRowFocus(target);
     target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
   },
@@ -220,6 +334,7 @@ export const CatalogSeeAllScreen = {
     `;
 
     ScreenUtils.indexFocusables(this.container);
+    this.buildNavigationModel();
     this.bindCardEvents();
     if (this.pendingRestoreFocus) {
       this.pendingRestoreFocus = false;
@@ -250,13 +365,7 @@ export const CatalogSeeAllScreen = {
       Router.back();
       return;
     }
-    if (ScreenUtils.handleDpadNavigation(event, this.container)) {
-      const focused = this.container.querySelector(".seeall-card.focused");
-      if (focused) {
-        this.lastFocusedKey = focused.dataset.focusKey || this.lastFocusedKey;
-        focused.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
-        this.maybeAutoLoadMore(focused.dataset.itemIndex);
-      }
+    if (this.handleGridDpad(event)) {
       return;
     }
     if (Number(event?.keyCode || 0) !== 13) {

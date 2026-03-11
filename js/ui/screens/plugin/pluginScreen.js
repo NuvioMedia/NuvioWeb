@@ -1,11 +1,9 @@
-import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
-import { PUBLIC_APP_URL } from "../../../config.js";
-import { isSearchOnlyCatalog } from "../../../core/addons/homeCatalogs.js";
+import { ADDON_REMOTE_BASE_URL, PUBLIC_APP_URL } from "../../../config.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -34,29 +32,130 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function hasHomeVisibleCatalogs(addons) {
-  return addons.some((addon) => Array.isArray(addon.catalogs)
-    && addon.catalogs.some((catalog) => !isSearchOnlyCatalog(catalog)));
+function isLoopbackHostname(hostname) {
+  const normalized = String(hostname || "").trim().toLowerCase();
+  return normalized === "localhost"
+    || normalized === "127.0.0.1"
+    || normalized === "0.0.0.0"
+    || normalized === "::1"
+    || normalized === "[::1]";
 }
 
-function formatCatalogSummary(addon) {
-  const catalogCount = Array.isArray(addon?.catalogs) ? addon.catalogs.length : 0;
-  const types = Array.isArray(addon?.rawTypes) && addon.rawTypes.length > 0
-    ? addon.rawTypes
-    : (Array.isArray(addon?.types) ? addon.types : []);
-  return `Catalogs: ${catalogCount} - Types: ${types.join(", ") || "None"}`;
-}
-
-function getPhoneManagerUrl(addons) {
-  const base = String(PUBLIC_APP_URL || window.location.origin + window.location.pathname).trim();
+function buildPhoneManagerUrl(base, addonCount) {
   if (!base) {
     return "";
   }
   const url = new URL(base, window.location.href);
   url.searchParams.set("addonsRemote", "1");
   url.hash = "#addons";
-  url.searchParams.set("count", String(addons.length));
+  url.searchParams.set("count", String(Math.max(0, Number(addonCount) || 0)));
   return url.toString();
+}
+
+let detectedLanHostPromise = null;
+
+function detectLanHost() {
+  if (detectedLanHostPromise) {
+    return detectedLanHostPromise;
+  }
+
+  detectedLanHostPromise = new Promise((resolve) => {
+    const RtcPeerConnection = globalThis.RTCPeerConnection
+      || globalThis.webkitRTCPeerConnection
+      || globalThis.mozRTCPeerConnection
+      || null;
+
+    if (!RtcPeerConnection) {
+      resolve("");
+      return;
+    }
+
+    let finished = false;
+    const connection = new RtcPeerConnection({ iceServers: [] });
+
+    const finish = (value = "") => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      try {
+        connection.onicecandidate = null;
+        connection.close();
+      } catch (_) {}
+      resolve(value);
+    };
+
+    const timeoutId = setTimeout(() => finish(""), 2000);
+    const parseCandidate = (candidateText) => {
+      const match = String(candidateText || "").match(/\b((?:\d{1,3}\.){3}\d{1,3})\b/);
+      if (!match) {
+        return;
+      }
+      const ip = String(match[1] || "").trim();
+      if (!ip || isLoopbackHostname(ip)) {
+        return;
+      }
+      clearTimeout(timeoutId);
+      finish(ip);
+    };
+
+    connection.onicecandidate = (event) => {
+      if (!event?.candidate) {
+        return;
+      }
+      parseCandidate(event.candidate.candidate);
+    };
+
+    try {
+      connection.createDataChannel("nuvio-lan");
+      connection.createOffer()
+        .then((offer) => connection.setLocalDescription(offer))
+        .catch(() => {
+          clearTimeout(timeoutId);
+          finish("");
+        });
+    } catch (_) {
+      clearTimeout(timeoutId);
+      finish("");
+    }
+  });
+
+  return detectedLanHostPromise;
+}
+
+async function getPhoneManagerUrl(addonCount) {
+  const wrapperServerBase = String(ADDON_REMOTE_BASE_URL || "").trim();
+  if (wrapperServerBase) {
+    try {
+      const wrapperUrl = new URL(wrapperServerBase, window.location.href);
+      if (!isLoopbackHostname(wrapperUrl.hostname)) {
+        return buildPhoneManagerUrl(wrapperUrl.toString(), addonCount);
+      }
+    } catch (_) {}
+  }
+
+  const configuredBase = String(PUBLIC_APP_URL || "").trim();
+  if (configuredBase) {
+    try {
+      const configuredUrl = new URL(configuredBase, window.location.href);
+      if (!isLoopbackHostname(configuredUrl.hostname)) {
+        return buildPhoneManagerUrl(configuredUrl.toString(), addonCount);
+      }
+    } catch (_) {}
+  }
+
+  const currentUrl = new URL(window.location.href);
+  if (!isLoopbackHostname(currentUrl.hostname)) {
+    return buildPhoneManagerUrl(`${currentUrl.origin}${currentUrl.pathname}`, addonCount);
+  }
+
+  const lanHost = await detectLanHost();
+  if (!lanHost) {
+    return "";
+  }
+
+  const port = currentUrl.port ? `:${currentUrl.port}` : "";
+  return buildPhoneManagerUrl(`${currentUrl.protocol}//${lanHost}${port}${currentUrl.pathname}`, addonCount);
 }
 
 export const PluginScreen = {
@@ -78,13 +177,10 @@ export const PluginScreen = {
   },
 
   async collectModel() {
-    const addons = await addonRepository.getInstalledAddons();
     const addonUrls = addonRepository.getInstalledAddonUrls();
     return {
-      addons,
-      addonUrls,
-      hasHomeVisibleCatalogs: hasHomeVisibleCatalogs(addons),
-      phoneManagerUrl: getPhoneManagerUrl(addons)
+      addonCount: addonUrls.length,
+      phoneManagerUrl: await getPhoneManagerUrl(addonUrls.length)
     };
   },
 
@@ -179,98 +275,9 @@ export const PluginScreen = {
     this.rowColumns = new Map();
     this.actionMap = new Map();
     this.setRowColumns(0, [0]);
-    if (this.model.hasHomeVisibleCatalogs) {
-      this.setRowColumns(1, [0]);
-    }
-
-    const installedStartRow = this.model.hasHomeVisibleCatalogs ? 2 : 1;
-    const addonRows = this.model.addons.map((addon, index) => {
-      const baseUrl = addon.baseUrl || this.model.addonUrls[index] || "";
-      const row = installedStartRow + index;
-      const upActionId = `addon_up_${index}`;
-      const downActionId = `addon_down_${index}`;
-      const removeActionId = `addon_remove_${index}`;
-      const focusCols = [];
-
-      this.actionMap.set(upActionId, async () => {
-        const urls = addonRepository.getInstalledAddonUrls();
-        if (index <= 0 || index >= urls.length) {
-          return;
-        }
-        const next = [...urls];
-        const moved = next.splice(index, 1)[0];
-        next.splice(index - 1, 0, moved);
-        await addonRepository.setAddonOrder(next);
-        this.contentRow = row - 1;
-        await this.render();
-      });
-
-      this.actionMap.set(downActionId, async () => {
-        const urls = addonRepository.getInstalledAddonUrls();
-        if (index < 0 || index >= urls.length - 1) {
-          return;
-        }
-        const next = [...urls];
-        const moved = next.splice(index, 1)[0];
-        next.splice(index + 1, 0, moved);
-        this.contentRow = row + 1;
-        await addonRepository.setAddonOrder(next);
-        await this.render();
-      });
-
-      this.actionMap.set(removeActionId, async () => {
-        await addonRepository.removeAddon(baseUrl);
-        await this.render();
-      });
-
-      if (index > 0) {
-        focusCols.push(0);
-      }
-      if (index < this.model.addons.length - 1) {
-        focusCols.push(1);
-      }
-      focusCols.push(2);
-      this.setRowColumns(row, focusCols);
-
-      return `
-        <article class="addons-installed-card">
-          <div class="addons-installed-head">
-            <div class="addons-installed-copy">
-              <h3>${escapeHtml(addon.displayName || addon.name || "Unknown addon")}</h3>
-              <p class="addons-installed-version">v${escapeHtml(addon.version || "0.0.0")}</p>
-            </div>
-            <div class="addons-installed-actions">
-              <button type="button"
-                      class="addons-action-btn ${index > 0 ? "addons-focusable" : "is-disabled"}"
-                      ${index > 0 ? `data-zone="content" data-row="${row}" data-col="0" data-action-id="${upActionId}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
-                <span class="material-icons" aria-hidden="true">arrow_upward</span>
-              </button>
-              <button type="button"
-                      class="addons-action-btn ${index < this.model.addons.length - 1 ? "addons-focusable" : "is-disabled"}"
-                      ${index < this.model.addons.length - 1 ? `data-zone="content" data-row="${row}" data-col="1" data-action-id="${downActionId}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
-                <span class="material-icons" aria-hidden="true">arrow_downward</span>
-              </button>
-              <button type="button"
-                      class="addons-action-btn addons-focusable addons-remove-btn"
-                      data-zone="content"
-                      data-row="${row}"
-                      data-col="2"
-                      data-action-id="${removeActionId}"
-                      tabindex="-1">Remove</button>
-            </div>
-          </div>
-          ${addon.description ? `<p class="addons-installed-description">${escapeHtml(addon.description)}</p>` : ""}
-          <p class="addons-installed-meta">${escapeHtml(baseUrl)}</p>
-          <p class="addons-installed-meta">${escapeHtml(formatCatalogSummary(addon))}</p>
-        </article>
-      `;
-    }).join("");
 
     this.actionMap.set("manage_from_phone", async () => {
       await this.openQrOverlay();
-    });
-    this.actionMap.set("reorder_catalogs", async () => {
-      await Router.navigate("catalogOrder");
     });
     this.actionMap.set("close_qr_overlay", async () => {
       await this.closeQrOverlay();
@@ -285,52 +292,38 @@ export const PluginScreen = {
           expanded: Boolean(this.sidebarExpanded),
           pillIconOnly: Boolean(this.pillIconOnly)
         })}
-        <main class="home-main addons-main">
-          <div class="addons-panel">
-            <h1 class="addons-title">Addons</h1>
-            <button type="button"
-                    class="addons-large-row addons-focusable"
-                    data-zone="content"
-                    data-row="0"
-                    data-col="0"
-                    data-action-id="manage_from_phone"
-                    tabindex="-1">
-              <span class="addons-large-row-icon material-icons" aria-hidden="true">qr_code_2</span>
-              <span class="addons-large-row-copy">
-                <strong>Manage from phone</strong>
-                <small>Scan a QR code to manage addons and Home catalogs from your phone</small>
-              </span>
-              <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
-            </button>
-            ${this.model.hasHomeVisibleCatalogs ? `
+        <main class="home-main addons-main addons-main-centered">
+          <div class="addons-panel addons-panel-centered">
+            <section class="addons-hero-card">
+              <h1 class="addons-title addons-title-centered">Addons</h1>
+              <p class="addons-lede">
+                Manage addons and home catalogs from your phone.
+              </p>
+              <p class="addons-meta">${escapeHtml(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
               <button type="button"
-                      class="addons-large-row addons-focusable"
+                      class="addons-large-row addons-large-row-centered addons-focusable"
                       data-zone="content"
-                      data-row="1"
+                      data-row="0"
                       data-col="0"
-                      data-action-id="reorder_catalogs"
+                      data-action-id="manage_from_phone"
                       tabindex="-1">
-                <span class="addons-large-row-icon material-icons" aria-hidden="true">reorder</span>
+                <span class="addons-large-row-icon material-icons" aria-hidden="true">qr_code_2</span>
                 <span class="addons-large-row-copy">
-                  <strong>Reorder home catalogs</strong>
-                  <small>Controls catalog row order on Home (Classic + Modern + Grid)</small>
+                  <strong>Manage addons</strong>
+                  <small>Manage addons and home catalogs from your phone</small>
                 </span>
-                <span class="addons-large-row-tail material-icons" aria-hidden="true">arrow_downward</span>
+                <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
               </button>
-            ` : ""}
-            <h2 class="addons-subtitle">Installed</h2>
-            <section class="addons-installed-list">
-              ${addonRows || '<div class="addons-empty">No addons installed. Add one to get started.</div>'}
             </section>
           </div>
         </main>
         ${this.qrOverlayOpen ? `
           <div class="addons-qr-overlay">
             <div class="addons-qr-dialog">
-              <p class="addons-qr-instruction">Scan with your phone to manage addons and catalogs</p>
+              <p class="addons-qr-instruction">Manage addons and home catalogs from your phone</p>
               ${this.model.phoneManagerUrl
                 ? '<canvas class="addons-qr-canvas" width="440" height="440" aria-label="QR code"></canvas>'
-                : '<div class="addons-qr-error">Set `PUBLIC_APP_URL` to enable phone management QR links in web builds.</div>'}
+                : '<div class="addons-qr-error">Set `ADDON_REMOTE_BASE_URL` in the wrapper, or `PUBLIC_APP_URL`, to a phone-reachable address.</div>'}
               ${this.model.phoneManagerUrl ? `<p class="addons-qr-url">${escapeHtml(this.model.phoneManagerUrl)}</p>` : ""}
               <button type="button" class="addons-qr-close addons-focusable focused" data-action-id="close_qr_overlay">
                 <span class="material-icons" aria-hidden="true">close</span>

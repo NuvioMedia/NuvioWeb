@@ -7,9 +7,18 @@ import { AuthState } from "./core/auth/authState.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
+import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
 import { loadStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
+
+function isAddonRemoteMode() {
+  try {
+    return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
+  } catch {
+    return false;
+  }
+}
 
 async function bootstrapApp() {
   renderAppShell();
@@ -48,14 +57,20 @@ async function bootstrapApp() {
   await AuthManager.bootstrap();
 }
 
+async function bootstrapAddonRemoteMode() {
+  await renderAddonRemotePage();
+}
+
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => {
-    bootstrapApp().catch((error) => {
+    const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
+    bootstrap().catch((error) => {
       console.error("App bootstrap failed", error);
     });
   }, { once: true });
 } else {
-  bootstrapApp().catch((error) => {
+  const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
+  bootstrap().catch((error) => {
     console.error("App bootstrap failed", error);
   });
 }

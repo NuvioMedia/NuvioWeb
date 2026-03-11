@@ -346,7 +346,8 @@ function buildYoutubeEmbedUrl(ytId = "") {
     playsinline: "1",
     rel: "0",
     modestbranding: "1",
-    enablejsapi: "1"
+    enablejsapi: "1",
+    vq: "hd2160"
   });
 
   const origin = String(globalThis?.location?.origin || "").trim();
@@ -361,12 +362,42 @@ function buildYoutubeEmbedUrl(ytId = "") {
   return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
+function scoreTrailerStream(entry = {}) {
+  const text = [
+    entry?.quality,
+    entry?.label,
+    entry?.name,
+    entry?.title,
+    entry?.description,
+    entry?.resolution
+  ].map((value) => String(value || "")).join(" ").toLowerCase();
+  const width = Number(entry?.width || 0);
+  const height = Number(entry?.height || entry?.resolutionHeight || 0);
+  const bitrate = Number(entry?.bitrate || 0);
+  let score = 0;
+
+  if (width >= 3840 || height >= 2160 || /2160|4k|uhd/.test(text)) score += 120;
+  else if (width >= 2560 || height >= 1440 || /1440|2k|qhd/.test(text)) score += 90;
+  else if (width >= 1920 || height >= 1080 || /1080|full\s*hd|fhd/.test(text)) score += 70;
+  else if (width >= 1280 || height >= 720 || /720|hd\b/.test(text)) score += 45;
+  else if (width > 0 || height > 0) score += 20;
+
+  score += Math.max(0, Math.min(20, Math.round(bitrate / 500000)));
+
+  if (/hdr|dolby/.test(text)) score += 8;
+  if (/hevc|h265|av1/.test(text)) score += 6;
+
+  return score;
+}
+
 function resolveTrailerSource(meta = {}) {
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
-  const directVideo = trailerStreams.find((entry) => {
-    const url = String(entry?.url || entry?.videoUrl || entry?.stream || "").trim();
-    return /^https?:\/\//i.test(url);
-  });
+  const directVideo = trailerStreams
+    .filter((entry) => {
+      const url = String(entry?.url || entry?.videoUrl || entry?.stream || "").trim();
+      return /^https?:\/\//i.test(url);
+    })
+    .sort((left, right) => scoreTrailerStream(right) - scoreTrailerStream(left))[0];
   if (directVideo) {
     return {
       kind: "video",

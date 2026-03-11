@@ -189,6 +189,7 @@ export const SearchScreen = {
       pillIconOnly: Boolean(this.pillIconOnly),
       contentScrollTop: Number(content?.scrollTop || 0),
       rowScrollLeftByKey,
+      rowFocusedIndexByKey: this.rowFocusedIndexByKey ? { ...this.rowFocusedIndexByKey } : {},
       pendingAutoFocusResults: false,
       voiceSearchSupported: Boolean(this.voiceSearchSupported),
       focusedAction: String(focused?.dataset?.action || ""),
@@ -222,6 +223,9 @@ export const SearchScreen = {
     this.contentScrollTop = Number(snapshot?.contentScrollTop || 0);
     this.rowScrollLeftByKey = snapshot?.rowScrollLeftByKey && typeof snapshot.rowScrollLeftByKey === "object"
       ? { ...snapshot.rowScrollLeftByKey }
+      : {};
+    this.rowFocusedIndexByKey = snapshot?.rowFocusedIndexByKey && typeof snapshot.rowFocusedIndexByKey === "object"
+      ? { ...snapshot.rowFocusedIndexByKey }
       : {};
     this.pendingAutoFocusResults = false;
     this.restoredFocusedDescriptor = snapshot ? {
@@ -269,6 +273,7 @@ export const SearchScreen = {
     this.lastContentFocus = null;
     this.contentScrollTop = 0;
     this.rowScrollLeftByKey = {};
+    this.rowFocusedIndexByKey = {};
     this.restoredFocusedDescriptor = null;
     this.voiceSearchSupported = typeof window !== "undefined"
       && (typeof window.SpeechRecognition === "function" || typeof window.webkitSpeechRecognition === "function");
@@ -609,12 +614,30 @@ export const SearchScreen = {
     if (!node) {
       return;
     }
+    const rowKey = String(node.dataset.rowKey || "");
+    if (String(node.dataset.navZone || "") === "results" && rowKey) {
+      this.rowFocusedIndexByKey = {
+        ...(this.rowFocusedIndexByKey || {}),
+        [rowKey]: Math.max(0, Number(node.dataset.navCol || 0))
+      };
+    }
     this.lastContentFocus = {
       zone: String(node.dataset.navZone || ""),
       row: Number(node.dataset.navRow || 0),
       col: Number(node.dataset.navCol || 0),
-      action: String(node.dataset.action || "")
+      action: String(node.dataset.action || ""),
+      rowKey
     };
+  },
+
+  resolvePreferredResultsNode(rowNodes = [], fallbackCol = 0) {
+    if (!Array.isArray(rowNodes) || !rowNodes.length) {
+      return null;
+    }
+    const rowKey = String(rowNodes[0]?.dataset?.rowKey || "");
+    const storedIndex = rowKey ? Number(this.rowFocusedIndexByKey?.[rowKey]) : Number.NaN;
+    const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+    return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
   },
 
   focusSidebarNode(preferredNode = null) {
@@ -675,9 +698,17 @@ export const SearchScreen = {
     }
     if (!target && this.lastContentFocus) {
       if (this.lastContentFocus.zone === "results") {
-        target = this.container?.querySelector(
-          `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
-        ) || null;
+        if (this.lastContentFocus.rowKey) {
+          const rowNodes = Array.from(this.container?.querySelectorAll(
+            `.search-result-card.focusable[data-row-key="${escapeSelectorValue(this.lastContentFocus.rowKey)}"]`
+          ) || []);
+          target = this.resolvePreferredResultsNode(rowNodes, this.lastContentFocus.col);
+        }
+        if (!target) {
+          target = this.container?.querySelector(
+            `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
+          ) || null;
+        }
       } else if (this.lastContentFocus.zone === "header") {
         target = this.container?.querySelector(
           `.focusable[data-nav-zone="header"][data-nav-col="${this.lastContentFocus.col}"]`
@@ -819,7 +850,7 @@ export const SearchScreen = {
       }
       if (direction === "down") {
         const firstRow = nav.rows?.[0] || [];
-        const target = firstRow[Math.min(col, Math.max(0, firstRow.length - 1))] || firstRow[0] || null;
+        const target = this.resolvePreferredResultsNode(firstRow, col);
         return this.focusNode(current, target) || true;
       }
       if (direction === "up") {
@@ -848,13 +879,13 @@ export const SearchScreen = {
         if (!nextRowNodes) {
           return true;
         }
-        const target = nextRowNodes[Math.min(col, nextRowNodes.length - 1)] || nextRowNodes[0] || null;
+        const target = this.resolvePreferredResultsNode(nextRowNodes, col);
         return this.focusNode(current, target) || true;
       }
       if (direction === "up") {
         const prevRowNodes = nav.rows?.[row - 1] || null;
         if (prevRowNodes) {
-          const target = prevRowNodes[Math.min(col, prevRowNodes.length - 1)] || prevRowNodes[0] || null;
+          const target = this.resolvePreferredResultsNode(prevRowNodes, col);
           return this.focusNode(current, target) || true;
         }
         const target = nav.header?.[Math.min(col, (nav.header?.length || 1) - 1)] || nav.header?.[0] || null;
@@ -1033,6 +1064,8 @@ export const SearchScreen = {
   },
 
   openCatalogSeeAllFromNode(node) {
+    const rowIndex = Math.max(0, Number(node?.dataset?.rowIndex || 0));
+    const sourceRow = this.rows?.[rowIndex] || null;
     Router.navigate("catalogSeeAll", {
       addonBaseUrl: node.dataset.addonBaseUrl || "",
       addonId: node.dataset.addonId || "",
@@ -1040,7 +1073,7 @@ export const SearchScreen = {
       catalogId: node.dataset.catalogId || "",
       catalogName: node.dataset.catalogName || "",
       type: node.dataset.catalogType || "movie",
-      initialItems: []
+      initialItems: Array.isArray(sourceRow?.items) ? sourceRow.items : []
     });
   },
 

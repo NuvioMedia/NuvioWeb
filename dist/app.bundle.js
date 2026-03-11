@@ -130,6 +130,7 @@
   var SUPABASE_ANON_KEY = String(runtimeEnv.SUPABASE_ANON_KEY || "").trim();
   var TV_LOGIN_REDIRECT_BASE_URL = String(runtimeEnv.TV_LOGIN_REDIRECT_BASE_URL || "").trim();
   var PUBLIC_APP_URL = String(runtimeEnv.PUBLIC_APP_URL || "").trim();
+  var ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
   var ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
   var PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
 
@@ -415,13 +416,13 @@
       const authState = AuthManager.getAuthState();
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       if (!hasSeenQr && authState !== AuthState.AUTHENTICATED) {
-        Router.navigate("authQrSignIn", { onboardingMode: true });
+        Router2.navigate("authQrSignIn", { onboardingMode: true });
         return;
       }
       if (authState === AuthState.AUTHENTICATED) {
-        Router.navigate("profileSelection");
+        Router2.navigate("profileSelection");
       } else {
-        Router.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
+        Router2.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
       }
     },
     cleanup() {
@@ -1947,7 +1948,7 @@
     createPosterCardMarkup: createPosterCardMarkup2,
     createSeeAllCardMarkup: createSeeAllCardMarkup2,
     formatCatalogRowTitle: formatCatalogRowTitle3,
-    escapeHtml: escapeHtml12,
+    escapeHtml: escapeHtml13,
     escapeAttribute: escapeAttribute2
   } = {}) {
     const catalogSeeAllMap = /* @__PURE__ */ new Map();
@@ -1981,11 +1982,11 @@
         "modern"
       )).join("");
       sectionsMarkup.push(`
-      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml12(rowKey)}" data-row-index="${rowIndex}">
+      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml13(rowKey)}" data-row-index="${rowIndex}">
         <div class="home-row-head">
-          <h2 class="home-row-title">${escapeHtml12(rowTitle)}</h2>
+          <h2 class="home-row-title">${escapeHtml13(rowTitle)}</h2>
         </div>
-        <div class="home-track" data-track-row-key="${escapeHtml12(rowKey)}">
+        <div class="home-track" data-track-row-key="${escapeHtml13(rowKey)}">
           ${cardsMarkup}
           ${hasSeeAll ? createSeeAllCardMarkup2(seeAllId, rowData) : ""}
         </div>
@@ -2000,7 +2001,7 @@
         heroItem,
         heroCandidates,
         buildModernHeroPresentation: buildModernHeroPresentation2,
-        escapeHtml: escapeHtml12,
+        escapeHtml: escapeHtml13,
         escapeAttribute: escapeAttribute2
       }) : ""}
         <div class="home-modern-rows-viewport">
@@ -2052,40 +2053,40 @@
     heroItem,
     heroCandidates,
     buildModernHeroPresentation: buildModernHeroPresentation2,
-    escapeHtml: escapeHtml12,
+    escapeHtml: escapeHtml13,
     escapeAttribute: escapeAttribute2
   }) {
     const display = buildModernHeroPresentation2(heroItem);
     if (!display) {
       return "";
     }
-    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml12(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
-    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml12(token)}</span>`);
+    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml13(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
+    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml13(token)}</span>`);
     if (display.showImdbPrimary) {
       primaryRightParts.push(`
       <span class="home-hero-imdb">
         <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
-        <span>${escapeHtml12(display.imdbText)}</span>
+        <span>${escapeHtml13(display.imdbText)}</span>
       </span>
     `);
     }
     const secondaryParts = [];
     if (display.secondaryHighlightText) {
-      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml12(display.secondaryHighlightText)}</span>`);
+      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml13(display.secondaryHighlightText)}</span>`);
     }
     display.badges.forEach((badge) => {
-      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml12(badge)}</span>`);
+      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml13(badge)}</span>`);
     });
     if (display.showImdbSecondary) {
       secondaryParts.push(`
       <span class="home-hero-imdb">
         <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
-        <span>${escapeHtml12(display.imdbText)}</span>
+        <span>${escapeHtml13(display.imdbText)}</span>
       </span>
     `);
     }
     if (display.languageText) {
-      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml12(display.languageText)}</span>`);
+      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml13(display.languageText)}</span>`);
     }
     return `
     <section class="home-hero home-hero-modern">
@@ -2102,7 +2103,7 @@
         <div class="home-hero-copy home-modern-hero-copy">
           <div class="home-hero-brand">
             ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title)}" />` : ""}
-            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml12(display.title)}</h1>
+            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml13(display.title)}</h1>
           </div>
           <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">
             <div class="home-modern-hero-meta-group">
@@ -2115,7 +2116,7 @@
           <div class="home-modern-hero-secondary${display.secondaryHighlightText || display.badges.length || display.showImdbSecondary || display.languageText ? "" : " is-empty"}">
             ${secondaryParts.join('<span class="home-hero-dot">\u2022</span>')}
           </div>
-          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml12(display.description)}</p>
+          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml13(display.description)}</p>
         </div>
         <div class="home-hero-indicators">${buildHeroIndicators(heroCandidates, heroItem)}</div>
       </article>
@@ -2255,14 +2256,14 @@
       return;
     }
     if (normalizedAction === "gotoAccount") {
-      Router.navigate("profileSelection");
+      Router2.navigate("profileSelection");
       return;
     }
     const target = getItemForAction(normalizedAction);
     if (!target || target.route === currentRoute) {
       return;
     }
-    Router.navigate(target.route);
+    Router2.navigate(target.route);
   }
   function isSelectedSidebarAction(action, selectedRoute = "") {
     var _a;
@@ -2587,7 +2588,8 @@
       playsinline: "1",
       rel: "0",
       modestbranding: "1",
-      enablejsapi: "1"
+      enablejsapi: "1",
+      vq: "hd2160"
     });
     const origin = String(((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.origin) || "").trim();
     const href = String(((_b = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _b.href) || "").trim();
@@ -2599,12 +2601,35 @@
     }
     return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
   }
+  function scoreTrailerStream(entry = {}) {
+    const text = [
+      entry == null ? void 0 : entry.quality,
+      entry == null ? void 0 : entry.label,
+      entry == null ? void 0 : entry.name,
+      entry == null ? void 0 : entry.title,
+      entry == null ? void 0 : entry.description,
+      entry == null ? void 0 : entry.resolution
+    ].map((value) => String(value || "")).join(" ").toLowerCase();
+    const width = Number((entry == null ? void 0 : entry.width) || 0);
+    const height = Number((entry == null ? void 0 : entry.height) || (entry == null ? void 0 : entry.resolutionHeight) || 0);
+    const bitrate = Number((entry == null ? void 0 : entry.bitrate) || 0);
+    let score = 0;
+    if (width >= 3840 || height >= 2160 || /2160|4k|uhd/.test(text)) score += 120;
+    else if (width >= 2560 || height >= 1440 || /1440|2k|qhd/.test(text)) score += 90;
+    else if (width >= 1920 || height >= 1080 || /1080|full\s*hd|fhd/.test(text)) score += 70;
+    else if (width >= 1280 || height >= 720 || /720|hd\b/.test(text)) score += 45;
+    else if (width > 0 || height > 0) score += 20;
+    score += Math.max(0, Math.min(20, Math.round(bitrate / 5e5)));
+    if (/hdr|dolby/.test(text)) score += 8;
+    if (/hevc|h265|av1/.test(text)) score += 6;
+    return score;
+  }
   function resolveTrailerSource(meta = {}) {
     const trailerStreams = Array.isArray(meta == null ? void 0 : meta.trailerStreams) ? meta.trailerStreams : [];
-    const directVideo = trailerStreams.find((entry) => {
+    const directVideo = trailerStreams.filter((entry) => {
       const url = String((entry == null ? void 0 : entry.url) || (entry == null ? void 0 : entry.videoUrl) || (entry == null ? void 0 : entry.stream) || "").trim();
       return /^https?:\/\//i.test(url);
-    });
+    }).sort((left, right) => scoreTrailerStream(right) - scoreTrailerStream(left))[0];
     if (directVideo) {
       return {
         kind: "video",
@@ -2914,7 +2939,10 @@
   }
   function buildPosterSubtitle(item, layoutMode) {
     const normalized = normalizeCatalogItem(item);
-    return firstNonEmpty(normalized.releaseInfo, "");
+    if (layoutMode === "modern") {
+      return firstNonEmpty(normalized.releaseInfo, "");
+    }
+    return firstNonEmpty(extractYear(normalized), normalized.releaseInfo, "");
   }
   function buildExpandedPosterMeta(item) {
     var _a;
@@ -3055,42 +3083,65 @@
   }
   var HomeScreen = {
     captureCurrentFocusState() {
-      var _a, _b;
-      if (!this.container || this.layoutMode !== "modern") {
+      var _a, _b, _c, _d, _e;
+      const layoutMode = String(this.renderedLayoutMode || this.layoutMode || "").toLowerCase();
+      if (!this.container || !layoutMode) {
         return null;
       }
-      const viewport = this.container.querySelector(".home-modern-rows-viewport");
+      const viewport = layoutMode === "modern" ? this.container.querySelector(".home-modern-rows-viewport") : this.container.querySelector(".home-main");
       if (!viewport) {
         return null;
       }
       const focused = this.container.querySelector(".home-main .focusable.focused");
-      const section = ((_a = focused == null ? void 0 : focused.closest) == null ? void 0 : _a.call(focused, "[data-row-key]")) || null;
       const trackStates = Object.fromEntries(
         Array.from(this.container.querySelectorAll("[data-track-row-key]")).map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft]).filter(([key]) => key)
       );
+      const section = ((_a = focused == null ? void 0 : focused.closest) == null ? void 0 : _a.call(focused, "[data-row-key]")) || null;
       const rowKey = String(((_b = section == null ? void 0 : section.dataset) == null ? void 0 : _b.rowKey) || "");
       let itemIndex = -1;
       if (focused) {
-        const track = focused.closest(".home-track");
+        const track = focused.closest(".home-track, .home-grid-track");
         if (track) {
           itemIndex = Array.from(track.querySelectorAll(".home-content-card.focusable")).indexOf(focused);
         }
       }
+      const focusKind = ((_c = focused == null ? void 0 : focused.classList) == null ? void 0 : _c.contains("home-hero-card")) ? "hero" : ((_d = focused == null ? void 0 : focused.dataset) == null ? void 0 : _d.action) === "resumeProgress" ? "continue" : ((_e = focused == null ? void 0 : focused.dataset) == null ? void 0 : _e.action) === "openCatalogSeeAll" ? "seeAll" : "item";
       return {
-        layoutMode: "modern",
+        layoutMode,
         mainScrollTop: viewport.scrollTop,
         rowKey,
         itemIndex,
+        focusKind,
         trackStates
       };
     },
-    restoreModernFocusState(state = null) {
-      var _a, _b, _c;
-      const focusState = (state == null ? void 0 : state.layoutMode) === "modern" ? state : ((_a = this.savedFocusStates) == null ? void 0 : _a.modern) || null;
+    persistCurrentFocusState() {
+      const currentState = this.captureCurrentFocusState();
+      if (!(currentState == null ? void 0 : currentState.layoutMode)) {
+        return;
+      }
+      this.savedFocusStates = {
+        ...this.savedFocusStates || {},
+        [currentState.layoutMode]: currentState
+      };
+    },
+    restoreFocusState(state = null) {
+      var _a;
+      const focusState = (state == null ? void 0 : state.layoutMode) === this.layoutMode ? state : ((_a = this.savedFocusStates) == null ? void 0 : _a[this.layoutMode]) || null;
+      if (!focusState) {
+        return false;
+      }
+      if (this.layoutMode === "modern") {
+        return this.restoreModernFocusState(focusState);
+      }
+      return this.restoreLegacyFocusState(focusState);
+    },
+    restoreModernFocusState(focusState) {
+      var _a, _b;
       if (!focusState || this.layoutMode !== "modern") {
         return false;
       }
-      const viewport = (_b = this.container) == null ? void 0 : _b.querySelector(".home-modern-rows-viewport");
+      const viewport = (_a = this.container) == null ? void 0 : _a.querySelector(".home-modern-rows-viewport");
       if (!viewport) {
         return false;
       }
@@ -3104,7 +3155,7 @@
       const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
       const desiredScrollTop = rowSection ? rowSection.offsetTop : Number(focusState.mainScrollTop || 0);
       viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
-      const targetTrack = ((_c = rowSection == null ? void 0 : rowSection.querySelector) == null ? void 0 : _c.call(rowSection, ".home-track")) || null;
+      const targetTrack = ((_b = rowSection == null ? void 0 : rowSection.querySelector) == null ? void 0 : _b.call(rowSection, ".home-track")) || null;
       const targetNodes = Array.from((targetTrack == null ? void 0 : targetTrack.querySelectorAll(".home-content-card.focusable")) || []);
       const fallback = this.container.querySelector(".home-main .home-continue-card.focusable, .home-main .home-poster-card.focusable");
       const target = targetNodes[focusState.itemIndex] || targetNodes[0] || fallback;
@@ -3118,6 +3169,48 @@
       this.ensureMainVerticalVisibility(target);
       this.scheduleModernHeroUpdate(target);
       this.scheduleFocusedPosterFlow(target);
+      return true;
+    },
+    restoreLegacyFocusState(focusState) {
+      var _a, _b, _c;
+      if (!focusState || !["classic", "grid"].includes(this.layoutMode)) {
+        return false;
+      }
+      const main = (_a = this.container) == null ? void 0 : _a.querySelector(".home-main");
+      if (!main) {
+        return false;
+      }
+      Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
+        const track = this.container.querySelector(`[data-track-row-key="${rowKey}"]`);
+        if (track) {
+          track.scrollLeft = Number(scrollLeft || 0);
+        }
+      });
+      const maxScrollTop = Math.max(0, main.scrollHeight - main.clientHeight);
+      main.scrollTop = Math.max(0, Math.min(maxScrollTop, Number(focusState.mainScrollTop || 0)));
+      let target = null;
+      if (focusState.focusKind === "hero") {
+        target = this.container.querySelector(".home-hero-card.focusable");
+      } else if (focusState.rowKey) {
+        const rowSection = this.container.querySelector(`[data-row-key="${focusState.rowKey}"]`);
+        const track = ((_b = rowSection == null ? void 0 : rowSection.querySelector) == null ? void 0 : _b.call(rowSection, ".home-track")) || ((_c = rowSection == null ? void 0 : rowSection.querySelector) == null ? void 0 : _c.call(rowSection, ".home-grid-track")) || null;
+        const rowNodes = Array.from((track == null ? void 0 : track.querySelectorAll(".home-content-card.focusable")) || []);
+        target = rowNodes[focusState.itemIndex] || rowNodes[0] || null;
+      }
+      const fallback = this.container.querySelector(this.getInitialFocusSelector());
+      target = target || fallback;
+      if (!target) {
+        return false;
+      }
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      target.classList.add("focused");
+      this.focusWithoutAutoScroll(target);
+      this.lastMainFocus = target;
+      this.rememberMainRowFocus(target);
+      if (target.closest(".home-track, .home-grid-track")) {
+        this.ensureTrackHorizontalVisibility(target);
+      }
+      this.ensureMainVerticalVisibility(target);
       return true;
     },
     cancelScrollAnimation(container, axis = "x") {
@@ -3212,9 +3305,15 @@
         return;
       }
       this.heroRotateTimeout = setTimeout(() => {
-        this.rotateHero(1);
-        this.heroRotateTimer = setInterval(() => {
+        var _a;
+        if (!((_a = this.container) == null ? void 0 : _a.querySelector(".home-hero-card.focusable.focused"))) {
           this.rotateHero(1);
+        }
+        this.heroRotateTimer = setInterval(() => {
+          var _a2;
+          if (!((_a2 = this.container) == null ? void 0 : _a2.querySelector(".home-hero-card.focusable.focused"))) {
+            this.rotateHero(1);
+          }
         }, HERO_ROTATE_INTERVAL_MS);
       }, HERO_ROTATE_FIRST_DELAY_MS);
     },
@@ -3331,6 +3430,42 @@
     isMainNode(node) {
       var _a;
       return String(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.navZone) || "") === "main";
+    },
+    getNodeRowKey(node) {
+      var _a, _b, _c, _d, _e, _f;
+      if (!node) {
+        return "";
+      }
+      if ((_a = node.classList) == null ? void 0 : _a.contains("home-hero-card")) {
+        return "__hero__";
+      }
+      return String(
+        ((_b = node.dataset) == null ? void 0 : _b.navRowKey) || ((_c = node.dataset) == null ? void 0 : _c.rowKey) || ((_f = (_e = (_d = node.closest) == null ? void 0 : _d.call(node, "[data-row-key]")) == null ? void 0 : _e.dataset) == null ? void 0 : _f.rowKey) || ""
+      );
+    },
+    rememberMainRowFocus(node) {
+      var _a;
+      if (!this.isMainNode(node)) {
+        return;
+      }
+      const rowKey = this.getNodeRowKey(node);
+      if (!rowKey || rowKey === "__hero__") {
+        return;
+      }
+      this.lastFocusedItemIndexByRowKey = {
+        ...this.lastFocusedItemIndexByRowKey || {},
+        [rowKey]: Math.max(0, Number(((_a = node.dataset) == null ? void 0 : _a.navCol) || 0))
+      };
+    },
+    resolvePreferredNodeForRow(rowNodes = [], fallbackCol = 0) {
+      var _a;
+      if (!Array.isArray(rowNodes) || !rowNodes.length) {
+        return null;
+      }
+      const rowKey = this.getNodeRowKey(rowNodes[0]);
+      const storedIndex = rowKey ? Number((_a = this.lastFocusedItemIndexByRowKey) == null ? void 0 : _a[rowKey]) : Number.NaN;
+      const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+      return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
     },
     focusWithoutAutoScroll(target) {
       focusWithoutAutoScroll(target);
@@ -3641,7 +3776,7 @@
       if (!main || !target || !((_c = this.container) == null ? void 0 : _c.contains(target))) {
         return;
       }
-      const row = target.closest(".home-row");
+      const row = target.closest(".home-row, .home-grid-section");
       const anchor = row || target.closest(".home-hero") || target;
       const mainRect = main.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
@@ -3666,8 +3801,14 @@
     },
     ensureTrackHorizontalVisibility(target, direction = null) {
       var _a;
-      const track = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, ".home-track");
+      const track = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, ".home-track, .home-grid-track");
       if (!track) {
+        return;
+      }
+      if (this.layoutMode !== "modern") {
+        const targetCenter = target.offsetLeft + target.offsetWidth / 2;
+        const centeredLeft = targetCenter - track.clientWidth / 2;
+        this.animateScroll(track, "x", centeredLeft, 160);
         return;
       }
       const edgePadding = this.getTrackEdgePadding();
@@ -3696,6 +3837,7 @@
       this.setSidebarExpanded(this.isSidebarNode(target));
       if (this.isMainNode(target)) {
         this.lastMainFocus = target;
+        this.rememberMainRowFocus(target);
         this.ensureTrackHorizontalVisibility(target, direction);
         this.ensureMainVerticalVisibility(target);
         this.scheduleModernHeroUpdate(target);
@@ -3746,10 +3888,14 @@
         node.dataset.navIndex = String(index);
       });
       rows.forEach((rowNodes, rowIndex) => {
+        const rowKey = this.getNodeRowKey(rowNodes[0]);
         rowNodes.forEach((node, colIndex) => {
           node.dataset.navZone = "main";
           node.dataset.navRow = String(rowIndex);
           node.dataset.navCol = String(colIndex);
+          if (rowKey) {
+            node.dataset.navRowKey = rowKey;
+          }
         });
       });
       this.navModel = { sidebar, rows };
@@ -3829,7 +3975,7 @@
         if (!targetRowNodes || !targetRowNodes.length) {
           return true;
         }
-        const target = targetRowNodes[Math.min(col, targetRowNodes.length - 1)] || targetRowNodes[0];
+        const target = this.resolvePreferredNodeForRow(targetRowNodes, col);
         return this.focusNode(current, target, direction) || true;
       }
       return false;
@@ -3905,7 +4051,7 @@
       this.render();
       if (deferredDescriptors.length) {
         this.fetchCatalogRows(deferredDescriptors).then((extraRows) => {
-          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+          if (token !== this.homeLoadToken || Router2.getCurrent() !== "home") {
             return;
           }
           const combinedByKey = /* @__PURE__ */ new Map();
@@ -3924,7 +4070,7 @@
       }
       if (this.layoutMode !== "modern") {
         this.enrichHero(this.heroCandidates[0] || null).then(() => {
-          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+          if (token !== this.homeLoadToken || Router2.getCurrent() !== "home") {
             return;
           }
           this.applyHeroToDom();
@@ -3933,7 +4079,7 @@
         });
       }
       this.enrichContinueWatching(this.continueWatching).then((enriched) => {
-        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        if (token !== this.homeLoadToken || Router2.getCurrent() !== "home") {
           return;
         }
         this.continueWatchingDisplay = enriched.map((item) => normalizeContinueWatchingItem(item));
@@ -4026,7 +4172,9 @@
         this.catalogSeeAllMap = modernLayoutPayload.catalogSeeAllMap;
         mainContentMarkup = modernLayoutPayload.markup;
       } else {
-        const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || []);
+        const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
+          rowKey: "continue_watching"
+        });
         mainContentMarkup = `
         ${showHeroSection ? renderHeroMarkup(this.layoutMode, heroItem, this.heroCandidates) : ""}
         ${continueHtml}
@@ -4071,7 +4219,10 @@
             initialItems: items
           });
           const section = document.createElement("section");
+          const rowKey = buildModernRowKey(rowData);
           section.className = this.layoutMode === "grid" ? "home-grid-section" : "home-row";
+          section.dataset.rowKey = rowKey;
+          section.dataset.rowIndex = String(rowIndex);
           const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
           const rowSubtitle = this.layoutMode === "classic" && showCatalogAddonName && rowData.addonName ? `from ${rowData.addonName}` : "";
           if (this.layoutMode === "grid") {
@@ -4087,6 +4238,9 @@
           `;
           }
           const track = section.querySelector(this.layoutMode === "grid" ? ".home-grid-track" : ".home-track");
+          if (track) {
+            track.dataset.trackRowKey = rowKey;
+          }
           const hasSeeAll = items.length >= 15;
           const visibleItems = this.layoutMode === "grid" ? hasSeeAll ? items.slice(0, 14) : items.slice(0, 15) : items.slice(0, 15);
           visibleItems.forEach((item, itemIndex) => {
@@ -4128,7 +4282,7 @@
             this.openCatalogSeeAllFromNode(item);
           }
           if (action === "resumeProgress") {
-            Router.navigate("detail", {
+            Router2.navigate("detail", {
               itemId: item.dataset.itemId,
               itemType: item.dataset.itemType || "movie",
               fallbackTitle: item.dataset.itemTitle || item.dataset.itemId || "Untitled"
@@ -4138,7 +4292,7 @@
       });
       ScreenUtils.indexFocusables(this.container);
       this.buildNavigationModel();
-      const restoredFocus = this.layoutMode === "modern" ? this.restoreModernFocusState(retainedFocusState) : false;
+      const restoredFocus = this.restoreFocusState(retainedFocusState);
       if (!restoredFocus) {
         ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
         const current = this.container.querySelector(".home-main .focusable.focused");
@@ -4156,6 +4310,7 @@
       }
       this.startHeroRotation();
       this.homeRouteEnterPending = false;
+      this.renderedLayoutMode = this.layoutMode;
     },
     teardownGridStickyHeader() {
       if (this.gridStickyCleanup) {
@@ -4306,7 +4461,7 @@
       if (!itemId) {
         return;
       }
-      Router.navigate("detail", {
+      Router2.navigate("detail", {
         itemId,
         itemType: node.dataset.itemType || "movie",
         fallbackTitle: node.dataset.itemTitle || "Untitled"
@@ -4320,10 +4475,10 @@
       const seeAllId = String(node.dataset.seeAllId || "");
       const mapped = ((_b = (_a = this.catalogSeeAllMap) == null ? void 0 : _a.get) == null ? void 0 : _b.call(_a, seeAllId)) || null;
       if (mapped) {
-        Router.navigate("catalogSeeAll", mapped);
+        Router2.navigate("catalogSeeAll", mapped);
         return;
       }
-      Router.navigate("catalogSeeAll", {
+      Router2.navigate("catalogSeeAll", {
         addonBaseUrl: node.dataset.addonBaseUrl || "",
         addonId: node.dataset.addonId || "",
         addonName: node.dataset.addonName || "",
@@ -4368,6 +4523,7 @@
         return;
       }
       if (code === 76) {
+        this.persistCurrentFocusState();
         const currentIndex = HOME_LAYOUT_SEQUENCE.indexOf(this.layoutMode);
         const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % HOME_LAYOUT_SEQUENCE.length : 0;
         this.layoutMode = HOME_LAYOUT_SEQUENCE[nextIndex];
@@ -4391,7 +4547,7 @@
       if (action === "openDetail") this.openDetailFromNode(current);
       if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
       if (action === "resumeProgress") {
-        Router.navigate("detail", {
+        Router2.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || current.dataset.itemId || "Untitled"
@@ -4399,13 +4555,7 @@
       }
     },
     cleanup() {
-      const currentState = this.captureCurrentFocusState();
-      if (currentState) {
-        this.savedFocusStates = {
-          ...this.savedFocusStates || {},
-          modern: currentState
-        };
-      }
+      this.persistCurrentFocusState();
       this.homeLoadToken = (this.homeLoadToken || 0) + 1;
       this.stopHeroRotation();
       this.cancelPendingHeroFocus();
@@ -9549,7 +9699,7 @@
         }
         const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
         const nextEpisode = this.episodes[this.episodePanelIndex + 1] || null;
-        Router.navigate("player", {
+        Router2.navigate("player", {
           streamUrl: bestStream,
           itemId: (_b = this.params) == null ? void 0 : _b.itemId,
           itemType,
@@ -9945,7 +10095,7 @@
           return;
         }
         const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
-        Router.navigate("player", {
+        Router2.navigate("player", {
           streamUrl: bestStream,
           itemId: (_e = this.params) == null ? void 0 : _e.itemId,
           itemType,
@@ -10040,7 +10190,7 @@
     },
     async signOut() {
       await AuthManager.signOut();
-      Router.navigate("authQrSignIn");
+      Router2.navigate("authQrSignIn");
     },
     render() {
       if (!this.container) {
@@ -10093,7 +10243,7 @@
       if (event.keyCode === 13 && current) {
         const action = current.dataset.action;
         if (action === "signin") {
-          Router.navigate("authQrSignIn");
+          Router2.navigate("authQrSignIn");
         }
         if (action === "logout") {
           this.signOut();
@@ -10469,7 +10619,7 @@
       this.container = document.getElementById("account");
       this.onboardingMode = Boolean(onboardingMode);
       this.isSignedIn = AuthManager.isAuthenticated;
-      this.hasBackDestination = Router.stack.length > 0;
+      this.hasBackDestination = Router2.stack.length > 0;
       ScreenUtils.show(this.container);
       this.container.innerHTML = `
       <div class="qr-layout">
@@ -10506,9 +10656,9 @@
       document.getElementById("qr-back-btn").onclick = () => {
         this.cleanup();
         if (this.hasBackDestination) {
-          Router.back();
+          Router2.back();
         } else {
-          Router.navigate("home");
+          Router2.navigate("home");
         }
       };
       ScreenUtils.indexFocusables(this.container);
@@ -10575,7 +10725,7 @@
           if (exchange) {
             LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
             this.isSignedIn = true;
-            Router.navigate("profileSelection");
+            Router2.navigate("profileSelection");
           } else {
             this.setStatus(this.toFriendlyQrError(QrLoginService.getLastError()));
           }
@@ -10704,7 +10854,7 @@
       }
       const action = current.dataset.action;
       if (action === "openQr") {
-        Router.navigate("authQrSignIn");
+        Router2.navigate("authQrSignIn");
         return;
       }
       if (action === "devLogin") {
@@ -10713,7 +10863,7 @@
         if (email && password) {
           try {
             await AuthManager.signInWithEmail(email, password);
-            Router.navigate("profileSelection");
+            Router2.navigate("profileSelection");
           } catch (error) {
             console.error("SignIn failed", error);
           }
@@ -10721,7 +10871,7 @@
         return;
       }
       if (action === "back") {
-        Router.back();
+        Router2.back();
       }
     },
     cleanup() {
@@ -10779,7 +10929,7 @@
         return;
       }
       if (action === "back") {
-        Router.back();
+        Router2.back();
       }
     },
     cleanup() {
@@ -12530,7 +12680,7 @@
       }
       await ProfileManager.setActiveProfile(profileId);
       await StartupSyncService.syncPull();
-      Router.navigate("home");
+      Router2.navigate("home");
     },
     async onKeyDown(event) {
       var _a, _b;
@@ -12899,7 +13049,8 @@
       playsinline: "1",
       rel: "0",
       modestbranding: "1",
-      enablejsapi: "1"
+      enablejsapi: "1",
+      vq: "hd2160"
     });
     const origin = String(((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.origin) || "").trim();
     const href = String(((_b = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _b.href) || "").trim();
@@ -12911,12 +13062,35 @@
     }
     return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
   }
+  function scoreTrailerStream2(entry = {}) {
+    const text = [
+      entry == null ? void 0 : entry.quality,
+      entry == null ? void 0 : entry.label,
+      entry == null ? void 0 : entry.name,
+      entry == null ? void 0 : entry.title,
+      entry == null ? void 0 : entry.description,
+      entry == null ? void 0 : entry.resolution
+    ].map((value) => String(value || "")).join(" ").toLowerCase();
+    const width = Number((entry == null ? void 0 : entry.width) || 0);
+    const height = Number((entry == null ? void 0 : entry.height) || (entry == null ? void 0 : entry.resolutionHeight) || 0);
+    const bitrate = Number((entry == null ? void 0 : entry.bitrate) || 0);
+    let score = 0;
+    if (width >= 3840 || height >= 2160 || /2160|4k|uhd/.test(text)) score += 120;
+    else if (width >= 2560 || height >= 1440 || /1440|2k|qhd/.test(text)) score += 90;
+    else if (width >= 1920 || height >= 1080 || /1080|full\s*hd|fhd/.test(text)) score += 70;
+    else if (width >= 1280 || height >= 720 || /720|hd\b/.test(text)) score += 45;
+    else if (width > 0 || height > 0) score += 20;
+    score += Math.max(0, Math.min(20, Math.round(bitrate / 5e5)));
+    if (/hdr|dolby/.test(text)) score += 8;
+    if (/hevc|h265|av1/.test(text)) score += 6;
+    return score;
+  }
   function resolveTrailerSource2(meta = {}) {
     const trailerStreams = Array.isArray(meta == null ? void 0 : meta.trailerStreams) ? meta.trailerStreams : [];
-    const directVideo = trailerStreams.find((entry) => {
+    const directVideo = trailerStreams.filter((entry) => {
       const url = String((entry == null ? void 0 : entry.url) || (entry == null ? void 0 : entry.videoUrl) || (entry == null ? void 0 : entry.stream) || "").trim();
       return /^https?:\/\//i.test(url);
-    });
+    }).sort((left, right) => scoreTrailerStream2(right) - scoreTrailerStream2(left))[0];
     if (directVideo) {
       return {
         kind: "video",
@@ -13061,7 +13235,7 @@
         if (this.consumeBackRequest()) {
           return;
         }
-        Router.back();
+        Router2.back();
       };
       document.addEventListener("keydown", this.backHandler, true);
     },
@@ -14370,7 +14544,7 @@
         return true;
       }
       if (this.isLoadingDetail) {
-        Router.navigate("home");
+        Router2.navigate("home");
         return true;
       }
       return false;
@@ -14387,7 +14561,7 @@
       }
       const currentIndex = this.episodes.findIndex((entry) => entry.id === pending.videoId);
       const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
-      Router.navigate("player", {
+      Router2.navigate("player", {
         streamUrl: selectedStream.url,
         itemId: (_a = this.params) == null ? void 0 : _a.itemId,
         itemType: ((_b = this.params) == null ? void 0 : _b.itemType) || "series",
@@ -14415,7 +14589,7 @@
       const currentIndex = this.episodes.findIndex((entry) => entry.id === episode.id);
       const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
       const streamBackdrop = ((_a = this.meta) == null ? void 0 : _a.background) || ((_b = this.meta) == null ? void 0 : _b.landscapePoster) || ((_c = this.meta) == null ? void 0 : _c.poster) || null;
-      Router.navigate("stream", {
+      Router2.navigate("stream", {
         itemId: ((_d = this.params) == null ? void 0 : _d.itemId) || null,
         itemType: "series",
         itemTitle: ((_e = this.meta) == null ? void 0 : _e.name) || ((_f = this.params) == null ? void 0 : _f.fallbackTitle) || ((_g = this.params) == null ? void 0 : _g.itemId) || "Untitled",
@@ -14438,7 +14612,7 @@
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
       const releaseYear = ((_b = String(((_a = this.meta) == null ? void 0 : _a.releaseInfo) || "").match(/\b(19|20)\d{2}\b/)) == null ? void 0 : _b[0]) || "";
       const streamBackdrop = ((_c = this.meta) == null ? void 0 : _c.background) || ((_d = this.meta) == null ? void 0 : _d.landscapePoster) || ((_e = this.meta) == null ? void 0 : _e.poster) || null;
-      Router.navigate("stream", {
+      Router2.navigate("stream", {
         itemId: ((_f = this.params) == null ? void 0 : _f.itemId) || null,
         itemType: "movie",
         itemTitle: ((_g = this.meta) == null ? void 0 : _g.name) || ((_h = this.params) == null ? void 0 : _h.fallbackTitle) || ((_i = this.params) == null ? void 0 : _i.itemId) || "Untitled",
@@ -14464,7 +14638,7 @@
       if (!(selectedStream == null ? void 0 : selectedStream.url)) {
         return;
       }
-      Router.navigate("player", {
+      Router2.navigate("player", {
         streamUrl: selectedStream.url,
         itemId: (_a = this.params) == null ? void 0 : _a.itemId,
         itemType: ((_b = this.params) == null ? void 0 : _b.itemType) || "movie",
@@ -15064,7 +15238,7 @@
           this.closeEpisodeStreamChooser();
           return;
         }
-        Router.back();
+        Router2.back();
         return;
       }
       if (this.isTrailerPlaying) {
@@ -15102,11 +15276,11 @@
       }
       const action = current.dataset.action;
       if (action === "goBack") {
-        Router.back();
+        Router2.back();
         return;
       }
       if (action === "openSearch") {
-        Router.navigate("search", {
+        Router2.navigate("search", {
           query: ((_c = this.params) == null ? void 0 : _c.fallbackTitle) || ((_d = this.params) == null ? void 0 : _d.itemId) || ""
         });
         return;
@@ -15198,7 +15372,7 @@
         return;
       }
       if (action === "openCastDetail") {
-        Router.navigate("castDetail", {
+        Router2.navigate("castDetail", {
           castId: current.dataset.castId || "",
           castName: current.dataset.castName || "",
           castRole: current.dataset.castRole || "",
@@ -15241,7 +15415,7 @@
         return;
       }
       if (action === "playStream" && current.dataset.streamUrl) {
-        Router.navigate("player", {
+        Router2.navigate("player", {
           streamUrl: current.dataset.streamUrl,
           itemId: (_x = this.params) == null ? void 0 : _x.itemId,
           itemType: (_y = this.params) == null ? void 0 : _y.itemType,
@@ -15257,7 +15431,7 @@
         return;
       }
       if (action === "openMoreLikeDetail") {
-        Router.navigate("detail", {
+        Router2.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -16799,7 +16973,7 @@
         if (focusKey) {
           this.controller.setFocusedPosterKey(focusKey);
         }
-        Router.navigate("detail", {
+        Router2.navigate("detail", {
           itemId: node.dataset.itemId,
           itemType: node.dataset.itemType || "movie",
           fallbackTitle: node.dataset.itemTitle || "Untitled"
@@ -17079,6 +17253,7 @@
         pillIconOnly: Boolean(this.pillIconOnly),
         contentScrollTop: Number((content == null ? void 0 : content.scrollTop) || 0),
         rowScrollLeftByKey,
+        rowFocusedIndexByKey: this.rowFocusedIndexByKey ? { ...this.rowFocusedIndexByKey } : {},
         pendingAutoFocusResults: false,
         voiceSearchSupported: Boolean(this.voiceSearchSupported),
         focusedAction: String(((_d = focused == null ? void 0 : focused.dataset) == null ? void 0 : _d.action) || ""),
@@ -17107,6 +17282,7 @@
       this.pillIconOnly = Boolean(snapshot == null ? void 0 : snapshot.pillIconOnly);
       this.contentScrollTop = Number((snapshot == null ? void 0 : snapshot.contentScrollTop) || 0);
       this.rowScrollLeftByKey = (snapshot == null ? void 0 : snapshot.rowScrollLeftByKey) && typeof snapshot.rowScrollLeftByKey === "object" ? { ...snapshot.rowScrollLeftByKey } : {};
+      this.rowFocusedIndexByKey = (snapshot == null ? void 0 : snapshot.rowFocusedIndexByKey) && typeof snapshot.rowFocusedIndexByKey === "object" ? { ...snapshot.rowFocusedIndexByKey } : {};
       this.pendingAutoFocusResults = false;
       this.restoredFocusedDescriptor = snapshot ? {
         action: String(snapshot.focusedAction || ""),
@@ -17153,6 +17329,7 @@
       this.lastContentFocus = null;
       this.contentScrollTop = 0;
       this.rowScrollLeftByKey = {};
+      this.rowFocusedIndexByKey = {};
       this.restoredFocusedDescriptor = null;
       this.voiceSearchSupported = typeof window !== "undefined" && (typeof window.SpeechRecognition === "function" || typeof window.webkitSpeechRecognition === "function");
       this.voiceSearchActive = false;
@@ -17482,12 +17659,30 @@
       if (!node) {
         return;
       }
+      const rowKey = String(node.dataset.rowKey || "");
+      if (String(node.dataset.navZone || "") === "results" && rowKey) {
+        this.rowFocusedIndexByKey = {
+          ...this.rowFocusedIndexByKey || {},
+          [rowKey]: Math.max(0, Number(node.dataset.navCol || 0))
+        };
+      }
       this.lastContentFocus = {
         zone: String(node.dataset.navZone || ""),
         row: Number(node.dataset.navRow || 0),
         col: Number(node.dataset.navCol || 0),
-        action: String(node.dataset.action || "")
+        action: String(node.dataset.action || ""),
+        rowKey
       };
+    },
+    resolvePreferredResultsNode(rowNodes = [], fallbackCol = 0) {
+      var _a, _b, _c;
+      if (!Array.isArray(rowNodes) || !rowNodes.length) {
+        return null;
+      }
+      const rowKey = String(((_b = (_a = rowNodes[0]) == null ? void 0 : _a.dataset) == null ? void 0 : _b.rowKey) || "");
+      const storedIndex = rowKey ? Number((_c = this.rowFocusedIndexByKey) == null ? void 0 : _c[rowKey]) : Number.NaN;
+      const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+      return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
     },
     focusSidebarNode(preferredNode = null) {
       var _a;
@@ -17525,7 +17720,7 @@
       return this.restoreContentFocus(false);
     },
     restoreContentFocus(preferResults = false) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
       let target = null;
       if (preferResults) {
         target = ((_a = this.container) == null ? void 0 : _a.querySelector(".search-results-row .search-result-card.focusable")) || null;
@@ -17545,22 +17740,30 @@
       }
       if (!target && this.lastContentFocus) {
         if (this.lastContentFocus.zone === "results") {
-          target = ((_h = this.container) == null ? void 0 : _h.querySelector(
-            `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
-          )) || null;
+          if (this.lastContentFocus.rowKey) {
+            const rowNodes = Array.from(((_h = this.container) == null ? void 0 : _h.querySelectorAll(
+              `.search-result-card.focusable[data-row-key="${escapeSelectorValue2(this.lastContentFocus.rowKey)}"]`
+            )) || []);
+            target = this.resolvePreferredResultsNode(rowNodes, this.lastContentFocus.col);
+          }
+          if (!target) {
+            target = ((_i = this.container) == null ? void 0 : _i.querySelector(
+              `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
+            )) || null;
+          }
         } else if (this.lastContentFocus.zone === "header") {
-          target = ((_i = this.container) == null ? void 0 : _i.querySelector(
+          target = ((_j = this.container) == null ? void 0 : _j.querySelector(
             `.focusable[data-nav-zone="header"][data-nav-col="${this.lastContentFocus.col}"]`
           )) || null;
         }
       }
       if (!target) {
-        target = this.getDefaultHeaderFocusTarget() || ((_j = this.container) == null ? void 0 : _j.querySelector(".search-result-card.focusable")) || null;
+        target = this.getDefaultHeaderFocusTarget() || ((_k = this.container) == null ? void 0 : _k.querySelector(".search-result-card.focusable")) || null;
       }
       if (!target) {
         return false;
       }
-      this.focusNode(((_k = this.container) == null ? void 0 : _k.querySelector(".focusable.focused")) || null, target);
+      this.focusNode(((_l = this.container) == null ? void 0 : _l.querySelector(".focusable.focused")) || null, target);
       this.restoredFocusedDescriptor = null;
       return true;
     },
@@ -17674,7 +17877,7 @@
         }
         if (direction === "down") {
           const firstRow = ((_f = nav.rows) == null ? void 0 : _f[0]) || [];
-          const target = firstRow[Math.min(col, Math.max(0, firstRow.length - 1))] || firstRow[0] || null;
+          const target = this.resolvePreferredResultsNode(firstRow, col);
           return this.focusNode(current, target) || true;
         }
         if (direction === "up") {
@@ -17701,13 +17904,13 @@
           if (!nextRowNodes) {
             return true;
           }
-          const target = nextRowNodes[Math.min(col, nextRowNodes.length - 1)] || nextRowNodes[0] || null;
+          const target = this.resolvePreferredResultsNode(nextRowNodes, col);
           return this.focusNode(current, target) || true;
         }
         if (direction === "up") {
           const prevRowNodes = ((_i = nav.rows) == null ? void 0 : _i[row - 1]) || null;
           if (prevRowNodes) {
-            const target2 = prevRowNodes[Math.min(col, prevRowNodes.length - 1)] || prevRowNodes[0] || null;
+            const target2 = this.resolvePreferredResultsNode(prevRowNodes, col);
             return this.focusNode(current, target2) || true;
           }
           const target = ((_k = nav.header) == null ? void 0 : _k[Math.min(col, (((_j = nav.header) == null ? void 0 : _j.length) || 1) - 1)]) || ((_l = nav.header) == null ? void 0 : _l[0]) || null;
@@ -17764,7 +17967,7 @@
       if (!action) return;
       if (action === "openDetail") this.openDetailFromNode(node);
       if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(node);
-      if (action === "openDiscover" && ((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled)) Router.navigate("discover");
+      if (action === "openDiscover" && ((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled)) Router2.navigate("discover");
       if (action === "openVoice") this.handleVoiceSearch();
     },
     ensureVoiceRecognition() {
@@ -17864,21 +18067,24 @@
       }, 2600);
     },
     openDetailFromNode(node) {
-      Router.navigate("detail", {
+      Router2.navigate("detail", {
         itemId: node.dataset.itemId,
         itemType: node.dataset.itemType || "movie",
         fallbackTitle: node.dataset.itemTitle || "Untitled"
       });
     },
     openCatalogSeeAllFromNode(node) {
-      Router.navigate("catalogSeeAll", {
+      var _a, _b;
+      const rowIndex = Math.max(0, Number(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.rowIndex) || 0));
+      const sourceRow = ((_b = this.rows) == null ? void 0 : _b[rowIndex]) || null;
+      Router2.navigate("catalogSeeAll", {
         addonBaseUrl: node.dataset.addonBaseUrl || "",
         addonId: node.dataset.addonId || "",
         addonName: node.dataset.addonName || "",
         catalogId: node.dataset.catalogId || "",
         catalogName: node.dataset.catalogName || "",
         type: node.dataset.catalogType || "movie",
-        initialItems: []
+        initialItems: Array.isArray(sourceRow == null ? void 0 : sourceRow.items) ? sourceRow.items : []
       });
     },
     async onKeyDown(event) {
@@ -18256,19 +18462,21 @@
       return Boolean(after && before !== after);
     },
     focusFirstContentCard() {
-      var _a, _b;
-      const firstCard = (_a = this.container) == null ? void 0 : _a.querySelector(".discover-grid .discover-card.focusable");
-      if (!firstCard) {
+      var _a, _b, _c;
+      const preferredSelector = this.lastFocusedDiscoverItemId ? `.discover-grid .discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]` : "";
+      const target = (preferredSelector ? (_a = this.container) == null ? void 0 : _a.querySelector(preferredSelector) : null) || ((_b = this.container) == null ? void 0 : _b.querySelector(".discover-grid .discover-card.focusable"));
+      if (!target) {
         return false;
       }
       this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
-      firstCard.classList.add("focused");
+      target.classList.add("focused");
       this.focusZone = "content";
-      focusWithoutAutoScroll(firstCard);
-      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
+      focusWithoutAutoScroll(target);
+      if (!((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar)) {
         setLegacySidebarExpanded(this.container, false);
       }
-      this.lastFocusedAction = String(firstCard.dataset.action || "openDetail");
+      this.lastFocusedAction = String(target.dataset.action || "openDetail");
+      this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
       return true;
     },
     focusSidebarNode() {
@@ -18297,9 +18505,9 @@
       return this.focusSidebarNode();
     },
     restoreContentFocus() {
-      var _a, _b, _c, _d;
+      var _a, _b, _c, _d, _e;
       const selector = this.lastFocusedAction ? `.focusable[data-action="${this.lastFocusedAction}"]` : ".discover-filter.focusable";
-      const target = ((_a = this.container) == null ? void 0 : _a.querySelector(selector)) || ((_b = this.container) == null ? void 0 : _b.querySelector(".discover-filter.focusable")) || ((_c = this.container) == null ? void 0 : _c.querySelector(".discover-card.focusable")) || null;
+      const target = ((_a = this.container) == null ? void 0 : _a.querySelector(selector)) || (this.lastFocusedDiscoverItemId ? (_b = this.container) == null ? void 0 : _b.querySelector(`.discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`) : null) || ((_c = this.container) == null ? void 0 : _c.querySelector(".discover-filter.focusable")) || ((_d = this.container) == null ? void 0 : _d.querySelector(".discover-card.focusable")) || null;
       if (!target) {
         return false;
       }
@@ -18307,7 +18515,7 @@
       target.classList.add("focused");
       this.focusZone = "content";
       focusWithoutAutoScroll(target);
-      if (!((_d = this.layoutPrefs) == null ? void 0 : _d.modernSidebar)) {
+      if (!((_e = this.layoutPrefs) == null ? void 0 : _e.modernSidebar)) {
         setLegacySidebarExpanded(this.container, false);
       }
       return true;
@@ -18438,7 +18646,8 @@
         }
         const cardNode = (_f = (_e = event.target) == null ? void 0 : _e.closest) == null ? void 0 : _f.call(_e, ".discover-card");
         if (cardNode) {
-          Router.navigate("detail", {
+          this.lastFocusedDiscoverItemId = String(cardNode.dataset.itemId || "");
+          Router2.navigate("detail", {
             itemId: cardNode.dataset.itemId,
             itemType: cardNode.dataset.itemType || "movie",
             fallbackTitle: cardNode.dataset.itemTitle || "Untitled"
@@ -18447,7 +18656,7 @@
       });
     },
     async onKeyDown(event) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
       if (Platform.isBackEvent(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
         if (this.openPicker) {
@@ -18532,6 +18741,9 @@
         return;
       }
       const currentAction = String(((_i = current == null ? void 0 : current.dataset) == null ? void 0 : _i.action) || "");
+      if (currentAction === "openDetail" && ((_j = current == null ? void 0 : current.dataset) == null ? void 0 : _j.itemId)) {
+        this.lastFocusedDiscoverItemId = String(current.dataset.itemId || "");
+      }
       const focusedFilterKind = this.getKindFromFilterAction(currentAction);
       if (focusedFilterKind) {
         if (isLeftKey(event)) {
@@ -18591,7 +18803,7 @@
       if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
       if (action === "discoverFilterGenre") this.openPickerMenu("genre");
       if (action === "openDetail") {
-        Router.navigate("detail", {
+        Router2.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -19369,10 +19581,10 @@
     },
     renderAccountSection(model) {
       const signedIn = model.authState === "authenticated";
-      this.actionMap.set("account:signin", () => Router.navigate("authQrSignIn"));
+      this.actionMap.set("account:signin", () => Router2.navigate("authQrSignIn"));
       this.actionMap.set("account:signout", async () => {
         await AuthManager.signOut();
-        Router.navigate("authQrSignIn");
+        Router2.navigate("authQrSignIn");
       });
       return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "account"))}
@@ -19397,7 +19609,7 @@
     `;
     },
     renderProfilesSection(model) {
-      this.actionMap.set("profiles:manage", () => Router.navigate("profileSelection", {
+      this.actionMap.set("profiles:manage", () => Router2.navigate("profileSelection", {
         mode: "management",
         returnRoute: "settings"
       }));
@@ -20239,7 +20451,7 @@
     `;
     },
     renderTraktSection() {
-      this.actionMap.set("trakt:open", () => Router.navigate("account"));
+      this.actionMap.set("trakt:open", () => Router2.navigate("account"));
       return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "trakt"))}
       <div class="settings-group-card settings-group-card-fill">
@@ -20522,7 +20734,7 @@
       }
       this.contentFocusKey = focusKey;
       await action();
-      if (Router.getCurrent() === "settings") {
+      if (Router2.getCurrent() === "settings") {
         await this.render();
         this.focusZone = "content";
         this.applyFocus();
@@ -20726,24 +20938,108 @@
   function escapeHtml8(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
-  function hasHomeVisibleCatalogs(addons) {
-    return addons.some((addon) => Array.isArray(addon.catalogs) && addon.catalogs.some((catalog) => !isSearchOnlyCatalog(catalog)));
+  function isLoopbackHostname(hostname) {
+    const normalized = String(hostname || "").trim().toLowerCase();
+    return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "0.0.0.0" || normalized === "::1" || normalized === "[::1]";
   }
-  function formatCatalogSummary(addon) {
-    const catalogCount = Array.isArray(addon == null ? void 0 : addon.catalogs) ? addon.catalogs.length : 0;
-    const types = Array.isArray(addon == null ? void 0 : addon.rawTypes) && addon.rawTypes.length > 0 ? addon.rawTypes : Array.isArray(addon == null ? void 0 : addon.types) ? addon.types : [];
-    return `Catalogs: ${catalogCount} - Types: ${types.join(", ") || "None"}`;
-  }
-  function getPhoneManagerUrl(addons) {
-    const base = String(PUBLIC_APP_URL || window.location.origin + window.location.pathname).trim();
+  function buildPhoneManagerUrl(base, addonCount) {
     if (!base) {
       return "";
     }
     const url = new URL(base, window.location.href);
     url.searchParams.set("addonsRemote", "1");
     url.hash = "#addons";
-    url.searchParams.set("count", String(addons.length));
+    url.searchParams.set("count", String(Math.max(0, Number(addonCount) || 0)));
     return url.toString();
+  }
+  var detectedLanHostPromise = null;
+  function detectLanHost() {
+    if (detectedLanHostPromise) {
+      return detectedLanHostPromise;
+    }
+    detectedLanHostPromise = new Promise((resolve) => {
+      const RtcPeerConnection = globalThis.RTCPeerConnection || globalThis.webkitRTCPeerConnection || globalThis.mozRTCPeerConnection || null;
+      if (!RtcPeerConnection) {
+        resolve("");
+        return;
+      }
+      let finished = false;
+      const connection = new RtcPeerConnection({ iceServers: [] });
+      const finish = (value = "") => {
+        if (finished) {
+          return;
+        }
+        finished = true;
+        try {
+          connection.onicecandidate = null;
+          connection.close();
+        } catch (_) {
+        }
+        resolve(value);
+      };
+      const timeoutId = setTimeout(() => finish(""), 2e3);
+      const parseCandidate = (candidateText) => {
+        const match = String(candidateText || "").match(/\b((?:\d{1,3}\.){3}\d{1,3})\b/);
+        if (!match) {
+          return;
+        }
+        const ip = String(match[1] || "").trim();
+        if (!ip || isLoopbackHostname(ip)) {
+          return;
+        }
+        clearTimeout(timeoutId);
+        finish(ip);
+      };
+      connection.onicecandidate = (event) => {
+        if (!(event == null ? void 0 : event.candidate)) {
+          return;
+        }
+        parseCandidate(event.candidate.candidate);
+      };
+      try {
+        connection.createDataChannel("nuvio-lan");
+        connection.createOffer().then((offer) => connection.setLocalDescription(offer)).catch(() => {
+          clearTimeout(timeoutId);
+          finish("");
+        });
+      } catch (_) {
+        clearTimeout(timeoutId);
+        finish("");
+      }
+    });
+    return detectedLanHostPromise;
+  }
+  async function getPhoneManagerUrl(addonCount) {
+    const wrapperServerBase = String(ADDON_REMOTE_BASE_URL || "").trim();
+    if (wrapperServerBase) {
+      try {
+        const wrapperUrl = new URL(wrapperServerBase, window.location.href);
+        if (!isLoopbackHostname(wrapperUrl.hostname)) {
+          return buildPhoneManagerUrl(wrapperUrl.toString(), addonCount);
+        }
+      } catch (_) {
+      }
+    }
+    const configuredBase = String(PUBLIC_APP_URL || "").trim();
+    if (configuredBase) {
+      try {
+        const configuredUrl = new URL(configuredBase, window.location.href);
+        if (!isLoopbackHostname(configuredUrl.hostname)) {
+          return buildPhoneManagerUrl(configuredUrl.toString(), addonCount);
+        }
+      } catch (_) {
+      }
+    }
+    const currentUrl = new URL(window.location.href);
+    if (!isLoopbackHostname(currentUrl.hostname)) {
+      return buildPhoneManagerUrl(`${currentUrl.origin}${currentUrl.pathname}`, addonCount);
+    }
+    const lanHost = await detectLanHost();
+    if (!lanHost) {
+      return "";
+    }
+    const port = currentUrl.port ? `:${currentUrl.port}` : "";
+    return buildPhoneManagerUrl(`${currentUrl.protocol}//${lanHost}${port}${currentUrl.pathname}`, addonCount);
   }
   var PluginScreen = {
     async mount() {
@@ -20762,13 +21058,10 @@
       await this.render();
     },
     async collectModel() {
-      const addons = await addonRepository.getInstalledAddons();
       const addonUrls = addonRepository.getInstalledAddonUrls();
       return {
-        addons,
-        addonUrls,
-        hasHomeVisibleCatalogs: hasHomeVisibleCatalogs(addons),
-        phoneManagerUrl: getPhoneManagerUrl(addons)
+        addonCount: addonUrls.length,
+        phoneManagerUrl: await getPhoneManagerUrl(addonUrls.length)
       };
     },
     setRowColumns(row, cols) {
@@ -20855,91 +21148,8 @@
       this.rowColumns = /* @__PURE__ */ new Map();
       this.actionMap = /* @__PURE__ */ new Map();
       this.setRowColumns(0, [0]);
-      if (this.model.hasHomeVisibleCatalogs) {
-        this.setRowColumns(1, [0]);
-      }
-      const installedStartRow = this.model.hasHomeVisibleCatalogs ? 2 : 1;
-      const addonRows = this.model.addons.map((addon, index) => {
-        const baseUrl = addon.baseUrl || this.model.addonUrls[index] || "";
-        const row = installedStartRow + index;
-        const upActionId = `addon_up_${index}`;
-        const downActionId = `addon_down_${index}`;
-        const removeActionId = `addon_remove_${index}`;
-        const focusCols = [];
-        this.actionMap.set(upActionId, async () => {
-          const urls = addonRepository.getInstalledAddonUrls();
-          if (index <= 0 || index >= urls.length) {
-            return;
-          }
-          const next = [...urls];
-          const moved = next.splice(index, 1)[0];
-          next.splice(index - 1, 0, moved);
-          await addonRepository.setAddonOrder(next);
-          this.contentRow = row - 1;
-          await this.render();
-        });
-        this.actionMap.set(downActionId, async () => {
-          const urls = addonRepository.getInstalledAddonUrls();
-          if (index < 0 || index >= urls.length - 1) {
-            return;
-          }
-          const next = [...urls];
-          const moved = next.splice(index, 1)[0];
-          next.splice(index + 1, 0, moved);
-          this.contentRow = row + 1;
-          await addonRepository.setAddonOrder(next);
-          await this.render();
-        });
-        this.actionMap.set(removeActionId, async () => {
-          await addonRepository.removeAddon(baseUrl);
-          await this.render();
-        });
-        if (index > 0) {
-          focusCols.push(0);
-        }
-        if (index < this.model.addons.length - 1) {
-          focusCols.push(1);
-        }
-        focusCols.push(2);
-        this.setRowColumns(row, focusCols);
-        return `
-        <article class="addons-installed-card">
-          <div class="addons-installed-head">
-            <div class="addons-installed-copy">
-              <h3>${escapeHtml8(addon.displayName || addon.name || "Unknown addon")}</h3>
-              <p class="addons-installed-version">v${escapeHtml8(addon.version || "0.0.0")}</p>
-            </div>
-            <div class="addons-installed-actions">
-              <button type="button"
-                      class="addons-action-btn ${index > 0 ? "addons-focusable" : "is-disabled"}"
-                      ${index > 0 ? `data-zone="content" data-row="${row}" data-col="0" data-action-id="${upActionId}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
-                <span class="material-icons" aria-hidden="true">arrow_upward</span>
-              </button>
-              <button type="button"
-                      class="addons-action-btn ${index < this.model.addons.length - 1 ? "addons-focusable" : "is-disabled"}"
-                      ${index < this.model.addons.length - 1 ? `data-zone="content" data-row="${row}" data-col="1" data-action-id="${downActionId}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
-                <span class="material-icons" aria-hidden="true">arrow_downward</span>
-              </button>
-              <button type="button"
-                      class="addons-action-btn addons-focusable addons-remove-btn"
-                      data-zone="content"
-                      data-row="${row}"
-                      data-col="2"
-                      data-action-id="${removeActionId}"
-                      tabindex="-1">Remove</button>
-            </div>
-          </div>
-          ${addon.description ? `<p class="addons-installed-description">${escapeHtml8(addon.description)}</p>` : ""}
-          <p class="addons-installed-meta">${escapeHtml8(baseUrl)}</p>
-          <p class="addons-installed-meta">${escapeHtml8(formatCatalogSummary(addon))}</p>
-        </article>
-      `;
-      }).join("");
       this.actionMap.set("manage_from_phone", async () => {
         await this.openQrOverlay();
-      });
-      this.actionMap.set("reorder_catalogs", async () => {
-        await Router.navigate("catalogOrder");
       });
       this.actionMap.set("close_qr_overlay", async () => {
         await this.closeQrOverlay();
@@ -20953,50 +21163,36 @@
         expanded: Boolean(this.sidebarExpanded),
         pillIconOnly: Boolean(this.pillIconOnly)
       })}
-        <main class="home-main addons-main">
-          <div class="addons-panel">
-            <h1 class="addons-title">Addons</h1>
-            <button type="button"
-                    class="addons-large-row addons-focusable"
-                    data-zone="content"
-                    data-row="0"
-                    data-col="0"
-                    data-action-id="manage_from_phone"
-                    tabindex="-1">
-              <span class="addons-large-row-icon material-icons" aria-hidden="true">qr_code_2</span>
-              <span class="addons-large-row-copy">
-                <strong>Manage from phone</strong>
-                <small>Scan a QR code to manage addons and Home catalogs from your phone</small>
-              </span>
-              <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
-            </button>
-            ${this.model.hasHomeVisibleCatalogs ? `
+        <main class="home-main addons-main addons-main-centered">
+          <div class="addons-panel addons-panel-centered">
+            <section class="addons-hero-card">
+              <h1 class="addons-title addons-title-centered">Addons</h1>
+              <p class="addons-lede">
+                Manage addons and home catalogs from your phone.
+              </p>
+              <p class="addons-meta">${escapeHtml8(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
               <button type="button"
-                      class="addons-large-row addons-focusable"
+                      class="addons-large-row addons-large-row-centered addons-focusable"
                       data-zone="content"
-                      data-row="1"
+                      data-row="0"
                       data-col="0"
-                      data-action-id="reorder_catalogs"
+                      data-action-id="manage_from_phone"
                       tabindex="-1">
-                <span class="addons-large-row-icon material-icons" aria-hidden="true">reorder</span>
+                <span class="addons-large-row-icon material-icons" aria-hidden="true">qr_code_2</span>
                 <span class="addons-large-row-copy">
-                  <strong>Reorder home catalogs</strong>
-                  <small>Controls catalog row order on Home (Classic + Modern + Grid)</small>
+                  <strong>Manage addons</strong>
+                  <small>Manage addons and home catalogs from your phone</small>
                 </span>
-                <span class="addons-large-row-tail material-icons" aria-hidden="true">arrow_downward</span>
+                <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
               </button>
-            ` : ""}
-            <h2 class="addons-subtitle">Installed</h2>
-            <section class="addons-installed-list">
-              ${addonRows || '<div class="addons-empty">No addons installed. Add one to get started.</div>'}
             </section>
           </div>
         </main>
         ${this.qrOverlayOpen ? `
           <div class="addons-qr-overlay">
             <div class="addons-qr-dialog">
-              <p class="addons-qr-instruction">Scan with your phone to manage addons and catalogs</p>
-              ${this.model.phoneManagerUrl ? '<canvas class="addons-qr-canvas" width="440" height="440" aria-label="QR code"></canvas>' : '<div class="addons-qr-error">Set `PUBLIC_APP_URL` to enable phone management QR links in web builds.</div>'}
+              <p class="addons-qr-instruction">Manage addons and home catalogs from your phone</p>
+              ${this.model.phoneManagerUrl ? '<canvas class="addons-qr-canvas" width="440" height="440" aria-label="QR code"></canvas>' : '<div class="addons-qr-error">Set `ADDON_REMOTE_BASE_URL` in the wrapper, or `PUBLIC_APP_URL`, to a phone-reachable address.</div>'}
               ${this.model.phoneManagerUrl ? `<p class="addons-qr-url">${escapeHtml8(this.model.phoneManagerUrl)}</p>` : ""}
               <button type="button" class="addons-qr-close addons-focusable focused" data-action-id="close_qr_overlay">
                 <span class="material-icons" aria-hidden="true">close</span>
@@ -21407,7 +21603,7 @@
       var _a, _b;
       if (Platform.isBackEvent(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        await Router.back();
+        await Router2.back();
         return;
       }
       const code = Number((event == null ? void 0 : event.keyCode) || 0);
@@ -22081,7 +22277,7 @@
         return;
       }
       const isSeries = normalizeType((_a = this.params) == null ? void 0 : _a.itemType) === "series";
-      Router.navigate("player", {
+      Router2.navigate("player", {
         streamUrl: targetUrl,
         itemId: ((_b = this.params) == null ? void 0 : _b.itemId) || null,
         itemType: isSeries ? "series" : "movie",
@@ -22105,7 +22301,7 @@
       var _a, _b, _c, _d;
       if (isBackEvent3(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router.back();
+        Router2.back();
         return;
       }
       const direction = getDpadDirection2(event);
@@ -22365,7 +22561,7 @@
       var _a;
       if (isBackEvent4(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router.back();
+        Router2.back();
         return;
       }
       if (ScreenUtils.handleDpadNavigation(event, this.container)) {
@@ -22380,11 +22576,11 @@
       }
       const action = String(current.dataset.action || "");
       if (action === "back") {
-        Router.back();
+        Router2.back();
         return;
       }
       if (action === "openDetail") {
-        Router.navigate("detail", {
+        Router2.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -22403,6 +22599,20 @@
   }
   function escapeHtml11(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function groupNodesByOffsetTop2(nodes = []) {
+    const grouped = [];
+    nodes.forEach((node) => {
+      const top = Math.round(node.offsetTop);
+      const bucket = grouped.find((entry) => Math.abs(entry.top - top) <= 6);
+      if (bucket) {
+        bucket.nodes.push(node);
+        return;
+      }
+      grouped.push({ top, nodes: [node] });
+    });
+    grouped.sort((left, right) => left.top - right.top);
+    return grouped.map((entry) => entry.nodes);
   }
   var CatalogSeeAllScreen = {
     getRouteStateKey(params = {}) {
@@ -22458,7 +22668,7 @@
       this.pendingRestoreFocus = false;
       this.savedScrollTop = 0;
       this.loadToken = (this.loadToken || 0) + 1;
-      if (this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params)) {
+      if ((navigationContext == null ? void 0 : navigationContext.isBackNavigation) && this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params)) {
         this.loading = false;
         this.render();
         return;
@@ -22541,6 +22751,92 @@
         this.loadNextPage();
       }
     },
+    buildNavigationModel() {
+      var _a;
+      const cards = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".seeall-card.focusable")) || []);
+      const rows = groupNodesByOffsetTop2(cards);
+      rows.forEach((rowNodes, rowIndex) => {
+        rowNodes.forEach((node, colIndex) => {
+          node.dataset.navRow = String(rowIndex);
+          node.dataset.navCol = String(colIndex);
+        });
+      });
+      this.navModel = { rows };
+    },
+    rememberRowFocus(node) {
+      if (!(node == null ? void 0 : node.dataset)) {
+        return;
+      }
+      const row = Number(node.dataset.navRow || -1);
+      const col = Number(node.dataset.navCol || 0);
+      if (row < 0) {
+        return;
+      }
+      this.rowFocusedIndexByRow = {
+        ...this.rowFocusedIndexByRow || {},
+        [row]: Math.max(0, col)
+      };
+    },
+    resolvePreferredNodeForRow(rowNodes = []) {
+      var _a, _b, _c;
+      if (!Array.isArray(rowNodes) || !rowNodes.length) {
+        return null;
+      }
+      const rowIndex = Number(((_b = (_a = rowNodes[0]) == null ? void 0 : _a.dataset) == null ? void 0 : _b.navRow) || -1);
+      const storedIndex = rowIndex >= 0 ? Number((_c = this.rowFocusedIndexByRow) == null ? void 0 : _c[rowIndex]) : Number.NaN;
+      const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+      return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
+    },
+    focusNode(target) {
+      var _a;
+      if (!target) {
+        return false;
+      }
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) {
+          node.classList.remove("focused");
+        }
+      });
+      target.classList.add("focused");
+      target.focus();
+      this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+      this.rememberRowFocus(target);
+      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      this.maybeAutoLoadMore(target.dataset.itemIndex);
+      return true;
+    },
+    handleGridDpad(event) {
+      var _a, _b, _c;
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      const direction = code === 38 ? "up" : code === 40 ? "down" : code === 37 ? "left" : code === 39 ? "right" : null;
+      if (!direction) {
+        return false;
+      }
+      const nav = this.navModel;
+      const current = ((_a = this.container) == null ? void 0 : _a.querySelector(".seeall-card.focused")) || null;
+      if (!((_b = nav == null ? void 0 : nav.rows) == null ? void 0 : _b.length) || !current) {
+        return false;
+      }
+      (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
+      const row = Number(current.dataset.navRow || 0);
+      const col = Number(current.dataset.navCol || 0);
+      const rowNodes = nav.rows[row] || [];
+      if (direction === "left") {
+        return this.focusNode(rowNodes[col - 1] || current) || true;
+      }
+      if (direction === "right") {
+        return this.focusNode(rowNodes[col + 1] || current) || true;
+      }
+      if (direction === "up" || direction === "down") {
+        const delta = direction === "up" ? -1 : 1;
+        const targetRowNodes = nav.rows[row + delta] || null;
+        if (!(targetRowNodes == null ? void 0 : targetRowNodes.length)) {
+          return true;
+        }
+        return this.focusNode(this.resolvePreferredNodeForRow(targetRowNodes)) || true;
+      }
+      return false;
+    },
     restoreFocusedCard() {
       var _a, _b, _c, _d;
       const shell = (_a = this.container) == null ? void 0 : _a.querySelector(".seeall-shell");
@@ -22556,6 +22852,7 @@
       });
       target.classList.add("focused");
       target.focus();
+      this.rememberRowFocus(target);
       target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
       this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
     },
@@ -22591,6 +22888,7 @@
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
+      this.buildNavigationModel();
       this.bindCardEvents();
       if (this.pendingRestoreFocus) {
         this.pendingRestoreFocus = false;
@@ -22619,16 +22917,10 @@
       var _a;
       if (isBackEvent5(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router.back();
+        Router2.back();
         return;
       }
-      if (ScreenUtils.handleDpadNavigation(event, this.container)) {
-        const focused = this.container.querySelector(".seeall-card.focused");
-        if (focused) {
-          this.lastFocusedKey = focused.dataset.focusKey || this.lastFocusedKey;
-          focused.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
-          this.maybeAutoLoadMore(focused.dataset.itemIndex);
-        }
+      if (this.handleGridDpad(event)) {
         return;
       }
       if (Number((event == null ? void 0 : event.keyCode) || 0) !== 13) {
@@ -22640,7 +22932,7 @@
       }
       const action = String(current.dataset.action || "");
       if (action === "openDetail") {
-        Router.navigate("detail", {
+        Router2.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -22693,7 +22985,7 @@
     "authSignIn",
     "syncCode"
   ]);
-  var Router = {
+  var Router2 = {
     current: null,
     currentParams: {},
     stack: [],
@@ -22960,14 +23252,14 @@
         if (typeof event.stopImmediatePropagation === "function") {
           event.stopImmediatePropagation();
         }
-        const currentScreen2 = Router.getCurrentScreen();
+        const currentScreen2 = Router2.getCurrentScreen();
         if ((_a = currentScreen2 == null ? void 0 : currentScreen2.consumeBackRequest) == null ? void 0 : _a.call(currentScreen2)) {
           return;
         }
-        Router.back();
+        Router2.back();
         return;
       }
-      const currentScreen = Router.getCurrentScreen();
+      const currentScreen = Router2.getCurrentScreen();
       (_b = currentScreen == null ? void 0 : currentScreen.onKeyDown) == null ? void 0 : _b.call(currentScreen, normalizedEvent);
     }
   };
@@ -22999,6 +23291,498 @@
       return;
     }
     document.body.insertAdjacentHTML("afterbegin", APP_SHELL);
+  }
+
+  // js/bootstrap/renderAddonRemotePage.js
+  function escapeHtml12(value) {
+    return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function normalizeAddonUrl(input) {
+    let trimmed = String(input || "").trim();
+    if (!trimmed) {
+      return "";
+    }
+    if (trimmed.startsWith("stremio://")) {
+      trimmed = trimmed.replace(/^stremio:\/\//i, "https://");
+    }
+    if (!/^https?:\/\//i.test(trimmed)) {
+      return "";
+    }
+    if (trimmed.endsWith("/manifest.json")) {
+      trimmed = trimmed.slice(0, -"/manifest.json".length);
+    }
+    return trimmed.replace(/\/+$/, "");
+  }
+  function clonePrefs(prefs = {}) {
+    return {
+      order: Array.isArray(prefs.order) ? [...prefs.order] : [],
+      disabled: Array.isArray(prefs.disabled) ? [...prefs.disabled] : []
+    };
+  }
+  function createShell() {
+    document.title = "Nuvio TV - Manage Addons";
+    document.body.innerHTML = `
+    <div class="addon-remote-shell">
+      <style>
+        body {
+          margin: 0;
+          background: #000;
+          color: #fff;
+          font-family: "Segoe UI", Arial, sans-serif;
+        }
+        .addon-remote-shell {
+          min-height: 100vh;
+          background:
+            radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 32%),
+            #000;
+        }
+        .addon-remote-page {
+          max-width: 720px;
+          margin: 0 auto;
+          padding: 28px 18px 80px;
+        }
+        .addon-remote-header {
+          padding: 20px 0 28px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .addon-remote-header h1 {
+          margin: 0;
+          font-size: 34px;
+          line-height: 1.1;
+        }
+        .addon-remote-header p {
+          margin: 10px 0 0;
+          color: rgba(255, 255, 255, 0.66);
+          font-size: 15px;
+          line-height: 1.5;
+        }
+        .addon-remote-banner {
+          margin-top: 18px;
+          padding: 14px 16px;
+          border-radius: 16px;
+          background: rgba(255, 255, 255, 0.06);
+          color: rgba(255, 255, 255, 0.78);
+          font-size: 14px;
+          line-height: 1.5;
+        }
+        .addon-remote-banner.is-warn {
+          background: rgba(207, 102, 121, 0.14);
+          color: rgba(255, 214, 220, 0.92);
+        }
+        .addon-remote-section {
+          margin-top: 28px;
+        }
+        .addon-remote-label {
+          margin: 0 0 12px;
+          color: rgba(255, 255, 255, 0.5);
+          font-size: 12px;
+          letter-spacing: 0.14em;
+          text-transform: uppercase;
+        }
+        .addon-remote-add {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 10px;
+        }
+        .addon-remote-input {
+          width: 100%;
+          min-width: 0;
+          border: 1px solid rgba(255, 255, 255, 0.14);
+          border-radius: 999px;
+          background: rgba(255, 255, 255, 0.04);
+          color: #fff;
+          padding: 14px 18px;
+          font-size: 15px;
+        }
+        .addon-remote-input::placeholder {
+          color: rgba(255, 255, 255, 0.28);
+        }
+        .addon-remote-error {
+          min-height: 20px;
+          margin-top: 10px;
+          color: #cf6679;
+          font-size: 13px;
+        }
+        .addon-remote-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .addon-remote-card {
+          display: flex;
+          gap: 12px;
+          align-items: center;
+          padding: 14px;
+          border-radius: 20px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .addon-remote-order {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+        .addon-remote-copy {
+          min-width: 0;
+          flex: 1;
+        }
+        .addon-remote-copy strong,
+        .addon-remote-copy span {
+          display: block;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .addon-remote-copy strong {
+          font-size: 15px;
+        }
+        .addon-remote-copy span {
+          margin-top: 3px;
+          color: rgba(255, 255, 255, 0.54);
+          font-size: 12px;
+        }
+        .addon-remote-actions {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+        }
+        .addon-remote-btn {
+          border: 1px solid rgba(255, 255, 255, 0.18);
+          border-radius: 999px;
+          background: transparent;
+          color: #fff;
+          padding: 10px 14px;
+          font-size: 13px;
+          cursor: pointer;
+        }
+        .addon-remote-btn:disabled {
+          opacity: 0.28;
+          cursor: default;
+        }
+        .addon-remote-btn-danger {
+          border-color: rgba(207, 102, 121, 0.4);
+          color: #ffb5c0;
+        }
+        .addon-remote-btn-toggle.is-disabled {
+          border-color: rgba(207, 102, 121, 0.4);
+          color: #ffb5c0;
+        }
+        .addon-remote-empty {
+          padding: 18px;
+          border-radius: 18px;
+          background: rgba(255, 255, 255, 0.04);
+          color: rgba(255, 255, 255, 0.54);
+          text-align: center;
+          font-size: 14px;
+        }
+        .addon-remote-save {
+          width: 100%;
+          margin-top: 28px;
+          padding: 16px 18px;
+          border-radius: 999px;
+          border: none;
+          background: #fff;
+          color: #000;
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .addon-remote-save:disabled {
+          opacity: 0.35;
+          cursor: default;
+        }
+        .addon-remote-status {
+          margin-top: 14px;
+          font-size: 13px;
+          text-align: center;
+          color: rgba(255, 255, 255, 0.62);
+        }
+      </style>
+      <div class="addon-remote-page" data-addon-remote-root></div>
+    </div>
+  `;
+  }
+  var AddonRemotePage = {
+    async mount() {
+      createShell();
+      this.root = document.querySelector("[data-addon-remote-root]");
+      this.addonDraft = "";
+      this.addError = "";
+      this.statusMessage = "";
+      this.isSaving = false;
+      this.isBootstrapping = true;
+      this.authReady = false;
+      this.catalogPrefs = clonePrefs(HomeCatalogStore.get());
+      this.savedState = { urls: [], order: [], disabled: [] };
+      this.draftAddons = [];
+      this.catalogItems = [];
+      this.render();
+      try {
+        await AuthManager.bootstrap();
+      } catch (error) {
+        console.warn("Addon remote auth bootstrap failed", error);
+      }
+      this.authReady = true;
+      await this.loadCurrentState();
+    },
+    buildCurrentState() {
+      return {
+        urls: this.draftAddons.map((addon) => addon.baseUrl),
+        order: this.catalogItems.map((item) => item.key),
+        disabled: this.catalogItems.filter((item) => item.isDisabled).map((item) => item.disableKey)
+      };
+    },
+    isDirty() {
+      return JSON.stringify(this.buildCurrentState()) !== JSON.stringify(this.savedState);
+    },
+    rebuildCatalogItems() {
+      const nextItems = buildOrderedCatalogItems(
+        this.draftAddons,
+        this.catalogPrefs.order,
+        this.catalogPrefs.disabled
+      );
+      this.catalogItems = nextItems;
+      this.catalogPrefs = {
+        order: nextItems.map((item) => item.key),
+        disabled: nextItems.filter((item) => item.isDisabled).map((item) => item.disableKey)
+      };
+    },
+    async loadCurrentState() {
+      this.isBootstrapping = true;
+      this.render();
+      this.draftAddons = await addonRepository.getInstalledAddons();
+      this.catalogPrefs = clonePrefs(HomeCatalogStore.get());
+      this.rebuildCatalogItems();
+      this.savedState = this.buildCurrentState();
+      this.isBootstrapping = false;
+      this.render();
+    },
+    async addAddon() {
+      const normalizedUrl = normalizeAddonUrl(this.addonDraft);
+      if (!normalizedUrl) {
+        this.addError = "Enter a valid http or https addon URL.";
+        this.render();
+        return;
+      }
+      if (this.draftAddons.some((addon) => addon.baseUrl === normalizedUrl)) {
+        this.addError = "That addon is already in the list.";
+        this.render();
+        return;
+      }
+      this.addError = "";
+      this.statusMessage = "";
+      this.render();
+      const result = await addonRepository.fetchAddon(normalizedUrl);
+      if (result.status !== "success") {
+        this.addError = result.message || "Unable to load that addon.";
+        this.render();
+        return;
+      }
+      this.draftAddons = [...this.draftAddons, result.data];
+      this.addonDraft = "";
+      this.rebuildCatalogItems();
+      this.render();
+    },
+    moveAddon(index, delta) {
+      const nextIndex = index + delta;
+      if (index < 0 || nextIndex < 0 || nextIndex >= this.draftAddons.length) {
+        return;
+      }
+      const next = [...this.draftAddons];
+      const moved = next.splice(index, 1)[0];
+      next.splice(nextIndex, 0, moved);
+      this.draftAddons = next;
+      this.rebuildCatalogItems();
+      this.render();
+    },
+    removeAddon(index) {
+      if (index < 0 || index >= this.draftAddons.length) {
+        return;
+      }
+      this.draftAddons = this.draftAddons.filter((_, currentIndex) => currentIndex !== index);
+      this.rebuildCatalogItems();
+      this.render();
+    },
+    moveCatalog(index, delta) {
+      const nextIndex = index + delta;
+      if (index < 0 || nextIndex < 0 || nextIndex >= this.catalogItems.length) {
+        return;
+      }
+      const nextOrder = [...this.catalogPrefs.order];
+      const moved = nextOrder.splice(index, 1)[0];
+      nextOrder.splice(nextIndex, 0, moved);
+      this.catalogPrefs.order = nextOrder;
+      this.rebuildCatalogItems();
+      this.render();
+    },
+    toggleCatalog(disableKey) {
+      const disabled = new Set(this.catalogPrefs.disabled);
+      if (disabled.has(disableKey)) {
+        disabled.delete(disableKey);
+      } else {
+        disabled.add(disableKey);
+      }
+      this.catalogPrefs.disabled = [...disabled];
+      this.rebuildCatalogItems();
+      this.render();
+    },
+    async saveChanges() {
+      if (this.isSaving || !this.isDirty()) {
+        return;
+      }
+      this.isSaving = true;
+      this.statusMessage = "";
+      this.render();
+      try {
+        const addonUrls = this.draftAddons.map((addon) => addon.baseUrl);
+        await addonRepository.setAddonOrder(addonUrls);
+        HomeCatalogStore.setOrder(this.catalogPrefs.order);
+        HomeCatalogStore.set({ disabled: this.catalogPrefs.disabled });
+        if (AuthManager.isAuthenticated) {
+          await LibrarySyncService.push();
+        }
+        this.savedState = this.buildCurrentState();
+        this.statusMessage = AuthManager.isAuthenticated ? "Addon changes saved and pushed to your synced profile. Home catalog changes were saved locally." : "Changes saved in this browser.";
+      } catch (error) {
+        console.warn("Addon remote save failed", error);
+        this.statusMessage = "Could not save changes.";
+      } finally {
+        this.isSaving = false;
+        this.render();
+      }
+    },
+    bindEvents() {
+      var _a, _b, _c, _d;
+      (_a = this.root.querySelector("[data-action='draft']")) == null ? void 0 : _a.addEventListener("input", (event) => {
+        var _a2;
+        this.addonDraft = String(((_a2 = event.target) == null ? void 0 : _a2.value) || "");
+        if (this.addError) {
+          this.addError = "";
+          this.render();
+        }
+      });
+      (_b = this.root.querySelector("[data-action='draft']")) == null ? void 0 : _b.addEventListener("keydown", async (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          await this.addAddon();
+        }
+      });
+      (_c = this.root.querySelector("[data-action='add']")) == null ? void 0 : _c.addEventListener("click", async () => {
+        await this.addAddon();
+      });
+      (_d = this.root.querySelector("[data-action='save']")) == null ? void 0 : _d.addEventListener("click", async () => {
+        await this.saveChanges();
+      });
+      this.root.querySelectorAll("[data-addon-up]").forEach((node) => {
+        node.addEventListener("click", () => {
+          this.moveAddon(Number(node.dataset.addonUp || 0), -1);
+        });
+      });
+      this.root.querySelectorAll("[data-addon-down]").forEach((node) => {
+        node.addEventListener("click", () => {
+          this.moveAddon(Number(node.dataset.addonDown || 0), 1);
+        });
+      });
+      this.root.querySelectorAll("[data-addon-remove]").forEach((node) => {
+        node.addEventListener("click", () => {
+          this.removeAddon(Number(node.dataset.addonRemove || 0));
+        });
+      });
+      this.root.querySelectorAll("[data-catalog-up]").forEach((node) => {
+        node.addEventListener("click", () => {
+          this.moveCatalog(Number(node.dataset.catalogUp || 0), -1);
+        });
+      });
+      this.root.querySelectorAll("[data-catalog-down]").forEach((node) => {
+        node.addEventListener("click", () => {
+          this.moveCatalog(Number(node.dataset.catalogDown || 0), 1);
+        });
+      });
+      this.root.querySelectorAll("[data-catalog-toggle]").forEach((node) => {
+        node.addEventListener("click", () => {
+          this.toggleCatalog(String(node.dataset.catalogToggle || ""));
+        });
+      });
+    },
+    render() {
+      if (!this.root) {
+        return;
+      }
+      const infoBanner = this.authReady ? AuthManager.isAuthenticated ? "Signed in. Addon changes can be pushed through the web sync backend. Home catalog changes stay local to this web install." : "Signed out. Changes save only in this browser unless you sign in on this phone." : "Checking account state...";
+      const addonCards = this.draftAddons.length ? this.draftAddons.map((addon, index) => `
+          <article class="addon-remote-card">
+            <div class="addon-remote-order">
+              <button class="addon-remote-btn" data-addon-up="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
+              <button class="addon-remote-btn" data-addon-down="${index}" ${index === this.draftAddons.length - 1 ? "disabled" : ""}>Down</button>
+            </div>
+            <div class="addon-remote-copy">
+              <strong>${escapeHtml12(addon.displayName || addon.name || addon.baseUrl)}</strong>
+              <span>${escapeHtml12(addon.baseUrl)}</span>
+              ${addon.description ? `<span>${escapeHtml12(addon.description)}</span>` : ""}
+            </div>
+            <div class="addon-remote-actions">
+              <button class="addon-remote-btn addon-remote-btn-danger" data-addon-remove="${index}">Remove</button>
+            </div>
+          </article>
+        `).join("") : '<div class="addon-remote-empty">No addons in this draft yet.</div>';
+      const catalogCards = this.catalogItems.length ? this.catalogItems.map((item, index) => `
+          <article class="addon-remote-card">
+            <div class="addon-remote-order">
+              <button class="addon-remote-btn" data-catalog-up="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
+              <button class="addon-remote-btn" data-catalog-down="${index}" ${index === this.catalogItems.length - 1 ? "disabled" : ""}>Down</button>
+            </div>
+            <div class="addon-remote-copy">
+              <strong>${escapeHtml12(item.catalogName)}${item.isDisabled ? ' <span style="color:#ffb5c0;">Disabled</span>' : ""}</strong>
+              <span>${escapeHtml12(`${item.addonName} - ${toDisplayTypeLabel(item.type)}`)}</span>
+            </div>
+            <div class="addon-remote-actions">
+              <button class="addon-remote-btn addon-remote-btn-toggle${item.isDisabled ? " is-disabled" : ""}"
+                      data-catalog-toggle="${escapeHtml12(item.disableKey)}">
+                ${item.isDisabled ? "Enable" : "Disable"}
+              </button>
+            </div>
+          </article>
+        `).join("") : '<div class="addon-remote-empty">No Home catalogs available from the current addons.</div>';
+      this.root.innerHTML = `
+      <header class="addon-remote-header">
+        <h1>Addons</h1>
+        <p>Manage addons and home catalogs from your phone.</p>
+        <div class="addon-remote-banner${AuthManager.isAuthenticated ? "" : " is-warn"}">${escapeHtml12(infoBanner)}</div>
+      </header>
+
+      <section class="addon-remote-section">
+        <p class="addon-remote-label">Add addon</p>
+        <div class="addon-remote-add">
+          <input class="addon-remote-input"
+                 type="url"
+                 value="${escapeHtml12(this.addonDraft)}"
+                 placeholder="https://example.com/manifest.json"
+                 data-action="draft" />
+          <button class="addon-remote-btn" data-action="add">Add</button>
+        </div>
+        <div class="addon-remote-error">${escapeHtml12(this.addError)}</div>
+      </section>
+
+      <section class="addon-remote-section">
+        <p class="addon-remote-label">Installed addons</p>
+        <div class="addon-remote-list">${this.isBootstrapping ? '<div class="addon-remote-empty">Loading addons...</div>' : addonCards}</div>
+      </section>
+
+      <section class="addon-remote-section">
+        <p class="addon-remote-label">Home catalogs</p>
+        <div class="addon-remote-list">${this.isBootstrapping ? '<div class="addon-remote-empty">Loading catalogs...</div>' : catalogCards}</div>
+      </section>
+
+      <button class="addon-remote-save" data-action="save" ${this.isSaving || !this.isDirty() ? "disabled" : ""}>
+        ${this.isSaving ? "Saving..." : "Save changes"}
+      </button>
+      <div class="addon-remote-status">${escapeHtml12(this.statusMessage)}</div>
+    `;
+      this.bindEvents();
+    }
+  };
+  async function renderAddonRemotePage() {
+    await AddonRemotePage.mount();
   }
 
   // js/runtime/loadStreamingLibs.js
@@ -23036,6 +23820,13 @@
   }
 
   // js/app.js
+  function isAddonRemoteMode() {
+    try {
+      return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
+    } catch (e) {
+      return false;
+    }
+  }
   async function bootstrapApp() {
     renderAppShell();
     Platform.init();
@@ -23043,37 +23834,42 @@
     console.log("Nuvio starting...", {
       platform: Platform.getName()
     });
-    Router.init();
+    Router2.init();
     PlayerController.init();
     FocusEngine.init();
     ThemeManager.apply();
     AuthManager.subscribe((state) => {
       if (state === AuthState.LOADING) {
         StartupSyncService.stop();
-        Router.navigate("splash");
+        Router2.navigate("splash");
       }
       if (state === AuthState.SIGNED_OUT) {
         StartupSyncService.stop();
         const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
-        Router.navigate("authQrSignIn", {
+        Router2.navigate("authQrSignIn", {
           onboardingMode: !hasSeenQr
         });
       }
       if (state === AuthState.AUTHENTICATED) {
         StartupSyncService.start();
-        Router.navigate("profileSelection");
+        Router2.navigate("profileSelection");
       }
     });
     await AuthManager.bootstrap();
   }
+  async function bootstrapAddonRemoteMode() {
+    await renderAddonRemotePage();
+  }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", () => {
-      bootstrapApp().catch((error) => {
+      const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
+      bootstrap().catch((error) => {
         console.error("App bootstrap failed", error);
       });
     }, { once: true });
   } else {
-    bootstrapApp().catch((error) => {
+    const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
+    bootstrap().catch((error) => {
       console.error("App bootstrap failed", error);
     });
   }
