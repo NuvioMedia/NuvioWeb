@@ -3593,6 +3593,76 @@
     </section>
   `;
   }
+  function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
+    const {
+      layoutMode = "classic",
+      showPosterLabels = true,
+      showCatalogAddonName = true,
+      showCatalogTypeSuffix = true
+    } = options;
+    const catalogSeeAllMap = /* @__PURE__ */ new Map();
+    const sectionsMarkup = [];
+    rows.forEach((rowData, rowIndex) => {
+      var _a, _b;
+      const items = Array.isArray((_b = (_a = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) ? rowData.result.data.items : [];
+      if (!items.length) {
+        return;
+      }
+      const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
+      catalogSeeAllMap.set(seeAllId, {
+        addonBaseUrl: rowData.addonBaseUrl || "",
+        addonId: rowData.addonId || "",
+        addonName: rowData.addonName || "",
+        catalogId: rowData.catalogId || "",
+        catalogName: rowData.catalogName || "",
+        type: rowData.type || "movie",
+        initialItems: items
+      });
+      const rowKey = buildModernRowKey(rowData);
+      const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+      const rowSubtitle = layoutMode === "classic" && showCatalogAddonName && rowData.addonName ? `from ${rowData.addonName}` : "";
+      const hasSeeAll = items.length >= 15;
+      const visibleItems = layoutMode === "grid" ? hasSeeAll ? items.slice(0, 14) : items.slice(0, 15) : items.slice(0, 15);
+      const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
+        item,
+        rowIndex,
+        itemIndex,
+        rowData.type,
+        showPosterLabels,
+        layoutMode
+      )).join("");
+      const trackMarkup = `
+      <div class="${layoutMode === "grid" ? "home-grid-track" : "home-track"}" data-track-row-key="${escapeAttribute(rowKey)}">
+        ${cardsMarkup}
+        ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData) : ""}
+      </div>
+    `;
+      if (layoutMode === "grid") {
+        sectionsMarkup.push(`
+        <section class="home-grid-section"
+                 data-row-key="${escapeAttribute(rowKey)}"
+                 data-row-index="${rowIndex}"
+                 data-section-title="${escapeAttribute(rowTitle)}">
+          <div class="home-grid-section-divider">${escapeHtml(rowTitle)}</div>
+          ${trackMarkup}
+        </section>
+      `);
+        return;
+      }
+      sectionsMarkup.push(`
+      <section class="home-row"
+               data-row-key="${escapeAttribute(rowKey)}"
+               data-row-index="${rowIndex}">
+        ${renderRowHeader(rowTitle, rowSubtitle)}
+        ${trackMarkup}
+      </section>
+    `);
+    });
+    return {
+      catalogSeeAllMap,
+      markup: sectionsMarkup.join("")
+    };
+  }
   function createSeeAllCardMarkup(seeAllId, rowData) {
     return `
     <article class="home-content-card home-seeall-card focusable"
@@ -3631,6 +3701,7 @@
     const expandedMeta = buildExpandedPosterMeta(normalized);
     const backdropSrc = firstNonEmpty(normalized.background, normalized.backdrop, normalized.backdropUrl, normalized.poster);
     const posterSrc = firstNonEmpty(normalized.poster, normalized.thumbnail, normalized.backdrop, normalized.backdropUrl);
+    const expandedVisualSrc = firstNonEmpty(backdropSrc, posterSrc);
     return `
     <article class="home-content-card home-poster-card focusable"
              data-action="openDetail"
@@ -3643,11 +3714,12 @@
              data-backdrop-src="${escapeAttribute(backdropSrc || "")}"
              data-logo-src="${escapeAttribute(normalized.logo || "")}">
       <div class="home-poster-frame">
-        ${posterSrc ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" alt="${escapeAttribute(normalized.name || "content")}" />` : '<div class="content-poster placeholder"></div>'}
+        ${posterSrc ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />` : '<div class="content-poster placeholder"></div>'}
+        ${expandedVisualSrc ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute(expandedVisualSrc)}" decoding="async" alt="" aria-hidden="true" />` : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
         <div class="home-poster-trailer-layer"></div>
         <div class="home-poster-expanded-gradient"></div>
         <div class="home-poster-expanded-brand">
-          ${normalized.logo ? `<img class="home-poster-expanded-logo" src="${escapeAttribute(normalized.logo)}" alt="${escapeAttribute(normalized.name || "content")}" />` : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
+          ${normalized.logo ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />` : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
         </div>
       </div>
       <div class="home-poster-expanded-copy">
@@ -3822,7 +3894,7 @@
         container[property] = nextValue;
         return;
       }
-      const easeOutCubic = (t3) => 1 - Math.pow(1 - t3, 3);
+      const easeOutCubic = (t4) => 1 - Math.pow(1 - t4, 3);
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const key = axis === "y" ? "y" : "x";
       const existing = map.get(container) || {};
@@ -4108,6 +4180,27 @@
       var _a;
       return this.layoutMode === "modern" && Boolean((_a = node == null ? void 0 : node.classList) == null ? void 0 : _a.contains("home-poster-card"));
     },
+    hydrateFocusedPosterAssets(node) {
+      if (!this.isModernPosterNode(node)) {
+        return;
+      }
+      const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
+      if (backdrop) {
+        const src = String(backdrop.dataset.src || "").trim();
+        if (src && !backdrop.getAttribute("src")) {
+          backdrop.setAttribute("src", src);
+        }
+        backdrop.removeAttribute("data-src");
+      }
+      const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
+      if (logo) {
+        const src = String(logo.dataset.src || "").trim();
+        if (src && !logo.getAttribute("src")) {
+          logo.setAttribute("src", src);
+        }
+        logo.removeAttribute("data-src");
+      }
+    },
     clearTrailerLayer(container) {
       var _a;
       if (!container) {
@@ -4168,13 +4261,6 @@
       const target = node || null;
       if (target) {
         target.classList.remove("is-expanded", "is-trailer-active");
-        const image = target.querySelector(".content-poster");
-        if (image && image.tagName === "IMG") {
-          const posterSrc = String(target.dataset.posterSrc || "").trim();
-          if (posterSrc) {
-            image.setAttribute("src", posterSrc);
-          }
-        }
         this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
       }
       const heroLayer = (_a = this.container) == null ? void 0 : _a.querySelector(".home-hero-trailer-layer");
@@ -4188,15 +4274,9 @@
       if (!this.isModernPosterNode(node)) {
         return;
       }
+      this.hydrateFocusedPosterAssets(node);
       if (this.expandedPosterNode && this.expandedPosterNode !== node) {
         this.collapseFocusedPoster(this.expandedPosterNode);
-      }
-      const image = node.querySelector(".content-poster");
-      if (image && image.tagName === "IMG") {
-        const backdropSrc = String(node.dataset.backdropSrc || "").trim();
-        if (backdropSrc) {
-          image.setAttribute("src", backdropSrc);
-        }
       }
       node.classList.add("is-expanded");
       this.expandedPosterNode = node;
@@ -4275,7 +4355,8 @@
       }
       this.cancelFocusedPosterFlow();
       const prefs = this.layoutPrefs || {};
-      const shouldRun = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.focusedPosterBackdropTrailerEnabled);
+      const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled);
+      const shouldRun = Boolean(shouldExpand || prefs.focusedPosterBackdropTrailerEnabled);
       if (!shouldRun) {
         this.collapseFocusedPoster();
         return;
@@ -4283,6 +4364,9 @@
       if (!this.isModernPosterNode(node)) {
         this.collapseFocusedPoster();
         return;
+      }
+      if (shouldExpand) {
+        this.hydrateFocusedPosterAssets(node);
       }
       if (this.expandedPosterNode && this.expandedPosterNode !== node) {
         this.collapseFocusedPoster(this.expandedPosterNode);
@@ -4562,9 +4646,71 @@
       }
       return false;
     },
+    ensureDelegatedEventsBound() {
+      if (!this.container) {
+        return;
+      }
+      if (!this.boundHomeFocusInHandler) {
+        this.boundHomeFocusInHandler = (event) => {
+          var _a, _b, _c;
+          const target = (_b = (_a = event == null ? void 0 : event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".focusable");
+          if (!target || !((_c = this.container) == null ? void 0 : _c.contains(target))) {
+            return;
+          }
+          if (target.closest(".home-sidebar .focusable, .modern-sidebar-panel .focusable")) {
+            this.setSidebarExpanded(true);
+            return;
+          }
+          if (!target.closest(".home-main .focusable")) {
+            return;
+          }
+          if (this.isMainNode(target)) {
+            this.lastMainFocus = target;
+          }
+          this.scheduleModernHeroUpdate(target);
+          this.scheduleFocusedPosterFlow(target);
+        };
+      }
+      if (!this.boundHomeClickHandler) {
+        this.boundHomeClickHandler = (event) => {
+          var _a, _b, _c;
+          const target = (_b = (_a = event == null ? void 0 : event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".home-main .focusable");
+          if (!target || !((_c = this.container) == null ? void 0 : _c.contains(target))) {
+            return;
+          }
+          const action = String(target.dataset.action || "");
+          if (action === "openDetail") {
+            this.openDetailFromNode(target);
+            return;
+          }
+          if (action === "openCatalogSeeAll") {
+            this.openCatalogSeeAllFromNode(target);
+            return;
+          }
+          if (action === "resumeProgress") {
+            Router2.navigate("detail", {
+              itemId: target.dataset.itemId,
+              itemType: target.dataset.itemType || "movie",
+              fallbackTitle: target.dataset.itemTitle || target.dataset.itemId || "Untitled"
+            });
+          }
+        };
+      }
+      if (this.boundHomeEventContainer === this.container) {
+        return;
+      }
+      if (this.boundHomeEventContainer) {
+        this.boundHomeEventContainer.removeEventListener("focusin", this.boundHomeFocusInHandler);
+        this.boundHomeEventContainer.removeEventListener("click", this.boundHomeClickHandler);
+      }
+      this.container.addEventListener("focusin", this.boundHomeFocusInHandler);
+      this.container.addEventListener("click", this.boundHomeClickHandler);
+      this.boundHomeEventContainer = this.container;
+    },
     async mount() {
       this.container = document.getElementById("home");
       ScreenUtils.show(this.container);
+      this.ensureDelegatedEventsBound();
       this.homeRouteEnterPending = true;
       const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
       const profileChanged = activeProfileId3 !== String(this.loadedProfileId || "");
@@ -4757,11 +4903,18 @@
         const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
           rowKey: "continue_watching"
         });
+        const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
+          layoutMode: this.layoutMode,
+          showPosterLabels,
+          showCatalogAddonName,
+          showCatalogTypeSuffix
+        });
+        this.catalogSeeAllMap = legacyRowsPayload.catalogSeeAllMap;
         mainContentMarkup = `
         ${showHeroSection ? renderHeroMarkup(this.layoutMode, heroItem, this.heroCandidates) : ""}
         ${continueHtml}
         ${this.layoutMode === "grid" ? '<div class="home-grid-sticky" id="homeGridSticky"></div>' : ""}
-        <section class="home-catalogs${this.layoutMode === "grid" ? " home-grid-catalogs" : ""}" id="homeCatalogRows"></section>
+        <section class="home-catalogs${this.layoutMode === "grid" ? " home-grid-catalogs" : ""}" id="homeCatalogRows">${legacyRowsPayload.markup}</section>
       `;
       }
       this.container.innerHTML = `
@@ -4781,96 +4934,10 @@
         </main>
       </div>
     `;
-      const rowsContainer = this.container.querySelector("#homeCatalogRows");
-      if (rowsContainer && this.layoutMode !== "modern") {
-        this.catalogSeeAllMap = /* @__PURE__ */ new Map();
-        this.rows.forEach((rowData, rowIndex) => {
-          var _a2, _b2;
-          const items = Array.isArray((_b2 = (_a2 = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a2.data) == null ? void 0 : _b2.items) ? rowData.result.data.items : [];
-          if (!items.length) {
-            return;
-          }
-          const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-          this.catalogSeeAllMap.set(seeAllId, {
-            addonBaseUrl: rowData.addonBaseUrl || "",
-            addonId: rowData.addonId || "",
-            addonName: rowData.addonName || "",
-            catalogId: rowData.catalogId || "",
-            catalogName: rowData.catalogName || "",
-            type: rowData.type || "movie",
-            initialItems: items
-          });
-          const section = document.createElement("section");
-          const rowKey = buildModernRowKey(rowData);
-          section.className = this.layoutMode === "grid" ? "home-grid-section" : "home-row";
-          section.dataset.rowKey = rowKey;
-          section.dataset.rowIndex = String(rowIndex);
-          const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
-          const rowSubtitle = this.layoutMode === "classic" && showCatalogAddonName && rowData.addonName ? `from ${rowData.addonName}` : "";
-          if (this.layoutMode === "grid") {
-            section.dataset.sectionTitle = rowTitle;
-            section.innerHTML = `
-            <div class="home-grid-section-divider">${escapeHtml(rowTitle)}</div>
-            <div class="home-grid-track"></div>
-          `;
-          } else {
-            section.innerHTML = `
-            ${renderRowHeader(rowTitle, rowSubtitle)}
-            <div class="home-track"></div>
-          `;
-          }
-          const track = section.querySelector(this.layoutMode === "grid" ? ".home-grid-track" : ".home-track");
-          if (track) {
-            track.dataset.trackRowKey = rowKey;
-          }
-          const hasSeeAll = items.length >= 15;
-          const visibleItems = this.layoutMode === "grid" ? hasSeeAll ? items.slice(0, 14) : items.slice(0, 15) : items.slice(0, 15);
-          visibleItems.forEach((item, itemIndex) => {
-            track.insertAdjacentHTML(
-              "beforeend",
-              createPosterCardMarkup(item, rowIndex, itemIndex, rowData.type, showPosterLabels, this.layoutMode)
-            );
-          });
-          if (hasSeeAll) {
-            track.insertAdjacentHTML("beforeend", createSeeAllCardMarkup(seeAllId, rowData));
-          }
-          rowsContainer.appendChild(section);
-        });
-      }
-      this.container.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((item) => {
-        item.addEventListener("focus", () => {
-          this.setSidebarExpanded(true);
-        });
-      });
       bindRootSidebarEvents(this.container, {
         currentRoute: "home",
         onSelectedAction: () => this.closeSidebarToContent(),
         onExpandSidebar: () => this.openSidebar()
-      });
-      this.container.querySelectorAll(".home-main .focusable").forEach((item) => {
-        item.addEventListener("focus", () => {
-          if (this.isMainNode(item)) {
-            this.lastMainFocus = item;
-          }
-          this.scheduleModernHeroUpdate(item);
-          this.scheduleFocusedPosterFlow(item);
-        });
-        item.addEventListener("click", () => {
-          const action = item.dataset.action;
-          if (action === "openDetail") {
-            this.openDetailFromNode(item);
-          }
-          if (action === "openCatalogSeeAll") {
-            this.openCatalogSeeAllFromNode(item);
-          }
-          if (action === "resumeProgress") {
-            Router2.navigate("detail", {
-              itemId: item.dataset.itemId,
-              itemType: item.dataset.itemType || "movie",
-              fallbackTitle: item.dataset.itemTitle || item.dataset.itemId || "Untitled"
-            });
-          }
-        });
       });
       ScreenUtils.indexFocusables(this.container);
       this.buildNavigationModel();
@@ -5076,7 +5143,8 @@
       if (Platform.isBackEvent(event)) {
         (_b = event.preventDefault) == null ? void 0 : _b.call(event);
         if (this.layoutMode === "modern") {
-          this.resetFocusedPosterFlow(currentFocusedNode);
+          this.cancelFocusedPosterFlow();
+          this.collapseFocusedPoster();
         }
         const sidebarFocused = Boolean(
           ((_c = this.container) == null ? void 0 : _c.querySelector(".modern-sidebar-panel .focusable.focused")) || ((_d = this.container) == null ? void 0 : _d.querySelector(".home-sidebar .focusable.focused"))
@@ -5098,8 +5166,8 @@
           setModernSidebarPillIconOnly(this.container, false);
         }
       }
-      if (this.layoutMode === "modern" && [13, 37, 38, 39, 40].includes(code)) {
-        this.resetFocusedPosterFlow(currentFocusedNode);
+      if (this.layoutMode === "modern" && [37, 38, 39, 40].includes(code)) {
+        this.cancelFocusedPosterFlow();
       }
       if (this.handleHomeDpad(event)) {
         return;
@@ -7435,6 +7503,19 @@
   };
 
   // js/ui/screens/player/playerScreen.js
+  var CLOCK_FORMATTER_CACHE = /* @__PURE__ */ new Map();
+  function t2(key, params = {}, fallback = key) {
+    return I18n.t(key, params, { fallback });
+  }
+  function buildIndexedLabel(baseLabel, index) {
+    return `${baseLabel} ${index + 1}`;
+  }
+  function subtitleLabel(index) {
+    return buildIndexedLabel(t2("subtitle_dialog_title", {}, "Subtitle"), index);
+  }
+  function audioLabel(index) {
+    return buildIndexedLabel(t2("audio_dialog_title", {}, "Audio"), index);
+  }
   function formatTime(secondsValue) {
     const total = Math.max(0, Math.floor(Number(secondsValue || 0)));
     const hours = Math.floor(total / 3600);
@@ -7446,11 +7527,36 @@
     return `${minutes}:${String(seconds).padStart(2, "0")}`;
   }
   function formatClock(date = /* @__PURE__ */ new Date()) {
-    return date.toLocaleTimeString("it-IT", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false
-    });
+    const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : void 0;
+    const localeKey = String(locale || "__default__");
+    if (!CLOCK_FORMATTER_CACHE.has(localeKey)) {
+      try {
+        CLOCK_FORMATTER_CACHE.set(localeKey, new Intl.DateTimeFormat(locale || void 0, {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false
+        }));
+      } catch (_) {
+        CLOCK_FORMATTER_CACHE.set(localeKey, null);
+      }
+    }
+    const formatter = CLOCK_FORMATTER_CACHE.get(localeKey);
+    try {
+      if (formatter == null ? void 0 : formatter.format) {
+        return formatter.format(date);
+      }
+      return date.toLocaleTimeString(locale || void 0, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+    } catch (_) {
+      return date.toLocaleTimeString(void 0, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+    }
   }
   function formatEndsAt(currentSeconds, durationSeconds) {
     const current = Number(currentSeconds || 0);
@@ -7514,6 +7620,9 @@
   }
   function escapeHtml2(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function buildEpisodePanelHint() {
+    return `UP/DOWN ${t2("discover_select_catalog", {}, "Select")} | OK ${t2("episodes_play", {}, "Play")} | BACK ${t2("episodes_panel_close", {}, "Close")}`;
   }
   function qualityLabelFromText(value) {
     const text = String(value || "").toLowerCase();
@@ -8355,6 +8464,8 @@
     },
     renderPlayerUi() {
       var _a;
+      this.uiRefs = null;
+      this.lastUiTickState = null;
       (_a = this.container.querySelector("#playerUiRoot")) == null ? void 0 : _a.remove();
       const root = document.createElement("div");
       root.id = "playerUiRoot";
@@ -8390,7 +8501,7 @@
       <div id="playerControlsOverlay" class="player-controls-overlay">
         <div class="player-controls-top">
           <div id="playerClock" class="player-clock">--:--</div>
-          <div class="player-ends-at">Ends at: <span id="playerEndsAt">--:--</span></div>
+          <div id="playerEndsAt" class="player-ends-at">${escapeHtml2(t2("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
         </div>
 
         <div class="player-controls-bottom">
@@ -8399,18 +8510,21 @@
             <div class="player-subtitle">${escapeHtml2(this.params.playerSubtitle || this.params.episodeLabel || this.params.itemType || "")}</div>
           </div>
 
-          <div class="player-progress-track">
-            <div id="playerProgressFill" class="player-progress-fill"></div>
-          </div>
+          <div class="player-controls-bar">
+            <div class="player-progress-track">
+              <div id="playerProgressFill" class="player-progress-fill"></div>
+            </div>
 
-          <div class="player-controls-row">
-            <div id="playerControlButtons" class="player-control-buttons"></div>
-            <div id="playerTimeLabel" class="player-time-label">0:00 / 0:00</div>
+            <div class="player-controls-row">
+              <div id="playerControlButtons" class="player-control-buttons"></div>
+              <div id="playerTimeLabel" class="player-time-label">0:00 / 0:00</div>
+            </div>
           </div>
         </div>
       </div>
     `;
       this.container.appendChild(root);
+      this.cachePlayerUiRefs(root);
       this.renderControlButtons();
       this.renderSubtitleDialog();
       this.renderAudioDialog();
@@ -8418,8 +8532,44 @@
       this.renderParentalGuideOverlay();
       this.renderSeekOverlay();
     },
+    cachePlayerUiRefs(root = null) {
+      var _a;
+      const uiRoot = root || ((_a = this.container) == null ? void 0 : _a.querySelector("#playerUiRoot"));
+      this.uiRefs = uiRoot ? {
+        root: uiRoot,
+        loadingOverlay: uiRoot.querySelector("#playerLoadingOverlay"),
+        parentalGuide: uiRoot.querySelector("#playerParentalGuide"),
+        aspectToast: uiRoot.querySelector("#playerAspectToast"),
+        seekOverlay: uiRoot.querySelector("#playerSeekOverlay"),
+        seekDirection: uiRoot.querySelector("#playerSeekDirection"),
+        seekPreview: uiRoot.querySelector("#playerSeekPreview"),
+        seekFill: uiRoot.querySelector("#playerSeekFill"),
+        modalBackdrop: uiRoot.querySelector("#playerModalBackdrop"),
+        subtitleDialog: uiRoot.querySelector("#playerSubtitleDialog"),
+        audioDialog: uiRoot.querySelector("#playerAudioDialog"),
+        sourcesPanel: uiRoot.querySelector("#playerSourcesPanel"),
+        controlsOverlay: uiRoot.querySelector("#playerControlsOverlay"),
+        clock: uiRoot.querySelector("#playerClock"),
+        endsAt: uiRoot.querySelector("#playerEndsAt"),
+        progressFill: uiRoot.querySelector("#playerProgressFill"),
+        controlButtons: uiRoot.querySelector("#playerControlButtons"),
+        timeLabel: uiRoot.querySelector("#playerTimeLabel")
+      } : null;
+      this.lastUiTickState = {
+        progressWidth: "",
+        clockText: "",
+        clockMinuteKey: "",
+        endsAtText: "",
+        endsAtMinuteBucket: null,
+        timeLabelText: "",
+        seekWidth: "",
+        seekPreviewText: "",
+        seekDirectionText: ""
+      };
+    },
     updateModalBackdrop() {
-      const modalBackdrop = this.container.querySelector("#playerModalBackdrop");
+      var _a;
+      const modalBackdrop = (_a = this.uiRefs) == null ? void 0 : _a.modalBackdrop;
       if (!modalBackdrop) {
         return;
       }
@@ -8584,33 +8734,33 @@
           icon: this.paused ? "assets/icons/ic_player_play.svg" : "assets/icons/ic_player_pause.svg",
           title: "Play/Pause"
         },
-        { action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: "Subtitles" },
+        { action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t2("subtitle_dialog_title", {}, "Subtitles") },
         {
           action: "audioTrack",
           icon: this.selectedAudioTrackIndex >= 0 || this.selectedManifestAudioTrackId ? "assets/icons/ic_player_audio_filled.svg" : "assets/icons/ic_player_audio_outline.svg",
-          title: "Audio"
+          title: t2("audio_dialog_title", {}, "Audio")
         },
-        { action: "source", icon: "assets/icons/ic_player_source.svg", title: "Sources" },
-        { action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: "Episodes" },
-        { action: "more", label: this.moreActionsVisible ? "<" : ">", title: "More" }
+        { action: "source", icon: "assets/icons/ic_player_source.svg", title: t2("sources_title", {}, "Sources") },
+        { action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t2("episodes_panel_title", {}, "Episodes") },
+        { action: "more", label: this.moreActionsVisible ? "<" : ">", title: t2("player_more_actions_title", {}, "More Actions") }
       ];
       if (!this.moreActionsVisible) {
         return base;
       }
       return [
         ...base.slice(0, Math.max(0, base.length - 1)),
-        { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: "Display Mode" },
-        { action: "source", icon: "assets/icons/ic_player_source.svg", title: "Sources" },
-        { action: "backFromMore", label: "<", title: "Back" }
+        { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t2("player_more_aspect_ratio", {}, "Aspect Ratio") },
+        { action: "source", icon: "assets/icons/ic_player_source.svg", title: t2("sources_title", {}, "Sources") },
+        { action: "backFromMore", label: "<", title: t2("player_go_back", {}, "Back") }
       ];
     },
     renderControlButtons() {
-      var _a, _b;
-      const wrap = this.container.querySelector("#playerControlButtons");
+      var _a, _b, _c;
+      const wrap = (_a = this.uiRefs) == null ? void 0 : _a.controlButtons;
       if (!wrap) {
         return;
       }
-      const currentAction = ((_b = (_a = wrap.querySelector(".player-control-btn.focused")) == null ? void 0 : _a.dataset) == null ? void 0 : _b.action) || "";
+      const currentAction = ((_c = (_b = wrap.querySelector(".player-control-btn.focused")) == null ? void 0 : _b.dataset) == null ? void 0 : _c.action) || "";
       const controls = this.getControlDefinitions();
       wrap.innerHTML = controls.map((control) => `
       <button class="player-control-btn focusable"
@@ -8628,8 +8778,9 @@
       return this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible;
     },
     setControlsVisible(visible, { focus = false } = {}) {
+      var _a;
       this.controlsVisible = Boolean(visible);
-      const overlay = this.container.querySelector("#playerControlsOverlay");
+      const overlay = (_a = this.uiRefs) == null ? void 0 : _a.controlsOverlay;
       if (!overlay) {
         return;
       }
@@ -8694,7 +8845,8 @@
       return true;
     },
     updateLoadingVisibility() {
-      const overlay = this.container.querySelector("#playerLoadingOverlay");
+      var _a;
+      const overlay = (_a = this.uiRefs) == null ? void 0 : _a.loadingOverlay;
       if (!overlay) {
         return;
       }
@@ -8704,41 +8856,79 @@
       const current = this.getPlaybackCurrentSeconds();
       const duration = this.getPlaybackDurationSeconds();
       const progress = duration > 0 ? clamp(current / duration, 0, 1) : 0;
-      const progressFill = this.container.querySelector("#playerProgressFill");
+      const uiRefs = this.uiRefs || {};
+      const uiState = this.lastUiTickState || (this.lastUiTickState = {});
+      const progressFill = uiRefs.progressFill;
       if (progressFill) {
-        progressFill.style.width = `${Math.round(progress * 1e4) / 100}%`;
+        const nextWidth = `${Math.round(progress * 1e4) / 100}%`;
+        if (uiState.progressWidth !== nextWidth) {
+          progressFill.style.width = nextWidth;
+          uiState.progressWidth = nextWidth;
+        }
       }
-      const clock = this.container.querySelector("#playerClock");
+      const clock = uiRefs.clock;
       if (clock) {
-        clock.textContent = formatClock(/* @__PURE__ */ new Date());
+        const now = /* @__PURE__ */ new Date();
+        const nextClockMinuteKey = `${now.getHours()}:${now.getMinutes()}`;
+        if (uiState.clockMinuteKey !== nextClockMinuteKey) {
+          const nextClockText = formatClock(now);
+          clock.textContent = nextClockText;
+          uiState.clockText = nextClockText;
+          uiState.clockMinuteKey = nextClockMinuteKey;
+        }
       }
-      const endsAt = this.container.querySelector("#playerEndsAt");
+      const endsAt = uiRefs.endsAt;
       if (endsAt) {
-        endsAt.textContent = formatEndsAt(current, duration);
+        const remainingMs = Math.max(0, (Number(duration || 0) - Number(current || 0)) * 1e3);
+        const nextEndsAtMinuteBucket = duration > 0 ? Math.floor((Date.now() + remainingMs) / 6e4) : -1;
+        if (uiState.endsAtMinuteBucket !== nextEndsAtMinuteBucket) {
+          const nextEndsAtText = t2("player_ends_at", [formatEndsAt(current, duration)], "Ends at %1$s");
+          endsAt.textContent = nextEndsAtText;
+          uiState.endsAtText = nextEndsAtText;
+          uiState.endsAtMinuteBucket = nextEndsAtMinuteBucket;
+        }
       }
-      const timeLabel = this.container.querySelector("#playerTimeLabel");
+      const timeLabel = uiRefs.timeLabel;
       if (timeLabel) {
-        timeLabel.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+        const nextTimeLabel = `${formatTime(current)} / ${formatTime(duration)}`;
+        if (uiState.timeLabelText !== nextTimeLabel) {
+          timeLabel.textContent = nextTimeLabel;
+          uiState.timeLabelText = nextTimeLabel;
+        }
       }
       if (this.seekOverlayVisible && this.seekPreviewSeconds == null) {
         this.renderSeekOverlay();
       }
     },
     renderSeekOverlay() {
-      const overlay = this.container.querySelector("#playerSeekOverlay");
-      const directionNode = this.container.querySelector("#playerSeekDirection");
-      const previewNode = this.container.querySelector("#playerSeekPreview");
-      const fillNode = this.container.querySelector("#playerSeekFill");
+      var _a, _b, _c, _d;
+      const overlay = (_a = this.uiRefs) == null ? void 0 : _a.seekOverlay;
+      const directionNode = (_b = this.uiRefs) == null ? void 0 : _b.seekDirection;
+      const previewNode = (_c = this.uiRefs) == null ? void 0 : _c.seekPreview;
+      const fillNode = (_d = this.uiRefs) == null ? void 0 : _d.seekFill;
       if (!overlay || !directionNode || !previewNode || !fillNode) {
         return;
       }
       const duration = this.getPlaybackDurationSeconds();
       const currentPreview = this.seekPreviewSeconds != null ? Number(this.seekPreviewSeconds) : this.getPlaybackCurrentSeconds();
       overlay.classList.toggle("hidden", !this.seekOverlayVisible);
-      previewNode.textContent = `${formatTime(currentPreview)} / ${formatTime(duration)}`;
-      directionNode.textContent = this.seekPreviewDirection < 0 ? "<<" : this.seekPreviewDirection > 0 ? ">>" : "";
+      const uiState = this.lastUiTickState || (this.lastUiTickState = {});
+      const nextPreviewText = `${formatTime(currentPreview)} / ${formatTime(duration)}`;
+      const nextDirectionText = this.seekPreviewDirection < 0 ? "<<" : this.seekPreviewDirection > 0 ? ">>" : "";
+      if (uiState.seekPreviewText !== nextPreviewText) {
+        previewNode.textContent = nextPreviewText;
+        uiState.seekPreviewText = nextPreviewText;
+      }
+      if (uiState.seekDirectionText !== nextDirectionText) {
+        directionNode.textContent = nextDirectionText;
+        uiState.seekDirectionText = nextDirectionText;
+      }
       const percent = duration > 0 ? clamp(currentPreview / duration, 0, 1) : 0;
-      fillNode.style.width = `${Math.round(percent * 1e4) / 100}%`;
+      const nextSeekWidth = `${Math.round(percent * 1e4) / 100}%`;
+      if (uiState.seekWidth !== nextSeekWidth) {
+        fillNode.style.width = nextSeekWidth;
+        uiState.seekWidth = nextSeekWidth;
+      }
     },
     beginSeekPreview(direction, isRepeat = false) {
       const currentTime = this.getPlaybackCurrentSeconds();
@@ -9048,10 +9238,10 @@
     },
     getSubtitleTabs() {
       return [
-        { id: "builtIn", label: "Built-in" },
-        { id: "addons", label: "Addons" },
-        { id: "style", label: "Style" },
-        { id: "delay", label: "Delay" }
+        { id: "builtIn", label: t2("subtitle_tab_builtin", {}, "Built-in") },
+        { id: "addons", label: t2("subtitle_tab_addons", {}, "Addons") },
+        { id: "style", label: t2("subtitle_tab_style", {}, "Style") },
+        { id: "delay", label: t2("subtitle_tab_delay", {}, "Delay") }
       ];
     },
     refreshTrackDialogs() {
@@ -9254,7 +9444,7 @@
           return [
             {
               id: "subtitle-off",
-              label: "None",
+              label: t2("subtitle_none", {}, "None"),
               secondary: "",
               selected: selectedAvPlaySubtitleTrack < 0,
               trackIndex: -1,
@@ -9265,7 +9455,7 @@
               const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
               return {
                 id: `subtitle-avplay-${normalizedTrackIndex}`,
-                label: (track == null ? void 0 : track.label) || `Subtitle ${index + 1}`,
+                label: (track == null ? void 0 : track.label) || subtitleLabel(index),
                 secondary: String((track == null ? void 0 : track.language) || "").toUpperCase(),
                 selected: normalizedTrackIndex === selectedAvPlaySubtitleTrack,
                 trackIndex: null,
@@ -9278,7 +9468,7 @@
           return [
             {
               id: "subtitle-off",
-              label: "None",
+              label: t2("subtitle_none", {}, "None"),
               secondary: "",
               selected: selectedDashSubtitleTrack < 0,
               trackIndex: -1,
@@ -9288,7 +9478,7 @@
               var _a;
               return {
                 id: `subtitle-dash-${index}-${(_a = track == null ? void 0 : track.id) != null ? _a : ""}`,
-                label: (track == null ? void 0 : track.label) || `Subtitle ${index + 1}`,
+                label: (track == null ? void 0 : track.label) || subtitleLabel(index),
                 secondary: String((track == null ? void 0 : track.language) || "").toUpperCase(),
                 selected: index === selectedDashSubtitleTrack,
                 trackIndex: null,
@@ -9301,7 +9491,7 @@
           return [
             {
               id: "subtitle-off",
-              label: "None",
+              label: t2("subtitle_none", {}, "None"),
               secondary: "",
               selected: !this.selectedManifestSubtitleTrackId,
               trackIndex: -1,
@@ -9309,7 +9499,7 @@
             },
             ...this.manifestSubtitleTracks.map((track) => ({
               id: `subtitle-manifest-${track.id}`,
-              label: track.name || "Subtitle",
+              label: track.name || t2("subtitle_dialog_title", {}, "Subtitle"),
               secondary: String(track.language || "").toUpperCase(),
               selected: this.selectedManifestSubtitleTrackId === track.id,
               trackIndex: null,
@@ -9320,14 +9510,14 @@
         const entries = [
           {
             id: "subtitle-off",
-            label: "None",
+            label: t2("subtitle_none", {}, "None"),
             secondary: "",
             selected: this.selectedSubtitleTrackIndex < 0 && !this.selectedManifestSubtitleTrackId,
             trackIndex: -1
           },
           ...builtInTracks.map((track, index) => ({
             id: `subtitle-built-${index}`,
-            label: track.label || `Subtitle ${index + 1}`,
+            label: track.label || subtitleLabel(index),
             secondary: String(track.language || "").toUpperCase(),
             selected: index === this.selectedSubtitleTrackIndex,
             trackIndex: index
@@ -9355,8 +9545,8 @@
               const subtitleId = subtitle.id || subtitle.url || `subtitle-${index}`;
               return {
                 id: `subtitle-addon-fallback-${subtitleId}`,
-                label: subtitle.lang || `Addon subtitle ${index + 1}`,
-                secondary: subtitle.addonName || "Addon",
+                label: subtitle.lang || subtitleLabel(index),
+                secondary: subtitle.addonName || t2("nav_addons", {}, "Addon"),
                 selected: this.selectedAddonSubtitleId === subtitleId,
                 trackIndex: null,
                 subtitleIndex: index,
@@ -9391,7 +9581,7 @@
           const absoluteIndex = builtInBoundary + relativeIndex;
           return {
             id: `subtitle-addon-${absoluteIndex}`,
-            label: track.label || `Addon subtitle ${relativeIndex + 1}`,
+            label: track.label || subtitleLabel(relativeIndex),
             secondary: String(track.language || "").toUpperCase(),
             selected: absoluteIndex === this.selectedSubtitleTrackIndex,
             trackIndex: absoluteIndex
@@ -9402,7 +9592,7 @@
         return [
           {
             id: "subtitle-style-default",
-            label: "Default",
+            label: t2("subtitle_style_defaults", {}, "Default"),
             secondary: "System style",
             selected: true,
             disabled: true,
@@ -9576,7 +9766,8 @@
       this.renderSubtitleDialog();
     },
     renderSubtitleDialog() {
-      const dialog = this.container.querySelector("#playerSubtitleDialog");
+      var _a;
+      const dialog = (_a = this.uiRefs) == null ? void 0 : _a.subtitleDialog;
       if (!dialog) {
         return;
       }
@@ -9590,7 +9781,7 @@
       const focusIndex = clamp(this.subtitleDialogIndex, 0, Math.max(0, entries.length - 1));
       this.subtitleDialogIndex = focusIndex;
       dialog.innerHTML = `
-      <div class="player-dialog-title">Subtitles</div>
+      <div class="player-dialog-title">${escapeHtml2(t2("subtitle_dialog_title", {}, "Subtitles"))}</div>
       <div class="player-dialog-tabs">
         ${tabs.map((tab) => `
           <div class="player-dialog-tab${tab.id === this.subtitleDialogTab ? " selected" : ""}">
@@ -9645,7 +9836,7 @@
           const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
           return {
             id: `audio-avplay-${normalizedTrackIndex}`,
-            label: (track == null ? void 0 : track.label) || `Track ${index + 1}`,
+            label: (track == null ? void 0 : track.label) || audioLabel(index),
             secondary: String((track == null ? void 0 : track.language) || "").toUpperCase(),
             selected: normalizedTrackIndex === selectedAvPlayAudioTrack || selectedAvPlayAudioTrack < 0 && normalizedTrackIndex === this.selectedAudioTrackIndex,
             avplayAudioTrackIndex: normalizedTrackIndex
@@ -9659,7 +9850,7 @@
           var _a;
           return {
             id: `audio-dash-${index}-${(_a = track == null ? void 0 : track.id) != null ? _a : ""}`,
-            label: (track == null ? void 0 : track.label) || `Track ${index + 1}`,
+            label: (track == null ? void 0 : track.label) || audioLabel(index),
             secondary: String((track == null ? void 0 : track.language) || "").toUpperCase(),
             selected: index === selectedDashAudioTrack || selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex,
             dashAudioTrackIndex: index
@@ -9673,7 +9864,7 @@
           var _a, _b, _c;
           return {
             id: `audio-hls-${index}-${(_c = (_b = (_a = track == null ? void 0 : track.id) != null ? _a : track == null ? void 0 : track.name) != null ? _b : track == null ? void 0 : track.lang) != null ? _c : ""}`,
-            label: (track == null ? void 0 : track.name) || (track == null ? void 0 : track.lang) || (track == null ? void 0 : track.language) || `Track ${index + 1}`,
+            label: (track == null ? void 0 : track.name) || (track == null ? void 0 : track.lang) || (track == null ? void 0 : track.language) || audioLabel(index),
             secondary: String((track == null ? void 0 : track.lang) || (track == null ? void 0 : track.language) || "").toUpperCase(),
             selected: index === selectedHlsAudioTrack || selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex,
             hlsAudioTrackIndex: index
@@ -9684,7 +9875,7 @@
       if (audioTracks.length) {
         return audioTracks.map((track, index) => ({
           id: `audio-track-${index}`,
-          label: track.label || `Track ${index + 1}`,
+          label: track.label || audioLabel(index),
           secondary: String(track.language || "").toUpperCase(),
           selected: index === this.selectedAudioTrackIndex,
           audioTrackIndex: index
@@ -9693,7 +9884,7 @@
       if (this.manifestAudioTracks.length) {
         return this.manifestAudioTracks.map((track) => ({
           id: `audio-manifest-${track.id}`,
-          label: track.name || "Audio",
+          label: track.name || t2("audio_dialog_title", {}, "Audio"),
           secondary: String(track.language || "").toUpperCase(),
           selected: this.selectedManifestAudioTrackId === track.id,
           manifestAudioTrackId: track.id
@@ -9787,7 +9978,8 @@
       this.renderAudioDialog();
     },
     renderAudioDialog() {
-      const dialog = this.container.querySelector("#playerAudioDialog");
+      var _a;
+      const dialog = (_a = this.uiRefs) == null ? void 0 : _a.audioDialog;
       if (!dialog) {
         return;
       }
@@ -9801,14 +9993,14 @@
         const loading = this.isCurrentSourceAdaptiveManifest() && (this.manifestLoading || this.trackDiscoveryInProgress);
         const emptyMessage = loading ? "Loading audio tracks..." : this.getUnavailableTrackMessage("audio");
         dialog.innerHTML = `
-        <div class="player-dialog-title">Audio</div>
+        <div class="player-dialog-title">${escapeHtml2(t2("audio_dialog_title", {}, "Audio"))}</div>
         <div class="player-dialog-empty">${emptyMessage}</div>
       `;
         return;
       }
       this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
       dialog.innerHTML = `
-      <div class="player-dialog-title">Audio</div>
+      <div class="player-dialog-title">${escapeHtml2(t2("audio_dialog_title", {}, "Audio"))}</div>
       <div class="player-dialog-list">
         ${entries.map((entry, index) => {
         const selected = entry.selected;
@@ -9950,7 +10142,7 @@
         }
       } catch (error) {
         if (token === this.sourceLoadToken) {
-          this.sourcesError = "Failed to load sources";
+          this.sourcesError = t2("panel_failed_load_streams", {}, "Failed to load streams");
         }
       } finally {
         if (token === this.sourceLoadToken) {
@@ -9960,7 +10152,8 @@
       }
     },
     renderSourcesPanel() {
-      const panel = this.container.querySelector("#playerSourcesPanel");
+      var _a;
+      const panel = (_a = this.uiRefs) == null ? void 0 : _a.sourcesPanel;
       if (!panel) {
         return;
       }
@@ -9974,10 +10167,10 @@
       this.ensureSourcesFocus();
       panel.innerHTML = `
       <div class="player-sources-header">
-        <div class="player-sources-title">Sources</div>
+        <div class="player-sources-title">${escapeHtml2(t2("sources_title", {}, "Sources"))}</div>
         <div class="player-sources-actions">
-          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">Reload</button>
-          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">Close</button>
+          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">${escapeHtml2(t2("sources_reload", {}, "Reload"))}</button>
+          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">${escapeHtml2(t2("sources_close", {}, "Close"))}</button>
         </div>
       </div>
 
@@ -9987,19 +10180,19 @@
         const focused = this.sourcesFocus.zone === "filter" && this.sourcesFocus.index === index;
         return `
             <div class="player-sources-filter${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              ${escapeHtml2(filter === "all" ? "All" : filter)}
+              ${escapeHtml2(filter === "all" ? t2("subtitle_all", {}, "All") : filter)}
             </div>
           `;
       }).join("")}
       </div>
 
       <div class="player-sources-list">
-        ${this.sourcesLoading ? `<div class="player-sources-empty">Loading sources...</div>` : ""}
+        ${this.sourcesLoading ? `<div class="player-sources-empty">${escapeHtml2(t2("stream_finding_source", {}, "Finding stream source"))}</div>` : ""}
         ${this.sourcesError ? `<div class="player-sources-empty">${escapeHtml2(this.sourcesError)}</div>` : ""}
-        ${!this.sourcesLoading && !filtered.length ? `<div class="player-sources-empty">No sources found.</div>` : filtered.map((stream, index) => {
-        var _a;
+        ${!this.sourcesLoading && !filtered.length ? `<div class="player-sources-empty">${escapeHtml2(t2("sources_no_streams", {}, "No streams found"))}</div>` : filtered.map((stream, index) => {
+        var _a2;
         const focused = this.sourcesFocus.zone === "list" && this.sourcesFocus.index === index;
-        const isCurrent = ((_a = this.streamCandidates[this.currentStreamIndex]) == null ? void 0 : _a.url) === stream.url;
+        const isCurrent = ((_a2 = this.streamCandidates[this.currentStreamIndex]) == null ? void 0 : _a2.url) === stream.url;
         return `
               <article class="player-source-card${focused ? " focused" : ""}${isCurrent ? " selected" : ""}">
                 <div class="player-source-main">
@@ -10011,8 +10204,8 @@
                   </div>
                 </div>
                 <div class="player-source-side">
-                  <div class="player-source-addon">${escapeHtml2(stream.addonName || "Addon")}</div>
-                  ${isCurrent ? `<div class="player-source-playing">Playing</div>` : ""}
+                  <div class="player-source-addon">${escapeHtml2(stream.addonName || t2("nav_addons", {}, "Addon"))}</div>
+                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml2(t2("sources_playing", {}, "Playing"))}</div>` : ""}
                 </div>
               </article>
             `;
@@ -10139,7 +10332,8 @@
       return false;
     },
     showAspectToast(label) {
-      const toast = this.container.querySelector("#playerAspectToast");
+      var _a;
+      const toast = (_a = this.uiRefs) == null ? void 0 : _a.aspectToast;
       if (!toast) {
         return;
       }
@@ -10167,7 +10361,8 @@
       this.applyAspectMode({ showToast: true });
     },
     renderParentalGuideOverlay() {
-      const overlay = this.container.querySelector("#playerParentalGuide");
+      var _a;
+      const overlay = (_a = this.uiRefs) == null ? void 0 : _a.parentalGuide;
       if (!overlay) {
         return;
       }
@@ -10244,14 +10439,14 @@
         const selectedClass = selected ? " selected" : "";
         return `
         <div class="player-episode-item${selectedClass}">
-          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml2(episode.title || "Episode")}</div>
+          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml2(episode.title || t2("episodes_episode", {}, "Episode"))}</div>
           <div class="player-episode-item-subtitle">${escapeHtml2(episode.overview || "")}</div>
         </div>
       `;
       }).join("");
       panel.innerHTML = `
-      <div class="player-episode-panel-title">Episodes</div>
-      <div class="player-episode-panel-hint">UP/DOWN select, OK play, BACK close</div>
+      <div class="player-episode-panel-title">${escapeHtml2(t2("episodes_panel_title", {}, "Episodes"))}</div>
+      <div class="player-episode-panel-hint">${escapeHtml2(buildEpisodePanelHint())}</div>
       ${cards}
     `;
       this.container.appendChild(panel);
@@ -10737,6 +10932,8 @@
         (_a = this.container.querySelector("#playerUiRoot")) == null ? void 0 : _a.remove();
         (_b = this.container.querySelector("#episodeSidePanel")) == null ? void 0 : _b.remove();
       }
+      this.uiRefs = null;
+      this.lastUiTickState = null;
       if (this.endedHandler && PlayerController.video) {
         PlayerController.video.removeEventListener("ended", this.endedHandler);
         this.endedHandler = null;
@@ -19641,7 +19838,7 @@
   function clamp3(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function t2(key, params = {}, fallback = key) {
+  function t3(key, params = {}, fallback = key) {
     return I18n.t(key, params, { fallback });
   }
   function escapeHtml7(value) {
@@ -19655,7 +19852,7 @@
       return fallback;
     }
     if (option.labelKey) {
-      return t2(option.labelKey, option.labelParams || {}, option.label || fallback);
+      return t3(option.labelKey, option.labelParams || {}, option.label || fallback);
     }
     return String(option.label || fallback);
   }
@@ -19664,7 +19861,7 @@
       return fallback;
     }
     if (option.captionKey) {
-      return t2(option.captionKey, option.captionParams || {}, option.caption || fallback);
+      return t3(option.captionKey, option.captionParams || {}, option.caption || fallback);
     }
     return String(option.caption || fallback);
   }
@@ -19673,8 +19870,8 @@
       return { label: "", subtitle: "" };
     }
     return {
-      label: section.labelKey ? t2(section.labelKey, section.labelParams || {}, section.label || "") : String(section.label || ""),
-      subtitle: section.subtitleKey ? t2(section.subtitleKey, section.subtitleParams || {}, section.subtitle || "") : String(section.subtitle || "")
+      label: section.labelKey ? t3(section.labelKey, section.labelParams || {}, section.label || "") : String(section.label || ""),
+      subtitle: section.subtitleKey ? t3(section.subtitleKey, section.subtitleParams || {}, section.subtitle || "") : String(section.subtitle || "")
     };
   }
   function renderSectionNavIcon(sectionId) {
@@ -19701,7 +19898,7 @@
   function labelForLanguage(language) {
     return translateOptionLabel(
       LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
-      t2("common.systemDefault")
+      t3("common.systemDefault")
     );
   }
   function labelForTmdbLanguage(language) {
@@ -19713,7 +19910,7 @@
   function labelForPlaybackLanguage(language) {
     return translateOptionLabel(
       PREFERRED_PLAYBACK_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
-      t2("common.system")
+      t3("common.system")
     );
   }
   function qualityLabel(value) {
@@ -19721,23 +19918,23 @@
     if (normalized === "2160p") return "2160p";
     if (normalized === "1080p") return "1080p";
     if (normalized === "720p") return "720p";
-    return t2("common.auto");
+    return t3("common.auto");
   }
   function playerLabel(value) {
     const normalized = String(value || "auto").toLowerCase();
-    if (normalized === "native") return t2("common.native");
+    if (normalized === "native") return t3("common.native");
     if (normalized === "hls") return "HLS.js";
     if (normalized === "dash") return "dash.js";
-    return t2("common.auto");
+    return t3("common.auto");
   }
   function renderModeLabel(value) {
-    return String(value || "native").toLowerCase() === "html" ? t2("common.htmlOverlay") : t2("common.native");
+    return String(value || "native").toLowerCase() === "html" ? t3("common.htmlOverlay") : t3("common.native");
   }
   function escapeSelector(value) {
     return String(value != null ? value : "").replace(/["\\]/g, "\\$&");
   }
   function plannedSubtitle(subtitle) {
-    return subtitle ? t2("common.comingSoonWithContext", { subject: subtitle }) : t2("common.comingSoon");
+    return subtitle ? t3("common.comingSoonWithContext", { subject: subtitle }) : t3("common.comingSoon");
   }
   function focusKeySelector(selector, key) {
     return `${selector}[data-focus-key="${escapeSelector(String(key))}"]`;
@@ -19813,7 +20010,7 @@
   function addonKindsLabel(addon) {
     const kinds = Array.isArray(addon == null ? void 0 : addon.types) ? addon.types.filter(Boolean) : [];
     if (!kinds.length) {
-      return t2("common.repository");
+      return t3("common.repository");
     }
     return kinds.map((entry) => String(entry)).join(", ");
   }
@@ -19987,7 +20184,7 @@
       const inert = disabled || planned;
       const trailing = external ? "external" : icon;
       const tailContent = [
-        planned ? `<span class="settings-row-badge">${escapeHtml7(t2("common.soon"))}</span>` : "",
+        planned ? `<span class="settings-row-badge">${escapeHtml7(t3("common.soon"))}</span>` : "",
         value ? `<span class="settings-row-value">${escapeHtml7(value)}</span>` : "",
         trailing ? iconSvg(ROW_ICONS[trailing], `settings-row-icon${external ? " is-external" : ""}`) : ""
       ].filter(Boolean).join("");
@@ -20018,7 +20215,7 @@
           ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
         </span>
         <span class="settings-row-tail">
-          ${planned ? `<span class="settings-row-badge">${escapeHtml7(t2("common.soon"))}</span>` : ""}
+          ${planned ? `<span class="settings-row-badge">${escapeHtml7(t3("common.soon"))}</span>` : ""}
           <span class="settings-toggle-pill${checked ? " is-checked" : ""}">
             <span class="settings-toggle-thumb"></span>
           </span>
@@ -20062,7 +20259,7 @@
               title="${escapeHtml7(label)}"
               ${this.registerAction(focusKey, inert ? () => {
       } : this.actionMap.get(focusKey))}>
-        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml7(t2("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
+        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml7(t3("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
       </button>
     `;
     },
@@ -20071,9 +20268,9 @@
       return `
       <article class="settings-plugin-repo-card">
         <div class="settings-plugin-repo-copy">
-          <div class="settings-plugin-repo-title">${escapeHtml7(addon.displayName || addon.name || t2("common.repository"))}</div>
+          <div class="settings-plugin-repo-title">${escapeHtml7(addon.displayName || addon.name || t3("common.repository"))}</div>
           <div class="settings-plugin-repo-meta">
-            ${escapeHtml7(t2(
+            ${escapeHtml7(t3(
         streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
         { count: streamResourceCount, version: addon.version || "0.0.0" }
       ))}
@@ -20084,12 +20281,12 @@
           ${this.renderPluginIconButton({
         focusKey: `plugins:refresh:${index}`,
         icon: "refresh",
-        label: t2("settings.plugins.refreshRepository")
+        label: t3("settings.plugins.refreshRepository")
       })}
           ${this.renderPluginIconButton({
         focusKey: `plugins:remove:${index}`,
         icon: "trash",
-        label: t2("settings.plugins.removeRepository"),
+        label: t3("settings.plugins.removeRepository"),
         destructive: true
       })}
         </div>
@@ -20123,7 +20320,7 @@
       return `
       <div class="settings-dialog-backdrop">
         <div class="settings-dialog">
-          <div class="settings-dialog-title">${escapeHtml7(this.optionDialog.title || t2("common.selectOption"))}</div>
+          <div class="settings-dialog-title">${escapeHtml7(this.optionDialog.title || t3("common.selectOption"))}</div>
           <div class="settings-dialog-list">
             ${this.optionDialog.options.map((option, index) => `
               <button class="settings-dialog-option settings-content-focusable focusable${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
@@ -20157,7 +20354,7 @@
             ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
           </span>
           <span class="settings-row-tail">
-            <span class="settings-row-value">${expanded ? t2("common.open") : t2("common.closed")}</span>
+            <span class="settings-row-value">${expanded ? t3("common.open") : t3("common.closed")}</span>
             ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
           </span>
         </button>
@@ -20177,18 +20374,18 @@
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${signedIn ? `<div class="settings-account-status">
-                <span class="settings-account-status-label">${t2("settings.status.signedIn")}</span>
-                <strong class="settings-account-status-value">${escapeHtml7(model.accountEmail || t2("settings.status.linkedFallback"))}</strong>
-              </div>` : `<p class="settings-account-note">${t2("settings.account.syncNote")}</p>
+                <span class="settings-account-status-label">${t3("settings.status.signedIn")}</span>
+                <strong class="settings-account-status-value">${escapeHtml7(model.accountEmail || t3("settings.status.linkedFallback"))}</strong>
+              </div>` : `<p class="settings-account-note">${t3("settings.account.syncNote")}</p>
               ${this.renderActionRow({
         focusKey: "account:signin",
-        title: t2("settings.account.signInWithQr"),
-        subtitle: t2("settings.account.signInWithQrSubtitle")
+        title: t3("settings.account.signInWithQr"),
+        subtitle: t3("settings.account.signInWithQrSubtitle")
       })}`}
           ${signedIn ? this.renderActionRow({
         focusKey: "account:signout",
-        title: t2("settings.account.signOut"),
-        subtitle: t2("settings.account.signOutSubtitle")
+        title: t3("settings.account.signOut"),
+        subtitle: t3("settings.account.signOutSubtitle")
       }) : ""}
         </div>
       </div>
@@ -20205,7 +20402,7 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "profiles:manage",
-        title: t2("settings.profiles.manageProfiles"),
+        title: t3("settings.profiles.manageProfiles"),
         subtitle: "",
         icon: null,
         classes: "settings-profile-manage-row"
@@ -20223,7 +20420,7 @@
       });
       this.actionMap.set("appearance:font", () => {
         this.openOptionDialog({
-          title: t2("settings.dialogs.selectFont"),
+          title: t3("settings.dialogs.selectFont"),
           options: FONT_OPTIONS,
           selectedId: model.theme.fontFamily,
           returnFocusKey: "appearance:font",
@@ -20235,7 +20432,7 @@
       });
       this.actionMap.set("appearance:language", () => {
         this.openOptionDialog({
-          title: t2("settings.dialogs.selectLanguage"),
+          title: t3("settings.dialogs.selectLanguage"),
           options: LANGUAGE_OPTIONS,
           selectedId: model.theme.language,
           returnFocusKey: "appearance:language",
@@ -20262,8 +20459,8 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "appearance:font",
-        title: t2("settings.appearance.appFont"),
-        subtitle: t2("settings.appearance.appFontSubtitle"),
+        title: t3("settings.appearance.appFont"),
+        subtitle: t3("settings.appearance.appFontSubtitle"),
         value: labelForFont(model.theme.fontFamily)
       })}
         </div>
@@ -20272,8 +20469,8 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "appearance:language",
-        title: t2("settings.appearance.appLanguage"),
-        subtitle: t2("settings.appearance.appLanguageSubtitle"),
+        title: t3("settings.appearance.appLanguage"),
+        subtitle: t3("settings.appearance.appLanguageSubtitle"),
         value: labelForLanguage(model.theme.language)
       })}
         </div>
@@ -20341,7 +20538,7 @@
           label: `${value}s`
         }));
         this.openOptionDialog({
-          title: t2("settings.dialogs.backdropExpandDelay"),
+          title: t3("settings.dialogs.backdropExpandDelay"),
           options,
           selectedId: String((_a2 = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a2 : 3),
           returnFocusKey: "layout:focusedPosterExpandDelay",
@@ -20362,7 +20559,7 @@
           { id: "expanded_card", labelKey: "settings.layout.trailerTargets.expandedCard" }
         ];
         this.openOptionDialog({
-          title: t2("settings.dialogs.modernTrailerPlaybackLocation"),
+          title: t3("settings.dialogs.modernTrailerPlaybackLocation"),
           options,
           selectedId: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media"),
           returnFocusKey: "layout:focusedPosterTrailerTarget",
@@ -20386,8 +20583,8 @@
         </div>
         ${isModernLayout ? this.renderToggleRow({
         focusKey: "layout:modernLandscapePosters",
-        title: t2("settings.layout.landscapePosters.title"),
-        subtitle: t2("settings.layout.landscapePosters.subtitle"),
+        title: t3("settings.layout.landscapePosters.title"),
+        subtitle: t3("settings.layout.landscapePosters.subtitle"),
         checked: Boolean(model.layout.modernLandscapePostersEnabled)
       }) : ""}
       </div>
@@ -20396,56 +20593,56 @@
       <div class="settings-stack">
         ${!model.layout.modernSidebar ? this.renderToggleRow({
         focusKey: "layout:collapseSidebar",
-        title: t2("settings.layout.collapseSidebar.title"),
-        subtitle: t2("settings.layout.collapseSidebar.subtitle"),
+        title: t3("settings.layout.collapseSidebar.title"),
+        subtitle: t3("settings.layout.collapseSidebar.subtitle"),
         checked: Boolean(model.layout.collapseSidebar)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:modernSidebar",
-        title: t2("settings.layout.modernSidebar.title"),
-        subtitle: t2("settings.layout.modernSidebar.subtitle"),
+        title: t3("settings.layout.modernSidebar.title"),
+        subtitle: t3("settings.layout.modernSidebar.subtitle"),
         checked: Boolean(model.layout.modernSidebar)
       })}
         ${model.layout.modernSidebar ? this.renderToggleRow({
         focusKey: "layout:modernSidebarBlur",
-        title: t2("settings.layout.modernSidebarBlur.title"),
-        subtitle: t2("settings.layout.modernSidebarBlur.subtitle"),
+        title: t3("settings.layout.modernSidebarBlur.title"),
+        subtitle: t3("settings.layout.modernSidebarBlur.subtitle"),
         checked: Boolean(model.layout.modernSidebarBlur)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:heroSection",
-        title: t2("settings.layout.heroSection.title"),
-        subtitle: t2("settings.layout.heroSection.subtitle"),
+        title: t3("settings.layout.heroSection.title"),
+        subtitle: t3("settings.layout.heroSection.subtitle"),
         checked: Boolean(model.layout.heroSectionEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:searchDiscover",
-        title: t2("settings.layout.searchDiscover.title"),
-        subtitle: t2("settings.layout.searchDiscover.subtitle"),
+        title: t3("settings.layout.searchDiscover.title"),
+        subtitle: t3("settings.layout.searchDiscover.subtitle"),
         checked: Boolean(model.layout.searchDiscoverEnabled)
       })}
         ${!isModernLayout ? this.renderToggleRow({
         focusKey: "layout:posterLabels",
-        title: t2("settings.layout.posterLabels.title"),
-        subtitle: t2("settings.layout.posterLabels.subtitle"),
+        title: t3("settings.layout.posterLabels.title"),
+        subtitle: t3("settings.layout.posterLabels.subtitle"),
         checked: Boolean(model.layout.posterLabelsEnabled)
       }) : ""}
         ${!isModernLayout ? this.renderToggleRow({
         focusKey: "layout:addonName",
-        title: t2("settings.layout.addonName.title"),
-        subtitle: t2("settings.layout.addonName.subtitle"),
+        title: t3("settings.layout.addonName.title"),
+        subtitle: t3("settings.layout.addonName.subtitle"),
         checked: Boolean(model.layout.catalogAddonNameEnabled)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:catalogType",
-        title: t2("settings.layout.catalogType.title"),
-        subtitle: t2("settings.layout.catalogType.subtitle"),
+        title: t3("settings.layout.catalogType.title"),
+        subtitle: t3("settings.layout.catalogType.subtitle"),
         checked: Boolean(model.layout.catalogTypeSuffixEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:hideUnreleased",
-        title: t2("settings.layout.hideUnreleased.title"),
-        subtitle: t2("settings.layout.hideUnreleased.subtitle"),
+        title: t3("settings.layout.hideUnreleased.title"),
+        subtitle: t3("settings.layout.hideUnreleased.subtitle"),
         checked: Boolean(model.layout.hideUnreleasedContent)
       })}
       </div>
@@ -20454,22 +20651,22 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "layout:detail:blurUnwatched",
-        title: t2("settings.layout.blurUnwatched.title"),
-        subtitle: t2("settings.layout.blurUnwatched.subtitle"),
+        title: t3("settings.layout.blurUnwatched.title"),
+        subtitle: t3("settings.layout.blurUnwatched.subtitle"),
         checked: false,
         disabled: true
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:trailerButton",
-        title: t2("settings.layout.showTrailerButton.title"),
-        subtitle: t2("settings.layout.showTrailerButton.subtitle"),
+        title: t3("settings.layout.showTrailerButton.title"),
+        subtitle: t3("settings.layout.showTrailerButton.subtitle"),
         checked: false,
         disabled: true
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:preferExternalMeta",
-        title: t2("settings.layout.preferExternalMeta.title"),
-        subtitle: t2("settings.layout.preferExternalMeta.subtitle"),
+        title: t3("settings.layout.preferExternalMeta.title"),
+        subtitle: t3("settings.layout.preferExternalMeta.subtitle"),
         checked: false,
         disabled: true
       })}
@@ -20479,33 +20676,33 @@
       <div class="settings-stack">
         ${!isModernLandscape ? this.renderToggleRow({
         focusKey: "layout:focusedPosterExpand",
-        title: t2("settings.layout.focusedPosterExpand.title"),
-        subtitle: t2("settings.layout.focusedPosterExpand.subtitle"),
+        title: t3("settings.layout.focusedPosterExpand.title"),
+        subtitle: t3("settings.layout.focusedPosterExpand.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
       }) : ""}
         ${!isModernLandscape && Boolean(model.layout.focusedPosterBackdropExpandEnabled) ? this.renderActionRow({
         focusKey: "layout:focusedPosterExpandDelay",
-        title: t2("settings.layout.focusedPosterExpandDelay.title"),
-        subtitle: t2("settings.layout.focusedPosterExpandDelay.subtitle"),
+        title: t3("settings.layout.focusedPosterExpandDelay.title"),
+        subtitle: t3("settings.layout.focusedPosterExpandDelay.subtitle"),
         value: `${Number((_a = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a : 3)}s`
       }) : ""}
         ${showAutoplayRow ? this.renderToggleRow({
         focusKey: "layout:focusedPosterTrailer",
-        title: isModernLayout ? t2("settings.layout.autoplayTrailer.title") : t2("settings.layout.autoplayTrailerExpandedCard.title"),
-        subtitle: isModernLayout ? t2("settings.layout.autoplayTrailer.subtitle") : t2("settings.layout.autoplayTrailerExpandedCard.subtitle"),
+        title: isModernLayout ? t3("settings.layout.autoplayTrailer.title") : t3("settings.layout.autoplayTrailerExpandedCard.title"),
+        subtitle: isModernLayout ? t3("settings.layout.autoplayTrailer.subtitle") : t3("settings.layout.autoplayTrailerExpandedCard.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
       }) : ""}
         ${showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderToggleRow({
         focusKey: "layout:focusedPosterTrailerMuted",
-        title: isModernLayout ? t2("settings.layout.trailerMuted.title") : t2("settings.layout.trailerMutedExpandedCard.title"),
-        subtitle: isModernLayout ? t2("settings.layout.trailerMuted.subtitle") : t2("settings.layout.trailerMutedExpandedCard.subtitle"),
+        title: isModernLayout ? t3("settings.layout.trailerMuted.title") : t3("settings.layout.trailerMutedExpandedCard.title"),
+        subtitle: isModernLayout ? t3("settings.layout.trailerMuted.subtitle") : t3("settings.layout.trailerMutedExpandedCard.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
       }) : ""}
         ${isModernLayout && showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderActionRow({
         focusKey: "layout:focusedPosterTrailerTarget",
-        title: t2("settings.layout.trailerTarget.title"),
-        subtitle: t2("settings.layout.trailerTarget.subtitle"),
-        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? t2("settings.layout.trailerTargets.expandedCard") : t2("settings.layout.trailerTargets.heroMedia")
+        title: t3("settings.layout.trailerTarget.title"),
+        subtitle: t3("settings.layout.trailerTarget.subtitle"),
+        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? t3("settings.layout.trailerTargets.expandedCard") : t3("settings.layout.trailerTargets.heroMedia")
       }) : ""}
       </div>
     `;
@@ -20515,29 +20712,29 @@
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:homeLayout",
-        title: t2("settings.layout.groups.homeLayout.title"),
-        subtitle: t2("settings.layout.groups.homeLayout.subtitle"),
+        title: t3("settings.layout.groups.homeLayout.title"),
+        subtitle: t3("settings.layout.groups.homeLayout.subtitle"),
         expanded: Boolean(expanded.homeLayout),
         bodyHtml: homeLayoutBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:homeContent",
-        title: t2("settings.layout.groups.homeContent.title"),
-        subtitle: t2("settings.layout.groups.homeContent.subtitle"),
+        title: t3("settings.layout.groups.homeContent.title"),
+        subtitle: t3("settings.layout.groups.homeContent.subtitle"),
         expanded: Boolean(expanded.homeContent),
         bodyHtml: homeContentBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:detailPage",
-        title: t2("settings.layout.groups.detailPage.title"),
-        subtitle: t2("settings.layout.groups.detailPage.subtitle"),
+        title: t3("settings.layout.groups.detailPage.title"),
+        subtitle: t3("settings.layout.groups.detailPage.subtitle"),
         expanded: Boolean(expanded.detailPage),
         bodyHtml: detailPageBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:focusedPoster",
-        title: t2("settings.layout.groups.focusedPoster.title"),
-        subtitle: t2("settings.layout.groups.focusedPoster.subtitle"),
+        title: t3("settings.layout.groups.focusedPoster.title"),
+        subtitle: t3("settings.layout.groups.focusedPoster.subtitle"),
         expanded: Boolean(expanded.focusedPoster),
         bodyHtml: focusedPosterBody
       })}
@@ -20547,7 +20744,7 @@
     },
     renderPluginsSection(model) {
       this.actionMap.set("plugins:editDraft", () => {
-        const value = window.prompt(t2("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
+        const value = window.prompt(t3("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
         if (value === null) {
           return;
         }
@@ -20579,7 +20776,7 @@
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-plugin-builder">
-          <div class="settings-plugin-builder-title">${t2("settings.plugins.addRepository")}</div>
+          <div class="settings-plugin-builder-title">${t3("settings.plugins.addRepository")}</div>
           <div class="settings-plugin-builder-row">
             <button class="settings-plugin-input settings-content-focusable focusable"
                     data-zone="content"
@@ -20590,40 +20787,40 @@
                     data-zone="content"
                     ${this.registerAction("plugins:addDraft", this.actionMap.get("plugins:addDraft"))}>
               ${iconSvg(ROW_ICONS.plus, "settings-plugin-add-icon")}
-              <span>${t2("common.add")}</span>
+              <span>${t3("common.add")}</span>
             </button>
           </div>
         </div>
 
         ${this.renderActionRow({
         focusKey: "plugins:phone",
-        title: t2("settings.plugins.manageFromPhone"),
-        subtitle: plannedSubtitle(t2("settings.plugins.manageFromPhoneSubtitle")),
+        title: t3("settings.plugins.manageFromPhone"),
+        subtitle: plannedSubtitle(t3("settings.plugins.manageFromPhoneSubtitle")),
         classes: "settings-plugins-phone",
         icon: "phone",
         planned: true
       })}
 
-        <div class="settings-repository-heading">${t2("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
+        <div class="settings-repository-heading">${t3("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
 
         ${model.addons.length ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>` : `<div class="settings-empty-state">
-              <p>${t2("settings.plugins.noRepositoriesTitle")}</p>
-              <p>${t2("settings.plugins.noRepositoriesSubtitle")}</p>
+              <p>${t3("settings.plugins.noRepositoriesTitle")}</p>
+              <p>${t3("settings.plugins.noRepositoriesSubtitle")}</p>
             </div>`}
 
         ${model.pluginSources.length ? `
-          <div class="settings-repository-heading settings-plugin-provider-heading">${t2("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
+          <div class="settings-repository-heading settings-plugin-provider-heading">${t3("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
           <div class="settings-stack">
             ${model.pluginSources.map((source) => this.renderToggleRow({
         focusKey: `plugins:provider:${source.id}`,
-        title: source.name || t2("common.provider"),
-        subtitle: source.urlTemplate || t2("settings.plugins.customProviderTemplate"),
+        title: source.name || t3("common.provider"),
+        subtitle: source.urlTemplate || t3("settings.plugins.customProviderTemplate"),
         checked: Boolean(source.enabled)
       })).join("")}
             ${this.renderActionRow({
         focusKey: "plugins:provider:test",
-        title: t2("settings.plugins.providerTesting"),
-        subtitle: plannedSubtitle(t2("settings.plugins.providerTestingSubtitle")),
+        title: t3("settings.plugins.providerTesting"),
+        subtitle: plannedSubtitle(t3("settings.plugins.providerTestingSubtitle")),
         planned: true
       })}
           </div>
@@ -20650,18 +20847,18 @@
           <div class="settings-stack">
             ${this.renderActionRow({
         focusKey: "integration:hub:tmdb",
-        title: t2("settings.integration.tmdb.label"),
-        subtitle: t2("settings.integration.tmdb.subtitle")
+        title: t3("settings.integration.tmdb.label"),
+        subtitle: t3("settings.integration.tmdb.subtitle")
       })}
             ${this.renderActionRow({
         focusKey: "integration:hub:mdblist",
-        title: t2("settings.integration.mdblist.label"),
-        subtitle: t2("settings.integration.mdblist.subtitle")
+        title: t3("settings.integration.mdblist.label"),
+        subtitle: t3("settings.integration.mdblist.subtitle")
       })}
             ${this.renderActionRow({
         focusKey: "integration:hub:animeskip",
-        title: t2("settings.integration.animeskip.label"),
-        subtitle: t2("settings.integration.animeskip.subtitle")
+        title: t3("settings.integration.animeskip.label"),
+        subtitle: t3("settings.integration.animeskip.subtitle")
       })}
           </div>
         </div>
@@ -20687,7 +20884,7 @@
         });
         this.actionMap.set("integration:tmdb:language", () => {
           this.openOptionDialog({
-            title: t2("settings.dialogs.selectTmdbLanguage"),
+            title: t3("settings.dialogs.selectTmdbLanguage"),
             options: TMDB_LANGUAGE_OPTIONS,
             selectedId: TmdbSettingsStore.get().language,
             returnFocusKey: "integration:tmdb:language",
@@ -20697,7 +20894,7 @@
           });
         });
         this.actionMap.set("integration:tmdb:api", () => {
-          const value = window.prompt(t2("settings.integration.tmdb.apiKey.prompt"), TmdbSettingsStore.get().apiKey || "");
+          const value = window.prompt(t3("settings.integration.tmdb.apiKey.prompt"), TmdbSettingsStore.get().apiKey || "");
           if (value !== null) {
             TmdbSettingsStore.set({ apiKey: String(value).trim() });
           }
@@ -20708,48 +20905,48 @@
           <div class="settings-stack">
             ${this.renderActionRow({
           focusKey: "integration:back",
-          title: t2("settings.integration.backToIntegrations.title"),
-          subtitle: t2("settings.integration.backToIntegrations.subtitle"),
+          title: t3("settings.integration.backToIntegrations.title"),
+          subtitle: t3("settings.integration.backToIntegrations.subtitle"),
           icon: "back"
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:enabled",
-          title: t2("settings.integration.tmdb.enable.title"),
-          subtitle: t2("settings.integration.tmdb.enable.subtitle"),
+          title: t3("settings.integration.tmdb.enable.title"),
+          subtitle: t3("settings.integration.tmdb.enable.subtitle"),
           checked: Boolean(model.tmdb.enabled)
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:artwork",
-          title: t2("settings.integration.tmdb.artwork.title"),
-          subtitle: t2("settings.integration.tmdb.artwork.subtitle"),
+          title: t3("settings.integration.tmdb.artwork.title"),
+          subtitle: t3("settings.integration.tmdb.artwork.subtitle"),
           checked: Boolean(model.tmdb.useArtwork),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:basic",
-          title: t2("settings.integration.tmdb.basicInfo.title"),
-          subtitle: t2("settings.integration.tmdb.basicInfo.subtitle"),
+          title: t3("settings.integration.tmdb.basicInfo.title"),
+          subtitle: t3("settings.integration.tmdb.basicInfo.subtitle"),
           checked: Boolean(model.tmdb.useBasicInfo),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:details",
-          title: t2("settings.integration.tmdb.details.title"),
-          subtitle: t2("settings.integration.tmdb.details.subtitle"),
+          title: t3("settings.integration.tmdb.details.title"),
+          subtitle: t3("settings.integration.tmdb.details.subtitle"),
           checked: Boolean(model.tmdb.useDetails),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderActionRow({
           focusKey: "integration:tmdb:language",
-          title: t2("settings.integration.tmdb.language.title"),
-          subtitle: t2("settings.integration.tmdb.language.subtitle"),
+          title: t3("settings.integration.tmdb.language.title"),
+          subtitle: t3("settings.integration.tmdb.language.subtitle"),
           value: labelForTmdbLanguage(model.tmdb.language)
         })}
             ${this.renderActionRow({
           focusKey: "integration:tmdb:api",
-          title: t2("settings.integration.tmdb.apiKey.title"),
-          subtitle: t2("settings.integration.tmdb.apiKey.subtitle"),
-          value: maskValue(model.tmdb.apiKey, t2("common.notSet"))
+          title: t3("settings.integration.tmdb.apiKey.title"),
+          subtitle: t3("settings.integration.tmdb.apiKey.subtitle"),
+          value: maskValue(model.tmdb.apiKey, t3("common.notSet"))
         })}
           </div>
         </div>
@@ -20760,7 +20957,7 @@
           MdbListSettingsStore.set({ enabled: !MdbListSettingsStore.get().enabled });
         });
         this.actionMap.set("integration:mdblist:key", () => {
-          const value = window.prompt(t2("settings.integration.mdblist.apiKey.prompt"), MdbListSettingsStore.get().apiKey || "");
+          const value = window.prompt(t3("settings.integration.mdblist.apiKey.prompt"), MdbListSettingsStore.get().apiKey || "");
           if (value !== null) {
             MdbListSettingsStore.set({ apiKey: String(value).trim() });
           }
@@ -20771,22 +20968,22 @@
           <div class="settings-stack">
             ${this.renderActionRow({
           focusKey: "integration:back",
-          title: t2("settings.integration.backToIntegrations.title"),
-          subtitle: t2("settings.integration.backToIntegrations.subtitle"),
+          title: t3("settings.integration.backToIntegrations.title"),
+          subtitle: t3("settings.integration.backToIntegrations.subtitle"),
           icon: "back"
         })}
             ${this.renderToggleRow({
           focusKey: "integration:mdblist:enabled",
-          title: t2("settings.integration.mdblist.enable.title"),
-          subtitle: plannedSubtitle(t2("settings.integration.mdblist.enable.subtitle")),
+          title: t3("settings.integration.mdblist.enable.title"),
+          subtitle: plannedSubtitle(t3("settings.integration.mdblist.enable.subtitle")),
           checked: Boolean(model.mdbList.enabled),
           planned: true
         })}
             ${this.renderActionRow({
           focusKey: "integration:mdblist:key",
-          title: t2("settings.integration.mdblist.apiKey.title"),
-          subtitle: plannedSubtitle(t2("settings.integration.mdblist.apiKey.subtitle")),
-          value: maskValue(model.mdbList.apiKey, t2("common.notSet")),
+          title: t3("settings.integration.mdblist.apiKey.title"),
+          subtitle: plannedSubtitle(t3("settings.integration.mdblist.apiKey.subtitle")),
+          value: maskValue(model.mdbList.apiKey, t3("common.notSet")),
           disabled: !model.mdbList.enabled,
           planned: true
         })}
@@ -20798,7 +20995,7 @@
         AnimeSkipSettingsStore.set({ enabled: !AnimeSkipSettingsStore.get().enabled });
       });
       this.actionMap.set("integration:animeskip:id", () => {
-        const value = window.prompt(t2("settings.integration.animeskip.clientId.prompt"), AnimeSkipSettingsStore.get().clientId || "");
+        const value = window.prompt(t3("settings.integration.animeskip.clientId.prompt"), AnimeSkipSettingsStore.get().clientId || "");
         if (value !== null) {
           AnimeSkipSettingsStore.set({ clientId: String(value).trim() });
         }
@@ -20809,22 +21006,22 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "integration:back",
-        title: t2("settings.integration.backToIntegrations.title"),
-        subtitle: t2("settings.integration.backToIntegrations.subtitle"),
+        title: t3("settings.integration.backToIntegrations.title"),
+        subtitle: t3("settings.integration.backToIntegrations.subtitle"),
         icon: "back"
       })}
           ${this.renderToggleRow({
         focusKey: "integration:animeskip:enabled",
-        title: t2("settings.integration.animeskip.enable.title"),
-        subtitle: plannedSubtitle(t2("settings.integration.animeskip.enable.subtitle")),
+        title: t3("settings.integration.animeskip.enable.title"),
+        subtitle: plannedSubtitle(t3("settings.integration.animeskip.enable.subtitle")),
         checked: Boolean(model.animeSkip.enabled),
         planned: true
       })}
           ${this.renderActionRow({
         focusKey: "integration:animeskip:id",
-        title: t2("settings.integration.animeskip.clientId.title"),
-        subtitle: plannedSubtitle(t2("settings.integration.animeskip.clientId.subtitle")),
-        value: maskValue(model.animeSkip.clientId, t2("common.notSet")),
+        title: t3("settings.integration.animeskip.clientId.title"),
+        subtitle: plannedSubtitle(t3("settings.integration.animeskip.clientId.subtitle")),
+        value: maskValue(model.animeSkip.clientId, t3("common.notSet")),
         disabled: !model.animeSkip.enabled,
         planned: true
       })}
@@ -20859,7 +21056,7 @@
       this.actionMap.set("playback:quality", () => {
         const options = ["auto", "2160p", "1080p", "720p"];
         this.openOptionDialog({
-          title: t2("settings.dialogs.preferredQuality"),
+          title: t3("settings.dialogs.preferredQuality"),
           options: options.map((option) => ({ id: option, label: qualityLabel(option) })),
           selectedId: String(PlayerSettingsStore.get().preferredQuality || "auto"),
           returnFocusKey: "playback:quality",
@@ -20871,7 +21068,7 @@
       this.actionMap.set("playback:player", () => {
         const options = ["auto", "native", "hls", "dash"];
         this.openOptionDialog({
-          title: t2("settings.dialogs.playerPreference"),
+          title: t3("settings.dialogs.playerPreference"),
           options: options.map((option) => ({ id: option, label: playerLabel(option) })),
           selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
           returnFocusKey: "playback:player",
@@ -20885,7 +21082,7 @@
       });
       this.actionMap.set("playback:audioLanguage", () => {
         this.openOptionDialog({
-          title: t2("settings.dialogs.preferredAudioLanguage"),
+          title: t3("settings.dialogs.preferredAudioLanguage"),
           options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
           selectedId: PlayerSettingsStore.get().preferredAudioLanguage,
           returnFocusKey: "playback:audioLanguage",
@@ -20899,7 +21096,7 @@
       });
       this.actionMap.set("playback:subtitleLanguage", () => {
         this.openOptionDialog({
-          title: t2("settings.dialogs.preferredSubtitleLanguage"),
+          title: t3("settings.dialogs.preferredSubtitleLanguage"),
           options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
           selectedId: PlayerSettingsStore.get().subtitleLanguage,
           returnFocusKey: "playback:subtitleLanguage",
@@ -20910,7 +21107,7 @@
       });
       this.actionMap.set("playback:renderMode", () => {
         this.openOptionDialog({
-          title: t2("settings.dialogs.subtitleRenderMode"),
+          title: t3("settings.dialogs.subtitleRenderMode"),
           options: [
             { id: "native", labelKey: "common.native" },
             { id: "html", labelKey: "common.htmlOverlay" }
@@ -20926,8 +21123,8 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:autoplay",
-        title: t2("settings.playback.autoplayNextEpisode.title"),
-        subtitle: t2("settings.playback.autoplayNextEpisode.subtitle"),
+        title: t3("settings.playback.autoplayNextEpisode.title"),
+        subtitle: t3("settings.playback.autoplayNextEpisode.subtitle"),
         checked: Boolean(model.player.autoplayNextEpisode)
       })}
       </div>
@@ -20936,14 +21133,14 @@
       <div class="settings-stack">
         ${this.renderActionRow({
         focusKey: "playback:quality",
-        title: t2("settings.playback.preferredQuality.title"),
-        subtitle: t2("settings.playback.preferredQuality.subtitle"),
+        title: t3("settings.playback.preferredQuality.title"),
+        subtitle: t3("settings.playback.preferredQuality.subtitle"),
         value: qualityLabel(model.player.preferredQuality)
       })}
         ${this.renderActionRow({
         focusKey: "playback:player",
-        title: t2("settings.playback.preferredPlayer.title"),
-        subtitle: t2("settings.playback.preferredPlayer.subtitle"),
+        title: t3("settings.playback.preferredPlayer.title"),
+        subtitle: t3("settings.playback.preferredPlayer.subtitle"),
         value: playerLabel(model.player.preferredPlayer)
       })}
       </div>
@@ -20952,14 +21149,14 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:trailer",
-        title: t2("settings.playback.autoplayTrailer.title"),
-        subtitle: t2("settings.playback.autoplayTrailer.subtitle"),
+        title: t3("settings.playback.autoplayTrailer.title"),
+        subtitle: t3("settings.playback.autoplayTrailer.subtitle"),
         checked: Boolean(model.player.trailerAutoplay)
       })}
         ${this.renderActionRow({
         focusKey: "playback:audioLanguage",
-        title: t2("settings.playback.preferredAudio.title"),
-        subtitle: t2("settings.playback.preferredAudio.subtitle"),
+        title: t3("settings.playback.preferredAudio.title"),
+        subtitle: t3("settings.playback.preferredAudio.subtitle"),
         value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
       })}
       </div>
@@ -20968,20 +21165,20 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:subtitlesEnabled",
-        title: t2("settings.playback.enableSubtitles.title"),
-        subtitle: t2("settings.playback.enableSubtitles.subtitle"),
+        title: t3("settings.playback.enableSubtitles.title"),
+        subtitle: t3("settings.playback.enableSubtitles.subtitle"),
         checked: Boolean(model.player.subtitlesEnabled)
       })}
         ${this.renderActionRow({
         focusKey: "playback:subtitleLanguage",
-        title: t2("settings.playback.subtitleLanguage.title"),
-        subtitle: t2("settings.playback.subtitleLanguage.subtitle"),
+        title: t3("settings.playback.subtitleLanguage.title"),
+        subtitle: t3("settings.playback.subtitleLanguage.subtitle"),
         value: labelForPlaybackLanguage(model.player.subtitleLanguage)
       })}
         ${this.renderActionRow({
         focusKey: "playback:renderMode",
-        title: t2("settings.playback.renderMode.title"),
-        subtitle: t2("settings.playback.renderMode.subtitle"),
+        title: t3("settings.playback.renderMode.title"),
+        subtitle: t3("settings.playback.renderMode.subtitle"),
         value: renderModeLabel(model.player.subtitleRenderMode)
       })}
       </div>
@@ -20992,29 +21189,29 @@
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:general",
-        title: t2("settings.playback.groups.general.title"),
-        subtitle: t2("settings.playback.groups.general.subtitle"),
+        title: t3("settings.playback.groups.general.title"),
+        subtitle: t3("settings.playback.groups.general.subtitle"),
         expanded: Boolean(expanded.general),
         bodyHtml: generalBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:stream",
-        title: t2("settings.playback.groups.stream.title"),
-        subtitle: t2("settings.playback.groups.stream.subtitle"),
+        title: t3("settings.playback.groups.stream.title"),
+        subtitle: t3("settings.playback.groups.stream.subtitle"),
         expanded: Boolean(expanded.stream),
         bodyHtml: streamBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:audio",
-        title: t2("settings.playback.groups.audio.title"),
-        subtitle: t2("settings.playback.groups.audio.subtitle"),
+        title: t3("settings.playback.groups.audio.title"),
+        subtitle: t3("settings.playback.groups.audio.subtitle"),
         expanded: Boolean(expanded.audio),
         bodyHtml: audioBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:subtitles",
-        title: t2("settings.playback.groups.subtitles.title"),
-        subtitle: t2("settings.playback.groups.subtitles.subtitle"),
+        title: t3("settings.playback.groups.subtitles.title"),
+        subtitle: t3("settings.playback.groups.subtitles.subtitle"),
         expanded: Boolean(expanded.subtitles),
         bodyHtml: subtitleBody
       })}
@@ -21030,8 +21227,8 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "trakt:open",
-        title: t2("settings.trakt.openSettings"),
-        subtitle: plannedSubtitle(t2("settings.trakt.openSettingsSubtitle")),
+        title: t3("settings.trakt.openSettings"),
+        subtitle: plannedSubtitle(t3("settings.trakt.openSettingsSubtitle")),
         planned: true
       })}
         </div>
@@ -21052,21 +21249,21 @@
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-about-brand">
           <img class="settings-about-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
-          <p class="settings-about-copy">${t2("settings.about.madeWithLove")}</p>
-          <p class="settings-about-copy">${t2("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
-          <p class="settings-about-copy">${t2("settings.about.portedBy")}</p>
+          <p class="settings-about-copy">${t3("settings.about.madeWithLove")}</p>
+          <p class="settings-about-copy">${t3("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
+          <p class="settings-about-copy">${t3("settings.about.portedBy")}</p>
         </div>
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "about:privacy",
-        title: t2("settings.about.privacyPolicy.title"),
-        subtitle: t2("settings.about.privacyPolicy.subtitle"),
+        title: t3("settings.about.privacyPolicy.title"),
+        subtitle: t3("settings.about.privacyPolicy.subtitle"),
         external: true
       })}
           ${this.renderActionRow({
         focusKey: "about:supporters",
-        title: t2("settings.about.supporters.title"),
-        subtitle: t2("settings.about.supporters.subtitle")
+        title: t3("settings.about.supporters.title"),
+        subtitle: t3("settings.about.supporters.subtitle")
       })}
         </div>
       </div>

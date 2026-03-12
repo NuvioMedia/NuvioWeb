@@ -681,6 +681,86 @@ function renderContinueWatchingSection(items = [], options = {}) {
   `;
 }
 
+function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
+  const {
+    layoutMode = "classic",
+    showPosterLabels = true,
+    showCatalogAddonName = true,
+    showCatalogTypeSuffix = true
+  } = options;
+  const catalogSeeAllMap = new Map();
+  const sectionsMarkup = [];
+
+  rows.forEach((rowData, rowIndex) => {
+    const items = Array.isArray(rowData?.result?.data?.items) ? rowData.result.data.items : [];
+    if (!items.length) {
+      return;
+    }
+
+    const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
+    catalogSeeAllMap.set(seeAllId, {
+      addonBaseUrl: rowData.addonBaseUrl || "",
+      addonId: rowData.addonId || "",
+      addonName: rowData.addonName || "",
+      catalogId: rowData.catalogId || "",
+      catalogName: rowData.catalogName || "",
+      type: rowData.type || "movie",
+      initialItems: items
+    });
+
+    const rowKey = buildModernRowKey(rowData);
+    const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+    const rowSubtitle = layoutMode === "classic" && showCatalogAddonName && rowData.addonName
+      ? `from ${rowData.addonName}`
+      : "";
+    const hasSeeAll = items.length >= 15;
+    const visibleItems = layoutMode === "grid"
+      ? (hasSeeAll ? items.slice(0, 14) : items.slice(0, 15))
+      : items.slice(0, 15);
+    const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
+      item,
+      rowIndex,
+      itemIndex,
+      rowData.type,
+      showPosterLabels,
+      layoutMode
+    )).join("");
+    const trackMarkup = `
+      <div class="${layoutMode === "grid" ? "home-grid-track" : "home-track"}" data-track-row-key="${escapeAttribute(rowKey)}">
+        ${cardsMarkup}
+        ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData) : ""}
+      </div>
+    `;
+
+    if (layoutMode === "grid") {
+      sectionsMarkup.push(`
+        <section class="home-grid-section"
+                 data-row-key="${escapeAttribute(rowKey)}"
+                 data-row-index="${rowIndex}"
+                 data-section-title="${escapeAttribute(rowTitle)}">
+          <div class="home-grid-section-divider">${escapeHtml(rowTitle)}</div>
+          ${trackMarkup}
+        </section>
+      `);
+      return;
+    }
+
+    sectionsMarkup.push(`
+      <section class="home-row"
+               data-row-key="${escapeAttribute(rowKey)}"
+               data-row-index="${rowIndex}">
+        ${renderRowHeader(rowTitle, rowSubtitle)}
+        ${trackMarkup}
+      </section>
+    `);
+  });
+
+  return {
+    catalogSeeAllMap,
+    markup: sectionsMarkup.join("")
+  };
+}
+
 function createSeeAllCardMarkup(seeAllId, rowData) {
   return `
     <article class="home-content-card home-seeall-card focusable"
@@ -721,6 +801,7 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
   const expandedMeta = buildExpandedPosterMeta(normalized);
   const backdropSrc = firstNonEmpty(normalized.background, normalized.backdrop, normalized.backdropUrl, normalized.poster);
   const posterSrc = firstNonEmpty(normalized.poster, normalized.thumbnail, normalized.backdrop, normalized.backdropUrl);
+  const expandedVisualSrc = firstNonEmpty(backdropSrc, posterSrc);
   return `
     <article class="home-content-card home-poster-card focusable"
              data-action="openDetail"
@@ -734,13 +815,16 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
              data-logo-src="${escapeAttribute(normalized.logo || "")}">
       <div class="home-poster-frame">
         ${posterSrc
-          ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" alt="${escapeAttribute(normalized.name || "content")}" />`
+          ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
           : '<div class="content-poster placeholder"></div>'}
+        ${expandedVisualSrc
+          ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute(expandedVisualSrc)}" decoding="async" alt="" aria-hidden="true" />`
+          : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
         <div class="home-poster-trailer-layer"></div>
         <div class="home-poster-expanded-gradient"></div>
         <div class="home-poster-expanded-brand">
           ${normalized.logo
-            ? `<img class="home-poster-expanded-logo" src="${escapeAttribute(normalized.logo)}" alt="${escapeAttribute(normalized.name || "content")}" />`
+            ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
             : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
         </div>
       </div>
@@ -1268,6 +1352,28 @@ export const HomeScreen = {
     return this.layoutMode === "modern" && Boolean(node?.classList?.contains("home-poster-card"));
   },
 
+  hydrateFocusedPosterAssets(node) {
+    if (!this.isModernPosterNode(node)) {
+      return;
+    }
+    const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
+    if (backdrop) {
+      const src = String(backdrop.dataset.src || "").trim();
+      if (src && !backdrop.getAttribute("src")) {
+        backdrop.setAttribute("src", src);
+      }
+      backdrop.removeAttribute("data-src");
+    }
+    const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
+    if (logo) {
+      const src = String(logo.dataset.src || "").trim();
+      if (src && !logo.getAttribute("src")) {
+        logo.setAttribute("src", src);
+      }
+      logo.removeAttribute("data-src");
+    }
+  },
+
   clearTrailerLayer(container) {
     if (!container) {
       return;
@@ -1326,13 +1432,6 @@ export const HomeScreen = {
     const target = node || null;
     if (target) {
       target.classList.remove("is-expanded", "is-trailer-active");
-      const image = target.querySelector(".content-poster");
-      if (image && image.tagName === "IMG") {
-        const posterSrc = String(target.dataset.posterSrc || "").trim();
-        if (posterSrc) {
-          image.setAttribute("src", posterSrc);
-        }
-      }
       this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
     }
     const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
@@ -1347,15 +1446,9 @@ export const HomeScreen = {
     if (!this.isModernPosterNode(node)) {
       return;
     }
+    this.hydrateFocusedPosterAssets(node);
     if (this.expandedPosterNode && this.expandedPosterNode !== node) {
       this.collapseFocusedPoster(this.expandedPosterNode);
-    }
-    const image = node.querySelector(".content-poster");
-    if (image && image.tagName === "IMG") {
-      const backdropSrc = String(node.dataset.backdropSrc || "").trim();
-      if (backdropSrc) {
-        image.setAttribute("src", backdropSrc);
-      }
     }
     node.classList.add("is-expanded");
     this.expandedPosterNode = node;
@@ -1439,7 +1532,8 @@ export const HomeScreen = {
     }
     this.cancelFocusedPosterFlow();
     const prefs = this.layoutPrefs || {};
-    const shouldRun = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.focusedPosterBackdropTrailerEnabled);
+    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled);
+    const shouldRun = Boolean(shouldExpand || prefs.focusedPosterBackdropTrailerEnabled);
     if (!shouldRun) {
       this.collapseFocusedPoster();
       return;
@@ -1447,6 +1541,9 @@ export const HomeScreen = {
     if (!this.isModernPosterNode(node)) {
       this.collapseFocusedPoster();
       return;
+    }
+    if (shouldExpand) {
+      this.hydrateFocusedPosterAssets(node);
     }
 
     if (this.expandedPosterNode && this.expandedPosterNode !== node) {
@@ -1770,9 +1867,70 @@ export const HomeScreen = {
     return false;
   },
 
+  ensureDelegatedEventsBound() {
+    if (!this.container) {
+      return;
+    }
+    if (!this.boundHomeFocusInHandler) {
+      this.boundHomeFocusInHandler = (event) => {
+        const target = event?.target?.closest?.(".focusable");
+        if (!target || !this.container?.contains(target)) {
+          return;
+        }
+        if (target.closest(".home-sidebar .focusable, .modern-sidebar-panel .focusable")) {
+          this.setSidebarExpanded(true);
+          return;
+        }
+        if (!target.closest(".home-main .focusable")) {
+          return;
+        }
+        if (this.isMainNode(target)) {
+          this.lastMainFocus = target;
+        }
+        this.scheduleModernHeroUpdate(target);
+        this.scheduleFocusedPosterFlow(target);
+      };
+    }
+    if (!this.boundHomeClickHandler) {
+      this.boundHomeClickHandler = (event) => {
+        const target = event?.target?.closest?.(".home-main .focusable");
+        if (!target || !this.container?.contains(target)) {
+          return;
+        }
+        const action = String(target.dataset.action || "");
+        if (action === "openDetail") {
+          this.openDetailFromNode(target);
+          return;
+        }
+        if (action === "openCatalogSeeAll") {
+          this.openCatalogSeeAllFromNode(target);
+          return;
+        }
+        if (action === "resumeProgress") {
+          Router.navigate("detail", {
+            itemId: target.dataset.itemId,
+            itemType: target.dataset.itemType || "movie",
+            fallbackTitle: target.dataset.itemTitle || target.dataset.itemId || "Untitled"
+          });
+        }
+      };
+    }
+    if (this.boundHomeEventContainer === this.container) {
+      return;
+    }
+    if (this.boundHomeEventContainer) {
+      this.boundHomeEventContainer.removeEventListener("focusin", this.boundHomeFocusInHandler);
+      this.boundHomeEventContainer.removeEventListener("click", this.boundHomeClickHandler);
+    }
+    this.container.addEventListener("focusin", this.boundHomeFocusInHandler);
+    this.container.addEventListener("click", this.boundHomeClickHandler);
+    this.boundHomeEventContainer = this.container;
+  },
+
   async mount() {
     this.container = document.getElementById("home");
     ScreenUtils.show(this.container);
+    this.ensureDelegatedEventsBound();
     this.homeRouteEnterPending = true;
     const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
     const profileChanged = activeProfileId !== String(this.loadedProfileId || "");
@@ -1983,11 +2141,18 @@ export const HomeScreen = {
       const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
         rowKey: "continue_watching"
       });
+      const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
+        layoutMode: this.layoutMode,
+        showPosterLabels,
+        showCatalogAddonName,
+        showCatalogTypeSuffix
+      });
+      this.catalogSeeAllMap = legacyRowsPayload.catalogSeeAllMap;
       mainContentMarkup = `
         ${showHeroSection ? renderHeroMarkup(this.layoutMode, heroItem, this.heroCandidates) : ""}
         ${continueHtml}
         ${this.layoutMode === "grid" ? '<div class="home-grid-sticky" id="homeGridSticky"></div>' : ""}
-        <section class="home-catalogs${this.layoutMode === "grid" ? " home-grid-catalogs" : ""}" id="homeCatalogRows"></section>
+        <section class="home-catalogs${this.layoutMode === "grid" ? " home-grid-catalogs" : ""}" id="homeCatalogRows">${legacyRowsPayload.markup}</section>
       `;
     }
 
@@ -2009,105 +2174,10 @@ export const HomeScreen = {
       </div>
     `;
 
-    const rowsContainer = this.container.querySelector("#homeCatalogRows");
-    if (rowsContainer && this.layoutMode !== "modern") {
-      this.catalogSeeAllMap = new Map();
-      this.rows.forEach((rowData, rowIndex) => {
-        const items = Array.isArray(rowData?.result?.data?.items) ? rowData.result.data.items : [];
-        if (!items.length) {
-          return;
-        }
-        const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-        this.catalogSeeAllMap.set(seeAllId, {
-          addonBaseUrl: rowData.addonBaseUrl || "",
-          addonId: rowData.addonId || "",
-          addonName: rowData.addonName || "",
-          catalogId: rowData.catalogId || "",
-          catalogName: rowData.catalogName || "",
-          type: rowData.type || "movie",
-          initialItems: items
-        });
-
-        const section = document.createElement("section");
-        const rowKey = buildModernRowKey(rowData);
-        section.className = this.layoutMode === "grid" ? "home-grid-section" : "home-row";
-        section.dataset.rowKey = rowKey;
-        section.dataset.rowIndex = String(rowIndex);
-        const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
-        const rowSubtitle = this.layoutMode === "classic" && showCatalogAddonName && rowData.addonName
-          ? `from ${rowData.addonName}`
-          : "";
-        if (this.layoutMode === "grid") {
-          section.dataset.sectionTitle = rowTitle;
-          section.innerHTML = `
-            <div class="home-grid-section-divider">${escapeHtml(rowTitle)}</div>
-            <div class="home-grid-track"></div>
-          `;
-        } else {
-          section.innerHTML = `
-            ${renderRowHeader(rowTitle, rowSubtitle)}
-            <div class="home-track"></div>
-          `;
-        }
-
-        const track = section.querySelector(this.layoutMode === "grid" ? ".home-grid-track" : ".home-track");
-        if (track) {
-          track.dataset.trackRowKey = rowKey;
-        }
-        const hasSeeAll = items.length >= 15;
-        const visibleItems = this.layoutMode === "grid"
-          ? (hasSeeAll ? items.slice(0, 14) : items.slice(0, 15))
-          : items.slice(0, 15);
-        visibleItems.forEach((item, itemIndex) => {
-          track.insertAdjacentHTML(
-            "beforeend",
-            createPosterCardMarkup(item, rowIndex, itemIndex, rowData.type, showPosterLabels, this.layoutMode)
-          );
-        });
-
-        if (hasSeeAll) {
-          track.insertAdjacentHTML("beforeend", createSeeAllCardMarkup(seeAllId, rowData));
-        }
-
-        rowsContainer.appendChild(section);
-      });
-    }
-
-    this.container.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((item) => {
-      item.addEventListener("focus", () => {
-        this.setSidebarExpanded(true);
-      });
-    });
     bindRootSidebarEvents(this.container, {
       currentRoute: "home",
       onSelectedAction: () => this.closeSidebarToContent(),
       onExpandSidebar: () => this.openSidebar()
-    });
-
-    this.container.querySelectorAll(".home-main .focusable").forEach((item) => {
-      item.addEventListener("focus", () => {
-        if (this.isMainNode(item)) {
-          this.lastMainFocus = item;
-        }
-        this.scheduleModernHeroUpdate(item);
-        this.scheduleFocusedPosterFlow(item);
-      });
-      item.addEventListener("click", () => {
-        const action = item.dataset.action;
-        if (action === "openDetail") {
-          this.openDetailFromNode(item);
-        }
-        if (action === "openCatalogSeeAll") {
-          this.openCatalogSeeAllFromNode(item);
-        }
-        if (action === "resumeProgress") {
-          Router.navigate("detail", {
-            itemId: item.dataset.itemId,
-            itemType: item.dataset.itemType || "movie",
-            fallbackTitle: item.dataset.itemTitle || item.dataset.itemId || "Untitled"
-          });
-        }
-      });
     });
 
     ScreenUtils.indexFocusables(this.container);
@@ -2322,7 +2392,8 @@ export const HomeScreen = {
     if (Platform.isBackEvent(event)) {
       event.preventDefault?.();
       if (this.layoutMode === "modern") {
-        this.resetFocusedPosterFlow(currentFocusedNode);
+        this.cancelFocusedPosterFlow();
+        this.collapseFocusedPoster();
       }
       const sidebarFocused = Boolean(
         this.container?.querySelector(".modern-sidebar-panel .focusable.focused")
@@ -2345,8 +2416,8 @@ export const HomeScreen = {
         setModernSidebarPillIconOnly(this.container, false);
       }
     }
-    if (this.layoutMode === "modern" && [13, 37, 38, 39, 40].includes(code)) {
-      this.resetFocusedPosterFlow(currentFocusedNode);
+    if (this.layoutMode === "modern" && [37, 38, 39, 40].includes(code)) {
+      this.cancelFocusedPosterFlow();
     }
     if (this.handleHomeDpad(event)) {
       return;

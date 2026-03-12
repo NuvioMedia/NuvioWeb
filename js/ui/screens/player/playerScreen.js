@@ -1,8 +1,27 @@
 import { PlayerController } from "../../../core/player/playerController.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
 import { Router } from "../../navigation/router.js";
+
+const CLOCK_FORMATTER_CACHE = new Map();
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
+
+function buildIndexedLabel(baseLabel, index) {
+  return `${baseLabel} ${index + 1}`;
+}
+
+function subtitleLabel(index) {
+  return buildIndexedLabel(t("subtitle_dialog_title", {}, "Subtitle"), index);
+}
+
+function audioLabel(index) {
+  return buildIndexedLabel(t("audio_dialog_title", {}, "Audio"), index);
+}
 
 function formatTime(secondsValue) {
   const total = Math.max(0, Math.floor(Number(secondsValue || 0)));
@@ -16,11 +35,36 @@ function formatTime(secondsValue) {
 }
 
 function formatClock(date = new Date()) {
-  return date.toLocaleTimeString("it-IT", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  });
+  const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : undefined;
+  const localeKey = String(locale || "__default__");
+  if (!CLOCK_FORMATTER_CACHE.has(localeKey)) {
+    try {
+      CLOCK_FORMATTER_CACHE.set(localeKey, new Intl.DateTimeFormat(locale || undefined, {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      }));
+    } catch (_) {
+      CLOCK_FORMATTER_CACHE.set(localeKey, null);
+    }
+  }
+  const formatter = CLOCK_FORMATTER_CACHE.get(localeKey);
+  try {
+    if (formatter?.format) {
+      return formatter.format(date);
+    }
+    return date.toLocaleTimeString(locale || undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    });
+  } catch (_) {
+    return date.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false
+    });
+  }
 }
 
 function formatEndsAt(currentSeconds, durationSeconds) {
@@ -102,6 +146,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function buildEpisodePanelHint() {
+  return `UP/DOWN ${t("discover_select_catalog", {}, "Select")} | OK ${t("episodes_play", {}, "Play")} | BACK ${t("episodes_panel_close", {}, "Close")}`;
 }
 
 function qualityLabelFromText(value) {
@@ -1085,6 +1133,8 @@ export const PlayerScreen = {
   },
 
   renderPlayerUi() {
+    this.uiRefs = null;
+    this.lastUiTickState = null;
     this.container.querySelector("#playerUiRoot")?.remove();
 
     const root = document.createElement("div");
@@ -1122,7 +1172,7 @@ export const PlayerScreen = {
       <div id="playerControlsOverlay" class="player-controls-overlay">
         <div class="player-controls-top">
           <div id="playerClock" class="player-clock">--:--</div>
-          <div class="player-ends-at">Ends at: <span id="playerEndsAt">--:--</span></div>
+          <div id="playerEndsAt" class="player-ends-at">${escapeHtml(t("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
         </div>
 
         <div class="player-controls-bottom">
@@ -1131,19 +1181,22 @@ export const PlayerScreen = {
             <div class="player-subtitle">${escapeHtml(this.params.playerSubtitle || this.params.episodeLabel || this.params.itemType || "")}</div>
           </div>
 
-          <div class="player-progress-track">
-            <div id="playerProgressFill" class="player-progress-fill"></div>
-          </div>
+          <div class="player-controls-bar">
+            <div class="player-progress-track">
+              <div id="playerProgressFill" class="player-progress-fill"></div>
+            </div>
 
-          <div class="player-controls-row">
-            <div id="playerControlButtons" class="player-control-buttons"></div>
-            <div id="playerTimeLabel" class="player-time-label">0:00 / 0:00</div>
+            <div class="player-controls-row">
+              <div id="playerControlButtons" class="player-control-buttons"></div>
+              <div id="playerTimeLabel" class="player-time-label">0:00 / 0:00</div>
+            </div>
           </div>
         </div>
       </div>
     `;
 
     this.container.appendChild(root);
+    this.cachePlayerUiRefs(root);
     this.renderControlButtons();
     this.renderSubtitleDialog();
     this.renderAudioDialog();
@@ -1152,8 +1205,43 @@ export const PlayerScreen = {
     this.renderSeekOverlay();
   },
 
+  cachePlayerUiRefs(root = null) {
+    const uiRoot = root || this.container?.querySelector("#playerUiRoot");
+    this.uiRefs = uiRoot ? {
+      root: uiRoot,
+      loadingOverlay: uiRoot.querySelector("#playerLoadingOverlay"),
+      parentalGuide: uiRoot.querySelector("#playerParentalGuide"),
+      aspectToast: uiRoot.querySelector("#playerAspectToast"),
+      seekOverlay: uiRoot.querySelector("#playerSeekOverlay"),
+      seekDirection: uiRoot.querySelector("#playerSeekDirection"),
+      seekPreview: uiRoot.querySelector("#playerSeekPreview"),
+      seekFill: uiRoot.querySelector("#playerSeekFill"),
+      modalBackdrop: uiRoot.querySelector("#playerModalBackdrop"),
+      subtitleDialog: uiRoot.querySelector("#playerSubtitleDialog"),
+      audioDialog: uiRoot.querySelector("#playerAudioDialog"),
+      sourcesPanel: uiRoot.querySelector("#playerSourcesPanel"),
+      controlsOverlay: uiRoot.querySelector("#playerControlsOverlay"),
+      clock: uiRoot.querySelector("#playerClock"),
+      endsAt: uiRoot.querySelector("#playerEndsAt"),
+      progressFill: uiRoot.querySelector("#playerProgressFill"),
+      controlButtons: uiRoot.querySelector("#playerControlButtons"),
+      timeLabel: uiRoot.querySelector("#playerTimeLabel")
+    } : null;
+    this.lastUiTickState = {
+      progressWidth: "",
+      clockText: "",
+      clockMinuteKey: "",
+      endsAtText: "",
+      endsAtMinuteBucket: null,
+      timeLabelText: "",
+      seekWidth: "",
+      seekPreviewText: "",
+      seekDirectionText: ""
+    };
+  },
+
   updateModalBackdrop() {
-    const modalBackdrop = this.container.querySelector("#playerModalBackdrop");
+    const modalBackdrop = this.uiRefs?.modalBackdrop;
     if (!modalBackdrop) {
       return;
     }
@@ -1339,17 +1427,17 @@ export const PlayerScreen = {
         icon: this.paused ? "assets/icons/ic_player_play.svg" : "assets/icons/ic_player_pause.svg",
         title: "Play/Pause"
       },
-      { action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: "Subtitles" },
+      { action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t("subtitle_dialog_title", {}, "Subtitles") },
       {
         action: "audioTrack",
         icon: this.selectedAudioTrackIndex >= 0 || this.selectedManifestAudioTrackId
           ? "assets/icons/ic_player_audio_filled.svg"
           : "assets/icons/ic_player_audio_outline.svg",
-        title: "Audio"
+        title: t("audio_dialog_title", {}, "Audio")
       },
-      { action: "source", icon: "assets/icons/ic_player_source.svg", title: "Sources" },
-      { action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: "Episodes" },
-      { action: "more", label: this.moreActionsVisible ? "<" : ">", title: "More" }
+      { action: "source", icon: "assets/icons/ic_player_source.svg", title: t("sources_title", {}, "Sources") },
+      { action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t("episodes_panel_title", {}, "Episodes") },
+      { action: "more", label: this.moreActionsVisible ? "<" : ">", title: t("player_more_actions_title", {}, "More Actions") }
     ];
 
     if (!this.moreActionsVisible) {
@@ -1358,14 +1446,14 @@ export const PlayerScreen = {
 
     return [
       ...base.slice(0, Math.max(0, base.length - 1)),
-      { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: "Display Mode" },
-      { action: "source", icon: "assets/icons/ic_player_source.svg", title: "Sources" },
-      { action: "backFromMore", label: "<", title: "Back" }
+      { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t("player_more_aspect_ratio", {}, "Aspect Ratio") },
+      { action: "source", icon: "assets/icons/ic_player_source.svg", title: t("sources_title", {}, "Sources") },
+      { action: "backFromMore", label: "<", title: t("player_go_back", {}, "Back") }
     ];
   },
 
   renderControlButtons() {
-    const wrap = this.container.querySelector("#playerControlButtons");
+    const wrap = this.uiRefs?.controlButtons;
     if (!wrap) {
       return;
     }
@@ -1397,7 +1485,7 @@ export const PlayerScreen = {
 
   setControlsVisible(visible, { focus = false } = {}) {
     this.controlsVisible = Boolean(visible);
-    const overlay = this.container.querySelector("#playerControlsOverlay");
+    const overlay = this.uiRefs?.controlsOverlay;
     if (!overlay) {
       return;
     }
@@ -1467,7 +1555,7 @@ export const PlayerScreen = {
   },
 
   updateLoadingVisibility() {
-    const overlay = this.container.querySelector("#playerLoadingOverlay");
+    const overlay = this.uiRefs?.loadingOverlay;
     if (!overlay) {
       return;
     }
@@ -1478,25 +1566,48 @@ export const PlayerScreen = {
     const current = this.getPlaybackCurrentSeconds();
     const duration = this.getPlaybackDurationSeconds();
     const progress = duration > 0 ? clamp(current / duration, 0, 1) : 0;
-
-    const progressFill = this.container.querySelector("#playerProgressFill");
+    const uiRefs = this.uiRefs || {};
+    const uiState = this.lastUiTickState || (this.lastUiTickState = {});
+    const progressFill = uiRefs.progressFill;
     if (progressFill) {
-      progressFill.style.width = `${Math.round(progress * 10000) / 100}%`;
+      const nextWidth = `${Math.round(progress * 10000) / 100}%`;
+      if (uiState.progressWidth !== nextWidth) {
+        progressFill.style.width = nextWidth;
+        uiState.progressWidth = nextWidth;
+      }
     }
 
-    const clock = this.container.querySelector("#playerClock");
+    const clock = uiRefs.clock;
     if (clock) {
-      clock.textContent = formatClock(new Date());
+      const now = new Date();
+      const nextClockMinuteKey = `${now.getHours()}:${now.getMinutes()}`;
+      if (uiState.clockMinuteKey !== nextClockMinuteKey) {
+        const nextClockText = formatClock(now);
+        clock.textContent = nextClockText;
+        uiState.clockText = nextClockText;
+        uiState.clockMinuteKey = nextClockMinuteKey;
+      }
     }
 
-    const endsAt = this.container.querySelector("#playerEndsAt");
+    const endsAt = uiRefs.endsAt;
     if (endsAt) {
-      endsAt.textContent = formatEndsAt(current, duration);
+      const remainingMs = Math.max(0, (Number(duration || 0) - Number(current || 0)) * 1000);
+      const nextEndsAtMinuteBucket = duration > 0 ? Math.floor((Date.now() + remainingMs) / 60000) : -1;
+      if (uiState.endsAtMinuteBucket !== nextEndsAtMinuteBucket) {
+        const nextEndsAtText = t("player_ends_at", [formatEndsAt(current, duration)], "Ends at %1$s");
+        endsAt.textContent = nextEndsAtText;
+        uiState.endsAtText = nextEndsAtText;
+        uiState.endsAtMinuteBucket = nextEndsAtMinuteBucket;
+      }
     }
 
-    const timeLabel = this.container.querySelector("#playerTimeLabel");
+    const timeLabel = uiRefs.timeLabel;
     if (timeLabel) {
-      timeLabel.textContent = `${formatTime(current)} / ${formatTime(duration)}`;
+      const nextTimeLabel = `${formatTime(current)} / ${formatTime(duration)}`;
+      if (uiState.timeLabelText !== nextTimeLabel) {
+        timeLabel.textContent = nextTimeLabel;
+        uiState.timeLabelText = nextTimeLabel;
+      }
     }
 
     if (this.seekOverlayVisible && this.seekPreviewSeconds == null) {
@@ -1504,10 +1615,10 @@ export const PlayerScreen = {
     }
   },
   renderSeekOverlay() {
-    const overlay = this.container.querySelector("#playerSeekOverlay");
-    const directionNode = this.container.querySelector("#playerSeekDirection");
-    const previewNode = this.container.querySelector("#playerSeekPreview");
-    const fillNode = this.container.querySelector("#playerSeekFill");
+    const overlay = this.uiRefs?.seekOverlay;
+    const directionNode = this.uiRefs?.seekDirection;
+    const previewNode = this.uiRefs?.seekPreview;
+    const fillNode = this.uiRefs?.seekFill;
     if (!overlay || !directionNode || !previewNode || !fillNode) {
       return;
     }
@@ -1518,11 +1629,24 @@ export const PlayerScreen = {
       : this.getPlaybackCurrentSeconds();
 
     overlay.classList.toggle("hidden", !this.seekOverlayVisible);
-    previewNode.textContent = `${formatTime(currentPreview)} / ${formatTime(duration)}`;
-    directionNode.textContent = this.seekPreviewDirection < 0 ? "<<" : this.seekPreviewDirection > 0 ? ">>" : "";
+    const uiState = this.lastUiTickState || (this.lastUiTickState = {});
+    const nextPreviewText = `${formatTime(currentPreview)} / ${formatTime(duration)}`;
+    const nextDirectionText = this.seekPreviewDirection < 0 ? "<<" : this.seekPreviewDirection > 0 ? ">>" : "";
+    if (uiState.seekPreviewText !== nextPreviewText) {
+      previewNode.textContent = nextPreviewText;
+      uiState.seekPreviewText = nextPreviewText;
+    }
+    if (uiState.seekDirectionText !== nextDirectionText) {
+      directionNode.textContent = nextDirectionText;
+      uiState.seekDirectionText = nextDirectionText;
+    }
 
     const percent = duration > 0 ? clamp(currentPreview / duration, 0, 1) : 0;
-    fillNode.style.width = `${Math.round(percent * 10000) / 100}%`;
+    const nextSeekWidth = `${Math.round(percent * 10000) / 100}%`;
+    if (uiState.seekWidth !== nextSeekWidth) {
+      fillNode.style.width = nextSeekWidth;
+      uiState.seekWidth = nextSeekWidth;
+    }
   },
 
   beginSeekPreview(direction, isRepeat = false) {
@@ -1888,10 +2012,10 @@ export const PlayerScreen = {
 
   getSubtitleTabs() {
     return [
-      { id: "builtIn", label: "Built-in" },
-      { id: "addons", label: "Addons" },
-      { id: "style", label: "Style" },
-      { id: "delay", label: "Delay" }
+      { id: "builtIn", label: t("subtitle_tab_builtin", {}, "Built-in") },
+      { id: "addons", label: t("subtitle_tab_addons", {}, "Addons") },
+      { id: "style", label: t("subtitle_tab_style", {}, "Style") },
+      { id: "delay", label: t("subtitle_tab_delay", {}, "Delay") }
     ];
   },
 
@@ -2173,7 +2297,7 @@ export const PlayerScreen = {
         return [
           {
             id: "subtitle-off",
-            label: "None",
+            label: t("subtitle_none", {}, "None"),
             secondary: "",
             selected: selectedAvPlaySubtitleTrack < 0,
             trackIndex: -1,
@@ -2184,7 +2308,7 @@ export const PlayerScreen = {
             const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
             return {
               id: `subtitle-avplay-${normalizedTrackIndex}`,
-              label: track?.label || `Subtitle ${index + 1}`,
+              label: track?.label || subtitleLabel(index),
               secondary: String(track?.language || "").toUpperCase(),
               selected: normalizedTrackIndex === selectedAvPlaySubtitleTrack,
               trackIndex: null,
@@ -2198,7 +2322,7 @@ export const PlayerScreen = {
         return [
           {
             id: "subtitle-off",
-            label: "None",
+            label: t("subtitle_none", {}, "None"),
             secondary: "",
             selected: selectedDashSubtitleTrack < 0,
             trackIndex: -1,
@@ -2206,7 +2330,7 @@ export const PlayerScreen = {
           },
           ...dashSubtitleTracks.map((track, index) => ({
             id: `subtitle-dash-${index}-${track?.id ?? ""}`,
-            label: track?.label || `Subtitle ${index + 1}`,
+            label: track?.label || subtitleLabel(index),
             secondary: String(track?.language || "").toUpperCase(),
             selected: index === selectedDashSubtitleTrack,
             trackIndex: null,
@@ -2219,7 +2343,7 @@ export const PlayerScreen = {
         return [
           {
             id: "subtitle-off",
-            label: "None",
+            label: t("subtitle_none", {}, "None"),
             secondary: "",
             selected: !this.selectedManifestSubtitleTrackId,
             trackIndex: -1,
@@ -2227,7 +2351,7 @@ export const PlayerScreen = {
           },
           ...this.manifestSubtitleTracks.map((track) => ({
             id: `subtitle-manifest-${track.id}`,
-            label: track.name || "Subtitle",
+            label: track.name || t("subtitle_dialog_title", {}, "Subtitle"),
             secondary: String(track.language || "").toUpperCase(),
             selected: this.selectedManifestSubtitleTrackId === track.id,
             trackIndex: null,
@@ -2239,14 +2363,14 @@ export const PlayerScreen = {
       const entries = [
         {
           id: "subtitle-off",
-          label: "None",
+          label: t("subtitle_none", {}, "None"),
           secondary: "",
           selected: this.selectedSubtitleTrackIndex < 0 && !this.selectedManifestSubtitleTrackId,
           trackIndex: -1
         },
         ...builtInTracks.map((track, index) => ({
           id: `subtitle-built-${index}`,
-          label: track.label || `Subtitle ${index + 1}`,
+          label: track.label || subtitleLabel(index),
           secondary: String(track.language || "").toUpperCase(),
           selected: index === this.selectedSubtitleTrackIndex,
           trackIndex: index
@@ -2277,8 +2401,8 @@ export const PlayerScreen = {
             const subtitleId = subtitle.id || subtitle.url || `subtitle-${index}`;
             return {
               id: `subtitle-addon-fallback-${subtitleId}`,
-              label: subtitle.lang || `Addon subtitle ${index + 1}`,
-              secondary: subtitle.addonName || "Addon",
+              label: subtitle.lang || subtitleLabel(index),
+              secondary: subtitle.addonName || t("nav_addons", {}, "Addon"),
               selected: this.selectedAddonSubtitleId === subtitleId,
               trackIndex: null,
               subtitleIndex: index,
@@ -2313,7 +2437,7 @@ export const PlayerScreen = {
         const absoluteIndex = builtInBoundary + relativeIndex;
         return {
           id: `subtitle-addon-${absoluteIndex}`,
-          label: track.label || `Addon subtitle ${relativeIndex + 1}`,
+          label: track.label || subtitleLabel(relativeIndex),
           secondary: String(track.language || "").toUpperCase(),
           selected: absoluteIndex === this.selectedSubtitleTrackIndex,
           trackIndex: absoluteIndex
@@ -2325,7 +2449,7 @@ export const PlayerScreen = {
       return [
         {
           id: "subtitle-style-default",
-          label: "Default",
+          label: t("subtitle_style_defaults", {}, "Default"),
           secondary: "System style",
           selected: true,
           disabled: true,
@@ -2535,7 +2659,7 @@ export const PlayerScreen = {
   },
 
   renderSubtitleDialog() {
-    const dialog = this.container.querySelector("#playerSubtitleDialog");
+    const dialog = this.uiRefs?.subtitleDialog;
     if (!dialog) {
       return;
     }
@@ -2552,7 +2676,7 @@ export const PlayerScreen = {
     this.subtitleDialogIndex = focusIndex;
 
     dialog.innerHTML = `
-      <div class="player-dialog-title">Subtitles</div>
+      <div class="player-dialog-title">${escapeHtml(t("subtitle_dialog_title", {}, "Subtitles"))}</div>
       <div class="player-dialog-tabs">
         ${tabs.map((tab) => `
           <div class="player-dialog-tab${tab.id === this.subtitleDialogTab ? " selected" : ""}">
@@ -2615,7 +2739,7 @@ export const PlayerScreen = {
         const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
         return {
           id: `audio-avplay-${normalizedTrackIndex}`,
-          label: track?.label || `Track ${index + 1}`,
+          label: track?.label || audioLabel(index),
           secondary: String(track?.language || "").toUpperCase(),
           selected: normalizedTrackIndex === selectedAvPlayAudioTrack
             || (selectedAvPlayAudioTrack < 0 && normalizedTrackIndex === this.selectedAudioTrackIndex),
@@ -2633,7 +2757,7 @@ export const PlayerScreen = {
         : -1;
       return dashAudioTracks.map((track, index) => ({
         id: `audio-dash-${index}-${track?.id ?? ""}`,
-        label: track?.label || `Track ${index + 1}`,
+        label: track?.label || audioLabel(index),
         secondary: String(track?.language || "").toUpperCase(),
         selected: index === selectedDashAudioTrack || (selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex),
         dashAudioTrackIndex: index
@@ -2649,7 +2773,7 @@ export const PlayerScreen = {
         : -1;
       return hlsAudioTracks.map((track, index) => ({
         id: `audio-hls-${index}-${track?.id ?? track?.name ?? track?.lang ?? ""}`,
-        label: track?.name || track?.lang || track?.language || `Track ${index + 1}`,
+        label: track?.name || track?.lang || track?.language || audioLabel(index),
         secondary: String(track?.lang || track?.language || "").toUpperCase(),
         selected: index === selectedHlsAudioTrack || (selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex),
         hlsAudioTrackIndex: index
@@ -2660,7 +2784,7 @@ export const PlayerScreen = {
     if (audioTracks.length) {
       return audioTracks.map((track, index) => ({
         id: `audio-track-${index}`,
-        label: track.label || `Track ${index + 1}`,
+        label: track.label || audioLabel(index),
         secondary: String(track.language || "").toUpperCase(),
         selected: index === this.selectedAudioTrackIndex,
         audioTrackIndex: index
@@ -2670,7 +2794,7 @@ export const PlayerScreen = {
     if (this.manifestAudioTracks.length) {
       return this.manifestAudioTracks.map((track) => ({
         id: `audio-manifest-${track.id}`,
-        label: track.name || "Audio",
+        label: track.name || t("audio_dialog_title", {}, "Audio"),
         secondary: String(track.language || "").toUpperCase(),
         selected: this.selectedManifestAudioTrackId === track.id,
         manifestAudioTrackId: track.id
@@ -2783,7 +2907,7 @@ export const PlayerScreen = {
   },
 
   renderAudioDialog() {
-    const dialog = this.container.querySelector("#playerAudioDialog");
+    const dialog = this.uiRefs?.audioDialog;
     if (!dialog) {
       return;
     }
@@ -2799,7 +2923,7 @@ export const PlayerScreen = {
       const loading = this.isCurrentSourceAdaptiveManifest() && (this.manifestLoading || this.trackDiscoveryInProgress);
       const emptyMessage = loading ? "Loading audio tracks..." : this.getUnavailableTrackMessage("audio");
       dialog.innerHTML = `
-        <div class="player-dialog-title">Audio</div>
+        <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
         <div class="player-dialog-empty">${emptyMessage}</div>
       `;
       return;
@@ -2808,7 +2932,7 @@ export const PlayerScreen = {
     this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
 
     dialog.innerHTML = `
-      <div class="player-dialog-title">Audio</div>
+      <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
       <div class="player-dialog-list">
         ${entries.map((entry, index) => {
           const selected = entry.selected;
@@ -2972,7 +3096,7 @@ export const PlayerScreen = {
       }
     } catch (error) {
       if (token === this.sourceLoadToken) {
-        this.sourcesError = "Failed to load sources";
+        this.sourcesError = t("panel_failed_load_streams", {}, "Failed to load streams");
       }
     } finally {
       if (token === this.sourceLoadToken) {
@@ -2983,7 +3107,7 @@ export const PlayerScreen = {
   },
 
   renderSourcesPanel() {
-    const panel = this.container.querySelector("#playerSourcesPanel");
+    const panel = this.uiRefs?.sourcesPanel;
     if (!panel) {
       return;
     }
@@ -3000,10 +3124,10 @@ export const PlayerScreen = {
 
     panel.innerHTML = `
       <div class="player-sources-header">
-        <div class="player-sources-title">Sources</div>
+        <div class="player-sources-title">${escapeHtml(t("sources_title", {}, "Sources"))}</div>
         <div class="player-sources-actions">
-          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">Reload</button>
-          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">Close</button>
+          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">${escapeHtml(t("sources_reload", {}, "Reload"))}</button>
+          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">${escapeHtml(t("sources_close", {}, "Close"))}</button>
         </div>
       </div>
 
@@ -3013,17 +3137,17 @@ export const PlayerScreen = {
           const focused = this.sourcesFocus.zone === "filter" && this.sourcesFocus.index === index;
           return `
             <div class="player-sources-filter${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              ${escapeHtml(filter === "all" ? "All" : filter)}
+              ${escapeHtml(filter === "all" ? t("subtitle_all", {}, "All") : filter)}
             </div>
           `;
         }).join("")}
       </div>
 
       <div class="player-sources-list">
-        ${this.sourcesLoading ? `<div class="player-sources-empty">Loading sources...</div>` : ""}
+        ${this.sourcesLoading ? `<div class="player-sources-empty">${escapeHtml(t("stream_finding_source", {}, "Finding stream source"))}</div>` : ""}
         ${this.sourcesError ? `<div class="player-sources-empty">${escapeHtml(this.sourcesError)}</div>` : ""}
         ${!this.sourcesLoading && !filtered.length
-          ? `<div class="player-sources-empty">No sources found.</div>`
+          ? `<div class="player-sources-empty">${escapeHtml(t("sources_no_streams", {}, "No streams found"))}</div>`
           : filtered.map((stream, index) => {
             const focused = this.sourcesFocus.zone === "list" && this.sourcesFocus.index === index;
             const isCurrent = this.streamCandidates[this.currentStreamIndex]?.url === stream.url;
@@ -3038,8 +3162,8 @@ export const PlayerScreen = {
                   </div>
                 </div>
                 <div class="player-source-side">
-                  <div class="player-source-addon">${escapeHtml(stream.addonName || "Addon")}</div>
-                  ${isCurrent ? `<div class="player-source-playing">Playing</div>` : ""}
+                  <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
+                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>` : ""}
                 </div>
               </article>
             `;
@@ -3179,7 +3303,7 @@ export const PlayerScreen = {
   },
 
   showAspectToast(label) {
-    const toast = this.container.querySelector("#playerAspectToast");
+    const toast = this.uiRefs?.aspectToast;
     if (!toast) {
       return;
     }
@@ -3212,7 +3336,7 @@ export const PlayerScreen = {
     this.applyAspectMode({ showToast: true });
   },
   renderParentalGuideOverlay() {
-    const overlay = this.container.querySelector("#playerParentalGuide");
+    const overlay = this.uiRefs?.parentalGuide;
     if (!overlay) {
       return;
     }
@@ -3298,15 +3422,15 @@ export const PlayerScreen = {
       const selectedClass = selected ? " selected" : "";
       return `
         <div class="player-episode-item${selectedClass}">
-          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml(episode.title || "Episode")}</div>
+          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml(episode.title || t("episodes_episode", {}, "Episode"))}</div>
           <div class="player-episode-item-subtitle">${escapeHtml(episode.overview || "")}</div>
         </div>
       `;
     }).join("");
 
     panel.innerHTML = `
-      <div class="player-episode-panel-title">Episodes</div>
-      <div class="player-episode-panel-hint">UP/DOWN select, OK play, BACK close</div>
+      <div class="player-episode-panel-title">${escapeHtml(t("episodes_panel_title", {}, "Episodes"))}</div>
+      <div class="player-episode-panel-hint">${escapeHtml(buildEpisodePanelHint())}</div>
       ${cards}
     `;
     this.container.appendChild(panel);
@@ -3859,6 +3983,8 @@ export const PlayerScreen = {
       this.container.querySelector("#playerUiRoot")?.remove();
       this.container.querySelector("#episodeSidePanel")?.remove();
     }
+    this.uiRefs = null;
+    this.lastUiTickState = null;
 
     if (this.endedHandler && PlayerController.video) {
       PlayerController.video.removeEventListener("ended", this.endedHandler);
