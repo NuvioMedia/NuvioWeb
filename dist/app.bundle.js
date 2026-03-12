@@ -133,6 +133,7 @@
   var ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
   var ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
   var PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
+  var TMDB_API_KEY = String(runtimeEnv.TMDB_API_KEY || "").trim();
 
   // js/core/auth/authManager.js
   var AuthManagerClass = class {
@@ -1386,10 +1387,9 @@
 
   // js/data/local/tmdbSettingsStore.js
   var KEY3 = "tmdbSettings";
-  var ANDROID_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
   var DEFAULTS3 = {
     enabled: true,
-    apiKey: ANDROID_TMDB_API_KEY,
+    apiKey: TMDB_API_KEY,
     language: "it-IT",
     useArtwork: true,
     useBasicInfo: true,
@@ -1409,7 +1409,6 @@
 
   // js/core/tmdb/tmdbService.js
   var TMDB_BASE_URL = "https://api.themoviedb.org/3";
-  var DEFAULT_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
   function getContentType(type) {
     const normalized = String(type || "").toLowerCase();
     if (normalized === "series" || normalized === "tv" || normalized === "show") {
@@ -1421,7 +1420,7 @@
     async ensureTmdbId(id, type = "movie") {
       var _a, _b;
       const settings = TmdbSettingsStore.get();
-      const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY || "").trim();
+      const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
       if (!settings.enabled || !apiKey) {
         return null;
       }
@@ -1456,7 +1455,6 @@
   // js/core/tmdb/tmdbMetadataService.js
   var TMDB_BASE_URL2 = "https://api.themoviedb.org/3";
   var IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
-  var DEFAULT_TMDB_API_KEY2 = "439c478a771f35c05022f9feabcca01c";
   function resolveType(contentType) {
     const normalized = String(contentType || "").toLowerCase();
     if (normalized === "series" || normalized === "tv" || normalized === "show") {
@@ -1480,7 +1478,7 @@
     async fetchEnrichment({ tmdbId, contentType, language = null } = {}) {
       var _a, _b, _c, _d;
       const settings = TmdbSettingsStore.get();
-      const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY2 || "").trim();
+      const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
       if (!settings.enabled || !apiKey || !tmdbId) {
         return null;
       }
@@ -1522,7 +1520,7 @@
     },
     async fetchSeasonRatings({ tmdbId, seasonNumber, language = null } = {}) {
       const settings = TmdbSettingsStore.get();
-      const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY2 || "").trim();
+      const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
       if (!settings.enabled || !apiKey || !tmdbId || !Number.isFinite(Number(seasonNumber))) {
         return [];
       }
@@ -1541,7 +1539,7 @@
     },
     async fetchMovieCollection({ collectionId, language = null } = {}) {
       const settings = TmdbSettingsStore.get();
-      const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY2 || "").trim();
+      const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
       if (!settings.enabled || !apiKey || !collectionId) {
         return [];
       }

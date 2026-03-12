@@ -17,3 +17,4 @@ export const PUBLIC_APP_URL = String(runtimeEnv.PUBLIC_APP_URL || "").trim();
 export const ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
 export const ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
 export const PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
+export const TMDB_API_KEY = String(runtimeEnv.TMDB_API_KEY || "").trim();

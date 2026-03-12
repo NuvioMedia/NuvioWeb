@@ -1,11 +1,11 @@
 import { LocalStore } from "../../core/storage/localStore.js";
+import { TMDB_API_KEY } from "../../config.js";
 
 const KEY = "tmdbSettings";
-const ANDROID_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 
 const DEFAULTS = {
   enabled: true,
-  apiKey: ANDROID_TMDB_API_KEY,
+  apiKey: TMDB_API_KEY,
   language: "it-IT",
   useArtwork: true,
   useBasicInfo: true,

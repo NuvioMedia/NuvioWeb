@@ -1,5 +1,8 @@
 AGENTS.md
 
+nuvio.env.js
+dist/nuvio.env.js
+
 *.ipk
 
 appinfo.json

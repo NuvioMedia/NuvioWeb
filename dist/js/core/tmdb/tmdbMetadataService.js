@@ -1,8 +1,8 @@
 import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
+import { TMDB_API_KEY } from "../../config.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
-const DEFAULT_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 
 function resolveType(contentType) {
   const normalized = String(contentType || "").toLowerCase();
@@ -32,7 +32,7 @@ export const TmdbMetadataService = {
 
   async fetchEnrichment({ tmdbId, contentType, language = null } = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY || "").trim();
+    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey || !tmdbId) {
       return null;
     }
@@ -85,7 +85,7 @@ export const TmdbMetadataService = {
 
   async fetchSeasonRatings({ tmdbId, seasonNumber, language = null } = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY || "").trim();
+    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey || !tmdbId || !Number.isFinite(Number(seasonNumber))) {
       return [];
     }
@@ -106,7 +106,7 @@ export const TmdbMetadataService = {
 
   async fetchMovieCollection({ collectionId, language = null } = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY || "").trim();
+    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey || !collectionId) {
       return [];
     }
