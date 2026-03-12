@@ -1153,6 +1153,9 @@ button:focus-visible {
   width: var(--modern-sidebar-collapsed-width);
   z-index: 18;
   pointer-events: none;
+  contain: layout paint style;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .modern-sidebar-shell.expanded {
@@ -1180,6 +1183,9 @@ button:focus-visible {
   opacity: 1;
   transform-origin: top left;
   animation: modernSidebarPanelIn 220ms cubic-bezier(0.2, 0.72, 0.2, 1);
+  contain: layout paint style;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .modern-sidebar-shell.blur-enabled .modern-sidebar-panel {
@@ -1349,6 +1355,17 @@ button:focus-visible {
   background: linear-gradient(180deg, rgba(65, 72, 81, 0.82), rgba(59, 65, 73, 0.78));
   backdrop-filter: blur(16px) saturate(1.12);
   -webkit-backdrop-filter: blur(16px) saturate(1.12);
+}
+
+.modern-sidebar-shell.performance-constrained .modern-sidebar-panel {
+  animation: none;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.22);
+}
+
+.modern-sidebar-shell.performance-constrained.blur-enabled .modern-sidebar-panel,
+.modern-sidebar-shell.performance-constrained.blur-enabled .modern-sidebar-pill-chip {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .modern-sidebar-pill-icon-wrap {
@@ -3984,6 +4001,12 @@ button:focus-visible {
   min-height: var(--home-poster-copy-height);
   height: var(--home-poster-copy-height);
   overflow: hidden;
+}
+
+.home-sidebar.performance-constrained,
+.home-sidebar.performance-constrained .home-nav-item,
+.home-sidebar.performance-constrained .home-nav-label {
+  transition: none;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-copy {

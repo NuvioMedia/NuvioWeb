@@ -14,6 +14,7 @@ import {
   isSelectedSidebarAction,
   isRootSidebarNode,
   renderRootSidebar,
+  setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
@@ -656,14 +657,13 @@ export const SearchScreen = {
 
   async openSidebar() {
     this.captureLiveViewState();
-    const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
     const selected = getRootSidebarSelectedNode(this.container, this.layoutPrefs);
     this.focusZone = "sidebar";
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
-      this.render();
-      return true;
+      setModernSidebarExpanded(this.container, true);
     }
+    const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
     return this.focusSidebarNode(selected || nodes[0] || null);
   },
 
@@ -672,10 +672,9 @@ export const SearchScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
-      this.render();
-      return true;
+      setModernSidebarExpanded(this.container, false);
     }
-    return this.restoreContentFocus(false);
+    return this.restoreContentFocus(false) || true;
   },
 
   restoreContentFocus(preferResults = false) {

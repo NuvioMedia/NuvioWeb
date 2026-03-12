@@ -1,6 +1,7 @@
 import { Router } from "../navigation/router.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { I18n } from "../../i18n/index.js";
+import { Platform } from "../../platform/index.js";
 
 const ROOT_SIDEBAR_ITEMS = [
   { action: "gotoHome", route: "home", labelKey: "sidebar.home", iconType: "material", iconName: "home" },
@@ -119,9 +120,10 @@ export function renderLegacySidebar({
   const profileState = profile || {};
   const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
   const collapsible = Boolean(layout?.collapseSidebar);
+  const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
 
   return `
-    <aside class="home-sidebar root-sidebar root-sidebar-legacy"
+    <aside class="home-sidebar root-sidebar root-sidebar-legacy${performanceConstrained ? " performance-constrained" : ""}"
            data-selected-route="${selectedRoute}"
            data-collapsible="${collapsible ? "true" : "false"}">
       ${showProfileSelector ? `
@@ -159,11 +161,12 @@ export function renderModernSidebar({
   const showPill = selectedRoute !== "search";
   const keepPillExpanded = selectedRoute === "settings";
   const selectedLabel = itemLabel(selectedItem);
+  const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
 
   return `
-    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}" data-selected-route="${selectedRoute}">
+    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">
       ${showPill ? `
-        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}">
+        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}" aria-expanded="${expanded ? "true" : "false"}">
           <img class="modern-sidebar-pill-chevron" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
           <span class="modern-sidebar-pill-chip">
             <span class="modern-sidebar-pill-icon-wrap">${iconMarkup(selectedItem, "modern-sidebar-pill-icon")}</span>
@@ -171,28 +174,26 @@ export function renderModernSidebar({
           </span>
         </button>
       ` : ""}
-      ${expanded ? `
-        <aside class="modern-sidebar-panel">
-          ${showProfileSelector ? `
-            <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
-              <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
-              <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
+      <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
+        ${showProfileSelector ? `
+          <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
+            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+            <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
+          </button>
+        ` : ""}
+        <div class="modern-sidebar-nav-list">
+          ${ROOT_SIDEBAR_ITEMS.map((item) => `
+            <button class="modern-sidebar-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
+                    data-action="${item.action}"
+                    aria-label="${itemLabel(item)}">
+              <span class="modern-sidebar-nav-icon-circle">
+                ${iconMarkup(item, "modern-sidebar-nav-icon")}
+              </span>
+              <span class="modern-sidebar-nav-label">${itemLabel(item)}</span>
             </button>
-          ` : ""}
-          <div class="modern-sidebar-nav-list">
-            ${ROOT_SIDEBAR_ITEMS.map((item) => `
-              <button class="modern-sidebar-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
-                      data-action="${item.action}"
-                      aria-label="${itemLabel(item)}">
-                <span class="modern-sidebar-nav-icon-circle">
-                  ${iconMarkup(item, "modern-sidebar-nav-icon")}
-                </span>
-                <span class="modern-sidebar-nav-label">${itemLabel(item)}</span>
-              </button>
-            `).join("")}
-          </div>
-        </aside>
-      ` : ""}
+          `).join("")}
+        </div>
+      </aside>
     </div>
   `;
 }
@@ -325,6 +326,24 @@ export function setModernSidebarPillIconOnly(container, iconOnly, keepExpanded =
     return;
   }
   pill.classList.toggle("icon-only", Boolean(iconOnly));
+}
+
+export function setModernSidebarExpanded(container, expanded) {
+  const shell = container?.querySelector(".modern-sidebar-shell");
+  if (!shell) {
+    return false;
+  }
+  const panel = shell.querySelector(".modern-sidebar-panel");
+  const pill = shell.querySelector(".modern-sidebar-pill");
+  shell.classList.toggle("expanded", Boolean(expanded));
+  if (panel) {
+    panel.hidden = !expanded;
+    panel.setAttribute("aria-hidden", expanded ? "false" : "true");
+  }
+  if (pill) {
+    pill.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
+  return true;
 }
 
 export function focusWithoutAutoScroll(node) {

@@ -31,6 +31,7 @@ import {
   isSelectedSidebarAction,
   isRootSidebarNode,
   renderRootSidebar,
+  setModernSidebarExpanded,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
 
@@ -1838,8 +1839,7 @@ export const SettingsScreen = {
     this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selectedSidebarNode));
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
-      await this.render();
-      return;
+      setModernSidebarExpanded(this.container, true);
     }
     this.applyFocus();
   },
@@ -1849,8 +1849,7 @@ export const SettingsScreen = {
     this.focusZone = "nav";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
-      await this.render();
-      return;
+      setModernSidebarExpanded(this.container, false);
     }
     this.applyFocus();
   },

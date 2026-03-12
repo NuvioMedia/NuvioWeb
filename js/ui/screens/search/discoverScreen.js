@@ -14,6 +14,7 @@ import {
   isSelectedSidebarAction,
   isRootSidebarNode,
   renderRootSidebar,
+  setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
@@ -369,8 +370,7 @@ export const DiscoverScreen = {
     this.focusZone = "sidebar";
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
-      await this.render();
-      return true;
+      setModernSidebarExpanded(this.container, true);
     }
     return this.focusSidebarNode();
   },
@@ -403,10 +403,9 @@ export const DiscoverScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
-      await this.render();
-      return true;
+      setModernSidebarExpanded(this.container, false);
     }
-    return this.restoreContentFocus();
+    return this.restoreContentFocus() || true;
   },
 
   getKindFromFilterAction(action) {

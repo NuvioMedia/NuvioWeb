@@ -13,6 +13,7 @@ import {
   isSelectedSidebarAction,
   isRootSidebarNode,
   renderRootSidebar,
+  setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
@@ -498,8 +499,7 @@ export const LibraryScreen = {
     this.focusZone = "sidebar";
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
-      await this.render();
-      return true;
+      setModernSidebarExpanded(this.container, true);
     }
     const target = preferredNode
       || getRootSidebarSelectedNode(this.container, this.layoutPrefs)
@@ -516,8 +516,7 @@ export const LibraryScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
-      await this.render();
-      return true;
+      setModernSidebarExpanded(this.container, false);
     }
     const target = preferredNode
       || this.resolveLastMainFocus()

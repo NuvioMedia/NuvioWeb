@@ -2901,8 +2901,9 @@
     const profileState = profile || {};
     const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
     const collapsible = Boolean(layout == null ? void 0 : layout.collapseSidebar);
+    const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
     return `
-    <aside class="home-sidebar root-sidebar root-sidebar-legacy"
+    <aside class="home-sidebar root-sidebar root-sidebar-legacy${performanceConstrained ? " performance-constrained" : ""}"
            data-selected-route="${selectedRoute}"
            data-collapsible="${collapsible ? "true" : "false"}">
       ${showProfileSelector ? `
@@ -2939,10 +2940,11 @@
     const showPill = selectedRoute !== "search";
     const keepPillExpanded = selectedRoute === "settings";
     const selectedLabel = itemLabel(selectedItem);
+    const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
     return `
-    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}" data-selected-route="${selectedRoute}">
+    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">
       ${showPill ? `
-        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}">
+        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}" aria-expanded="${expanded ? "true" : "false"}">
           <img class="modern-sidebar-pill-chevron" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
           <span class="modern-sidebar-pill-chip">
             <span class="modern-sidebar-pill-icon-wrap">${iconMarkup(selectedItem, "modern-sidebar-pill-icon")}</span>
@@ -2950,28 +2952,26 @@
           </span>
         </button>
       ` : ""}
-      ${expanded ? `
-        <aside class="modern-sidebar-panel">
-          ${showProfileSelector ? `
-            <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
-              <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
-              <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
+      <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
+        ${showProfileSelector ? `
+          <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
+            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+            <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
+          </button>
+        ` : ""}
+        <div class="modern-sidebar-nav-list">
+          ${ROOT_SIDEBAR_ITEMS.map((item) => `
+            <button class="modern-sidebar-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
+                    data-action="${item.action}"
+                    aria-label="${itemLabel(item)}">
+              <span class="modern-sidebar-nav-icon-circle">
+                ${iconMarkup(item, "modern-sidebar-nav-icon")}
+              </span>
+              <span class="modern-sidebar-nav-label">${itemLabel(item)}</span>
             </button>
-          ` : ""}
-          <div class="modern-sidebar-nav-list">
-            ${ROOT_SIDEBAR_ITEMS.map((item) => `
-              <button class="modern-sidebar-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
-                      data-action="${item.action}"
-                      aria-label="${itemLabel(item)}">
-                <span class="modern-sidebar-nav-icon-circle">
-                  ${iconMarkup(item, "modern-sidebar-nav-icon")}
-                </span>
-                <span class="modern-sidebar-nav-label">${itemLabel(item)}</span>
-              </button>
-            `).join("")}
-          </div>
-        </aside>
-      ` : ""}
+          `).join("")}
+        </div>
+      </aside>
     </div>
   `;
   }
@@ -3050,6 +3050,23 @@
       return;
     }
     pill.classList.toggle("icon-only", Boolean(iconOnly));
+  }
+  function setModernSidebarExpanded(container, expanded) {
+    const shell = container == null ? void 0 : container.querySelector(".modern-sidebar-shell");
+    if (!shell) {
+      return false;
+    }
+    const panel = shell.querySelector(".modern-sidebar-panel");
+    const pill = shell.querySelector(".modern-sidebar-pill");
+    shell.classList.toggle("expanded", Boolean(expanded));
+    if (panel) {
+      panel.hidden = !expanded;
+      panel.setAttribute("aria-hidden", expanded ? "false" : "true");
+    }
+    if (pill) {
+      pill.setAttribute("aria-expanded", expanded ? "true" : "false");
+    }
+    return true;
   }
   function focusWithoutAutoScroll(node) {
     if (!node || typeof node.focus !== "function") {
@@ -4433,23 +4450,20 @@
       this.collapseFocusedPoster();
     },
     openSidebar() {
-      var _a, _b;
+      var _a, _b, _c;
       if ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) {
         if (this.sidebarExpanded) {
           return true;
         }
         this.sidebarExpanded = true;
-        this.render();
+        setModernSidebarExpanded(this.container, true);
         const target2 = getModernSidebarSelectedNode(this.container);
-        if (target2) {
-          target2.classList.add("focused");
-          this.focusWithoutAutoScroll(target2);
-        }
-        return true;
+        const current = ((_b = this.container) == null ? void 0 : _b.querySelector(".focusable.focused")) || null;
+        return this.focusNode(current, target2) || true;
       }
       const target = getLegacySidebarSelectedNode(this.container);
       if (target) {
-        (_b = this.container) == null ? void 0 : _b.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+        (_c = this.container) == null ? void 0 : _c.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
         target.classList.add("focused");
         this.focusWithoutAutoScroll(target);
         this.setSidebarExpanded(true);
@@ -4458,24 +4472,19 @@
       return false;
     },
     closeSidebarToContent() {
-      var _a, _b, _c, _d, _e, _f, _g, _h;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       if ((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) {
         if (!this.sidebarExpanded) {
           return false;
         }
         const target2 = this.lastMainFocus && this.isMainNode(this.lastMainFocus) ? this.lastMainFocus : ((_d = (_c = (_b = this.navModel) == null ? void 0 : _b.rows) == null ? void 0 : _c[0]) == null ? void 0 : _d[0]) || null;
         this.sidebarExpanded = false;
-        this.render();
-        if (target2) {
-          target2.classList.add("focused");
-          this.focusWithoutAutoScroll(target2);
-          this.ensureTrackHorizontalVisibility(target2, "right");
-          this.ensureMainVerticalVisibility(target2);
-        }
-        return true;
+        setModernSidebarExpanded(this.container, false);
+        const current2 = ((_e = this.container) == null ? void 0 : _e.querySelector(".focusable.focused")) || null;
+        return this.focusNode(current2, target2, "right") || true;
       }
-      const current = (_e = this.container) == null ? void 0 : _e.querySelector(".home-sidebar .focusable.focused");
-      const target = this.lastMainFocus && this.isMainNode(this.lastMainFocus) ? this.lastMainFocus : ((_h = (_g = (_f = this.navModel) == null ? void 0 : _f.rows) == null ? void 0 : _g[0]) == null ? void 0 : _h[0]) || null;
+      const current = (_f = this.container) == null ? void 0 : _f.querySelector(".home-sidebar .focusable.focused");
+      const target = this.lastMainFocus && this.isMainNode(this.lastMainFocus) ? this.lastMainFocus : ((_i = (_h = (_g = this.navModel) == null ? void 0 : _g.rows) == null ? void 0 : _h[0]) == null ? void 0 : _i[0]) || null;
       return this.focusNode(current, target, "right") || true;
     },
     ensureMainVerticalVisibility(target) {
@@ -18706,8 +18715,7 @@
       this.focusZone = "sidebar";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
         this.sidebarExpanded = true;
-        await this.render();
-        return true;
+        setModernSidebarExpanded(this.container, true);
       }
       const target = preferredNode || getRootSidebarSelectedNode(this.container, this.layoutPrefs) || getRootSidebarNodes(this.container, this.layoutPrefs)[0] || null;
       if (!target) {
@@ -18721,8 +18729,7 @@
       this.focusZone = "content";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
         this.sidebarExpanded = false;
-        await this.render();
-        return true;
+        setModernSidebarExpanded(this.container, false);
       }
       const target = preferredNode || this.resolveLastMainFocus() || null;
       if (!target) {
@@ -19536,14 +19543,13 @@
     async openSidebar() {
       var _a;
       this.captureLiveViewState();
-      const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
       const selected = getRootSidebarSelectedNode(this.container, this.layoutPrefs);
       this.focusZone = "sidebar";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
         this.sidebarExpanded = true;
-        this.render();
-        return true;
+        setModernSidebarExpanded(this.container, true);
       }
+      const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
       return this.focusSidebarNode(selected || nodes[0] || null);
     },
     async closeSidebarToContent() {
@@ -19552,10 +19558,9 @@
       this.focusZone = "content";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
         this.sidebarExpanded = false;
-        this.render();
-        return true;
+        setModernSidebarExpanded(this.container, false);
       }
-      return this.restoreContentFocus(false);
+      return this.restoreContentFocus(false) || true;
     },
     restoreContentFocus(preferResults = false) {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
@@ -20337,8 +20342,7 @@
       this.focusZone = "sidebar";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
         this.sidebarExpanded = true;
-        await this.render();
-        return true;
+        setModernSidebarExpanded(this.container, true);
       }
       return this.focusSidebarNode();
     },
@@ -20363,10 +20367,9 @@
       this.focusZone = "content";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
         this.sidebarExpanded = false;
-        await this.render();
-        return true;
+        setModernSidebarExpanded(this.container, false);
       }
-      return this.restoreContentFocus();
+      return this.restoreContentFocus() || true;
     },
     getKindFromFilterAction(action) {
       if (action === "discoverFilterType") return "type";
@@ -22469,8 +22472,7 @@
       this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selectedSidebarNode));
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && !this.sidebarExpanded) {
         this.sidebarExpanded = true;
-        await this.render();
-        return;
+        setModernSidebarExpanded(this.container, true);
       }
       this.applyFocus();
     },
@@ -22480,8 +22482,7 @@
       this.focusZone = "nav";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
         this.sidebarExpanded = false;
-        await this.render();
-        return;
+        setModernSidebarExpanded(this.container, false);
       }
       this.applyFocus();
     },
@@ -23109,7 +23110,8 @@
       if (((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar) && !this.sidebarExpanded) {
         this.sidebarExpanded = true;
         this.focusZone = "sidebar";
-        await this.render();
+        setModernSidebarExpanded(this.container, true);
+        this.applyFocus();
         return;
       }
       this.focusZone = "sidebar";
@@ -23120,7 +23122,8 @@
       this.focusZone = "content";
       if (((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded) {
         this.sidebarExpanded = false;
-        await this.render();
+        setModernSidebarExpanded(this.container, false);
+        this.applyFocus();
         return;
       }
       this.applyFocus();
@@ -23197,7 +23200,8 @@
             this.focusZone = "content";
             if ((_f = this.layoutPrefs) == null ? void 0 : _f.modernSidebar) {
               this.sidebarExpanded = false;
-              await this.render();
+              setModernSidebarExpanded(this.container, false);
+              this.applyFocus();
               return;
             }
             this.applyFocus();
@@ -23216,7 +23220,8 @@
             this.sidebarFocusIndex = Math.max(0, nodes.indexOf(selected));
             if (((_i = this.layoutPrefs) == null ? void 0 : _i.modernSidebar) && !this.sidebarExpanded) {
               this.sidebarExpanded = true;
-              await this.render();
+              setModernSidebarExpanded(this.container, true);
+              this.applyFocus();
             } else {
               this.applyFocus();
             }

@@ -15,6 +15,7 @@ import {
   isSelectedSidebarAction,
   isRootSidebarNode,
   renderRootSidebar,
+  setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
@@ -420,7 +421,8 @@ export const PluginScreen = {
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
       this.focusZone = "sidebar";
-      await this.render();
+      setModernSidebarExpanded(this.container, true);
+      this.applyFocus();
       return;
     }
     this.focusZone = "sidebar";
@@ -431,7 +433,8 @@ export const PluginScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
-      await this.render();
+      setModernSidebarExpanded(this.container, false);
+      this.applyFocus();
       return;
     }
     this.applyFocus();
@@ -515,7 +518,8 @@ export const PluginScreen = {
           this.focusZone = "content";
           if (this.layoutPrefs?.modernSidebar) {
             this.sidebarExpanded = false;
-            await this.render();
+            setModernSidebarExpanded(this.container, false);
+            this.applyFocus();
             return;
           }
           this.applyFocus();
@@ -535,7 +539,8 @@ export const PluginScreen = {
           this.sidebarFocusIndex = Math.max(0, nodes.indexOf(selected));
           if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
             this.sidebarExpanded = true;
-            await this.render();
+            setModernSidebarExpanded(this.container, true);
+            this.applyFocus();
           } else {
             this.applyFocus();
           }

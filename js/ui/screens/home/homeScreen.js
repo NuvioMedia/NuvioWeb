@@ -31,6 +31,7 @@ import {
   focusWithoutAutoScroll,
   isSelectedSidebarAction,
   renderRootSidebar,
+  setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
@@ -1576,13 +1577,10 @@ export const HomeScreen = {
         return true;
       }
       this.sidebarExpanded = true;
-      this.render();
+      setModernSidebarExpanded(this.container, true);
       const target = getModernSidebarSelectedNode(this.container);
-      if (target) {
-        target.classList.add("focused");
-        this.focusWithoutAutoScroll(target);
-      }
-      return true;
+      const current = this.container?.querySelector(".focusable.focused") || null;
+      return this.focusNode(current, target) || true;
     }
     const target = getLegacySidebarSelectedNode(this.container);
     if (target) {
@@ -1604,14 +1602,9 @@ export const HomeScreen = {
         ? this.lastMainFocus
         : (this.navModel?.rows?.[0]?.[0] || null);
       this.sidebarExpanded = false;
-      this.render();
-      if (target) {
-        target.classList.add("focused");
-        this.focusWithoutAutoScroll(target);
-        this.ensureTrackHorizontalVisibility(target, "right");
-        this.ensureMainVerticalVisibility(target);
-      }
-      return true;
+      setModernSidebarExpanded(this.container, false);
+      const current = this.container?.querySelector(".focusable.focused") || null;
+      return this.focusNode(current, target, "right") || true;
     }
     const current = this.container?.querySelector(".home-sidebar .focusable.focused");
     const target = (this.lastMainFocus && this.isMainNode(this.lastMainFocus))
