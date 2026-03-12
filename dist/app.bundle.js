@@ -2445,18 +2445,40 @@
       "common.closed": "Closed",
       "common.comingSoon": "Coming soon.",
       "common.comingSoonWithContext": "{{subject}} Coming soon.",
+      "common.arabic": "Arabic",
+      "common.chinese": "Chinese",
+      "common.dutch": "Dutch",
       "common.english": "English",
+      "common.french": "French",
+      "common.german": "German",
+      "common.hindi": "Hindi",
       "common.htmlOverlay": "HTML overlay",
+      "common.hungarian": "Hungarian",
       "common.italian": "Italian",
+      "common.japanese": "Japanese",
+      "common.korean": "Korean",
       "common.native": "Native",
       "common.open": "Open",
+      "common.polish": "Polish",
+      "common.portuguese": "Portuguese",
       "common.provider": "Provider",
       "common.repository": "Repository",
+      "common.romanian": "Romanian",
+      "common.russian": "Russian",
       "common.selectOption": "Select option",
       "common.soon": "Soon",
+      "common.slovak": "Slovak",
+      "common.slovenian": "Slovenian",
       "common.spanish": "Spanish",
+      "common.swedish": "Swedish",
       "common.system": "System",
+      "common.turkish": "Turkish",
       "common.unknownUser": "User",
+      "common.vietnamese": "Vietnamese",
+      "player.track.audioDescription": "Audio description",
+      "player.track.commentary": "Commentary",
+      "player.track.stereo": "Stereo",
+      "player.track.surround": "Surround",
       "sidebar.profileFallback": "Profile",
       "sidebar.switchProfile": "Switch profile",
       "settings.about.portedBy": "Ported by edoedac0 and WhiteGiso.",
@@ -2514,18 +2536,40 @@
       "common.closed": "Chiuso",
       "common.comingSoon": "In arrivo.",
       "common.comingSoonWithContext": "{{subject}} In arrivo.",
+      "common.arabic": "Arabo",
+      "common.chinese": "Cinese",
+      "common.dutch": "Olandese",
       "common.english": "Inglese",
+      "common.french": "Francese",
+      "common.german": "Tedesco",
+      "common.hindi": "Hindi",
       "common.htmlOverlay": "Overlay HTML",
+      "common.hungarian": "Ungherese",
       "common.italian": "Italiano",
+      "common.japanese": "Giapponese",
+      "common.korean": "Coreano",
       "common.native": "Nativo",
       "common.open": "Aperto",
+      "common.polish": "Polacco",
+      "common.portuguese": "Portoghese",
       "common.provider": "Provider",
       "common.repository": "Repository",
+      "common.romanian": "Rumeno",
+      "common.russian": "Russo",
       "common.selectOption": "Seleziona opzione",
       "common.soon": "Presto",
+      "common.slovak": "Slovacco",
+      "common.slovenian": "Sloveno",
       "common.spanish": "Spagnolo",
+      "common.swedish": "Svedese",
       "common.system": "Sistema",
+      "common.turkish": "Turco",
       "common.unknownUser": "Utente",
+      "common.vietnamese": "Vietnamita",
+      "player.track.audioDescription": "Audiodescrizione",
+      "player.track.commentary": "Commento",
+      "player.track.stereo": "Stereo",
+      "player.track.surround": "Surround",
       "sidebar.profileFallback": "Profilo",
       "sidebar.switchProfile": "Cambia profilo",
       "settings.about.portedBy": "Ported by edoedac0 and WhiteGiso.",
@@ -5675,6 +5719,102 @@
     return webosAvplayEngine;
   }
 
+  // js/platform/webos/webosLunaService.js
+  function getServiceRequest() {
+    var _a, _b;
+    const request = (_b = (_a = globalThis.webOS) == null ? void 0 : _a.service) == null ? void 0 : _b.request;
+    if (typeof request === "function") {
+      return request.bind(globalThis.webOS.service);
+    }
+    return null;
+  }
+  function getPalmServiceBridge() {
+    return typeof globalThis.PalmServiceBridge === "function" ? globalThis.PalmServiceBridge : null;
+  }
+  function buildPalmServiceUrl(service, method) {
+    const normalizedService = String(service || "").trim().replace(/\/+$/, "");
+    const normalizedMethod = String(method || "").trim().replace(/^\/+/, "");
+    if (!normalizedService || !normalizedMethod) {
+      return "";
+    }
+    return `${normalizedService}/${normalizedMethod}`;
+  }
+  function parseBridgePayload(payload) {
+    if (payload && typeof payload === "object") {
+      return payload;
+    }
+    try {
+      return JSON.parse(String(payload || ""));
+    } catch (_) {
+      return {
+        returnValue: false,
+        errorCode: -1,
+        errorText: String(payload || "Invalid Luna payload")
+      };
+    }
+  }
+  var WebOsLunaService = {
+    isAvailable() {
+      return Boolean(getServiceRequest() || getPalmServiceBridge());
+    },
+    request(service, { method = "", parameters = {}, subscribe = false } = {}) {
+      return new Promise((resolve, reject) => {
+        const request = getServiceRequest();
+        if (request) {
+          request(String(service || "").trim(), {
+            method: String(method || "").trim(),
+            parameters: parameters && typeof parameters === "object" ? { ...parameters } : {},
+            subscribe: Boolean(subscribe),
+            onSuccess: (result) => resolve(result || {}),
+            onFailure: (result) => reject(result || {
+              returnValue: false,
+              errorCode: -1,
+              errorText: "Luna request failed"
+            })
+          });
+          return;
+        }
+        const PalmServiceBridge = getPalmServiceBridge();
+        const targetUrl = buildPalmServiceUrl(service, method);
+        if (!PalmServiceBridge || !targetUrl) {
+          reject({
+            returnValue: false,
+            errorCode: -1,
+            errorText: "Luna service bridge unavailable"
+          });
+          return;
+        }
+        const bridge = new PalmServiceBridge();
+        const payload = parameters && typeof parameters === "object" ? { ...parameters } : {};
+        if (subscribe) {
+          payload.subscribe = true;
+        }
+        bridge.onservicecallback = (rawResponse) => {
+          var _a;
+          const parsed = parseBridgePayload(rawResponse);
+          if ((parsed == null ? void 0 : parsed.returnValue) === false || (parsed == null ? void 0 : parsed.errorCode)) {
+            reject(parsed);
+          } else {
+            resolve(parsed || {});
+          }
+          try {
+            (_a = bridge.cancel) == null ? void 0 : _a.call(bridge);
+          } catch (_) {
+          }
+        };
+        try {
+          bridge.call(targetUrl, JSON.stringify(payload));
+        } catch (error) {
+          reject({
+            returnValue: false,
+            errorCode: -1,
+            errorText: String((error == null ? void 0 : error.message) || error || "Luna bridge call failed")
+          });
+        }
+      });
+    }
+  };
+
   // js/core/player/playerController.js
   var PlayerController = {
     video: null,
@@ -5708,6 +5848,12 @@
     currentPlaybackHeaders: {},
     currentPlaybackMediaSourceType: null,
     avplayFallbackAttempts: /* @__PURE__ */ new Set(),
+    playbackEngineAttempts: /* @__PURE__ */ new Map(),
+    playRequestToken: 0,
+    nativeMediaId: "",
+    nativeMediaIdLookupToken: 0,
+    webosDeviceInfoPromise: null,
+    webosUnsupportedAudioCodecs: /* @__PURE__ */ new Set(["dts", "truehd"]),
     isExpectedPlayInterruption(error) {
       const message = String((error == null ? void 0 : error.message) || "").toLowerCase();
       const name = String((error == null ? void 0 : error.name) || "").toLowerCase();
@@ -5716,21 +5862,59 @@
       }
       return message.includes("interrupted by a new load request") || message.includes("the play() request was interrupted");
     },
+    normalizeMimeType(mimeType) {
+      return String(mimeType || "").toLowerCase().split(";")[0].trim();
+    },
     guessMediaMimeType(url) {
       const raw = String(url || "").trim();
       if (!raw) {
         return null;
       }
       const inferByPath = (pathname = "", search = null) => {
+        var _a, _b, _c, _d;
         const path = String(pathname || "").toLowerCase();
+        const formatHint = String(
+          ((_a = search == null ? void 0 : search.get) == null ? void 0 : _a.call(search, "format")) || ((_b = search == null ? void 0 : search.get) == null ? void 0 : _b.call(search, "type")) || ((_c = search == null ? void 0 : search.get) == null ? void 0 : _c.call(search, "mime")) || ((_d = search == null ? void 0 : search.get) == null ? void 0 : _d.call(search, "output")) || ""
+        ).toLowerCase();
         if (path.endsWith(".m3u8")) {
           return "application/vnd.apple.mpegurl";
         }
         if (path.endsWith(".mpd")) {
           return "application/dash+xml";
         }
+        if (path.includes(".ism/manifest") || path.includes(".isml/manifest")) {
+          return "application/vnd.ms-sstr+xml";
+        }
+        if (formatHint === "m3u8" || formatHint === "hls") {
+          return "application/vnd.apple.mpegurl";
+        }
+        if (formatHint === "mpd" || formatHint === "dash") {
+          return "application/dash+xml";
+        }
         if (path.includes("/playlist") && search && (search.has("type") || search.has("rendition"))) {
           return "application/vnd.apple.mpegurl";
+        }
+        const extensionMatch = path.match(/\.(mp4|m4v|mov|webm|mkv|avi|wmv|ts|m2ts|mpg|mpeg|3gp|mp3|aac|flac)(?=($|[/?#&]))/i);
+        if (extensionMatch) {
+          const extension = String(extensionMatch[1] || "").toLowerCase();
+          const directMimeMap = {
+            "3gp": "video/3gpp",
+            aac: "audio/aac",
+            avi: "video/x-msvideo",
+            flac: "audio/flac",
+            m2ts: "video/mp2t",
+            m4v: "video/mp4",
+            mkv: "video/x-matroska",
+            mov: "video/quicktime",
+            mp3: "audio/mpeg",
+            mp4: "video/mp4",
+            mpeg: "video/mpeg",
+            mpg: "video/mpeg",
+            ts: "video/mp2t",
+            webm: "video/webm",
+            wmv: "video/x-ms-wmv"
+          };
+          return directMimeMap[extension] || null;
         }
         return null;
       };
@@ -5742,10 +5926,14 @@
       }
     },
     isLikelyHlsMimeType(mimeType) {
-      return String(mimeType || "").toLowerCase() === "application/vnd.apple.mpegurl";
+      const normalized = this.normalizeMimeType(mimeType);
+      return normalized === "application/vnd.apple.mpegurl" || normalized === "application/x-mpegurl" || normalized === "audio/mpegurl" || normalized === "audio/x-mpegurl";
     },
     isLikelyDashMimeType(mimeType) {
-      return String(mimeType || "").toLowerCase() === "application/dash+xml";
+      return this.normalizeMimeType(mimeType) === "application/dash+xml";
+    },
+    isLikelySmoothStreamingMimeType(mimeType) {
+      return this.normalizeMimeType(mimeType) === "application/vnd.ms-sstr+xml";
     },
     canUseHlsJs() {
       return hlsJsEngine.isSupported();
@@ -5772,6 +5960,63 @@
     canUseAvPlay() {
       return this.getPlatformAvplayEngine().isSupported();
     },
+    isUsingNativePlayback() {
+      return String(this.playbackEngine || "").startsWith("native");
+    },
+    refreshWebOsDeviceInfo() {
+      if (!Platform.isWebOS()) {
+        return Promise.resolve({
+          unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
+        });
+      }
+      if (this.webosDeviceInfoPromise) {
+        return this.webosDeviceInfoPromise;
+      }
+      if (!WebOsLunaService.isAvailable()) {
+        this.webosDeviceInfoPromise = Promise.resolve({
+          unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
+        });
+        return this.webosDeviceInfoPromise;
+      }
+      this.webosDeviceInfoPromise = WebOsLunaService.request("luna://com.webos.service.config", {
+        method: "getConfigs",
+        parameters: {
+          configNames: ["tv.model.edidType"]
+        }
+      }).then((result) => {
+        var _a;
+        const edidType = String(((_a = result == null ? void 0 : result.configs) == null ? void 0 : _a["tv.model.edidType"]) || "").toLowerCase();
+        if (edidType.includes("dts")) {
+          this.webosUnsupportedAudioCodecs.delete("dts");
+        }
+        if (edidType.includes("truehd")) {
+          this.webosUnsupportedAudioCodecs.delete("truehd");
+        }
+        return {
+          unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
+        };
+      }).catch(() => ({
+        unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
+      }));
+      return this.webosDeviceInfoPromise;
+    },
+    getWebOsUnsupportedAudioCodecs() {
+      return Array.from(this.webosUnsupportedAudioCodecs);
+    },
+    getWebOsUnsupportedAudioPenalty(text = "") {
+      const normalizedText = String(text || "").toLowerCase();
+      let penalty = 0;
+      if (this.webosUnsupportedAudioCodecs.has("dts") && /\b(dts-hd|dts:x|dts)\b/.test(normalizedText)) {
+        penalty -= 45;
+      }
+      if (this.webosUnsupportedAudioCodecs.has("truehd") && /\btruehd\b/.test(normalizedText)) {
+        penalty -= 45;
+      }
+      return penalty;
+    },
+    isLikelyUnsupportedWebOsAudioTrackDescription(text = "") {
+      return this.getWebOsUnsupportedAudioPenalty(text) < 0;
+    },
     isLikelyDirectFileUrl(url) {
       const raw = String(url || "").trim();
       if (!raw) {
@@ -5782,7 +6027,7 @@
         probes.push(decodeURIComponent(raw));
       } catch (_) {
       }
-      return probes.some((value) => /\.(mkv|mp4|m4v|mov|webm|avi|ts|m2ts)(?=($|[/?#&]))/i.test(String(value || "")));
+      return probes.some((value) => /\.(mkv|mp4|m4v|mov|webm|avi|wmv|ts|m2ts|mpg|mpeg|3gp)(?=($|[/?#&]))/i.test(String(value || "")));
     },
     isUsingAvPlay() {
       return String(this.playbackEngine || "").endsWith("avplay") && this.avplayActive;
@@ -5800,6 +6045,55 @@
         this.video.dispatchEvent(event);
       } catch (_) {
       }
+    },
+    requestWebOsMediaCommand(method, parameters = {}) {
+      if (!Platform.isWebOS() || !WebOsLunaService.isAvailable()) {
+        return Promise.reject(new Error("webOS Luna media service unavailable"));
+      }
+      return WebOsLunaService.request("luna://com.webos.media", {
+        method,
+        parameters
+      });
+    },
+    resetNativeMediaState() {
+      this.nativeMediaId = "";
+      this.nativeMediaIdLookupToken = Number(this.nativeMediaIdLookupToken || 0) + 1;
+    },
+    syncNativeMediaId() {
+      var _a;
+      const mediaId = String(((_a = this.video) == null ? void 0 : _a.mediaId) || "").trim();
+      if (mediaId) {
+        this.nativeMediaId = mediaId;
+      }
+      return this.nativeMediaId;
+    },
+    waitForNativeMediaId({ maxAttempts = 4, intervalMs = 300 } = {}) {
+      if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
+        return Promise.resolve(null);
+      }
+      const existingMediaId = this.syncNativeMediaId();
+      if (existingMediaId) {
+        return Promise.resolve(existingMediaId);
+      }
+      const lookupToken = Number(this.nativeMediaIdLookupToken || 0) + 1;
+      this.nativeMediaIdLookupToken = lookupToken;
+      return new Promise((resolve) => {
+        let attempts = 0;
+        const poll = () => {
+          if (lookupToken !== this.nativeMediaIdLookupToken) {
+            resolve(null);
+            return;
+          }
+          const mediaId = this.syncNativeMediaId();
+          if (mediaId || attempts >= maxAttempts) {
+            resolve(mediaId || null);
+            return;
+          }
+          attempts += 1;
+          setTimeout(poll, intervalMs);
+        };
+        poll();
+      });
     },
     stopAvPlayTickTimer() {
       if (this.avplayTickTimer) {
@@ -5882,6 +6176,19 @@
         track.language || track.lang || extraInfo.track_lang || extraInfo.language || ""
       ).trim();
     },
+    pickAvPlayExtraValue(extraInfo = {}, keys = []) {
+      for (const key of keys) {
+        const value = extraInfo == null ? void 0 : extraInfo[key];
+        if (value === null || value === void 0) {
+          continue;
+        }
+        const text = String(value).trim();
+        if (text) {
+          return text;
+        }
+      }
+      return "";
+    },
     syncAvPlayTrackInfo() {
       if (!this.isUsingAvPlay()) {
         this.avplayAudioTracks = [];
@@ -5919,10 +6226,36 @@
       this.avplayAudioTracks = totalTracks.filter((track) => this.normalizeAvPlayTrackType(track == null ? void 0 : track.type) === "AUDIO").map((track, index) => {
         const trackIndex = Number(track == null ? void 0 : track.index);
         const normalizedTrackIndex = Number.isFinite(trackIndex) ? trackIndex : index;
+        const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
+        const forcedValue = this.pickAvPlayExtraValue(extraInfo, [
+          "forced",
+          "is_forced"
+        ]);
         return {
           id: `avplay-audio-${normalizedTrackIndex}`,
           label: this.pickAvPlayTrackLabel(track, index, "Track"),
           language: this.pickAvPlayTrackLanguage(track),
+          channels: this.pickAvPlayExtraValue(extraInfo, [
+            "channels",
+            "channel",
+            "audio_channel",
+            "audio_channel_count",
+            "channel_layout"
+          ]),
+          codec: this.pickAvPlayExtraValue(extraInfo, [
+            "codec",
+            "audio_type",
+            "audioType",
+            "audioCodec",
+            "fourCC"
+          ]),
+          characteristics: this.pickAvPlayExtraValue(extraInfo, [
+            "characteristics",
+            "role",
+            "type"
+          ]),
+          forced: /^(1|true|yes)$/i.test(forcedValue),
+          extraInfo,
           avplayTrackIndex: normalizedTrackIndex
         };
       });
@@ -6279,6 +6612,9 @@
       }
       const targetMs = Math.max(0, Math.floor(seconds * 1e3));
       try {
+        this.avplayReady = false;
+        this.emitVideoEvent("waiting", { playbackEngine: this.playbackEngine });
+        this.emitVideoEvent("seeking", { playbackEngine: this.playbackEngine });
         if (typeof avplay.seekTo === "function") {
           avplay.seekTo(targetMs);
         } else {
@@ -6291,6 +6627,15 @@
         }
         this.avplayCurrentTimeMs = targetMs;
         this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine });
+        setTimeout(() => {
+          if (!this.isUsingAvPlay()) {
+            return;
+          }
+          this.refreshAvPlayTimeline();
+          this.avplayReady = true;
+          this.emitVideoEvent("seeked", { playbackEngine: this.playbackEngine });
+          this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
+        }, 120);
         return true;
       } catch (_) {
         return false;
@@ -6333,19 +6678,114 @@
       });
       return true;
     },
+    getAttemptedPlaybackEngines(url = this.currentPlaybackUrl) {
+      const normalizedUrl = String(url || "").trim();
+      if (!normalizedUrl) {
+        return /* @__PURE__ */ new Set();
+      }
+      return new Set(this.playbackEngineAttempts.get(normalizedUrl) || []);
+    },
+    rememberPlaybackEngineAttempt(url, engineName, { reset = false } = {}) {
+      const normalizedUrl = String(url || "").trim();
+      const normalizedEngine = String(engineName || "").trim();
+      if (!normalizedUrl || !normalizedEngine) {
+        return;
+      }
+      const nextSet = reset ? /* @__PURE__ */ new Set() : new Set(this.playbackEngineAttempts.get(normalizedUrl) || []);
+      nextSet.add(normalizedEngine);
+      this.playbackEngineAttempts.set(normalizedUrl, nextSet);
+    },
+    clearPlaybackEngineAttempts(url = null) {
+      const normalizedUrl = String(url || "").trim();
+      if (!normalizedUrl) {
+        this.playbackEngineAttempts.clear();
+        return;
+      }
+      this.playbackEngineAttempts.delete(normalizedUrl);
+    },
+    getPlaybackEngineCandidates(url, sourceType = null) {
+      const normalizedSourceType = String(sourceType || this.guessMediaMimeType(url) || "").trim();
+      const avplayEngine = this.getPlatformAvplayEngineName();
+      const pushCandidate = (target, candidate) => {
+        const normalized = String(candidate || "").trim();
+        if (!normalized || target.includes(normalized)) {
+          return;
+        }
+        target.push(normalized);
+      };
+      if (this.isLikelyHlsMimeType(normalizedSourceType)) {
+        const candidates2 = [];
+        if (this.canPlayNatively("application/vnd.apple.mpegurl")) {
+          pushCandidate(candidates2, "native-hls");
+        }
+        if (this.canUseHlsJs()) {
+          pushCandidate(candidates2, "hls.js");
+        }
+        if (this.canUseAvPlay()) {
+          pushCandidate(candidates2, avplayEngine);
+        }
+        return candidates2;
+      }
+      if (this.isLikelyDashMimeType(normalizedSourceType)) {
+        const candidates2 = [];
+        if (Platform.isWebOS() && this.canPlayNatively("application/dash+xml")) {
+          pushCandidate(candidates2, "native-dash");
+        }
+        if (this.canUseDashJs()) {
+          pushCandidate(candidates2, "dash.js");
+        }
+        if (this.canPlayNatively("application/dash+xml")) {
+          pushCandidate(candidates2, "native-dash");
+        }
+        return candidates2;
+      }
+      if (this.isLikelySmoothStreamingMimeType(normalizedSourceType)) {
+        const candidates2 = [];
+        if (this.canPlayNatively("application/vnd.ms-sstr+xml")) {
+          pushCandidate(candidates2, "native-file");
+        }
+        if (this.canUseAvPlay()) {
+          pushCandidate(candidates2, avplayEngine);
+        }
+        return candidates2;
+      }
+      const candidates = [];
+      if (this.canUseAvPlay()) {
+        pushCandidate(candidates, avplayEngine);
+      }
+      pushCandidate(candidates, "native-file");
+      return candidates;
+    },
+    getAlternativePlaybackEngine(url = this.currentPlaybackUrl, sourceType = this.currentPlaybackMediaSourceType) {
+      const normalizedUrl = String(url || "").trim();
+      if (!normalizedUrl) {
+        return null;
+      }
+      const attemptedEngines = this.getAttemptedPlaybackEngines(normalizedUrl);
+      const currentEngine = String(this.playbackEngine || "").trim();
+      const candidates = this.getPlaybackEngineCandidates(normalizedUrl, sourceType);
+      return candidates.find((candidate) => candidate !== currentEngine && !attemptedEngines.has(candidate)) || null;
+    },
     getPlaybackCapabilities() {
       const supports = (mimeType) => this.canPlayNatively(mimeType);
       const capabilities = {
         avplay: this.canUseAvPlay(),
         hls: supports("application/vnd.apple.mpegurl"),
         dash: supports("application/dash+xml"),
+        smoothStreaming: supports("application/vnd.ms-sstr+xml"),
+        mp4: supports("video/mp4"),
         mp4H264: supports('video/mp4; codecs="avc1.4d401f,mp4a.40.2"'),
         mp4Hevc: supports('video/mp4; codecs="hvc1.1.6.L93.B0,mp4a.40.2"') || supports('video/mp4; codecs="hev1.1.6.L93.B0,mp4a.40.2"'),
         mp4HevcMain10: supports('video/mp4; codecs="hvc1.2.4.L153.B0,mp4a.40.2"') || supports('video/mp4; codecs="hev1.2.4.L153.B0,mp4a.40.2"'),
         mp4Av1: supports('video/mp4; codecs="av01.0.08M.08,mp4a.40.2"'),
         webmVp9: supports('video/webm; codecs="vp9,opus"'),
+        webm: supports("video/webm"),
         mkvH264: supports('video/x-matroska; codecs="avc1.4d401f,mp4a.40.2"') || supports("video/x-matroska"),
+        quicktime: supports("video/quicktime"),
+        mpegTs: supports("video/mp2t"),
         audioAac: supports('audio/mp4; codecs="mp4a.40.2"'),
+        audioMp3: supports("audio/mpeg"),
+        audioFlac: supports("audio/flac"),
         audioAc3: supports('audio/mp4; codecs="ac-3"') || supports('audio/mp4; codecs="dac3"'),
         audioEac3: supports('audio/mp4; codecs="ec-3"') || supports('audio/mp4; codecs="dec3"'),
         dolbyVision: supports('video/mp4; codecs="dvh1.05.06,ec-3"') || supports('video/mp4; codecs="dvhe.05.06,ec-3"')
@@ -6382,11 +6822,11 @@
         this.playbackEngine = "none";
       }
     },
-    applyNativeSource(url, mimeType = null) {
+    applyNativeSource(url, mimeType = null, engineName = "native-file") {
       if (!nativeVideoEngine.load(this.video, url, mimeType)) {
         return false;
       }
-      this.playbackEngine = "native";
+      this.playbackEngine = String(engineName || "native-file");
       return true;
     },
     shouldForwardHeaderToHls(name) {
@@ -6422,11 +6862,17 @@
     },
     buildHlsConfig(requestHeaders = {}) {
       const forwardedHeaders = this.normalizePlaybackHeaders(requestHeaders);
+      const isWebOs = Platform.isWebOS();
       return {
-        enableWorker: true,
+        enableWorker: !isWebOs,
         lowLatencyMode: false,
-        backBufferLength: 90,
-        maxBufferLength: 30,
+        backBufferLength: isWebOs ? 30 : 90,
+        maxBufferLength: isWebOs ? 18 : 30,
+        maxMaxBufferLength: isWebOs ? 24 : 60,
+        maxBufferHole: 0.5,
+        startFragPrefetch: false,
+        fragLoadingTimeOut: isWebOs ? 18e3 : 2e4,
+        manifestLoadingTimeOut: isWebOs ? 18e3 : 2e4,
         xhrSetup: (xhr) => {
           Object.entries(forwardedHeaders).forEach(([headerName, headerValue]) => {
             try {
@@ -6466,31 +6912,71 @@
       }
       this.hlsInstance = hls;
       this.playbackEngine = "hls.js";
+      let networkRecoveryAttempts = 0;
+      let mediaRecoveryAttempts = 0;
       hls.on(Hls.Events.ERROR, (_, data = {}) => {
         if (!(data == null ? void 0 : data.fatal)) {
           return;
         }
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          if (networkRecoveryAttempts >= 1) {
+            this.lastPlaybackErrorCode = 2;
+            this.teardownHlsInstance();
+            this.emitVideoEvent("error", {
+              playbackEngine: "hls.js",
+              mediaErrorCode: 2,
+              hlsErrorType: String(data.type || ""),
+              hlsErrorDetails: String(data.details || "")
+            });
+            return;
+          }
           try {
+            networkRecoveryAttempts += 1;
             hls.startLoad();
             return;
           } catch (_2) {
           }
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          if (mediaRecoveryAttempts >= 1) {
+            this.lastPlaybackErrorCode = 3;
+            this.teardownHlsInstance();
+            this.emitVideoEvent("error", {
+              playbackEngine: "hls.js",
+              mediaErrorCode: 3,
+              hlsErrorType: String(data.type || ""),
+              hlsErrorDetails: String(data.details || "")
+            });
+            return;
+          }
           try {
+            mediaRecoveryAttempts += 1;
             hls.recoverMediaError();
             return;
           } catch (_2) {
           }
         }
+        this.lastPlaybackErrorCode = 4;
         this.teardownHlsInstance();
+        this.emitVideoEvent("error", {
+          playbackEngine: "hls.js",
+          mediaErrorCode: 4,
+          hlsErrorType: String(data.type || ""),
+          hlsErrorDetails: String(data.details || "")
+        });
       });
       hls.on(Hls.Events.MEDIA_ATTACHED, () => {
         try {
           hls.loadSource(url);
         } catch (error) {
           console.warn("HLS source attach failed", error);
+          this.lastPlaybackErrorCode = 4;
+          this.emitVideoEvent("error", {
+            playbackEngine: "hls.js",
+            mediaErrorCode: 4,
+            hlsErrorType: "attach",
+            hlsErrorDetails: String((error == null ? void 0 : error.message) || error || "")
+          });
         }
       });
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -6509,7 +6995,7 @@
       return true;
     },
     playWithDashJs(url) {
-      var _a, _b, _c, _d, _e, _f;
+      var _a, _b, _c, _d, _e, _f, _g, _h;
       if (!this.video || !this.canUseDashJs()) {
         return false;
       }
@@ -6521,9 +7007,15 @@
         if (!player) {
           return false;
         }
+        const isWebOs = Platform.isWebOS();
         (_a = player.updateSettings) == null ? void 0 : _a.call(player, {
           streaming: {
-            fastSwitchEnabled: true
+            fastSwitchEnabled: !isWebOs,
+            lowLatencyEnabled: false,
+            scheduleWhilePaused: false,
+            bufferToKeep: isWebOs ? 8 : 20,
+            bufferPruningInterval: isWebOs ? 10 : 20,
+            stableBufferTime: isWebOs ? 8 : 12
           }
         });
         player.initialize(this.video, url, true);
@@ -6531,11 +7023,35 @@
         const emitTracksChanged = () => {
           this.emitVideoEvent("dashtrackschanged", { playbackEngine: "dash.js" });
         };
+        const emitDashError = (event = {}) => {
+          var _a2, _b2, _c2;
+          const errorText = String(
+            ((_a2 = event == null ? void 0 : event.error) == null ? void 0 : _a2.message) || ((_b2 = event == null ? void 0 : event.event) == null ? void 0 : _b2.message) || (event == null ? void 0 : event.message) || ""
+          ).toLowerCase();
+          let mediaErrorCode = 4;
+          if (errorText.includes("network") || errorText.includes("download") || errorText.includes("manifest")) {
+            mediaErrorCode = 2;
+          } else if (errorText.includes("decode") || errorText.includes("mediasource") || errorText.includes("append")) {
+            mediaErrorCode = 3;
+          }
+          this.lastPlaybackErrorCode = mediaErrorCode;
+          this.emitVideoEvent("error", {
+            playbackEngine: "dash.js",
+            mediaErrorCode,
+            dashError: String(((_c2 = event == null ? void 0 : event.error) == null ? void 0 : _c2.message) || (event == null ? void 0 : event.message) || "")
+          });
+        };
         try {
           (_b = player.on) == null ? void 0 : _b.call(player, dashEvents.STREAM_INITIALIZED, emitTracksChanged);
           (_c = player.on) == null ? void 0 : _c.call(player, dashEvents.TRACK_CHANGE_RENDERED, emitTracksChanged);
           (_d = player.on) == null ? void 0 : _d.call(player, dashEvents.TEXT_TRACKS_ADDED, emitTracksChanged);
           (_e = player.on) == null ? void 0 : _e.call(player, dashEvents.PERIOD_SWITCH_COMPLETED, emitTracksChanged);
+          if (dashEvents.ERROR) {
+            (_f = player.on) == null ? void 0 : _f.call(player, dashEvents.ERROR, emitDashError);
+          }
+          if (dashEvents.PLAYBACK_ERROR) {
+            (_g = player.on) == null ? void 0 : _g.call(player, dashEvents.PLAYBACK_ERROR, emitDashError);
+          }
         } catch (_) {
         }
         this.dashInstance = player;
@@ -6544,10 +7060,16 @@
       } catch (error) {
         console.warn("DASH source attach failed", error);
         try {
-          (_f = player == null ? void 0 : player.reset) == null ? void 0 : _f.call(player);
+          (_h = player == null ? void 0 : player.reset) == null ? void 0 : _h.call(player);
         } catch (_) {
         }
         this.dashInstance = null;
+        this.lastPlaybackErrorCode = 4;
+        this.emitVideoEvent("error", {
+          playbackEngine: "dash.js",
+          mediaErrorCode: 4,
+          dashError: String((error == null ? void 0 : error.message) || error || "")
+        });
         return false;
       }
     },
@@ -6692,50 +7214,157 @@
     setHlsAudioTrack(index) {
       return hlsJsEngine.setAudioTrack(this.hlsInstance, index);
     },
-    attemptVideoPlay({ warningLabel = "Playback start rejected", onRejected = null } = {}) {
+    setNativeAudioTrack(index) {
+      var _a;
+      if (!this.video) {
+        return false;
+      }
+      const targetIndex = Number(index);
+      const audioTrackList = this.video.audioTracks || this.video.webkitAudioTracks || this.video.mozAudioTracks || null;
+      let tracks = [];
+      if (audioTrackList) {
+        try {
+          tracks = Array.from(audioTrackList).filter(Boolean);
+        } catch (_) {
+          const trackCount = Number(audioTrackList.length || 0);
+          for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
+            const track = audioTrackList[trackIndex] || ((_a = audioTrackList.item) == null ? void 0 : _a.call(audioTrackList, trackIndex)) || null;
+            if (track) {
+              tracks.push(track);
+            }
+          }
+        }
+      }
+      if (!Number.isFinite(targetIndex) || targetIndex < 0 || targetIndex >= tracks.length) {
+        return false;
+      }
+      const mediaId = this.syncNativeMediaId();
+      if (mediaId) {
+        this.requestWebOsMediaCommand("selectTrack", {
+          type: "audio",
+          mediaId,
+          index: targetIndex
+        }).catch(() => {
+        });
+      }
+      tracks.forEach((track, trackIndex) => {
+        const selected = trackIndex === targetIndex;
+        try {
+          if ("enabled" in track) {
+            track.enabled = selected;
+          }
+        } catch (_) {
+        }
+        try {
+          if ("selected" in track) {
+            track.selected = selected;
+          }
+        } catch (_) {
+        }
+      });
+      return true;
+    },
+    setNativeTextTrack(index) {
+      var _a;
+      if (!this.video) {
+        return false;
+      }
+      const targetIndex = Number(index);
+      const textTrackList = this.video.textTracks || this.video.webkitTextTracks || this.video.mozTextTracks || null;
+      let tracks = [];
+      if (textTrackList) {
+        try {
+          tracks = Array.from(textTrackList).filter(Boolean);
+        } catch (_) {
+          const trackCount = Number(textTrackList.length || 0);
+          for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
+            const track = textTrackList[trackIndex] || ((_a = textTrackList.item) == null ? void 0 : _a.call(textTrackList, trackIndex)) || null;
+            if (track) {
+              tracks.push(track);
+            }
+          }
+        }
+      }
+      if (!Number.isFinite(targetIndex) || targetIndex < -1 || targetIndex >= tracks.length) {
+        return false;
+      }
+      const mediaId = this.syncNativeMediaId();
+      if (mediaId && Platform.isWebOS()) {
+        if (targetIndex < 0) {
+          this.requestWebOsMediaCommand("setSubtitleEnable", {
+            mediaId,
+            enable: false
+          }).catch(() => {
+          });
+        } else {
+          this.requestWebOsMediaCommand("setSubtitleEnable", {
+            mediaId,
+            enable: true
+          }).catch(() => {
+          });
+          setTimeout(() => {
+            if (mediaId !== this.nativeMediaId) {
+              return;
+            }
+            this.requestWebOsMediaCommand("selectTrack", {
+              type: "text",
+              mediaId,
+              index: targetIndex
+            }).catch(() => {
+            });
+          }, 350);
+        }
+      }
+      tracks.forEach((track, trackIndex) => {
+        try {
+          track.mode = targetIndex >= 0 && trackIndex === targetIndex ? "showing" : "disabled";
+        } catch (_) {
+        }
+      });
+      return true;
+    },
+    attemptVideoPlay({ warningLabel = "Playback start rejected", onRejected = null, beforePlay = null, playToken = null } = {}) {
       if (!this.video) {
         return;
       }
-      const playPromise = this.video.play();
-      if (!playPromise || typeof playPromise.catch !== "function") {
-        return;
-      }
-      playPromise.catch((error) => {
+      Promise.resolve().then(() => beforePlay == null ? void 0 : beforePlay()).then(() => {
+        if (playToken !== null && playToken !== this.playRequestToken) {
+          return null;
+        }
+        return this.video.play();
+      }).then((playPromise) => {
+        if (!playPromise || typeof playPromise.catch !== "function") {
+          return null;
+        }
+        return playPromise.catch((error) => {
+          if (this.isExpectedPlayInterruption(error)) {
+            return null;
+          }
+          if (typeof onRejected === "function") {
+            try {
+              const handled = onRejected(error);
+              if (handled) {
+                return null;
+              }
+            } catch (_) {
+            }
+          }
+          this.isPlaying = false;
+          console.warn(warningLabel, error);
+          return null;
+        });
+      }).catch((error) => {
         if (this.isExpectedPlayInterruption(error)) {
           return;
-        }
-        if (typeof onRejected === "function") {
-          try {
-            const handled = onRejected(error);
-            if (handled) {
-              return;
-            }
-          } catch (_) {
-          }
         }
         this.isPlaying = false;
         console.warn(warningLabel, error);
       });
     },
     choosePlaybackEngine(url, sourceType) {
-      const mimeType = String(sourceType || "").toLowerCase();
-      if (this.isLikelyHlsMimeType(mimeType)) {
-        if (this.canPlayNatively("application/vnd.apple.mpegurl")) {
-          return "native-hls";
-        }
-        if (this.canUseHlsJs()) {
-          return "hls.js";
-        }
-        return "native-hls";
-      }
-      if (this.isLikelyDashMimeType(mimeType)) {
-        if (this.canUseDashJs()) {
-          return "dash.js";
-        }
-        if (this.canPlayNatively("application/dash+xml")) {
-          return "native-dash";
-        }
-        return "native-dash";
+      const candidates = this.getPlaybackEngineCandidates(url, sourceType);
+      if (candidates.length) {
+        return candidates[0];
       }
       if (this.canUseAvPlay()) {
         return this.getPlatformAvplayEngineName();
@@ -6748,6 +7377,7 @@
       this.video.muted = false;
       this.video.defaultMuted = false;
       this.video.volume = 1;
+      this.refreshWebOsDeviceInfo();
       console.log("Runtime probe:", {
         platform: Platform.getName(),
         deviceLabel: Platform.getDeviceLabel(),
@@ -6777,6 +7407,16 @@
       this.video.addEventListener("waiting", () => {
         console.log("Buffering...");
       });
+      const syncNativeMediaId = () => {
+        this.syncNativeMediaId();
+      };
+      this.video.addEventListener("loadedmetadata", syncNativeMediaId);
+      this.video.addEventListener("loadeddata", syncNativeMediaId);
+      this.video.addEventListener("canplay", syncNativeMediaId);
+      this.video.addEventListener("playing", syncNativeMediaId);
+      this.video.addEventListener("emptied", () => {
+        this.resetNativeMediaState();
+      });
       this.video.addEventListener("playing", () => {
         var _a, _b, _c, _d, _e;
         console.log("Playing");
@@ -6784,7 +7424,7 @@
         const audioTrackCount = Number((audioTrackList == null ? void 0 : audioTrackList.length) || 0);
         const probeUrl = String(this.currentPlaybackUrl || ((_d = this.video) == null ? void 0 : _d.currentSrc) || ((_e = this.video) == null ? void 0 : _e.src) || "").trim();
         const isDirectFile = this.isLikelyDirectFileUrl(probeUrl);
-        if (this.playbackEngine === "native" && isDirectFile && audioTrackCount <= 0 && this.canUseAvPlay()) {
+        if (this.isUsingNativePlayback() && isDirectFile && audioTrackCount <= 0 && this.canUseAvPlay()) {
           this.forceAvPlayFallbackForCurrentSource("native_playing_no_audio_tracks");
         }
       });
@@ -6805,9 +7445,10 @@
           currentSrc: ((_i = this.video) == null ? void 0 : _i.currentSrc) || ((_j = this.video) == null ? void 0 : _j.src) || "",
           canUseAvPlay: this.canUseAvPlay(),
           directFileHint: isDirectFile,
-          avplayFallbackTried: fallbackTried
+          avplayFallbackTried: fallbackTried,
+          nativeMediaId: this.nativeMediaId || ""
         });
-        if (this.playbackEngine === "native" && isDirectFile && audioTrackCount <= 0 && this.canUseAvPlay()) {
+        if (this.isUsingNativePlayback() && isDirectFile && audioTrackCount <= 0 && this.canUseAvPlay()) {
           this.forceAvPlayFallbackForCurrentSource("native_no_audio_tracks");
         }
       });
@@ -6857,8 +7498,13 @@
       this.currentPlaybackHeaders = { ...requestHeaders || {} };
       this.currentPlaybackMediaSourceType = mediaSourceType || null;
       this.lastPlaybackErrorCode = 0;
+      const playToken = Number(this.playRequestToken || 0) + 1;
+      this.playRequestToken = playToken;
       const sourceType = String(mediaSourceType || this.guessMediaMimeType(url) || "").trim() || null;
       const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType);
+      this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
+        reset: !forceEngine
+      });
       console.log("Playback engine selected:", {
         engine: preferredEngine,
         sourceType,
@@ -6873,13 +7519,17 @@
       this.video.pause();
       this.video.removeAttribute("src");
       this.video.load();
+      this.resetNativeMediaState();
+      const nativeFallbackEngine = this.isLikelyHlsMimeType(sourceType) ? "native-hls" : this.isLikelyDashMimeType(sourceType) ? "native-dash" : "native-file";
       if (preferredEngine === this.getPlatformAvplayEngineName()) {
         const avplayStarted = this.playWithAvPlay(url);
         console.log("AVPlay start:", avplayStarted ? "ok" : "failed");
         if (!avplayStarted) {
-          this.applyNativeSource(url, null);
+          this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
           this.attemptVideoPlay({
             warningLabel: "Playback start rejected",
+            playToken,
+            beforePlay: () => this.waitForNativeMediaId(),
             onRejected: (error) => {
               if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay()) {
                 return false;
@@ -6895,19 +7545,29 @@
       } else if (preferredEngine === "hls.js") {
         const hlsStarted = this.playWithHlsJs(url, requestHeaders);
         if (!hlsStarted) {
-          this.applyNativeSource(url, sourceType || null);
-          this.attemptVideoPlay({ warningLabel: "Playback start rejected" });
+          this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
+          this.attemptVideoPlay({
+            warningLabel: "Playback start rejected",
+            playToken,
+            beforePlay: () => this.waitForNativeMediaId()
+          });
         }
       } else if (preferredEngine === "dash.js") {
         const dashStarted = this.playWithDashJs(url);
         if (!dashStarted) {
-          this.applyNativeSource(url, sourceType || "application/dash+xml");
+          this.applyNativeSource(url, sourceType || "application/dash+xml", "native-dash");
         }
-        this.attemptVideoPlay({ warningLabel: "DASH playback start rejected" });
+        this.attemptVideoPlay({
+          warningLabel: "DASH playback start rejected",
+          playToken,
+          beforePlay: dashStarted ? null : () => this.waitForNativeMediaId()
+        });
       } else if (preferredEngine === "native-hls") {
-        this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl");
+        this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
         this.attemptVideoPlay({
           warningLabel: "Native HLS playback start rejected",
+          playToken,
+          beforePlay: () => this.waitForNativeMediaId(),
           onRejected: (error) => {
             if (!this.isUnsupportedSourceError(error)) {
               return false;
@@ -6920,12 +7580,28 @@
           }
         });
       } else if (preferredEngine === "native-dash") {
-        this.applyNativeSource(url, sourceType || "application/dash+xml");
-        this.attemptVideoPlay({ warningLabel: "Native DASH playback start rejected" });
+        this.applyNativeSource(url, sourceType || "application/dash+xml", "native-dash");
+        this.attemptVideoPlay({
+          warningLabel: "Native DASH playback start rejected",
+          playToken,
+          beforePlay: () => this.waitForNativeMediaId(),
+          onRejected: (error) => {
+            if (!this.isUnsupportedSourceError(error) || !this.canUseDashJs()) {
+              return false;
+            }
+            const fallbackStarted = this.playWithDashJs(url);
+            if (fallbackStarted) {
+              this.isPlaying = true;
+            }
+            return fallbackStarted;
+          }
+        });
       } else {
-        this.applyNativeSource(url, null);
+        this.applyNativeSource(url, sourceType || null, "native-file");
         this.attemptVideoPlay({
           warningLabel: "Playback start rejected",
+          playToken,
+          beforePlay: () => this.waitForNativeMediaId(),
           onRejected: (error) => {
             if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay() || !this.isLikelyDirectFileUrl(url)) {
               return false;
@@ -7014,6 +7690,7 @@
       this.video.pause();
       this.teardownAdaptiveInstances();
       this.teardownAvPlay();
+      this.resetNativeMediaState();
       this.video.removeAttribute("src");
       Array.from(this.video.querySelectorAll("source")).forEach((node) => node.remove());
       this.video.load();
@@ -7028,6 +7705,8 @@
       this.currentPlaybackMediaSourceType = null;
       this.playbackEngine = "none";
       this.lastPlaybackErrorCode = 0;
+      this.playRequestToken = Number(this.playRequestToken || 0) + 1;
+      this.clearPlaybackEngineAttempts();
       if (this.progressSaveTimer) {
         clearInterval(this.progressSaveTimer);
         this.progressSaveTimer = null;
@@ -7504,6 +8183,60 @@
 
   // js/ui/screens/player/playerScreen.js
   var CLOCK_FORMATTER_CACHE = /* @__PURE__ */ new Map();
+  var LANGUAGE_DISPLAY_NAME_CACHE = /* @__PURE__ */ new Map();
+  var AUDIO_TRACK_LANGUAGE_KEY_BY_CODE = {
+    ar: "common.arabic",
+    de: "common.german",
+    en: "common.english",
+    es: "common.spanish",
+    fr: "common.french",
+    hi: "common.hindi",
+    hu: "common.hungarian",
+    it: "common.italian",
+    ja: "common.japanese",
+    ko: "common.korean",
+    nl: "common.dutch",
+    pl: "common.polish",
+    pt: "common.portuguese",
+    ro: "common.romanian",
+    ru: "common.russian",
+    sk: "common.slovak",
+    sl: "common.slovenian",
+    sv: "common.swedish",
+    tr: "common.turkish",
+    vi: "common.vietnamese",
+    zh: "common.chinese"
+  };
+  var LANGUAGE_CODE_ALIASES = {
+    ara: "ar",
+    chi: "zh",
+    deu: "de",
+    dut: "nl",
+    eng: "en",
+    fra: "fr",
+    fre: "fr",
+    ger: "de",
+    hin: "hi",
+    hun: "hu",
+    ita: "it",
+    jpn: "ja",
+    kor: "ko",
+    nld: "nl",
+    pol: "pl",
+    por: "pt",
+    ron: "ro",
+    rum: "ro",
+    rus: "ru",
+    slk: "sk",
+    slo: "sk",
+    slv: "sl",
+    spa: "es",
+    swe: "sv",
+    tur: "tr",
+    und: "",
+    vie: "vi",
+    zho: "zh"
+  };
   function t2(key, params = {}, fallback = key) {
     return I18n.t(key, params, { fallback });
   }
@@ -7515,6 +8248,231 @@
   }
   function audioLabel(index) {
     return buildIndexedLabel(t2("audio_dialog_title", {}, "Audio"), index);
+  }
+  function cleanDisplayText(value) {
+    return String(value != null ? value : "").replace(/\s+/g, " ").trim();
+  }
+  function normalizeComparableText(value) {
+    return cleanDisplayText(value).toLowerCase().replace(/[_-]+/g, " ");
+  }
+  function pushUniqueText(target, value) {
+    const text = cleanDisplayText(value);
+    if (!text) {
+      return;
+    }
+    const normalized = normalizeComparableText(text);
+    if (target.some((entry) => normalizeComparableText(entry) === normalized)) {
+      return;
+    }
+    target.push(text);
+  }
+  function flattenTrackMetadata(value, into = []) {
+    if (value === null || value === void 0) {
+      return into;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((entry) => flattenTrackMetadata(entry, into));
+      return into;
+    }
+    if (typeof value === "object") {
+      Object.values(value).forEach((entry) => flattenTrackMetadata(entry, into));
+      return into;
+    }
+    const text = cleanDisplayText(value);
+    if (text) {
+      into.push(text);
+    }
+    return into;
+  }
+  function isGenericAudioTrackLabel(value) {
+    const normalized = normalizeComparableText(value);
+    return normalized === "" || /^audio\s*\d*$/.test(normalized) || /^track\s*\d*$/.test(normalized);
+  }
+  function getTrackMetadataStrings(track = {}) {
+    const values = [];
+    [
+      track == null ? void 0 : track.name,
+      track == null ? void 0 : track.label,
+      track == null ? void 0 : track.title,
+      track == null ? void 0 : track.language,
+      track == null ? void 0 : track.lang,
+      track == null ? void 0 : track.channels,
+      track == null ? void 0 : track.characteristics,
+      track == null ? void 0 : track.role,
+      track == null ? void 0 : track.accessibility,
+      track == null ? void 0 : track.codec,
+      track == null ? void 0 : track.codecs,
+      track == null ? void 0 : track.audioCodec,
+      track == null ? void 0 : track.extraInfo,
+      track == null ? void 0 : track.attrs
+    ].forEach((value) => flattenTrackMetadata(value, values));
+    return values;
+  }
+  function normalizeTrackLanguageCode(value) {
+    var _a;
+    const raw = cleanDisplayText(value).toLowerCase();
+    if (!raw || raw === "unknown") {
+      return "";
+    }
+    if (!/^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})*$/i.test(raw)) {
+      return "";
+    }
+    const parts = raw.split(/[-_]/);
+    const base = (_a = LANGUAGE_CODE_ALIASES[parts[0]]) != null ? _a : parts[0];
+    if (!base) {
+      return "";
+    }
+    return [base, ...parts.slice(1)].join("-");
+  }
+  function getTrackLanguageValue(track = {}) {
+    var _a, _b;
+    const candidates = [
+      track == null ? void 0 : track.language,
+      track == null ? void 0 : track.lang,
+      track == null ? void 0 : track.track_lang,
+      (_a = track == null ? void 0 : track.extraInfo) == null ? void 0 : _a.track_lang,
+      (_b = track == null ? void 0 : track.extraInfo) == null ? void 0 : _b.language
+    ];
+    return candidates.find((value) => cleanDisplayText(value)) || "";
+  }
+  function getTrackLanguageLabel(track = {}) {
+    const rawLanguage = cleanDisplayText(getTrackLanguageValue(track));
+    if (!rawLanguage) {
+      return "";
+    }
+    const normalizedCode = normalizeTrackLanguageCode(rawLanguage);
+    const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : "en";
+    if (normalizedCode) {
+      const cacheKey = `${locale}::${normalizedCode}`;
+      if (!LANGUAGE_DISPLAY_NAME_CACHE.has(cacheKey)) {
+        let displayName = "";
+        try {
+          if (typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function") {
+            const formatter = new Intl.DisplayNames([locale], { type: "language" });
+            displayName = cleanDisplayText(formatter.of(normalizedCode));
+          }
+        } catch (_) {
+          displayName = "";
+        }
+        if (!displayName) {
+          const fallbackKey = AUDIO_TRACK_LANGUAGE_KEY_BY_CODE[normalizedCode.split("-")[0]];
+          displayName = fallbackKey ? t2(fallbackKey, {}, rawLanguage.toUpperCase()) : rawLanguage.toUpperCase();
+        }
+        LANGUAGE_DISPLAY_NAME_CACHE.set(cacheKey, displayName);
+      }
+      return LANGUAGE_DISPLAY_NAME_CACHE.get(cacheKey) || "";
+    }
+    return rawLanguage;
+  }
+  function getMeaningfulTrackLabel(track = {}) {
+    const candidates = [track == null ? void 0 : track.name, track == null ? void 0 : track.label, track == null ? void 0 : track.title];
+    for (const candidate of candidates) {
+      const text = cleanDisplayText(candidate);
+      if (!text || isGenericAudioTrackLabel(text)) {
+        continue;
+      }
+      if (normalizeTrackLanguageCode(text)) {
+        continue;
+      }
+      return text;
+    }
+    return "";
+  }
+  function detectChannelLayout(value) {
+    const text = cleanDisplayText(value).toLowerCase();
+    if (!text) {
+      return "";
+    }
+    const explicitLayout = text.match(/\b(7\.1|5\.1|2\.1|2\.0|1\.0)\b/);
+    if (explicitLayout) {
+      if (explicitLayout[1] === "2.0") {
+        return t2("player.track.stereo", {}, "Stereo");
+      }
+      return explicitLayout[1];
+    }
+    const numericMatch = text.match(/\b([0-9]{1,2})(?:ch| channels?)\b/) || text.match(/^([0-9]{1,2})(?:\/[a-z0-9.]+)?$/);
+    if (!numericMatch) {
+      return "";
+    }
+    const channels = Number(numericMatch[1]);
+    if (!Number.isFinite(channels) || channels <= 0) {
+      return "";
+    }
+    if (channels >= 8) {
+      return "7.1";
+    }
+    if (channels >= 6) {
+      return "5.1";
+    }
+    if (channels === 2) {
+      return t2("player.track.stereo", {}, "Stereo");
+    }
+    if (channels === 1) {
+      return "1.0";
+    }
+    return `${channels}ch`;
+  }
+  function getTrackDescriptorLabels(track = {}) {
+    const descriptors = [];
+    const metadataStrings = getTrackMetadataStrings(track);
+    const searchText = metadataStrings.join(" ").toLowerCase();
+    const channelCandidates = [track == null ? void 0 : track.channels, ...metadataStrings];
+    for (const candidate of channelCandidates) {
+      const channelLayout = detectChannelLayout(candidate);
+      if (channelLayout) {
+        pushUniqueText(descriptors, channelLayout);
+        break;
+      }
+    }
+    if (!descriptors.length) {
+      if (/\bstereo\b/.test(searchText)) {
+        pushUniqueText(descriptors, t2("player.track.stereo", {}, "Stereo"));
+      } else if (/\bsurround\b/.test(searchText)) {
+        pushUniqueText(descriptors, t2("player.track.surround", {}, "Surround"));
+      }
+    }
+    if (/\b(atmos|joc)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "Dolby Atmos");
+    } else if (/\b(eac3|ec-3|ddp|dolby digital plus)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "Dolby Digital Plus");
+    } else if (/\b(ac3|ac-3|dolby digital)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "Dolby Digital");
+    } else if (/\b(truehd)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "TrueHD");
+    } else if (/\b(dts:x|dts-hd|dts)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "DTS");
+    } else if (/\b(aac|mp4a)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "AAC");
+    } else if (/\b(opus)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "Opus");
+    } else if (/\b(flac)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "FLAC");
+    } else if (/\b(mp3|mpeg audio)\b/.test(searchText)) {
+      pushUniqueText(descriptors, "MP3");
+    }
+    if (/\bforced\b/.test(searchText) || Boolean(track == null ? void 0 : track.forced)) {
+      pushUniqueText(descriptors, t2("sub_forced_lang", {}, "Forced"));
+    }
+    if (/\b(commentary)\b/.test(searchText)) {
+      pushUniqueText(descriptors, t2("player.track.commentary", {}, "Commentary"));
+    }
+    if (/\b(audio description|audio-description|describes-video|describes video|descriptive)\b/.test(searchText)) {
+      pushUniqueText(descriptors, t2("player.track.audioDescription", {}, "Audio description"));
+    }
+    return descriptors;
+  }
+  function formatAudioTrackDisplay(track = {}, index = 0) {
+    const languageLabel = getTrackLanguageLabel(track);
+    const descriptors = getTrackDescriptorLabels(track);
+    const rawLabel = getMeaningfulTrackLabel(track);
+    const labelParts = [];
+    if (languageLabel) {
+      pushUniqueText(labelParts, languageLabel);
+    }
+    descriptors.forEach((descriptor) => pushUniqueText(labelParts, descriptor));
+    const label = labelParts.length ? labelParts.join(" - ") : rawLabel || audioLabel(index);
+    const secondary = !languageLabel && rawLabel && normalizeComparableText(rawLabel) !== normalizeComparableText(label) ? rawLabel : "";
+    return { label, secondary };
   }
   function formatTime(secondsValue) {
     const total = Math.max(0, Math.floor(Number(secondsValue || 0)));
@@ -7952,7 +8910,12 @@
       if (/\b(mp3|mpeg audio)\b/.test(text)) score += 8;
       if (/\b(stereo|2\.0|2ch)\b/.test(text)) score += 8;
       if (/\b(eac3|ec-3|ddp|atmos)\b/.test(text)) score -= 28;
-      if (/\b(truehd|dts-hd|dts:x|dts)\b/.test(text)) score -= 45;
+      const devicePenalty = typeof PlayerController.getWebOsUnsupportedAudioPenalty === "function" ? Number(PlayerController.getWebOsUnsupportedAudioPenalty(text) || 0) : 0;
+      if (devicePenalty !== 0) {
+        score += devicePenalty;
+      } else if (/\b(truehd|dts-hd|dts:x|dts)\b/.test(text)) {
+        score -= 45;
+      }
       if (/\b(7\.1|8ch)\b/.test(text)) score -= 12;
       if (/\b(flac|alac)\b/.test(text)) score -= 10;
       return score;
@@ -8066,8 +9029,12 @@
           const groupId = String(attributes["GROUP-ID"] || "").trim();
           const name = String(attributes.NAME || attributes.LANGUAGE || "").trim();
           const language = String(attributes.LANGUAGE || "").trim();
+          const channels = String(attributes.CHANNELS || "").trim();
+          const characteristics = String(attributes.CHARACTERISTICS || "").trim();
           const uri = attributes.URI ? resolveUrl(manifestUrl, attributes.URI) : null;
           const isDefault = String(attributes.DEFAULT || "").toUpperCase() === "YES";
+          const forced = String(attributes.FORCED || "").toUpperCase() === "YES";
+          const autoselect = String(attributes.AUTOSELECT || "").toUpperCase() === "YES";
           const trackId = `${mediaType || "TRACK"}::${groupId || "main"}::${name || language || "default"}`;
           if (mediaType === "AUDIO") {
             audioTracks.push({
@@ -8075,8 +9042,12 @@
               groupId,
               name: name || `Audio ${audioTracks.length + 1}`,
               language,
+              channels,
+              characteristics,
               uri,
-              isDefault
+              isDefault,
+              forced,
+              autoselect
             });
             return;
           }
@@ -8086,8 +9057,11 @@
               groupId,
               name: name || `Subtitle ${subtitleTracks.length + 1}`,
               language,
+              characteristics,
               uri,
-              isDefault
+              isDefault,
+              forced,
+              autoselect
             });
             return;
           }
@@ -8112,6 +9086,25 @@
           resolution: String(pendingVariantAttributes.RESOLUTION || "").trim()
         });
         pendingVariantAttributes = null;
+      });
+      const codecsByAudioGroup = /* @__PURE__ */ new Map();
+      variants.forEach((variant) => {
+        const groupId = cleanDisplayText(variant == null ? void 0 : variant.audioGroupId);
+        const codecs = cleanDisplayText(variant == null ? void 0 : variant.codecs);
+        if (!groupId || !codecs) {
+          return;
+        }
+        const existing = codecsByAudioGroup.get(groupId) || [];
+        if (!existing.includes(codecs)) {
+          existing.push(codecs);
+          codecsByAudioGroup.set(groupId, existing);
+        }
+      });
+      audioTracks.forEach((track) => {
+        const codecs = codecsByAudioGroup.get(cleanDisplayText(track == null ? void 0 : track.groupId));
+        if (codecs == null ? void 0 : codecs.length) {
+          track.codecs = codecs.join(", ");
+        }
       });
       return {
         audioTracks,
@@ -8148,18 +9141,26 @@
       const audioTracks = [];
       const subtitleTracks = [];
       adaptationSets.forEach((adaptationSet, setIndex) => {
+        var _a;
         const contentType = String(adaptationSet.getAttribute("contentType") || "").toLowerCase();
         const mimeType = String(adaptationSet.getAttribute("mimeType") || "").toLowerCase();
-        const codecs = String(adaptationSet.getAttribute("codecs") || "").toLowerCase();
         const representation = adaptationSet.getElementsByTagName("Representation")[0] || null;
-        const role = adaptationSet.getElementsByTagName("Role")[0] || null;
+        const codecs = String(
+          adaptationSet.getAttribute("codecs") || (representation == null ? void 0 : representation.getAttribute("codecs")) || ""
+        ).toLowerCase();
+        const roleValues = Array.from(adaptationSet.getElementsByTagName("Role")).map((node) => String(node.getAttribute("value") || "").trim()).filter(Boolean);
+        const accessibilityValues = Array.from(adaptationSet.getElementsByTagName("Accessibility")).map((node) => String(node.getAttribute("value") || "").trim()).filter(Boolean);
+        const audioChannelConfiguration = adaptationSet.getElementsByTagName("AudioChannelConfiguration")[0] || ((_a = representation == null ? void 0 : representation.getElementsByTagName("AudioChannelConfiguration")) == null ? void 0 : _a[0]) || null;
         const language = String(
           adaptationSet.getAttribute("lang") || (representation == null ? void 0 : representation.getAttribute("lang")) || ""
         ).trim();
         const label = String(
-          adaptationSet.getAttribute("label") || (representation == null ? void 0 : representation.getAttribute("label")) || (role == null ? void 0 : role.getAttribute("value")) || ""
+          adaptationSet.getAttribute("label") || (representation == null ? void 0 : representation.getAttribute("label")) || roleValues[0] || ""
         ).trim();
         const setId = String(adaptationSet.getAttribute("id") || setIndex).trim();
+        const channels = String((audioChannelConfiguration == null ? void 0 : audioChannelConfiguration.getAttribute("value")) || "").trim();
+        const role = roleValues.join(" ");
+        const accessibility = accessibilityValues.join(" ");
         const isAudio = contentType === "audio" || mimeType.startsWith("audio/");
         const isSubtitle = contentType === "text" || mimeType.startsWith("text/") || mimeType.includes("ttml") || mimeType.includes("vtt") || codecs.includes("stpp") || codecs.includes("wvtt");
         if (isAudio) {
@@ -8168,6 +9169,10 @@
             groupId: setId,
             name: label || `Audio ${audioTracks.length + 1}`,
             language,
+            channels,
+            role,
+            accessibility,
+            codecs,
             uri: null,
             isDefault: audioTracks.length === 0
           });
@@ -8177,6 +9182,8 @@
             groupId: setId,
             name: label || `Subtitle ${subtitleTracks.length + 1}`,
             language,
+            role,
+            accessibility,
             uri: null,
             isDefault: subtitleTracks.length === 0
           });
@@ -9024,7 +10031,7 @@
       this.setControlsVisible(true, { focus: true });
       this.renderControlButtons();
     },
-    async playStreamByUrl(streamUrl, { preservePanel = false, resetSilentAudioState = true } = {}) {
+    async playStreamByUrl(streamUrl, { preservePanel = false, resetSilentAudioState = true, preservePlaybackState = false, forceEngine = null } = {}) {
       if (!streamUrl) {
         return;
       }
@@ -9035,6 +10042,17 @@
       this.loadingVisible = true;
       this.updateLoadingVisibility();
       this.cancelSeekPreview({ commit: false });
+      if (preservePlaybackState) {
+        const restoreTimeSeconds = this.getPlaybackCurrentSeconds();
+        const video = PlayerController.video;
+        const usingAvPlay = typeof PlayerController.isUsingAvPlay === "function" ? PlayerController.isUsingAvPlay() : false;
+        this.pendingPlaybackRestore = {
+          timeSeconds: Number.isFinite(restoreTimeSeconds) ? restoreTimeSeconds : 0,
+          paused: Boolean(this.paused || !usingAvPlay && (video == null ? void 0 : video.paused))
+        };
+      } else {
+        this.pendingPlaybackRestore = null;
+      }
       this.markPlaybackProgress();
       this.clearPlaybackStallGuard();
       if (resetSilentAudioState) {
@@ -9056,7 +10074,10 @@
       this.renderAudioDialog();
       const sourceCandidate = this.getStreamCandidateByUrl(streamUrl) || this.getCurrentStreamCandidate();
       this.activePlaybackUrl = streamUrl;
-      PlayerController.play(this.activePlaybackUrl, this.buildPlaybackContext(sourceCandidate));
+      PlayerController.play(this.activePlaybackUrl, {
+        ...this.buildPlaybackContext(sourceCandidate),
+        forceEngine
+      });
       this.paused = false;
       this.loadSubtitles();
       this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
@@ -9081,7 +10102,7 @@
       if (!(selected == null ? void 0 : selected.url)) {
         return;
       }
-      this.playStreamByUrl(selected.url);
+      this.playStreamByUrl(selected.url, { preservePlaybackState: true });
     },
     mediaErrorMessage(errorCode = 0) {
       const code = Number(errorCode || 0);
@@ -9127,7 +10148,8 @@
       if (this.sourcesPanelVisible || this.subtitleDialogVisible || this.audioDialogVisible) {
         return false;
       }
-      if (String(PlayerController.playbackEngine || "") !== "native") {
+      const usingNativePlayback = typeof PlayerController.isUsingNativePlayback === "function" ? PlayerController.isUsingNativePlayback() : String(PlayerController.playbackEngine || "").startsWith("native");
+      if (!usingNativePlayback) {
         return false;
       }
       if (typeof PlayerController.canUseAvPlay === "function" && PlayerController.canUseAvPlay()) {
@@ -9150,7 +10172,7 @@
       const currentCandidate = this.getStreamCandidateByUrl(currentUrl) || this.getCurrentStreamCandidate();
       const currentScore = this.getWebOsAudioCompatibilityScore(currentCandidate);
       const currentText = this.getStreamSearchText(currentCandidate);
-      const clearlyUnsupportedAudio = /\b(eac3|ec-3|ddp|atmos|truehd|dts-hd|dts:x|dts)\b/.test(currentText);
+      const clearlyUnsupportedAudio = /\b(eac3|ec-3|ddp|atmos)\b/.test(currentText) || (typeof PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription === "function" ? PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription(currentText) : /\b(truehd|dts-hd|dts:x|dts)\b/.test(currentText));
       if (!clearlyUnsupportedAudio && currentScore >= 0) {
         return false;
       }
@@ -9175,13 +10197,25 @@
       });
       this.playStreamByUrl(fallback.stream.url, {
         preservePanel: false,
-        resetSilentAudioState: false
+        resetSilentAudioState: false,
+        preservePlaybackState: true
       });
       return true;
     },
     recoverFromPlaybackError(errorCode = 0) {
       var _a;
       const currentUrl = String(this.activePlaybackUrl || "").trim();
+      const alternativeEngine = currentUrl && typeof PlayerController.getAlternativePlaybackEngine === "function" ? PlayerController.getAlternativePlaybackEngine(currentUrl) : null;
+      if (currentUrl && alternativeEngine) {
+        this.sourcesError = `${this.mediaErrorMessage(errorCode)}. Retrying current source...`;
+        this.playStreamByUrl(currentUrl, {
+          preservePanel: false,
+          preservePlaybackState: true,
+          resetSilentAudioState: false,
+          forceEngine: alternativeEngine
+        });
+        return true;
+      }
       if (currentUrl) {
         this.failedStreamUrls.add(currentUrl);
       }
@@ -9193,7 +10227,10 @@
       }
       this.currentStreamIndex = fallback.index;
       this.sourcesError = `${this.mediaErrorMessage(errorCode)}. Trying next source...`;
-      this.playStreamByUrl(fallback.stream.url, { preservePanel: false });
+      this.playStreamByUrl(fallback.stream.url, {
+        preservePanel: false,
+        preservePlaybackState: true
+      });
       return true;
     },
     clearPlaybackStallGuard() {
@@ -9695,6 +10732,14 @@
       }
       const textTracks = this.getTextTracks();
       const targetIndex = Number(entry.trackIndex);
+      const appliedByController = typeof PlayerController.setNativeTextTrack === "function" ? PlayerController.setNativeTextTrack(targetIndex) : false;
+      if (appliedByController) {
+        this.selectedAddonSubtitleId = null;
+        this.selectedSubtitleTrackIndex = targetIndex;
+        this.renderControlButtons();
+        this.renderSubtitleDialog();
+        return;
+      }
       textTracks.forEach((track, index) => {
         try {
           track.mode = index === targetIndex ? "showing" : "disabled";
@@ -9834,10 +10879,11 @@
         return avplayAudioTracks.map((track, index) => {
           const avplayTrackIndex = Number(track == null ? void 0 : track.avplayTrackIndex);
           const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
+          const display = formatAudioTrackDisplay(track, index);
           return {
             id: `audio-avplay-${normalizedTrackIndex}`,
-            label: (track == null ? void 0 : track.label) || audioLabel(index),
-            secondary: String((track == null ? void 0 : track.language) || "").toUpperCase(),
+            label: display.label,
+            secondary: display.secondary,
             selected: normalizedTrackIndex === selectedAvPlayAudioTrack || selectedAvPlayAudioTrack < 0 && normalizedTrackIndex === this.selectedAudioTrackIndex,
             avplayAudioTrackIndex: normalizedTrackIndex
           };
@@ -9848,10 +10894,11 @@
         const selectedDashAudioTrack = typeof PlayerController.getSelectedDashAudioTrackIndex === "function" ? PlayerController.getSelectedDashAudioTrackIndex() : -1;
         return dashAudioTracks.map((track, index) => {
           var _a;
+          const display = formatAudioTrackDisplay(track, index);
           return {
             id: `audio-dash-${index}-${(_a = track == null ? void 0 : track.id) != null ? _a : ""}`,
-            label: (track == null ? void 0 : track.label) || audioLabel(index),
-            secondary: String((track == null ? void 0 : track.language) || "").toUpperCase(),
+            label: display.label,
+            secondary: display.secondary,
             selected: index === selectedDashAudioTrack || selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex,
             dashAudioTrackIndex: index
           };
@@ -9862,10 +10909,11 @@
         const selectedHlsAudioTrack = typeof PlayerController.getSelectedHlsAudioTrackIndex === "function" ? PlayerController.getSelectedHlsAudioTrackIndex() : -1;
         return hlsAudioTracks.map((track, index) => {
           var _a, _b, _c;
+          const display = formatAudioTrackDisplay(track, index);
           return {
             id: `audio-hls-${index}-${(_c = (_b = (_a = track == null ? void 0 : track.id) != null ? _a : track == null ? void 0 : track.name) != null ? _b : track == null ? void 0 : track.lang) != null ? _c : ""}`,
-            label: (track == null ? void 0 : track.name) || (track == null ? void 0 : track.lang) || (track == null ? void 0 : track.language) || audioLabel(index),
-            secondary: String((track == null ? void 0 : track.lang) || (track == null ? void 0 : track.language) || "").toUpperCase(),
+            label: display.label,
+            secondary: display.secondary,
             selected: index === selectedHlsAudioTrack || selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex,
             hlsAudioTrackIndex: index
           };
@@ -9873,22 +10921,28 @@
       }
       const audioTracks = this.getAudioTracks();
       if (audioTracks.length) {
-        return audioTracks.map((track, index) => ({
-          id: `audio-track-${index}`,
-          label: track.label || audioLabel(index),
-          secondary: String(track.language || "").toUpperCase(),
-          selected: index === this.selectedAudioTrackIndex,
-          audioTrackIndex: index
-        }));
+        return audioTracks.map((track, index) => {
+          const display = formatAudioTrackDisplay(track, index);
+          return {
+            id: `audio-track-${index}`,
+            label: display.label,
+            secondary: display.secondary,
+            selected: index === this.selectedAudioTrackIndex,
+            audioTrackIndex: index
+          };
+        });
       }
       if (this.manifestAudioTracks.length) {
-        return this.manifestAudioTracks.map((track) => ({
-          id: `audio-manifest-${track.id}`,
-          label: track.name || t2("audio_dialog_title", {}, "Audio"),
-          secondary: String(track.language || "").toUpperCase(),
-          selected: this.selectedManifestAudioTrackId === track.id,
-          manifestAudioTrackId: track.id
-        }));
+        return this.manifestAudioTracks.map((track, index) => {
+          const display = formatAudioTrackDisplay(track, index);
+          return {
+            id: `audio-manifest-${track.id}`,
+            label: display.label,
+            secondary: display.secondary,
+            selected: this.selectedManifestAudioTrackId === track.id,
+            manifestAudioTrackId: track.id
+          };
+        });
       }
       return [];
     },
@@ -9956,6 +11010,13 @@
       const audioTracks = this.getAudioTracks();
       const nativeTrackIndex = Number(selectedEntry.audioTrackIndex);
       if (!audioTracks.length || !Number.isFinite(nativeTrackIndex) || nativeTrackIndex < 0 || nativeTrackIndex >= audioTracks.length) {
+        return;
+      }
+      const appliedByController = typeof PlayerController.setNativeAudioTrack === "function" ? PlayerController.setNativeAudioTrack(nativeTrackIndex) : false;
+      if (appliedByController) {
+        this.selectedAudioTrackIndex = nativeTrackIndex;
+        this.renderControlButtons();
+        this.renderAudioDialog();
         return;
       }
       audioTracks.forEach((track, trackIndex) => {
@@ -10296,7 +11357,7 @@
       }
       const selectedStream = list[clamp(index, 0, Math.max(0, list.length - 1))] || null;
       if (selectedStream == null ? void 0 : selectedStream.url) {
-        await this.playStreamByUrl(selectedStream.url);
+        await this.playStreamByUrl(selectedStream.url, { preservePlaybackState: true });
       }
     },
     async handleSourcesPanelKey(event) {

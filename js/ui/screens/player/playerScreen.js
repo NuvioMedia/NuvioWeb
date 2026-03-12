@@ -6,6 +6,60 @@ import { Environment } from "../../../platform/environment.js";
 import { Router } from "../../navigation/router.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
+const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
+const AUDIO_TRACK_LANGUAGE_KEY_BY_CODE = {
+  ar: "common.arabic",
+  de: "common.german",
+  en: "common.english",
+  es: "common.spanish",
+  fr: "common.french",
+  hi: "common.hindi",
+  hu: "common.hungarian",
+  it: "common.italian",
+  ja: "common.japanese",
+  ko: "common.korean",
+  nl: "common.dutch",
+  pl: "common.polish",
+  pt: "common.portuguese",
+  ro: "common.romanian",
+  ru: "common.russian",
+  sk: "common.slovak",
+  sl: "common.slovenian",
+  sv: "common.swedish",
+  tr: "common.turkish",
+  vi: "common.vietnamese",
+  zh: "common.chinese"
+};
+const LANGUAGE_CODE_ALIASES = {
+  ara: "ar",
+  chi: "zh",
+  deu: "de",
+  dut: "nl",
+  eng: "en",
+  fra: "fr",
+  fre: "fr",
+  ger: "de",
+  hin: "hi",
+  hun: "hu",
+  ita: "it",
+  jpn: "ja",
+  kor: "ko",
+  nld: "nl",
+  pol: "pl",
+  por: "pt",
+  ron: "ro",
+  rum: "ro",
+  rus: "ru",
+  slk: "sk",
+  slo: "sk",
+  slv: "sl",
+  spa: "es",
+  swe: "sv",
+  tur: "tr",
+  und: "",
+  vie: "vi",
+  zho: "zh"
+};
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -21,6 +75,262 @@ function subtitleLabel(index) {
 
 function audioLabel(index) {
   return buildIndexedLabel(t("audio_dialog_title", {}, "Audio"), index);
+}
+
+function cleanDisplayText(value) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeComparableText(value) {
+  return cleanDisplayText(value)
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+}
+
+function pushUniqueText(target, value) {
+  const text = cleanDisplayText(value);
+  if (!text) {
+    return;
+  }
+  const normalized = normalizeComparableText(text);
+  if (target.some((entry) => normalizeComparableText(entry) === normalized)) {
+    return;
+  }
+  target.push(text);
+}
+
+function flattenTrackMetadata(value, into = []) {
+  if (value === null || value === undefined) {
+    return into;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((entry) => flattenTrackMetadata(entry, into));
+    return into;
+  }
+  if (typeof value === "object") {
+    Object.values(value).forEach((entry) => flattenTrackMetadata(entry, into));
+    return into;
+  }
+  const text = cleanDisplayText(value);
+  if (text) {
+    into.push(text);
+  }
+  return into;
+}
+
+function isGenericAudioTrackLabel(value) {
+  const normalized = normalizeComparableText(value);
+  return normalized === ""
+    || /^audio\s*\d*$/.test(normalized)
+    || /^track\s*\d*$/.test(normalized);
+}
+
+function getTrackMetadataStrings(track = {}) {
+  const values = [];
+  [
+    track?.name,
+    track?.label,
+    track?.title,
+    track?.language,
+    track?.lang,
+    track?.channels,
+    track?.characteristics,
+    track?.role,
+    track?.accessibility,
+    track?.codec,
+    track?.codecs,
+    track?.audioCodec,
+    track?.extraInfo,
+    track?.attrs
+  ].forEach((value) => flattenTrackMetadata(value, values));
+  return values;
+}
+
+function normalizeTrackLanguageCode(value) {
+  const raw = cleanDisplayText(value).toLowerCase();
+  if (!raw || raw === "unknown") {
+    return "";
+  }
+  if (!/^[a-z]{2,3}(?:[-_][a-z0-9]{2,8})*$/i.test(raw)) {
+    return "";
+  }
+  const parts = raw.split(/[-_]/);
+  const base = LANGUAGE_CODE_ALIASES[parts[0]] ?? parts[0];
+  if (!base) {
+    return "";
+  }
+  return [base, ...parts.slice(1)].join("-");
+}
+
+function getTrackLanguageValue(track = {}) {
+  const candidates = [
+    track?.language,
+    track?.lang,
+    track?.track_lang,
+    track?.extraInfo?.track_lang,
+    track?.extraInfo?.language
+  ];
+  return candidates.find((value) => cleanDisplayText(value)) || "";
+}
+
+function getTrackLanguageLabel(track = {}) {
+  const rawLanguage = cleanDisplayText(getTrackLanguageValue(track));
+  if (!rawLanguage) {
+    return "";
+  }
+
+  const normalizedCode = normalizeTrackLanguageCode(rawLanguage);
+  const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : "en";
+  if (normalizedCode) {
+    const cacheKey = `${locale}::${normalizedCode}`;
+    if (!LANGUAGE_DISPLAY_NAME_CACHE.has(cacheKey)) {
+      let displayName = "";
+      try {
+        if (typeof Intl !== "undefined" && typeof Intl.DisplayNames === "function") {
+          const formatter = new Intl.DisplayNames([locale], { type: "language" });
+          displayName = cleanDisplayText(formatter.of(normalizedCode));
+        }
+      } catch (_) {
+        displayName = "";
+      }
+      if (!displayName) {
+        const fallbackKey = AUDIO_TRACK_LANGUAGE_KEY_BY_CODE[normalizedCode.split("-")[0]];
+        displayName = fallbackKey ? t(fallbackKey, {}, rawLanguage.toUpperCase()) : rawLanguage.toUpperCase();
+      }
+      LANGUAGE_DISPLAY_NAME_CACHE.set(cacheKey, displayName);
+    }
+    return LANGUAGE_DISPLAY_NAME_CACHE.get(cacheKey) || "";
+  }
+
+  return rawLanguage;
+}
+
+function getMeaningfulTrackLabel(track = {}) {
+  const candidates = [track?.name, track?.label, track?.title];
+  for (const candidate of candidates) {
+    const text = cleanDisplayText(candidate);
+    if (!text || isGenericAudioTrackLabel(text)) {
+      continue;
+    }
+    if (normalizeTrackLanguageCode(text)) {
+      continue;
+    }
+    return text;
+  }
+  return "";
+}
+
+function detectChannelLayout(value) {
+  const text = cleanDisplayText(value).toLowerCase();
+  if (!text) {
+    return "";
+  }
+  const explicitLayout = text.match(/\b(7\.1|5\.1|2\.1|2\.0|1\.0)\b/);
+  if (explicitLayout) {
+    if (explicitLayout[1] === "2.0") {
+      return t("player.track.stereo", {}, "Stereo");
+    }
+    return explicitLayout[1];
+  }
+  const numericMatch = text.match(/\b([0-9]{1,2})(?:ch| channels?)\b/) || text.match(/^([0-9]{1,2})(?:\/[a-z0-9.]+)?$/);
+  if (!numericMatch) {
+    return "";
+  }
+  const channels = Number(numericMatch[1]);
+  if (!Number.isFinite(channels) || channels <= 0) {
+    return "";
+  }
+  if (channels >= 8) {
+    return "7.1";
+  }
+  if (channels >= 6) {
+    return "5.1";
+  }
+  if (channels === 2) {
+    return t("player.track.stereo", {}, "Stereo");
+  }
+  if (channels === 1) {
+    return "1.0";
+  }
+  return `${channels}ch`;
+}
+
+function getTrackDescriptorLabels(track = {}) {
+  const descriptors = [];
+  const metadataStrings = getTrackMetadataStrings(track);
+  const searchText = metadataStrings.join(" ").toLowerCase();
+
+  const channelCandidates = [track?.channels, ...metadataStrings];
+  for (const candidate of channelCandidates) {
+    const channelLayout = detectChannelLayout(candidate);
+    if (channelLayout) {
+      pushUniqueText(descriptors, channelLayout);
+      break;
+    }
+  }
+
+  if (!descriptors.length) {
+    if (/\bstereo\b/.test(searchText)) {
+      pushUniqueText(descriptors, t("player.track.stereo", {}, "Stereo"));
+    } else if (/\bsurround\b/.test(searchText)) {
+      pushUniqueText(descriptors, t("player.track.surround", {}, "Surround"));
+    }
+  }
+
+  if (/\b(atmos|joc)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "Dolby Atmos");
+  } else if (/\b(eac3|ec-3|ddp|dolby digital plus)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "Dolby Digital Plus");
+  } else if (/\b(ac3|ac-3|dolby digital)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "Dolby Digital");
+  } else if (/\b(truehd)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "TrueHD");
+  } else if (/\b(dts:x|dts-hd|dts)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "DTS");
+  } else if (/\b(aac|mp4a)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "AAC");
+  } else if (/\b(opus)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "Opus");
+  } else if (/\b(flac)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "FLAC");
+  } else if (/\b(mp3|mpeg audio)\b/.test(searchText)) {
+    pushUniqueText(descriptors, "MP3");
+  }
+
+  if (/\bforced\b/.test(searchText) || Boolean(track?.forced)) {
+    pushUniqueText(descriptors, t("sub_forced_lang", {}, "Forced"));
+  }
+  if (/\b(commentary)\b/.test(searchText)) {
+    pushUniqueText(descriptors, t("player.track.commentary", {}, "Commentary"));
+  }
+  if (/\b(audio description|audio-description|describes-video|describes video|descriptive)\b/.test(searchText)) {
+    pushUniqueText(descriptors, t("player.track.audioDescription", {}, "Audio description"));
+  }
+
+  return descriptors;
+}
+
+function formatAudioTrackDisplay(track = {}, index = 0) {
+  const languageLabel = getTrackLanguageLabel(track);
+  const descriptors = getTrackDescriptorLabels(track);
+  const rawLabel = getMeaningfulTrackLabel(track);
+  const labelParts = [];
+
+  if (languageLabel) {
+    pushUniqueText(labelParts, languageLabel);
+  }
+  descriptors.forEach((descriptor) => pushUniqueText(labelParts, descriptor));
+
+  const label = labelParts.length ? labelParts.join(" - ") : (rawLabel || audioLabel(index));
+  const secondary = !languageLabel
+    && rawLabel
+    && normalizeComparableText(rawLabel) !== normalizeComparableText(label)
+      ? rawLabel
+      : "";
+
+  return { label, secondary };
 }
 
 function formatTime(secondsValue) {
@@ -524,7 +834,14 @@ export const PlayerScreen = {
     if (/\b(stereo|2\.0|2ch)\b/.test(text)) score += 8;
 
     if (/\b(eac3|ec-3|ddp|atmos)\b/.test(text)) score -= 28;
-    if (/\b(truehd|dts-hd|dts:x|dts)\b/.test(text)) score -= 45;
+    const devicePenalty = typeof PlayerController.getWebOsUnsupportedAudioPenalty === "function"
+      ? Number(PlayerController.getWebOsUnsupportedAudioPenalty(text) || 0)
+      : 0;
+    if (devicePenalty !== 0) {
+      score += devicePenalty;
+    } else if (/\b(truehd|dts-hd|dts:x|dts)\b/.test(text)) {
+      score -= 45;
+    }
     if (/\b(7\.1|8ch)\b/.test(text)) score -= 12;
     if (/\b(flac|alac)\b/.test(text)) score -= 10;
 
@@ -667,8 +984,12 @@ export const PlayerScreen = {
         const groupId = String(attributes["GROUP-ID"] || "").trim();
         const name = String(attributes.NAME || attributes.LANGUAGE || "").trim();
         const language = String(attributes.LANGUAGE || "").trim();
+        const channels = String(attributes.CHANNELS || "").trim();
+        const characteristics = String(attributes.CHARACTERISTICS || "").trim();
         const uri = attributes.URI ? resolveUrl(manifestUrl, attributes.URI) : null;
         const isDefault = String(attributes.DEFAULT || "").toUpperCase() === "YES";
+        const forced = String(attributes.FORCED || "").toUpperCase() === "YES";
+        const autoselect = String(attributes.AUTOSELECT || "").toUpperCase() === "YES";
         const trackId = `${mediaType || "TRACK"}::${groupId || "main"}::${name || language || "default"}`;
 
         if (mediaType === "AUDIO") {
@@ -677,8 +998,12 @@ export const PlayerScreen = {
             groupId,
             name: name || `Audio ${audioTracks.length + 1}`,
             language,
+            channels,
+            characteristics,
             uri,
-            isDefault
+            isDefault,
+            forced,
+            autoselect
           });
           return;
         }
@@ -689,8 +1014,11 @@ export const PlayerScreen = {
             groupId,
             name: name || `Subtitle ${subtitleTracks.length + 1}`,
             language,
+            characteristics,
             uri,
-            isDefault
+            isDefault,
+            forced,
+            autoselect
           });
           return;
         }
@@ -719,6 +1047,26 @@ export const PlayerScreen = {
         resolution: String(pendingVariantAttributes.RESOLUTION || "").trim()
       });
       pendingVariantAttributes = null;
+    });
+
+    const codecsByAudioGroup = new Map();
+    variants.forEach((variant) => {
+      const groupId = cleanDisplayText(variant?.audioGroupId);
+      const codecs = cleanDisplayText(variant?.codecs);
+      if (!groupId || !codecs) {
+        return;
+      }
+      const existing = codecsByAudioGroup.get(groupId) || [];
+      if (!existing.includes(codecs)) {
+        existing.push(codecs);
+        codecsByAudioGroup.set(groupId, existing);
+      }
+    });
+    audioTracks.forEach((track) => {
+      const codecs = codecsByAudioGroup.get(cleanDisplayText(track?.groupId));
+      if (codecs?.length) {
+        track.codecs = codecs.join(", ");
+      }
     });
 
     return {
@@ -763,9 +1111,21 @@ export const PlayerScreen = {
     adaptationSets.forEach((adaptationSet, setIndex) => {
       const contentType = String(adaptationSet.getAttribute("contentType") || "").toLowerCase();
       const mimeType = String(adaptationSet.getAttribute("mimeType") || "").toLowerCase();
-      const codecs = String(adaptationSet.getAttribute("codecs") || "").toLowerCase();
       const representation = adaptationSet.getElementsByTagName("Representation")[0] || null;
-      const role = adaptationSet.getElementsByTagName("Role")[0] || null;
+      const codecs = String(
+        adaptationSet.getAttribute("codecs")
+        || representation?.getAttribute("codecs")
+        || ""
+      ).toLowerCase();
+      const roleValues = Array.from(adaptationSet.getElementsByTagName("Role"))
+        .map((node) => String(node.getAttribute("value") || "").trim())
+        .filter(Boolean);
+      const accessibilityValues = Array.from(adaptationSet.getElementsByTagName("Accessibility"))
+        .map((node) => String(node.getAttribute("value") || "").trim())
+        .filter(Boolean);
+      const audioChannelConfiguration = adaptationSet.getElementsByTagName("AudioChannelConfiguration")[0]
+        || representation?.getElementsByTagName("AudioChannelConfiguration")?.[0]
+        || null;
       const language = String(
         adaptationSet.getAttribute("lang")
         || representation?.getAttribute("lang")
@@ -774,10 +1134,13 @@ export const PlayerScreen = {
       const label = String(
         adaptationSet.getAttribute("label")
         || representation?.getAttribute("label")
-        || role?.getAttribute("value")
+        || roleValues[0]
         || ""
       ).trim();
       const setId = String(adaptationSet.getAttribute("id") || setIndex).trim();
+      const channels = String(audioChannelConfiguration?.getAttribute("value") || "").trim();
+      const role = roleValues.join(" ");
+      const accessibility = accessibilityValues.join(" ");
 
       const isAudio = contentType === "audio" || mimeType.startsWith("audio/");
       const isSubtitle = contentType === "text"
@@ -793,6 +1156,10 @@ export const PlayerScreen = {
           groupId: setId,
           name: label || `Audio ${audioTracks.length + 1}`,
           language,
+          channels,
+          role,
+          accessibility,
+          codecs,
           uri: null,
           isDefault: audioTracks.length === 0
         });
@@ -802,6 +1169,8 @@ export const PlayerScreen = {
           groupId: setId,
           name: label || `Subtitle ${subtitleTracks.length + 1}`,
           language,
+          role,
+          accessibility,
           uri: null,
           isDefault: subtitleTracks.length === 0
         });
@@ -1760,7 +2129,7 @@ export const PlayerScreen = {
     this.renderControlButtons();
   },
 
-  async playStreamByUrl(streamUrl, { preservePanel = false, resetSilentAudioState = true } = {}) {
+  async playStreamByUrl(streamUrl, { preservePanel = false, resetSilentAudioState = true, preservePlaybackState = false, forceEngine = null } = {}) {
     if (!streamUrl) {
       return;
     }
@@ -1773,6 +2142,19 @@ export const PlayerScreen = {
     this.loadingVisible = true;
     this.updateLoadingVisibility();
     this.cancelSeekPreview({ commit: false });
+    if (preservePlaybackState) {
+      const restoreTimeSeconds = this.getPlaybackCurrentSeconds();
+      const video = PlayerController.video;
+      const usingAvPlay = typeof PlayerController.isUsingAvPlay === "function"
+        ? PlayerController.isUsingAvPlay()
+        : false;
+      this.pendingPlaybackRestore = {
+        timeSeconds: Number.isFinite(restoreTimeSeconds) ? restoreTimeSeconds : 0,
+        paused: Boolean(this.paused || (!usingAvPlay && video?.paused))
+      };
+    } else {
+      this.pendingPlaybackRestore = null;
+    }
     this.markPlaybackProgress();
     this.clearPlaybackStallGuard();
     if (resetSilentAudioState) {
@@ -1797,7 +2179,10 @@ export const PlayerScreen = {
 
     const sourceCandidate = this.getStreamCandidateByUrl(streamUrl) || this.getCurrentStreamCandidate();
     this.activePlaybackUrl = streamUrl;
-    PlayerController.play(this.activePlaybackUrl, this.buildPlaybackContext(sourceCandidate));
+    PlayerController.play(this.activePlaybackUrl, {
+      ...this.buildPlaybackContext(sourceCandidate),
+      forceEngine
+    });
     this.paused = false;
     this.loadSubtitles();
     this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
@@ -1825,7 +2210,7 @@ export const PlayerScreen = {
     if (!selected?.url) {
       return;
     }
-    this.playStreamByUrl(selected.url);
+    this.playStreamByUrl(selected.url, { preservePlaybackState: true });
   },
 
   mediaErrorMessage(errorCode = 0) {
@@ -1879,7 +2264,10 @@ export const PlayerScreen = {
     if (this.sourcesPanelVisible || this.subtitleDialogVisible || this.audioDialogVisible) {
       return false;
     }
-    if (String(PlayerController.playbackEngine || "") !== "native") {
+    const usingNativePlayback = typeof PlayerController.isUsingNativePlayback === "function"
+      ? PlayerController.isUsingNativePlayback()
+      : String(PlayerController.playbackEngine || "").startsWith("native");
+    if (!usingNativePlayback) {
       return false;
     }
     if (typeof PlayerController.canUseAvPlay === "function" && PlayerController.canUseAvPlay()) {
@@ -1909,7 +2297,10 @@ export const PlayerScreen = {
     const currentCandidate = this.getStreamCandidateByUrl(currentUrl) || this.getCurrentStreamCandidate();
     const currentScore = this.getWebOsAudioCompatibilityScore(currentCandidate);
     const currentText = this.getStreamSearchText(currentCandidate);
-    const clearlyUnsupportedAudio = /\b(eac3|ec-3|ddp|atmos|truehd|dts-hd|dts:x|dts)\b/.test(currentText);
+    const clearlyUnsupportedAudio = /\b(eac3|ec-3|ddp|atmos)\b/.test(currentText)
+      || (typeof PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription === "function"
+        ? PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription(currentText)
+        : /\b(truehd|dts-hd|dts:x|dts)\b/.test(currentText));
     if (!clearlyUnsupportedAudio && currentScore >= 0) {
       return false;
     }
@@ -1936,13 +2327,28 @@ export const PlayerScreen = {
     });
     this.playStreamByUrl(fallback.stream.url, {
       preservePanel: false,
-      resetSilentAudioState: false
+      resetSilentAudioState: false,
+      preservePlaybackState: true
     });
     return true;
   },
 
   recoverFromPlaybackError(errorCode = 0) {
     const currentUrl = String(this.activePlaybackUrl || "").trim();
+    const alternativeEngine = currentUrl && typeof PlayerController.getAlternativePlaybackEngine === "function"
+      ? PlayerController.getAlternativePlaybackEngine(currentUrl)
+      : null;
+    if (currentUrl && alternativeEngine) {
+      this.sourcesError = `${this.mediaErrorMessage(errorCode)}. Retrying current source...`;
+      this.playStreamByUrl(currentUrl, {
+        preservePanel: false,
+        preservePlaybackState: true,
+        resetSilentAudioState: false,
+        forceEngine: alternativeEngine
+      });
+      return true;
+    }
+
     if (currentUrl) {
       this.failedStreamUrls.add(currentUrl);
     }
@@ -1956,7 +2362,10 @@ export const PlayerScreen = {
 
     this.currentStreamIndex = fallback.index;
     this.sourcesError = `${this.mediaErrorMessage(errorCode)}. Trying next source...`;
-    this.playStreamByUrl(fallback.stream.url, { preservePanel: false });
+    this.playStreamByUrl(fallback.stream.url, {
+      preservePanel: false,
+      preservePlaybackState: true
+    });
     return true;
   },
 
@@ -2570,6 +2979,17 @@ export const PlayerScreen = {
     const textTracks = this.getTextTracks();
     const targetIndex = Number(entry.trackIndex);
 
+    const appliedByController = typeof PlayerController.setNativeTextTrack === "function"
+      ? PlayerController.setNativeTextTrack(targetIndex)
+      : false;
+    if (appliedByController) {
+      this.selectedAddonSubtitleId = null;
+      this.selectedSubtitleTrackIndex = targetIndex;
+      this.renderControlButtons();
+      this.renderSubtitleDialog();
+      return;
+    }
+
     textTracks.forEach((track, index) => {
       try {
         track.mode = index === targetIndex ? "showing" : "disabled";
@@ -2737,10 +3157,11 @@ export const PlayerScreen = {
       return avplayAudioTracks.map((track, index) => {
         const avplayTrackIndex = Number(track?.avplayTrackIndex);
         const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
+        const display = formatAudioTrackDisplay(track, index);
         return {
           id: `audio-avplay-${normalizedTrackIndex}`,
-          label: track?.label || audioLabel(index),
-          secondary: String(track?.language || "").toUpperCase(),
+          label: display.label,
+          secondary: display.secondary,
           selected: normalizedTrackIndex === selectedAvPlayAudioTrack
             || (selectedAvPlayAudioTrack < 0 && normalizedTrackIndex === this.selectedAudioTrackIndex),
           avplayAudioTrackIndex: normalizedTrackIndex
@@ -2755,13 +3176,16 @@ export const PlayerScreen = {
       const selectedDashAudioTrack = typeof PlayerController.getSelectedDashAudioTrackIndex === "function"
         ? PlayerController.getSelectedDashAudioTrackIndex()
         : -1;
-      return dashAudioTracks.map((track, index) => ({
-        id: `audio-dash-${index}-${track?.id ?? ""}`,
-        label: track?.label || audioLabel(index),
-        secondary: String(track?.language || "").toUpperCase(),
-        selected: index === selectedDashAudioTrack || (selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex),
-        dashAudioTrackIndex: index
-      }));
+      return dashAudioTracks.map((track, index) => {
+        const display = formatAudioTrackDisplay(track, index);
+        return {
+          id: `audio-dash-${index}-${track?.id ?? ""}`,
+          label: display.label,
+          secondary: display.secondary,
+          selected: index === selectedDashAudioTrack || (selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex),
+          dashAudioTrackIndex: index
+        };
+      });
     }
 
     const hlsAudioTracks = typeof PlayerController.getHlsAudioTracks === "function"
@@ -2771,34 +3195,43 @@ export const PlayerScreen = {
       const selectedHlsAudioTrack = typeof PlayerController.getSelectedHlsAudioTrackIndex === "function"
         ? PlayerController.getSelectedHlsAudioTrackIndex()
         : -1;
-      return hlsAudioTracks.map((track, index) => ({
-        id: `audio-hls-${index}-${track?.id ?? track?.name ?? track?.lang ?? ""}`,
-        label: track?.name || track?.lang || track?.language || audioLabel(index),
-        secondary: String(track?.lang || track?.language || "").toUpperCase(),
-        selected: index === selectedHlsAudioTrack || (selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex),
-        hlsAudioTrackIndex: index
-      }));
+      return hlsAudioTracks.map((track, index) => {
+        const display = formatAudioTrackDisplay(track, index);
+        return {
+          id: `audio-hls-${index}-${track?.id ?? track?.name ?? track?.lang ?? ""}`,
+          label: display.label,
+          secondary: display.secondary,
+          selected: index === selectedHlsAudioTrack || (selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex),
+          hlsAudioTrackIndex: index
+        };
+      });
     }
 
     const audioTracks = this.getAudioTracks();
     if (audioTracks.length) {
-      return audioTracks.map((track, index) => ({
-        id: `audio-track-${index}`,
-        label: track.label || audioLabel(index),
-        secondary: String(track.language || "").toUpperCase(),
-        selected: index === this.selectedAudioTrackIndex,
-        audioTrackIndex: index
-      }));
+      return audioTracks.map((track, index) => {
+        const display = formatAudioTrackDisplay(track, index);
+        return {
+          id: `audio-track-${index}`,
+          label: display.label,
+          secondary: display.secondary,
+          selected: index === this.selectedAudioTrackIndex,
+          audioTrackIndex: index
+        };
+      });
     }
 
     if (this.manifestAudioTracks.length) {
-      return this.manifestAudioTracks.map((track) => ({
-        id: `audio-manifest-${track.id}`,
-        label: track.name || t("audio_dialog_title", {}, "Audio"),
-        secondary: String(track.language || "").toUpperCase(),
-        selected: this.selectedManifestAudioTrackId === track.id,
-        manifestAudioTrackId: track.id
-      }));
+      return this.manifestAudioTracks.map((track, index) => {
+        const display = formatAudioTrackDisplay(track, index);
+        return {
+          id: `audio-manifest-${track.id}`,
+          label: display.label,
+          secondary: display.secondary,
+          selected: this.selectedManifestAudioTrackId === track.id,
+          manifestAudioTrackId: track.id
+        };
+      });
     }
 
     return [];
@@ -2881,6 +3314,16 @@ export const PlayerScreen = {
     const audioTracks = this.getAudioTracks();
     const nativeTrackIndex = Number(selectedEntry.audioTrackIndex);
     if (!audioTracks.length || !Number.isFinite(nativeTrackIndex) || nativeTrackIndex < 0 || nativeTrackIndex >= audioTracks.length) {
+      return;
+    }
+
+    const appliedByController = typeof PlayerController.setNativeAudioTrack === "function"
+      ? PlayerController.setNativeAudioTrack(nativeTrackIndex)
+      : false;
+    if (appliedByController) {
+      this.selectedAudioTrackIndex = nativeTrackIndex;
+      this.renderControlButtons();
+      this.renderAudioDialog();
       return;
     }
 
@@ -3263,7 +3706,7 @@ export const PlayerScreen = {
 
     const selectedStream = list[clamp(index, 0, Math.max(0, list.length - 1))] || null;
     if (selectedStream?.url) {
-      await this.playStreamByUrl(selectedStream.url);
+      await this.playStreamByUrl(selectedStream.url, { preservePlaybackState: true });
     }
   },
 
