@@ -1,7 +1,7 @@
 import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
+import { TMDB_API_KEY } from "../../config.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const DEFAULT_TMDB_API_KEY = "439c478a771f35c05022f9feabcca01c";
 
 function getContentType(type) {
   const normalized = String(type || "").toLowerCase();
@@ -15,7 +15,7 @@ export const TmdbService = {
 
   async ensureTmdbId(id, type = "movie") {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || DEFAULT_TMDB_API_KEY || "").trim();
+    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey) {
       return null;
     }

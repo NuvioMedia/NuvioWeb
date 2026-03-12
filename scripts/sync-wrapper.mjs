@@ -1,4 +1,4 @@
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
@@ -75,9 +75,13 @@ async function syncBuild(targetDir) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetDir, "app.bundle.js"));
-
-  const runtimeEnv = await readFile(path.join(distDir, "js/runtime/env.js"), "utf8");
-  await writeFile(path.join(targetDir, "js/runtime/env.js"), runtimeEnv, "utf8");
+  try {
+    await cp(path.join(distDir, "nuvio.env.js"), path.join(targetDir, "nuvio.env.js"));
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
 }
 
 const { platform, targetDir } = parseArgs(process.argv.slice(2));
