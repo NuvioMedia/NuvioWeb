@@ -1,6 +1,7 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
+import { I18n } from "../../../i18n/index.js";
 
 const KEY = "manualSyncCode";
 
@@ -16,13 +17,13 @@ export const SyncCodeScreen = {
     const value = LocalStore.get(KEY, "");
     this.container.innerHTML = `
       <div class="row">
-        <h2>Sync Code</h2>
-        <p>Current code: ${value || "(empty)"}</p>
+        <h2>${I18n.t("auth.syncCode.title")}</h2>
+        <p>${I18n.t("auth.syncCode.currentCode", { value: value || I18n.t("auth.syncCode.emptyValue") })}</p>
       </div>
       <div class="row">
-        <div class="card focusable" data-action="setCode">Set Code</div>
-        <div class="card focusable" data-action="clearCode">Clear Code</div>
-        <div class="card focusable" data-action="back">Back</div>
+        <div class="card focusable" data-action="setCode">${I18n.t("auth.syncCode.setCode")}</div>
+        <div class="card focusable" data-action="clearCode">${I18n.t("auth.syncCode.clearCode")}</div>
+        <div class="card focusable" data-action="back">${I18n.t("auth.syncCode.back")}</div>
       </div>
     `;
     ScreenUtils.indexFocusables(this.container);
@@ -43,7 +44,7 @@ export const SyncCodeScreen = {
     }
     const action = current.dataset.action;
     if (action === "setCode") {
-      const value = window.prompt("Insert sync code", LocalStore.get(KEY, ""));
+      const value = window.prompt(I18n.t("auth.syncCode.prompt"), LocalStore.get(KEY, ""));
       if (value !== null) {
         LocalStore.set(KEY, String(value).trim());
         this.render();

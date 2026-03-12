@@ -20,6 +20,7 @@ import { WatchedItemsSyncService } from "../../../core/profile/watchedItemsSyncS
 import { WatchProgressSyncService } from "../../../core/profile/watchProgressSyncService.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
 import { Platform } from "../../../platform/index.js";
+import { I18n } from "../../../i18n/index.js";
 import { PluginManager } from "../../../core/player/pluginManager.js";
 import {
   activateLegacySidebarAction,
@@ -41,13 +42,13 @@ const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
 const THEME_OPTIONS = [
-  { id: "WHITE", label: "White", color: "#f5f5f5" },
-  { id: "CRIMSON", label: "Crimson", color: "#e53935" },
-  { id: "OCEAN", label: "Ocean", color: "#1e88e5" },
-  { id: "VIOLET", label: "Violet", color: "#8e24aa" },
-  { id: "EMERALD", label: "Emerald", color: "#43a047" },
-  { id: "AMBER", label: "Amber", color: "#fb8c00" },
-  { id: "ROSE", label: "Rose", color: "#d81b60" }
+  { id: "WHITE", labelKey: "settings.appearance.themes.white", color: "#f5f5f5" },
+  { id: "CRIMSON", labelKey: "settings.appearance.themes.crimson", color: "#e53935" },
+  { id: "OCEAN", labelKey: "settings.appearance.themes.ocean", color: "#1e88e5" },
+  { id: "VIOLET", labelKey: "settings.appearance.themes.violet", color: "#8e24aa" },
+  { id: "EMERALD", labelKey: "settings.appearance.themes.emerald", color: "#43a047" },
+  { id: "AMBER", labelKey: "settings.appearance.themes.amber", color: "#fb8c00" },
+  { id: "ROSE", labelKey: "settings.appearance.themes.rose", color: "#d81b60" }
 ];
 
 const FONT_OPTIONS = [
@@ -57,28 +58,39 @@ const FONT_OPTIONS = [
 ];
 
 const LANGUAGE_OPTIONS = [
-  { id: null, label: "System default" },
-  { id: "en", label: "English" },
-  { id: "it", label: "Italiano" },
-  { id: "es", label: "Espanol" }
+  { id: null, labelKey: "common.systemDefault" },
+  { id: "en", labelKey: "common.english" },
+  { id: "it", labelKey: "common.italian" }
+];
+
+const TMDB_LANGUAGE_OPTIONS = [
+  { id: "en-US", labelKey: "common.english" },
+  { id: "it-IT", labelKey: "common.italian" },
+  { id: "es-ES", labelKey: "common.spanish" }
+];
+
+const PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
+  { id: "system", labelKey: "common.system" },
+  { id: "en", labelKey: "common.english" },
+  { id: "it", labelKey: "common.italian" }
 ];
 
 const HOME_LAYOUT_OPTIONS = [
-  { id: "modern", label: "Modern", caption: "Floating rows" },
-  { id: "grid", label: "Grid", caption: "Dense browse" },
-  { id: "classic", label: "Classic", caption: "Hero first" }
+  { id: "modern", labelKey: "settings.layout.homeLayouts.modern.label", captionKey: "settings.layout.homeLayouts.modern.caption" },
+  { id: "grid", labelKey: "settings.layout.homeLayouts.grid.label", captionKey: "settings.layout.homeLayouts.grid.caption" },
+  { id: "classic", labelKey: "settings.layout.homeLayouts.classic.label", captionKey: "settings.layout.homeLayouts.classic.caption" }
 ];
 
 const SECTION_META = [
-  { id: "account", label: "Account", subtitle: "Manage login, sync, and device link status." },
-  { id: "profiles", label: "Profiles", subtitle: "Manage user profiles for this account." },
-  { id: "appearance", label: "Appearance", subtitle: "Choose your color theme, font and language" },
-  { id: "layout", label: "Layout", subtitle: "Adjust home layout, content visibility, and poster behavior" },
-  { id: "plugins", label: "Plugins", subtitle: "Manage repositories, providers, and plugin states." },
-  { id: "integration", label: "Integration", subtitle: "Choose TMDB or MDBList" },
-  { id: "playback", label: "Playback", subtitle: "Configure video playback and subtitle options" },
-  { id: "trakt", label: "Trakt", subtitle: "Manage Trakt authentication and sync preferences." },
-  { id: "about", label: "About", subtitle: "App information, credits, and legal links" }
+  { id: "account", labelKey: "settings.sections.account.label", subtitleKey: "settings.sections.account.subtitle" },
+  { id: "profiles", labelKey: "settings.sections.profiles.label", subtitleKey: "settings.sections.profiles.subtitle" },
+  { id: "appearance", labelKey: "settings.sections.appearance.label", subtitleKey: "settings.sections.appearance.subtitle" },
+  { id: "layout", labelKey: "settings.sections.layout.label", subtitleKey: "settings.sections.layout.subtitle" },
+  { id: "plugins", labelKey: "settings.sections.plugins.label", subtitleKey: "settings.sections.plugins.subtitle" },
+  { id: "integration", labelKey: "settings.sections.integration.label", subtitleKey: "settings.sections.integration.subtitle" },
+  { id: "playback", labelKey: "settings.sections.playback.label", subtitleKey: "settings.sections.playback.subtitle" },
+  { id: "trakt", labelKey: "settings.sections.trakt.label", subtitleKey: "settings.sections.trakt.subtitle" },
+  { id: "about", labelKey: "settings.sections.about.label", subtitleKey: "settings.sections.about.subtitle" }
 ];
 
 const SECTION_ICONS = {
@@ -110,6 +122,10 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -120,6 +136,36 @@ function escapeHtml(value) {
 
 function iconSvg(path, className = "settings-inline-icon", viewBox = "0 0 24 24") {
   return `<svg class="${className}" viewBox="${viewBox}" aria-hidden="true" focusable="false">${path}</svg>`;
+}
+
+function translateOptionLabel(option, fallback = "") {
+  if (!option) {
+    return fallback;
+  }
+  if (option.labelKey) {
+    return t(option.labelKey, option.labelParams || {}, option.label || fallback);
+  }
+  return String(option.label || fallback);
+}
+
+function translateOptionCaption(option, fallback = "") {
+  if (!option) {
+    return fallback;
+  }
+  if (option.captionKey) {
+    return t(option.captionKey, option.captionParams || {}, option.caption || fallback);
+  }
+  return String(option.caption || fallback);
+}
+
+function translateSectionCopy(section) {
+  if (!section) {
+    return { label: "", subtitle: "" };
+  }
+  return {
+    label: section.labelKey ? t(section.labelKey, section.labelParams || {}, section.label || "") : String(section.label || ""),
+    subtitle: section.subtitleKey ? t(section.subtitleKey, section.subtitleParams || {}, section.subtitle || "") : String(section.subtitle || "")
+  };
 }
 
 function renderSectionNavIcon(sectionId) {
@@ -150,7 +196,10 @@ function maskValue(value, fallback) {
 }
 
 function labelForTheme(themeName) {
-  return THEME_OPTIONS.find((item) => item.id === String(themeName || "").toUpperCase())?.label || "White";
+  return translateOptionLabel(
+    THEME_OPTIONS.find((item) => item.id === String(themeName || "").toUpperCase()),
+    t("settings.appearance.themes.white")
+  );
 }
 
 function labelForFont(fontFamily) {
@@ -158,11 +207,31 @@ function labelForFont(fontFamily) {
 }
 
 function labelForLanguage(language) {
-  return LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language))?.label || "System default";
+  return translateOptionLabel(
+    LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
+    t("common.systemDefault")
+  );
 }
 
 function labelForLayout(layout) {
-  return HOME_LAYOUT_OPTIONS.find((item) => item.id === String(layout || "").toLowerCase())?.label || "Classic";
+  return translateOptionLabel(
+    HOME_LAYOUT_OPTIONS.find((item) => item.id === String(layout || "").toLowerCase()),
+    t("settings.layout.homeLayouts.classic.label")
+  );
+}
+
+function labelForTmdbLanguage(language) {
+  return translateOptionLabel(
+    TMDB_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
+    String(language || "en-US")
+  );
+}
+
+function labelForPlaybackLanguage(language) {
+  return translateOptionLabel(
+    PREFERRED_PLAYBACK_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
+    t("common.system")
+  );
 }
 
 function qualityLabel(value) {
@@ -170,19 +239,19 @@ function qualityLabel(value) {
   if (normalized === "2160p") return "2160p";
   if (normalized === "1080p") return "1080p";
   if (normalized === "720p") return "720p";
-  return "Auto";
+  return t("common.auto");
 }
 
 function playerLabel(value) {
   const normalized = String(value || "auto").toLowerCase();
-  if (normalized === "native") return "Native";
+  if (normalized === "native") return t("common.native");
   if (normalized === "hls") return "HLS.js";
   if (normalized === "dash") return "dash.js";
-  return "Auto";
+  return t("common.auto");
 }
 
 function renderModeLabel(value) {
-  return String(value || "native").toLowerCase() === "html" ? "HTML overlay" : "Native";
+  return String(value || "native").toLowerCase() === "html" ? t("common.htmlOverlay") : t("common.native");
 }
 
 function escapeSelector(value) {
@@ -190,7 +259,7 @@ function escapeSelector(value) {
 }
 
 function plannedSubtitle(subtitle) {
-  return subtitle ? `${subtitle} Coming soon.` : "Coming soon.";
+  return subtitle ? t("common.comingSoonWithContext", { subject: subtitle }) : t("common.comingSoon");
 }
 
 function focusKeySelector(selector, key) {
@@ -273,7 +342,7 @@ function scrollSettingsRailItem(node) {
 function addonKindsLabel(addon) {
   const kinds = Array.isArray(addon?.types) ? addon.types.filter(Boolean) : [];
   if (!kinds.length) {
-    return "Repository";
+    return t("common.repository");
   }
   return kinds.map((entry) => String(entry)).join(", ");
 }
@@ -437,7 +506,7 @@ export const SettingsScreen = {
               data-section="${item.id}">
         <span class="settings-nav-leading">
           ${renderSectionNavIcon(item.id)}
-          <span class="settings-nav-label">${escapeHtml(item.label)}</span>
+          <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
       </button>
@@ -445,10 +514,11 @@ export const SettingsScreen = {
   },
 
   renderSectionHeader(section) {
+    const copy = translateSectionCopy(section);
     return `
       <header class="settings-content-header">
-        <h1 class="settings-title">${escapeHtml(section.label)}</h1>
-        <p class="settings-subtitle">${escapeHtml(section.subtitle)}</p>
+        <h1 class="settings-title">${escapeHtml(copy.label)}</h1>
+        <p class="settings-subtitle">${escapeHtml(copy.subtitle)}</p>
       </header>
     `;
   },
@@ -467,7 +537,7 @@ export const SettingsScreen = {
     const inert = disabled || planned;
     const trailing = external ? "external" : icon;
     const tailContent = [
-      planned ? `<span class="settings-row-badge">Soon</span>` : "",
+      planned ? `<span class="settings-row-badge">${escapeHtml(t("common.soon"))}</span>` : "",
       value ? `<span class="settings-row-value">${escapeHtml(value)}</span>` : "",
       trailing ? iconSvg(ROW_ICONS[trailing], `settings-row-icon${external ? " is-external" : ""}`) : ""
     ].filter(Boolean).join("");
@@ -497,7 +567,7 @@ export const SettingsScreen = {
           ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml(subtitle)}</span>` : ""}
         </span>
         <span class="settings-row-tail">
-          ${planned ? `<span class="settings-row-badge">Soon</span>` : ""}
+          ${planned ? `<span class="settings-row-badge">${escapeHtml(t("common.soon"))}</span>` : ""}
           <span class="settings-toggle-pill${checked ? " is-checked" : ""}">
             <span class="settings-toggle-thumb"></span>
           </span>
@@ -517,7 +587,7 @@ export const SettingsScreen = {
             ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
           </span>
         </span>
-        <span class="settings-theme-name">${escapeHtml(theme.label)}</span>
+        <span class="settings-theme-name">${escapeHtml(translateOptionLabel(theme))}</span>
         <span class="settings-theme-underline" style="background:${escapeHtml(theme.color)};"></span>
       </button>
     `;
@@ -529,8 +599,8 @@ export const SettingsScreen = {
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}"></span>
-        <span class="settings-layout-name">${escapeHtml(option.label)}</span>
-        <span class="settings-layout-caption">${escapeHtml(option.caption)}</span>
+        <span class="settings-layout-name">${escapeHtml(translateOptionLabel(option))}</span>
+        <span class="settings-layout-caption">${escapeHtml(translateOptionCaption(option))}</span>
       </button>
     `;
   },
@@ -543,7 +613,7 @@ export const SettingsScreen = {
               aria-label="${escapeHtml(label)}"
               title="${escapeHtml(label)}"
               ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}>
-        ${planned ? '<span class="settings-plugin-icon-badge">Soon</span>' : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
+        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml(t("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
       </button>
     `;
   },
@@ -555,9 +625,12 @@ export const SettingsScreen = {
     return `
       <article class="settings-plugin-repo-card">
         <div class="settings-plugin-repo-copy">
-          <div class="settings-plugin-repo-title">${escapeHtml(addon.displayName || addon.name || "Repository")}</div>
+          <div class="settings-plugin-repo-title">${escapeHtml(addon.displayName || addon.name || t("common.repository"))}</div>
           <div class="settings-plugin-repo-meta">
-            ${escapeHtml(`${streamResourceCount} stream resource${streamResourceCount === 1 ? "" : "s"} · v${addon.version || "0.0.0"}`)}
+            ${escapeHtml(t(
+              streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
+              { count: streamResourceCount, version: addon.version || "0.0.0" }
+            ))}
           </div>
           <div class="settings-plugin-repo-url">${escapeHtml(addon.baseUrl || addon.description || addonKindsLabel(addon))}</div>
         </div>
@@ -565,12 +638,12 @@ export const SettingsScreen = {
           ${this.renderPluginIconButton({
             focusKey: `plugins:refresh:${index}`,
             icon: "refresh",
-            label: "Refresh repository"
+            label: t("settings.plugins.refreshRepository")
           })}
           ${this.renderPluginIconButton({
             focusKey: `plugins:remove:${index}`,
             icon: "trash",
-            label: "Remove repository",
+            label: t("settings.plugins.removeRepository"),
             destructive: true
           })}
         </div>
@@ -608,14 +681,14 @@ export const SettingsScreen = {
     return `
       <div class="settings-dialog-backdrop">
         <div class="settings-dialog">
-          <div class="settings-dialog-title">${escapeHtml(this.optionDialog.title || "Select option")}</div>
+          <div class="settings-dialog-title">${escapeHtml(this.optionDialog.title || t("common.selectOption"))}</div>
           <div class="settings-dialog-list">
             ${this.optionDialog.options.map((option, index) => `
               <button class="settings-dialog-option settings-content-focusable focusable${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
                       data-zone="dialog"
                       data-dialog-index="${index}"
                       data-dialog-option-id="${escapeHtml(option.id)}">
-                <span class="settings-dialog-option-label">${escapeHtml(option.label)}</span>
+                <span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>
               </button>
             `).join("")}
           </div>
@@ -643,7 +716,7 @@ export const SettingsScreen = {
             ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml(subtitle)}</span>` : ""}
           </span>
           <span class="settings-row-tail">
-            <span class="settings-row-value">${expanded ? "Open" : "Closed"}</span>
+            <span class="settings-row-value">${expanded ? t("common.open") : t("common.closed")}</span>
             ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
           </span>
         </button>
@@ -666,19 +739,19 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${signedIn
             ? `<div class="settings-account-status">
-                <span class="settings-account-status-label">Signed in</span>
-                <strong class="settings-account-status-value">${escapeHtml(model.accountEmail || "Account linked on this TV")}</strong>
+                <span class="settings-account-status-label">${t("settings.status.signedIn")}</span>
+                <strong class="settings-account-status-value">${escapeHtml(model.accountEmail || t("settings.status.linkedFallback"))}</strong>
               </div>`
-            : `<p class="settings-account-note">Sync your library and preferences across devices.</p>
+            : `<p class="settings-account-note">${t("settings.account.syncNote")}</p>
               ${this.renderActionRow({
               focusKey: "account:signin",
-              title: "Sign in with QR",
-              subtitle: "Open QR sign-in to connect this device."
+              title: t("settings.account.signInWithQr"),
+              subtitle: t("settings.account.signInWithQrSubtitle")
             })}`}
           ${signedIn ? this.renderActionRow({
             focusKey: "account:signout",
-            title: "Sign out",
-            subtitle: "Disconnect this TV from your account."
+            title: t("settings.account.signOut"),
+            subtitle: t("settings.account.signOutSubtitle")
           }) : ""}
         </div>
       </div>
@@ -697,7 +770,7 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${this.renderActionRow({
             focusKey: "profiles:manage",
-            title: "Manage Profiles",
+            title: t("settings.profiles.manageProfiles"),
             subtitle: "",
             icon: null,
             classes: "settings-profile-manage-row"
@@ -717,7 +790,7 @@ export const SettingsScreen = {
 
     this.actionMap.set("appearance:font", () => {
       this.openOptionDialog({
-        title: "Select font",
+        title: t("settings.dialogs.selectFont"),
         options: FONT_OPTIONS,
         selectedId: model.theme.fontFamily,
         returnFocusKey: "appearance:font",
@@ -730,13 +803,15 @@ export const SettingsScreen = {
 
     this.actionMap.set("appearance:language", () => {
       this.openOptionDialog({
-        title: "Select language",
+        title: t("settings.dialogs.selectLanguage"),
         options: LANGUAGE_OPTIONS,
         selectedId: model.theme.language,
         returnFocusKey: "appearance:language",
-        onSelect: (option) => {
+        onSelect: async (option) => {
           ThemeStore.set({ language: option.id });
+          await I18n.init();
           ThemeManager.apply();
+          I18n.apply();
         }
       });
     });
@@ -756,8 +831,8 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${this.renderActionRow({
             focusKey: "appearance:font",
-            title: "App Font",
-            subtitle: "Choose your preferred font",
+            title: t("settings.appearance.appFont"),
+            subtitle: t("settings.appearance.appFontSubtitle"),
             value: labelForFont(model.theme.fontFamily)
           })}
         </div>
@@ -766,10 +841,9 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${this.renderActionRow({
             focusKey: "appearance:language",
-            title: "App Language",
-            subtitle: plannedSubtitle("Override system language"),
-            value: labelForLanguage(model.theme.language),
-            planned: true
+            title: t("settings.appearance.appLanguage"),
+            subtitle: t("settings.appearance.appLanguageSubtitle"),
+            value: labelForLanguage(model.theme.language)
           })}
         </div>
       </div>
@@ -838,7 +912,7 @@ export const SettingsScreen = {
         label: `${value}s`
       }));
       this.openOptionDialog({
-        title: "Backdrop Expand Delay",
+        title: t("settings.dialogs.backdropExpandDelay"),
         options,
         selectedId: String(model.layout.focusedPosterBackdropExpandDelaySeconds ?? 3),
         returnFocusKey: "layout:focusedPosterExpandDelay",
@@ -855,11 +929,11 @@ export const SettingsScreen = {
     });
     this.actionMap.set("layout:focusedPosterTrailerTarget", () => {
       const options = [
-        { id: "hero_media", label: "Hero Media" },
-        { id: "expanded_card", label: "Expanded Card" }
+        { id: "hero_media", labelKey: "settings.layout.trailerTargets.heroMedia" },
+        { id: "expanded_card", labelKey: "settings.layout.trailerTargets.expandedCard" }
       ];
       this.openOptionDialog({
-        title: "Modern Trailer Playback Location",
+        title: t("settings.dialogs.modernTrailerPlaybackLocation"),
         options,
         selectedId: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media"),
         returnFocusKey: "layout:focusedPosterTrailerTarget",
@@ -885,8 +959,8 @@ export const SettingsScreen = {
         </div>
         ${isModernLayout ? this.renderToggleRow({
           focusKey: "layout:modernLandscapePosters",
-          title: "Landscape Posters",
-          subtitle: "Switch between portrait and landscape cards for Modern view.",
+          title: t("settings.layout.landscapePosters.title"),
+          subtitle: t("settings.layout.landscapePosters.subtitle"),
           checked: Boolean(model.layout.modernLandscapePostersEnabled)
         }) : ""}
       </div>
@@ -896,56 +970,56 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${!model.layout.modernSidebar ? this.renderToggleRow({
           focusKey: "layout:collapseSidebar",
-          title: "Collapse Sidebar",
-          subtitle: "Hide sidebar by default; show when focused.",
+          title: t("settings.layout.collapseSidebar.title"),
+          subtitle: t("settings.layout.collapseSidebar.subtitle"),
           checked: Boolean(model.layout.collapseSidebar)
         }) : ""}
         ${this.renderToggleRow({
           focusKey: "layout:modernSidebar",
-          title: "Modern Sidebar",
-          subtitle: "Enable floating sidebar navigation.",
+          title: t("settings.layout.modernSidebar.title"),
+          subtitle: t("settings.layout.modernSidebar.subtitle"),
           checked: Boolean(model.layout.modernSidebar)
         })}
         ${model.layout.modernSidebar ? this.renderToggleRow({
           focusKey: "layout:modernSidebarBlur",
-          title: "Modern Sidebar Blur",
-          subtitle: "Toggle blur effect for modern sidebar surfaces.",
+          title: t("settings.layout.modernSidebarBlur.title"),
+          subtitle: t("settings.layout.modernSidebarBlur.subtitle"),
           checked: Boolean(model.layout.modernSidebarBlur)
         }) : ""}
         ${this.renderToggleRow({
           focusKey: "layout:heroSection",
-          title: "Show Hero Section",
-          subtitle: "Display hero carousel at top of home.",
+          title: t("settings.layout.heroSection.title"),
+          subtitle: t("settings.layout.heroSection.subtitle"),
           checked: Boolean(model.layout.heroSectionEnabled)
         })}
         ${this.renderToggleRow({
           focusKey: "layout:searchDiscover",
-          title: "Show Discover in Search",
-          subtitle: "Show browse section when search is empty.",
+          title: t("settings.layout.searchDiscover.title"),
+          subtitle: t("settings.layout.searchDiscover.subtitle"),
           checked: Boolean(model.layout.searchDiscoverEnabled)
         })}
         ${!isModernLayout ? this.renderToggleRow({
           focusKey: "layout:posterLabels",
-          title: "Show Poster Labels",
-          subtitle: "Show titles under posters in rows, grid, and see-all.",
+          title: t("settings.layout.posterLabels.title"),
+          subtitle: t("settings.layout.posterLabels.subtitle"),
           checked: Boolean(model.layout.posterLabelsEnabled)
         }) : ""}
         ${!isModernLayout ? this.renderToggleRow({
           focusKey: "layout:addonName",
-          title: "Show Addon Name",
-          subtitle: "Show source name under catalog titles.",
+          title: t("settings.layout.addonName.title"),
+          subtitle: t("settings.layout.addonName.subtitle"),
           checked: Boolean(model.layout.catalogAddonNameEnabled)
         }) : ""}
         ${this.renderToggleRow({
           focusKey: "layout:catalogType",
-          title: "Show Catalog Type",
-          subtitle: "Show type suffix next to catalog name (Movie/Series).",
+          title: t("settings.layout.catalogType.title"),
+          subtitle: t("settings.layout.catalogType.subtitle"),
           checked: Boolean(model.layout.catalogTypeSuffixEnabled)
         })}
         ${this.renderToggleRow({
           focusKey: "layout:hideUnreleased",
-          title: "Hide Unreleased Content",
-          subtitle: "Hide movies and shows that haven't been released yet.",
+          title: t("settings.layout.hideUnreleased.title"),
+          subtitle: t("settings.layout.hideUnreleased.subtitle"),
           checked: Boolean(model.layout.hideUnreleasedContent)
         })}
       </div>
@@ -955,22 +1029,22 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${this.renderToggleRow({
           focusKey: "layout:detail:blurUnwatched",
-          title: "Blur Unwatched Episodes",
-          subtitle: "Blur episode thumbnails until watched to avoid spoilers.",
+          title: t("settings.layout.blurUnwatched.title"),
+          subtitle: t("settings.layout.blurUnwatched.subtitle"),
           checked: false,
           disabled: true
         })}
         ${this.renderToggleRow({
           focusKey: "layout:detail:trailerButton",
-          title: "Show Trailer Button",
-          subtitle: "Show trailer button on detail page (only when trailer is available).",
+          title: t("settings.layout.showTrailerButton.title"),
+          subtitle: t("settings.layout.showTrailerButton.subtitle"),
           checked: false,
           disabled: true
         })}
         ${this.renderToggleRow({
           focusKey: "layout:detail:preferExternalMeta",
-          title: "Prefer meta from external addon",
-          subtitle: "Use metadata from external addon instead of catalog addon.",
+          title: t("settings.layout.preferExternalMeta.title"),
+          subtitle: t("settings.layout.preferExternalMeta.subtitle"),
           checked: false,
           disabled: true
         })}
@@ -981,39 +1055,39 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${!isModernLandscape ? this.renderToggleRow({
           focusKey: "layout:focusedPosterExpand",
-          title: "Expand Focused Poster to Backdrop",
-          subtitle: "Expand focused poster after idle delay.",
+          title: t("settings.layout.focusedPosterExpand.title"),
+          subtitle: t("settings.layout.focusedPosterExpand.subtitle"),
           checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
         }) : ""}
         ${!isModernLandscape && Boolean(model.layout.focusedPosterBackdropExpandEnabled) ? this.renderActionRow({
           focusKey: "layout:focusedPosterExpandDelay",
-          title: "Backdrop Expand Delay",
-          subtitle: "How long to wait before expanding focused cards.",
+          title: t("settings.layout.focusedPosterExpandDelay.title"),
+          subtitle: t("settings.layout.focusedPosterExpandDelay.subtitle"),
           value: `${Number(model.layout.focusedPosterBackdropExpandDelaySeconds ?? 3)}s`
         }) : ""}
         ${showAutoplayRow ? this.renderToggleRow({
           focusKey: "layout:focusedPosterTrailer",
-          title: isModernLayout ? "Autoplay Trailer" : "Autoplay Trailer in Expanded Card",
+          title: isModernLayout ? t("settings.layout.autoplayTrailer.title") : t("settings.layout.autoplayTrailerExpandedCard.title"),
           subtitle: isModernLayout
-            ? "Play trailer preview for focused content when available."
-            : "Play trailer inside expanded backdrop when available.",
+            ? t("settings.layout.autoplayTrailer.subtitle")
+            : t("settings.layout.autoplayTrailerExpandedCard.subtitle"),
           checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
         }) : ""}
         ${showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderToggleRow({
           focusKey: "layout:focusedPosterTrailerMuted",
-          title: "Play Trailer Muted",
+          title: isModernLayout ? t("settings.layout.trailerMuted.title") : t("settings.layout.trailerMutedExpandedCard.title"),
           subtitle: isModernLayout
-            ? "Mute trailer audio during autoplay preview."
-            : "Mute trailer audio in expanded cards.",
+            ? t("settings.layout.trailerMuted.subtitle")
+            : t("settings.layout.trailerMutedExpandedCard.subtitle"),
           checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
         }) : ""}
         ${isModernLayout && showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderActionRow({
           focusKey: "layout:focusedPosterTrailerTarget",
-          title: "Modern Trailer Playback Location",
-          subtitle: "Choose where trailer preview plays in Modern Home.",
+          title: t("settings.layout.trailerTarget.title"),
+          subtitle: t("settings.layout.trailerTarget.subtitle"),
           value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card"
-            ? "Expanded Card"
-            : "Hero Media"
+            ? t("settings.layout.trailerTargets.expandedCard")
+            : t("settings.layout.trailerTargets.heroMedia")
         }) : ""}
       </div>
     `;
@@ -1024,29 +1098,29 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
             focusKey: "layout:toggle:homeLayout",
-            title: "Home Layout",
-            subtitle: "Choose structure and hero source.",
+            title: t("settings.layout.groups.homeLayout.title"),
+            subtitle: t("settings.layout.groups.homeLayout.subtitle"),
             expanded: Boolean(expanded.homeLayout),
             bodyHtml: homeLayoutBody
           })}
           ${this.renderCollapsibleRow({
             focusKey: "layout:toggle:homeContent",
-            title: "Home Content",
-            subtitle: "Control what appears on home and search.",
+            title: t("settings.layout.groups.homeContent.title"),
+            subtitle: t("settings.layout.groups.homeContent.subtitle"),
             expanded: Boolean(expanded.homeContent),
             bodyHtml: homeContentBody
           })}
           ${this.renderCollapsibleRow({
             focusKey: "layout:toggle:detailPage",
-            title: "Detail Page",
-            subtitle: "Settings for the detail and episode screens.",
+            title: t("settings.layout.groups.detailPage.title"),
+            subtitle: t("settings.layout.groups.detailPage.subtitle"),
             expanded: Boolean(expanded.detailPage),
             bodyHtml: detailPageBody
           })}
           ${this.renderCollapsibleRow({
             focusKey: "layout:toggle:focusedPoster",
-            title: "Focused Poster",
-            subtitle: "Advanced behavior for focused poster cards.",
+            title: t("settings.layout.groups.focusedPoster.title"),
+            subtitle: t("settings.layout.groups.focusedPoster.subtitle"),
             expanded: Boolean(expanded.focusedPoster),
             bodyHtml: focusedPosterBody
           })}
@@ -1057,7 +1131,7 @@ export const SettingsScreen = {
 
   renderPluginsSection(model) {
     this.actionMap.set("plugins:editDraft", () => {
-      const value = window.prompt("Add repository URL", this.pluginDraft || "https://example.com/manifest.json");
+      const value = window.prompt(t("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
       if (value === null) {
         return;
       }
@@ -1091,7 +1165,7 @@ export const SettingsScreen = {
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-plugin-builder">
-          <div class="settings-plugin-builder-title">Add repository</div>
+          <div class="settings-plugin-builder-title">${t("settings.plugins.addRepository")}</div>
           <div class="settings-plugin-builder-row">
             <button class="settings-plugin-input settings-content-focusable focusable"
                     data-zone="content"
@@ -1102,42 +1176,42 @@ export const SettingsScreen = {
                     data-zone="content"
                     ${this.registerAction("plugins:addDraft", this.actionMap.get("plugins:addDraft"))}>
               ${iconSvg(ROW_ICONS.plus, "settings-plugin-add-icon")}
-              <span>Add</span>
+              <span>${t("common.add")}</span>
             </button>
           </div>
         </div>
 
         ${this.renderActionRow({
           focusKey: "plugins:phone",
-          title: "Manage from phone",
-          subtitle: plannedSubtitle("Scan a QR code to add or remove repositories from your phone"),
+          title: t("settings.plugins.manageFromPhone"),
+          subtitle: plannedSubtitle(t("settings.plugins.manageFromPhoneSubtitle")),
           classes: "settings-plugins-phone",
           icon: "phone",
           planned: true
         })}
 
-        <div class="settings-repository-heading">Repositories (${model.addons.length})</div>
+        <div class="settings-repository-heading">${t("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
 
         ${model.addons.length
           ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>`
           : `<div class="settings-empty-state">
-              <p>No repositories added yet.</p>
-              <p>Add a repository to get started.</p>
+              <p>${t("settings.plugins.noRepositoriesTitle")}</p>
+              <p>${t("settings.plugins.noRepositoriesSubtitle")}</p>
             </div>`}
 
         ${model.pluginSources.length ? `
-          <div class="settings-repository-heading settings-plugin-provider-heading">Providers (${model.pluginSources.length})</div>
+          <div class="settings-repository-heading settings-plugin-provider-heading">${t("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
           <div class="settings-stack">
             ${model.pluginSources.map((source) => this.renderToggleRow({
               focusKey: `plugins:provider:${source.id}`,
-              title: source.name || "Provider",
-              subtitle: source.urlTemplate || "Custom provider template",
+              title: source.name || t("common.provider"),
+              subtitle: source.urlTemplate || t("settings.plugins.customProviderTemplate"),
               checked: Boolean(source.enabled)
             })).join("")}
             ${this.renderActionRow({
               focusKey: "plugins:provider:test",
-              title: "Provider testing",
-              subtitle: plannedSubtitle("Run local provider tests and inspect results."),
+              title: t("settings.plugins.providerTesting"),
+              subtitle: plannedSubtitle(t("settings.plugins.providerTestingSubtitle")),
               planned: true
             })}
           </div>
@@ -1160,27 +1234,27 @@ export const SettingsScreen = {
       this.contentFocusKey = "integration:back";
     });
 
-    return `
-      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "integration"))}
-      <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-stack">
-          ${this.renderActionRow({
-            focusKey: "integration:hub:tmdb",
-            title: "TMDB",
-            subtitle: "Metadata enrichment controls"
-          })}
-          ${this.renderActionRow({
-            focusKey: "integration:hub:mdblist",
-            title: "MDBList",
-            subtitle: "External ratings providers"
-          })}
-          ${this.renderActionRow({
-            focusKey: "integration:hub:animeskip",
-            title: "Anime-Skip",
-            subtitle: "Anime intro/outro skip timestamps"
-          })}
+      return `
+        ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "integration"))}
+        <div class="settings-group-card settings-group-card-fill">
+          <div class="settings-stack">
+            ${this.renderActionRow({
+              focusKey: "integration:hub:tmdb",
+              title: t("settings.integration.tmdb.label"),
+              subtitle: t("settings.integration.tmdb.subtitle")
+            })}
+            ${this.renderActionRow({
+              focusKey: "integration:hub:mdblist",
+              title: t("settings.integration.mdblist.label"),
+              subtitle: t("settings.integration.mdblist.subtitle")
+            })}
+            ${this.renderActionRow({
+              focusKey: "integration:hub:animeskip",
+              title: t("settings.integration.animeskip.label"),
+              subtitle: t("settings.integration.animeskip.subtitle")
+            })}
+          </div>
         </div>
-      </div>
     `;
   },
 
@@ -1204,14 +1278,9 @@ export const SettingsScreen = {
         TmdbSettingsStore.set({ useDetails: !TmdbSettingsStore.get().useDetails });
       });
       this.actionMap.set("integration:tmdb:language", () => {
-        const options = [
-          { id: "en-US", label: "English" },
-          { id: "it-IT", label: "Italian" },
-          { id: "es-ES", label: "Spanish" }
-        ];
         this.openOptionDialog({
-          title: "Select TMDB language",
-          options,
+          title: t("settings.dialogs.selectTmdbLanguage"),
+          options: TMDB_LANGUAGE_OPTIONS,
           selectedId: TmdbSettingsStore.get().language,
           returnFocusKey: "integration:tmdb:language",
           onSelect: (option) => {
@@ -1220,60 +1289,60 @@ export const SettingsScreen = {
         });
       });
       this.actionMap.set("integration:tmdb:api", () => {
-        const value = window.prompt("TMDB API key", TmdbSettingsStore.get().apiKey || "");
+        const value = window.prompt(t("settings.integration.tmdb.apiKey.prompt"), TmdbSettingsStore.get().apiKey || "");
         if (value !== null) {
           TmdbSettingsStore.set({ apiKey: String(value).trim() });
         }
       });
 
       return `
-        ${this.renderSectionHeader({ label: "TMDB", subtitle: "Metadata enrichment controls" })}
+        ${this.renderSectionHeader({ labelKey: "settings.integration.tmdb.label", subtitleKey: "settings.integration.tmdb.subtitle" })}
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
               focusKey: "integration:back",
-              title: "Back to Integrations",
-              subtitle: "Return to integration list",
+              title: t("settings.integration.backToIntegrations.title"),
+              subtitle: t("settings.integration.backToIntegrations.subtitle"),
               icon: "back"
             })}
             ${this.renderToggleRow({
               focusKey: "integration:tmdb:enabled",
-              title: "Enable TMDB",
-              subtitle: "Turn metadata enrichment on or off.",
+              title: t("settings.integration.tmdb.enable.title"),
+              subtitle: t("settings.integration.tmdb.enable.subtitle"),
               checked: Boolean(model.tmdb.enabled)
             })}
             ${this.renderToggleRow({
               focusKey: "integration:tmdb:artwork",
-              title: "Artwork",
-              subtitle: "Posters, logos, and backdrops from TMDB.",
+              title: t("settings.integration.tmdb.artwork.title"),
+              subtitle: t("settings.integration.tmdb.artwork.subtitle"),
               checked: Boolean(model.tmdb.useArtwork),
               disabled: !model.tmdb.enabled
             })}
             ${this.renderToggleRow({
               focusKey: "integration:tmdb:basic",
-              title: "Basic Info",
-              subtitle: "Genres, ratings, and overview from TMDB.",
+              title: t("settings.integration.tmdb.basicInfo.title"),
+              subtitle: t("settings.integration.tmdb.basicInfo.subtitle"),
               checked: Boolean(model.tmdb.useBasicInfo),
               disabled: !model.tmdb.enabled
             })}
             ${this.renderToggleRow({
               focusKey: "integration:tmdb:details",
-              title: "Details",
-              subtitle: "Runtime, release date, country, and language from TMDB.",
+              title: t("settings.integration.tmdb.details.title"),
+              subtitle: t("settings.integration.tmdb.details.subtitle"),
               checked: Boolean(model.tmdb.useDetails),
               disabled: !model.tmdb.enabled
             })}
             ${this.renderActionRow({
               focusKey: "integration:tmdb:language",
-              title: "TMDB Language",
-              subtitle: "Preferred metadata language",
-              value: model.tmdb.language || "en-US"
+              title: t("settings.integration.tmdb.language.title"),
+              subtitle: t("settings.integration.tmdb.language.subtitle"),
+              value: labelForTmdbLanguage(model.tmdb.language)
             })}
             ${this.renderActionRow({
               focusKey: "integration:tmdb:api",
-              title: "API Key",
-              subtitle: "Configure TMDB credentials",
-              value: maskValue(model.tmdb.apiKey, "Not set")
+              title: t("settings.integration.tmdb.apiKey.title"),
+              subtitle: t("settings.integration.tmdb.apiKey.subtitle"),
+              value: maskValue(model.tmdb.apiKey, t("common.notSet"))
             })}
           </div>
         </div>
@@ -1285,34 +1354,34 @@ export const SettingsScreen = {
         MdbListSettingsStore.set({ enabled: !MdbListSettingsStore.get().enabled });
       });
       this.actionMap.set("integration:mdblist:key", () => {
-        const value = window.prompt("MDBList API key", MdbListSettingsStore.get().apiKey || "");
+        const value = window.prompt(t("settings.integration.mdblist.apiKey.prompt"), MdbListSettingsStore.get().apiKey || "");
         if (value !== null) {
           MdbListSettingsStore.set({ apiKey: String(value).trim() });
         }
       });
 
       return `
-        ${this.renderSectionHeader({ label: "MDBList", subtitle: "External ratings providers" })}
+        ${this.renderSectionHeader({ labelKey: "settings.integration.mdblist.label", subtitleKey: "settings.integration.mdblist.subtitle" })}
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
               focusKey: "integration:back",
-              title: "Back to Integrations",
-              subtitle: "Return to integration list",
+              title: t("settings.integration.backToIntegrations.title"),
+              subtitle: t("settings.integration.backToIntegrations.subtitle"),
               icon: "back"
             })}
             ${this.renderToggleRow({
               focusKey: "integration:mdblist:enabled",
-              title: "Enable MDBList",
-              subtitle: plannedSubtitle("Use MDBList as an extra ratings provider."),
+              title: t("settings.integration.mdblist.enable.title"),
+              subtitle: plannedSubtitle(t("settings.integration.mdblist.enable.subtitle")),
               checked: Boolean(model.mdbList.enabled),
               planned: true
             })}
             ${this.renderActionRow({
               focusKey: "integration:mdblist:key",
-              title: "API Key",
-              subtitle: plannedSubtitle("Configure MDBList credentials"),
-              value: maskValue(model.mdbList.apiKey, "Not set"),
+              title: t("settings.integration.mdblist.apiKey.title"),
+              subtitle: plannedSubtitle(t("settings.integration.mdblist.apiKey.subtitle")),
+              value: maskValue(model.mdbList.apiKey, t("common.notSet")),
               disabled: !model.mdbList.enabled,
               planned: true
             })}
@@ -1325,34 +1394,34 @@ export const SettingsScreen = {
       AnimeSkipSettingsStore.set({ enabled: !AnimeSkipSettingsStore.get().enabled });
     });
     this.actionMap.set("integration:animeskip:id", () => {
-      const value = window.prompt("Anime-Skip client ID", AnimeSkipSettingsStore.get().clientId || "");
+      const value = window.prompt(t("settings.integration.animeskip.clientId.prompt"), AnimeSkipSettingsStore.get().clientId || "");
       if (value !== null) {
         AnimeSkipSettingsStore.set({ clientId: String(value).trim() });
       }
     });
 
     return `
-      ${this.renderSectionHeader({ label: "Anime-Skip", subtitle: "Anime intro and outro skip timestamps" })}
+      ${this.renderSectionHeader({ labelKey: "settings.integration.animeskip.label", subtitleKey: "settings.integration.animeskip.subtitle" })}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderActionRow({
             focusKey: "integration:back",
-            title: "Back to Integrations",
-            subtitle: "Return to integration list",
+            title: t("settings.integration.backToIntegrations.title"),
+            subtitle: t("settings.integration.backToIntegrations.subtitle"),
             icon: "back"
           })}
           ${this.renderToggleRow({
             focusKey: "integration:animeskip:enabled",
-            title: "Enable Anime-Skip",
-            subtitle: plannedSubtitle("Use Anime-Skip timestamps during playback."),
+            title: t("settings.integration.animeskip.enable.title"),
+            subtitle: plannedSubtitle(t("settings.integration.animeskip.enable.subtitle")),
             checked: Boolean(model.animeSkip.enabled),
             planned: true
           })}
           ${this.renderActionRow({
             focusKey: "integration:animeskip:id",
-            title: "Client ID",
-            subtitle: plannedSubtitle("Configure Anime-Skip client credentials"),
-            value: maskValue(model.animeSkip.clientId, "Not set"),
+            title: t("settings.integration.animeskip.clientId.title"),
+            subtitle: plannedSubtitle(t("settings.integration.animeskip.clientId.subtitle")),
+            value: maskValue(model.animeSkip.clientId, t("common.notSet")),
             disabled: !model.animeSkip.enabled,
             planned: true
           })}
@@ -1391,7 +1460,7 @@ export const SettingsScreen = {
     this.actionMap.set("playback:quality", () => {
       const options = ["auto", "2160p", "1080p", "720p"];
       this.openOptionDialog({
-        title: "Preferred quality",
+        title: t("settings.dialogs.preferredQuality"),
         options: options.map((option) => ({ id: option, label: qualityLabel(option) })),
         selectedId: String(PlayerSettingsStore.get().preferredQuality || "auto"),
         returnFocusKey: "playback:quality",
@@ -1403,7 +1472,7 @@ export const SettingsScreen = {
     this.actionMap.set("playback:player", () => {
       const options = ["auto", "native", "hls", "dash"];
       this.openOptionDialog({
-        title: "Player preference",
+        title: t("settings.dialogs.playerPreference"),
         options: options.map((option) => ({ id: option, label: playerLabel(option) })),
         selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
         returnFocusKey: "playback:player",
@@ -1416,14 +1485,9 @@ export const SettingsScreen = {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
     this.actionMap.set("playback:audioLanguage", () => {
-      const options = [
-        { id: "system", label: "System" },
-        { id: "en", label: "English" },
-        { id: "it", label: "Italian" }
-      ];
       this.openOptionDialog({
-        title: "Preferred audio language",
-        options,
+        title: t("settings.dialogs.preferredAudioLanguage"),
+        options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
         selectedId: PlayerSettingsStore.get().preferredAudioLanguage,
         returnFocusKey: "playback:audioLanguage",
         onSelect: (option) => {
@@ -1435,14 +1499,9 @@ export const SettingsScreen = {
       PlayerSettingsStore.set({ subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled });
     });
     this.actionMap.set("playback:subtitleLanguage", () => {
-      const options = [
-        { id: "system", label: "System" },
-        { id: "en", label: "English" },
-        { id: "it", label: "Italian" }
-      ];
       this.openOptionDialog({
-        title: "Preferred subtitle language",
-        options,
+        title: t("settings.dialogs.preferredSubtitleLanguage"),
+        options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
         selectedId: PlayerSettingsStore.get().subtitleLanguage,
         returnFocusKey: "playback:subtitleLanguage",
         onSelect: (option) => {
@@ -1452,10 +1511,10 @@ export const SettingsScreen = {
     });
     this.actionMap.set("playback:renderMode", () => {
       this.openOptionDialog({
-        title: "Subtitle render mode",
+        title: t("settings.dialogs.subtitleRenderMode"),
         options: [
-          { id: "native", label: "Native" },
-          { id: "html", label: "HTML overlay" }
+          { id: "native", labelKey: "common.native" },
+          { id: "html", labelKey: "common.htmlOverlay" }
         ],
         selectedId: String(PlayerSettingsStore.get().subtitleRenderMode || "native").toLowerCase(),
         returnFocusKey: "playback:renderMode",
@@ -1469,8 +1528,8 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${this.renderToggleRow({
           focusKey: "playback:autoplay",
-          title: "Autoplay Next Episode",
-          subtitle: "Automatically continue to the next episode.",
+          title: t("settings.playback.autoplayNextEpisode.title"),
+          subtitle: t("settings.playback.autoplayNextEpisode.subtitle"),
           checked: Boolean(model.player.autoplayNextEpisode)
         })}
       </div>
@@ -1480,14 +1539,14 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${this.renderActionRow({
           focusKey: "playback:quality",
-          title: "Preferred Quality",
-          subtitle: "Choose the default quality target.",
+          title: t("settings.playback.preferredQuality.title"),
+          subtitle: t("settings.playback.preferredQuality.subtitle"),
           value: qualityLabel(model.player.preferredQuality)
         })}
         ${this.renderActionRow({
           focusKey: "playback:player",
-          title: "Preferred Player",
-          subtitle: "Select the playback engine priority.",
+          title: t("settings.playback.preferredPlayer.title"),
+          subtitle: t("settings.playback.preferredPlayer.subtitle"),
           value: playerLabel(model.player.preferredPlayer)
         })}
       </div>
@@ -1497,15 +1556,15 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${this.renderToggleRow({
           focusKey: "playback:trailer",
-          title: "Autoplay Trailer",
-          subtitle: "Play trailers automatically on focused content.",
+          title: t("settings.playback.autoplayTrailer.title"),
+          subtitle: t("settings.playback.autoplayTrailer.subtitle"),
           checked: Boolean(model.player.trailerAutoplay)
         })}
         ${this.renderActionRow({
           focusKey: "playback:audioLanguage",
-          title: "Preferred Audio",
-          subtitle: "Choose the default audio language.",
-          value: String(model.player.preferredAudioLanguage || "system").toUpperCase()
+          title: t("settings.playback.preferredAudio.title"),
+          subtitle: t("settings.playback.preferredAudio.subtitle"),
+          value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
         })}
       </div>
     `;
@@ -1514,20 +1573,20 @@ export const SettingsScreen = {
       <div class="settings-stack">
         ${this.renderToggleRow({
           focusKey: "playback:subtitlesEnabled",
-          title: "Enable Subtitles",
-          subtitle: "Turn subtitles on by default.",
+          title: t("settings.playback.enableSubtitles.title"),
+          subtitle: t("settings.playback.enableSubtitles.subtitle"),
           checked: Boolean(model.player.subtitlesEnabled)
         })}
         ${this.renderActionRow({
           focusKey: "playback:subtitleLanguage",
-          title: "Subtitle Language",
-          subtitle: "Preferred subtitle language.",
-          value: String(model.player.subtitleLanguage || "system").toUpperCase()
+          title: t("settings.playback.subtitleLanguage.title"),
+          subtitle: t("settings.playback.subtitleLanguage.subtitle"),
+          value: labelForPlaybackLanguage(model.player.subtitleLanguage)
         })}
         ${this.renderActionRow({
           focusKey: "playback:renderMode",
-          title: "Render Mode",
-          subtitle: "Choose how subtitles are drawn.",
+          title: t("settings.playback.renderMode.title"),
+          subtitle: t("settings.playback.renderMode.subtitle"),
           value: renderModeLabel(model.player.subtitleRenderMode)
         })}
       </div>
@@ -1539,29 +1598,29 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
             focusKey: "playback:toggle:general",
-            title: "General",
-            subtitle: "Core playback behavior.",
+            title: t("settings.playback.groups.general.title"),
+            subtitle: t("settings.playback.groups.general.subtitle"),
             expanded: Boolean(expanded.general),
             bodyHtml: generalBody
           })}
           ${this.renderCollapsibleRow({
             focusKey: "playback:toggle:stream",
-            title: "Player & Stream Selection",
-            subtitle: "Player preference, auto-play, and source filtering.",
+            title: t("settings.playback.groups.stream.title"),
+            subtitle: t("settings.playback.groups.stream.subtitle"),
             expanded: Boolean(expanded.stream),
             bodyHtml: streamBody
           })}
           ${this.renderCollapsibleRow({
             focusKey: "playback:toggle:audio",
-            title: "Audio & Trailer",
-            subtitle: "Trailer behavior and audio controls.",
+            title: t("settings.playback.groups.audio.title"),
+            subtitle: t("settings.playback.groups.audio.subtitle"),
             expanded: Boolean(expanded.audio),
             bodyHtml: audioBody
           })}
           ${this.renderCollapsibleRow({
             focusKey: "playback:toggle:subtitles",
-            title: "Subtitles",
-            subtitle: "Language, style, and render mode.",
+            title: t("settings.playback.groups.subtitles.title"),
+            subtitle: t("settings.playback.groups.subtitles.subtitle"),
             expanded: Boolean(expanded.subtitles),
             bodyHtml: subtitleBody
           })}
@@ -1579,8 +1638,8 @@ export const SettingsScreen = {
         <div class="settings-stack">
           ${this.renderActionRow({
             focusKey: "trakt:open",
-            title: "Open Trakt Settings",
-            subtitle: plannedSubtitle("Manage Trakt sign-in and continue watching sync."),
+            title: t("settings.trakt.openSettings"),
+            subtitle: plannedSubtitle(t("settings.trakt.openSettingsSubtitle")),
             planned: true
           })}
         </div>
@@ -1601,21 +1660,21 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-about-brand">
           <img class="settings-about-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
-          <p class="settings-about-copy">Made with &#10084; by Tapframe and friends</p>
-          <p class="settings-about-copy">Version ${escapeHtml(SETTINGS_VERSION_LABEL)}</p>
-          <p class="settings-about-copy">Ported by edoedac0 and WhiteGiso.</p>
+          <p class="settings-about-copy">${t("settings.about.madeWithLove")}</p>
+          <p class="settings-about-copy">${t("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
+          <p class="settings-about-copy">${t("settings.about.portedBy")}</p>
         </div>
         <div class="settings-stack">
           ${this.renderActionRow({
             focusKey: "about:privacy",
-            title: "Privacy Policy",
-            subtitle: "View our privacy policy",
+            title: t("settings.about.privacyPolicy.title"),
+            subtitle: t("settings.about.privacyPolicy.subtitle"),
             external: true
           })}
           ${this.renderActionRow({
             focusKey: "about:supporters",
-            title: "Supporters & Contributors",
-            subtitle: "Open recognition and project credits"
+            title: t("settings.about.supporters.title"),
+            subtitle: t("settings.about.supporters.subtitle")
           })}
         </div>
       </div>

@@ -84,7 +84,8 @@ await mkdir(distDir, { recursive: true });
 await Promise.all([
   copyEntry("assets"),
   copyEntry("css"),
-  copyEntry("js")
+  copyEntry("js"),
+  copyEntry("res")
 ]);
 
 await buildBundle();

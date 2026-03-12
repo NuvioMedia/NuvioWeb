@@ -3,6 +3,7 @@ import { QrLoginService } from "../../../core/auth/qrLoginService.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
+import { I18n } from "../../../i18n/index.js";
 
 let pollInterval = null;
 let countdownInterval = null;
@@ -25,23 +26,23 @@ export const AuthQrSignInScreen = {
           </div>
 
           <div class="qr-copy-block">
-            <h1 class="qr-title">Sign In With QR</h1>
+            <h1 class="qr-title">${I18n.t("auth.qr.title")}</h1>
             <p id="qr-description" class="qr-description">${this.getLeftDescription()}</p>
           </div>
         </section>
 
-        <section class="qr-card-panel" aria-label="Account Login">
+        <section class="qr-card-panel" aria-label="${I18n.t("auth.qr.cardAriaLabel")}">
           <div class="qr-card">
             <header class="qr-card-header">
-              <h2 class="qr-card-title">Account Login</h2>
+              <h2 class="qr-card-title">${I18n.t("auth.qr.cardTitle")}</h2>
               <p id="qr-card-subtitle" class="qr-card-subtitle">${this.getCardSubtitle()}</p>
             </header>
 
             <div id="qr-container" class="qr-code-frame"></div>
             <div id="qr-code-text" class="qr-code-text"></div>
-            <div id="qr-status" class="qr-status">Waiting for approval on your phone...</div>
+            <div id="qr-status" class="qr-status">${I18n.t("auth.qr.waitingApproval")}</div>
             <div class="qr-actions">
-              <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">Refresh QR</button>
+              <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">${I18n.t("auth.qr.refresh")}</button>
               <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
             </div>
           </div>
@@ -68,7 +69,7 @@ export const AuthQrSignInScreen = {
     this.stopIntervals();
     const sessionId = activeQrSessionId + 1;
     activeQrSessionId = sessionId;
-    this.setStatus("Preparing QR login...");
+    this.setStatus(I18n.t("auth.qr.preparing"));
 
     const result = await QrLoginService.start();
     if (sessionId !== activeQrSessionId) {
@@ -82,7 +83,7 @@ export const AuthQrSignInScreen = {
     }
 
     this.renderQr(result);
-    this.setStatus("Scan QR and sign in on your phone");
+    this.setStatus(I18n.t("auth.qr.scanAndSignIn"));
     this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
   },
 
@@ -95,10 +96,10 @@ export const AuthQrSignInScreen = {
     }
 
     qrContainer.innerHTML = `
-      <img src="${qrImageUrl}" class="qr-image" alt="QR code" />
+      <img src="${qrImageUrl}" class="qr-image" alt="${I18n.t("auth.qr.qrImageAlt")}" />
     `;
 
-    codeText.innerText = `Code: ${code}`;
+    codeText.innerText = I18n.t("auth.qr.codeLabel", { code });
   },
 
   startCountdown(expiresAt) {
@@ -125,7 +126,7 @@ export const AuthQrSignInScreen = {
       }
 
       if (status === "approved") {
-        this.setStatus("Approved. Finishing login...");
+        this.setStatus(I18n.t("auth.qr.approved"));
         clearInterval(pollInterval);
         pollInterval = null;
 
@@ -144,11 +145,11 @@ export const AuthQrSignInScreen = {
       }
 
       if (status === "pending") {
-        this.setStatus("Waiting for approval on your phone...");
+        this.setStatus(I18n.t("auth.qr.waitingApproval"));
       }
 
       if (status === "expired") {
-        this.setStatus("QR expired. Refresh to retry.");
+        this.setStatus(I18n.t("auth.qr.expired"));
       }
 
     }, Math.max(2, Number(pollIntervalSeconds || 3)) * 1000);
@@ -157,21 +158,21 @@ export const AuthQrSignInScreen = {
   toFriendlyQrError(rawError) {
     const message = String(rawError || "").toLowerCase();
     if (!message) {
-      return "QR unavailable. Try again.";
+      return I18n.t("auth.qr.unavailable");
     }
     if (message.includes("invalid tv login redirect base url")) {
-      return "QR backend redirect URL is invalid. Check TV login SQL setup.";
+      return I18n.t("auth.qr.invalidRedirect");
     }
     if (message.includes("start_tv_login_session") && message.includes("could not find the function")) {
-      return "QR backend function is missing. Re-run TV login SQL setup.";
+      return I18n.t("auth.qr.missingFunction");
     }
     if (message.includes("gen_random_bytes") && message.includes("does not exist")) {
-      return "QR backend missing extension. Re-run SQL setup for TV login.";
+      return I18n.t("auth.qr.missingExtension");
     }
     if (message.includes("network") || message.includes("failed to fetch")) {
-      return "Network error while generating QR.";
+      return I18n.t("auth.qr.networkError");
     }
-    return `QR unavailable: ${rawError}`;
+    return I18n.t("auth.qr.unavailableWithReason", { reason: rawError });
   },
 
   setStatus(text) {
@@ -184,26 +185,26 @@ export const AuthQrSignInScreen = {
 
   getLeftDescription() {
     if (this.isSignedIn) {
-      return "Account linked on this TV.";
+      return I18n.t("auth.qr.leftDescriptionSignedIn");
     }
-    return "Use your phone to sign in with email/password. TV stays QR-only for faster login.";
+    return I18n.t("auth.qr.leftDescriptionSignedOut");
   },
 
   getCardSubtitle() {
     if (this.isSignedIn) {
-      return "Your synced data";
+      return I18n.t("auth.qr.cardSubtitleSignedIn");
     }
-    return "Scan QR, approve in browser, then return here.";
+    return I18n.t("auth.qr.cardSubtitleSignedOut");
   },
 
   getBackButtonLabel() {
     if (this.hasBackDestination) {
-      return "Back";
+      return I18n.t("auth.qr.back");
     }
     if (this.isSignedIn) {
-      return "Continue";
+      return I18n.t("auth.qr.continue");
     }
-    return "Continue without account";
+    return I18n.t("auth.qr.continueWithoutAccount");
   },
 
   onKeyDown(event) {

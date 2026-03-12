@@ -1,6 +1,7 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
+import { I18n } from "../../../i18n/index.js";
 
 export const AuthSignInScreen = {
 
@@ -13,13 +14,13 @@ export const AuthSignInScreen = {
   render() {
     this.container.innerHTML = `
       <div class="row">
-        <h2>Email Sign In</h2>
-        <p>Press ENTER to open QR login or use the dev shortcut with preset credentials.</p>
+        <h2>${I18n.t("auth.signIn.title")}</h2>
+        <p>${I18n.t("auth.signIn.description")}</p>
       </div>
       <div class="row">
-        <div class="card focusable" data-action="openQr">Open QR Login</div>
-        <div class="card focusable" data-action="devLogin">Dev Email Login</div>
-        <div class="card focusable" data-action="back">Back</div>
+        <div class="card focusable" data-action="openQr">${I18n.t("auth.signIn.openQrLogin")}</div>
+        <div class="card focusable" data-action="devLogin">${I18n.t("auth.signIn.devEmailLogin")}</div>
+        <div class="card focusable" data-action="back">${I18n.t("auth.signIn.back")}</div>
       </div>
     `;
 
@@ -45,8 +46,8 @@ export const AuthSignInScreen = {
       return;
     }
     if (action === "devLogin") {
-      const email = window.prompt("Email");
-      const password = window.prompt("Password");
+      const email = window.prompt(I18n.t("auth.signIn.emailPrompt"));
+      const password = window.prompt(I18n.t("auth.signIn.passwordPrompt"));
       if (email && password) {
         try {
           await AuthManager.signInWithEmail(email, password);

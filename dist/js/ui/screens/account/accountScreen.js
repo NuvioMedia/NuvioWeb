@@ -1,6 +1,7 @@
 import { AuthManager } from "../../../core/auth/authManager.js";
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
+import { I18n } from "../../../i18n/index.js";
 
 export const AccountScreen = {
 
@@ -44,18 +45,18 @@ export const AccountScreen = {
     }
 
     if (this.state.authState === "loading") {
-      this.container.innerHTML = `<div class="account-wrapper"><h2>Loading account...</h2></div>`;
+      this.container.innerHTML = `<div class="account-wrapper"><h2>${I18n.t("auth.account.loadingAccount")}</h2></div>`;
       return;
     }
 
     if (this.state.authState === "signedOut") {
       this.container.innerHTML = `
         <div class="account-wrapper">
-          <h1>Account</h1>
-          <p>Sign in to sync your library and preferences.</p>
+          <h1>${I18n.t("auth.account.title")}</h1>
+          <p>${I18n.t("auth.account.signInCopy")}</p>
           <div class="account-card focusable" data-action="signin">
-            <h3>Sign In</h3>
-            <p>Use QR sign-in from mobile.</p>
+            <h3>${I18n.t("auth.account.signIn")}</h3>
+            <p>${I18n.t("auth.account.signInSubtitle")}</p>
           </div>
         </div>
       `;
@@ -65,12 +66,12 @@ export const AccountScreen = {
 
     this.container.innerHTML = `
       <div class="account-wrapper">
-        <h1>Account</h1>
+        <h1>${I18n.t("auth.account.title")}</h1>
         <div class="account-info">
-          <span>Signed in as</span>
-          <strong>${this.state.email || "User"}</strong>
+          <span>${I18n.t("auth.account.signedInAs")}</span>
+          <strong>${this.state.email || I18n.t("common.unknownUser")}</strong>
         </div>
-        <div class="logout-btn focusable" data-action="logout">Sign Out</div>
+        <div class="logout-btn focusable" data-action="logout">${I18n.t("auth.account.signOut")}</div>
       </div>
     `;
     this.attachFocus();

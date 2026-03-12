@@ -11,6 +11,7 @@ import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
 import { loadStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
+import { I18n } from "./i18n/index.js";
 
 function isAddonRemoteMode() {
   try {
@@ -23,6 +24,7 @@ function isAddonRemoteMode() {
 async function bootstrapApp() {
   renderAppShell();
   Platform.init();
+  await I18n.init();
   await loadStreamingLibs();
 
   console.log("Nuvio starting...", {
@@ -33,6 +35,7 @@ async function bootstrapApp() {
   PlayerController.init();
   FocusEngine.init();
   ThemeManager.apply();
+  I18n.apply();
 
   AuthManager.subscribe((state) => {
     if (state === AuthState.LOADING) {

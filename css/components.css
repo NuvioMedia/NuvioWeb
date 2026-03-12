@@ -853,42 +853,42 @@ button:focus-visible {
   display: flex;
   width: 100vw;
   height: 100vh;
-  --legacy-sidebar-rail-width: 72px;
-  --legacy-sidebar-open-width: 196px;
-  --legacy-sidebar-item-width: 48px;
-  --legacy-sidebar-item-expanded-width: 156px;
-  --legacy-sidebar-item-height: 52px;
-  --legacy-sidebar-item-radius: 32px;
-  --legacy-sidebar-padding: 12px;
-  --legacy-sidebar-item-gap: 10px;
-  --legacy-sidebar-leading-offset: 18px;
-  --legacy-sidebar-label-start: 54px;
-  --legacy-sidebar-label-end: 14px;
-  --legacy-sidebar-profile-top-gap: 30px;
-  --legacy-sidebar-profile-bottom-gap: 16px;
-  --sidebar-leading-visual-size: 34px;
-  --sidebar-icon-size: 22px;
-  --modern-sidebar-collapsed-width: 184px;
-  --modern-sidebar-open-width: 262px;
-  --modern-sidebar-surface-width: 240px;
-  --modern-sidebar-surface-top: 16px;
-  --modern-sidebar-surface-left: 14px;
-  --modern-sidebar-surface-bottom: 12px;
-  --modern-sidebar-panel-padding-x: 12px;
-  --modern-sidebar-panel-padding-y: 14px;
+  --legacy-sidebar-rail-width: 88px;
+  --legacy-sidebar-open-width: 236px;
+  --legacy-sidebar-item-width: 60px;
+  --legacy-sidebar-item-expanded-width: 192px;
+  --legacy-sidebar-item-height: 62px;
+  --legacy-sidebar-item-radius: 36px;
+  --legacy-sidebar-padding: 14px;
+  --legacy-sidebar-item-gap: 12px;
+  --legacy-sidebar-leading-offset: 22px;
+  --legacy-sidebar-label-start: 72px;
+  --legacy-sidebar-label-end: 18px;
+  --legacy-sidebar-profile-top-gap: 34px;
+  --legacy-sidebar-profile-bottom-gap: 18px;
+  --sidebar-leading-visual-size: 40px;
+  --sidebar-icon-size: 28px;
+  --modern-sidebar-collapsed-width: 212px;
+  --modern-sidebar-open-width: 312px;
+  --modern-sidebar-surface-width: 288px;
+  --modern-sidebar-surface-top: 18px;
+  --modern-sidebar-surface-left: 16px;
+  --modern-sidebar-surface-bottom: 14px;
+  --modern-sidebar-panel-padding-x: 14px;
+  --modern-sidebar-panel-padding-y: 18px;
   --modern-sidebar-button-width: 92%;
-  --modern-sidebar-button-height: 54px;
-  --modern-sidebar-button-gap: 14px;
+  --modern-sidebar-button-height: 62px;
+  --modern-sidebar-button-gap: 16px;
   --modern-sidebar-button-radius: 999px;
-  --modern-sidebar-list-gap: 6px;
-  --modern-sidebar-pill-top: 16px;
-  --modern-sidebar-pill-left: 40px;
-  --modern-sidebar-pill-height: 44px;
-  --modern-sidebar-pill-chevron-width: 8.5px;
-  --modern-sidebar-pill-chevron-height: 16px;
-  --modern-sidebar-pill-chip-start: 5px;
-  --modern-sidebar-pill-chip-end: 12px;
-  --modern-sidebar-pill-chip-gap: 9px;
+  --modern-sidebar-list-gap: 8px;
+  --modern-sidebar-pill-top: 18px;
+  --modern-sidebar-pill-left: 44px;
+  --modern-sidebar-pill-height: 50px;
+  --modern-sidebar-pill-chevron-width: 10px;
+  --modern-sidebar-pill-chevron-height: 18px;
+  --modern-sidebar-pill-chip-start: 7px;
+  --modern-sidebar-pill-chip-end: 14px;
+  --modern-sidebar-pill-chip-gap: 12px;
   --focus-color: #f5f8fc;
   background: radial-gradient(120% 90% at 75% 8%, rgba(190, 40, 18, 0.26), transparent 45%), #06090e;
   color: #f8fbff;
@@ -975,13 +975,13 @@ button:focus-visible {
   border: none;
   background: transparent;
   color: var(--text-tertiary);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 16px;
   padding: 0;
   transition: background 160ms ease, padding 180ms ease;
   margin: 0;
@@ -1027,7 +1027,7 @@ button:focus-visible {
   overflow: hidden;
   white-space: nowrap;
   transition: opacity 120ms ease, width 120ms ease;
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1;
 }
@@ -1083,7 +1083,7 @@ button:focus-visible {
   margin: var(--legacy-sidebar-profile-top-gap) auto var(--legacy-sidebar-profile-bottom-gap);
   flex-shrink: 0;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   border: none;
   background: transparent;
   border-radius: var(--legacy-sidebar-item-radius);
@@ -1112,14 +1112,14 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: #f2f7fd;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   flex-shrink: 0;
 }
 
 .home-profile-name {
   color: currentColor;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 600;
   line-height: 1.18;
 }
@@ -1191,15 +1191,15 @@ button:focus-visible {
 .modern-sidebar-profile {
   min-height: var(--modern-sidebar-button-height);
   width: var(--modern-sidebar-button-width);
-  margin: 12px auto 16px;
-  padding: 10px 14px;
+  margin: 14px auto 18px;
+  padding: 12px 18px;
   border-radius: var(--modern-sidebar-button-radius);
   border: 1.5px solid transparent;
   background: transparent;
   color: #fff;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 20px;
   text-align: left;
 }
 
@@ -1216,7 +1216,7 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: #f3f6fb;
-  font-size: 16px;
+  font-size: 18px;
   font-weight: 700;
   flex: 0 0 auto;
 }
@@ -1224,7 +1224,7 @@ button:focus-visible {
 .modern-sidebar-profile-name {
   min-width: 0;
   flex: 1;
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
@@ -1246,7 +1246,7 @@ button:focus-visible {
   min-height: var(--modern-sidebar-button-height);
   width: var(--modern-sidebar-button-width);
   margin: 0 auto;
-  padding: 10px 14px;
+  padding: 12px 18px;
   border-radius: var(--modern-sidebar-button-radius);
   border: 1.5px solid transparent;
   background: transparent;
@@ -1307,7 +1307,7 @@ button:focus-visible {
 .modern-sidebar-pill-label {
   min-width: 0;
   flex: 1;
-  font-size: 21px;
+  font-size: 24px;
   line-height: 1;
   white-space: nowrap;
   overflow: hidden;
@@ -2777,7 +2777,7 @@ button:focus-visible {
 }
 
 .home-screen-shell {
-  --home-sidebar-width: 72px;
+  --home-sidebar-width: var(--legacy-sidebar-rail-width);
   --home-content-start: 48px;
   --home-row-gap: 16px;
   --home-track-end: 200px;

@@ -2180,13 +2180,588 @@
     }));
   }
 
+  // js/data/local/themeStore.js
+  var KEY4 = "themeSettings";
+  var ACCENT_MIGRATION_FLAG_KEY = "themeAccentMigratedToWhite";
+  var LEGACY_DEFAULT_ACCENT = "#ff3d00";
+  var DEFAULT_THEME = {
+    mode: "dark",
+    themeName: "WHITE",
+    accentColor: "#ffffff",
+    fontFamily: "INTER",
+    language: null
+  };
+  var THEME_BY_ACCENT = /* @__PURE__ */ new Map([
+    ["#ffffff", "WHITE"],
+    ["#f5f5f5", "WHITE"],
+    ["#f5f8fc", "WHITE"],
+    ["#ff4d4f", "CRIMSON"],
+    ["#ff5252", "CRIMSON"],
+    ["#42a5f5", "OCEAN"],
+    ["#ba68c8", "VIOLET"],
+    ["#ab47bc", "VIOLET"],
+    ["#66bb6a", "EMERALD"],
+    ["#ffca28", "AMBER"],
+    ["#ffa726", "AMBER"],
+    ["#ec407a", "ROSE"]
+  ]);
+  function normalizeTheme(settings = {}) {
+    const accent = String((settings == null ? void 0 : settings.accentColor) || DEFAULT_THEME.accentColor).toLowerCase();
+    const themeName = String(
+      (settings == null ? void 0 : settings.themeName) || THEME_BY_ACCENT.get(accent) || DEFAULT_THEME.themeName
+    ).toUpperCase();
+    return {
+      ...DEFAULT_THEME,
+      ...settings,
+      themeName,
+      accentColor: accent
+    };
+  }
+  var ThemeStore = {
+    get() {
+      const stored = LocalStore.get(KEY4, {}) || {};
+      if (String((stored == null ? void 0 : stored.accentColor) || "").toLowerCase() === LEGACY_DEFAULT_ACCENT && !LocalStore.get(ACCENT_MIGRATION_FLAG_KEY, false)) {
+        const migrated = { ...stored, accentColor: DEFAULT_THEME.accentColor };
+        LocalStore.set(KEY4, migrated);
+        LocalStore.set(ACCENT_MIGRATION_FLAG_KEY, true);
+        return normalizeTheme(migrated);
+      }
+      return normalizeTheme(stored);
+    },
+    set(partial) {
+      LocalStore.set(KEY4, normalizeTheme({ ...this.get(), ...partial || {} }));
+    }
+  };
+
+  // js/i18n/index.js
+  var DEFAULT_LOCALE = "en";
+  var SUPPORTED_LOCALES = [
+    "en",
+    "es",
+    "fr",
+    "hi",
+    "hu",
+    "it",
+    "ja",
+    "nl",
+    "pl",
+    "ro",
+    "se",
+    "sk",
+    "sl",
+    "tr",
+    "vi"
+  ];
+  var KEY_ALIASES = {
+    "common.add": "plugin_add_btn",
+    "common.notSet": "mdblist_not_set",
+    "common.systemDefault": "appearance_language_system",
+    "sidebar.addons": "nav_addons",
+    "sidebar.expandSidebar": "cd_expand_sidebar",
+    "sidebar.home": "nav_home",
+    "sidebar.library": "nav_library",
+    "sidebar.search": "nav_search",
+    "sidebar.settings": "nav_settings",
+    "settings.account.signInWithQr": "account_signin_qr_title",
+    "settings.account.signInWithQrSubtitle": "account_signin_qr_subtitle",
+    "settings.account.signOut": "account_sign_out",
+    "settings.account.syncNote": "account_sync_description",
+    "settings.appearance.appFont": "appearance_font",
+    "settings.appearance.appFontSubtitle": "appearance_font_subtitle",
+    "settings.appearance.appLanguage": "appearance_language",
+    "settings.appearance.appLanguageSubtitle": "appearance_language_subtitle",
+    "settings.about.madeWithLove": "about_made_with_love",
+    "settings.about.privacyPolicy.subtitle": "about_privacy_policy_subtitle",
+    "settings.about.privacyPolicy.title": "about_privacy_policy",
+    "settings.about.supporters.subtitle": "about_supporters_contributors_subtitle",
+    "settings.about.supporters.title": "about_supporters_contributors",
+    "settings.about.version": "about_version",
+    "settings.dialogs.backdropExpandDelay": "layout_expand_delay",
+    "settings.dialogs.modernTrailerPlaybackLocation": "layout_trailer_location",
+    "settings.dialogs.preferredAudioLanguage": "audio_preferred_lang",
+    "settings.dialogs.selectFont": "appearance_font_dialog_title",
+    "settings.dialogs.selectLanguage": "appearance_language_dialog_title",
+    "settings.dialogs.selectTmdbLanguage": "tmdb_language_dialog_title",
+    "settings.integration.animeskip.enable.subtitle": "animeskip_enable_subtitle",
+    "settings.integration.animeskip.enable.title": "animeskip_enable_title",
+    "settings.integration.animeskip.label": "animeskip_title",
+    "settings.integration.animeskip.subtitle": "settings_animeskip_subtitle",
+    "settings.integration.animeskip.clientId.prompt": "animeskip_client_id_title",
+    "settings.integration.animeskip.clientId.subtitle": "animeskip_client_id_subtitle",
+    "settings.integration.animeskip.clientId.title": "animeskip_client_id_title",
+    "settings.integration.mdblist.apiKey.prompt": "mdblist_api_key_title",
+    "settings.integration.mdblist.apiKey.subtitle": "mdblist_api_key_subtitle",
+    "settings.integration.mdblist.apiKey.title": "mdblist_api_key_title",
+    "settings.integration.mdblist.enable.subtitle": "mdblist_enable_subtitle",
+    "settings.integration.mdblist.enable.title": "mdblist_enable_title",
+    "settings.integration.mdblist.label": "mdblist_title",
+    "settings.integration.mdblist.subtitle": "settings_mdblist_subtitle",
+    "settings.integration.tmdb.artwork.subtitle": "tmdb_artwork_subtitle",
+    "settings.integration.tmdb.artwork.title": "tmdb_artwork_title",
+    "settings.integration.tmdb.basicInfo.subtitle": "tmdb_basic_info_subtitle",
+    "settings.integration.tmdb.basicInfo.title": "tmdb_basic_info_title",
+    "settings.integration.tmdb.details.subtitle": "tmdb_details_subtitle",
+    "settings.integration.tmdb.details.title": "tmdb_details_title",
+    "settings.integration.tmdb.enable.subtitle": "tmdb_enable_subtitle",
+    "settings.integration.tmdb.enable.title": "tmdb_enable_title",
+    "settings.integration.tmdb.label": "mdblist_tmdb_title",
+    "settings.integration.tmdb.language.subtitle": "tmdb_language_subtitle",
+    "settings.integration.tmdb.language.title": "tmdb_language_title",
+    "settings.integration.tmdb.subtitle": "settings_tmdb_subtitle",
+    "settings.layout.addonName.subtitle": "layout_addon_name_sub",
+    "settings.layout.addonName.title": "layout_addon_name",
+    "settings.layout.autoplayTrailer.subtitle": "layout_autoplay_trailer_sub",
+    "settings.layout.autoplayTrailer.title": "layout_autoplay_trailer",
+    "settings.layout.autoplayTrailerExpandedCard.subtitle": "layout_autoplay_trailer_expanded_sub",
+    "settings.layout.autoplayTrailerExpandedCard.title": "layout_autoplay_trailer_expanded",
+    "settings.layout.blurUnwatched.subtitle": "layout_blur_unwatched_sub",
+    "settings.layout.blurUnwatched.title": "layout_blur_unwatched",
+    "settings.layout.catalogType.subtitle": "layout_catalog_type_sub",
+    "settings.layout.catalogType.title": "layout_catalog_type",
+    "settings.layout.collapseSidebar.subtitle": "layout_collapse_sidebar_sub",
+    "settings.layout.collapseSidebar.title": "layout_collapse_sidebar",
+    "settings.layout.focusedPosterExpand.subtitle": "layout_expand_poster_sub",
+    "settings.layout.focusedPosterExpand.title": "layout_expand_poster",
+    "settings.layout.focusedPosterExpandDelay.subtitle": "layout_expand_delay_sub",
+    "settings.layout.focusedPosterExpandDelay.title": "layout_expand_delay",
+    "settings.layout.groups.detailPage.subtitle": "layout_section_detail_desc",
+    "settings.layout.groups.detailPage.title": "layout_section_detail",
+    "settings.layout.groups.focusedPoster.subtitle": "layout_section_focused_desc",
+    "settings.layout.groups.focusedPoster.title": "layout_section_focused",
+    "settings.layout.groups.homeContent.subtitle": "layout_section_content_desc",
+    "settings.layout.groups.homeContent.title": "layout_section_content",
+    "settings.layout.groups.homeLayout.subtitle": "layout_section_home_desc",
+    "settings.layout.groups.homeLayout.title": "layout_section_home",
+    "settings.layout.heroSection.subtitle": "layout_show_hero_sub",
+    "settings.layout.heroSection.title": "layout_show_hero",
+    "settings.layout.hideUnreleased.subtitle": "layout_hide_unreleased_sub",
+    "settings.layout.hideUnreleased.title": "layout_hide_unreleased",
+    "settings.layout.homeLayouts.classic.caption": "layout_classic_desc",
+    "settings.layout.homeLayouts.classic.label": "layout_classic",
+    "settings.layout.homeLayouts.grid.caption": "layout_grid_desc",
+    "settings.layout.homeLayouts.grid.label": "layout_grid",
+    "settings.layout.homeLayouts.modern.caption": "layout_modern_desc",
+    "settings.layout.homeLayouts.modern.label": "layout_modern",
+    "settings.layout.landscapePosters.subtitle": "layout_landscape_posters_sub",
+    "settings.layout.landscapePosters.title": "layout_landscape_posters",
+    "settings.layout.modernSidebar.subtitle": "layout_modern_sidebar_sub",
+    "settings.layout.modernSidebar.title": "layout_modern_sidebar",
+    "settings.layout.modernSidebarBlur.subtitle": "layout_modern_sidebar_blur_sub",
+    "settings.layout.modernSidebarBlur.title": "layout_modern_sidebar_blur",
+    "settings.layout.posterLabels.subtitle": "layout_poster_labels_sub",
+    "settings.layout.posterLabels.title": "layout_poster_labels",
+    "settings.layout.preferExternalMeta.subtitle": "layout_prefer_external_meta_sub",
+    "settings.layout.preferExternalMeta.title": "layout_prefer_external_meta",
+    "settings.layout.searchDiscover.subtitle": "layout_show_discover_sub",
+    "settings.layout.searchDiscover.title": "layout_show_discover",
+    "settings.layout.showTrailerButton.subtitle": "layout_trailer_button_sub",
+    "settings.layout.showTrailerButton.title": "layout_trailer_button",
+    "settings.layout.trailerMuted.subtitle": "layout_trailer_muted_sub_preview",
+    "settings.layout.trailerMuted.title": "layout_trailer_muted",
+    "settings.layout.trailerMutedExpandedCard.subtitle": "layout_trailer_muted_sub_expanded",
+    "settings.layout.trailerMutedExpandedCard.title": "layout_trailer_muted",
+    "settings.layout.trailerTarget.subtitle": "layout_trailer_location_sub",
+    "settings.layout.trailerTarget.title": "layout_trailer_location",
+    "settings.layout.trailerTargets.expandedCard": "layout_trailer_expanded_card",
+    "settings.layout.trailerTargets.heroMedia": "layout_trailer_hero_media",
+    "settings.playback.autoplayNextEpisode.subtitle": "autoplay_next_episode_sub",
+    "settings.playback.autoplayNextEpisode.title": "autoplay_next_episode",
+    "settings.playback.autoplayTrailer.subtitle": "audio_autoplay_trailers_sub",
+    "settings.playback.autoplayTrailer.title": "audio_autoplay_trailers",
+    "settings.playback.groups.audio.subtitle": "playback_section_audio_desc",
+    "settings.playback.groups.audio.title": "playback_section_audio",
+    "settings.playback.groups.general.subtitle": "playback_section_general_desc",
+    "settings.playback.groups.general.title": "playback_section_general",
+    "settings.playback.groups.stream.subtitle": "playback_section_player_desc",
+    "settings.playback.groups.stream.title": "playback_section_player",
+    "settings.playback.groups.subtitles.subtitle": "playback_section_subtitles_desc",
+    "settings.playback.groups.subtitles.title": "playback_section_subtitles",
+    "settings.playback.preferredAudio.title": "audio_preferred_lang",
+    "settings.playback.preferredPlayer.title": "playback_player",
+    "settings.playback.subtitleLanguage.title": "sub_preferred_lang",
+    "settings.plugins.addRepository": "plugin_add_repository",
+    "settings.plugins.manageFromPhone": "plugin_manage_from_phone_title",
+    "settings.plugins.manageFromPhoneSubtitle": "plugin_manage_from_phone_subtitle",
+    "settings.plugins.providersHeading": "plugin_providers_section",
+    "settings.plugins.repositoriesHeading": "plugin_repositories_section",
+    "settings.profiles.manageProfiles": "profile_manage_title",
+    "settings.sections.about.label": "about_title",
+    "settings.sections.about.subtitle": "about_subtitle",
+    "settings.sections.account.label": "settings_account",
+    "settings.sections.account.subtitle": "settings_account_subtitle",
+    "settings.sections.appearance.label": "appearance_title",
+    "settings.sections.appearance.subtitle": "appearance_subtitle",
+    "settings.sections.integration.label": "settings_integrations_section",
+    "settings.sections.integration.subtitle": "settings_integrations_section_subtitle",
+    "settings.sections.layout.label": "settings_layout",
+    "settings.sections.layout.subtitle": "settings_layout_subtitle",
+    "settings.sections.playback.label": "settings_playback",
+    "settings.sections.playback.subtitle": "settings_playback_subtitle",
+    "settings.sections.plugins.label": "settings_plugins",
+    "settings.sections.plugins.subtitle": "settings_plugins_section_subtitle",
+    "settings.sections.profiles.label": "settings_profiles",
+    "settings.sections.profiles.subtitle": "settings_profiles_subtitle",
+    "settings.sections.trakt.label": "trakt_watch_progress_source_trakt",
+    "settings.sections.trakt.subtitle": "settings_trakt_subtitle",
+    "settings.status.signedIn": "account_signed_in_label",
+    "settings.trakt.openSettings": "trakt_watch_progress_source_trakt",
+    "settings.trakt.openSettingsSubtitle": "settings_trakt_subtitle",
+    "auth.account.loadingAccount": "account_loading",
+    "auth.account.signIn": "account_signin_qr_title",
+    "auth.account.signInCopy": "account_sign_in_description",
+    "auth.account.signInSubtitle": "account_signin_qr_subtitle",
+    "auth.account.signedInAs": "account_signed_in_label",
+    "auth.account.signOut": "account_sign_out",
+    "auth.account.title": "account_title",
+    "auth.qr.approved": "auth_qr_finishing",
+    "auth.qr.back": "auth_qr_back",
+    "auth.qr.cardAriaLabel": "auth_qr_account_login",
+    "auth.qr.cardSubtitleSignedIn": "auth_qr_synced_data",
+    "auth.qr.cardSubtitleSignedOut": "auth_qr_scan_instruction",
+    "auth.qr.cardTitle": "auth_qr_account_login",
+    "auth.qr.codeLabel": "auth_qr_code_label",
+    "auth.qr.continue": "auth_qr_continue",
+    "auth.qr.continueWithoutAccount": "auth_qr_continue_without_account",
+    "auth.qr.expired": "auth_qr_unavailable",
+    "auth.qr.leftDescriptionSignedIn": "auth_qr_connected",
+    "auth.qr.leftDescriptionSignedOut": "auth_qr_phone_hint",
+    "auth.qr.preparing": "auth_qr_generating",
+    "auth.qr.refresh": "auth_qr_refresh",
+    "auth.qr.scanAndSignIn": "auth_qr_scan_instruction",
+    "auth.qr.title": "auth_qr_title",
+    "auth.qr.unavailable": "auth_qr_unavailable",
+    "auth.signIn.back": "auth_qr_back",
+    "auth.signIn.description": "auth_signin_tv_disabled",
+    "auth.signIn.emailPrompt": "debug_email_placeholder",
+    "auth.signIn.openQrLogin": "auth_signin_qr_btn",
+    "auth.signIn.passwordPrompt": "debug_password_placeholder",
+    "auth.signIn.title": "auth_signin_title",
+    "auth.syncCode.back": "auth_qr_back",
+    "auth.syncCode.title": "account_sync_code_title"
+  };
+  var EXTRA_MESSAGES = {
+    en: {
+      "common.auto": "Auto",
+      "common.closed": "Closed",
+      "common.comingSoon": "Coming soon.",
+      "common.comingSoonWithContext": "{{subject}} Coming soon.",
+      "common.english": "English",
+      "common.htmlOverlay": "HTML overlay",
+      "common.italian": "Italian",
+      "common.native": "Native",
+      "common.open": "Open",
+      "common.provider": "Provider",
+      "common.repository": "Repository",
+      "common.selectOption": "Select option",
+      "common.soon": "Soon",
+      "common.spanish": "Spanish",
+      "common.system": "System",
+      "common.unknownUser": "User",
+      "sidebar.profileFallback": "Profile",
+      "sidebar.switchProfile": "Switch profile",
+      "settings.about.portedBy": "Ported by edoedac0 and WhiteGiso.",
+      "settings.account.signOutSubtitle": "Disconnect this TV from your account.",
+      "settings.appearance.themes.amber": "Amber",
+      "settings.appearance.themes.crimson": "Crimson",
+      "settings.appearance.themes.emerald": "Emerald",
+      "settings.appearance.themes.ocean": "Ocean",
+      "settings.appearance.themes.rose": "Rose",
+      "settings.appearance.themes.violet": "Violet",
+      "settings.appearance.themes.white": "White",
+      "settings.dialogs.playerPreference": "Player preference",
+      "settings.dialogs.preferredQuality": "Preferred quality",
+      "settings.dialogs.preferredSubtitleLanguage": "Preferred subtitle language",
+      "settings.dialogs.subtitleRenderMode": "Subtitle render mode",
+      "settings.integration.backToIntegrations.subtitle": "Return to integration list",
+      "settings.integration.backToIntegrations.title": "Back to Integrations",
+      "settings.integration.tmdb.apiKey.prompt": "TMDB API key",
+      "settings.integration.tmdb.apiKey.subtitle": "Configure TMDB credentials",
+      "settings.integration.tmdb.apiKey.title": "API Key",
+      "settings.playback.enableSubtitles.subtitle": "Turn subtitles on by default.",
+      "settings.playback.enableSubtitles.title": "Enable Subtitles",
+      "settings.playback.preferredAudio.subtitle": "Choose the default audio language.",
+      "settings.playback.preferredPlayer.subtitle": "Select the playback engine priority.",
+      "settings.playback.preferredQuality.subtitle": "Choose the default quality target.",
+      "settings.playback.preferredQuality.title": "Preferred Quality",
+      "settings.playback.renderMode.subtitle": "Choose how subtitles are drawn.",
+      "settings.playback.renderMode.title": "Render Mode",
+      "settings.playback.subtitleLanguage.subtitle": "Preferred subtitle language.",
+      "settings.plugins.addRepositoryPrompt": "Add repository URL",
+      "settings.plugins.customProviderTemplate": "Custom provider template",
+      "settings.plugins.noRepositoriesSubtitle": "Add a repository to get started.",
+      "settings.plugins.noRepositoriesTitle": "No repositories added yet.",
+      "settings.plugins.providerTesting": "Provider testing",
+      "settings.plugins.providerTestingSubtitle": "Run local provider tests and inspect results.",
+      "settings.plugins.refreshRepository": "Refresh repository",
+      "settings.plugins.removeRepository": "Remove repository",
+      "settings.status.linkedFallback": "Account linked on this TV",
+      "auth.qr.invalidRedirect": "QR backend redirect URL is invalid.",
+      "auth.qr.missingExtension": "QR backend missing required extension.",
+      "auth.qr.missingFunction": "QR backend function is missing.",
+      "auth.qr.networkError": "Network error while generating QR.",
+      "auth.qr.qrImageAlt": "QR code",
+      "auth.qr.unavailableWithReason": "QR unavailable: {{reason}}",
+      "auth.qr.waitingApproval": "Waiting for approval on your phone...",
+      "auth.signIn.devEmailLogin": "Dev Email Login",
+      "auth.syncCode.clearCode": "Clear Code",
+      "auth.syncCode.currentCode": "Current code: {{value}}",
+      "auth.syncCode.emptyValue": "(empty)",
+      "auth.syncCode.prompt": "Insert sync code",
+      "auth.syncCode.setCode": "Set Code"
+    },
+    it: {
+      "common.auto": "Auto",
+      "common.closed": "Chiuso",
+      "common.comingSoon": "In arrivo.",
+      "common.comingSoonWithContext": "{{subject}} In arrivo.",
+      "common.english": "Inglese",
+      "common.htmlOverlay": "Overlay HTML",
+      "common.italian": "Italiano",
+      "common.native": "Nativo",
+      "common.open": "Aperto",
+      "common.provider": "Provider",
+      "common.repository": "Repository",
+      "common.selectOption": "Seleziona opzione",
+      "common.soon": "Presto",
+      "common.spanish": "Spagnolo",
+      "common.system": "Sistema",
+      "common.unknownUser": "Utente",
+      "sidebar.profileFallback": "Profilo",
+      "sidebar.switchProfile": "Cambia profilo",
+      "settings.about.portedBy": "Ported by edoedac0 and WhiteGiso.",
+      "settings.account.signOutSubtitle": "Disconnetti questa TV dal tuo account.",
+      "settings.appearance.themes.amber": "Ambra",
+      "settings.appearance.themes.crimson": "Cremisi",
+      "settings.appearance.themes.emerald": "Smeraldo",
+      "settings.appearance.themes.ocean": "Oceano",
+      "settings.appearance.themes.rose": "Rosa",
+      "settings.appearance.themes.violet": "Violetto",
+      "settings.appearance.themes.white": "Bianco",
+      "settings.dialogs.playerPreference": "Preferenza player",
+      "settings.dialogs.preferredQuality": "Qualita preferita",
+      "settings.dialogs.preferredSubtitleLanguage": "Lingua sottotitoli preferita",
+      "settings.dialogs.subtitleRenderMode": "Modalita rendering sottotitoli",
+      "settings.integration.backToIntegrations.subtitle": "Torna alla lista integrazioni",
+      "settings.integration.backToIntegrations.title": "Torna alle integrazioni",
+      "settings.integration.tmdb.apiKey.prompt": "Chiave API TMDB",
+      "settings.integration.tmdb.apiKey.subtitle": "Configura le credenziali TMDB",
+      "settings.integration.tmdb.apiKey.title": "Chiave API",
+      "settings.playback.enableSubtitles.subtitle": "Attiva i sottotitoli di default.",
+      "settings.playback.enableSubtitles.title": "Abilita sottotitoli",
+      "settings.playback.preferredAudio.subtitle": "Scegli la lingua audio predefinita.",
+      "settings.playback.preferredPlayer.subtitle": "Seleziona la priorita del motore di riproduzione.",
+      "settings.playback.preferredQuality.subtitle": "Scegli la qualita predefinita.",
+      "settings.playback.preferredQuality.title": "Qualita preferita",
+      "settings.playback.renderMode.subtitle": "Scegli come vengono disegnati i sottotitoli.",
+      "settings.playback.renderMode.title": "Modalita rendering",
+      "settings.playback.subtitleLanguage.subtitle": "Lingua preferita dei sottotitoli.",
+      "settings.plugins.addRepositoryPrompt": "Aggiungi URL repository",
+      "settings.plugins.customProviderTemplate": "Template provider personalizzato",
+      "settings.plugins.noRepositoriesSubtitle": "Aggiungi una repository per iniziare.",
+      "settings.plugins.noRepositoriesTitle": "Nessuna repository ancora aggiunta.",
+      "settings.plugins.providerTesting": "Test provider",
+      "settings.plugins.providerTestingSubtitle": "Esegui test locali del provider e controlla i risultati.",
+      "settings.plugins.refreshRepository": "Aggiorna repository",
+      "settings.plugins.removeRepository": "Rimuovi repository",
+      "settings.status.linkedFallback": "Account collegato su questa TV",
+      "auth.qr.invalidRedirect": "L'URL di redirect del QR non e' valido.",
+      "auth.qr.missingExtension": "Al backend QR manca un'estensione richiesta.",
+      "auth.qr.missingFunction": "La funzione backend QR manca.",
+      "auth.qr.networkError": "Errore di rete durante la generazione del QR.",
+      "auth.qr.qrImageAlt": "Codice QR",
+      "auth.qr.unavailableWithReason": "QR non disponibile: {{reason}}",
+      "auth.qr.waitingApproval": "In attesa di approvazione dal telefono...",
+      "auth.signIn.devEmailLogin": "Login email dev",
+      "auth.syncCode.clearCode": "Cancella codice",
+      "auth.syncCode.currentCode": "Codice attuale: {{value}}",
+      "auth.syncCode.emptyValue": "(vuoto)",
+      "auth.syncCode.prompt": "Inserisci codice sync",
+      "auth.syncCode.setCode": "Imposta codice"
+    }
+  };
+  var warnedKeys = /* @__PURE__ */ new Set();
+  var activeMessages = /* @__PURE__ */ Object.create(null);
+  var currentLocale = DEFAULT_LOCALE;
+  var initialized = false;
+  var initPromise = null;
+  var baseMessagesPromise = null;
+  var localeMessagesCache = /* @__PURE__ */ new Map();
+  function normalizeLocale(value) {
+    const raw = String(value || "").trim().toLowerCase();
+    if (!raw) {
+      return "";
+    }
+    const [language] = raw.split(/[-_]/);
+    return language || raw;
+  }
+  function detectSystemLocale() {
+    var _a, _b;
+    const candidates = Array.isArray((_a = globalThis.navigator) == null ? void 0 : _a.languages) ? globalThis.navigator.languages : [(_b = globalThis.navigator) == null ? void 0 : _b.language];
+    return candidates.find(Boolean) || DEFAULT_LOCALE;
+  }
+  function resolvePreferredLocale(preferred = null) {
+    const requested = preferred === null ? ThemeStore.get().language || detectSystemLocale() : preferred;
+    const normalized = normalizeLocale(requested);
+    if (!normalized || normalized === "system") {
+      return normalizeLocale(detectSystemLocale()) || DEFAULT_LOCALE;
+    }
+    if (SUPPORTED_LOCALES.includes(normalized)) {
+      return normalized;
+    }
+    return DEFAULT_LOCALE;
+  }
+  function interpolate(template, params = {}) {
+    const values = Array.isArray(params) ? params : Object.values(params || {});
+    let sequentialIndex = 0;
+    return String(template || "").replace(/\{\{(\w+)\}\}/g, (_, key) => {
+      var _a;
+      return String((_a = params == null ? void 0 : params[key]) != null ? _a : "");
+    }).replace(/%(\d+)\$[a-z]/gi, (_, index) => {
+      var _a;
+      return String((_a = values[Number(index) - 1]) != null ? _a : "");
+    }).replace(/%[a-z]/gi, () => {
+      var _a;
+      return String((_a = values[sequentialIndex++]) != null ? _a : "");
+    });
+  }
+  function parseStringsXml(source) {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(source, "application/xml");
+    if (xml.querySelector("parsererror")) {
+      throw new Error("Invalid strings.xml");
+    }
+    return Array.from(xml.querySelectorAll("string[name]")).reduce((messages, node) => {
+      const name = String(node.getAttribute("name") || "").trim();
+      if (!name) {
+        return messages;
+      }
+      messages[name] = String(node.textContent || "");
+      return messages;
+    }, {});
+  }
+  async function loadXmlFile(relativePath) {
+    const candidates = [
+      `res/${relativePath}`,
+      `dist/res/${relativePath}`
+    ];
+    for (const candidate of candidates) {
+      try {
+        const response = await fetch(candidate);
+        if (!response.ok) {
+          continue;
+        }
+        return parseStringsXml(await response.text());
+      } catch (_) {
+        continue;
+      }
+    }
+    throw new Error(`Unable to load translation file: ${relativePath}`);
+  }
+  async function loadBaseMessages() {
+    if (!baseMessagesPromise) {
+      baseMessagesPromise = loadXmlFile("values/strings.xml");
+    }
+    return baseMessagesPromise;
+  }
+  async function loadLocaleMessages(locale) {
+    if (localeMessagesCache.has(locale)) {
+      return await localeMessagesCache.get(locale);
+    }
+    const promise = (async () => {
+      const base = await loadBaseMessages();
+      if (locale === DEFAULT_LOCALE) {
+        return { ...base };
+      }
+      try {
+        const localized = await loadXmlFile(`values-${locale}/strings.xml`);
+        return {
+          ...base,
+          ...localized
+        };
+      } catch (_) {
+        return { ...base };
+      }
+    })();
+    localeMessagesCache.set(locale, promise);
+    const messages = await promise;
+    localeMessagesCache.set(locale, messages);
+    return messages;
+  }
+  function getExtraMessage(locale, key) {
+    var _a, _b, _c;
+    return (_c = (_a = EXTRA_MESSAGES[locale]) == null ? void 0 : _a[key]) != null ? _c : (_b = EXTRA_MESSAGES[DEFAULT_LOCALE]) == null ? void 0 : _b[key];
+  }
+  function warnMissingKey(locale, key) {
+    const warningKey = `${locale}:${key}`;
+    if (warnedKeys.has(warningKey)) {
+      return;
+    }
+    warnedKeys.add(warningKey);
+    console.warn(`Missing translation for "${key}" in locale "${locale}"`);
+  }
+  var I18n = {
+    async init(preferred = null) {
+      const locale = resolvePreferredLocale(preferred);
+      if (initialized && locale === currentLocale && Object.keys(activeMessages).length > 0) {
+        return currentLocale;
+      }
+      if (initPromise && locale === currentLocale) {
+        return await initPromise;
+      }
+      currentLocale = locale;
+      initPromise = (async () => {
+        activeMessages = await loadLocaleMessages(locale);
+        initialized = true;
+        return currentLocale;
+      })();
+      try {
+        return await initPromise;
+      } finally {
+        initPromise = null;
+      }
+    },
+    getLocale() {
+      return initialized ? currentLocale : resolvePreferredLocale();
+    },
+    resolveLocale(preferred = null) {
+      return resolvePreferredLocale(preferred);
+    },
+    getSupportedLocales() {
+      return [...SUPPORTED_LOCALES];
+    },
+    t(key, params = {}, options = {}) {
+      var _a, _b, _c;
+      const locale = normalizeLocale((_a = options == null ? void 0 : options.locale) != null ? _a : currentLocale) || resolvePreferredLocale((_b = options == null ? void 0 : options.locale) != null ? _b : null);
+      if (typeof activeMessages[key] === "string") {
+        return interpolate(activeMessages[key], params);
+      }
+      const aliasedKey = KEY_ALIASES[key];
+      if (aliasedKey && typeof activeMessages[aliasedKey] === "string") {
+        return interpolate(activeMessages[aliasedKey], params);
+      }
+      const extra = getExtraMessage(locale, key);
+      if (typeof extra === "string") {
+        return interpolate(extra, params);
+      }
+      warnMissingKey(locale, key);
+      return interpolate((_c = options == null ? void 0 : options.fallback) != null ? _c : key, params);
+    },
+    apply() {
+      const locale = this.getLocale();
+      if (typeof document !== "undefined" && (document == null ? void 0 : document.documentElement)) {
+        document.documentElement.lang = locale;
+      }
+      return locale;
+    }
+  };
+
   // js/ui/components/sidebarNavigation.js
   var ROOT_SIDEBAR_ITEMS = [
-    { action: "gotoHome", route: "home", label: "Home", iconType: "material", iconName: "home" },
+    { action: "gotoHome", route: "home", labelKey: "sidebar.home", iconType: "material", iconName: "home" },
     {
       action: "gotoSearch",
       route: "search",
-      label: "Search",
+      labelKey: "sidebar.search",
       iconType: "svg",
       viewBox: "0 0 20 20",
       iconMarkup: '<path fill-rule="evenodd" d="M4 9a5 5 0 1110 0A5 5 0 014 9zm5-7a7 7 0 104.2 12.6.999.999 0 00.093.107l3 3a1 1 0 001.414-1.414l-3-3a.999.999 0 00-.107-.093A7 7 0 009 2z"/>'
@@ -2194,7 +2769,7 @@
     {
       action: "gotoLibrary",
       route: "library",
-      label: "Library",
+      labelKey: "sidebar.library",
       iconType: "svg",
       viewBox: "0 0 24 24",
       iconMarkup: '<path d="M8.50989 2.00001H15.49C15.7225 1.99995 15.9007 1.99991 16.0565 2.01515C17.1643 2.12352 18.0711 2.78958 18.4556 3.68678H5.54428C5.92879 2.78958 6.83555 2.12352 7.94337 2.01515C8.09917 1.99991 8.27741 1.99995 8.50989 2.00001Z"/><path d="M6.31052 4.72312C4.91989 4.72312 3.77963 5.56287 3.3991 6.67691C3.39117 6.70013 3.38356 6.72348 3.37629 6.74693C3.77444 6.62636 4.18881 6.54759 4.60827 6.49382C5.68865 6.35531 7.05399 6.35538 8.64002 6.35547L8.75846 6.35547L15.5321 6.35547C17.1181 6.35538 18.4835 6.35531 19.5639 6.49382C19.9833 6.54759 20.3977 6.62636 20.7958 6.74693C20.7886 6.72348 20.781 6.70013 20.773 6.67691C20.3925 5.56287 19.2522 4.72312 17.8616 4.72312H6.31052Z"/><path fill-rule="evenodd" clip-rule="evenodd" d="M8.67239 7.54204H15.3276C18.7024 7.54204 20.3898 7.54204 21.3377 8.52887C22.2855 9.5157 22.0625 11.0403 21.6165 14.0896L21.1935 16.9811C20.8437 19.3724 20.6689 20.568 19.7717 21.284C18.8745 22 17.5512 22 14.9046 22H9.09536C6.44881 22 5.12553 22 4.22834 21.284C3.33115 20.568 3.15626 19.3724 2.80648 16.9811L2.38351 14.0896C1.93748 11.0403 1.71447 9.5157 2.66232 8.52887C3.61017 7.54204 5.29758 7.54204 8.67239 7.54204ZM8 18.0001C8 17.5859 8.3731 17.2501 8.83333 17.2501H15.1667C15.6269 17.2501 16 17.5859 16 18.0001C16 18.4144 15.6269 18.7502 15.1667 18.7502H8.83333C8.3731 18.7502 8 18.4144 8 18.0001Z"/>'
@@ -2202,7 +2777,7 @@
     {
       action: "gotoPlugin",
       route: "plugin",
-      label: "Addons",
+      labelKey: "sidebar.addons",
       iconType: "svg",
       viewBox: "0 0 24 24",
       iconMarkup: '<path d="M2,9 C2,7.34315 3.34315,6 5,6 L7.85279,6 C8.15014,6 8.33369,5.69148 8.21898,5.41714 C8.16269,5.28251 8.11486,5.14448 8.0827,5 C7.75165,3.51305 8.87451,2 10.5,2 C12.1255,2 13.2483,3.51305 12.9173,5 C12.8851,5.14448 12.8373,5.28251 12.781,5.41714 C12.6663,5.69148 12.8499,6 13.1472,6 L15,6 C16.6569,6 18,7.34315 18,9 L18,10.8528 C18,11.1501 18.3085,11.3337 18.5829,11.219 C18.7175,11.1627 18.8555,11.1149 19,11.0827 C20.4869,10.7517 22,11.8745 22,13.5 C22,15.1255 20.4869,16.2483 19,15.9173 C18.8555,15.8851 18.7175,15.8373 18.5829,15.781 C18.3085,15.6663 18,15.8499 18,16.1472 L18,19 C18,20.6569 16.6569,22 15,22 L13.1066,22 C12.8194,22 12.6341,21.7088 12.7164,21.4337 C12.7583,21.2937 12.7892,21.1502 12.8021,21 C12.9129,19.7075 11.8988,18.5 10.5,18.5 C9.1012,18.5 8.08712,19.7075 8.1979,21 C8.21078,21.1502 8.2417,21.2937 8.28358,21.4337 C8.36589,21.7088 8.18055,22 7.89338,22 L5,22 C3.34315,22 2,20.6569 2,19 L2,16.1066 C2,15.8194 2.29121,15.6341 2.56632,15.7164 C2.7063,15.7583 2.84976,15.7892 3,15.8021 C4.29252,15.9129 5.5,14.8988 5.5,13.5 C5.5,12.1012 4.29252,11.0871 3,11.1979 C2.84976,11.2108 2.7063,11.2417 2.56633,11.2836 C2.29121,11.3659 2,11.1806 2,10.8934 L2,9 Z"/>'
@@ -2210,7 +2785,7 @@
     {
       action: "gotoSettings",
       route: "settings",
-      label: "Settings",
+      labelKey: "sidebar.settings",
       iconType: "svg",
       viewBox: "0 0 24 24",
       iconMarkup: '<path fill-rule="evenodd" clip-rule="evenodd" d="M14.2788 2.15224C13.9085 2 13.439 2 12.5 2C11.561 2 11.0915 2 10.7212 2.15224C10.2274 2.35523 9.83509 2.74458 9.63056 3.23463C9.53719 3.45834 9.50065 3.7185 9.48635 4.09799C9.46534 4.65568 9.17716 5.17189 8.69017 5.45093C8.20318 5.72996 7.60864 5.71954 7.11149 5.45876C6.77318 5.2813 6.52789 5.18262 6.28599 5.15102C5.75609 5.08178 5.22018 5.22429 4.79616 5.5472C4.47814 5.78938 4.24339 6.1929 3.7739 6.99993C3.30441 7.80697 3.06967 8.21048 3.01735 8.60491C2.94758 9.1308 3.09118 9.66266 3.41655 10.0835C3.56506 10.2756 3.77377 10.437 4.0977 10.639C4.57391 10.936 4.88032 11.4419 4.88029 12C4.88026 12.5581 4.57386 13.0639 4.0977 13.3608C3.77372 13.5629 3.56497 13.7244 3.41645 13.9165C3.09108 14.3373 2.94749 14.8691 3.01725 15.395C3.06957 15.7894 3.30432 16.193 3.7738 17C4.24329 17.807 4.47804 18.2106 4.79606 18.4527C5.22008 18.7756 5.75599 18.9181 6.28589 18.8489C6.52778 18.8173 6.77305 18.7186 7.11133 18.5412C7.60852 18.2804 8.2031 18.27 8.69012 18.549C9.17714 18.8281 9.46533 19.3443 9.48635 19.9021C9.50065 20.2815 9.53719 20.5417 9.63056 20.7654C9.83509 21.2554 10.2274 21.6448 10.7212 21.8478C11.0915 22 11.561 22 12.5 22C13.439 22 13.9085 22 14.2788 21.8478C14.7726 21.6448 15.1649 21.2554 15.3694 20.7654C15.4628 20.5417 15.4994 20.2815 15.5137 19.902C15.5347 19.3443 15.8228 18.8281 16.3098 18.549C16.7968 18.2699 17.3914 18.2804 17.8886 18.5412C18.2269 18.7186 18.4721 18.8172 18.714 18.8488C19.2439 18.9181 19.7798 18.7756 20.2038 18.4527C20.5219 18.2105 20.7566 17.807 21.2261 16.9999C21.6956 16.1929 21.9303 15.7894 21.9827 15.395C22.0524 14.8691 21.9088 14.3372 21.5835 13.9164C21.4349 13.7243 21.2262 13.5628 20.9022 13.3608C20.4261 13.0639 20.1197 12.558 20.1197 11.9999C20.1197 11.4418 20.4261 10.9361 20.9022 10.6392C21.2263 10.4371 21.435 10.2757 21.5836 10.0835C21.9089 9.66273 22.0525 9.13087 21.9828 8.60497C21.9304 8.21055 21.6957 7.80703 21.2262 7C20.7567 6.19297 20.522 5.78945 20.2039 5.54727C19.7799 5.22436 19.244 5.08185 18.7141 5.15109C18.4722 5.18269 18.2269 5.28136 17.8887 5.4588C17.3915 5.71959 16.7969 5.73002 16.3099 5.45096C15.8229 5.17191 15.5347 4.65566 15.5136 4.09794C15.4993 3.71848 15.4628 3.45833 15.3694 3.23463C15.1649 2.74458 14.7726 2.35523 14.2788 2.15224ZM12.5 15C14.1695 15 15.5228 13.6569 15.5228 12C15.5228 10.3431 14.1695 9 12.5 9C10.8305 9 9.47716 10.3431 9.47716 12C9.47716 13.6569 10.8305 15 12.5 15Z"/>'
@@ -2233,6 +2808,12 @@
     </svg>
   `;
   }
+  function t(key, params = {}, fallback = key) {
+    return I18n.t(key, params, { fallback });
+  }
+  function itemLabel(item) {
+    return t(item == null ? void 0 : item.labelKey, {}, String((item == null ? void 0 : item.label) || (item == null ? void 0 : item.route) || ""));
+  }
   function getSelectedItem(routeName = "") {
     return ROOT_SIDEBAR_ITEMS.find((item) => item.route === String(routeName || "")) || ROOT_SIDEBAR_ITEMS[0];
   }
@@ -2244,8 +2825,8 @@
     const profiles = await ProfileManager.getProfiles();
     const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId3) || profiles[0] || null;
     return {
-      activeProfileName: String((activeProfile == null ? void 0 : activeProfile.name) || "Profile").trim() || "Profile",
-      activeProfileInitial: profileInitial((activeProfile == null ? void 0 : activeProfile.name) || "Profile"),
+      activeProfileName: String((activeProfile == null ? void 0 : activeProfile.name) || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback"),
+      activeProfileInitial: profileInitial((activeProfile == null ? void 0 : activeProfile.name) || t("sidebar.profileFallback")),
       activeProfileColorHex: String((activeProfile == null ? void 0 : activeProfile.avatarColorHex) || "#1E88E5"),
       showProfileSelector: profiles.length > 1
     };
@@ -2285,18 +2866,18 @@
       ${showProfileSelector ? `
         <button class="home-profile-pill focusable"
                 data-action="gotoAccount"
-                aria-label="Switch profile">
+                aria-label="${t("sidebar.switchProfile")}">
           <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
-          <span class="home-profile-name">${profileState.activeProfileName || "Profile"}</span>
+          <span class="home-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
         </button>
       ` : ""}
       <div class="home-nav-list">
         ${ROOT_SIDEBAR_ITEMS.map((item) => `
           <button class="home-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
                   data-action="${item.action}"
-                  aria-label="${item.label}">
+                  aria-label="${itemLabel(item)}">
             <span class="home-nav-icon-wrap">${iconMarkup(item, "home-nav-icon")}</span>
-            <span class="home-nav-label">${item.label}</span>
+            <span class="home-nav-label">${itemLabel(item)}</span>
           </button>
         `).join("")}
       </div>
@@ -2315,34 +2896,35 @@
     const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
     const showPill = selectedRoute !== "search";
     const keepPillExpanded = selectedRoute === "settings";
+    const selectedLabel = itemLabel(selectedItem);
     return `
     <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}" data-selected-route="${selectedRoute}">
       ${showPill ? `
-        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="Expand sidebar">
+        <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}">
           <img class="modern-sidebar-pill-chevron" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
           <span class="modern-sidebar-pill-chip">
             <span class="modern-sidebar-pill-icon-wrap">${iconMarkup(selectedItem, "modern-sidebar-pill-icon")}</span>
-            <span class="modern-sidebar-pill-label">${selectedItem.label}</span>
+            <span class="modern-sidebar-pill-label">${selectedLabel}</span>
           </span>
         </button>
       ` : ""}
       ${expanded ? `
         <aside class="modern-sidebar-panel">
           ${showProfileSelector ? `
-            <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="Switch profile">
+            <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
               <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
-              <span class="modern-sidebar-profile-name">${profileState.activeProfileName || "Profile"}</span>
+              <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
             </button>
           ` : ""}
           <div class="modern-sidebar-nav-list">
             ${ROOT_SIDEBAR_ITEMS.map((item) => `
               <button class="modern-sidebar-nav-item focusable${selectedItem.action === item.action ? " selected" : ""}"
                       data-action="${item.action}"
-                      aria-label="${item.label}">
+                      aria-label="${itemLabel(item)}">
                 <span class="modern-sidebar-nav-icon-circle">
                   ${iconMarkup(item, "modern-sidebar-nav-icon")}
                 </span>
-                <span class="modern-sidebar-nav-label">${item.label}</span>
+                <span class="modern-sidebar-nav-label">${itemLabel(item)}</span>
               </button>
             `).join("")}
           </div>
@@ -3240,7 +3822,7 @@
         container[property] = nextValue;
         return;
       }
-      const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+      const easeOutCubic = (t3) => 1 - Math.pow(1 - t3, 3);
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const key = axis === "y" ? "y" : "x";
       const existing = map.get(container) || {};
@@ -6603,7 +7185,7 @@
   };
 
   // js/core/player/pluginRuntime.js
-  var KEY4 = "pluginSources";
+  var KEY5 = "pluginSources";
   function normalizeSources(input) {
     if (!Array.isArray(input)) {
       return [];
@@ -6625,10 +7207,10 @@
   }
   var PluginRuntime = {
     listSources() {
-      return normalizeSources(LocalStore.get(KEY4, []));
+      return normalizeSources(LocalStore.get(KEY5, []));
     },
     saveSources(sources) {
-      LocalStore.set(KEY4, normalizeSources(sources));
+      LocalStore.set(KEY5, normalizeSources(sources));
     },
     addSource(source) {
       const current = this.listSources();
@@ -10197,17 +10779,17 @@
         return;
       }
       if (this.state.authState === "loading") {
-        this.container.innerHTML = `<div class="account-wrapper"><h2>Loading account...</h2></div>`;
+        this.container.innerHTML = `<div class="account-wrapper"><h2>${I18n.t("auth.account.loadingAccount")}</h2></div>`;
         return;
       }
       if (this.state.authState === "signedOut") {
         this.container.innerHTML = `
         <div class="account-wrapper">
-          <h1>Account</h1>
-          <p>Sign in to sync your library and preferences.</p>
+          <h1>${I18n.t("auth.account.title")}</h1>
+          <p>${I18n.t("auth.account.signInCopy")}</p>
           <div class="account-card focusable" data-action="signin">
-            <h3>Sign In</h3>
-            <p>Use QR sign-in from mobile.</p>
+            <h3>${I18n.t("auth.account.signIn")}</h3>
+            <p>${I18n.t("auth.account.signInSubtitle")}</p>
           </div>
         </div>
       `;
@@ -10216,12 +10798,12 @@
       }
       this.container.innerHTML = `
       <div class="account-wrapper">
-        <h1>Account</h1>
+        <h1>${I18n.t("auth.account.title")}</h1>
         <div class="account-info">
-          <span>Signed in as</span>
-          <strong>${this.state.email || "User"}</strong>
+          <span>${I18n.t("auth.account.signedInAs")}</span>
+          <strong>${this.state.email || I18n.t("common.unknownUser")}</strong>
         </div>
-        <div class="logout-btn focusable" data-action="logout">Sign Out</div>
+        <div class="logout-btn focusable" data-action="logout">${I18n.t("auth.account.signOut")}</div>
       </div>
     `;
       this.attachFocus();
@@ -10629,23 +11211,23 @@
           </div>
 
           <div class="qr-copy-block">
-            <h1 class="qr-title">Sign In With QR</h1>
+            <h1 class="qr-title">${I18n.t("auth.qr.title")}</h1>
             <p id="qr-description" class="qr-description">${this.getLeftDescription()}</p>
           </div>
         </section>
 
-        <section class="qr-card-panel" aria-label="Account Login">
+        <section class="qr-card-panel" aria-label="${I18n.t("auth.qr.cardAriaLabel")}">
           <div class="qr-card">
             <header class="qr-card-header">
-              <h2 class="qr-card-title">Account Login</h2>
+              <h2 class="qr-card-title">${I18n.t("auth.qr.cardTitle")}</h2>
               <p id="qr-card-subtitle" class="qr-card-subtitle">${this.getCardSubtitle()}</p>
             </header>
 
             <div id="qr-container" class="qr-code-frame"></div>
             <div id="qr-code-text" class="qr-code-text"></div>
-            <div id="qr-status" class="qr-status">Waiting for approval on your phone...</div>
+            <div id="qr-status" class="qr-status">${I18n.t("auth.qr.waitingApproval")}</div>
             <div class="qr-actions">
-              <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">Refresh QR</button>
+              <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">${I18n.t("auth.qr.refresh")}</button>
               <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
             </div>
           </div>
@@ -10669,7 +11251,7 @@
       this.stopIntervals();
       const sessionId = activeQrSessionId + 1;
       activeQrSessionId = sessionId;
-      this.setStatus("Preparing QR login...");
+      this.setStatus(I18n.t("auth.qr.preparing"));
       const result = await QrLoginService.start();
       if (sessionId !== activeQrSessionId) {
         return;
@@ -10680,7 +11262,7 @@
         return;
       }
       this.renderQr(result);
-      this.setStatus("Scan QR and sign in on your phone");
+      this.setStatus(I18n.t("auth.qr.scanAndSignIn"));
       this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
     },
     renderQr({ qrImageUrl, code }) {
@@ -10690,9 +11272,9 @@
         return;
       }
       qrContainer.innerHTML = `
-      <img src="${qrImageUrl}" class="qr-image" alt="QR code" />
+      <img src="${qrImageUrl}" class="qr-image" alt="${I18n.t("auth.qr.qrImageAlt")}" />
     `;
-      codeText.innerText = `Code: ${code}`;
+      codeText.innerText = I18n.t("auth.qr.codeLabel", { code });
     },
     startCountdown(expiresAt) {
       const renderRemaining = () => {
@@ -10715,7 +11297,7 @@
           return;
         }
         if (status === "approved") {
-          this.setStatus("Approved. Finishing login...");
+          this.setStatus(I18n.t("auth.qr.approved"));
           clearInterval(pollInterval);
           pollInterval = null;
           const exchange = await QrLoginService.exchange(code, deviceNonce);
@@ -10731,31 +11313,31 @@
           }
         }
         if (status === "pending") {
-          this.setStatus("Waiting for approval on your phone...");
+          this.setStatus(I18n.t("auth.qr.waitingApproval"));
         }
         if (status === "expired") {
-          this.setStatus("QR expired. Refresh to retry.");
+          this.setStatus(I18n.t("auth.qr.expired"));
         }
       }, Math.max(2, Number(pollIntervalSeconds || 3)) * 1e3);
     },
     toFriendlyQrError(rawError) {
       const message = String(rawError || "").toLowerCase();
       if (!message) {
-        return "QR unavailable. Try again.";
+        return I18n.t("auth.qr.unavailable");
       }
       if (message.includes("invalid tv login redirect base url")) {
-        return "QR backend redirect URL is invalid. Check TV login SQL setup.";
+        return I18n.t("auth.qr.invalidRedirect");
       }
       if (message.includes("start_tv_login_session") && message.includes("could not find the function")) {
-        return "QR backend function is missing. Re-run TV login SQL setup.";
+        return I18n.t("auth.qr.missingFunction");
       }
       if (message.includes("gen_random_bytes") && message.includes("does not exist")) {
-        return "QR backend missing extension. Re-run SQL setup for TV login.";
+        return I18n.t("auth.qr.missingExtension");
       }
       if (message.includes("network") || message.includes("failed to fetch")) {
-        return "Network error while generating QR.";
+        return I18n.t("auth.qr.networkError");
       }
-      return `QR unavailable: ${rawError}`;
+      return I18n.t("auth.qr.unavailableWithReason", { reason: rawError });
     },
     setStatus(text) {
       const statusNode = document.getElementById("qr-status");
@@ -10766,24 +11348,24 @@
     },
     getLeftDescription() {
       if (this.isSignedIn) {
-        return "Account linked on this TV.";
+        return I18n.t("auth.qr.leftDescriptionSignedIn");
       }
-      return "Use your phone to sign in with email/password. TV stays QR-only for faster login.";
+      return I18n.t("auth.qr.leftDescriptionSignedOut");
     },
     getCardSubtitle() {
       if (this.isSignedIn) {
-        return "Your synced data";
+        return I18n.t("auth.qr.cardSubtitleSignedIn");
       }
-      return "Scan QR, approve in browser, then return here.";
+      return I18n.t("auth.qr.cardSubtitleSignedOut");
     },
     getBackButtonLabel() {
       if (this.hasBackDestination) {
-        return "Back";
+        return I18n.t("auth.qr.back");
       }
       if (this.isSignedIn) {
-        return "Continue";
+        return I18n.t("auth.qr.continue");
       }
-      return "Continue without account";
+      return I18n.t("auth.qr.continueWithoutAccount");
     },
     onKeyDown(event) {
       var _a;
@@ -10829,13 +11411,13 @@
     render() {
       this.container.innerHTML = `
       <div class="row">
-        <h2>Email Sign In</h2>
-        <p>Press ENTER to open QR login or use the dev shortcut with preset credentials.</p>
+        <h2>${I18n.t("auth.signIn.title")}</h2>
+        <p>${I18n.t("auth.signIn.description")}</p>
       </div>
       <div class="row">
-        <div class="card focusable" data-action="openQr">Open QR Login</div>
-        <div class="card focusable" data-action="devLogin">Dev Email Login</div>
-        <div class="card focusable" data-action="back">Back</div>
+        <div class="card focusable" data-action="openQr">${I18n.t("auth.signIn.openQrLogin")}</div>
+        <div class="card focusable" data-action="devLogin">${I18n.t("auth.signIn.devEmailLogin")}</div>
+        <div class="card focusable" data-action="back">${I18n.t("auth.signIn.back")}</div>
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
@@ -10858,8 +11440,8 @@
         return;
       }
       if (action === "devLogin") {
-        const email = window.prompt("Email");
-        const password = window.prompt("Password");
+        const email = window.prompt(I18n.t("auth.signIn.emailPrompt"));
+        const password = window.prompt(I18n.t("auth.signIn.passwordPrompt"));
         if (email && password) {
           try {
             await AuthManager.signInWithEmail(email, password);
@@ -10880,7 +11462,7 @@
   };
 
   // js/ui/screens/account/syncCodeScreen.js
-  var KEY5 = "manualSyncCode";
+  var KEY6 = "manualSyncCode";
   var SyncCodeScreen = {
     async mount() {
       this.container = document.getElementById("account");
@@ -10888,16 +11470,16 @@
       this.render();
     },
     render() {
-      const value = LocalStore.get(KEY5, "");
+      const value = LocalStore.get(KEY6, "");
       this.container.innerHTML = `
       <div class="row">
-        <h2>Sync Code</h2>
-        <p>Current code: ${value || "(empty)"}</p>
+        <h2>${I18n.t("auth.syncCode.title")}</h2>
+        <p>${I18n.t("auth.syncCode.currentCode", { value: value || I18n.t("auth.syncCode.emptyValue") })}</p>
       </div>
       <div class="row">
-        <div class="card focusable" data-action="setCode">Set Code</div>
-        <div class="card focusable" data-action="clearCode">Clear Code</div>
-        <div class="card focusable" data-action="back">Back</div>
+        <div class="card focusable" data-action="setCode">${I18n.t("auth.syncCode.setCode")}</div>
+        <div class="card focusable" data-action="clearCode">${I18n.t("auth.syncCode.clearCode")}</div>
+        <div class="card focusable" data-action="back">${I18n.t("auth.syncCode.back")}</div>
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
@@ -10916,15 +11498,15 @@
       }
       const action = current.dataset.action;
       if (action === "setCode") {
-        const value = window.prompt("Insert sync code", LocalStore.get(KEY5, ""));
+        const value = window.prompt(I18n.t("auth.syncCode.prompt"), LocalStore.get(KEY6, ""));
         if (value !== null) {
-          LocalStore.set(KEY5, String(value).trim());
+          LocalStore.set(KEY6, String(value).trim());
           this.render();
         }
         return;
       }
       if (action === "clearCode") {
-        LocalStore.remove(KEY5);
+        LocalStore.remove(KEY6);
         this.render();
         return;
       }
@@ -12756,7 +13338,7 @@
   };
 
   // js/data/local/playerSettingsStore.js
-  var KEY6 = "playerSettings";
+  var KEY7 = "playerSettings";
   var DEFAULTS4 = {
     autoplayNextEpisode: true,
     subtitlesEnabled: true,
@@ -12771,11 +13353,11 @@
     get() {
       return {
         ...DEFAULTS4,
-        ...LocalStore.get(KEY6, {}) || {}
+        ...LocalStore.get(KEY7, {}) || {}
       };
     },
     set(partial) {
-      LocalStore.set(KEY6, { ...this.get(), ...partial || {} });
+      LocalStore.set(KEY7, { ...this.get(), ...partial || {} });
     }
   };
 
@@ -18816,59 +19398,6 @@
     }
   };
 
-  // js/data/local/themeStore.js
-  var KEY7 = "themeSettings";
-  var ACCENT_MIGRATION_FLAG_KEY = "themeAccentMigratedToWhite";
-  var LEGACY_DEFAULT_ACCENT = "#ff3d00";
-  var DEFAULT_THEME = {
-    mode: "dark",
-    themeName: "WHITE",
-    accentColor: "#ffffff",
-    fontFamily: "INTER",
-    language: null
-  };
-  var THEME_BY_ACCENT = /* @__PURE__ */ new Map([
-    ["#ffffff", "WHITE"],
-    ["#f5f5f5", "WHITE"],
-    ["#f5f8fc", "WHITE"],
-    ["#ff4d4f", "CRIMSON"],
-    ["#ff5252", "CRIMSON"],
-    ["#42a5f5", "OCEAN"],
-    ["#ba68c8", "VIOLET"],
-    ["#ab47bc", "VIOLET"],
-    ["#66bb6a", "EMERALD"],
-    ["#ffca28", "AMBER"],
-    ["#ffa726", "AMBER"],
-    ["#ec407a", "ROSE"]
-  ]);
-  function normalizeTheme(settings = {}) {
-    const accent = String((settings == null ? void 0 : settings.accentColor) || DEFAULT_THEME.accentColor).toLowerCase();
-    const themeName = String(
-      (settings == null ? void 0 : settings.themeName) || THEME_BY_ACCENT.get(accent) || DEFAULT_THEME.themeName
-    ).toUpperCase();
-    return {
-      ...DEFAULT_THEME,
-      ...settings,
-      themeName,
-      accentColor: accent
-    };
-  }
-  var ThemeStore = {
-    get() {
-      const stored = LocalStore.get(KEY7, {}) || {};
-      if (String((stored == null ? void 0 : stored.accentColor) || "").toLowerCase() === LEGACY_DEFAULT_ACCENT && !LocalStore.get(ACCENT_MIGRATION_FLAG_KEY, false)) {
-        const migrated = { ...stored, accentColor: DEFAULT_THEME.accentColor };
-        LocalStore.set(KEY7, migrated);
-        LocalStore.set(ACCENT_MIGRATION_FLAG_KEY, true);
-        return normalizeTheme(migrated);
-      }
-      return normalizeTheme(stored);
-    },
-    set(partial) {
-      LocalStore.set(KEY7, normalizeTheme({ ...this.get(), ...partial || {} }));
-    }
-  };
-
   // js/ui/theme/themeColors.js
   var palettes = {
     WHITE: {
@@ -19042,13 +19571,13 @@
   var PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
   var SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
   var THEME_OPTIONS = [
-    { id: "WHITE", label: "White", color: "#f5f5f5" },
-    { id: "CRIMSON", label: "Crimson", color: "#e53935" },
-    { id: "OCEAN", label: "Ocean", color: "#1e88e5" },
-    { id: "VIOLET", label: "Violet", color: "#8e24aa" },
-    { id: "EMERALD", label: "Emerald", color: "#43a047" },
-    { id: "AMBER", label: "Amber", color: "#fb8c00" },
-    { id: "ROSE", label: "Rose", color: "#d81b60" }
+    { id: "WHITE", labelKey: "settings.appearance.themes.white", color: "#f5f5f5" },
+    { id: "CRIMSON", labelKey: "settings.appearance.themes.crimson", color: "#e53935" },
+    { id: "OCEAN", labelKey: "settings.appearance.themes.ocean", color: "#1e88e5" },
+    { id: "VIOLET", labelKey: "settings.appearance.themes.violet", color: "#8e24aa" },
+    { id: "EMERALD", labelKey: "settings.appearance.themes.emerald", color: "#43a047" },
+    { id: "AMBER", labelKey: "settings.appearance.themes.amber", color: "#fb8c00" },
+    { id: "ROSE", labelKey: "settings.appearance.themes.rose", color: "#d81b60" }
   ];
   var FONT_OPTIONS = [
     { id: "INTER", label: "Inter" },
@@ -19056,26 +19585,35 @@
     { id: "OPEN_SANS", label: "Open Sans" }
   ];
   var LANGUAGE_OPTIONS = [
-    { id: null, label: "System default" },
-    { id: "en", label: "English" },
-    { id: "it", label: "Italiano" },
-    { id: "es", label: "Espanol" }
+    { id: null, labelKey: "common.systemDefault" },
+    { id: "en", labelKey: "common.english" },
+    { id: "it", labelKey: "common.italian" }
+  ];
+  var TMDB_LANGUAGE_OPTIONS = [
+    { id: "en-US", labelKey: "common.english" },
+    { id: "it-IT", labelKey: "common.italian" },
+    { id: "es-ES", labelKey: "common.spanish" }
+  ];
+  var PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
+    { id: "system", labelKey: "common.system" },
+    { id: "en", labelKey: "common.english" },
+    { id: "it", labelKey: "common.italian" }
   ];
   var HOME_LAYOUT_OPTIONS = [
-    { id: "modern", label: "Modern", caption: "Floating rows" },
-    { id: "grid", label: "Grid", caption: "Dense browse" },
-    { id: "classic", label: "Classic", caption: "Hero first" }
+    { id: "modern", labelKey: "settings.layout.homeLayouts.modern.label", captionKey: "settings.layout.homeLayouts.modern.caption" },
+    { id: "grid", labelKey: "settings.layout.homeLayouts.grid.label", captionKey: "settings.layout.homeLayouts.grid.caption" },
+    { id: "classic", labelKey: "settings.layout.homeLayouts.classic.label", captionKey: "settings.layout.homeLayouts.classic.caption" }
   ];
   var SECTION_META = [
-    { id: "account", label: "Account", subtitle: "Manage login, sync, and device link status." },
-    { id: "profiles", label: "Profiles", subtitle: "Manage user profiles for this account." },
-    { id: "appearance", label: "Appearance", subtitle: "Choose your color theme, font and language" },
-    { id: "layout", label: "Layout", subtitle: "Adjust home layout, content visibility, and poster behavior" },
-    { id: "plugins", label: "Plugins", subtitle: "Manage repositories, providers, and plugin states." },
-    { id: "integration", label: "Integration", subtitle: "Choose TMDB or MDBList" },
-    { id: "playback", label: "Playback", subtitle: "Configure video playback and subtitle options" },
-    { id: "trakt", label: "Trakt", subtitle: "Manage Trakt authentication and sync preferences." },
-    { id: "about", label: "About", subtitle: "App information, credits, and legal links" }
+    { id: "account", labelKey: "settings.sections.account.label", subtitleKey: "settings.sections.account.subtitle" },
+    { id: "profiles", labelKey: "settings.sections.profiles.label", subtitleKey: "settings.sections.profiles.subtitle" },
+    { id: "appearance", labelKey: "settings.sections.appearance.label", subtitleKey: "settings.sections.appearance.subtitle" },
+    { id: "layout", labelKey: "settings.sections.layout.label", subtitleKey: "settings.sections.layout.subtitle" },
+    { id: "plugins", labelKey: "settings.sections.plugins.label", subtitleKey: "settings.sections.plugins.subtitle" },
+    { id: "integration", labelKey: "settings.sections.integration.label", subtitleKey: "settings.sections.integration.subtitle" },
+    { id: "playback", labelKey: "settings.sections.playback.label", subtitleKey: "settings.sections.playback.subtitle" },
+    { id: "trakt", labelKey: "settings.sections.trakt.label", subtitleKey: "settings.sections.trakt.subtitle" },
+    { id: "about", labelKey: "settings.sections.about.label", subtitleKey: "settings.sections.about.subtitle" }
   ];
   var SECTION_ICONS = {
     account: "person",
@@ -19103,11 +19641,41 @@
   function clamp3(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
+  function t2(key, params = {}, fallback = key) {
+    return I18n.t(key, params, { fallback });
+  }
   function escapeHtml7(value) {
     return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
   function iconSvg(path, className = "settings-inline-icon", viewBox = "0 0 24 24") {
     return `<svg class="${className}" viewBox="${viewBox}" aria-hidden="true" focusable="false">${path}</svg>`;
+  }
+  function translateOptionLabel(option, fallback = "") {
+    if (!option) {
+      return fallback;
+    }
+    if (option.labelKey) {
+      return t2(option.labelKey, option.labelParams || {}, option.label || fallback);
+    }
+    return String(option.label || fallback);
+  }
+  function translateOptionCaption(option, fallback = "") {
+    if (!option) {
+      return fallback;
+    }
+    if (option.captionKey) {
+      return t2(option.captionKey, option.captionParams || {}, option.caption || fallback);
+    }
+    return String(option.caption || fallback);
+  }
+  function translateSectionCopy(section) {
+    if (!section) {
+      return { label: "", subtitle: "" };
+    }
+    return {
+      label: section.labelKey ? t2(section.labelKey, section.labelParams || {}, section.label || "") : String(section.label || ""),
+      subtitle: section.subtitleKey ? t2(section.subtitleKey, section.subtitleParams || {}, section.subtitle || "") : String(section.subtitle || "")
+    };
   }
   function renderSectionNavIcon(sectionId) {
     if (sectionId === "trakt") {
@@ -19131,31 +19699,45 @@
     return ((_a = FONT_OPTIONS.find((item) => item.id === String(fontFamily || "").toUpperCase())) == null ? void 0 : _a.label) || "Inter";
   }
   function labelForLanguage(language) {
-    var _a;
-    return ((_a = LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language))) == null ? void 0 : _a.label) || "System default";
+    return translateOptionLabel(
+      LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
+      t2("common.systemDefault")
+    );
+  }
+  function labelForTmdbLanguage(language) {
+    return translateOptionLabel(
+      TMDB_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
+      String(language || "en-US")
+    );
+  }
+  function labelForPlaybackLanguage(language) {
+    return translateOptionLabel(
+      PREFERRED_PLAYBACK_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
+      t2("common.system")
+    );
   }
   function qualityLabel(value) {
     const normalized = String(value || "auto").toLowerCase();
     if (normalized === "2160p") return "2160p";
     if (normalized === "1080p") return "1080p";
     if (normalized === "720p") return "720p";
-    return "Auto";
+    return t2("common.auto");
   }
   function playerLabel(value) {
     const normalized = String(value || "auto").toLowerCase();
-    if (normalized === "native") return "Native";
+    if (normalized === "native") return t2("common.native");
     if (normalized === "hls") return "HLS.js";
     if (normalized === "dash") return "dash.js";
-    return "Auto";
+    return t2("common.auto");
   }
   function renderModeLabel(value) {
-    return String(value || "native").toLowerCase() === "html" ? "HTML overlay" : "Native";
+    return String(value || "native").toLowerCase() === "html" ? t2("common.htmlOverlay") : t2("common.native");
   }
   function escapeSelector(value) {
     return String(value != null ? value : "").replace(/["\\]/g, "\\$&");
   }
   function plannedSubtitle(subtitle) {
-    return subtitle ? `${subtitle} Coming soon.` : "Coming soon.";
+    return subtitle ? t2("common.comingSoonWithContext", { subject: subtitle }) : t2("common.comingSoon");
   }
   function focusKeySelector(selector, key) {
     return `${selector}[data-focus-key="${escapeSelector(String(key))}"]`;
@@ -19231,7 +19813,7 @@
   function addonKindsLabel(addon) {
     const kinds = Array.isArray(addon == null ? void 0 : addon.types) ? addon.types.filter(Boolean) : [];
     if (!kinds.length) {
-      return "Repository";
+      return t2("common.repository");
     }
     return kinds.map((entry) => String(entry)).join(", ");
   }
@@ -19376,17 +19958,18 @@
               data-section="${item.id}">
         <span class="settings-nav-leading">
           ${renderSectionNavIcon(item.id)}
-          <span class="settings-nav-label">${escapeHtml7(item.label)}</span>
+          <span class="settings-nav-label">${escapeHtml7(translateSectionCopy(item).label)}</span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
       </button>
     `).join("");
     },
     renderSectionHeader(section) {
+      const copy = translateSectionCopy(section);
       return `
       <header class="settings-content-header">
-        <h1 class="settings-title">${escapeHtml7(section.label)}</h1>
-        <p class="settings-subtitle">${escapeHtml7(section.subtitle)}</p>
+        <h1 class="settings-title">${escapeHtml7(copy.label)}</h1>
+        <p class="settings-subtitle">${escapeHtml7(copy.subtitle)}</p>
       </header>
     `;
     },
@@ -19404,7 +19987,7 @@
       const inert = disabled || planned;
       const trailing = external ? "external" : icon;
       const tailContent = [
-        planned ? `<span class="settings-row-badge">Soon</span>` : "",
+        planned ? `<span class="settings-row-badge">${escapeHtml7(t2("common.soon"))}</span>` : "",
         value ? `<span class="settings-row-value">${escapeHtml7(value)}</span>` : "",
         trailing ? iconSvg(ROW_ICONS[trailing], `settings-row-icon${external ? " is-external" : ""}`) : ""
       ].filter(Boolean).join("");
@@ -19435,7 +20018,7 @@
           ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
         </span>
         <span class="settings-row-tail">
-          ${planned ? `<span class="settings-row-badge">Soon</span>` : ""}
+          ${planned ? `<span class="settings-row-badge">${escapeHtml7(t2("common.soon"))}</span>` : ""}
           <span class="settings-toggle-pill${checked ? " is-checked" : ""}">
             <span class="settings-toggle-thumb"></span>
           </span>
@@ -19454,7 +20037,7 @@
             ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
           </span>
         </span>
-        <span class="settings-theme-name">${escapeHtml7(theme.label)}</span>
+        <span class="settings-theme-name">${escapeHtml7(translateOptionLabel(theme))}</span>
         <span class="settings-theme-underline" style="background:${escapeHtml7(theme.color)};"></span>
       </button>
     `;
@@ -19465,8 +20048,8 @@
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-layout-preview settings-layout-preview-${escapeHtml7(option.id)}"></span>
-        <span class="settings-layout-name">${escapeHtml7(option.label)}</span>
-        <span class="settings-layout-caption">${escapeHtml7(option.caption)}</span>
+        <span class="settings-layout-name">${escapeHtml7(translateOptionLabel(option))}</span>
+        <span class="settings-layout-caption">${escapeHtml7(translateOptionCaption(option))}</span>
       </button>
     `;
     },
@@ -19479,7 +20062,7 @@
               title="${escapeHtml7(label)}"
               ${this.registerAction(focusKey, inert ? () => {
       } : this.actionMap.get(focusKey))}>
-        ${planned ? '<span class="settings-plugin-icon-badge">Soon</span>' : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
+        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml7(t2("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
       </button>
     `;
     },
@@ -19488,9 +20071,12 @@
       return `
       <article class="settings-plugin-repo-card">
         <div class="settings-plugin-repo-copy">
-          <div class="settings-plugin-repo-title">${escapeHtml7(addon.displayName || addon.name || "Repository")}</div>
+          <div class="settings-plugin-repo-title">${escapeHtml7(addon.displayName || addon.name || t2("common.repository"))}</div>
           <div class="settings-plugin-repo-meta">
-            ${escapeHtml7(`${streamResourceCount} stream resource${streamResourceCount === 1 ? "" : "s"} \xB7 v${addon.version || "0.0.0"}`)}
+            ${escapeHtml7(t2(
+        streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
+        { count: streamResourceCount, version: addon.version || "0.0.0" }
+      ))}
           </div>
           <div class="settings-plugin-repo-url">${escapeHtml7(addon.baseUrl || addon.description || addonKindsLabel(addon))}</div>
         </div>
@@ -19498,12 +20084,12 @@
           ${this.renderPluginIconButton({
         focusKey: `plugins:refresh:${index}`,
         icon: "refresh",
-        label: "Refresh repository"
+        label: t2("settings.plugins.refreshRepository")
       })}
           ${this.renderPluginIconButton({
         focusKey: `plugins:remove:${index}`,
         icon: "trash",
-        label: "Remove repository",
+        label: t2("settings.plugins.removeRepository"),
         destructive: true
       })}
         </div>
@@ -19537,14 +20123,14 @@
       return `
       <div class="settings-dialog-backdrop">
         <div class="settings-dialog">
-          <div class="settings-dialog-title">${escapeHtml7(this.optionDialog.title || "Select option")}</div>
+          <div class="settings-dialog-title">${escapeHtml7(this.optionDialog.title || t2("common.selectOption"))}</div>
           <div class="settings-dialog-list">
             ${this.optionDialog.options.map((option, index) => `
               <button class="settings-dialog-option settings-content-focusable focusable${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
                       data-zone="dialog"
                       data-dialog-index="${index}"
                       data-dialog-option-id="${escapeHtml7(option.id)}">
-                <span class="settings-dialog-option-label">${escapeHtml7(option.label)}</span>
+                <span class="settings-dialog-option-label">${escapeHtml7(translateOptionLabel(option))}</span>
               </button>
             `).join("")}
           </div>
@@ -19571,7 +20157,7 @@
             ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
           </span>
           <span class="settings-row-tail">
-            <span class="settings-row-value">${expanded ? "Open" : "Closed"}</span>
+            <span class="settings-row-value">${expanded ? t2("common.open") : t2("common.closed")}</span>
             ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
           </span>
         </button>
@@ -19591,18 +20177,18 @@
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${signedIn ? `<div class="settings-account-status">
-                <span class="settings-account-status-label">Signed in</span>
-                <strong class="settings-account-status-value">${escapeHtml7(model.accountEmail || "Account linked on this TV")}</strong>
-              </div>` : `<p class="settings-account-note">Sync your library and preferences across devices.</p>
+                <span class="settings-account-status-label">${t2("settings.status.signedIn")}</span>
+                <strong class="settings-account-status-value">${escapeHtml7(model.accountEmail || t2("settings.status.linkedFallback"))}</strong>
+              </div>` : `<p class="settings-account-note">${t2("settings.account.syncNote")}</p>
               ${this.renderActionRow({
         focusKey: "account:signin",
-        title: "Sign in with QR",
-        subtitle: "Open QR sign-in to connect this device."
+        title: t2("settings.account.signInWithQr"),
+        subtitle: t2("settings.account.signInWithQrSubtitle")
       })}`}
           ${signedIn ? this.renderActionRow({
         focusKey: "account:signout",
-        title: "Sign out",
-        subtitle: "Disconnect this TV from your account."
+        title: t2("settings.account.signOut"),
+        subtitle: t2("settings.account.signOutSubtitle")
       }) : ""}
         </div>
       </div>
@@ -19619,7 +20205,7 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "profiles:manage",
-        title: "Manage Profiles",
+        title: t2("settings.profiles.manageProfiles"),
         subtitle: "",
         icon: null,
         classes: "settings-profile-manage-row"
@@ -19637,7 +20223,7 @@
       });
       this.actionMap.set("appearance:font", () => {
         this.openOptionDialog({
-          title: "Select font",
+          title: t2("settings.dialogs.selectFont"),
           options: FONT_OPTIONS,
           selectedId: model.theme.fontFamily,
           returnFocusKey: "appearance:font",
@@ -19649,13 +20235,15 @@
       });
       this.actionMap.set("appearance:language", () => {
         this.openOptionDialog({
-          title: "Select language",
+          title: t2("settings.dialogs.selectLanguage"),
           options: LANGUAGE_OPTIONS,
           selectedId: model.theme.language,
           returnFocusKey: "appearance:language",
-          onSelect: (option) => {
+          onSelect: async (option) => {
             ThemeStore.set({ language: option.id });
+            await I18n.init();
             ThemeManager.apply();
+            I18n.apply();
           }
         });
       });
@@ -19674,8 +20262,8 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "appearance:font",
-        title: "App Font",
-        subtitle: "Choose your preferred font",
+        title: t2("settings.appearance.appFont"),
+        subtitle: t2("settings.appearance.appFontSubtitle"),
         value: labelForFont(model.theme.fontFamily)
       })}
         </div>
@@ -19684,10 +20272,9 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "appearance:language",
-        title: "App Language",
-        subtitle: plannedSubtitle("Override system language"),
-        value: labelForLanguage(model.theme.language),
-        planned: true
+        title: t2("settings.appearance.appLanguage"),
+        subtitle: t2("settings.appearance.appLanguageSubtitle"),
+        value: labelForLanguage(model.theme.language)
       })}
         </div>
       </div>
@@ -19754,7 +20341,7 @@
           label: `${value}s`
         }));
         this.openOptionDialog({
-          title: "Backdrop Expand Delay",
+          title: t2("settings.dialogs.backdropExpandDelay"),
           options,
           selectedId: String((_a2 = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a2 : 3),
           returnFocusKey: "layout:focusedPosterExpandDelay",
@@ -19771,11 +20358,11 @@
       });
       this.actionMap.set("layout:focusedPosterTrailerTarget", () => {
         const options = [
-          { id: "hero_media", label: "Hero Media" },
-          { id: "expanded_card", label: "Expanded Card" }
+          { id: "hero_media", labelKey: "settings.layout.trailerTargets.heroMedia" },
+          { id: "expanded_card", labelKey: "settings.layout.trailerTargets.expandedCard" }
         ];
         this.openOptionDialog({
-          title: "Modern Trailer Playback Location",
+          title: t2("settings.dialogs.modernTrailerPlaybackLocation"),
           options,
           selectedId: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media"),
           returnFocusKey: "layout:focusedPosterTrailerTarget",
@@ -19799,8 +20386,8 @@
         </div>
         ${isModernLayout ? this.renderToggleRow({
         focusKey: "layout:modernLandscapePosters",
-        title: "Landscape Posters",
-        subtitle: "Switch between portrait and landscape cards for Modern view.",
+        title: t2("settings.layout.landscapePosters.title"),
+        subtitle: t2("settings.layout.landscapePosters.subtitle"),
         checked: Boolean(model.layout.modernLandscapePostersEnabled)
       }) : ""}
       </div>
@@ -19809,56 +20396,56 @@
       <div class="settings-stack">
         ${!model.layout.modernSidebar ? this.renderToggleRow({
         focusKey: "layout:collapseSidebar",
-        title: "Collapse Sidebar",
-        subtitle: "Hide sidebar by default; show when focused.",
+        title: t2("settings.layout.collapseSidebar.title"),
+        subtitle: t2("settings.layout.collapseSidebar.subtitle"),
         checked: Boolean(model.layout.collapseSidebar)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:modernSidebar",
-        title: "Modern Sidebar",
-        subtitle: "Enable floating sidebar navigation.",
+        title: t2("settings.layout.modernSidebar.title"),
+        subtitle: t2("settings.layout.modernSidebar.subtitle"),
         checked: Boolean(model.layout.modernSidebar)
       })}
         ${model.layout.modernSidebar ? this.renderToggleRow({
         focusKey: "layout:modernSidebarBlur",
-        title: "Modern Sidebar Blur",
-        subtitle: "Toggle blur effect for modern sidebar surfaces.",
+        title: t2("settings.layout.modernSidebarBlur.title"),
+        subtitle: t2("settings.layout.modernSidebarBlur.subtitle"),
         checked: Boolean(model.layout.modernSidebarBlur)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:heroSection",
-        title: "Show Hero Section",
-        subtitle: "Display hero carousel at top of home.",
+        title: t2("settings.layout.heroSection.title"),
+        subtitle: t2("settings.layout.heroSection.subtitle"),
         checked: Boolean(model.layout.heroSectionEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:searchDiscover",
-        title: "Show Discover in Search",
-        subtitle: "Show browse section when search is empty.",
+        title: t2("settings.layout.searchDiscover.title"),
+        subtitle: t2("settings.layout.searchDiscover.subtitle"),
         checked: Boolean(model.layout.searchDiscoverEnabled)
       })}
         ${!isModernLayout ? this.renderToggleRow({
         focusKey: "layout:posterLabels",
-        title: "Show Poster Labels",
-        subtitle: "Show titles under posters in rows, grid, and see-all.",
+        title: t2("settings.layout.posterLabels.title"),
+        subtitle: t2("settings.layout.posterLabels.subtitle"),
         checked: Boolean(model.layout.posterLabelsEnabled)
       }) : ""}
         ${!isModernLayout ? this.renderToggleRow({
         focusKey: "layout:addonName",
-        title: "Show Addon Name",
-        subtitle: "Show source name under catalog titles.",
+        title: t2("settings.layout.addonName.title"),
+        subtitle: t2("settings.layout.addonName.subtitle"),
         checked: Boolean(model.layout.catalogAddonNameEnabled)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:catalogType",
-        title: "Show Catalog Type",
-        subtitle: "Show type suffix next to catalog name (Movie/Series).",
+        title: t2("settings.layout.catalogType.title"),
+        subtitle: t2("settings.layout.catalogType.subtitle"),
         checked: Boolean(model.layout.catalogTypeSuffixEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:hideUnreleased",
-        title: "Hide Unreleased Content",
-        subtitle: "Hide movies and shows that haven't been released yet.",
+        title: t2("settings.layout.hideUnreleased.title"),
+        subtitle: t2("settings.layout.hideUnreleased.subtitle"),
         checked: Boolean(model.layout.hideUnreleasedContent)
       })}
       </div>
@@ -19867,22 +20454,22 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "layout:detail:blurUnwatched",
-        title: "Blur Unwatched Episodes",
-        subtitle: "Blur episode thumbnails until watched to avoid spoilers.",
+        title: t2("settings.layout.blurUnwatched.title"),
+        subtitle: t2("settings.layout.blurUnwatched.subtitle"),
         checked: false,
         disabled: true
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:trailerButton",
-        title: "Show Trailer Button",
-        subtitle: "Show trailer button on detail page (only when trailer is available).",
+        title: t2("settings.layout.showTrailerButton.title"),
+        subtitle: t2("settings.layout.showTrailerButton.subtitle"),
         checked: false,
         disabled: true
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:preferExternalMeta",
-        title: "Prefer meta from external addon",
-        subtitle: "Use metadata from external addon instead of catalog addon.",
+        title: t2("settings.layout.preferExternalMeta.title"),
+        subtitle: t2("settings.layout.preferExternalMeta.subtitle"),
         checked: false,
         disabled: true
       })}
@@ -19892,33 +20479,33 @@
       <div class="settings-stack">
         ${!isModernLandscape ? this.renderToggleRow({
         focusKey: "layout:focusedPosterExpand",
-        title: "Expand Focused Poster to Backdrop",
-        subtitle: "Expand focused poster after idle delay.",
+        title: t2("settings.layout.focusedPosterExpand.title"),
+        subtitle: t2("settings.layout.focusedPosterExpand.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
       }) : ""}
         ${!isModernLandscape && Boolean(model.layout.focusedPosterBackdropExpandEnabled) ? this.renderActionRow({
         focusKey: "layout:focusedPosterExpandDelay",
-        title: "Backdrop Expand Delay",
-        subtitle: "How long to wait before expanding focused cards.",
+        title: t2("settings.layout.focusedPosterExpandDelay.title"),
+        subtitle: t2("settings.layout.focusedPosterExpandDelay.subtitle"),
         value: `${Number((_a = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a : 3)}s`
       }) : ""}
         ${showAutoplayRow ? this.renderToggleRow({
         focusKey: "layout:focusedPosterTrailer",
-        title: isModernLayout ? "Autoplay Trailer" : "Autoplay Trailer in Expanded Card",
-        subtitle: isModernLayout ? "Play trailer preview for focused content when available." : "Play trailer inside expanded backdrop when available.",
+        title: isModernLayout ? t2("settings.layout.autoplayTrailer.title") : t2("settings.layout.autoplayTrailerExpandedCard.title"),
+        subtitle: isModernLayout ? t2("settings.layout.autoplayTrailer.subtitle") : t2("settings.layout.autoplayTrailerExpandedCard.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
       }) : ""}
         ${showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderToggleRow({
         focusKey: "layout:focusedPosterTrailerMuted",
-        title: "Play Trailer Muted",
-        subtitle: isModernLayout ? "Mute trailer audio during autoplay preview." : "Mute trailer audio in expanded cards.",
+        title: isModernLayout ? t2("settings.layout.trailerMuted.title") : t2("settings.layout.trailerMutedExpandedCard.title"),
+        subtitle: isModernLayout ? t2("settings.layout.trailerMuted.subtitle") : t2("settings.layout.trailerMutedExpandedCard.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
       }) : ""}
         ${isModernLayout && showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderActionRow({
         focusKey: "layout:focusedPosterTrailerTarget",
-        title: "Modern Trailer Playback Location",
-        subtitle: "Choose where trailer preview plays in Modern Home.",
-        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? "Expanded Card" : "Hero Media"
+        title: t2("settings.layout.trailerTarget.title"),
+        subtitle: t2("settings.layout.trailerTarget.subtitle"),
+        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? t2("settings.layout.trailerTargets.expandedCard") : t2("settings.layout.trailerTargets.heroMedia")
       }) : ""}
       </div>
     `;
@@ -19928,29 +20515,29 @@
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:homeLayout",
-        title: "Home Layout",
-        subtitle: "Choose structure and hero source.",
+        title: t2("settings.layout.groups.homeLayout.title"),
+        subtitle: t2("settings.layout.groups.homeLayout.subtitle"),
         expanded: Boolean(expanded.homeLayout),
         bodyHtml: homeLayoutBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:homeContent",
-        title: "Home Content",
-        subtitle: "Control what appears on home and search.",
+        title: t2("settings.layout.groups.homeContent.title"),
+        subtitle: t2("settings.layout.groups.homeContent.subtitle"),
         expanded: Boolean(expanded.homeContent),
         bodyHtml: homeContentBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:detailPage",
-        title: "Detail Page",
-        subtitle: "Settings for the detail and episode screens.",
+        title: t2("settings.layout.groups.detailPage.title"),
+        subtitle: t2("settings.layout.groups.detailPage.subtitle"),
         expanded: Boolean(expanded.detailPage),
         bodyHtml: detailPageBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:focusedPoster",
-        title: "Focused Poster",
-        subtitle: "Advanced behavior for focused poster cards.",
+        title: t2("settings.layout.groups.focusedPoster.title"),
+        subtitle: t2("settings.layout.groups.focusedPoster.subtitle"),
         expanded: Boolean(expanded.focusedPoster),
         bodyHtml: focusedPosterBody
       })}
@@ -19960,7 +20547,7 @@
     },
     renderPluginsSection(model) {
       this.actionMap.set("plugins:editDraft", () => {
-        const value = window.prompt("Add repository URL", this.pluginDraft || "https://example.com/manifest.json");
+        const value = window.prompt(t2("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
         if (value === null) {
           return;
         }
@@ -19992,7 +20579,7 @@
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-plugin-builder">
-          <div class="settings-plugin-builder-title">Add repository</div>
+          <div class="settings-plugin-builder-title">${t2("settings.plugins.addRepository")}</div>
           <div class="settings-plugin-builder-row">
             <button class="settings-plugin-input settings-content-focusable focusable"
                     data-zone="content"
@@ -20003,40 +20590,40 @@
                     data-zone="content"
                     ${this.registerAction("plugins:addDraft", this.actionMap.get("plugins:addDraft"))}>
               ${iconSvg(ROW_ICONS.plus, "settings-plugin-add-icon")}
-              <span>Add</span>
+              <span>${t2("common.add")}</span>
             </button>
           </div>
         </div>
 
         ${this.renderActionRow({
         focusKey: "plugins:phone",
-        title: "Manage from phone",
-        subtitle: plannedSubtitle("Scan a QR code to add or remove repositories from your phone"),
+        title: t2("settings.plugins.manageFromPhone"),
+        subtitle: plannedSubtitle(t2("settings.plugins.manageFromPhoneSubtitle")),
         classes: "settings-plugins-phone",
         icon: "phone",
         planned: true
       })}
 
-        <div class="settings-repository-heading">Repositories (${model.addons.length})</div>
+        <div class="settings-repository-heading">${t2("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
 
         ${model.addons.length ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>` : `<div class="settings-empty-state">
-              <p>No repositories added yet.</p>
-              <p>Add a repository to get started.</p>
+              <p>${t2("settings.plugins.noRepositoriesTitle")}</p>
+              <p>${t2("settings.plugins.noRepositoriesSubtitle")}</p>
             </div>`}
 
         ${model.pluginSources.length ? `
-          <div class="settings-repository-heading settings-plugin-provider-heading">Providers (${model.pluginSources.length})</div>
+          <div class="settings-repository-heading settings-plugin-provider-heading">${t2("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
           <div class="settings-stack">
             ${model.pluginSources.map((source) => this.renderToggleRow({
         focusKey: `plugins:provider:${source.id}`,
-        title: source.name || "Provider",
-        subtitle: source.urlTemplate || "Custom provider template",
+        title: source.name || t2("common.provider"),
+        subtitle: source.urlTemplate || t2("settings.plugins.customProviderTemplate"),
         checked: Boolean(source.enabled)
       })).join("")}
             ${this.renderActionRow({
         focusKey: "plugins:provider:test",
-        title: "Provider testing",
-        subtitle: plannedSubtitle("Run local provider tests and inspect results."),
+        title: t2("settings.plugins.providerTesting"),
+        subtitle: plannedSubtitle(t2("settings.plugins.providerTestingSubtitle")),
         planned: true
       })}
           </div>
@@ -20058,26 +20645,26 @@
         this.contentFocusKey = "integration:back";
       });
       return `
-      ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "integration"))}
-      <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-stack">
-          ${this.renderActionRow({
+        ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "integration"))}
+        <div class="settings-group-card settings-group-card-fill">
+          <div class="settings-stack">
+            ${this.renderActionRow({
         focusKey: "integration:hub:tmdb",
-        title: "TMDB",
-        subtitle: "Metadata enrichment controls"
+        title: t2("settings.integration.tmdb.label"),
+        subtitle: t2("settings.integration.tmdb.subtitle")
       })}
-          ${this.renderActionRow({
+            ${this.renderActionRow({
         focusKey: "integration:hub:mdblist",
-        title: "MDBList",
-        subtitle: "External ratings providers"
+        title: t2("settings.integration.mdblist.label"),
+        subtitle: t2("settings.integration.mdblist.subtitle")
       })}
-          ${this.renderActionRow({
+            ${this.renderActionRow({
         focusKey: "integration:hub:animeskip",
-        title: "Anime-Skip",
-        subtitle: "Anime intro/outro skip timestamps"
+        title: t2("settings.integration.animeskip.label"),
+        subtitle: t2("settings.integration.animeskip.subtitle")
       })}
+          </div>
         </div>
-      </div>
     `;
     },
     renderIntegrationDetail(model, key) {
@@ -20099,14 +20686,9 @@
           TmdbSettingsStore.set({ useDetails: !TmdbSettingsStore.get().useDetails });
         });
         this.actionMap.set("integration:tmdb:language", () => {
-          const options = [
-            { id: "en-US", label: "English" },
-            { id: "it-IT", label: "Italian" },
-            { id: "es-ES", label: "Spanish" }
-          ];
           this.openOptionDialog({
-            title: "Select TMDB language",
-            options,
+            title: t2("settings.dialogs.selectTmdbLanguage"),
+            options: TMDB_LANGUAGE_OPTIONS,
             selectedId: TmdbSettingsStore.get().language,
             returnFocusKey: "integration:tmdb:language",
             onSelect: (option) => {
@@ -20115,59 +20697,59 @@
           });
         });
         this.actionMap.set("integration:tmdb:api", () => {
-          const value = window.prompt("TMDB API key", TmdbSettingsStore.get().apiKey || "");
+          const value = window.prompt(t2("settings.integration.tmdb.apiKey.prompt"), TmdbSettingsStore.get().apiKey || "");
           if (value !== null) {
             TmdbSettingsStore.set({ apiKey: String(value).trim() });
           }
         });
         return `
-        ${this.renderSectionHeader({ label: "TMDB", subtitle: "Metadata enrichment controls" })}
+        ${this.renderSectionHeader({ labelKey: "settings.integration.tmdb.label", subtitleKey: "settings.integration.tmdb.subtitle" })}
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
           focusKey: "integration:back",
-          title: "Back to Integrations",
-          subtitle: "Return to integration list",
+          title: t2("settings.integration.backToIntegrations.title"),
+          subtitle: t2("settings.integration.backToIntegrations.subtitle"),
           icon: "back"
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:enabled",
-          title: "Enable TMDB",
-          subtitle: "Turn metadata enrichment on or off.",
+          title: t2("settings.integration.tmdb.enable.title"),
+          subtitle: t2("settings.integration.tmdb.enable.subtitle"),
           checked: Boolean(model.tmdb.enabled)
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:artwork",
-          title: "Artwork",
-          subtitle: "Posters, logos, and backdrops from TMDB.",
+          title: t2("settings.integration.tmdb.artwork.title"),
+          subtitle: t2("settings.integration.tmdb.artwork.subtitle"),
           checked: Boolean(model.tmdb.useArtwork),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:basic",
-          title: "Basic Info",
-          subtitle: "Genres, ratings, and overview from TMDB.",
+          title: t2("settings.integration.tmdb.basicInfo.title"),
+          subtitle: t2("settings.integration.tmdb.basicInfo.subtitle"),
           checked: Boolean(model.tmdb.useBasicInfo),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:details",
-          title: "Details",
-          subtitle: "Runtime, release date, country, and language from TMDB.",
+          title: t2("settings.integration.tmdb.details.title"),
+          subtitle: t2("settings.integration.tmdb.details.subtitle"),
           checked: Boolean(model.tmdb.useDetails),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderActionRow({
           focusKey: "integration:tmdb:language",
-          title: "TMDB Language",
-          subtitle: "Preferred metadata language",
-          value: model.tmdb.language || "en-US"
+          title: t2("settings.integration.tmdb.language.title"),
+          subtitle: t2("settings.integration.tmdb.language.subtitle"),
+          value: labelForTmdbLanguage(model.tmdb.language)
         })}
             ${this.renderActionRow({
           focusKey: "integration:tmdb:api",
-          title: "API Key",
-          subtitle: "Configure TMDB credentials",
-          value: maskValue(model.tmdb.apiKey, "Not set")
+          title: t2("settings.integration.tmdb.apiKey.title"),
+          subtitle: t2("settings.integration.tmdb.apiKey.subtitle"),
+          value: maskValue(model.tmdb.apiKey, t2("common.notSet"))
         })}
           </div>
         </div>
@@ -20178,33 +20760,33 @@
           MdbListSettingsStore.set({ enabled: !MdbListSettingsStore.get().enabled });
         });
         this.actionMap.set("integration:mdblist:key", () => {
-          const value = window.prompt("MDBList API key", MdbListSettingsStore.get().apiKey || "");
+          const value = window.prompt(t2("settings.integration.mdblist.apiKey.prompt"), MdbListSettingsStore.get().apiKey || "");
           if (value !== null) {
             MdbListSettingsStore.set({ apiKey: String(value).trim() });
           }
         });
         return `
-        ${this.renderSectionHeader({ label: "MDBList", subtitle: "External ratings providers" })}
+        ${this.renderSectionHeader({ labelKey: "settings.integration.mdblist.label", subtitleKey: "settings.integration.mdblist.subtitle" })}
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
           focusKey: "integration:back",
-          title: "Back to Integrations",
-          subtitle: "Return to integration list",
+          title: t2("settings.integration.backToIntegrations.title"),
+          subtitle: t2("settings.integration.backToIntegrations.subtitle"),
           icon: "back"
         })}
             ${this.renderToggleRow({
           focusKey: "integration:mdblist:enabled",
-          title: "Enable MDBList",
-          subtitle: plannedSubtitle("Use MDBList as an extra ratings provider."),
+          title: t2("settings.integration.mdblist.enable.title"),
+          subtitle: plannedSubtitle(t2("settings.integration.mdblist.enable.subtitle")),
           checked: Boolean(model.mdbList.enabled),
           planned: true
         })}
             ${this.renderActionRow({
           focusKey: "integration:mdblist:key",
-          title: "API Key",
-          subtitle: plannedSubtitle("Configure MDBList credentials"),
-          value: maskValue(model.mdbList.apiKey, "Not set"),
+          title: t2("settings.integration.mdblist.apiKey.title"),
+          subtitle: plannedSubtitle(t2("settings.integration.mdblist.apiKey.subtitle")),
+          value: maskValue(model.mdbList.apiKey, t2("common.notSet")),
           disabled: !model.mdbList.enabled,
           planned: true
         })}
@@ -20216,33 +20798,33 @@
         AnimeSkipSettingsStore.set({ enabled: !AnimeSkipSettingsStore.get().enabled });
       });
       this.actionMap.set("integration:animeskip:id", () => {
-        const value = window.prompt("Anime-Skip client ID", AnimeSkipSettingsStore.get().clientId || "");
+        const value = window.prompt(t2("settings.integration.animeskip.clientId.prompt"), AnimeSkipSettingsStore.get().clientId || "");
         if (value !== null) {
           AnimeSkipSettingsStore.set({ clientId: String(value).trim() });
         }
       });
       return `
-      ${this.renderSectionHeader({ label: "Anime-Skip", subtitle: "Anime intro and outro skip timestamps" })}
+      ${this.renderSectionHeader({ labelKey: "settings.integration.animeskip.label", subtitleKey: "settings.integration.animeskip.subtitle" })}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "integration:back",
-        title: "Back to Integrations",
-        subtitle: "Return to integration list",
+        title: t2("settings.integration.backToIntegrations.title"),
+        subtitle: t2("settings.integration.backToIntegrations.subtitle"),
         icon: "back"
       })}
           ${this.renderToggleRow({
         focusKey: "integration:animeskip:enabled",
-        title: "Enable Anime-Skip",
-        subtitle: plannedSubtitle("Use Anime-Skip timestamps during playback."),
+        title: t2("settings.integration.animeskip.enable.title"),
+        subtitle: plannedSubtitle(t2("settings.integration.animeskip.enable.subtitle")),
         checked: Boolean(model.animeSkip.enabled),
         planned: true
       })}
           ${this.renderActionRow({
         focusKey: "integration:animeskip:id",
-        title: "Client ID",
-        subtitle: plannedSubtitle("Configure Anime-Skip client credentials"),
-        value: maskValue(model.animeSkip.clientId, "Not set"),
+        title: t2("settings.integration.animeskip.clientId.title"),
+        subtitle: plannedSubtitle(t2("settings.integration.animeskip.clientId.subtitle")),
+        value: maskValue(model.animeSkip.clientId, t2("common.notSet")),
         disabled: !model.animeSkip.enabled,
         planned: true
       })}
@@ -20277,7 +20859,7 @@
       this.actionMap.set("playback:quality", () => {
         const options = ["auto", "2160p", "1080p", "720p"];
         this.openOptionDialog({
-          title: "Preferred quality",
+          title: t2("settings.dialogs.preferredQuality"),
           options: options.map((option) => ({ id: option, label: qualityLabel(option) })),
           selectedId: String(PlayerSettingsStore.get().preferredQuality || "auto"),
           returnFocusKey: "playback:quality",
@@ -20289,7 +20871,7 @@
       this.actionMap.set("playback:player", () => {
         const options = ["auto", "native", "hls", "dash"];
         this.openOptionDialog({
-          title: "Player preference",
+          title: t2("settings.dialogs.playerPreference"),
           options: options.map((option) => ({ id: option, label: playerLabel(option) })),
           selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
           returnFocusKey: "playback:player",
@@ -20302,14 +20884,9 @@
         PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
       });
       this.actionMap.set("playback:audioLanguage", () => {
-        const options = [
-          { id: "system", label: "System" },
-          { id: "en", label: "English" },
-          { id: "it", label: "Italian" }
-        ];
         this.openOptionDialog({
-          title: "Preferred audio language",
-          options,
+          title: t2("settings.dialogs.preferredAudioLanguage"),
+          options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
           selectedId: PlayerSettingsStore.get().preferredAudioLanguage,
           returnFocusKey: "playback:audioLanguage",
           onSelect: (option) => {
@@ -20321,14 +20898,9 @@
         PlayerSettingsStore.set({ subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled });
       });
       this.actionMap.set("playback:subtitleLanguage", () => {
-        const options = [
-          { id: "system", label: "System" },
-          { id: "en", label: "English" },
-          { id: "it", label: "Italian" }
-        ];
         this.openOptionDialog({
-          title: "Preferred subtitle language",
-          options,
+          title: t2("settings.dialogs.preferredSubtitleLanguage"),
+          options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
           selectedId: PlayerSettingsStore.get().subtitleLanguage,
           returnFocusKey: "playback:subtitleLanguage",
           onSelect: (option) => {
@@ -20338,10 +20910,10 @@
       });
       this.actionMap.set("playback:renderMode", () => {
         this.openOptionDialog({
-          title: "Subtitle render mode",
+          title: t2("settings.dialogs.subtitleRenderMode"),
           options: [
-            { id: "native", label: "Native" },
-            { id: "html", label: "HTML overlay" }
+            { id: "native", labelKey: "common.native" },
+            { id: "html", labelKey: "common.htmlOverlay" }
           ],
           selectedId: String(PlayerSettingsStore.get().subtitleRenderMode || "native").toLowerCase(),
           returnFocusKey: "playback:renderMode",
@@ -20354,8 +20926,8 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:autoplay",
-        title: "Autoplay Next Episode",
-        subtitle: "Automatically continue to the next episode.",
+        title: t2("settings.playback.autoplayNextEpisode.title"),
+        subtitle: t2("settings.playback.autoplayNextEpisode.subtitle"),
         checked: Boolean(model.player.autoplayNextEpisode)
       })}
       </div>
@@ -20364,14 +20936,14 @@
       <div class="settings-stack">
         ${this.renderActionRow({
         focusKey: "playback:quality",
-        title: "Preferred Quality",
-        subtitle: "Choose the default quality target.",
+        title: t2("settings.playback.preferredQuality.title"),
+        subtitle: t2("settings.playback.preferredQuality.subtitle"),
         value: qualityLabel(model.player.preferredQuality)
       })}
         ${this.renderActionRow({
         focusKey: "playback:player",
-        title: "Preferred Player",
-        subtitle: "Select the playback engine priority.",
+        title: t2("settings.playback.preferredPlayer.title"),
+        subtitle: t2("settings.playback.preferredPlayer.subtitle"),
         value: playerLabel(model.player.preferredPlayer)
       })}
       </div>
@@ -20380,15 +20952,15 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:trailer",
-        title: "Autoplay Trailer",
-        subtitle: "Play trailers automatically on focused content.",
+        title: t2("settings.playback.autoplayTrailer.title"),
+        subtitle: t2("settings.playback.autoplayTrailer.subtitle"),
         checked: Boolean(model.player.trailerAutoplay)
       })}
         ${this.renderActionRow({
         focusKey: "playback:audioLanguage",
-        title: "Preferred Audio",
-        subtitle: "Choose the default audio language.",
-        value: String(model.player.preferredAudioLanguage || "system").toUpperCase()
+        title: t2("settings.playback.preferredAudio.title"),
+        subtitle: t2("settings.playback.preferredAudio.subtitle"),
+        value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
       })}
       </div>
     `;
@@ -20396,20 +20968,20 @@
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:subtitlesEnabled",
-        title: "Enable Subtitles",
-        subtitle: "Turn subtitles on by default.",
+        title: t2("settings.playback.enableSubtitles.title"),
+        subtitle: t2("settings.playback.enableSubtitles.subtitle"),
         checked: Boolean(model.player.subtitlesEnabled)
       })}
         ${this.renderActionRow({
         focusKey: "playback:subtitleLanguage",
-        title: "Subtitle Language",
-        subtitle: "Preferred subtitle language.",
-        value: String(model.player.subtitleLanguage || "system").toUpperCase()
+        title: t2("settings.playback.subtitleLanguage.title"),
+        subtitle: t2("settings.playback.subtitleLanguage.subtitle"),
+        value: labelForPlaybackLanguage(model.player.subtitleLanguage)
       })}
         ${this.renderActionRow({
         focusKey: "playback:renderMode",
-        title: "Render Mode",
-        subtitle: "Choose how subtitles are drawn.",
+        title: t2("settings.playback.renderMode.title"),
+        subtitle: t2("settings.playback.renderMode.subtitle"),
         value: renderModeLabel(model.player.subtitleRenderMode)
       })}
       </div>
@@ -20420,29 +20992,29 @@
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:general",
-        title: "General",
-        subtitle: "Core playback behavior.",
+        title: t2("settings.playback.groups.general.title"),
+        subtitle: t2("settings.playback.groups.general.subtitle"),
         expanded: Boolean(expanded.general),
         bodyHtml: generalBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:stream",
-        title: "Player & Stream Selection",
-        subtitle: "Player preference, auto-play, and source filtering.",
+        title: t2("settings.playback.groups.stream.title"),
+        subtitle: t2("settings.playback.groups.stream.subtitle"),
         expanded: Boolean(expanded.stream),
         bodyHtml: streamBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:audio",
-        title: "Audio & Trailer",
-        subtitle: "Trailer behavior and audio controls.",
+        title: t2("settings.playback.groups.audio.title"),
+        subtitle: t2("settings.playback.groups.audio.subtitle"),
         expanded: Boolean(expanded.audio),
         bodyHtml: audioBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:subtitles",
-        title: "Subtitles",
-        subtitle: "Language, style, and render mode.",
+        title: t2("settings.playback.groups.subtitles.title"),
+        subtitle: t2("settings.playback.groups.subtitles.subtitle"),
         expanded: Boolean(expanded.subtitles),
         bodyHtml: subtitleBody
       })}
@@ -20458,8 +21030,8 @@
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "trakt:open",
-        title: "Open Trakt Settings",
-        subtitle: plannedSubtitle("Manage Trakt sign-in and continue watching sync."),
+        title: t2("settings.trakt.openSettings"),
+        subtitle: plannedSubtitle(t2("settings.trakt.openSettingsSubtitle")),
         planned: true
       })}
         </div>
@@ -20480,21 +21052,21 @@
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-about-brand">
           <img class="settings-about-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
-          <p class="settings-about-copy">Made with &#10084; by Tapframe and friends</p>
-          <p class="settings-about-copy">Version ${escapeHtml7(SETTINGS_VERSION_LABEL)}</p>
-          <p class="settings-about-copy">Ported by edoedac0 and WhiteGiso.</p>
+          <p class="settings-about-copy">${t2("settings.about.madeWithLove")}</p>
+          <p class="settings-about-copy">${t2("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
+          <p class="settings-about-copy">${t2("settings.about.portedBy")}</p>
         </div>
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "about:privacy",
-        title: "Privacy Policy",
-        subtitle: "View our privacy policy",
+        title: t2("settings.about.privacyPolicy.title"),
+        subtitle: t2("settings.about.privacyPolicy.subtitle"),
         external: true
       })}
           ${this.renderActionRow({
         focusKey: "about:supporters",
-        title: "Supporters & Contributors",
-        subtitle: "Open recognition and project credits"
+        title: t2("settings.about.supporters.title"),
+        subtitle: t2("settings.about.supporters.subtitle")
       })}
         </div>
       </div>
@@ -23830,6 +24402,7 @@
   async function bootstrapApp() {
     renderAppShell();
     Platform.init();
+    await I18n.init();
     await loadStreamingLibs();
     console.log("Nuvio starting...", {
       platform: Platform.getName()
@@ -23838,6 +24411,7 @@
     PlayerController.init();
     FocusEngine.init();
     ThemeManager.apply();
+    I18n.apply();
     AuthManager.subscribe((state) => {
       if (state === AuthState.LOADING) {
         StartupSyncService.stop();
