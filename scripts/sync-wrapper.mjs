@@ -22,13 +22,17 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
 }());
 `;
 const wrapperIconFiles = {
-  icon: {
+  webosIcon: {
     source: path.join(rootDir, "assets", "images", "icon.png"),
     target: "icon.png"
   },
-  largeIcon: {
+  webosLargeIcon: {
     source: path.join(rootDir, "assets", "images", "largeIcon.png"),
     target: "largeIcon.png"
+  },
+  tizenIcon: {
+    source: path.join(rootDir, "assets", "images", "tizenIcon.png"),
+    target: "icon.png"
   }
 };
 
@@ -169,6 +173,52 @@ ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
 `;
 }
 
+function buildTizenIndexHtml() {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <title>${appName}</title>
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <link rel="stylesheet" href="css/themes.css" />
+</head>
+<body>
+  <script defer src="main.js"></script>
+</body>
+</html>
+`;
+}
+
+function buildTizenMainJs() {
+  return `window.__NUVIO_PLATFORM__ = "tizen";
+
+var tvInput = window.tizen && window.tizen.tvinputdevice;
+if (tvInput && typeof tvInput.registerKey === "function") {
+  ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"].forEach(function registerKey(keyName) {
+    try {
+      tvInput.registerKey(keyName);
+    } catch (_) {}
+  });
+}
+
+function loadScript(src) {
+  var script = document.createElement("script");
+  script.src = src;
+  script.defer = false;
+  document.body.appendChild(script);
+}
+
+loadScript("nuvio.env.js");
+loadScript("js/runtime/env.js");
+loadScript("assets/libs/qrcode-generator.js");
+loadScript("app.bundle.js");
+`;
+}
+
 async function readTextFile(filePath, missingMessage) {
   try {
     return await readFile(filePath, "utf8");
@@ -185,12 +235,16 @@ async function writeTextFile(filePath, contents) {
 }
 
 async function syncWrapperIcons(targetDir, { includeLargeIcon }) {
-  const iconTasks = [wrapperIconFiles.icon];
+  const iconTasks = [wrapperIconFiles.webosIcon];
   if (includeLargeIcon) {
-    iconTasks.push(wrapperIconFiles.largeIcon);
+    iconTasks.push(wrapperIconFiles.webosLargeIcon);
   }
 
   await Promise.all(iconTasks.map(({ source, target }) => cp(source, path.join(targetDir, target))));
+}
+
+async function syncTizenIcon(targetDir) {
+  await cp(wrapperIconFiles.tizenIcon.source, path.join(targetDir, wrapperIconFiles.tizenIcon.target));
 }
 
 async function resolveWebOsScriptPath(targetDir) {
@@ -212,8 +266,8 @@ async function updateWebOsMetadata(targetDir) {
   const appInfo = JSON.parse(appInfoRaw);
 
   appInfo.title = appName;
-  appInfo.icon = wrapperIconFiles.icon.target;
-  appInfo.largeIcon = wrapperIconFiles.largeIcon.target;
+  appInfo.icon = wrapperIconFiles.webosIcon.target;
+  appInfo.largeIcon = wrapperIconFiles.webosLargeIcon.target;
 
   await writeTextFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`);
   await syncWrapperIcons(targetDir, { includeLargeIcon: true });
@@ -232,9 +286,16 @@ function upsertXmlTag(xml, tagName, innerText) {
 }
 
 function upsertTizenIcon(xml, iconSrc) {
-  const iconPattern = /<icon\b[^>]*src="[^"]*"[^>]*\/>/;
+  const iconPattern = /<icon\b[^>]*src="[^"]*"[^>]*>([\s\S]*?)<\/icon>|<icon\b[^>]*src="[^"]*"[^>]*\/>/;
   if (iconPattern.test(xml)) {
-    return xml.replace(iconPattern, `<icon src="${iconSrc}"/>`);
+    let replaced = false;
+    return xml.replace(iconPattern, () => {
+      if (replaced) {
+        return "";
+      }
+      replaced = true;
+      return `<icon src="${iconSrc}"/>`;
+    });
   }
 
   return insertIntoWidget(xml, `<icon src="${iconSrc}"/>`);
@@ -257,11 +318,13 @@ async function updateTizenMetadata(targetDir) {
   );
   let configXml = configRaw;
 
-  configXml = upsertTizenIcon(configXml, wrapperIconFiles.icon.target);
+  configXml = upsertTizenIcon(configXml, wrapperIconFiles.tizenIcon.target);
   configXml = upsertXmlTag(configXml, "name", appName);
 
   await writeTextFile(configPath, configXml);
-  await syncWrapperIcons(targetDir, { includeLargeIcon: false });
+  await syncTizenIcon(targetDir);
+  await writeTextFile(path.join(targetDir, "index.html"), buildTizenIndexHtml());
+  await writeTextFile(path.join(targetDir, "main.js"), buildTizenMainJs());
 }
 
 const { platform, targetDir } = parseArgs(process.argv.slice(2));
