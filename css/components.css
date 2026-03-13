@@ -7194,6 +7194,19 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.detail-trailer-active .series-season-row,
+.detail-trailer-active .series-episode-track,
+.detail-trailer-active .series-insight-section,
+.detail-trailer-active .detail-company-section {
+  opacity: 0;
+  transform: translateY(12px);
+  pointer-events: none;
+}
+
+.detail-trailer-active .series-detail-content {
+  overflow: hidden;
+}
+
 .series-primary-btn,
 .series-circle-btn {
   border: none;
