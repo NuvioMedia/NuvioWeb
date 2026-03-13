@@ -139,6 +139,11 @@ function extractCast(meta = {}) {
   return [];
 }
 
+function hasCastPhotos(castItems = []) {
+  return Array.isArray(castItems)
+    && castItems.some((entry) => String(entry?.photo || "").trim().length > 0);
+}
+
 function isBackEvent(event) {
   return Environment.isBackEvent(event);
 }
@@ -688,7 +693,7 @@ export const MetaDetailsScreen = {
       this.castItems = extractCast(this.meta);
       this.buildEpisodeState(allProgressItems, allWatchedItems);
       this.trailerSource = resolveTrailerSource(this.meta);
-      if (!this.castItems.length) {
+      if (!this.castItems.length || !hasCastPhotos(this.castItems)) {
         const fallbackCast = await withTimeout(this.fetchTmdbCastFallback(this.meta), 3200, []);
         if (Array.isArray(fallbackCast) && fallbackCast.length) {
           this.castItems = fallbackCast;
