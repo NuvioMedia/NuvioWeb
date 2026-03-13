@@ -1,4 +1,5 @@
 import { ScreenUtils } from "../../navigation/screen.js";
+import { Router } from "../../navigation/router.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";

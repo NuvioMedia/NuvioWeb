@@ -6,6 +6,20 @@ import { build } from "esbuild";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
+const defaultEnvFileContents = `(function defineNuvioEnv() {
+  var root = typeof globalThis !== "undefined" ? globalThis : window;
+  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
+    SUPABASE_URL: "",
+    SUPABASE_ANON_KEY: "",
+    TV_LOGIN_REDIRECT_BASE_URL: "",
+    PUBLIC_APP_URL: "",
+    ADDON_REMOTE_BASE_URL: "",
+    ENABLE_REMOTE_WRAPPER_MODE: false,
+    PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
+    TMDB_API_KEY: ""
+  });
+}());
+`;
 
 async function copyEntry(relativePath) {
   await cp(path.join(rootDir, relativePath), path.join(distDir, relativePath), {
@@ -28,8 +42,17 @@ async function copyOptionalRootFile(fileName, { fallback = null } = {}) {
     return "";
   }
 
-  await cp(path.join(rootDir, fallback), targetPath);
-  return fallback;
+  try {
+    await cp(path.join(rootDir, fallback), targetPath);
+    return fallback;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  await writeFile(targetPath, defaultEnvFileContents, "utf8");
+  return "generated-default";
 }
 
 async function buildBundle() {
@@ -72,6 +95,8 @@ const copiedEnvSource = await copyOptionalRootFile("nuvio.env.js", {
 
 if (copiedEnvSource === "nuvio.env.example.js") {
   console.warn("Using nuvio.env.example.js as dist/nuvio.env.js because no local nuvio.env.js was found.");
+} else if (copiedEnvSource === "generated-default") {
+  console.warn("Generated a default dist/nuvio.env.js because no local nuvio.env.js or nuvio.env.example.js was found.");
 }
 
 console.log(`Built shared app into ${distDir}`);

@@ -13,6 +13,29 @@ import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
 
+function formatErrorMessage(error) {
+  if (!error) {
+    return "Unknown error";
+  }
+  if (typeof error === "string") {
+    return error;
+  }
+  return String(error?.stack || error?.message || error);
+}
+
+function renderFatalError(error) {
+  const message = formatErrorMessage(error);
+  document.body.innerHTML = `
+    <div style="min-height:100vh;background:#0f1115;color:#f4f7fb;padding:48px;font-family:Arial,sans-serif;">
+      <div style="max-width:960px;margin:0 auto;">
+        <h1 style="margin:0 0 16px;font-size:42px;">Nuvio TV failed to start</h1>
+        <p style="margin:0 0 20px;font-size:20px;color:#c7d0dd;">Startup hit an error before the app UI rendered.</p>
+        <pre style="white-space:pre-wrap;word-break:break-word;background:#171b22;border:1px solid #2b3340;border-radius:12px;padding:20px;font-size:18px;line-height:1.5;">${message}</pre>
+      </div>
+    </div>
+  `;
+}
+
 function isAddonRemoteMode() {
   try {
     return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
@@ -69,11 +92,24 @@ if (document.readyState === "loading") {
     const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
     bootstrap().catch((error) => {
       console.error("App bootstrap failed", error);
+      renderFatalError(error);
     });
   }, { once: true });
 } else {
   const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
   bootstrap().catch((error) => {
     console.error("App bootstrap failed", error);
+    renderFatalError(error);
   });
 }
+
+window.addEventListener("error", (event) => {
+  if (!event?.error) {
+    return;
+  }
+  renderFatalError(event.error);
+});
+
+window.addEventListener("unhandledrejection", (event) => {
+  renderFatalError(event?.reason);
+});

@@ -5,7 +5,9 @@
   "version": "0.1.0",
   "scripts": {
     "build": "node ./scripts/build.mjs",
-    "sync": "node ./scripts/sync-wrapper.mjs"
+    "sync": "node ./scripts/sync-wrapper.mjs",
+    "sync:tizen": "node ./scripts/sync-wrapper.mjs --tizen",
+    "sync:webos": "node ./scripts/sync-wrapper.mjs --webos"
   },
   "devDependencies": {
     "esbuild": "^0.27.3"

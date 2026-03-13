@@ -417,13 +417,13 @@
       const authState = AuthManager.getAuthState();
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       if (!hasSeenQr && authState !== AuthState.AUTHENTICATED) {
-        Router2.navigate("authQrSignIn", { onboardingMode: true });
+        Router.navigate("authQrSignIn", { onboardingMode: true });
         return;
       }
       if (authState === AuthState.AUTHENTICATED) {
-        Router2.navigate("profileSelection");
+        Router.navigate("profileSelection");
       } else {
-        Router2.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
+        Router.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
       }
     },
     cleanup() {
@@ -2879,14 +2879,14 @@
       return;
     }
     if (normalizedAction === "gotoAccount") {
-      Router2.navigate("profileSelection");
+      Router.navigate("profileSelection");
       return;
     }
     const target = getItemForAction(normalizedAction);
     if (!target || target.route === currentRoute) {
       return;
     }
-    Router2.navigate(target.route);
+    Router.navigate(target.route);
   }
   function isSelectedSidebarAction(action, selectedRoute = "") {
     var _a;
@@ -4739,7 +4739,7 @@
             return;
           }
           if (action === "resumeProgress") {
-            Router2.navigate("detail", {
+            Router.navigate("detail", {
               itemId: target.dataset.itemId,
               itemType: target.dataset.itemType || "movie",
               fallbackTitle: target.dataset.itemTitle || target.dataset.itemId || "Untitled"
@@ -4830,7 +4830,7 @@
       this.render();
       if (deferredDescriptors.length) {
         this.fetchCatalogRows(deferredDescriptors).then((extraRows) => {
-          if (token !== this.homeLoadToken || Router2.getCurrent() !== "home") {
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
             return;
           }
           const combinedByKey = /* @__PURE__ */ new Map();
@@ -4849,7 +4849,7 @@
       }
       if (this.layoutMode !== "modern") {
         this.enrichHero(this.heroCandidates[0] || null).then(() => {
-          if (token !== this.homeLoadToken || Router2.getCurrent() !== "home") {
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
             return;
           }
           this.applyHeroToDom();
@@ -4858,7 +4858,7 @@
         });
       }
       this.enrichContinueWatching(this.continueWatching).then((enriched) => {
-        if (token !== this.homeLoadToken || Router2.getCurrent() !== "home") {
+        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
         this.continueWatchingDisplay = enriched.map((item) => normalizeContinueWatchingItem(item));
@@ -5161,7 +5161,7 @@
       if (!itemId) {
         return;
       }
-      Router2.navigate("detail", {
+      Router.navigate("detail", {
         itemId,
         itemType: node.dataset.itemType || "movie",
         fallbackTitle: node.dataset.itemTitle || "Untitled"
@@ -5175,10 +5175,10 @@
       const seeAllId = String(node.dataset.seeAllId || "");
       const mapped = ((_b = (_a = this.catalogSeeAllMap) == null ? void 0 : _a.get) == null ? void 0 : _b.call(_a, seeAllId)) || null;
       if (mapped) {
-        Router2.navigate("catalogSeeAll", mapped);
+        Router.navigate("catalogSeeAll", mapped);
         return;
       }
-      Router2.navigate("catalogSeeAll", {
+      Router.navigate("catalogSeeAll", {
         addonBaseUrl: node.dataset.addonBaseUrl || "",
         addonId: node.dataset.addonId || "",
         addonName: node.dataset.addonName || "",
@@ -5248,7 +5248,7 @@
       if (action === "openDetail") this.openDetailFromNode(current);
       if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
       if (action === "resumeProgress") {
-        Router2.navigate("detail", {
+        Router.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || current.dataset.itemId || "Untitled"
@@ -11544,7 +11544,7 @@
         }
         const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
         const nextEpisode = this.episodes[this.episodePanelIndex + 1] || null;
-        Router2.navigate("player", {
+        Router.navigate("player", {
           streamUrl: bestStream,
           itemId: (_b = this.params) == null ? void 0 : _b.itemId,
           itemType,
@@ -11940,7 +11940,7 @@
           return;
         }
         const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
-        Router2.navigate("player", {
+        Router.navigate("player", {
           streamUrl: bestStream,
           itemId: (_e = this.params) == null ? void 0 : _e.itemId,
           itemType,
@@ -12037,7 +12037,7 @@
     },
     async signOut() {
       await AuthManager.signOut();
-      Router2.navigate("authQrSignIn");
+      Router.navigate("authQrSignIn");
     },
     render() {
       if (!this.container) {
@@ -12090,7 +12090,7 @@
       if (event.keyCode === 13 && current) {
         const action = current.dataset.action;
         if (action === "signin") {
-          Router2.navigate("authQrSignIn");
+          Router.navigate("authQrSignIn");
         }
         if (action === "logout") {
           this.signOut();
@@ -12466,7 +12466,7 @@
       this.container = document.getElementById("account");
       this.onboardingMode = Boolean(onboardingMode);
       this.isSignedIn = AuthManager.isAuthenticated;
-      this.hasBackDestination = Router2.stack.length > 0;
+      this.hasBackDestination = Router.stack.length > 0;
       ScreenUtils.show(this.container);
       this.container.innerHTML = `
       <div class="qr-layout">
@@ -12503,9 +12503,9 @@
       document.getElementById("qr-back-btn").onclick = () => {
         this.cleanup();
         if (this.hasBackDestination) {
-          Router2.back();
+          Router.back();
         } else {
-          Router2.navigate("home");
+          Router.navigate("home");
         }
       };
       ScreenUtils.indexFocusables(this.container);
@@ -12572,7 +12572,7 @@
           if (exchange) {
             LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
             this.isSignedIn = true;
-            Router2.navigate("profileSelection");
+            Router.navigate("profileSelection");
           } else {
             this.setStatus(this.toFriendlyQrError(QrLoginService.getLastError()));
           }
@@ -12701,7 +12701,7 @@
       }
       const action = current.dataset.action;
       if (action === "openQr") {
-        Router2.navigate("authQrSignIn");
+        Router.navigate("authQrSignIn");
         return;
       }
       if (action === "devLogin") {
@@ -12710,7 +12710,7 @@
         if (email && password) {
           try {
             await AuthManager.signInWithEmail(email, password);
-            Router2.navigate("profileSelection");
+            Router.navigate("profileSelection");
           } catch (error) {
             console.error("SignIn failed", error);
           }
@@ -12718,7 +12718,7 @@
         return;
       }
       if (action === "back") {
-        Router2.back();
+        Router.back();
       }
     },
     cleanup() {
@@ -12776,7 +12776,7 @@
         return;
       }
       if (action === "back") {
-        Router2.back();
+        Router.back();
       }
     },
     cleanup() {
@@ -14527,7 +14527,7 @@
       }
       await ProfileManager.setActiveProfile(profileId);
       await StartupSyncService.syncPull();
-      Router2.navigate("home");
+      Router.navigate("home");
     },
     async onKeyDown(event) {
       var _a, _b;
@@ -15082,7 +15082,7 @@
         if (this.consumeBackRequest()) {
           return;
         }
-        Router2.back();
+        Router.back();
       };
       document.addEventListener("keydown", this.backHandler, true);
     },
@@ -16391,7 +16391,7 @@
         return true;
       }
       if (this.isLoadingDetail) {
-        Router2.navigate("home");
+        Router.navigate("home");
         return true;
       }
       return false;
@@ -16408,7 +16408,7 @@
       }
       const currentIndex = this.episodes.findIndex((entry) => entry.id === pending.videoId);
       const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
-      Router2.navigate("player", {
+      Router.navigate("player", {
         streamUrl: selectedStream.url,
         itemId: (_a = this.params) == null ? void 0 : _a.itemId,
         itemType: ((_b = this.params) == null ? void 0 : _b.itemType) || "series",
@@ -16436,7 +16436,7 @@
       const currentIndex = this.episodes.findIndex((entry) => entry.id === episode.id);
       const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
       const streamBackdrop = ((_a = this.meta) == null ? void 0 : _a.background) || ((_b = this.meta) == null ? void 0 : _b.landscapePoster) || ((_c = this.meta) == null ? void 0 : _c.poster) || null;
-      Router2.navigate("stream", {
+      Router.navigate("stream", {
         itemId: ((_d = this.params) == null ? void 0 : _d.itemId) || null,
         itemType: "series",
         itemTitle: ((_e = this.meta) == null ? void 0 : _e.name) || ((_f = this.params) == null ? void 0 : _f.fallbackTitle) || ((_g = this.params) == null ? void 0 : _g.itemId) || "Untitled",
@@ -16459,7 +16459,7 @@
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
       const releaseYear = ((_b = String(((_a = this.meta) == null ? void 0 : _a.releaseInfo) || "").match(/\b(19|20)\d{2}\b/)) == null ? void 0 : _b[0]) || "";
       const streamBackdrop = ((_c = this.meta) == null ? void 0 : _c.background) || ((_d = this.meta) == null ? void 0 : _d.landscapePoster) || ((_e = this.meta) == null ? void 0 : _e.poster) || null;
-      Router2.navigate("stream", {
+      Router.navigate("stream", {
         itemId: ((_f = this.params) == null ? void 0 : _f.itemId) || null,
         itemType: "movie",
         itemTitle: ((_g = this.meta) == null ? void 0 : _g.name) || ((_h = this.params) == null ? void 0 : _h.fallbackTitle) || ((_i = this.params) == null ? void 0 : _i.itemId) || "Untitled",
@@ -16485,7 +16485,7 @@
       if (!(selectedStream == null ? void 0 : selectedStream.url)) {
         return;
       }
-      Router2.navigate("player", {
+      Router.navigate("player", {
         streamUrl: selectedStream.url,
         itemId: (_a = this.params) == null ? void 0 : _a.itemId,
         itemType: ((_b = this.params) == null ? void 0 : _b.itemType) || "movie",
@@ -17085,7 +17085,7 @@
           this.closeEpisodeStreamChooser();
           return;
         }
-        Router2.back();
+        Router.back();
         return;
       }
       if (this.isTrailerPlaying) {
@@ -17123,11 +17123,11 @@
       }
       const action = current.dataset.action;
       if (action === "goBack") {
-        Router2.back();
+        Router.back();
         return;
       }
       if (action === "openSearch") {
-        Router2.navigate("search", {
+        Router.navigate("search", {
           query: ((_c = this.params) == null ? void 0 : _c.fallbackTitle) || ((_d = this.params) == null ? void 0 : _d.itemId) || ""
         });
         return;
@@ -17219,7 +17219,7 @@
         return;
       }
       if (action === "openCastDetail") {
-        Router2.navigate("castDetail", {
+        Router.navigate("castDetail", {
           castId: current.dataset.castId || "",
           castName: current.dataset.castName || "",
           castRole: current.dataset.castRole || "",
@@ -17262,7 +17262,7 @@
         return;
       }
       if (action === "playStream" && current.dataset.streamUrl) {
-        Router2.navigate("player", {
+        Router.navigate("player", {
           streamUrl: current.dataset.streamUrl,
           itemId: (_x = this.params) == null ? void 0 : _x.itemId,
           itemType: (_y = this.params) == null ? void 0 : _y.itemType,
@@ -17278,7 +17278,7 @@
         return;
       }
       if (action === "openMoreLikeDetail") {
-        Router2.navigate("detail", {
+        Router.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -18818,7 +18818,7 @@
         if (focusKey) {
           this.controller.setFocusedPosterKey(focusKey);
         }
-        Router2.navigate("detail", {
+        Router.navigate("detail", {
           itemId: node.dataset.itemId,
           itemType: node.dataset.itemType || "movie",
           fallbackTitle: node.dataset.itemTitle || "Untitled"
@@ -19810,7 +19810,7 @@
       if (!action) return;
       if (action === "openDetail") this.openDetailFromNode(node);
       if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(node);
-      if (action === "openDiscover" && ((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled)) Router2.navigate("discover");
+      if (action === "openDiscover" && ((_a = this.layoutPrefs) == null ? void 0 : _a.searchDiscoverEnabled)) Router.navigate("discover");
       if (action === "openVoice") this.handleVoiceSearch();
     },
     ensureVoiceRecognition() {
@@ -19910,7 +19910,7 @@
       }, 2600);
     },
     openDetailFromNode(node) {
-      Router2.navigate("detail", {
+      Router.navigate("detail", {
         itemId: node.dataset.itemId,
         itemType: node.dataset.itemType || "movie",
         fallbackTitle: node.dataset.itemTitle || "Untitled"
@@ -19920,7 +19920,7 @@
       var _a, _b;
       const rowIndex = Math.max(0, Number(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.rowIndex) || 0));
       const sourceRow = ((_b = this.rows) == null ? void 0 : _b[rowIndex]) || null;
-      Router2.navigate("catalogSeeAll", {
+      Router.navigate("catalogSeeAll", {
         addonBaseUrl: node.dataset.addonBaseUrl || "",
         addonId: node.dataset.addonId || "",
         addonName: node.dataset.addonName || "",
@@ -20488,7 +20488,7 @@
         const cardNode = (_f = (_e = event.target) == null ? void 0 : _e.closest) == null ? void 0 : _f.call(_e, ".discover-card");
         if (cardNode) {
           this.lastFocusedDiscoverItemId = String(cardNode.dataset.itemId || "");
-          Router2.navigate("detail", {
+          Router.navigate("detail", {
             itemId: cardNode.dataset.itemId,
             itemType: cardNode.dataset.itemType || "movie",
             fallbackTitle: cardNode.dataset.itemTitle || "Untitled"
@@ -20644,7 +20644,7 @@
       if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
       if (action === "discoverFilterGenre") this.openPickerMenu("genre");
       if (action === "openDetail") {
-        Router2.navigate("detail", {
+        Router.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -21426,10 +21426,10 @@
     },
     renderAccountSection(model) {
       const signedIn = model.authState === "authenticated";
-      this.actionMap.set("account:signin", () => Router2.navigate("authQrSignIn"));
+      this.actionMap.set("account:signin", () => Router.navigate("authQrSignIn"));
       this.actionMap.set("account:signout", async () => {
         await AuthManager.signOut();
-        Router2.navigate("authQrSignIn");
+        Router.navigate("authQrSignIn");
       });
       return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "account"))}
@@ -21454,7 +21454,7 @@
     `;
     },
     renderProfilesSection(model) {
-      this.actionMap.set("profiles:manage", () => Router2.navigate("profileSelection", {
+      this.actionMap.set("profiles:manage", () => Router.navigate("profileSelection", {
         mode: "management",
         returnRoute: "settings"
       }));
@@ -22282,7 +22282,7 @@
     `;
     },
     renderTraktSection() {
-      this.actionMap.set("trakt:open", () => Router2.navigate("account"));
+      this.actionMap.set("trakt:open", () => Router.navigate("account"));
       return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "trakt"))}
       <div class="settings-group-card settings-group-card-fill">
@@ -22563,7 +22563,7 @@
       }
       this.contentFocusKey = focusKey;
       await action();
-      if (Router2.getCurrent() === "settings") {
+      if (Router.getCurrent() === "settings") {
         await this.render();
         this.focusZone = "content";
         this.applyFocus();
@@ -23436,7 +23436,7 @@
       var _a, _b;
       if (Platform.isBackEvent(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        await Router2.back();
+        await Router.back();
         return;
       }
       const code = Number((event == null ? void 0 : event.keyCode) || 0);
@@ -24110,7 +24110,7 @@
         return;
       }
       const isSeries = normalizeType((_a = this.params) == null ? void 0 : _a.itemType) === "series";
-      Router2.navigate("player", {
+      Router.navigate("player", {
         streamUrl: targetUrl,
         itemId: ((_b = this.params) == null ? void 0 : _b.itemId) || null,
         itemType: isSeries ? "series" : "movie",
@@ -24134,7 +24134,7 @@
       var _a, _b, _c, _d;
       if (isBackEvent3(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router2.back();
+        Router.back();
         return;
       }
       const direction = getDpadDirection2(event);
@@ -24394,7 +24394,7 @@
       var _a;
       if (isBackEvent4(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router2.back();
+        Router.back();
         return;
       }
       if (ScreenUtils.handleDpadNavigation(event, this.container)) {
@@ -24409,11 +24409,11 @@
       }
       const action = String(current.dataset.action || "");
       if (action === "back") {
-        Router2.back();
+        Router.back();
         return;
       }
       if (action === "openDetail") {
-        Router2.navigate("detail", {
+        Router.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -24750,7 +24750,7 @@
       var _a;
       if (isBackEvent5(event)) {
         (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
-        Router2.back();
+        Router.back();
         return;
       }
       if (this.handleGridDpad(event)) {
@@ -24765,7 +24765,7 @@
       }
       const action = String(current.dataset.action || "");
       if (action === "openDetail") {
-        Router2.navigate("detail", {
+        Router.navigate("detail", {
           itemId: current.dataset.itemId,
           itemType: current.dataset.itemType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled"
@@ -24818,7 +24818,7 @@
     "authSignIn",
     "syncCode"
   ]);
-  var Router2 = {
+  var Router = {
     current: null,
     currentParams: {},
     stack: [],
@@ -25085,14 +25085,14 @@
         if (typeof event.stopImmediatePropagation === "function") {
           event.stopImmediatePropagation();
         }
-        const currentScreen2 = Router2.getCurrentScreen();
+        const currentScreen2 = Router.getCurrentScreen();
         if ((_a = currentScreen2 == null ? void 0 : currentScreen2.consumeBackRequest) == null ? void 0 : _a.call(currentScreen2)) {
           return;
         }
-        Router2.back();
+        Router.back();
         return;
       }
-      const currentScreen = Router2.getCurrentScreen();
+      const currentScreen = Router.getCurrentScreen();
       (_b = currentScreen == null ? void 0 : currentScreen.onKeyDown) == null ? void 0 : _b.call(currentScreen, normalizedEvent);
     }
   };
@@ -25653,6 +25653,27 @@
   }
 
   // js/app.js
+  function formatErrorMessage(error) {
+    if (!error) {
+      return "Unknown error";
+    }
+    if (typeof error === "string") {
+      return error;
+    }
+    return String((error == null ? void 0 : error.stack) || (error == null ? void 0 : error.message) || error);
+  }
+  function renderFatalError(error) {
+    const message = formatErrorMessage(error);
+    document.body.innerHTML = `
+    <div style="min-height:100vh;background:#0f1115;color:#f4f7fb;padding:48px;font-family:Arial,sans-serif;">
+      <div style="max-width:960px;margin:0 auto;">
+        <h1 style="margin:0 0 16px;font-size:42px;">Nuvio TV failed to start</h1>
+        <p style="margin:0 0 20px;font-size:20px;color:#c7d0dd;">Startup hit an error before the app UI rendered.</p>
+        <pre style="white-space:pre-wrap;word-break:break-word;background:#171b22;border:1px solid #2b3340;border-radius:12px;padding:20px;font-size:18px;line-height:1.5;">${message}</pre>
+      </div>
+    </div>
+  `;
+  }
   function isAddonRemoteMode() {
     try {
       return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
@@ -25668,7 +25689,7 @@
     console.log("Nuvio starting...", {
       platform: Platform.getName()
     });
-    Router2.init();
+    Router.init();
     PlayerController.init();
     FocusEngine.init();
     ThemeManager.apply();
@@ -25676,18 +25697,18 @@
     AuthManager.subscribe((state) => {
       if (state === AuthState.LOADING) {
         StartupSyncService.stop();
-        Router2.navigate("splash");
+        Router.navigate("splash");
       }
       if (state === AuthState.SIGNED_OUT) {
         StartupSyncService.stop();
         const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
-        Router2.navigate("authQrSignIn", {
+        Router.navigate("authQrSignIn", {
           onboardingMode: !hasSeenQr
         });
       }
       if (state === AuthState.AUTHENTICATED) {
         StartupSyncService.start();
-        Router2.navigate("profileSelection");
+        Router.navigate("profileSelection");
       }
     });
     await AuthManager.bootstrap();
@@ -25700,12 +25721,23 @@
       const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
       bootstrap().catch((error) => {
         console.error("App bootstrap failed", error);
+        renderFatalError(error);
       });
     }, { once: true });
   } else {
     const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
     bootstrap().catch((error) => {
       console.error("App bootstrap failed", error);
+      renderFatalError(error);
     });
   }
+  window.addEventListener("error", (event) => {
+    if (!(event == null ? void 0 : event.error)) {
+      return;
+    }
+    renderFatalError(event.error);
+  });
+  window.addEventListener("unhandledrejection", (event) => {
+    renderFatalError(event == null ? void 0 : event.reason);
+  });
 })();

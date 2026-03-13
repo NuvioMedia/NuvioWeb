@@ -110,7 +110,7 @@ After that, sync the shared web build into the wrapper:
 
 ```bash
 npm run build
-npm run sync -- --webos --path /absolute/path/to/YourWebOSProject
+npm run sync:webos -- /absolute/path/to/YourWebOSProject
 ```
 
 Then package/install that wrapper with your normal webOS CLI workflow.
@@ -177,7 +177,7 @@ Then sync the shared web build into the wrapper:
 
 ```bash
 npm run build
-npm run sync -- --tizen --path /absolute/path/to/YourTizenProject
+npm run sync:tizen -- /absolute/path/to/YourTizenProject
 ```
 
 Then package/install that wrapper with Tizen Studio or your normal Samsung TV workflow.
@@ -185,6 +185,13 @@ Then package/install that wrapper with Tizen Studio or your normal Samsung TV wo
 ## Sync Command
 
 The universal sync command copies the built web app into a wrapper project:
+
+```bash
+npm run sync:webos -- /absolute/path/to/project
+npm run sync:tizen -- /absolute/path/to/project
+```
+
+Compatibility form:
 
 ```bash
 npm run sync -- --webos --path /absolute/path/to/project
@@ -196,7 +203,14 @@ It syncs:
 - `assets/`
 - `css/`
 - `js/`
+- `res/`
 - `app.bundle.js`
+
+It also updates wrapper metadata:
+
+- `appinfo.json` for webOS: sets the title to `Nuvio TV`, points `icon` to `icon.png`, and points `largeIcon` to `largeIcon.png`
+- `config.xml` for Tizen: sets `<name>` to `Nuvio TV` and `<icon src="icon.png"/>`
+- copies `icon.png` into both wrapper roots and `largeIcon.png` into the webOS wrapper root
 
 ## Hosted vs Packaged
 
