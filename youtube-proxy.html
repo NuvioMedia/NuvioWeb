@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<body style="margin:0">
+<iframe id="yt" style="width:100%;height:100%;border:0"
+allow="autoplay; fullscreen"></iframe>
+
+<script>
+const v = new URLSearchParams(location.search).get("v");
+document.getElementById("yt").src =
+`https://www.youtube-nocookie.com/embed/${v}?autoplay=1&mute=1`;
+</script>
+</body>
+</html>
