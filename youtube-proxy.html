@@ -1,59 +1,113 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>YT Proxy</title>
-  <style>
-    html, body {
-      margin: 0;
-      width: 100%;
-      height: 100%;
-      background: black;
-      overflow: hidden;
-    }
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>YT Proxy</title>
 
-    .stage {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: black;
-    }
+<style>
+html,body{
+  margin:0;
+  width:100%;
+  height:100%;
+  background:black;
+  overflow:hidden;
+}
 
-    .video-box {
-      width: 100vw;
-      aspect-ratio: 16 / 9;
-      max-height: 100vh;
-      background: black;
-    }
+.stage{
+  position:fixed;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 
-    #yt {
-      width: 100%;
-      height: 100%;
-      border: 0;
-      display: block;
-    }
-  </style>
+.video-box{
+  width:100vw;
+  aspect-ratio:16/9;
+  max-height:100vh;
+  background:black;
+  position:relative;
+}
+
+#yt{
+  width:100%;
+  height:100%;
+  border:0;
+}
+
+/* overlay nero */
+#black{
+  position:absolute;
+  inset:0;
+  background:black;
+  transition:opacity .3s ease;
+}
+</style>
 </head>
+
 <body>
-  <div class="stage">
-    <div class="video-box">
-      <iframe
-        id="yt"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-        allowfullscreen>
-      </iframe>
-    </div>
-  </div>
 
-  <script>
-    const params = new URLSearchParams(location.search);
-    const v = params.get("v") || "qBg39HCJiTU";
+<div class="stage">
+<div class="video-box">
 
-    document.getElementById("yt").src =
-      `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v)}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0`;
-  </script>
+<div id="black"></div>
+
+<div id="yt"></div>
+
+</div>
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+
+<script>
+
+const params = new URLSearchParams(location.search)
+const v = params.get("v") || "qBg39HCJiTU"
+
+let player
+
+function onYouTubeIframeAPIReady(){
+
+  player = new YT.Player("yt",{
+
+    videoId: v,
+
+    playerVars:{
+      autoplay:1,
+      mute:1,
+      controls:1,
+      rel:0,
+      playsinline:1
+    },
+
+    events:{
+      onStateChange:onState
+    }
+
+  })
+
+}
+
+function onState(e){
+
+  /* BUFFERING o PLAYING */
+
+  if(e.data === YT.PlayerState.BUFFERING || e.data === YT.PlayerState.PLAYING){
+
+    const black = document.getElementById("black")
+
+    black.style.opacity = "0"
+
+    setTimeout(()=>{
+      black.remove()
+    },300)
+
+  }
+
+}
+
+</script>
+
 </body>
 </html>
