@@ -1,118 +1,30 @@
 <!DOCTYPE html>
-<html lang="it">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>YT Proxy</title>
-
+<meta charset="UTF-8">
 <style>
-  html, body {
-    margin: 0;
-    width: 100%;
-    height: 100%;
-    background: black;
-    overflow: hidden;
-  }
-
-  .stage {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: black;
-  }
-
-  .video-box {
-    width: 100vw;
-    aspect-ratio: 16 / 9;
-    max-height: 100vh;
-    background: black;
-    position: relative;
-    overflow: hidden;
-  }
-
-  #player-shell {
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    transition: opacity 0.15s linear;
-    background: black;
-  }
-
-  #yt {
-    width: 100%;
-    height: 100%;
-  }
-
-  #black {
-    position: absolute;
-    inset: 0;
-    background: black;
-    z-index: 5;
-    transition: opacity 0.15s linear;
-  }
+html,body{margin:0;height:100%}
+#yt{width:100%;height:100%}
 </style>
 </head>
+
 <body>
-  <div class="stage">
-    <div class="video-box">
-      <div id="black"></div>
-      <div id="player-shell">
-        <div id="yt"></div>
-      </div>
-    </div>
-  </div>
 
-  <script src="https://www.youtube.com/iframe_api"></script>
-  <script>
-    const params = new URLSearchParams(location.search);
-    const v = params.get("v") || "qBg39HCJiTU";
+<div id="yt"></div>
 
-    let player;
-    let revealed = false;
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+const v = new URLSearchParams(location.search).get("v") || "qBg39HCJiTU";
 
-    function revealPlayer() {
-      if (revealed) return;
-      revealed = true;
-
-      document.getElementById("player-shell").style.opacity = "1";
-      const black = document.getElementById("black");
-      black.style.opacity = "0";
-
-      setTimeout(() => {
-        black.remove();
-      }, 200);
+function onYouTubeIframeAPIReady() {
+  new YT.Player("yt", {
+    videoId: v,
+    playerVars: {
+      autoplay: 1
     }
+  });
+}
+</script>
 
-    function onYouTubeIframeAPIReady() {
-      player = new YT.Player("yt", {
-        videoId: v,
-        playerVars: {
-          autoplay: 1,
-          mute: 0,
-          controls: 1,
-          rel: 0,
-          playsinline: 1
-        },
-        events: {
-          onStateChange: onPlayerStateChange
-        }
-      });
-    }
-
-    function onPlayerStateChange(event) {
-      if (
-        event.data === YT.PlayerState.PLAYING
-      ) {
-        revealPlayer();
-      }
-    }
-
-    // fallback: se PLAYING tarda ma il player è già partito quasi del tutto
-    setTimeout(() => {
-      revealPlayer();
-    }, 2500);
-  </script>
 </body>
 </html>
