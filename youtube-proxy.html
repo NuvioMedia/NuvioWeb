@@ -1,40 +1,59 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
 <head>
-<meta charset="UTF-8">
-<style>
-html, body {
-  margin:0;
-  padding:0;
-  width:100vw;
-  height:100vh;
-  background:black;
-  overflow:hidden;
-}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YT Proxy</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      overflow: hidden;
+    }
 
-#yt {
-  width:100vw;
-  height:100vh;
-  border:0;
-}
-</style>
+    .stage {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: black;
+    }
+
+    .video-box {
+      width: 100vw;
+      aspect-ratio: 16 / 9;
+      max-height: 100vh;
+      background: black;
+    }
+
+    #yt {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+  </style>
 </head>
-
 <body>
+  <div class="stage">
+    <div class="video-box">
+      <iframe
+        id="yt"
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        allowfullscreen>
+      </iframe>
+    </div>
+  </div>
 
-<iframe
- id="yt"
- allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
- allowfullscreen>
-</iframe>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const v = params.get("v") || "qBg39HCJiTU";
 
-<script>
-const params = new URLSearchParams(location.search);
-const v = params.get("v");
-
-document.getElementById("yt").src =
-`https://www.youtube-nocookie.com/embed/${v}?autoplay=1&mute=1&controls=0&playsinline=1&rel=0`;
-</script>
-
+    document.getElementById("yt").src =
+      `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v)}?autoplay=1&mute=1&controls=1&playsinline=1&rel=0`;
+  </script>
 </body>
 </html>
