@@ -6,13 +6,15 @@ import { build } from "esbuild";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
+const bundleFileName = "app.bundle.js";
+const rootBundlePath = path.join(rootDir, bundleFileName);
 const defaultEnvFileContents = `(function defineNuvioEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
   root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
     SUPABASE_URL: "",
     SUPABASE_ANON_KEY: "",
     TV_LOGIN_REDIRECT_BASE_URL: "",
-    PUBLIC_APP_URL: "",
+    YOUTUBE_PROXY_URL: "",
     ADDON_REMOTE_BASE_URL: "",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
@@ -27,7 +29,7 @@ async function copyEntry(relativePath) {
   });
 }
 
-async function copyOptionalRootFile(fileName, { fallback = null } = {}) {
+async function copyOptionalRootFile(fileName, { fallback = null, defaultContents = defaultEnvFileContents } = {}) {
   const targetPath = path.join(distDir, fileName);
   try {
     await cp(path.join(rootDir, fileName), targetPath);
@@ -51,29 +53,27 @@ async function copyOptionalRootFile(fileName, { fallback = null } = {}) {
     }
   }
 
-  await writeFile(targetPath, defaultEnvFileContents, "utf8");
+  await writeFile(targetPath, defaultContents, "utf8");
   return "generated-default";
 }
 
 async function buildBundle() {
   await build({
     entryPoints: [path.join(rootDir, "js/app.js")],
-    outfile: path.join(distDir, "app.bundle.js"),
+    outfile: rootBundlePath,
     bundle: true,
     format: "iife",
     platform: "browser",
-    target: ["es2018"],
+    target: ["es2015"],
     logLevel: "silent"
   });
+
+  await cp(rootBundlePath, path.join(distDir, bundleFileName));
 }
 
 async function writeDistIndex() {
   const sourceIndex = await readFile(path.join(rootDir, "index.html"), "utf8");
-  const output = sourceIndex.replace(
-    '<script type="module" src="js/app.js"></script>',
-    '<script defer src="app.bundle.js"></script>'
-  );
-  await writeFile(path.join(distDir, "index.html"), output, "utf8");
+  await writeFile(path.join(distDir, "index.html"), sourceIndex, "utf8");
 }
 
 await rm(distDir, { recursive: true, force: true });

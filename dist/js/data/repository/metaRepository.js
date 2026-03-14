@@ -2,6 +2,12 @@ import { safeApiCall } from "../../core/network/safeApiCall.js";
 import { addonRepository } from "./addonRepository.js";
 import { MetaApi } from "../remote/api/metaApi.js";
 
+function normalizeDisplayText(value) {
+  return String(value ?? "")
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, "\"");
+}
+
 class MetaRepository {
 
   constructor() {
@@ -73,14 +79,14 @@ class MetaRepository {
       ...meta,
       id: meta.id || "",
       type: meta.type || "",
-      name: meta.name || "Untitled",
+      name: normalizeDisplayText(meta.name || "Untitled"),
       poster: meta.poster || null,
       background: meta.background || null,
       logo: meta.logo || null,
-      description: meta.description || "",
-      genres: Array.isArray(meta.genres) ? meta.genres : [],
+      description: normalizeDisplayText(meta.description || ""),
+      genres: Array.isArray(meta.genres) ? meta.genres.map((genre) => normalizeDisplayText(genre)) : [],
       videos: Array.isArray(meta.videos) ? meta.videos : [],
-      releaseInfo: meta.releaseInfo || ""
+      releaseInfo: normalizeDisplayText(meta.releaseInfo || "")
     };
   }
 

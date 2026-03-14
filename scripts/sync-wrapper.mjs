@@ -13,7 +13,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     SUPABASE_URL: "",
     SUPABASE_ANON_KEY: "",
     TV_LOGIN_REDIRECT_BASE_URL: "",
-    PUBLIC_APP_URL: "",
+    YOUTUBE_PROXY_URL: "",
     ADDON_REMOTE_BASE_URL: "",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
@@ -143,6 +143,7 @@ async function syncBuild(targetDir) {
       throw error;
     }
   }
+
 }
 
 function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {

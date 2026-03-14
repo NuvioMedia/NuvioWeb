@@ -4,7 +4,7 @@ import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
-import { ADDON_REMOTE_BASE_URL, PUBLIC_APP_URL } from "../../../config.js";
+import { ADDON_REMOTE_BASE_URL } from "../../../config.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -132,16 +132,6 @@ async function getPhoneManagerUrl(addonCount) {
       const wrapperUrl = new URL(wrapperServerBase, window.location.href);
       if (!isLoopbackHostname(wrapperUrl.hostname)) {
         return buildPhoneManagerUrl(wrapperUrl.toString(), addonCount);
-      }
-    } catch (_) {}
-  }
-
-  const configuredBase = String(PUBLIC_APP_URL || "").trim();
-  if (configuredBase) {
-    try {
-      const configuredUrl = new URL(configuredBase, window.location.href);
-      if (!isLoopbackHostname(configuredUrl.hostname)) {
-        return buildPhoneManagerUrl(configuredUrl.toString(), addonCount);
       }
     } catch (_) {}
   }
@@ -325,7 +315,7 @@ export const PluginScreen = {
               <p class="addons-qr-instruction">Manage addons and home catalogs from your phone</p>
               ${this.model.phoneManagerUrl
                 ? '<canvas class="addons-qr-canvas" width="440" height="440" aria-label="QR code"></canvas>'
-                : '<div class="addons-qr-error">Set `ADDON_REMOTE_BASE_URL` in the wrapper, or `PUBLIC_APP_URL`, to a phone-reachable address.</div>'}
+                : '<div class="addons-qr-error">Open the app from a phone-reachable `http(s)` address or set `ADDON_REMOTE_BASE_URL` in the wrapper.</div>'}
               ${this.model.phoneManagerUrl ? `<p class="addons-qr-url">${escapeHtml(this.model.phoneManagerUrl)}</p>` : ""}
               <button type="button" class="addons-qr-close addons-focusable focused" data-action-id="close_qr_overlay">
                 <span class="material-icons" aria-hidden="true">close</span>

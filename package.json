@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "serve": "node ./scripts/serve.mjs",
     "sync": "node ./scripts/sync-wrapper.mjs",
     "sync:tizen": "node ./scripts/sync-wrapper.mjs --tizen",
     "sync:webos": "node ./scripts/sync-wrapper.mjs --webos"

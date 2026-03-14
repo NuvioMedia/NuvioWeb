@@ -436,7 +436,9 @@ function interpolate(template, params = {}) {
   return String(template || "")
     .replace(/\{\{(\w+)\}\}/g, (_, key) => String(params?.[key] ?? ""))
     .replace(/%(\d+)\$[a-z]/gi, (_, index) => String(values[Number(index) - 1] ?? ""))
-    .replace(/%[a-z]/gi, () => String(values[sequentialIndex++] ?? ""));
+    .replace(/%[a-z]/gi, () => String(values[sequentialIndex++] ?? ""))
+    .replace(/\\'/g, "'")
+    .replace(/\\"/g, "\"");
 }
 
 function parseStringsXml(source) {

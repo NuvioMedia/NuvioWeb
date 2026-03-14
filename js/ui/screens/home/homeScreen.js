@@ -11,6 +11,7 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { Platform } from "../../../platform/index.js";
+import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import {
   buildModernNavigationRows,
   buildModernRowKey,
@@ -193,32 +194,29 @@ function resolveYoutubeId(value) {
   return "";
 }
 
-function buildYoutubeEmbedUrl(videoId) {
+function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
   const cleanId = resolveYoutubeId(videoId);
   if (!cleanId) {
     return "";
   }
-  const params = new URLSearchParams({
-    autoplay: "1",
-    mute: "1",
-    controls: "0",
-    loop: "1",
-    playlist: cleanId,
-    playsinline: "1",
-    rel: "0",
-    modestbranding: "1",
-    enablejsapi: "1",
-    vq: "hd2160"
-  });
-  const origin = String(globalThis?.location?.origin || "").trim();
-  const href = String(globalThis?.location?.href || "").trim();
-  if (/^https?:\/\//i.test(origin)) {
-    params.set("origin", origin);
+  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  if (!proxyBase) {
+    return "";
   }
-  if (/^https?:\/\//i.test(href)) {
-    params.set("widget_referrer", href);
+  try {
+    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+    proxyUrl.searchParams.set("v", cleanId);
+    proxyUrl.searchParams.set("autoplay", "1");
+    proxyUrl.searchParams.set("muted", muted ? "1" : "0");
+    proxyUrl.searchParams.set("controls", "0");
+    proxyUrl.searchParams.set("loop", "1");
+    proxyUrl.searchParams.set("playlist", cleanId);
+    proxyUrl.searchParams.set("playsinline", "1");
+    proxyUrl.searchParams.set("rel", "0");
+    return proxyUrl.toString();
+  } catch (_) {
+    return "";
   }
-  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
 function scoreTrailerStream(entry = {}) {
@@ -278,10 +276,14 @@ function resolveTrailerSource(meta = {}) {
       || ""
     );
     if (ytId) {
+      const embedUrl = buildYoutubeEmbedUrl(ytId);
+      if (!embedUrl) {
+        continue;
+      }
       return {
         kind: "youtube",
         ytId,
-        embedUrl: buildYoutubeEmbedUrl(ytId)
+        embedUrl
       };
     }
   }
@@ -290,11 +292,40 @@ function resolveTrailerSource(meta = {}) {
   if (!fallbackId) {
     return null;
   }
+  const fallbackEmbedUrl = buildYoutubeEmbedUrl(fallbackId);
+  if (!fallbackEmbedUrl) {
+    return null;
+  }
   return {
     kind: "youtube",
     ytId: fallbackId,
-    embedUrl: buildYoutubeEmbedUrl(fallbackId)
+    embedUrl: fallbackEmbedUrl
   };
+}
+
+function applyTrailerAudioPreferences(source, prefs = {}) {
+  if (!source) {
+    return null;
+  }
+  const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
+  if (source.kind === "youtube") {
+    const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted });
+    if (!embedUrl) {
+      return null;
+    }
+    return {
+      ...source,
+      embedUrl,
+      muted
+    };
+  }
+  if (source.kind === "video") {
+    return {
+      ...source,
+      muted
+    };
+  }
+  return source;
 }
 
 function withTimeout(promise, ms, fallbackValue) {
@@ -816,17 +847,17 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
              data-logo-src="${escapeAttribute(normalized.logo || "")}">
       <div class="home-poster-frame">
         ${posterSrc
-          ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
-          : '<div class="content-poster placeholder"></div>'}
+      ? `<img class="content-poster" src="${escapeAttribute(posterSrc)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
+      : '<div class="content-poster placeholder"></div>'}
         ${expandedVisualSrc
-          ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute(expandedVisualSrc)}" decoding="async" alt="" aria-hidden="true" />`
-          : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
+      ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute(expandedVisualSrc)}" decoding="async" alt="" aria-hidden="true" />`
+      : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
         <div class="home-poster-trailer-layer"></div>
         <div class="home-poster-expanded-gradient"></div>
         <div class="home-poster-expanded-brand">
           ${normalized.logo
-            ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
-            : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
+      ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
+      : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
         </div>
       </div>
       <div class="home-poster-expanded-copy">
@@ -1392,39 +1423,53 @@ export const HomeScreen = {
     container.classList.remove("is-active");
   },
 
-  mountTrailerLayer(container, source) {
+  mountTrailerLayer(container, source, onReady = null) {
     if (!container || !source) {
       return;
     }
     this.clearTrailerLayer(container);
     if (source.kind === "youtube" && source.embedUrl) {
-      container.innerHTML = `
-        <iframe class="home-inline-trailer-frame"
-                src="${escapeAttribute(source.embedUrl)}"
-                title="Trailer preview"
-                allow="autoplay; encrypted-media; picture-in-picture"
-                allowfullscreen
-                referrerpolicy="strict-origin-when-cross-origin"></iframe>
-      `;
-      container.classList.add("is-active");
+      const frame = document.createElement("iframe");
+      frame.className = "home-inline-trailer-frame";
+      frame.src = source.embedUrl;
+      frame.title = "Trailer preview";
+      frame.allow = "autoplay; encrypted-media; picture-in-picture";
+      frame.allowFullscreen = true;
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      frame.addEventListener("load", () => {
+        container.classList.add("is-active");
+        onReady?.();
+      }, { once: true });
+      container.appendChild(frame);
       return;
     }
     if (source.kind === "video" && source.url) {
+      const shouldMute = source.muted !== false;
       container.innerHTML = `
-        <video class="home-inline-trailer-video" autoplay muted loop playsinline>
+        <video class="home-inline-trailer-video" autoplay loop playsinline>
           <source src="${escapeAttribute(source.url)}" />
         </video>
       `;
       const video = container.querySelector("video");
       if (video) {
-        const activate = () => container.classList.add("is-active");
+        video.muted = shouldMute;
+        video.defaultMuted = shouldMute;
+        try {
+          video.volume = shouldMute ? 0 : 1;
+        } catch (_) {
+        }
+        const activate = () => {
+          container.classList.add("is-active");
+          onReady?.();
+        };
         video.addEventListener("loadeddata", activate, { once: true });
         const playAttempt = video.play?.();
         if (playAttempt?.catch) {
-          playAttempt.catch(() => {});
+          playAttempt.catch(() => { });
         }
       } else {
         container.classList.add("is-active");
+        onReady?.();
       }
     }
   },
@@ -1498,7 +1543,8 @@ export const HomeScreen = {
     }
 
     const sourceItem = this.getNodeHeroSource(node);
-    const source = await this.getTrailerSourceForItem(sourceItem);
+    const baseSource = await this.getTrailerSourceForItem(sourceItem);
+    const source = applyTrailerAudioPreferences(baseSource, prefs);
     if (!source || !node.classList.contains("focused")) {
       return;
     }
@@ -1506,8 +1552,11 @@ export const HomeScreen = {
     if (trailerTarget === "expanded_card" && shouldExpand) {
       const trailerLayer = node.querySelector(".home-poster-trailer-layer");
       if (trailerLayer) {
-        this.mountTrailerLayer(trailerLayer, source);
-        node.classList.add("is-trailer-active");
+        this.mountTrailerLayer(trailerLayer, source, () => {
+          if (node.classList.contains("focused")) {
+            node.classList.add("is-trailer-active");
+          }
+        });
       }
       return;
     }
@@ -1515,8 +1564,11 @@ export const HomeScreen = {
     const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
     const heroMedia = this.container?.querySelector(".home-modern-hero-media");
     if (heroLayer && heroMedia) {
-      this.mountTrailerLayer(heroLayer, source);
-      heroMedia.classList.add("trailer-active");
+      this.mountTrailerLayer(heroLayer, source, () => {
+        if (node.classList.contains("focused")) {
+          heroMedia.classList.add("trailer-active");
+        }
+      });
     }
   },
 
@@ -2152,12 +2204,12 @@ export const HomeScreen = {
     this.container.innerHTML = `
       <div class="home-shell home-screen-shell ${layoutClass}">
         ${renderRootSidebar({
-          selectedRoute: "home",
-          profile: this.sidebarProfile,
-          layout: this.layoutPrefs,
-          expanded: Boolean(this.sidebarExpanded),
-          pillIconOnly: Boolean(this.pillIconOnly)
-        })}
+      selectedRoute: "home",
+      profile: this.sidebarProfile,
+      layout: this.layoutPrefs,
+      expanded: Boolean(this.sidebarExpanded),
+      pillIconOnly: Boolean(this.pillIconOnly)
+    })}
 
         <main class="home-main home-screen-main">
           <div class="home-route-content${this.homeRouteEnterPending ? " home-route-content-enter" : ""}">

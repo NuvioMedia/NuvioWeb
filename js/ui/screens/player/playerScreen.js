@@ -620,6 +620,7 @@ export const PlayerScreen = {
     this.container = document.getElementById("player");
     this.container.style.display = "block";
     this.params = params;
+    this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
 
     this.aspectModes = [
       { objectFit: "contain", label: "Fit" },
@@ -719,12 +720,16 @@ export const PlayerScreen = {
     this.videoListeners = [];
 
     this.renderPlayerUi();
-    this.bindVideoEvents();
+    if (!this.isExternalFrameMode()) {
+      this.bindVideoEvents();
+    }
     this.renderEpisodePanel();
     this.applyAspectMode({ showToast: false });
-    this.updateUiTick();
+    if (!this.isExternalFrameMode()) {
+      this.updateUiTick();
+    }
 
-    if (initialStreamUrl) {
+    if (initialStreamUrl && !this.isExternalFrameMode()) {
       const sourceCandidate = this.getStreamCandidateByUrl(initialStreamUrl) || this.getCurrentStreamCandidate();
       this.activePlaybackUrl = initialStreamUrl;
       PlayerController.play(this.activePlaybackUrl, this.buildPlaybackContext(sourceCandidate));
@@ -732,14 +737,24 @@ export const PlayerScreen = {
       this.startTrackDiscoveryWindow();
     }
 
-    this.loadSubtitles();
-    this.syncTrackState();
-    this.tickTimer = setInterval(() => this.updateUiTick(), 1000);
-    this.endedHandler = () => {
-      this.handlePlaybackEnded();
-    };
-    PlayerController.video?.addEventListener("ended", this.endedHandler);
-    this.setControlsVisible(true, { focus: true });
+    if (!this.isExternalFrameMode()) {
+      this.loadSubtitles();
+      this.syncTrackState();
+      this.tickTimer = setInterval(() => this.updateUiTick(), 1000);
+      this.endedHandler = () => {
+        this.handlePlaybackEnded();
+      };
+      PlayerController.video?.addEventListener("ended", this.endedHandler);
+      this.setControlsVisible(true, { focus: true });
+    } else {
+      this.loadingVisible = false;
+      this.updateLoadingVisibility();
+      this.setControlsVisible(false);
+    }
+  },
+
+  isExternalFrameMode() {
+    return Boolean(this.externalFrameUrl);
   },
 
   buildPlaybackContext(streamCandidate = this.getCurrentStreamCandidate()) {
@@ -1510,68 +1525,85 @@ export const PlayerScreen = {
     root.id = "playerUiRoot";
     root.className = "player-ui-root";
 
-    root.innerHTML = `
-      <div id="playerLoadingOverlay" class="player-loading-overlay">
-        <div class="player-loading-backdrop"${this.params.playerBackdropUrl ? ` style="background-image:url('${this.params.playerBackdropUrl}')"` : ""}></div>
-        <div class="player-loading-gradient"></div>
-        <div class="player-loading-center">
-          ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
-          <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
-          ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml(this.params.playerSubtitle)}</div>` : ""}
+    if (this.isExternalFrameMode()) {
+      root.innerHTML = `
+        <div class="player-external-frame-shell">
+          <iframe
+            class="player-external-frame"
+            src="${escapeHtml(this.externalFrameUrl)}"
+            title="${escapeHtml(this.params.playerTitle || "Trailer")}"
+            allow="autoplay; encrypted-media; picture-in-picture"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+          ></iframe>
         </div>
-      </div>
-
-      <div id="playerParentalGuide" class="player-parental-guide hidden"></div>
-
-      <div id="playerAspectToast" class="player-aspect-toast hidden"></div>
-
-      <div id="playerSeekOverlay" class="player-seek-overlay hidden">
-        <div class="player-seek-overlay-top">
-          <span id="playerSeekDirection" class="player-seek-direction"></span>
-          <span id="playerSeekPreview" class="player-seek-preview">0:00</span>
-        </div>
-        <div class="player-seek-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
-      </div>
-
-      <div id="playerModalBackdrop" class="player-modal-backdrop hidden"></div>
-      <div id="playerSubtitleDialog" class="player-modal player-subtitle-modal hidden"></div>
-      <div id="playerAudioDialog" class="player-modal player-audio-modal hidden"></div>
-      <div id="playerSourcesPanel" class="player-sources-panel hidden"></div>
-
-      <div id="playerControlsOverlay" class="player-controls-overlay">
-        <div class="player-controls-top">
-          <div id="playerClock" class="player-clock">--:--</div>
-          <div id="playerEndsAt" class="player-ends-at">${escapeHtml(t("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
-        </div>
-
-        <div class="player-controls-bottom">
-          <div class="player-meta">
-            <div class="player-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Untitled")}</div>
-            <div class="player-subtitle">${escapeHtml(this.params.playerSubtitle || this.params.episodeLabel || this.params.itemType || "")}</div>
-          </div>
-
-          <div class="player-controls-bar">
-            <div class="player-progress-track">
-              <div id="playerProgressFill" class="player-progress-fill"></div>
-            </div>
-
-            <div class="player-controls-row">
-              <div id="playerControlButtons" class="player-control-buttons"></div>
-              <div id="playerTimeLabel" class="player-time-label">0:00 / 0:00</div>
-            </div>
+      `;
+    } else {
+      root.innerHTML = `
+        <div id="playerLoadingOverlay" class="player-loading-overlay">
+          <div class="player-loading-backdrop"${this.params.playerBackdropUrl ? ` style="background-image:url('${this.params.playerBackdropUrl}')"` : ""}></div>
+          <div class="player-loading-gradient"></div>
+          <div class="player-loading-center">
+            ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
+            <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
+            ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml(this.params.playerSubtitle)}</div>` : ""}
           </div>
         </div>
-      </div>
-    `;
+
+        <div id="playerParentalGuide" class="player-parental-guide hidden"></div>
+
+        <div id="playerAspectToast" class="player-aspect-toast hidden"></div>
+
+        <div id="playerSeekOverlay" class="player-seek-overlay hidden">
+          <div class="player-seek-overlay-top">
+            <span id="playerSeekDirection" class="player-seek-direction"></span>
+            <span id="playerSeekPreview" class="player-seek-preview">0:00</span>
+          </div>
+          <div class="player-seek-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
+        </div>
+
+        <div id="playerModalBackdrop" class="player-modal-backdrop hidden"></div>
+        <div id="playerSubtitleDialog" class="player-modal player-subtitle-modal hidden"></div>
+        <div id="playerAudioDialog" class="player-modal player-audio-modal hidden"></div>
+        <div id="playerSourcesPanel" class="player-sources-panel hidden"></div>
+
+        <div id="playerControlsOverlay" class="player-controls-overlay">
+          <div class="player-controls-top">
+            <div id="playerClock" class="player-clock">--:--</div>
+            <div id="playerEndsAt" class="player-ends-at">${escapeHtml(t("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
+          </div>
+
+          <div class="player-controls-bottom">
+            <div class="player-meta">
+              <div class="player-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Untitled")}</div>
+              <div class="player-subtitle">${escapeHtml(this.params.playerSubtitle || this.params.episodeLabel || this.params.itemType || "")}</div>
+            </div>
+
+            <div class="player-controls-bar">
+              <div class="player-progress-track">
+                <div id="playerProgressFill" class="player-progress-fill"></div>
+              </div>
+
+              <div class="player-controls-row">
+                <div id="playerControlButtons" class="player-control-buttons"></div>
+                <div id="playerTimeLabel" class="player-time-label">0:00 / 0:00</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
     this.container.appendChild(root);
     this.cachePlayerUiRefs(root);
-    this.renderControlButtons();
-    this.renderSubtitleDialog();
-    this.renderAudioDialog();
-    this.renderSourcesPanel();
-    this.renderParentalGuideOverlay();
-    this.renderSeekOverlay();
+    if (!this.isExternalFrameMode()) {
+      this.renderControlButtons();
+      this.renderSubtitleDialog();
+      this.renderAudioDialog();
+      this.renderSourcesPanel();
+      this.renderParentalGuideOverlay();
+      this.renderSeekOverlay();
+    }
   },
 
   cachePlayerUiRefs(root = null) {
@@ -1822,6 +1854,9 @@ export const PlayerScreen = {
   },
 
   renderControlButtons() {
+    if (this.isExternalFrameMode()) {
+      return;
+    }
     const wrap = this.uiRefs?.controlButtons;
     if (!wrap) {
       return;
@@ -1854,6 +1889,9 @@ export const PlayerScreen = {
 
   setControlsVisible(visible, { focus = false } = {}) {
     this.controlsVisible = Boolean(visible);
+    if (this.isExternalFrameMode()) {
+      return;
+    }
     const overlay = this.uiRefs?.controlsOverlay;
     if (!overlay) {
       return;
@@ -1932,6 +1970,9 @@ export const PlayerScreen = {
   },
 
   updateUiTick() {
+    if (this.isExternalFrameMode()) {
+      return;
+    }
     const current = this.getPlaybackCurrentSeconds();
     const duration = this.getPlaybackDurationSeconds();
     const progress = duration > 0 ? clamp(current / duration, 0, 1) : 0;
@@ -2115,6 +2156,9 @@ export const PlayerScreen = {
   },
 
   togglePause() {
+    if (this.isExternalFrameMode()) {
+      return;
+    }
     if (this.paused) {
       PlayerController.resume();
       this.paused = false;
@@ -2130,6 +2174,9 @@ export const PlayerScreen = {
   },
 
   async playStreamByUrl(streamUrl, { preservePanel = false, resetSilentAudioState = true, preservePlaybackState = false, forceEngine = null } = {}) {
+    if (this.isExternalFrameMode()) {
+      return;
+    }
     if (!streamUrl) {
       return;
     }

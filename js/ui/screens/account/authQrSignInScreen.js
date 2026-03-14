@@ -8,6 +8,7 @@ import { I18n } from "../../../i18n/index.js";
 let pollInterval = null;
 let countdownInterval = null;
 let activeQrSessionId = 0;
+const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
 
 export const AuthQrSignInScreen = {
 
@@ -16,6 +17,9 @@ export const AuthQrSignInScreen = {
     this.onboardingMode = Boolean(onboardingMode);
     this.isSignedIn = AuthManager.isAuthenticated;
     this.hasBackDestination = Router.stack.length > 0;
+    this.isMounted = true;
+    this.isStartingQr = false;
+    this.isLeaving = false;
     ScreenUtils.show(this.container);
 
     this.container.innerHTML = `
@@ -42,23 +46,26 @@ export const AuthQrSignInScreen = {
             <div id="qr-code-text" class="qr-code-text"></div>
             <div id="qr-status" class="qr-status">${I18n.t("auth.qr.waitingApproval")}</div>
             <div class="qr-actions">
-              <button id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">${I18n.t("auth.qr.refresh")}</button>
-              <button id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
+              <button type="button" id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">${I18n.t("auth.qr.refresh")}</button>
+              <button type="button" id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
             </div>
           </div>
         </section>
       </div>
     `;
 
-    document.getElementById("qr-refresh-btn").onclick = () => this.startQr();
-    document.getElementById("qr-back-btn").onclick = () => {
-      this.cleanup();
-      if (this.hasBackDestination) {
-        Router.back();
-      } else {
-        Router.navigate("home");
-      }
-    };
+    this.refreshButton = this.container.querySelector("#qr-refresh-btn");
+    this.backButton = this.container.querySelector("#qr-back-btn");
+    if (this.refreshButton) {
+      this.refreshButton.onclick = () => {
+        this.handleRefreshAction();
+      };
+    }
+    if (this.backButton) {
+      this.backButton.onclick = () => {
+        this.handleContinueAction();
+      };
+    }
 
     ScreenUtils.indexFocusables(this.container);
     ScreenUtils.setInitialFocus(this.container);
@@ -66,30 +73,42 @@ export const AuthQrSignInScreen = {
   },
 
   async startQr() {
+    if (!this.isMounted || this.isLeaving || this.isStartingQr) {
+      return;
+    }
+    this.isStartingQr = true;
+    this.updateActionButtons();
     this.stopIntervals();
     const sessionId = activeQrSessionId + 1;
     activeQrSessionId = sessionId;
     this.setStatus(I18n.t("auth.qr.preparing"));
 
-    const result = await QrLoginService.start();
-    if (sessionId !== activeQrSessionId) {
-      return;
-    }
+    try {
+      const result = await QrLoginService.start();
+      if (!this.isMounted || sessionId !== activeQrSessionId) {
+        return;
+      }
 
-    if (!result) {
-      const raw = QrLoginService.getLastError();
-      this.setStatus(this.toFriendlyQrError(raw));
-      return;
-    }
+      if (!result) {
+        const raw = QrLoginService.getLastError();
+        this.setStatus(this.toFriendlyQrError(raw));
+        return;
+      }
 
-    this.renderQr(result);
-    this.setStatus(I18n.t("auth.qr.scanAndSignIn"));
-    this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
+      this.renderQr(result);
+      this.setStatus(I18n.t("auth.qr.scanAndSignIn"));
+      this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
+    } finally {
+      if (this.isMounted && sessionId === activeQrSessionId) {
+        this.isStartingQr = false;
+        this.updateActionButtons();
+      }
+    }
   },
 
   renderQr({ qrImageUrl, code }) {
-    const qrContainer = document.getElementById("qr-container");
-    const codeText = document.getElementById("qr-code-text");
+    const qrContainer = this.container?.querySelector("#qr-container");
+    const codeText = this.container?.querySelector("#qr-code-text");
 
     if (!qrContainer || !codeText) {
       return;
@@ -121,7 +140,7 @@ export const AuthQrSignInScreen = {
   startPolling(code, deviceNonce, pollIntervalSeconds = 3, sessionId) {
     pollInterval = setInterval(async () => {
       const status = await QrLoginService.poll(code, deviceNonce);
-      if (sessionId !== activeQrSessionId) {
+      if (!this.isMounted || sessionId !== activeQrSessionId) {
         return;
       }
 
@@ -136,6 +155,7 @@ export const AuthQrSignInScreen = {
         }
 
         if (exchange) {
+          LocalStore.remove(GUEST_QR_BYPASS_KEY);
           LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
           this.isSignedIn = true;
           Router.navigate("profileSelection");
@@ -176,11 +196,54 @@ export const AuthQrSignInScreen = {
   },
 
   setStatus(text) {
-    const statusNode = document.getElementById("qr-status");
+    const statusNode = this.container?.querySelector("#qr-status");
     if (!statusNode) {
       return;
     }
     statusNode.innerText = text;
+  },
+
+  updateActionButtons() {
+    const refreshButton = this.refreshButton || this.container?.querySelector("#qr-refresh-btn");
+    const backButton = this.backButton || this.container?.querySelector("#qr-back-btn");
+    const disabled = Boolean(this.isLeaving || this.isStartingQr);
+    if (refreshButton instanceof HTMLButtonElement) {
+      refreshButton.disabled = disabled;
+      refreshButton.setAttribute("aria-busy", this.isStartingQr ? "true" : "false");
+    }
+    if (backButton instanceof HTMLButtonElement) {
+      backButton.disabled = Boolean(this.isLeaving);
+    }
+  },
+
+  handleRefreshAction() {
+    if (this.isLeaving || this.isStartingQr) {
+      return;
+    }
+    this.startQr();
+  },
+
+  handleContinueAction() {
+    if (this.isLeaving) {
+      return;
+    }
+    this.isLeaving = true;
+    this.updateActionButtons();
+    LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
+    if (!this.isSignedIn) {
+      LocalStore.set(GUEST_QR_BYPASS_KEY, true);
+    } else {
+      LocalStore.remove(GUEST_QR_BYPASS_KEY);
+    }
+    this.cleanup();
+    if (this.hasBackDestination && this.isSignedIn) {
+      Router.back();
+      return;
+    }
+    Router.navigate("home", {}, {
+      replaceHistory: true,
+      skipStackPush: true
+    });
   },
 
   getLeftDescription() {
@@ -198,9 +261,6 @@ export const AuthQrSignInScreen = {
   },
 
   getBackButtonLabel() {
-    if (this.hasBackDestination) {
-      return I18n.t("auth.qr.back");
-    }
     if (this.isSignedIn) {
       return I18n.t("auth.qr.continue");
     }
@@ -222,11 +282,11 @@ export const AuthQrSignInScreen = {
 
     const action = current.dataset.action;
     if (action === "refresh") {
-      this.startQr();
+      this.handleRefreshAction();
       return;
     }
     if (action === "back") {
-      current.click();
+      this.handleContinueAction();
     }
   },
 
@@ -238,7 +298,17 @@ export const AuthQrSignInScreen = {
   },
 
   cleanup() {
+    this.isMounted = false;
+    activeQrSessionId += 1;
     this.stopIntervals();
+    if (this.refreshButton) {
+      this.refreshButton.onclick = null;
+      this.refreshButton = null;
+    }
+    if (this.backButton) {
+      this.backButton.onclick = null;
+      this.backButton = null;
+    }
     ScreenUtils.hide(this.container);
     this.container = null;
   }

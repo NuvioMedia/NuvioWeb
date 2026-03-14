@@ -5435,6 +5435,22 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.player-external-frame-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: auto;
+  background: #000;
+}
+
+.player-external-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: #000;
+}
+
 .player-loading-overlay {
   position: absolute;
   inset: 0;

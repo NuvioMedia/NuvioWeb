@@ -13,6 +13,8 @@ import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
 
+const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
+
 function formatErrorMessage(error) {
   if (!error) {
     return "Unknown error";
@@ -68,6 +70,16 @@ async function bootstrapApp() {
 
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
+      const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
+      if (shouldBypassQr) {
+        if (Router.getCurrent() !== "home") {
+          Router.navigate("home", {}, {
+            replaceHistory: true,
+            skipStackPush: true
+          });
+        }
+        return;
+      }
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       Router.navigate("authQrSignIn", {
         onboardingMode: !hasSeenQr
@@ -75,6 +87,7 @@ async function bootstrapApp() {
     }
 
     if (state === AuthState.AUTHENTICATED) {
+      LocalStore.remove(GUEST_QR_BYPASS_KEY);
       StartupSyncService.start();
       Router.navigate("profileSelection");
     }

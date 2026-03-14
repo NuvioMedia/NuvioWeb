@@ -12,6 +12,7 @@ import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
+import { YOUTUBE_PROXY_URL } from "../../../config.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 
@@ -337,29 +338,24 @@ function buildYoutubeEmbedUrl(ytId = "") {
   if (!cleanId) {
     return "";
   }
-  const params = new URLSearchParams({
-    autoplay: "1",
-    mute: "1",
-    controls: "0",
-    loop: "1",
-    playlist: cleanId,
-    playsinline: "1",
-    rel: "0",
-    modestbranding: "1",
-    enablejsapi: "1",
-    vq: "hd2160"
-  });
-
-  const origin = String(globalThis?.location?.origin || "").trim();
-  const href = String(globalThis?.location?.href || "").trim();
-  if (/^https?:\/\//i.test(origin)) {
-    params.set("origin", origin);
+  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  if (!proxyBase) {
+    return "";
   }
-  if (/^https?:\/\//i.test(href)) {
-    params.set("widget_referrer", href);
+  try {
+    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+    proxyUrl.searchParams.set("v", cleanId);
+    proxyUrl.searchParams.set("autoplay", "1");
+    proxyUrl.searchParams.set("muted", "1");
+    proxyUrl.searchParams.set("controls", "0");
+    proxyUrl.searchParams.set("loop", "1");
+    proxyUrl.searchParams.set("playlist", cleanId);
+    proxyUrl.searchParams.set("playsinline", "1");
+    proxyUrl.searchParams.set("rel", "0");
+    return proxyUrl.toString();
+  } catch (_) {
+    return "";
   }
-
-  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
 function scoreTrailerStream(entry = {}) {
@@ -419,10 +415,14 @@ function resolveTrailerSource(meta = {}) {
       || ""
     );
     if (ytId) {
+      const embedUrl = buildYoutubeEmbedUrl(ytId);
+      if (!embedUrl) {
+        continue;
+      }
       return {
         kind: "youtube",
         ytId,
-        embedUrl: buildYoutubeEmbedUrl(ytId)
+        embedUrl
       };
     }
   }
@@ -431,10 +431,14 @@ function resolveTrailerSource(meta = {}) {
   if (!ytId) {
     return null;
   }
+  const embedUrl = buildYoutubeEmbedUrl(ytId);
+  if (!embedUrl) {
+    return null;
+  }
   return {
     kind: "youtube",
     ytId,
-    embedUrl: buildYoutubeEmbedUrl(ytId)
+    embedUrl
   };
 }
 
@@ -1776,6 +1780,41 @@ export const MetaDetailsScreen = {
     this.syncTrailerDom();
   },
 
+  openTrailerInPlayer() {
+    if (!this.trailerSource) {
+      return;
+    }
+    this.stopTrailerPlayback({ keepDom: false });
+    const commonParams = {
+      itemId: this.params?.itemId || null,
+      itemType: this.params?.itemType || "movie",
+      playerTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Trailer",
+      playerSubtitle: "Trailer",
+      playerBackdropUrl: this.meta?.background || this.meta?.poster || null,
+      playerLogoUrl: this.meta?.logo || null
+    };
+    if (this.trailerSource.kind === "video" && this.trailerSource.url) {
+      Router.navigate("player", {
+        ...commonParams,
+        streamUrl: this.trailerSource.url,
+        streamCandidates: [
+          {
+            url: this.trailerSource.url,
+            title: "Trailer",
+            addonName: "Trailer"
+          }
+        ]
+      });
+      return;
+    }
+    if (this.trailerSource.kind === "youtube" && this.trailerSource.embedUrl) {
+      Router.navigate("player", {
+        ...commonParams,
+        externalFrameUrl: this.trailerSource.embedUrl
+      });
+    }
+  },
+
   stopTrailerPlayback({ keepDom = false } = {}) {
     if (this.trailerAutoplayTimer) {
       clearTimeout(this.trailerAutoplayTimer);
@@ -2791,12 +2830,7 @@ export const MetaDetailsScreen = {
     }
 
     if (action === "toggleTrailer") {
-      if (this.isTrailerPlaying) {
-        this.stopTrailerPlayback();
-        this.restartTrailerAutoplayTimer();
-      } else {
-        this.playTrailer();
-      }
+      this.openTrailerInPlayer();
       return;
     }
 
