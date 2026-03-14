@@ -14,13 +14,16 @@ html,body{margin:0;height:100%}
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
-const v = new URLSearchParams(location.search).get("v") || "qBg39HCJiTU";
+const params = new URLSearchParams(location.search);
+const video = params.get("v") || "qBg39HCJiTU";
+const muted = params.get("muted") === "1" ? 1 : 0;
 
 function onYouTubeIframeAPIReady() {
   new YT.Player("yt", {
-    videoId: v,
+    videoId: video,
     playerVars: {
-      autoplay: 1
+      autoplay: 1,
+      mute: muted
     }
   });
 }
