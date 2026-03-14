@@ -8,6 +8,48 @@ const ADAPTERS = {
   tizen: tizenAdapter
 };
 
+function parseWebOsMajorVersion() {
+  const candidates = [
+    String(globalThis.PalmSystem?.deviceInfo || ""),
+    String(globalThis.webOSSystem?.deviceInfo || ""),
+    String(globalThis.navigator?.userAgent || "")
+  ].filter(Boolean);
+
+  const patterns = [
+    /web0s\.tv[\s\-\/]?(\d{1,2})/i,
+    /webos\.tv[\s\-\/]?(\d{1,2})/i,
+    /web0s[\s\-\/]?(\d{1,2})/i,
+    /webos[\s\-\/]?(\d{1,2})/i,
+    /chromium\/(\d{2,3})/i,
+    /chrome\/(\d{2,3})/i
+  ];
+
+  for (const candidate of candidates) {
+    for (const pattern of patterns) {
+      const match = candidate.match(pattern);
+      if (!match) {
+        continue;
+      }
+      const value = Number(match[1] || 0);
+      if (!Number.isFinite(value) || value <= 0) {
+        continue;
+      }
+      if (/chrom(e|ium)\//i.test(pattern.source)) {
+        if (value <= 53) return 3;
+        if (value <= 68) return 4;
+        if (value <= 79) return 5;
+        if (value <= 87) return 6;
+        if (value <= 94) return 22;
+        if (value <= 108) return 23;
+        if (value <= 120) return 24;
+        return 25;
+      }
+      return value;
+    }
+  }
+  return 0;
+}
+
 function detectPlatformName() {
   const override = String(globalThis.__NUVIO_PLATFORM__ || "").trim().toLowerCase();
   if (override && ADAPTERS[override]) {
@@ -44,6 +86,13 @@ export const Platform = {
 
   isWebOS() {
     return this.getName() === "webos";
+  },
+
+  getWebOsMajorVersion() {
+    if (!this.isWebOS()) {
+      return 0;
+    }
+    return parseWebOsMajorVersion();
   },
 
   isTizen() {

@@ -1986,6 +1986,46 @@
     webos: webosAdapter,
     tizen: tizenAdapter
   };
+  function parseWebOsMajorVersion() {
+    var _a, _b, _c;
+    const candidates = [
+      String(((_a = globalThis.PalmSystem) == null ? void 0 : _a.deviceInfo) || ""),
+      String(((_b = globalThis.webOSSystem) == null ? void 0 : _b.deviceInfo) || ""),
+      String(((_c = globalThis.navigator) == null ? void 0 : _c.userAgent) || "")
+    ].filter(Boolean);
+    const patterns = [
+      /web0s\.tv[\s\-\/]?(\d{1,2})/i,
+      /webos\.tv[\s\-\/]?(\d{1,2})/i,
+      /web0s[\s\-\/]?(\d{1,2})/i,
+      /webos[\s\-\/]?(\d{1,2})/i,
+      /chromium\/(\d{2,3})/i,
+      /chrome\/(\d{2,3})/i
+    ];
+    for (const candidate of candidates) {
+      for (const pattern of patterns) {
+        const match = candidate.match(pattern);
+        if (!match) {
+          continue;
+        }
+        const value = Number(match[1] || 0);
+        if (!Number.isFinite(value) || value <= 0) {
+          continue;
+        }
+        if (/chrom(e|ium)\//i.test(pattern.source)) {
+          if (value <= 53) return 3;
+          if (value <= 68) return 4;
+          if (value <= 79) return 5;
+          if (value <= 87) return 6;
+          if (value <= 94) return 22;
+          if (value <= 108) return 23;
+          if (value <= 120) return 24;
+          return 25;
+        }
+        return value;
+      }
+    }
+    return 0;
+  }
   function detectPlatformName() {
     var _a;
     const override = String(globalThis.__NUVIO_PLATFORM__ || "").trim().toLowerCase();
@@ -2019,6 +2059,12 @@
     },
     isWebOS() {
       return this.getName() === "webos";
+    },
+    getWebOsMajorVersion() {
+      if (!this.isWebOS()) {
+        return 0;
+      }
+      return parseWebOsMajorVersion();
     },
     isTizen() {
       return this.getName() === "tizen";
@@ -3437,6 +3483,11 @@
   }
   function applyTrailerAudioPreferences(source, prefs = {}) {
     if (!source) {
+      return null;
+    }
+    const webOsMajorVersion = typeof Platform.getWebOsMajorVersion === "function" ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
+    const isLegacyWebOsYoutube = Platform.isWebOS() && webOsMajorVersion > 0 && webOsMajorVersion < 22;
+    if (isLegacyWebOsYoutube && source.kind === "youtube") {
       return null;
     }
     const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
@@ -7567,15 +7618,7 @@
       this.video.defaultMuted = false;
       this.video.volume = 1;
       this.refreshWebOsDeviceInfo();
-      console.log("Runtime probe:", {
-        platform: Platform.getName(),
-        deviceLabel: Platform.getDeviceLabel(),
-        capabilities: Platform.getCapabilities(),
-        canUseAvPlay: this.canUseAvPlay()
-      });
-      console.log("Playback capabilities:", this.getPlaybackCapabilities());
       this.video.addEventListener("ended", () => {
-        console.log("Playback ended");
         this.isPlaying = false;
         const context = this.createProgressContext();
         this.flushProgress(0, 0, true, context);
@@ -7593,9 +7636,6 @@
           playbackEngine: this.playbackEngine
         });
       });
-      this.video.addEventListener("waiting", () => {
-        console.log("Buffering...");
-      });
       const syncNativeMediaId = () => {
         this.syncNativeMediaId();
       };
@@ -7608,7 +7648,6 @@
       });
       this.video.addEventListener("playing", () => {
         var _a, _b, _c, _d, _e;
-        console.log("Playing");
         const audioTrackList = ((_a = this.video) == null ? void 0 : _a.audioTracks) || ((_b = this.video) == null ? void 0 : _b.webkitAudioTracks) || ((_c = this.video) == null ? void 0 : _c.mozAudioTracks);
         const audioTrackCount = Number((audioTrackList == null ? void 0 : audioTrackList.length) || 0);
         const probeUrl = String(this.currentPlaybackUrl || ((_d = this.video) == null ? void 0 : _d.currentSrc) || ((_e = this.video) == null ? void 0 : _e.src) || "").trim();
@@ -7618,7 +7657,7 @@
         }
       });
       this.video.addEventListener("loadedmetadata", () => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         const audioTrackList = ((_a = this.video) == null ? void 0 : _a.audioTracks) || ((_b = this.video) == null ? void 0 : _b.webkitAudioTracks) || ((_c = this.video) == null ? void 0 : _c.mozAudioTracks);
         const textTrackList = ((_d = this.video) == null ? void 0 : _d.textTracks) || ((_e = this.video) == null ? void 0 : _e.webkitTextTracks) || ((_f = this.video) == null ? void 0 : _f.mozTextTracks);
         const audioTrackCount = Number((audioTrackList == null ? void 0 : audioTrackList.length) || 0);
@@ -7626,17 +7665,6 @@
         const probeUrl = String(this.currentPlaybackUrl || ((_g = this.video) == null ? void 0 : _g.currentSrc) || ((_h = this.video) == null ? void 0 : _h.src) || "").trim();
         const isDirectFile = this.isLikelyDirectFileUrl(probeUrl);
         const fallbackTried = this.avplayFallbackAttempts.has(probeUrl);
-        console.log("Playback metadata:", {
-          playbackEngine: this.playbackEngine,
-          duration: Number(this.getDurationSeconds() || 0),
-          audioTrackCount,
-          textTrackCount,
-          currentSrc: ((_i = this.video) == null ? void 0 : _i.currentSrc) || ((_j = this.video) == null ? void 0 : _j.src) || "",
-          canUseAvPlay: this.canUseAvPlay(),
-          directFileHint: isDirectFile,
-          avplayFallbackTried: fallbackTried,
-          nativeMediaId: this.nativeMediaId || ""
-        });
         if (this.isUsingNativePlayback() && isDirectFile && audioTrackCount <= 0 && this.canUseAvPlay()) {
           this.forceAvPlayFallbackForCurrentSource("native_no_audio_tracks");
         }
@@ -7694,14 +7722,6 @@
       this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
         reset: !forceEngine
       });
-      console.log("Playback engine selected:", {
-        engine: preferredEngine,
-        sourceType,
-        directFileHint: this.isLikelyDirectFileUrl(url),
-        canUseAvPlay: this.canUseAvPlay(),
-        forceEngine: forceEngine || "",
-        url
-      });
       this.teardownAdaptiveInstances();
       this.teardownAvPlay();
       Array.from(this.video.querySelectorAll("source")).forEach((node) => node.remove());
@@ -7712,7 +7732,6 @@
       const nativeFallbackEngine = this.isLikelyHlsMimeType(sourceType) ? "native-hls" : this.isLikelyDashMimeType(sourceType) ? "native-dash" : "native-file";
       if (preferredEngine === this.getPlatformAvplayEngineName()) {
         const avplayStarted = this.playWithAvPlay(url);
-        console.log("AVPlay start:", avplayStarted ? "ok" : "failed");
         if (!avplayStarted) {
           this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
           this.attemptVideoPlay({
@@ -13350,12 +13369,10 @@
       return __async(this, null, function* () {
         try {
           if (!AuthManager.isAuthenticated) {
-            console.warn("[AddonSync] pull skipped: auth state is not AUTHENTICATED");
             return [];
           }
           const localUrls = addonRepository.getInstalledAddonUrls();
           const profileId = yield resolveAddonProfileId();
-          console.log(`[AddonSync] pull start profileId=${profileId}`);
           const ownerId = yield AuthManager.getEffectiveUserId();
           let addonTableMissing = false;
           try {
@@ -13365,7 +13382,6 @@
               true
             );
             const addonUrls = extractAddonUrls(addonRows);
-            console.log(`[AddonSync] pull table addons returned ${addonUrls.length} urls`);
             yield addonRepository.setAddonOrder(addonUrls, { silent: true });
             return addonUrls;
           } catch (addonsTableError) {
@@ -13380,7 +13396,6 @@
               true
             );
             const urls = extractAddonUrls(rows);
-            console.log(`[AddonSync] pull table ${TABLE3} returned ${urls.length} urls`);
             yield addonRepository.setAddonOrder(urls, { silent: true });
             return urls;
           } catch (tvTableError) {
@@ -13395,7 +13410,6 @@
                 true
               );
               const urls = extractAddonUrls(rpcRows);
-              console.log(`[AddonSync] pull RPC sync_pull_addons returned ${urls.length} urls`);
               yield addonRepository.setAddonOrder(urls, { silent: true });
               return urls;
             } catch (rpcError) {
@@ -13403,7 +13417,6 @@
             }
           }
           if (localUrls.length) {
-            console.log("[AddonSync] no remote addon source available, preserving local addons");
             return localUrls;
           }
           return [];
@@ -13417,12 +13430,10 @@
       return __async(this, null, function* () {
         try {
           if (!AuthManager.isAuthenticated) {
-            console.warn("[AddonSync] push skipped: auth state is not AUTHENTICATED");
             return false;
           }
           const profileId = yield resolveAddonProfileId();
           const urls = addonRepository.getInstalledAddonUrls();
-          console.log(`[AddonSync] push start profileId=${profileId} urls=${urls.length}`);
           try {
             yield SupabaseApi.rpc(
               "sync_push_addons",
@@ -26304,15 +26315,12 @@
       renderAppShell();
       Platform.init();
       yield I18n.init();
-      yield loadStreamingLibs();
-      console.log("Nuvio starting...", {
-        platform: Platform.getName()
-      });
       Router.init();
       PlayerController.init();
       FocusEngine.init();
       ThemeManager.apply();
       I18n.apply();
+      void loadStreamingLibs();
       AuthManager.subscribe((state) => {
         if (state === AuthState.LOADING) {
           StartupSyncService.stop();

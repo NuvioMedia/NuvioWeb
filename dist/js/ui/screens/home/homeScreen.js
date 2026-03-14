@@ -307,6 +307,13 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
   if (!source) {
     return null;
   }
+  const webOsMajorVersion = typeof Platform.getWebOsMajorVersion === "function"
+    ? Number(Platform.getWebOsMajorVersion() || 0)
+    : 0;
+  const isLegacyWebOsYoutube = Platform.isWebOS() && webOsMajorVersion > 0 && webOsMajorVersion < 22;
+  if (isLegacyWebOsYoutube && source.kind === "youtube") {
+    return null;
+  }
   const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
   if (source.kind === "youtube") {
     const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted });

@@ -1747,16 +1747,8 @@ export const PlayerController = {
     this.video.defaultMuted = false;
     this.video.volume = 1;
     this.refreshWebOsDeviceInfo();
-    console.log("Runtime probe:", {
-      platform: Platform.getName(),
-      deviceLabel: Platform.getDeviceLabel(),
-      capabilities: Platform.getCapabilities(),
-      canUseAvPlay: this.canUseAvPlay()
-    });
-    console.log("Playback capabilities:", this.getPlaybackCapabilities());
 
     this.video.addEventListener("ended", () => {
-      console.log("Playback ended");
       this.isPlaying = false;
       const context = this.createProgressContext();
       this.flushProgress(0, 0, true, context);
@@ -1775,10 +1767,6 @@ export const PlayerController = {
       });
     });
 
-    this.video.addEventListener("waiting", () => {
-      console.log("Buffering...");
-    });
-
     const syncNativeMediaId = () => {
       this.syncNativeMediaId();
     };
@@ -1791,7 +1779,6 @@ export const PlayerController = {
     });
 
     this.video.addEventListener("playing", () => {
-      console.log("Playing");
       const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks;
       const audioTrackCount = Number(audioTrackList?.length || 0);
       const probeUrl = String(this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || "").trim();
@@ -1814,17 +1801,6 @@ export const PlayerController = {
       const probeUrl = String(this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || "").trim();
       const isDirectFile = this.isLikelyDirectFileUrl(probeUrl);
       const fallbackTried = this.avplayFallbackAttempts.has(probeUrl);
-      console.log("Playback metadata:", {
-        playbackEngine: this.playbackEngine,
-        duration: Number(this.getDurationSeconds() || 0),
-        audioTrackCount,
-        textTrackCount,
-        currentSrc: this.video?.currentSrc || this.video?.src || "",
-        canUseAvPlay: this.canUseAvPlay(),
-        directFileHint: isDirectFile,
-        avplayFallbackTried: fallbackTried,
-        nativeMediaId: this.nativeMediaId || ""
-      });
       if (
         this.isUsingNativePlayback()
         && isDirectFile
@@ -1892,14 +1868,6 @@ export const PlayerController = {
     this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
       reset: !forceEngine
     });
-    console.log("Playback engine selected:", {
-      engine: preferredEngine,
-      sourceType,
-      directFileHint: this.isLikelyDirectFileUrl(url),
-      canUseAvPlay: this.canUseAvPlay(),
-      forceEngine: forceEngine || "",
-      url
-    });
 
     this.teardownAdaptiveInstances();
     this.teardownAvPlay();
@@ -1916,7 +1884,6 @@ export const PlayerController = {
 
     if (preferredEngine === this.getPlatformAvplayEngineName()) {
       const avplayStarted = this.playWithAvPlay(url);
-      console.log("AVPlay start:", avplayStarted ? "ok" : "failed");
       if (!avplayStarted) {
         this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
         this.attemptVideoPlay({

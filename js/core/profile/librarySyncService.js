@@ -79,12 +79,10 @@ export const LibrarySyncService = {
   async pull() {
     try {
       if (!AuthManager.isAuthenticated) {
-        console.warn("[AddonSync] pull skipped: auth state is not AUTHENTICATED");
         return [];
       }
       const localUrls = addonRepository.getInstalledAddonUrls();
       const profileId = await resolveAddonProfileId();
-      console.log(`[AddonSync] pull start profileId=${profileId}`);
       const ownerId = await AuthManager.getEffectiveUserId();
       let addonTableMissing = false;
 
@@ -95,7 +93,6 @@ export const LibrarySyncService = {
           true
         );
         const addonUrls = extractAddonUrls(addonRows);
-        console.log(`[AddonSync] pull table addons returned ${addonUrls.length} urls`);
         await addonRepository.setAddonOrder(addonUrls, { silent: true });
         return addonUrls;
       } catch (addonsTableError) {
@@ -111,7 +108,6 @@ export const LibrarySyncService = {
           true
         );
         const urls = extractAddonUrls(rows);
-        console.log(`[AddonSync] pull table ${TABLE} returned ${urls.length} urls`);
         await addonRepository.setAddonOrder(urls, { silent: true });
         return urls;
       } catch (tvTableError) {
@@ -127,7 +123,6 @@ export const LibrarySyncService = {
             true
           );
           const urls = extractAddonUrls(rpcRows);
-          console.log(`[AddonSync] pull RPC sync_pull_addons returned ${urls.length} urls`);
           await addonRepository.setAddonOrder(urls, { silent: true });
           return urls;
         } catch (rpcError) {
@@ -136,7 +131,6 @@ export const LibrarySyncService = {
       }
 
       if (localUrls.length) {
-        console.log("[AddonSync] no remote addon source available, preserving local addons");
         return localUrls;
       }
       return [];
@@ -149,12 +143,10 @@ export const LibrarySyncService = {
   async push() {
     try {
       if (!AuthManager.isAuthenticated) {
-        console.warn("[AddonSync] push skipped: auth state is not AUTHENTICATED");
         return false;
       }
       const profileId = await resolveAddonProfileId();
       const urls = addonRepository.getInstalledAddonUrls();
-      console.log(`[AddonSync] push start profileId=${profileId} urls=${urls.length}`);
 
       try {
         await SupabaseApi.rpc(

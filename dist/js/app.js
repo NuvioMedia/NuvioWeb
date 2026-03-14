@@ -50,17 +50,13 @@ async function bootstrapApp() {
   renderAppShell();
   Platform.init();
   await I18n.init();
-  await loadStreamingLibs();
-
-  console.log("Nuvio starting...", {
-    platform: Platform.getName()
-  });
 
   Router.init();
   PlayerController.init();
   FocusEngine.init();
   ThemeManager.apply();
   I18n.apply();
+  void loadStreamingLibs();
 
   AuthManager.subscribe((state) => {
     if (state === AuthState.LOADING) {
