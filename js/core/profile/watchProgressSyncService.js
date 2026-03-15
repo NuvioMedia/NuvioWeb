@@ -17,34 +17,35 @@ function progressKey(item = {}) {
 }
 
 function mergeProgressItems(localItems = [], remoteItems = []) {
-  const byKey = new Map();
-  const upsert = (item) => {
-    if (!item?.contentId) {
+  const localByKey = new Map(
+    (Array.isArray(localItems) ? localItems : [])
+      .filter((item) => Boolean(item?.contentId))
+      .map((item) => [progressKey(item), item])
+  );
+  const remoteByKey = new Map(
+    (Array.isArray(remoteItems) ? remoteItems : [])
+      .filter((item) => Boolean(item?.contentId))
+      .map((item) => [progressKey(item), item])
+  );
+
+  if (!remoteByKey.size) {
+    return Array.from(localByKey.values())
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  }
+
+  const merged = [];
+  remoteByKey.forEach((remoteItem, key) => {
+    const localItem = localByKey.get(key);
+    if (!localItem) {
+      merged.push(remoteItem);
       return;
     }
-    const key = progressKey(item);
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, item);
-      return;
-    }
-    const existingUpdated = Number(existing.updatedAt || 0);
-    const incomingUpdated = Number(item.updatedAt || 0);
-    if (incomingUpdated > existingUpdated) {
-      byKey.set(key, item);
-      return;
-    }
-    if (incomingUpdated === existingUpdated) {
-      const existingPos = Number(existing.positionMs || 0);
-      const incomingPos = Number(item.positionMs || 0);
-      if (incomingPos > existingPos) {
-        byKey.set(key, item);
-      }
-    }
-  };
-  localItems.forEach(upsert);
-  remoteItems.forEach(upsert);
-  return Array.from(byKey.values()).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+    const remoteUpdatedAt = Number(remoteItem.updatedAt || 0);
+    const localUpdatedAt = Number(localItem.updatedAt || 0);
+    merged.push(remoteUpdatedAt > localUpdatedAt ? remoteItem : localItem);
+  });
+
+  return merged.sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
 }
 
 function shouldTryLegacyTable(error) {
