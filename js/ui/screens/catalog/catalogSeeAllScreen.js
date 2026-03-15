@@ -17,6 +17,25 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function extractReleaseYear(item = {}) {
+  const candidates = [
+    item?.released,
+    item?.releaseDate,
+    item?.release_date,
+    item?.releaseInfo,
+    item?.year
+  ].filter(Boolean);
+
+  for (const value of candidates) {
+    const match = String(value).match(/\b(19|20)\d{2}\b/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return "";
+}
+
 function groupNodesByOffsetTop(nodes = []) {
   const grouped = [];
   nodes.forEach((node) => {
@@ -308,12 +327,19 @@ export const CatalogSeeAllScreen = {
           <article class="seeall-card focusable"
                    data-action="openDetail"
                    data-item-id="${item.id || ""}"
-                   data-item-type="${item.type || descriptor.type || "movie"}"
-                   data-item-title="${escapeHtml(item.name || "Untitled")}"
-                   data-focus-key="item:${item.id || index}"
-                   data-item-index="${index}">
-            <div class="seeall-card-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-            ${this.layoutPrefs?.posterLabelsEnabled !== false ? `<div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>` : ""}
+                    data-item-type="${item.type || descriptor.type || "movie"}"
+                    data-item-title="${escapeHtml(item.name || "Untitled")}"
+                    data-focus-key="item:${item.id || index}"
+                    data-item-index="${index}">
+            <div class="seeall-card-poster-wrap">
+              ${item.poster
+                ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" />`
+                : `<div class="seeall-card-poster placeholder"></div>`}
+            </div>
+            ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
+              <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
+              <div class="seeall-card-year">${escapeHtml(extractReleaseYear(item))}</div>
+            ` : ""}
           </article>
         `).join("")
       : `<div class="seeall-empty">No items available.</div>`;

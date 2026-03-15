@@ -751,12 +751,93 @@ export const SearchScreen = {
       this.ensureHeaderVisible();
     }
     if (zone === "results") {
-      const row = target.closest(".search-results-row");
-      row?.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      this.ensureResultsRowVisible(target);
       this.ensureResultCardVisible(current, target);
     }
     this.captureLiveViewState();
     return true;
+  },
+
+  cancelScrollAnimation(container, axis = "x") {
+    const map = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
+    const state = map.get(container);
+    const key = axis === "y" ? "y" : "x";
+    if (state?.[key]) {
+      cancelAnimationFrame(state[key]);
+      state[key] = null;
+    }
+  },
+
+  animateScroll(container, axis, targetValue, duration = 150) {
+    if (!container) {
+      return;
+    }
+    const property = axis === "y" ? "scrollTop" : "scrollLeft";
+    const max = axis === "y"
+      ? Math.max(0, container.scrollHeight - container.clientHeight)
+      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const startValue = Number(container[property] || 0);
+    if (Math.abs(startValue - nextValue) <= 1) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (prefersReducedMotion) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const map = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
+    const key = axis === "y" ? "y" : "x";
+    const existing = map.get(container) || {};
+    if (existing[key]) {
+      cancelAnimationFrame(existing[key]);
+    }
+
+    const startTime = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
+      if (progress < 1) {
+        existing[key] = requestAnimationFrame(tick);
+        map.set(container, existing);
+      } else {
+        existing[key] = null;
+        map.set(container, existing);
+      }
+    };
+
+    existing[key] = requestAnimationFrame(tick);
+    map.set(container, existing);
+  },
+
+  ensureResultsRowVisible(target) {
+    const content = this.container?.querySelector(".search-content");
+    const row = target?.closest?.(".search-results-row");
+    if (!content || !row) {
+      return;
+    }
+
+    const contentRect = content.getBoundingClientRect();
+    const rowRect = row.getBoundingClientRect();
+    const topInset = 18;
+    const bottomInset = 28;
+    const rowTop = rowRect.top - contentRect.top + content.scrollTop;
+    const rowBottom = rowRect.bottom - contentRect.top + content.scrollTop;
+    const visibleTop = contentRect.top + topInset;
+    const visibleBottom = contentRect.bottom - bottomInset;
+
+    if (rowRect.top < visibleTop) {
+      this.animateScroll(content, "y", rowTop - topInset, 150);
+      return;
+    }
+
+    if (rowRect.bottom > visibleBottom) {
+      this.animateScroll(content, "y", rowBottom - content.clientHeight + bottomInset, 150);
+    }
   },
 
   ensureResultCardVisible(current, target) {
@@ -765,39 +846,13 @@ export const SearchScreen = {
       return;
     }
 
-    const targetLeft = Number(target.offsetLeft || 0);
-    const targetRight = targetLeft + Number(target.offsetWidth || 0);
-    const viewLeft = Number(track.scrollLeft || 0);
-    const viewRight = viewLeft + Number(track.clientWidth || 0);
-    const leftPad = 72;
-    const rightPad = 88;
-    const currentRow = Number(current?.dataset?.navRow ?? -1);
-    const targetRow = Number(target?.dataset?.navRow ?? -1);
-    const currentCol = Number(current?.dataset?.navCol ?? -1);
-    const targetCol = Number(target?.dataset?.navCol ?? -1);
-    const sameRow = currentRow >= 0 && currentRow === targetRow;
-
-    if (sameRow && targetCol > currentCol) {
-      if (targetRight > (viewRight - rightPad) || targetLeft < (viewLeft + leftPad)) {
-        track.scrollLeft = Math.max(0, targetLeft - leftPad);
-      }
-      return;
-    }
-
-    if (sameRow && targetCol < currentCol) {
-      if (targetLeft < (viewLeft + leftPad) || targetRight > (viewRight - rightPad)) {
-        track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
-      }
-      return;
-    }
-
-    if (targetRight > (viewRight - rightPad)) {
-      track.scrollLeft = Math.max(0, targetLeft - leftPad);
-      return;
-    }
-    if (targetLeft < (viewLeft + leftPad)) {
-      track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
-    }
+    const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(track) : null;
+    const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
+    const trackRect = track.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
+    const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+    this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), 140);
   },
 
   ensureHeaderVisible() {
@@ -811,7 +866,7 @@ export const SearchScreen = {
     const visibleTop = contentRect.top + topInset;
 
     if (headerRect.top < visibleTop) {
-      content.scrollTop += headerRect.top - visibleTop;
+      this.animateScroll(content, "y", content.scrollTop + (headerRect.top - visibleTop), 150);
     }
   },
 

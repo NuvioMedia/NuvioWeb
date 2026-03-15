@@ -4,6 +4,7 @@ import { Environment } from "../../../platform/environment.js";
 import { Platform } from "../../../platform/index.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { LibraryController, LIBRARY_PRIVACY_OPTIONS } from "./libraryController.js";
+import { renderFilterPicker } from "../../components/filterPicker.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -34,19 +35,6 @@ function bookmarkOutlineSvg() {
             fill="none"
             stroke="currentColor"
             stroke-width="5.5"
-            stroke-linecap="round"
-            stroke-linejoin="round" />
-    </svg>
-  `;
-}
-
-function chevronSvg(open) {
-  return `
-    <svg viewBox="0 0 24 24" class="library-picker-chevron" aria-hidden="true" focusable="false">
-      <path d="${open ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.75"
             stroke-linecap="round"
             stroke-linejoin="round" />
     </svg>
@@ -162,32 +150,19 @@ export const LibraryScreen = {
 
   renderPicker(picker, title, value, options, widthClass = "") {
     const state = this.controller.getState();
-    const open = state.expandedPicker === picker;
-    return `
-      <div class="library-picker${open ? " open" : ""} ${widthClass}">
-        <button class="library-picker-anchor focusable library-primary"
-                data-action="togglePicker"
-                data-picker="${picker}">
-          <span class="library-picker-copy">
-            <span class="library-picker-title">${escapeHtml(title)}</span>
-            <span class="library-picker-value">${escapeHtml(value)}</span>
-          </span>
-          <span class="library-picker-icon">${chevronSvg(open)}</span>
-        </button>
-        ${open ? `
-          <div class="library-picker-menu" role="listbox" aria-label="${escapeHtml(title)}">
-            ${options.map((option, index) => `
-              <button class="library-picker-option focusable${index === Number(state.pickerFocusIndex || 0) ? " library-picker-option-target" : ""}"
-                      data-action="selectPickerOption"
-                      data-picker="${picker}"
-                      data-option-index="${index}">
-                ${escapeHtml(option.label)}
-              </button>
-            `).join("")}
-          </div>
-        ` : ""}
-      </div>
-    `;
+    return renderFilterPicker({
+      picker,
+      title,
+      value,
+      options,
+      open: state.expandedPicker === picker,
+      focusIndex: Number(state.pickerFocusIndex || 0),
+      widthClass,
+      classPrefix: "library-picker",
+      anchorExtraClass: "library-primary",
+      optionFocusable: true,
+      targetOptionClass: "library-picker-option-target"
+    });
   },
 
   renderGrid(items) {
