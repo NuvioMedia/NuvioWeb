@@ -336,6 +336,17 @@ export const StreamScreen = {
     return `stream:${itemType}:${itemId}:${videoId}`;
   },
 
+  navigateBackFromStream() {
+    if (this.params?.continueWatchingBackHome) {
+      Router.navigate("home", {}, {
+        skipStackPush: true,
+        replaceHistory: true
+      });
+      return true;
+    }
+    return false;
+  },
+
   captureRouteState() {
     const list = this.container?.querySelector(".stream-route-list");
     return {
@@ -741,6 +752,8 @@ export const StreamScreen = {
         : null,
       playerTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
       playerSubtitle: this.params?.episodeTitle || this.params?.playerSubtitle || "",
+      playerEpisodeTitle: this.params?.episodeTitle || "",
+      playerReleaseYear: this.params?.year || "",
       playerBackdropUrl: this.getBackdropUrl() || null,
       playerLogoUrl: this.params?.logo || null,
       parentalWarnings: this.params?.parentalWarnings || null,
@@ -750,14 +763,20 @@ export const StreamScreen = {
       episodes: Array.isArray(this.params?.episodes) ? this.params.episodes : [],
       streamCandidates: filtered,
       nextEpisodeVideoId: this.params?.nextEpisodeVideoId || null,
-      nextEpisodeLabel: this.params?.nextEpisodeLabel || null
+      nextEpisodeLabel: this.params?.nextEpisodeLabel || null,
+      nextEpisodeSeason: this.params?.nextEpisodeSeason ?? null,
+      nextEpisodeEpisode: this.params?.nextEpisodeEpisode ?? null,
+      nextEpisodeTitle: this.params?.nextEpisodeTitle || "",
+      nextEpisodeReleased: this.params?.nextEpisodeReleased || ""
     });
   },
 
   onKeyDown(event) {
     if (isBackEvent(event)) {
       event?.preventDefault?.();
-      Router.back();
+      if (!this.navigateBackFromStream()) {
+        Router.back();
+      }
       return;
     }
 

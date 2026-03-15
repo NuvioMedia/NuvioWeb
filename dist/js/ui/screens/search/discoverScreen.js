@@ -105,6 +105,63 @@ function isEnterKey(event) {
   return isKey(event, 13, ["Enter"]);
 }
 
+function setContainerScrollTop(container, top, behavior = "auto") {
+  if (!(container instanceof HTMLElement)) {
+    return 0;
+  }
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const resolvedTop = Math.max(0, Math.min(maxScrollTop, Number(top || 0)));
+  if (behavior === "smooth") {
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top: resolvedTop, behavior: "smooth" });
+    } else {
+      container.scrollTop = resolvedTop;
+    }
+    return resolvedTop;
+  }
+
+  const previousBehavior = container.style.scrollBehavior;
+  container.style.scrollBehavior = "auto";
+  container.scrollTop = resolvedTop;
+  void container.offsetHeight;
+  container.style.scrollBehavior = previousBehavior;
+  return resolvedTop;
+}
+
+function scrollNodeIntoContainerView(node, container, { center = false, padding = 18, behavior = "smooth" } = {}) {
+  if (!(node instanceof HTMLElement) || !(container instanceof HTMLElement)) {
+    return null;
+  }
+  const itemTop = node.offsetTop;
+  const itemBottom = itemTop + node.offsetHeight;
+  const currentTop = container.scrollTop;
+  const viewTop = currentTop + padding;
+  const viewBottom = currentTop + container.clientHeight - padding;
+  let nextScrollTop = currentTop;
+
+  if (center) {
+    nextScrollTop = itemTop - ((container.clientHeight - node.offsetHeight) / 2);
+  } else if (itemTop < viewTop) {
+    nextScrollTop = itemTop - padding;
+  } else if (itemBottom > viewBottom) {
+    nextScrollTop = itemBottom - container.clientHeight + padding;
+  }
+
+  const resolvedTop = Math.max(0, nextScrollTop);
+  if (Math.abs(resolvedTop - currentTop) <= 1) {
+    return resolvedTop;
+  }
+  if (behavior === "smooth") {
+    container.scrollTo({
+      top: resolvedTop,
+      behavior: "smooth"
+    });
+  } else {
+    setContainerScrollTop(container, resolvedTop, "auto");
+  }
+  return resolvedTop;
+}
+
 export const DiscoverScreen = {
 
   getRouteStateKey() {
@@ -155,6 +212,7 @@ export const DiscoverScreen = {
     this.loading = false;
     this.updateCatalogOptions();
     this.pendingRestoreFocus = true;
+    this.preserveViewportOnNextRender = false;
     return true;
   },
 
@@ -184,6 +242,7 @@ export const DiscoverScreen = {
     this.savedScrollTop = 0;
     this.rowFocusedIndexByRow = {};
     this.pendingRestoreFocus = false;
+    this.preserveViewportOnNextRender = false;
     this.nextSkip = 0;
     this.hasMore = true;
 
@@ -274,7 +333,7 @@ export const DiscoverScreen = {
     await this.loadNextPage({ restoreFocusToGrid: false });
   },
 
-  async loadNextPage({ restoreFocusToGrid = true } = {}) {
+  async loadNextPage({ restoreFocusToGrid = true, preserveViewport = false } = {}) {
     if (this.loading || !this.hasMore) {
       return;
     }
@@ -290,7 +349,10 @@ export const DiscoverScreen = {
     this.loading = true;
     this.captureViewState();
     this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
-    this.render();
+    this.preserveViewportOnNextRender = Boolean(preserveViewport);
+    if (!preserveViewport) {
+      this.render();
+    }
 
     const extraArgs = {};
     if (this.selectedGenre && this.selectedGenre !== "Default") {
@@ -313,11 +375,13 @@ export const DiscoverScreen = {
     if (result.status !== "success") {
       this.loading = false;
       this.hasMore = false;
+      this.preserveViewportOnNextRender = false;
       this.render();
       return;
     }
 
     const incoming = Array.isArray(result?.data?.items) ? result.data.items : [];
+    let addedCount = 0;
     if (!this.items.length) {
       this.items = [];
     }
@@ -329,6 +393,7 @@ export const DiscoverScreen = {
         }
         seen.add(item.id);
         this.items.push(item);
+        addedCount += 1;
       });
       this.nextSkip = Math.max(0, Number(this.nextSkip || 0)) + 100;
     }
@@ -339,17 +404,24 @@ export const DiscoverScreen = {
       this.lastFocusedDiscoverItemId = String(this.items[0].id);
     }
     this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
+    this.preserveViewportOnNextRender = Boolean(preserveViewport && addedCount > 0);
     this.render();
   },
 
-  maybeAutoLoadMore(index) {
+  shouldAutoLoadMore(index) {
     if (this.loading || !this.hasMore) {
-      return;
+      return false;
     }
     const remaining = (this.items.length - 1) - Number(index || 0);
-    if (remaining <= 10) {
-      this.loadNextPage();
+    return remaining <= 10;
+  },
+
+  shouldAutoLoadMoreFromScroll(scroller) {
+    if (!(scroller instanceof HTMLElement) || this.loading || !this.hasMore) {
+      return false;
     }
+    const remaining = scroller.scrollHeight - (scroller.scrollTop + scroller.clientHeight);
+    return remaining <= 640;
   },
 
   getPickerOptions(kind) {
@@ -533,11 +605,11 @@ export const DiscoverScreen = {
   restoreScrollState() {
     const main = this.container?.querySelector(".discover-main");
     if (main) {
-      main.scrollTop = Number(this.savedScrollTop || 0);
+      this.savedScrollTop = setContainerScrollTop(main, this.savedScrollTop, "auto");
     }
   },
 
-  restoreFocusedCard() {
+  restoreFocusedCard({ scrollMode = "center" } = {}) {
     this.restoreScrollState();
     const target = (this.lastFocusedKey
       ? this.container?.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
@@ -563,9 +635,11 @@ export const DiscoverScreen = {
       this.scrollContentToTop();
       return;
     }
-    target.focus();
+    focusWithoutAutoScroll(target);
     this.rememberRowFocus(target);
-    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    if (scrollMode !== "none") {
+      scrollNodeIntoContainerView(target, this.getContentScroller(), { center: scrollMode === "center", padding: 20 });
+    }
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
   },
 
@@ -625,9 +699,23 @@ export const DiscoverScreen = {
       this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
     }
     this.rememberRowFocus(target);
-    target.focus();
-    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
-    this.maybeAutoLoadMore(target.dataset.itemIndex);
+    focusWithoutAutoScroll(target);
+    const scroller = this.getContentScroller();
+    const isFirstRow = Number(target.dataset.navRow || 0) === 0;
+    const shouldLoadMore = this.shouldAutoLoadMore(target.dataset.itemIndex);
+    const nextScrollTop = isFirstRow
+      ? setContainerScrollTop(scroller, 0, "smooth")
+      : scrollNodeIntoContainerView(target, scroller, {
+        center: false,
+        padding: 20,
+        behavior: shouldLoadMore ? "auto" : "smooth"
+      });
+    if (Number.isFinite(nextScrollTop)) {
+      this.savedScrollTop = nextScrollTop;
+    }
+    if (shouldLoadMore) {
+      this.loadNextPage({ preserveViewport: true });
+    }
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
@@ -641,7 +729,7 @@ export const DiscoverScreen = {
   scrollContentToTop() {
     const scroller = this.getContentScroller();
     if (scroller) {
-      scroller.scrollTop = 0;
+      this.savedScrollTop = setContainerScrollTop(scroller, 0, "auto");
     }
   },
 
@@ -717,7 +805,7 @@ export const DiscoverScreen = {
     return this.focusSidebarNode();
   },
 
-  restoreContentFocus() {
+  restoreContentFocus({ scrollMode = "center" } = {}) {
     const selector = this.lastFocusedAction && this.lastFocusedAction !== "openDetail"
       ? `.focusable[data-action="${this.lastFocusedAction}"]`
       : "";
@@ -741,9 +829,11 @@ export const DiscoverScreen = {
       focusWithoutAutoScroll(target);
       this.scrollContentToTop();
     } else {
-      target.focus();
+      focusWithoutAutoScroll(target);
       this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
-      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      if (scrollMode !== "none") {
+        scrollNodeIntoContainerView(target, this.getContentScroller(), { center: scrollMode === "center", padding: 20 });
+      }
     }
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
@@ -862,6 +952,7 @@ export const DiscoverScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
     this.bindCardEvents();
+    this.bindShellEvents();
     bindRootSidebarEvents(this.container, {
       currentRoute: "search",
       onSelectedAction: () => this.closeSidebarToContent(),
@@ -869,8 +960,10 @@ export const DiscoverScreen = {
     });
     this.bindPointerEvents();
     if (this.pendingRestoreFocus) {
+      const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
       this.pendingRestoreFocus = false;
-      this.restoreFocusedCard();
+      this.preserveViewportOnNextRender = false;
+      this.restoreFocusedCard({ scrollMode });
       this.syncOpenPickerScroll();
       return;
     }
@@ -878,7 +971,9 @@ export const DiscoverScreen = {
     if (this.focusZone === "sidebar") {
       this.focusSidebarNode();
     } else {
-      this.restoreContentFocus();
+      const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
+      this.preserveViewportOnNextRender = false;
+      this.restoreContentFocus({ scrollMode });
     }
     this.syncOpenPickerScroll();
   },
@@ -891,13 +986,26 @@ export const DiscoverScreen = {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
         this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
         this.savedScrollTop = this.container?.querySelector(".discover-main")?.scrollTop || 0;
-        this.maybeAutoLoadMore(node.dataset.itemIndex);
       });
       node.addEventListener("mouseenter", () => {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
         this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
       });
     });
+  },
+
+  bindShellEvents() {
+    const scroller = this.getContentScroller();
+    if (!scroller || scroller.__discoverScrollBound) {
+      return;
+    }
+    scroller.__discoverScrollBound = true;
+    scroller.addEventListener("scroll", () => {
+      this.savedScrollTop = Number(scroller.scrollTop || 0);
+      if (this.shouldAutoLoadMoreFromScroll(scroller)) {
+        this.loadNextPage({ preserveViewport: true });
+      }
+    }, { passive: true });
   },
 
   bindPointerEvents() {

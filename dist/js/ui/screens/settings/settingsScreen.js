@@ -158,7 +158,6 @@ const AVAILABLE_SUBTITLE_LANGUAGES = [
 ].sort((left, right) => left.label.localeCompare(right.label));
 
 const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
-  { id: "system", labelKey: "common.system" },
   { id: "off", label: "Off" },
   { id: "forced", label: "Forced" },
   ...AVAILABLE_SUBTITLE_LANGUAGES
@@ -411,6 +410,17 @@ function labelForSubtitlePlaybackLanguage(language) {
           ? t("common.system")
           : String(language || "system")
   );
+}
+
+function subtitleLanguageOptionCode(option) {
+  const normalized = normalizeSelectableSubtitleLanguageCode(option?.id);
+  if (!normalized || normalized === "off") {
+    return "";
+  }
+  if (normalized === "forced") {
+    return "FORCED";
+  }
+  return normalized.toUpperCase();
 }
 
 function qualityLabel(value) {
@@ -844,13 +854,15 @@ export const SettingsScreen = {
     `;
   },
 
-  openOptionDialog({ title, options, selectedId, onSelect, returnFocusKey }) {
+  openOptionDialog({ title, options, selectedId, onSelect, returnFocusKey, dialogClassName = "", optionRenderer = "default" }) {
     this.optionDialog = {
       title,
       options: Array.isArray(options) ? options : [],
       selectedId: selectedId ?? null,
       onSelect,
-      returnFocusKey
+      returnFocusKey,
+      dialogClassName,
+      optionRenderer
     };
     const selectedIndex = this.optionDialog.options.findIndex((option) => String(option.id) === String(selectedId));
     this.dialogFocusIndex = clamp(selectedIndex >= 0 ? selectedIndex : 0, 0, Math.max(0, this.optionDialog.options.length - 1));
@@ -871,17 +883,32 @@ export const SettingsScreen = {
       return "";
     }
 
+    const dialogClassName = this.optionDialog.dialogClassName ? ` ${escapeHtml(this.optionDialog.dialogClassName)}` : "";
+    const useLanguageRenderer = this.optionDialog.optionRenderer === "subtitle-language";
+
     return `
       <div class="settings-dialog-backdrop">
-        <div class="settings-dialog">
+        <div class="settings-dialog${dialogClassName}">
           <div class="settings-dialog-title">${escapeHtml(this.optionDialog.title || t("common.selectOption"))}</div>
-          <div class="settings-dialog-list">
+          <div class="settings-dialog-list${useLanguageRenderer ? " settings-language-dialog-list" : ""}">
             ${this.optionDialog.options.map((option, index) => `
-              <button class="settings-dialog-option settings-content-focusable focusable${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
+              <button class="settings-dialog-option settings-content-focusable focusable${useLanguageRenderer ? " settings-language-option" : ""}${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
                       data-zone="dialog"
                       data-dialog-index="${index}"
                       data-dialog-option-id="${escapeHtml(option.id)}">
-                <span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>
+                ${useLanguageRenderer
+                  ? `<span class="settings-language-option-copy">
+                      <span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>
+                    </span>
+                    <span class="settings-language-option-meta">
+                      ${subtitleLanguageOptionCode(option)
+                        ? `<span class="settings-language-option-code">${escapeHtml(subtitleLanguageOptionCode(option))}</span>`
+                        : ""}
+                      ${String(option.id) === String(this.optionDialog.selectedId)
+                        ? `<span class="settings-language-option-check" aria-hidden="true">&#10003;</span>`
+                        : ""}
+                    </span>`
+                  : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`}
               </button>
             `).join("")}
           </div>
@@ -1701,11 +1728,14 @@ export const SettingsScreen = {
     });
     this.actionMap.set("playback:subtitleLanguage", () => {
       const currentSettings = PlayerSettingsStore.get();
+      const currentLanguage = normalizeSelectableSubtitleLanguageCode(currentSettings.subtitleStyle?.preferredLanguage || currentSettings.subtitleLanguage);
       this.openOptionDialog({
         title: t("settings.dialogs.preferredSubtitleLanguage"),
         options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
-        selectedId: normalizeSelectableSubtitleLanguageCode(currentSettings.subtitleStyle?.preferredLanguage || currentSettings.subtitleLanguage),
+        selectedId: currentLanguage === "system" ? "off" : currentLanguage,
         returnFocusKey: "playback:subtitleLanguage",
+        dialogClassName: "settings-language-dialog",
+        optionRenderer: "subtitle-language",
         onSelect: (option) => {
           const normalized = normalizeSelectableSubtitleLanguageCode(option.id);
           PlayerSettingsStore.set({
@@ -1995,6 +2025,7 @@ export const SettingsScreen = {
       if (dialogNode) {
         dialogNode.classList.add("focused");
         dialogNode.focus();
+        scrollIntoNearestView(dialogNode);
       }
       return;
     }

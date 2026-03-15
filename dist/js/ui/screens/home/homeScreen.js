@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
+import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
@@ -36,10 +37,18 @@ import {
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
 
 const HERO_ROTATE_FIRST_DELAY_MS = 20000;
 const HERO_ROTATE_INTERVAL_MS = 10000;
 const HOME_LAYOUT_SEQUENCE = ["modern", "grid", "classic"];
+const DEFAULT_PROFILE_COLOR = "#1E88E5";
+const CW_MAX_NEXT_UP_LOOKUPS = 24;
+const CW_MAX_VISIBLE_ITEMS = 10;
+const CW_DAYS_CAP = 60;
+const CW_PROGRESS_START_THRESHOLD = 0.02;
+const CW_PROGRESS_END_THRESHOLD = 0.85;
+const CW_ENTER_DELAY_MS = 320;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -105,6 +114,51 @@ function uniqueById(items = []) {
     seen.add(id);
     return true;
   });
+}
+
+function clampChannel(value) {
+  return Math.min(255, Math.max(0, Math.round(value)));
+}
+
+function parseHexColor(colorHex, fallback = { r: 30, g: 136, b: 229 }) {
+  const value = String(colorHex || "").trim();
+  const match = value.match(/^#([0-9a-f]{6})$/i);
+  if (!match) {
+    return fallback;
+  }
+  const normalized = match[1];
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16)
+  };
+}
+
+function mixColors(baseColor, accentColor, weight) {
+  const normalizedWeight = Math.min(1, Math.max(0, Number(weight) || 0));
+  return {
+    r: clampChannel((baseColor.r * (1 - normalizedWeight)) + (accentColor.r * normalizedWeight)),
+    g: clampChannel((baseColor.g * (1 - normalizedWeight)) + (accentColor.g * normalizedWeight)),
+    b: clampChannel((baseColor.b * (1 - normalizedWeight)) + (accentColor.b * normalizedWeight))
+  };
+}
+
+function colorToRgba(color, alpha = 1) {
+  const normalizedAlpha = Math.min(1, Math.max(0, Number(alpha) || 0));
+  return `rgba(${clampChannel(color.r)}, ${clampChannel(color.g)}, ${clampChannel(color.b)}, ${normalizedAlpha})`;
+}
+
+function buildProfileBackgroundStyle(colorHex) {
+  const rootStyles = getComputedStyle(document.documentElement);
+  const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
+  const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
+  const accent = parseHexColor(colorHex, parseHexColor(DEFAULT_PROFILE_COLOR));
+  const gradientTop = mixColors(elevated, accent, 0.3);
+  const gradientMid = mixColors(background, accent, 0.14);
+  return `
+    linear-gradient(180deg, ${colorToRgba(gradientTop, 1)} 0%, ${colorToRgba(gradientMid, 1)} 42%, ${colorToRgba(background, 1)} 100%),
+    linear-gradient(90deg, ${colorToRgba(accent, 0.26)} 0%, ${colorToRgba(accent, 0.08)} 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%)
+  `;
 }
 
 function resolveImdbRating(item) {
@@ -349,7 +403,86 @@ function withTimeout(promise, ms, fallbackValue) {
   });
 }
 
+function progressFractionForContinueWatching(item = {}) {
+  const explicitPercent = Number(item.progressPercent);
+  if (Number.isFinite(explicitPercent) && explicitPercent > 0) {
+    return Math.max(0, Math.min(1, explicitPercent / 100));
+  }
+  const durationMs = Number(item.durationMs || 0);
+  const positionMs = Number(item.positionMs || 0);
+  if (!Number.isFinite(durationMs) || durationMs <= 0 || !Number.isFinite(positionMs) || positionMs <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, positionMs / durationMs));
+}
+
+function isSeriesTypeForContinueWatching(type) {
+  const normalized = String(type || "").toLowerCase();
+  return normalized === "series" || normalized === "tv";
+}
+
+function isCompletedForContinueWatching(item = {}) {
+  return progressFractionForContinueWatching(item) >= CW_PROGRESS_END_THRESHOLD;
+}
+
+function isInProgressForContinueWatching(item = {}) {
+  const fraction = progressFractionForContinueWatching(item);
+  return fraction >= CW_PROGRESS_START_THRESHOLD && fraction < CW_PROGRESS_END_THRESHOLD;
+}
+
+function shouldTreatAsInProgressForContinueWatching(item = {}) {
+  if (isInProgressForContinueWatching(item)) {
+    return true;
+  }
+  if (isCompletedForContinueWatching(item)) {
+    return false;
+  }
+  const hasStartedPlayback = Number(item.positionMs || 0) > 0 || Number(item.progressPercent || 0) > 0;
+  const source = String(item.source || "").toLowerCase();
+  return hasStartedPlayback && source !== "trakt_history" && source !== "trakt_show_progress";
+}
+
+function episodeKey(season, episode) {
+  return `${Number(season || 0)}:${Number(episode || 0)}`;
+}
+
+function normalizeEpisodeEntries(videos = []) {
+  return (Array.isArray(videos) ? videos : [])
+    .map((video) => ({
+      id: String(video?.id || "").trim(),
+      season: Number(video?.season || 0),
+      episode: Number(video?.episode || 0),
+      title: String(video?.title || video?.name || "").trim(),
+      thumbnail: firstNonEmpty(video?.thumbnail),
+      overview: firstNonEmpty(video?.overview, video?.description),
+      released: firstNonEmpty(video?.released, video?.releaseInfo)
+    }))
+    .filter((entry) => entry.season > 0 && entry.episode > 0)
+    .sort((left, right) => {
+      if (left.season !== right.season) {
+        return left.season - right.season;
+      }
+      return left.episode - right.episode;
+    });
+}
+
+function hasEpisodeAiredForContinueWatching(released) {
+  const raw = String(released || "").trim();
+  if (!raw) {
+    return true;
+  }
+  const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || raw;
+  const parsedTime = Date.parse(datePortion);
+  if (!Number.isFinite(parsedTime)) {
+    return true;
+  }
+  return parsedTime <= Date.now();
+}
+
 function buildProgressStatus(item) {
+  if (item?.isNextUp) {
+    return "Next Up";
+  }
   const durationMs = Number(item?.durationMs || 0);
   const positionMs = Number(item?.positionMs || 0);
   if (!durationMs || !positionMs) {
@@ -367,12 +500,10 @@ function buildProgressStatus(item) {
 }
 
 function buildProgressFraction(item) {
-  const durationMs = Number(item?.durationMs || 0);
-  const positionMs = Number(item?.positionMs || 0);
-  if (!durationMs || !positionMs) {
+  if (item?.isNextUp) {
     return 0;
   }
-  return Math.max(0, Math.min(1, positionMs / durationMs));
+  return progressFractionForContinueWatching(item);
 }
 
 function normalizeCatalogItem(item, fallbackType = "movie") {
@@ -406,7 +537,7 @@ function normalizeContinueWatchingItem(item) {
   }
   const title = firstNonEmpty(item.title, item.name, prettyId(item.contentId));
   const type = String(item.contentType || item.type || "movie").trim() || "movie";
-  const isSeries = type.toLowerCase() === "series";
+  const isSeries = isSeriesTypeForContinueWatching(type);
   return {
     ...item,
     heroSource: "continueWatching",
@@ -726,32 +857,13 @@ function renderRowHeader(title, subtitle = "") {
 function renderContinueWatchingCard(item, index) {
   const normalized = normalizeContinueWatchingItem(item);
   const subtitle = firstNonEmpty(normalized.episodeTitle, normalized.releaseInfo, toTitleCase(normalized.type));
-  const isSeries = String(normalized.type || "movie").toLowerCase() === "series";
-  const cardImage = isSeries
-    ? firstNonEmpty(
-        item?.episodeThumbnail,
-        normalized.episodeThumbnail,
-        item?.thumbnail,
-        normalized.thumbnail,
-        item?.poster,
-        normalized.poster,
-        item?.backdrop,
-        normalized.backdrop,
-        item?.background,
-        normalized.background
-      )
-    : firstNonEmpty(
-        item?.backdrop,
-        normalized.backdrop,
-        item?.landscapePoster,
-        normalized.landscapePoster,
-        item?.thumbnail,
-        normalized.thumbnail,
-        item?.poster,
-        normalized.poster,
-        item?.background,
-        normalized.background
-      );
+  const isNextUp = Boolean(normalized?.isNextUp);
+  const hasAired = normalized?.hasAired !== false;
+  const cardImage = !isNextUp
+    ? firstNonEmpty(normalized.backdrop, normalized.poster)
+    : (!hasAired
+      ? firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail)
+      : firstNonEmpty(normalized.thumbnail, normalized.backdrop, normalized.poster));
   return `
     <article class="home-content-card home-continue-card focusable"
              data-action="resumeProgress"
@@ -773,19 +885,24 @@ function renderContinueWatchingCard(item, index) {
 }
 
 function renderContinueWatchingLoadingCard(index = 0) {
+  const titleWidths = [132, 148, 124, 156, 138, 144, 126, 152, 136, 142];
+  const subtitleWidths = [108, 118, 96, 124, 110, 122, 102, 116, 106, 120];
+  const safeIndex = Math.max(0, Number(index) || 0);
+  const titleWidth = titleWidths[safeIndex % titleWidths.length];
+  const subtitleWidth = subtitleWidths[safeIndex % subtitleWidths.length];
   return `
     <article class="home-content-card home-continue-card home-continue-card-loading focusable"
               data-action="continueWatchingLoading"
              data-cw-loading-index="${index}"
-             aria-disabled="true">
-      <div class="home-continue-media home-continue-media-loading">
-        <span class="home-continue-badge">Loading</span>
-        <div class="home-continue-copy">
-          <div class="home-continue-kicker">Continue Watching</div>
-          <div class="home-continue-title">Loading...</div>
-          <div class="home-continue-subtitle">Fetching your recent progress</div>
+              aria-disabled="true">
+      <div class="home-continue-media home-continue-media-loading"
+           style="--cw-skeleton-title:${titleWidth}px;--cw-skeleton-subtitle:${subtitleWidth}px;">
+        <span class="home-continue-badge" aria-hidden="true">Loading</span>
+        <div class="home-continue-copy home-continue-copy-skeleton" aria-hidden="true">
+          <div class="home-continue-skeleton-line home-continue-skeleton-kicker"></div>
+          <div class="home-continue-skeleton-line home-continue-skeleton-title"></div>
+          <div class="home-continue-skeleton-line home-continue-skeleton-subtitle"></div>
         </div>
-        <div class="home-continue-progress"><span style="width:38%"></span></div>
       </div>
     </article>
   `;
@@ -810,6 +927,32 @@ function renderContinueWatchingSection(items = [], options = {}) {
       </div>
     </section>
   `;
+}
+
+function continueWatchingStreamParams(item, options = {}) {
+  const normalized = normalizeContinueWatchingItem(item);
+  if (!normalized?.contentId) {
+    return null;
+  }
+  const isSeries = isSeriesTypeForContinueWatching(normalized.type);
+  return {
+    itemId: normalized.contentId,
+    itemType: normalized.type || "movie",
+    itemTitle: normalized.title || normalized.contentId || "Untitled",
+    playerTitle: normalized.title || normalized.contentId || "Untitled",
+    playerEpisodeTitle: isSeries ? (normalized.episodeTitle || "") : "",
+    playerReleaseYear: isSeries ? "" : (String(normalized.releaseInfo || "").match(/\b(19|20)\d{2}\b/)?.[0] || ""),
+    videoId: normalized.videoId || normalized.contentId,
+    season: isSeries ? normalized.season : null,
+    episode: isSeries ? normalized.episode : null,
+    episodeTitle: isSeries ? (normalized.episodeTitle || "") : "",
+    backdrop: firstNonEmpty(normalized.backdrop, normalized.background, normalized.landscapePoster, normalized.poster),
+    landscapePoster: firstNonEmpty(normalized.landscapePoster, normalized.backdrop, normalized.background, normalized.poster),
+    poster: firstNonEmpty(normalized.poster, normalized.backdrop, normalized.background),
+    logo: firstNonEmpty(normalized.logo),
+    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0),
+    continueWatchingBackHome: true
+  };
 }
 
 function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
@@ -1479,22 +1622,319 @@ export const HomeScreen = {
     return normalizeContinueWatchingItem(this.continueWatchingDisplay?.[index] || this.continueWatching?.[index] || null);
   },
 
-  openContinueWatchingFromNode(node) {
+  getContinueWatchingMenuItem() {
+    const menu = this.continueWatchingMenu;
+    if (!menu) {
+      return null;
+    }
+    return normalizeContinueWatchingItem(
+      this.continueWatchingDisplay?.find((item) => {
+        return String(item?.contentId || "") === String(menu.contentId || "")
+          && String(item?.videoId || "") === String(menu.videoId || "");
+      })
+      || menu.item
+      || null
+    );
+  },
+
+  isContinueWatchingItemWatched(item) {
+    const contentId = String(item?.contentId || "");
+    if (!contentId) {
+      return false;
+    }
+    return Boolean((this.watchedItems || []).some((entry) => String(entry?.contentId || "") === contentId));
+  },
+
+  getContinueWatchingMenuOptions() {
+    const item = this.getContinueWatchingMenuItem();
+    if (!item) {
+      return [];
+    }
+    const watched = this.isContinueWatchingItemWatched(item);
+    return [
+      { action: "resume", label: "Resume" },
+      { action: "startOver", label: "Start Over" },
+      { action: "details", label: "View Details" },
+      { action: "toggleWatched", label: watched ? "Mark Unwatched" : "Mark Watched" },
+      { action: "remove", label: "Remove from Continue Watching" }
+    ];
+  },
+
+  renderContinueWatchingMenu() {
+    const item = this.getContinueWatchingMenuItem();
+    if (!item) {
+      return "";
+    }
+    const options = this.getContinueWatchingMenuOptions();
+    const subtitle = firstNonEmpty(item.episodeCode, item.episodeTitle, item.releaseInfo, toTitleCase(item.type));
+    return renderHoldMenuMarkup({
+      kicker: "Continue Watching",
+      title: item.title || "Untitled",
+      subtitle,
+      focusedIndex: Number(this.continueWatchingMenu?.optionIndex || 0),
+      options: options.map((option) => ({
+        ...option,
+        danger: option.action === "remove"
+      }))
+    });
+  },
+
+  applyContinueWatchingMenuFocus() {
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!buttons.length) {
+      return false;
+    }
+    const currentIndex = Math.max(0, Math.min(buttons.length - 1, Number(this.continueWatchingMenu?.optionIndex || 0)));
+    buttons.forEach((node, index) => node.classList.toggle("focused", index === currentIndex));
+    const target = buttons[currentIndex] || buttons[0] || null;
+    if (!target) {
+      return false;
+    }
+    target.classList.add("focused");
+    this.focusWithoutAutoScroll(target);
+    return true;
+  },
+
+  moveContinueWatchingMenuFocus(delta) {
+    if (!this.continueWatchingMenu) {
+      return false;
+    }
+    const options = this.getContinueWatchingMenuOptions();
+    if (!options.length) {
+      return false;
+    }
+    this.continueWatchingMenu = {
+      ...this.continueWatchingMenu,
+      optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.continueWatchingMenu.optionIndex || 0) + delta))
+    };
+    this.applyContinueWatchingMenuFocus();
+    return true;
+  },
+
+  openContinueWatchingMenu(node) {
     const item = this.getContinueWatchingItemFromNode(node);
     if (!item?.contentId) {
+      return false;
+    }
+    this.cancelPendingContinueWatchingEnter();
+    this.continueWatchingMenu = {
+      contentId: item.contentId,
+      videoId: item.videoId || "",
+      index: Number(node?.dataset?.cwIndex || 0),
+      optionIndex: 0,
+      item
+    };
+    this.render();
+    return true;
+  },
+
+  closeContinueWatchingMenu() {
+    if (!this.continueWatchingMenu) {
+      return false;
+    }
+    this.pendingContinueWatchingFocusIndex = Math.max(0, Number(this.continueWatchingMenu.index || 0));
+    this.continueWatchingMenu = null;
+    this.render();
+    return true;
+  },
+
+  cancelPendingContinueWatchingEnter() {
+    if (this.pendingContinueWatchingEnterTimer) {
+      clearTimeout(this.pendingContinueWatchingEnterTimer);
+      this.pendingContinueWatchingEnterTimer = null;
+    }
+    this.pendingContinueWatchingEnterTarget = null;
+  },
+
+  scheduleContinueWatchingEnter(node) {
+    const item = this.getContinueWatchingItemFromNode(node);
+    if (!item?.contentId) {
+      return false;
+    }
+    this.cancelPendingContinueWatchingEnter();
+    this.pendingContinueWatchingEnterTarget = {
+      contentId: item.contentId,
+      videoId: String(item.videoId || "")
+    };
+    this.pendingContinueWatchingEnterTimer = setTimeout(() => {
+      this.pendingContinueWatchingEnterTimer = null;
+      const pending = this.pendingContinueWatchingEnterTarget;
+      this.pendingContinueWatchingEnterTarget = null;
+      if (!pending || Router.getCurrent() !== "home") {
+        return;
+      }
+      const current = this.container?.querySelector(".home-continue-card.focusable.focused") || null;
+      const focusedItem = this.getContinueWatchingItemFromNode(current);
+      if (!focusedItem?.contentId) {
+        return;
+      }
+      if (String(focusedItem.contentId) !== String(pending.contentId)
+        || String(focusedItem.videoId || "") !== String(pending.videoId || "")) {
+        return;
+      }
+      this.openContinueWatchingFromItem(focusedItem);
+    }, CW_ENTER_DELAY_MS);
+    return true;
+  },
+
+  openContinueWatchingFromItem(item, options = {}) {
+    const params = continueWatchingStreamParams(item, options);
+    if (!params) {
+      return false;
+    }
+    const normalized = normalizeContinueWatchingItem(item);
+    this.cancelPendingContinueWatchingEnter();
+    this.continueWatchingMenu = null;
+
+    if (isSeriesTypeForContinueWatching(normalized?.type)) {
+      Router.navigate("detail", {
+        itemId: normalized.contentId,
+        itemType: normalized.type || "series",
+        fallbackTitle: normalized.title || normalized.contentId || "Untitled",
+        autoOpenContinueWatching: true,
+        resumeProgressMs: Number(params.resumePositionMs || 0) || 0,
+        resumeVideoId: normalized.videoId || null,
+        resumeSeason: normalized.season ?? null,
+        resumeEpisode: normalized.episode ?? null,
+        continueWatchingBackHome: true
+      });
+      return true;
+    }
+
+    Router.navigate("stream", params);
+    return true;
+  },
+
+  openContinueWatchingDetails(item) {
+    const normalized = normalizeContinueWatchingItem(item);
+    if (!normalized?.contentId) {
+      return false;
+    }
+    this.cancelPendingContinueWatchingEnter();
+    this.continueWatchingMenu = null;
+    Router.navigate("detail", {
+      itemId: normalized.contentId,
+      itemType: normalized.type || "movie",
+      fallbackTitle: normalized.title || normalized.contentId || "Untitled"
+    });
+    return true;
+  },
+
+  pruneContinueWatchingItem(item) {
+    const normalized = normalizeContinueWatchingItem(item);
+    const contentId = String(normalized?.contentId || "");
+    const videoId = String(normalized?.videoId || "");
+    if (!contentId) {
       return;
     }
-    Router.navigate("detail", {
-      itemId: item.contentId,
-      itemType: item.type || "movie",
-      fallbackTitle: item.title || item.contentId || "Untitled",
-      autoOpenContinueWatching: true,
-      resumeProgressMs: Number(item.positionMs || 0) || 0,
-      resumeVideoId: item.videoId || null,
-      resumeSeason: item.season,
-      resumeEpisode: item.episode,
-      resumeEpisodeTitle: item.episodeTitle || ""
+    const matchesItem = (entry) => {
+      if (String(entry?.contentId || "") !== contentId) {
+        return false;
+      }
+      if (!videoId) {
+        return true;
+      }
+      const entryVideoId = String(entry?.videoId || "");
+      return !entryVideoId || entryVideoId === videoId;
+    };
+    this.allProgress = Array.isArray(this.allProgress) ? this.allProgress.filter((entry) => !matchesItem(entry)) : [];
+    this.continueWatching = Array.isArray(this.continueWatching) ? this.continueWatching.filter((entry) => !matchesItem(entry)) : [];
+    this.continueWatchingDisplay = Array.isArray(this.continueWatchingDisplay)
+      ? this.continueWatchingDisplay.filter((entry) => !matchesItem(entry))
+      : [];
+    this.nextUpProgressCandidates = Array.isArray(this.nextUpProgressCandidates)
+      ? this.nextUpProgressCandidates.filter((entry) => !matchesItem(entry))
+      : [];
+    this.continueWatchingLoading = false;
+    if (this.layoutMode === "modern") {
+      this.heroItem = this.pickInitialHero();
+    }
+  },
+
+  async toggleContinueWatchingWatched(item) {
+    const normalized = normalizeContinueWatchingItem(item);
+    if (!normalized?.contentId) {
+      return false;
+    }
+    if (this.isContinueWatchingItemWatched(normalized)) {
+      await watchedItemsRepository.unmark(normalized.contentId);
+      this.watchedItems = Array.isArray(this.watchedItems)
+        ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(normalized.contentId))
+        : [];
+      return true;
+    }
+    await watchedItemsRepository.mark({
+      contentId: normalized.contentId,
+      contentType: normalized.type || "movie",
+      title: normalized.title || normalized.contentId || "Untitled",
+      watchedAt: Date.now()
     });
+    await watchProgressRepository.saveProgress({
+      contentId: normalized.contentId,
+      contentType: normalized.type || "movie",
+      videoId: normalized.videoId || null,
+      season: normalized.season,
+      episode: normalized.episode,
+      positionMs: 100,
+      durationMs: 100,
+      updatedAt: Date.now()
+    });
+    this.watchedItems = [
+      {
+        contentId: normalized.contentId,
+        contentType: normalized.type || "movie",
+        title: normalized.title || normalized.contentId || "Untitled",
+        watchedAt: Date.now()
+      },
+      ...(Array.isArray(this.watchedItems) ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(normalized.contentId)) : [])
+    ];
+    this.pruneContinueWatchingItem(normalized);
+    return true;
+  },
+
+  async removeContinueWatchingItem(item) {
+    const normalized = normalizeContinueWatchingItem(item);
+    if (!normalized?.contentId) {
+      return false;
+    }
+    await watchProgressRepository.removeProgress(normalized.contentId, normalized.videoId || null);
+    this.pruneContinueWatchingItem(normalized);
+    return true;
+  },
+
+  async activateContinueWatchingMenuOption() {
+    const item = this.getContinueWatchingMenuItem();
+    const options = this.getContinueWatchingMenuOptions();
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.continueWatchingMenu?.optionIndex || 0)))];
+    if (!item || !option) {
+      return false;
+    }
+    const anchorIndex = Math.max(0, Number(this.continueWatchingMenu?.index || 0));
+    if (option.action === "resume") {
+      return this.openContinueWatchingFromItem(item);
+    }
+    if (option.action === "startOver") {
+      return this.openContinueWatchingFromItem(item, { startOver: true });
+    }
+    if (option.action === "details") {
+      return this.openContinueWatchingDetails(item);
+    }
+    if (option.action === "toggleWatched") {
+      await this.toggleContinueWatchingWatched(item);
+    } else if (option.action === "remove") {
+      await this.removeContinueWatchingItem(item);
+    } else {
+      return false;
+    }
+    this.continueWatchingMenu = null;
+    this.pendingContinueWatchingFocusIndex = anchorIndex;
+    this.render();
+    return true;
+  },
+
+  openContinueWatchingFromNode(node) {
+    const item = this.getContinueWatchingItemFromNode(node);
+    this.openContinueWatchingFromItem(item);
   },
 
   scheduleModernHeroUpdate(node) {
@@ -2032,6 +2472,16 @@ export const HomeScreen = {
       if (!targetRowNodes || !targetRowNodes.length) {
         return true;
       }
+      const currentRowKey = this.getNodeRowKey(current);
+      const targetRowKey = this.getNodeRowKey(targetRowNodes[0]);
+      if (
+        direction === "down"
+        && this.continueWatchingLoading
+        && currentRowKey === "continue_watching"
+        && targetRowKey !== "continue_watching"
+      ) {
+        return true;
+      }
       const target = this.resolvePreferredNodeForRow(targetRowNodes, col);
       return this.focusNode(current, target, direction) || true;
     }
@@ -2065,8 +2515,17 @@ export const HomeScreen = {
     }
     if (!this.boundHomeClickHandler) {
       this.boundHomeClickHandler = (event) => {
-        const target = event?.target?.closest?.(".home-main .focusable");
+        const target = event?.target?.closest?.(".home-main .focusable, .hold-menu .focusable");
         if (!target || !this.container?.contains(target)) {
+          return;
+        }
+        if (target.closest(".hold-menu")) {
+          const optionIndex = Number(target.dataset.holdIndex || 0);
+          this.continueWatchingMenu = {
+            ...(this.continueWatchingMenu || {}),
+            optionIndex
+          };
+          void this.activateContinueWatchingMenuOption();
           return;
         }
         const action = String(target.dataset.action || "");
@@ -2100,6 +2559,9 @@ export const HomeScreen = {
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
     this.homeRouteEnterPending = true;
+    this.continueWatchingMenu = null;
+    this.pendingContinueWatchingFocusIndex = null;
+    this.cancelPendingContinueWatchingEnter();
     this.forceInitialContinueWatchingFocus = false;
     this.continueWatchingLoading = false;
     const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
@@ -2120,12 +2582,19 @@ export const HomeScreen = {
 
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.hasAppliedInitialContinueWatchingFocus = false;
+    const profiles = await ProfileManager.getProfiles();
+    const activeProfile = profiles.find((entry) => String(entry.id) === activeProfileId) || profiles[0] || null;
+    const bootBackground = buildProfileBackgroundStyle(activeProfile?.avatarColorHex || DEFAULT_PROFILE_COLOR);
     this.container.innerHTML = `
       <div class="home-boot">
         <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
         <div class="home-boot-shimmer"></div>
       </div>
     `;
+    const bootNode = this.container.querySelector(".home-boot");
+    if (bootNode) {
+      bootNode.style.background = bootBackground;
+    }
     await this.loadData({ background: false });
   },
 
@@ -2163,11 +2632,15 @@ export const HomeScreen = {
       return;
     }
     this.rows = this.sortAndFilterRows(initialRows);
+    this.allProgress = await watchProgressRepository.getAll();
     this.continueWatching = await watchProgressRepository.getRecent(10);
+    this.watchedItems = await watchedItemsRepository.getAll(2000);
+    this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
+      .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
     if (token !== this.homeLoadToken) {
       return;
     }
-    this.continueWatchingLoading = Boolean(this.continueWatching?.length);
+    this.continueWatchingLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
     this.continueWatchingDisplay = [];
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
     this.heroIndex = 0;
@@ -2208,7 +2681,11 @@ export const HomeScreen = {
       });
     }
 
-    this.enrichContinueWatching(this.continueWatching).then((enriched) => {
+    this.enrichContinueWatching(this.continueWatching, {
+      allProgress: this.allProgress,
+      watchedItems: this.watchedItems,
+      nextUpProgressCandidates: this.nextUpProgressCandidates
+    }).then((enriched) => {
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
       }
@@ -2288,8 +2765,6 @@ export const HomeScreen = {
     this.expandedPosterNode = null;
     const shouldHoldHeroForContinueWatching = this.layoutMode === "modern"
       && Boolean(this.continueWatchingLoading)
-      && Array.isArray(this.continueWatching)
-      && this.continueWatching.length > 0
       && !this.continueWatchingDisplay?.length;
     const heroItem = shouldHoldHeroForContinueWatching
       ? null
@@ -2299,6 +2774,10 @@ export const HomeScreen = {
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
     const showCatalogTypeSuffix = this.layoutPrefs?.catalogTypeSuffixEnabled !== false;
+    const continueWatchingLoadingCount = Math.max(
+      Number(this.continueWatching?.length || 0),
+      Number(this.nextUpProgressCandidates?.length || 0)
+    );
     this.teardownGridStickyHeader();
 
     let mainContentMarkup = "";
@@ -2311,7 +2790,7 @@ export const HomeScreen = {
         heroCandidates: this.heroCandidates,
         continueWatchingItems: this.continueWatchingDisplay || [],
         continueWatchingLoading: Boolean(this.continueWatchingLoading),
-        continueWatchingLoadingCount: Number(this.continueWatching?.length || 0),
+        continueWatchingLoadingCount,
         showHeroSection,
         showPosterLabels,
         showCatalogTypeSuffix,
@@ -2329,7 +2808,7 @@ export const HomeScreen = {
       const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
         rowKey: "continue_watching",
         loading: Boolean(this.continueWatchingLoading),
-        loadingCount: Number(this.continueWatching?.length || 0)
+        loadingCount: continueWatchingLoadingCount
       });
       const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
         layoutMode: this.layoutMode,
@@ -2362,6 +2841,7 @@ export const HomeScreen = {
           </div>
         </main>
       </div>
+      ${this.renderContinueWatchingMenu()}
     `;
 
     bindRootSidebarEvents(this.container, {
@@ -2372,10 +2852,35 @@ export const HomeScreen = {
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
-    if (shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
+    if (this.continueWatchingMenu) {
+      this.applyContinueWatchingMenuFocus();
+    } else if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
+      const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
+      const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
+        || cards[cards.length - 1]
+        || null;
+      this.pendingContinueWatchingFocusIndex = null;
+      if (target) {
+        this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+        target.classList.add("focused");
+        this.focusWithoutAutoScroll(target);
+        this.lastMainFocus = target;
+        this.rememberMainRowFocus(target);
+        this.ensureTrackHorizontalVisibility(target);
+        this.ensureMainVerticalVisibility(target);
+      } else {
+        ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
+        const current = this.container.querySelector(".home-main .focusable.focused");
+        if (current && this.isMainNode(current)) {
+          this.lastMainFocus = current;
+          this.scheduleModernHeroUpdate(current);
+          this.scheduleFocusedPosterFlow(current);
+        }
+      }
+    } else if (shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
       this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
       this.lastMainFocus = null;
-      this.hasAppliedInitialContinueWatchingFocus = false;
+      this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
     } else if (this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
       this.forceInitialContinueWatchingFocus = false;
       this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
@@ -2437,34 +2942,299 @@ export const HomeScreen = {
     };
   },
 
-  async enrichContinueWatching(items = []) {
-    const enriched = await Promise.all((items || []).map(async (item) => {
+  selectNextUpProgressCandidates(allProgress = [], inProgressItems = []) {
+    const cutoffMs = Date.now() - (CW_DAYS_CAP * 24 * 60 * 60 * 1000);
+    const inProgressSeriesIds = new Set(
+      (Array.isArray(inProgressItems) ? inProgressItems : [])
+        .filter((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        .map((item) => String(item?.contentId || "").trim())
+        .filter(Boolean)
+    );
+
+    const latestCompletedByContent = new Map();
+    (Array.isArray(allProgress) ? allProgress : []).forEach((entry) => {
+      if (Number(entry?.updatedAt || 0) < cutoffMs) {
+        return;
+      }
+      const contentId = String(entry?.contentId || "").trim();
+      if (!contentId || inProgressSeriesIds.has(contentId)) {
+        return;
+      }
+      if (!isSeriesTypeForContinueWatching(entry?.contentType)) {
+        return;
+      }
+      const season = Number(entry?.season || 0);
+      const episode = Number(entry?.episode || 0);
+      if (season <= 0 || episode <= 0 || !isCompletedForContinueWatching(entry)) {
+        return;
+      }
+
+      const existing = latestCompletedByContent.get(contentId);
+      if (!existing) {
+        latestCompletedByContent.set(contentId, entry);
+        return;
+      }
+
+      const existingUpdated = Number(existing.updatedAt || 0);
+      const incomingUpdated = Number(entry.updatedAt || 0);
+      if (incomingUpdated > existingUpdated) {
+        latestCompletedByContent.set(contentId, entry);
+        return;
+      }
+      if (incomingUpdated === existingUpdated) {
+        const existingKey = (Number(existing.season || 0) * 1000) + Number(existing.episode || 0);
+        const incomingKey = (season * 1000) + episode;
+        if (incomingKey > existingKey) {
+          latestCompletedByContent.set(contentId, entry);
+        }
+      }
+    });
+
+    return Array.from(latestCompletedByContent.values())
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  },
+
+  buildWatchedEpisodeIndex(watchedItems = []) {
+    const byContent = new Map();
+    (Array.isArray(watchedItems) ? watchedItems : []).forEach((entry) => {
+      const contentId = String(entry?.contentId || "").trim();
+      const season = Number(entry?.season || 0);
+      const episode = Number(entry?.episode || 0);
+      if (!contentId || season <= 0 || episode <= 0) {
+        return;
+      }
+      if (!byContent.has(contentId)) {
+        byContent.set(contentId, new Set());
+      }
+      byContent.get(contentId).add(episodeKey(season, episode));
+    });
+    return byContent;
+  },
+
+  buildEpisodeProgressIndex(allProgress = [], contentId = "") {
+    const targetContentId = String(contentId || "").trim();
+    const byEpisode = new Map();
+    if (!targetContentId) {
+      return byEpisode;
+    }
+
+    (Array.isArray(allProgress) ? allProgress : []).forEach((entry) => {
+      if (String(entry?.contentId || "").trim() !== targetContentId) {
+        return;
+      }
+      const season = Number(entry?.season || 0);
+      const episode = Number(entry?.episode || 0);
+      if (season <= 0 || episode <= 0) {
+        return;
+      }
+      const key = episodeKey(season, episode);
+      const existing = byEpisode.get(key);
+      if (!existing || Number(entry?.updatedAt || 0) > Number(existing?.updatedAt || 0)) {
+        byEpisode.set(key, entry);
+      }
+    });
+
+    return byEpisode;
+  },
+
+  async fetchMetaForContinueWatching(contentType, contentId, timeoutMs = 1800) {
+    const normalizedType = String(contentType || "").trim().toLowerCase();
+    const typeCandidates = [];
+    if (normalizedType) {
+      typeCandidates.push(normalizedType);
+    }
+    if (isSeriesTypeForContinueWatching(normalizedType)) {
+      typeCandidates.push("series", "tv");
+    } else {
+      typeCandidates.push("movie");
+    }
+
+    const seenTypes = new Set();
+    for (const type of typeCandidates) {
+      const normalizedCandidate = String(type || "").trim().toLowerCase();
+      if (!normalizedCandidate || seenTypes.has(normalizedCandidate)) {
+        continue;
+      }
+      seenTypes.add(normalizedCandidate);
       try {
         const result = await withTimeout(
-          metaRepository.getMetaFromAllAddons(item.contentType || "movie", item.contentId),
-          1800,
+          metaRepository.getMetaFromAllAddons(normalizedCandidate, contentId),
+          timeoutMs,
           { status: "error", message: "timeout" }
         );
         if (result?.status === "success" && result?.data) {
+          return result.data;
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  },
+
+  resolveNextUpEpisode(meta = {}, completedProgress = {}, allProgress = [], watchedEpisodeKeys = new Set()) {
+    const episodes = normalizeEpisodeEntries(meta?.videos || []);
+    if (!episodes.length) {
+      return null;
+    }
+
+    const progressByEpisode = this.buildEpisodeProgressIndex(allProgress, completedProgress?.contentId);
+    const anchorVideoId = String(completedProgress?.videoId || "").trim();
+    let anchorIndex = anchorVideoId
+      ? episodes.findIndex((entry) => String(entry?.id || "") === anchorVideoId)
+      : -1;
+
+    const anchorSeason = Number(completedProgress?.season || 0);
+    const anchorEpisode = Number(completedProgress?.episode || 0);
+    if (anchorIndex < 0 && anchorSeason > 0 && anchorEpisode > 0) {
+      anchorIndex = episodes.findIndex((entry) => Number(entry.season || 0) === anchorSeason && Number(entry.episode || 0) === anchorEpisode);
+    }
+
+    if (anchorIndex < 0) {
+      let latestCompleted = null;
+      progressByEpisode.forEach((entry) => {
+        if (!isCompletedForContinueWatching(entry)) {
+          return;
+        }
+        if (!latestCompleted || Number(entry.updatedAt || 0) > Number(latestCompleted.updatedAt || 0)) {
+          latestCompleted = entry;
+        }
+      });
+      if (latestCompleted) {
+        anchorIndex = episodes.findIndex((entry) => (
+          Number(entry.season || 0) === Number(latestCompleted.season || 0)
+          && Number(entry.episode || 0) === Number(latestCompleted.episode || 0)
+        ));
+      }
+    }
+
+    if (anchorIndex < 0) {
+      return null;
+    }
+
+    for (let index = anchorIndex + 1; index < episodes.length; index += 1) {
+      const candidate = episodes[index];
+      const key = episodeKey(candidate.season, candidate.episode);
+      const candidateProgress = progressByEpisode.get(key);
+      if (watchedEpisodeKeys?.has?.(key)) {
+        continue;
+      }
+      if (candidateProgress && isCompletedForContinueWatching(candidateProgress)) {
+        continue;
+      }
+      if (candidateProgress && shouldTreatAsInProgressForContinueWatching(candidateProgress)) {
+        return null;
+      }
+      return candidate;
+    }
+
+    return null;
+  },
+
+  async buildNextUpItems({
+    allProgress = [],
+    inProgressItems = [],
+    nextUpProgressCandidates = [],
+    watchedItems = []
+  } = {}) {
+    const resolvedCandidates = (Array.isArray(nextUpProgressCandidates) && nextUpProgressCandidates.length)
+      ? nextUpProgressCandidates
+      : this.selectNextUpProgressCandidates(allProgress, inProgressItems);
+
+    if (!resolvedCandidates.length) {
+      return [];
+    }
+
+    const neededSlots = Math.max(0, CW_MAX_VISIBLE_ITEMS - Math.min(CW_MAX_VISIBLE_ITEMS, Number(inProgressItems?.length || 0)));
+    const lookupCount = Math.min(CW_MAX_NEXT_UP_LOOKUPS, neededSlots || CW_MAX_VISIBLE_ITEMS);
+    const limitedCandidates = resolvedCandidates.slice(0, lookupCount);
+    const watchedEpisodeIndex = this.buildWatchedEpisodeIndex(watchedItems);
+
+    const nextUpItems = await Promise.all(limitedCandidates.map(async (progressEntry) => {
+      const contentType = String(progressEntry?.contentType || "series").toLowerCase();
+      const contentId = String(progressEntry?.contentId || "").trim();
+      if (!contentId || !isSeriesTypeForContinueWatching(contentType)) {
+        return null;
+      }
+
+      let meta = null;
+      try {
+        meta = await this.fetchMetaForContinueWatching(contentType, contentId, 2200);
+      } catch (error) {
+        console.warn("Next up meta lookup failed", error);
+      }
+
+      if (!meta) {
+        return null;
+      }
+
+      const watchedEpisodeKeys = watchedEpisodeIndex.get(contentId) || new Set();
+      const nextEpisode = this.resolveNextUpEpisode(meta, progressEntry, allProgress, watchedEpisodeKeys);
+      if (!nextEpisode) {
+        return null;
+      }
+      const hasAired = hasEpisodeAiredForContinueWatching(nextEpisode.released);
+
+      return {
+        contentId,
+        contentType,
+        videoId: nextEpisode.id || null,
+        season: Number(nextEpisode.season || 0) || null,
+        episode: Number(nextEpisode.episode || 0) || null,
+        episodeTitle: firstNonEmpty(nextEpisode.title),
+        positionMs: 0,
+        durationMs: 0,
+        updatedAt: Number(progressEntry?.updatedAt || Date.now()),
+        isNextUp: true,
+        hasAired,
+        title: meta.name || prettyId(contentId),
+        landscapePoster: firstNonEmpty(meta.landscapePoster, meta.thumbnail, meta.backdrop, meta.background, nextEpisode.thumbnail, meta.poster),
+        episodeThumbnail: firstNonEmpty(nextEpisode.thumbnail),
+        poster: firstNonEmpty(meta.poster, nextEpisode.thumbnail, meta.thumbnail, meta.background, meta.backdrop),
+        background: firstNonEmpty(meta.background, meta.backdrop, nextEpisode.thumbnail, meta.poster),
+        backdrop: firstNonEmpty(meta.backdrop, meta.background, nextEpisode.thumbnail),
+        thumbnail: firstNonEmpty(nextEpisode.thumbnail, meta.thumbnail, meta.poster, meta.background),
+        logo: firstNonEmpty(meta.logo),
+        description: firstNonEmpty(nextEpisode.overview, meta.description),
+        releaseInfo: firstNonEmpty(nextEpisode.released, meta.releaseInfo),
+        imdbRating: resolveImdbRating(meta),
+        genres: Array.isArray(meta.genres) ? meta.genres : [],
+        runtimeMinutes: Number(meta.runtimeMinutes ?? meta.runtime ?? 0) || 0,
+        ageRating: firstNonEmpty(meta.ageRating, meta.age_rating),
+        status: firstNonEmpty(meta.status),
+        language: firstNonEmpty(meta.language),
+        country: firstNonEmpty(meta.country)
+      };
+    }));
+
+    return nextUpItems
+      .filter(Boolean)
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  },
+
+  async enrichContinueWatching(items = [], options = {}) {
+    const inProgressItems = await Promise.all((items || []).map(async (item) => {
+      try {
+        const meta = await this.fetchMetaForContinueWatching(item.contentType || "movie", item.contentId, 1800);
+        if (meta) {
           return {
             ...item,
-            title: result.data.name || prettyId(item.contentId),
-            landscapePoster: result.data.landscapePoster || result.data.thumbnail || result.data.backdrop || result.data.background || null,
-            episodeThumbnail: result.data.episodeThumbnail || null,
-            poster: result.data.poster || result.data.thumbnail || result.data.background || result.data.backdrop || null,
-            background: result.data.background || result.data.backdrop || result.data.thumbnail || result.data.poster || null,
-            backdrop: result.data.backdrop || result.data.background || null,
-            thumbnail: result.data.thumbnail || result.data.poster || null,
-            logo: result.data.logo || null,
-            description: result.data.description || "",
-            releaseInfo: result.data.releaseInfo || "",
-            imdbRating: resolveImdbRating(result.data),
-            genres: Array.isArray(result.data.genres) ? result.data.genres : [],
-            runtimeMinutes: Number(result.data.runtimeMinutes ?? result.data.runtime ?? 0) || 0,
-            ageRating: firstNonEmpty(result.data.ageRating, result.data.age_rating),
-            status: firstNonEmpty(result.data.status),
-            language: firstNonEmpty(result.data.language),
-            country: firstNonEmpty(result.data.country)
+            title: meta.name || prettyId(item.contentId),
+            landscapePoster: meta.landscapePoster || meta.thumbnail || meta.backdrop || meta.background || null,
+            episodeThumbnail: meta.episodeThumbnail || null,
+            poster: meta.poster || meta.thumbnail || meta.background || meta.backdrop || null,
+            background: meta.background || meta.backdrop || meta.thumbnail || meta.poster || null,
+            backdrop: meta.backdrop || meta.background || null,
+            thumbnail: meta.thumbnail || meta.poster || null,
+            logo: meta.logo || null,
+            description: meta.description || "",
+            releaseInfo: meta.releaseInfo || "",
+            imdbRating: resolveImdbRating(meta),
+            genres: Array.isArray(meta.genres) ? meta.genres : [],
+            runtimeMinutes: Number(meta.runtimeMinutes ?? meta.runtime ?? 0) || 0,
+            ageRating: firstNonEmpty(meta.ageRating, meta.age_rating),
+            status: firstNonEmpty(meta.status),
+            language: firstNonEmpty(meta.language),
+            country: firstNonEmpty(meta.country)
           };
         }
       } catch (error) {
@@ -2491,7 +3261,24 @@ export const HomeScreen = {
         episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
       };
     }));
-    return enriched;
+
+    const nextUpItems = await this.buildNextUpItems({
+      allProgress: options?.allProgress || [],
+      inProgressItems,
+      nextUpProgressCandidates: options?.nextUpProgressCandidates || [],
+      watchedItems: options?.watchedItems || []
+    });
+
+    const inProgressSeriesIds = new Set(
+      inProgressItems
+        .filter((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        .map((item) => String(item?.contentId || "").trim())
+        .filter(Boolean)
+    );
+
+    return [...inProgressItems, ...nextUpItems.filter((item) => !inProgressSeriesIds.has(String(item?.contentId || "").trim()))]
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
+      .slice(0, CW_MAX_VISIBLE_ITEMS);
   },
 
   pickHeroItem(rows) {
@@ -2599,6 +3386,29 @@ export const HomeScreen = {
 
   onKeyDown(event) {
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
+    const code = Number(event?.keyCode || 0);
+    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    if (code !== 13 || !currentFocusedNode?.matches?.(".home-continue-card.focusable")) {
+      this.cancelPendingContinueWatchingEnter();
+    }
+    if (this.continueWatchingMenu) {
+      if (Platform.isBackEvent(event)) {
+        event.preventDefault?.();
+        this.closeContinueWatchingMenu();
+        return;
+      }
+      if (code === 38 || code === 40) {
+        event.preventDefault?.();
+        this.moveContinueWatchingMenuFocus(code === 38 ? -1 : 1);
+        return;
+      }
+      if (code === 13) {
+        event.preventDefault?.();
+        void this.activateContinueWatchingMenuOption();
+        return;
+      }
+      return;
+    }
     if (Platform.isBackEvent(event)) {
       event.preventDefault?.();
       if (this.layoutMode === "modern") {
@@ -2616,7 +3426,6 @@ export const HomeScreen = {
       }
       return;
     }
-    const code = Number(event?.keyCode || 0);
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;
@@ -2630,6 +3439,14 @@ export const HomeScreen = {
       this.cancelFocusedPosterFlow();
     }
     if (this.handleHomeDpad(event)) {
+      return;
+    }
+    const wantsContinueWatchingMenu = currentFocusedNode?.matches?.(".home-continue-card.focusable")
+      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
+    if (wantsContinueWatchingMenu) {
+      event.preventDefault?.();
+      this.cancelPendingContinueWatchingEnter();
+      this.openContinueWatchingMenu(currentFocusedNode);
       return;
     }
     if (code === 76) {
@@ -2658,11 +3475,13 @@ export const HomeScreen = {
     if (action === "openDetail") this.openDetailFromNode(current);
     if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
     if (action === "resumeProgress") {
-      this.openContinueWatchingFromNode(current);
+      this.scheduleContinueWatchingEnter(current);
     }
   },
 
   cleanup() {
+    this.cancelPendingContinueWatchingEnter();
+    this.continueWatchingMenu = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.stopHeroRotation();

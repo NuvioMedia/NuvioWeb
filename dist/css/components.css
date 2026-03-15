@@ -806,7 +806,9 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 26px;
-  background: radial-gradient(140% 90% at 70% 5%, rgba(180, 48, 30, 0.26), transparent 40%), #06090e;
+  background:
+    linear-gradient(180deg, rgba(35, 62, 91, 1) 0%, rgba(18, 29, 44, 1) 42%, rgba(13, 13, 13, 1) 100%),
+    linear-gradient(90deg, rgba(30, 136, 229, 0.26) 0%, rgba(30, 136, 229, 0.08) 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%);
 }
 
 .home-boot-logo {
@@ -1914,6 +1916,7 @@ button:focus-visible {
 .discover-card,
 .discover-action-card {
   width: 248px;
+  scroll-margin-block: 12px;
   transition: transform 180ms ease, filter 180ms ease;
 }
 
@@ -2142,14 +2145,13 @@ button:focus-visible {
   border-radius: 12px;
   overflow: hidden;
   background: var(--card-bg);
-  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .search-result-card.focused .search-result-poster-wrap {
   border-color: var(--focus-color);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
 }
 
 .search-result-poster {
@@ -2195,15 +2197,13 @@ button:focus-visible {
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.06);
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .search-seeall-card.focused .search-seeall-inner {
   border-color: var(--focus-color);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: var(--focus-bg);
+  box-shadow: 0 0 0 2px var(--focus-color);
 }
 
 .search-seeall-arrow {
@@ -2387,6 +2387,7 @@ button:focus-visible {
   min-width: 174px;
   min-height: 62px;
   padding: 0 22px;
+  box-sizing: border-box;
   border-radius: 16px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
@@ -2479,6 +2480,13 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.library-grid-year {
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 1.25;
+  color: var(--text-secondary);
+}
+
 .library-empty-state {
   min-height: 640px;
   display: flex;
@@ -2562,6 +2570,8 @@ button:focus-visible {
 
 .library-dialog {
   width: min(620px, calc(100vw - 48px));
+  max-height: min(88vh, 760px);
+  overflow-y: auto;
   border-radius: 18px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
@@ -2660,6 +2670,7 @@ button:focus-visible {
 .library-dialog-input,
 .library-dialog-textarea {
   width: 100%;
+  box-sizing: border-box;
   border-radius: 14px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
@@ -2889,13 +2900,13 @@ button:focus-visible {
   flex: 0 0 clamp(280px, 22vw, 360px);
   min-height: 220px;
   border-radius: 14px;
-  border: 2px solid transparent;
+  border: 0;
   background: rgba(13, 19, 27, 0.92);
   overflow: hidden;
 }
 
 .home-progress-card.focused {
-  border-color: rgba(245, 249, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(245, 249, 255, 0.95);
 }
 
 .home-progress-poster {
@@ -3232,14 +3243,16 @@ button:focus-visible {
   aspect-ratio: 2 / 3;
   border: 2px solid transparent;
   border-radius: calc(var(--home-poster-radius) - 2px);
+  background-color: transparent;
   overflow: hidden;
-  transition: transform 180ms ease, border-color 180ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .home-screen-shell .home-poster-card.focused .home-poster-frame {
-  border-color: #fff;
-  transform: scale(1.02);
-  transform-origin: center center;
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
+  transform: none;
 }
 
 .home-screen-shell .home-poster-card .content-poster,
@@ -3383,7 +3396,7 @@ button:focus-visible {
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: inherit;
   background: rgba(255, 255, 255, 0.06);
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
 
 .home-screen-shell .home-seeall-label {
@@ -3413,10 +3426,8 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-seeall-card.focused .home-seeall-card-inner {
   border-color: var(--focus-color);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: var(--focus-bg);
+  box-shadow: 0 0 0 2px var(--focus-color);
 }
 
 .home-screen-shell.home-layout-classic .home-seeall-card.focused,
@@ -3427,10 +3438,8 @@ button:focus-visible {
 .home-screen-shell.home-layout-classic .home-seeall-card.focused .home-seeall-card-inner,
 .home-screen-shell.home-layout-grid .home-seeall-card.focused .home-seeall-card-inner {
   border-color: var(--focus-color);
-  background: rgba(255, 255, 255, 0.1);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  background: var(--focus-bg);
+  box-shadow: 0 0 0 2px var(--focus-color);
 }
 
 .home-screen-shell .home-row-continue .home-track {
@@ -3447,6 +3456,7 @@ button:focus-visible {
 .home-screen-shell .home-continue-media {
   position: relative;
   height: var(--home-continue-height);
+  border: 0;
   border-radius: 10px;
   overflow: hidden;
   background:
@@ -3454,6 +3464,20 @@ button:focus-visible {
     linear-gradient(145deg, #393939, #111);
   background-position: center;
   background-size: cover;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+.home-screen-shell .home-continue-card.focused,
+.home-screen-shell .home-continue-card.home-content-card.focused {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  transform: none !important;
+}
+
+.home-screen-shell .home-continue-card.focused .home-continue-media {
+  box-shadow: inset 0 0 0 2px var(--focus-color), 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
 }
 
 .home-screen-shell .home-continue-media::after {
@@ -3527,6 +3551,86 @@ button:focus-visible {
   background: #9e9e9e;
 }
 
+.hold-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.hold-menu {
+  width: min(520px, calc(100vw - 48px));
+  padding: 34px 34px 28px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-elevated);
+  box-sizing: border-box;
+}
+
+.hold-menu-header {
+  margin-bottom: 26px;
+  text-align: center;
+}
+
+.hold-menu-kicker {
+  color: #b3b3b3;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hold-menu-title {
+  margin: 10px 0 0;
+  color: #fff;
+  font-size: 32px;
+  line-height: 1.16;
+  font-weight: 700;
+}
+
+.hold-menu-subtitle {
+  margin: 16px 0 0;
+  color: #b3b3b3;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.hold-menu-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hold-menu-button {
+  width: 100%;
+  min-height: 58px;
+  padding: 16px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  background: var(--card-bg);
+  color: #fff;
+  text-align: left;
+  font-size: 17px;
+  line-height: 1.2;
+  font-weight: 600;
+  box-sizing: border-box;
+}
+
+.hold-menu-button.focused {
+  background: var(--focus-bg);
+  border-color: var(--focus-color);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px var(--focus-color);
+}
+
+.hold-menu-button.danger {
+  background: #4a2323;
+}
+
 .home-screen-shell .home-continue-media-loading {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
@@ -3539,7 +3643,13 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.home-screen-shell .home-continue-card-loading .home-continue-progress {
+  display: none;
+}
+
 .home-screen-shell .home-continue-card-loading .home-continue-badge {
+  color: transparent;
+  min-width: 70px;
   background: rgba(19, 19, 19, 0.94);
 }
 
@@ -3547,6 +3657,38 @@ button:focus-visible {
 .home-screen-shell .home-continue-card-loading .home-continue-subtitle,
 .home-screen-shell .home-continue-card-loading .home-continue-kicker {
   text-shadow: none;
+}
+
+.home-screen-shell .home-continue-copy-skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding-right: 96px;
+  padding-bottom: 4px;
+}
+
+.home-screen-shell .home-continue-skeleton-line {
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
+  background-size: 220% 100%;
+  animation: homeContinueLoadingShimmer 1.2s linear infinite;
+}
+
+.home-screen-shell .home-continue-skeleton-kicker {
+  width: 58px;
+  height: 12px;
+}
+
+.home-screen-shell .home-continue-skeleton-title {
+  width: var(--cw-skeleton-title, 138px);
+  height: 16px;
+}
+
+.home-screen-shell .home-continue-skeleton-subtitle {
+  width: var(--cw-skeleton-subtitle, 118px);
+  height: 12px;
+  opacity: 0.86;
 }
 
 @keyframes homeContinueLoadingShimmer {
@@ -3671,9 +3813,9 @@ button:focus-visible {
 .home-screen-shell.home-layout-classic .home-poster-card.focused .home-poster-frame,
 .home-screen-shell.home-layout-grid .home-poster-card.focused .home-poster-frame {
   transform: none;
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
 }
 
 .home-screen-shell.home-layout-classic .home-content-card,
@@ -3760,9 +3902,9 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-classic .home-continue-card.focused .home-continue-media,
 .home-screen-shell.home-layout-grid .home-continue-card.focused .home-continue-media {
-  box-shadow:
-    0 18px 44px rgba(0, 0, 0, 0.4),
-    0 0 0 2px rgba(255, 255, 255, 0.96);
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
 }
 
 .home-screen-shell.home-layout-grid .home-grid-catalogs {
@@ -4235,10 +4377,13 @@ button:focus-visible {
   height: var(--home-poster-height);
   aspect-ratio: auto;
   border-radius: 12px;
-  transition: border-color 180ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.focused .home-poster-frame {
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
   transform: none;
 }
 
@@ -5163,6 +5308,9 @@ button:focus-visible {
   gap: 10px;
   overflow-y: auto;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  scroll-padding-top: 8px;
+  scroll-padding-bottom: 8px;
 }
 
 .settings-dialog-list::-webkit-scrollbar {
@@ -5197,6 +5345,76 @@ button:focus-visible {
 .settings-dialog-option-label {
   font-size: 22px;
   line-height: 1.15;
+}
+
+.settings-language-dialog {
+  width: min(400px, calc(100vw - 80px));
+  max-height: min(480px, calc(100vh - 120px));
+}
+
+.settings-language-dialog-list {
+  max-height: 320px;
+  padding: 4px 2px 4px 0;
+}
+
+.settings-language-option {
+  min-height: 64px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  scroll-margin-block: 8px;
+}
+
+.settings-language-option.is-selected {
+  background: var(--focus-bg);
+  border-color: var(--focus-color);
+}
+
+.settings-language-option.focused {
+  background: var(--focus-bg);
+  border: 2px solid var(--focus-color) !important;
+}
+
+.settings-language-option-copy {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-language-option-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: 12px;
+}
+
+.settings-language-option-code {
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.settings-language-option-check {
+  color: var(--secondary-color);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.settings-language-option.is-selected .settings-dialog-option-label {
+  color: var(--secondary-color);
+}
+
+.settings-language-option.is-selected .settings-language-option-code,
+.settings-language-option.focused .settings-language-option-code {
+  color: var(--text-primary);
+}
+
+.settings-language-option.focused .settings-dialog-option-label {
+  color: #ffffff;
 }
 
 .settings-empty-state {
@@ -6011,6 +6229,10 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.player-controls-overlay.modal-blocked {
+  pointer-events: none;
+}
+
 .player-controls-top {
   align-self: flex-end;
   text-align: right;
@@ -6056,6 +6278,12 @@ button:focus-visible {
   margin-top: 4px;
   font-size: 20px;
   color: rgba(239, 245, 251, 0.9);
+}
+
+.player-meta-tertiary {
+  margin-top: 6px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.68);
 }
 
 .player-controls-bar {
@@ -6131,6 +6359,17 @@ button:focus-visible {
   filter: invert(1) brightness(1.15);
 }
 
+.player-control-icon-mask {
+  background-color: #ffffff;
+  filter: none;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+}
+
 .player-control-label {
   font-size: 13px;
   font-weight: 700;
@@ -6144,15 +6383,24 @@ button:focus-visible {
 
 .player-control-btn.is-primary {
   background: transparent;
-  color: #ffffff;
+  color: var(--secondary-color);
 }
 
-.player-control-btn.is-primary .player-control-icon {
-  filter: invert(1) brightness(1.15);
+.player-control-btn.is-primary.focused {
+  background: #ffffff;
+  color: #000000;
+}
+
+.player-control-btn.is-primary .player-control-icon:not(.player-control-icon-mask) {
+  filter: brightness(0) invert(1);
 }
 
 .player-control-btn.focused .player-control-icon {
   filter: none;
+}
+
+.player-control-btn.focused .player-control-icon-mask {
+  background-color: #000000;
 }
 
 .player-time-label {
@@ -6265,6 +6513,114 @@ button:focus-visible {
   transition: width 120ms linear;
 }
 
+.player-next-episode-card {
+  position: absolute;
+  right: 26px;
+  bottom: 30px;
+  z-index: 29;
+  width: 420px;
+  pointer-events: none;
+  transition: bottom 180ms ease, opacity 180ms ease;
+}
+
+.player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
+  bottom: 122px;
+}
+
+.player-next-episode-card.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-next-episode-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(25, 25, 25, 0.89);
+  box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
+}
+
+.player-next-episode-card-inner.is-selected {
+  border-width: 2px;
+  border-color: var(--secondary-color);
+}
+
+.player-next-episode-thumb-wrap {
+  position: relative;
+  width: 112px;
+  min-width: 112px;
+  height: 64px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.player-next-episode-thumb,
+.player-next-episode-thumb-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.player-next-episode-thumb-shade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 26%, rgba(0, 0, 0, 0.32) 100%);
+}
+
+.player-next-episode-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.player-next-episode-kicker {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.player-next-episode-title {
+  margin-top: 2px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-next-episode-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.player-next-episode-pill.is-playable {
+  color: #ffffff;
+}
+
+.player-next-episode-card-inner.is-selected .player-next-episode-pill.is-playable {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
+.player-next-episode-pill-icon {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.player-next-episode-pill-text {
+  font-size: 12px;
+}
+
 .player-aspect-toast {
   position: absolute;
   left: 50%;
@@ -6361,6 +6717,7 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   z-index: 34;
+  pointer-events: auto;
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0.52) 34%, rgba(0, 0, 0, 0.14) 100%),
     rgba(0, 0, 0, 0.32);
@@ -6401,7 +6758,8 @@ button:focus-visible {
 }
 
 .player-audio-modal {
-  width: 760px;
+  width: min(620px, calc(100vw - 104px));
+  padding: 30px 24px 22px;
 }
 
 .player-speed-modal {
@@ -6476,6 +6834,7 @@ button:focus-visible {
   grid-template-columns: 1fr auto;
   grid-template-rows: auto auto;
   column-gap: 12px;
+  scroll-margin-block: 10px;
 }
 
 .player-dialog-item.focused {
@@ -6515,6 +6874,10 @@ button:focus-visible {
 
 .player-dialog-item.selected .player-dialog-item-check {
   color: var(--player-text-primary);
+}
+
+.player-dialog-item.selected.focused .player-dialog-item-check {
+  color: var(--player-on-secondary);
 }
 
 .player-dialog-item-sub {
@@ -6764,6 +7127,9 @@ button:focus-visible {
   overflow-y: auto;
   scrollbar-width: none;
   padding-right: 6px;
+  scroll-behavior: smooth;
+  scroll-padding-top: 10px;
+  scroll-padding-bottom: 10px;
 }
 
 .player-subtitle-rail::-webkit-scrollbar,
@@ -6775,41 +7141,28 @@ button:focus-visible {
   display: none;
 }
 
-.player-audio-overlay-grid {
-  display: grid;
-  grid-template-columns: 460px 1fr;
-  gap: 14px;
-}
-
 .player-audio-track-list {
-  max-height: 62vh;
+  width: min(100%, 520px);
+  max-height: 56vh;
 }
 
-.player-audio-mix-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.player-audio-track-list .player-dialog-item {
+  min-height: 54px;
+  padding: 9px 12px;
 }
 
-.player-audio-mix-title {
+.player-audio-track-list .player-dialog-item-main {
+  font-size: 18px;
+  line-height: 1.12;
+}
+
+.player-audio-track-list .player-dialog-item-sub {
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.player-audio-track-list .player-dialog-item-check {
   font-size: 20px;
-  font-weight: 700;
-  color: var(--player-text-primary);
-}
-
-.player-audio-mix-value {
-  font-size: 16px;
-  color: var(--player-text-secondary);
-}
-
-.player-audio-mix-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.player-audio-mix-btn .player-dialog-item-main {
-  text-align: center;
 }
 
 .player-speed-modal .player-dialog-list {
@@ -8101,10 +8454,11 @@ button:focus-visible {
 .series-episode-thumb {
   position: relative;
   height: 263px;
+  border: 0;
   border-radius: 20px;
   background: var(--detail-bg-card) center center / cover no-repeat;
   overflow: hidden;
-  transition: box-shadow 180ms ease, transform 180ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .series-episode-card.focused {
@@ -8113,12 +8467,9 @@ button:focus-visible {
 }
 
 .series-episode-card.focused .series-episode-thumb {
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 2px #fff,
-    0 0 0 1px rgba(255, 255, 255, 0.08);
-  transform: scale(1.02);
-  transform-origin: center center;
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
+  transform: none;
 }
 
 .detail-morelike-card.focused {
@@ -8128,12 +8479,10 @@ button:focus-visible {
 }
 
 .detail-morelike-card.focused .detail-morelike-poster-wrap {
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 2px #fff,
-    0 0 0 1px rgba(255, 255, 255, 0.08);
-  transform: scale(1.02);
-  transform-origin: center center;
+  border-color: var(--focus-color);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
+  transform: none;
 }
 
 .series-episode-overlay {
@@ -8225,8 +8574,8 @@ button:focus-visible {
 
 .series-episode-status {
   position: absolute;
-  top: 16px;
-  left: 16px;
+  top: 22px;
+  left: 22px;
   width: 32px;
   height: 32px;
   border-radius: 999px;
@@ -8477,9 +8826,11 @@ button:focus-visible {
 .detail-morelike-poster-wrap {
   width: 100%;
   height: 146px;
+  border: 2px solid transparent;
   border-radius: 12px;
   overflow: visible;
-  transition: box-shadow 180ms ease, transform 180ms ease;
+  background-color: transparent;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .detail-morelike-poster {
@@ -9202,10 +9553,18 @@ button:focus-visible {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   padding: 24px 48px 32px;
   box-sizing: border-box;
   background: var(--bg-color);
   color: var(--text-color);
+  scroll-padding-top: 18px;
+  scroll-padding-bottom: 18px;
+}
+
+.seeall-shell::-webkit-scrollbar {
+  display: none;
 }
 
 .seeall-header {
@@ -9240,6 +9599,7 @@ button:focus-visible {
   border: none;
   justify-self: start;
   overflow: visible;
+  scroll-margin-block: 12px;
 }
 
 .seeall-card.focused {
@@ -9256,14 +9616,13 @@ button:focus-visible {
   overflow: hidden;
   background: var(--card-bg);
   margin-bottom: 8px;
-  transition: border-color 160ms ease, box-shadow 160ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .seeall-card.focused .seeall-card-poster-wrap {
   border-color: var(--focus-color);
-  box-shadow:
-    0 18px 40px rgba(0, 0, 0, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: 0 0 0 2px var(--focus-color);
+  background-color: var(--focus-bg);
 }
 
 .seeall-card-poster,
