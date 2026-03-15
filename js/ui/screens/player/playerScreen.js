@@ -1,6 +1,7 @@
 import { PlayerController } from "../../../core/player/playerController.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
 import { Router } from "../../navigation/router.js";
@@ -60,6 +61,16 @@ const LANGUAGE_CODE_ALIASES = {
   vie: "vi",
   zho: "zh"
 };
+const SUBTITLE_LANGUAGE_OFF_KEY = "__off__";
+const SUBTITLE_LANGUAGE_UNKNOWN_KEY = "__unknown__";
+const SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C5C", "#00FF88"];
+const SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
+const SUBTITLE_DELAY_STEP_MS = 250;
+const SUBTITLE_FONT_STEP = 10;
+const SUBTITLE_VERTICAL_OFFSET_STEP = 2;
+const AUDIO_AMPLIFICATION_MIN_DB = 0;
+const AUDIO_AMPLIFICATION_MAX_DB = 10;
+const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -471,6 +482,38 @@ function qualityLabelFromText(value) {
   return "Auto";
 }
 
+function formatSubtitleDelay(delayMs = 0) {
+  const seconds = Number(delayMs || 0) / 1000;
+  return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(3)}s`;
+}
+
+function normalizeSubtitleLanguageKey(value) {
+  const code = normalizeTrackLanguageCode(value);
+  if (code) {
+    return code;
+  }
+  const cleaned = cleanDisplayText(value);
+  return cleaned ? cleaned.toLowerCase() : SUBTITLE_LANGUAGE_UNKNOWN_KEY;
+}
+
+function subtitleLanguageLabel(languageKey) {
+  if (languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
+    return t("subtitle_none", {}, "Off");
+  }
+  if (languageKey === SUBTITLE_LANGUAGE_UNKNOWN_KEY) {
+    return t("common.unknown", {}, "Unknown");
+  }
+  return getTrackLanguageLabel({ language: languageKey }) || String(languageKey || "").toUpperCase();
+}
+
+function styleChipLabel(value = "") {
+  return String(value || "").replace(/^#/, "").toUpperCase();
+}
+
+function dbToGain(db = 0) {
+  return Math.pow(10, Number(db || 0) / 20);
+}
+
 function flattenStreamGroups(streamResult) {
   if (!streamResult || streamResult.status !== "success") {
     return [];
@@ -649,6 +692,11 @@ export const PlayerScreen = {
     this.subtitleDialogVisible = false;
     this.subtitleDialogTab = "builtIn";
     this.subtitleDialogIndex = 0;
+    this.subtitleLanguageRailIndex = 0;
+    this.subtitleOptionRailIndex = 0;
+    this.subtitleStyleRailIndex = 0;
+    this.subtitleFocusedRail = "language";
+    this.subtitleDialogScrollMode = "nearest";
     this.selectedSubtitleTrackIndex = -1;
     this.selectedAddonSubtitleId = null;
     this.builtInSubtitleCount = 0;
@@ -656,6 +704,8 @@ export const PlayerScreen = {
 
     this.audioDialogVisible = false;
     this.audioDialogIndex = 0;
+    this.audioMixFocusIndex = 0;
+    this.audioFocusedColumn = "tracks";
     this.selectedAudioTrackIndex = -1;
 
     this.sourcesPanelVisible = false;
@@ -667,6 +717,8 @@ export const PlayerScreen = {
 
     this.aspectModeIndex = 0;
     this.aspectToastTimer = null;
+    this.speedDialogVisible = false;
+    this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.indexOf(1));
 
     this.episodes = Array.isArray(params.episodes) ? params.episodes : [];
     this.episodePanelVisible = false;
@@ -696,7 +748,12 @@ export const PlayerScreen = {
     this.selectedManifestAudioTrackId = null;
     this.selectedManifestSubtitleTrackId = null;
     this.activePlaybackUrl = initialStreamUrl || null;
-    this.pendingPlaybackRestore = null;
+    this.pendingPlaybackRestore = Number(params.resumePositionMs || 0) > 0
+      ? {
+          timeSeconds: Number(params.resumePositionMs || 0) / 1000,
+          paused: false
+        }
+      : null;
     this.trackDiscoveryToken = 0;
     this.trackDiscoveryInProgress = false;
     this.trackDiscoveryTimer = null;
@@ -715,13 +772,31 @@ export const PlayerScreen = {
     this.controlsVisible = true;
     this.loadingVisible = true;
     this.moreActionsVisible = false;
+    this.controlFocusZone = "buttons";
+    this.controlFocusIndex = 0;
     this.controlsHideTimer = null;
     this.tickTimer = null;
     this.videoListeners = [];
 
+    const playerSettings = PlayerSettingsStore.get();
+    this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
+    this.subtitleStyleSettings = {
+      ...playerSettings.subtitleStyle,
+      preferredLanguage: String(playerSettings.subtitleStyle?.preferredLanguage || playerSettings.subtitleLanguage || "system"),
+      secondaryPreferredLanguage: String(playerSettings.subtitleStyle?.secondaryPreferredLanguage || playerSettings.secondarySubtitleLanguage || "off")
+    };
+    this.audioAmplificationDb = clamp(Number(playerSettings.audioAmplificationDb || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
+    this.persistAudioAmplification = Boolean(playerSettings.persistAudioAmplification);
+    this.audioAmplificationAvailable = false;
+    this.audioContext = null;
+    this.audioGainNode = null;
+    this.audioMediaSource = null;
+
     this.renderPlayerUi();
     if (!this.isExternalFrameMode()) {
       this.bindVideoEvents();
+      this.applyAudioAmplification();
+      this.applySubtitlePresentationSettings();
     }
     this.renderEpisodePanel();
     this.applyAspectMode({ showToast: false });
@@ -771,6 +846,10 @@ export const PlayerScreen = {
       videoId: this.params.videoId || null,
       season: this.params.season == null ? null : Number(this.params.season),
       episode: this.params.episode == null ? null : Number(this.params.episode),
+      title: this.params.playerTitle || this.params.itemTitle || null,
+      poster: this.params.poster || null,
+      background: this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
+      episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
       requestHeaders,
       mediaSourceType
     };
@@ -1555,19 +1634,23 @@ export const PlayerScreen = {
         <div id="playerAspectToast" class="player-aspect-toast hidden"></div>
 
         <div id="playerSeekOverlay" class="player-seek-overlay hidden">
-          <div class="player-seek-overlay-top">
+          <div class="player-seek-overlay-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
+          <div class="player-seek-overlay-bottom">
             <span id="playerSeekDirection" class="player-seek-direction"></span>
-            <span id="playerSeekPreview" class="player-seek-preview">0:00</span>
+            <span id="playerSeekPreview" class="player-seek-preview">0:00 / 0:00</span>
           </div>
-          <div class="player-seek-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
         </div>
 
         <div id="playerModalBackdrop" class="player-modal-backdrop hidden"></div>
         <div id="playerSubtitleDialog" class="player-modal player-subtitle-modal hidden"></div>
         <div id="playerAudioDialog" class="player-modal player-audio-modal hidden"></div>
+        <div id="playerSpeedDialog" class="player-modal player-speed-modal hidden"></div>
         <div id="playerSourcesPanel" class="player-sources-panel hidden"></div>
 
         <div id="playerControlsOverlay" class="player-controls-overlay">
+          <div class="player-controls-gradient player-controls-gradient-top"></div>
+          <div class="player-controls-gradient player-controls-gradient-bottom"></div>
+
           <div class="player-controls-top">
             <div id="playerClock" class="player-clock">--:--</div>
             <div id="playerEndsAt" class="player-ends-at">${escapeHtml(t("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
@@ -1580,8 +1663,10 @@ export const PlayerScreen = {
             </div>
 
             <div class="player-controls-bar">
-              <div class="player-progress-track">
-                <div id="playerProgressFill" class="player-progress-fill"></div>
+              <div id="playerProgressShell" class="player-progress-shell">
+                <div class="player-progress-track">
+                  <div id="playerProgressFill" class="player-progress-fill"></div>
+                </div>
               </div>
 
               <div class="player-controls-row">
@@ -1600,6 +1685,7 @@ export const PlayerScreen = {
       this.renderControlButtons();
       this.renderSubtitleDialog();
       this.renderAudioDialog();
+      this.renderSpeedDialog();
       this.renderSourcesPanel();
       this.renderParentalGuideOverlay();
       this.renderSeekOverlay();
@@ -1620,8 +1706,10 @@ export const PlayerScreen = {
       modalBackdrop: uiRoot.querySelector("#playerModalBackdrop"),
       subtitleDialog: uiRoot.querySelector("#playerSubtitleDialog"),
       audioDialog: uiRoot.querySelector("#playerAudioDialog"),
+      speedDialog: uiRoot.querySelector("#playerSpeedDialog"),
       sourcesPanel: uiRoot.querySelector("#playerSourcesPanel"),
       controlsOverlay: uiRoot.querySelector("#playerControlsOverlay"),
+      progressShell: uiRoot.querySelector("#playerProgressShell"),
       clock: uiRoot.querySelector("#playerClock"),
       endsAt: uiRoot.querySelector("#playerEndsAt"),
       progressFill: uiRoot.querySelector("#playerProgressFill"),
@@ -1637,8 +1725,118 @@ export const PlayerScreen = {
       timeLabelText: "",
       seekWidth: "",
       seekPreviewText: "",
-      seekDirectionText: ""
+      seekDirectionText: "",
+      progressFocused: false
     };
+  },
+
+  getPlayerUiState() {
+    return {
+      isPlaying: !this.paused,
+      isBuffering: Boolean(this.loadingVisible),
+      currentPosition: Math.round(this.getPlaybackCurrentSeconds() * 1000),
+      duration: Math.round(this.getPlaybackDurationSeconds() * 1000),
+      title: String(this.params?.playerTitle || this.params?.itemId || "Untitled"),
+      currentSeason: this.params?.season == null ? null : Number(this.params.season),
+      currentEpisode: this.params?.episode == null ? null : Number(this.params.episode),
+      currentEpisodeTitle: String(this.params?.playerSubtitle || "").trim() || null,
+      currentStreamName: this.getCurrentStreamCandidate()?.label || null,
+      currentStreamUrl: this.getCurrentStreamCandidate()?.url || null,
+      showControls: Boolean(this.controlsVisible),
+      showSeekOverlay: Boolean(this.seekOverlayVisible),
+      pendingPreviewSeekPosition: this.seekPreviewSeconds == null ? null : Math.round(Number(this.seekPreviewSeconds || 0) * 1000),
+      playbackSpeed: Number(PlayerController.video?.playbackRate || 1),
+      showAudioOverlay: Boolean(this.audioDialogVisible),
+      showSubtitleOverlay: Boolean(this.subtitleDialogVisible),
+      subtitleDelayMs: Number(this.subtitleDelayMs || 0),
+      subtitleStyle: { ...this.subtitleStyleSettings },
+      audioAmplificationDb: Number(this.audioAmplificationDb || 0),
+      isAudioAmplificationAvailable: Boolean(this.audioAmplificationAvailable),
+      persistAudioAmplification: Boolean(this.persistAudioAmplification),
+      showEpisodesPanel: Boolean(this.episodePanelVisible),
+      episodesAll: Array.isArray(this.episodes) ? this.episodes : [],
+      showSourcesPanel: Boolean(this.sourcesPanelVisible),
+      isLoadingSourceStreams: Boolean(this.sourcesLoading),
+      sourceStreamsError: this.sourcesError || null,
+      sourceAllStreams: Array.isArray(this.streamCandidates) ? this.streamCandidates : [],
+      sourceSelectedAddonFilter: this.sourceFilter === "all" ? null : this.sourceFilter,
+      sourceFilteredStreams: this.getFilteredSources(),
+      sourceAvailableAddons: this.getSourceFilters().filter((entry) => entry !== "all")
+    };
+  },
+
+  persistPlayerPresentationSettings() {
+    PlayerSettingsStore.set({
+      subtitleDelayMs: Number(this.subtitleDelayMs || 0),
+      subtitleStyle: { ...this.subtitleStyleSettings },
+      subtitleLanguage: this.subtitleStyleSettings?.preferredLanguage || "system",
+      secondarySubtitleLanguage: this.subtitleStyleSettings?.secondaryPreferredLanguage || "off",
+      audioAmplificationDb: Number(this.audioAmplificationDb || 0),
+      persistAudioAmplification: Boolean(this.persistAudioAmplification)
+    });
+  },
+
+  ensureAudioAmplificationGraph() {
+    const video = PlayerController.video;
+    if (!video || this.audioGainNode) {
+      return Boolean(this.audioGainNode);
+    }
+    const AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+    if (typeof AudioContextCtor !== "function") {
+      return false;
+    }
+    try {
+      this.audioContext = this.audioContext || new AudioContextCtor();
+      this.audioMediaSource = this.audioMediaSource || this.audioContext.createMediaElementSource(video);
+      this.audioGainNode = this.audioGainNode || this.audioContext.createGain();
+      this.audioMediaSource.connect(this.audioGainNode);
+      this.audioGainNode.connect(this.audioContext.destination);
+      this.audioAmplificationAvailable = true;
+      return true;
+    } catch (_) {
+      this.audioAmplificationAvailable = false;
+      return false;
+    }
+  },
+
+  applyAudioAmplification() {
+    if (!this.ensureAudioAmplificationGraph()) {
+      this.audioAmplificationAvailable = false;
+      return;
+    }
+    try {
+      if (this.audioContext?.state === "suspended") {
+        void this.audioContext.resume().catch(() => {});
+      }
+      this.audioGainNode.gain.value = dbToGain(this.audioAmplificationDb);
+      this.audioAmplificationAvailable = true;
+    } catch (_) {
+      this.audioAmplificationAvailable = false;
+    }
+  },
+
+  applySubtitlePresentationSettings() {
+    const uiRoot = this.uiRefs?.root;
+    const video = PlayerController.video;
+    if (!uiRoot || !video) {
+      return;
+    }
+    const style = this.subtitleStyleSettings || {};
+    uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
+    uiRoot.style.setProperty("--player-subtitle-outline-color", String(style.outlineColor || "#000000"));
+    uiRoot.style.setProperty("--player-subtitle-font-size", `${clamp(Number(style.fontSize || 100), 70, 180)}%`);
+    uiRoot.style.setProperty("--player-subtitle-font-weight", style.bold ? "700" : "500");
+    uiRoot.style.setProperty("--player-subtitle-shadow", style.outlineEnabled
+      ? `0 0 2px ${style.outlineColor || "#000000"}, 0 0 4px ${style.outlineColor || "#000000"}`
+      : "none");
+    uiRoot.style.setProperty("--player-subtitle-offset", `${clamp(Number(style.verticalOffset || 0), -12, 12) * -2}vh`);
+    video.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
+    video.style.setProperty("--player-subtitle-outline-color", String(style.outlineColor || "#000000"));
+    video.style.setProperty("--player-subtitle-font-size", `${clamp(Number(style.fontSize || 100), 70, 180)}%`);
+    video.style.setProperty("--player-subtitle-font-weight", style.bold ? "700" : "500");
+    video.style.setProperty("--player-subtitle-shadow", style.outlineEnabled
+      ? `0 0 2px ${style.outlineColor || "#000000"}, 0 0 4px ${style.outlineColor || "#000000"}`
+      : "none");
   },
 
   updateModalBackdrop() {
@@ -1646,7 +1844,7 @@ export const PlayerScreen = {
     if (!modalBackdrop) {
       return;
     }
-    const hasModal = this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible;
+    const hasModal = this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible || this.speedDialogVisible;
     modalBackdrop.classList.toggle("hidden", !hasModal);
   },
 
@@ -1675,6 +1873,8 @@ export const PlayerScreen = {
       this.paused = false;
       this.updateLoadingVisibility();
       this.refreshTrackDialogs();
+      this.applyAudioAmplification();
+      this.applySubtitlePresentationSettings();
       this.updateUiTick();
       this.resetControlsAutoHide();
       if (!this.parentalGuideShown && this.parentalWarnings.length) {
@@ -1728,6 +1928,8 @@ export const PlayerScreen = {
       this.loadingVisible = false;
       this.updateLoadingVisibility();
       this.markPlaybackProgress();
+      this.applyAudioAmplification();
+      this.applySubtitlePresentationSettings();
       this.ensureTrackDataWarmup();
       this.startTrackDiscoveryWindow({ durationMs: 5000, intervalMs: 300 });
       setTimeout(() => {
@@ -1737,6 +1939,7 @@ export const PlayerScreen = {
 
     const onPlayable = () => {
       this.refreshTrackDialogs();
+      this.applySubtitlePresentationSettings();
       this.updateUiTick();
     };
 
@@ -1821,25 +2024,38 @@ export const PlayerScreen = {
   },
 
   getControlDefinitions() {
+    const uiState = this.getPlayerUiState();
     const base = [
       {
         action: "playPause",
         label: this.paused ? ">" : "II",
         icon: this.paused ? "assets/icons/ic_player_play.svg" : "assets/icons/ic_player_pause.svg",
-        title: "Play/Pause"
-      },
-      { action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t("subtitle_dialog_title", {}, "Subtitles") },
-      {
+        title: "Play/Pause",
+        primary: true
+      }
+    ];
+
+    if (this.hasSubtitleTracksAvailable()) {
+      base.push({ action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t("subtitle_dialog_title", {}, "Subtitles") });
+    }
+
+    if (this.hasAudioTracksAvailable()) {
+      base.push({
         action: "audioTrack",
         icon: this.selectedAudioTrackIndex >= 0 || this.selectedManifestAudioTrackId
           ? "assets/icons/ic_player_audio_filled.svg"
           : "assets/icons/ic_player_audio_outline.svg",
         title: t("audio_dialog_title", {}, "Audio")
-      },
-      { action: "source", icon: "assets/icons/ic_player_source.svg", title: t("sources_title", {}, "Sources") },
-      { action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t("episodes_panel_title", {}, "Episodes") },
-      { action: "more", label: this.moreActionsVisible ? "<" : ">", title: t("player_more_actions_title", {}, "More Actions") }
-    ];
+      });
+    }
+
+    base.push({ action: "source", icon: "assets/icons/ic_player_source.svg", title: t("sources_title", {}, "Sources") });
+
+    if (Array.isArray(uiState.episodesAll) && uiState.episodesAll.length) {
+      base.push({ action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t("episodes_panel_title", {}, "Episodes") });
+    }
+
+    base.push({ action: "more", label: this.moreActionsVisible ? "<" : ">", title: t("player_more_actions_title", {}, "More Actions") });
 
     if (!this.moreActionsVisible) {
       return base;
@@ -1847,8 +2063,8 @@ export const PlayerScreen = {
 
     return [
       ...base.slice(0, Math.max(0, base.length - 1)),
+      { action: "speed", label: `${Number(PlayerController.video?.playbackRate || 1).toFixed(Number(PlayerController.video?.playbackRate || 1) % 1 ? 2 : 0)}x`, title: t("player_playback_speed", {}, "Playback speed") },
       { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t("player_more_aspect_ratio", {}, "Aspect Ratio") },
-      { action: "source", icon: "assets/icons/ic_player_source.svg", title: t("sources_title", {}, "Sources") },
       { action: "backFromMore", label: "<", title: t("player_go_back", {}, "Back") }
     ];
   },
@@ -1862,11 +2078,11 @@ export const PlayerScreen = {
       return;
     }
 
-    const currentAction = wrap.querySelector(".player-control-btn.focused")?.dataset?.action || "";
     const controls = this.getControlDefinitions();
+    this.controlFocusIndex = clamp(this.controlFocusIndex, 0, Math.max(0, controls.length - 1));
 
     wrap.innerHTML = controls.map((control) => `
-      <button class="player-control-btn focusable"
+      <button class="player-control-btn focusable${control.primary ? " is-primary" : ""}"
               data-action="${control.action}"
               title="${escapeHtml(control.title || "")}">
         ${control.icon
@@ -1875,16 +2091,18 @@ export const PlayerScreen = {
       </button>
     `).join("");
 
-    const preferred = wrap.querySelector(`.player-control-btn[data-action="${currentAction}"]`)
-      || wrap.querySelector(".player-control-btn");
-
-    if (preferred) {
-      preferred.classList.add("focused");
+    const buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
+    buttons.forEach((button, index) => {
+      button.classList.toggle("focused", this.controlFocusZone === "buttons" && index === this.controlFocusIndex);
+    });
+    const progressShell = this.uiRefs?.progressShell;
+    if (progressShell) {
+      progressShell.classList.toggle("focused", this.controlFocusZone === "progress");
     }
   },
 
   isDialogOpen() {
-    return this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible;
+    return this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible || this.speedDialogVisible;
   },
 
   setControlsVisible(visible, { focus = false } = {}) {
@@ -1909,13 +2127,16 @@ export const PlayerScreen = {
   },
 
   focusFirstControl() {
-    const buttons = Array.from(this.container.querySelectorAll(".player-control-btn"));
-    if (!buttons.length) {
-      return;
-    }
-    buttons.forEach((node) => node.classList.remove("focused"));
-    buttons[0].classList.add("focused");
-    buttons[0].focus();
+    this.controlFocusZone = "buttons";
+    this.controlFocusIndex = 0;
+    this.renderControlButtons();
+    const firstButton = this.container.querySelector('.player-control-btn[data-action]');
+    firstButton?.focus?.();
+  },
+
+  focusProgressBar() {
+    this.controlFocusZone = "progress";
+    this.renderControlButtons();
   },
 
   clearControlsAutoHide() {
@@ -1975,7 +2196,10 @@ export const PlayerScreen = {
     }
     const current = this.getPlaybackCurrentSeconds();
     const duration = this.getPlaybackDurationSeconds();
-    const progress = duration > 0 ? clamp(current / duration, 0, 1) : 0;
+    const effectiveProgressSeconds = this.controlsVisible && this.controlFocusZone === "progress" && this.seekPreviewSeconds != null
+      ? Number(this.seekPreviewSeconds)
+      : current;
+    const progress = duration > 0 ? clamp(effectiveProgressSeconds / duration, 0, 1) : 0;
     const uiRefs = this.uiRefs || {};
     const uiState = this.lastUiTickState || (this.lastUiTickState = {});
     const progressFill = uiRefs.progressFill;
@@ -2013,7 +2237,7 @@ export const PlayerScreen = {
 
     const timeLabel = uiRefs.timeLabel;
     if (timeLabel) {
-      const nextTimeLabel = `${formatTime(current)} / ${formatTime(duration)}`;
+      const nextTimeLabel = `${formatTime(effectiveProgressSeconds)} / ${formatTime(duration)}`;
       if (uiState.timeLabelText !== nextTimeLabel) {
         timeLabel.textContent = nextTimeLabel;
         uiState.timeLabelText = nextTimeLabel;
@@ -2038,7 +2262,8 @@ export const PlayerScreen = {
       ? Number(this.seekPreviewSeconds)
       : this.getPlaybackCurrentSeconds();
 
-    overlay.classList.toggle("hidden", !this.seekOverlayVisible);
+    const shouldShowOverlay = this.seekOverlayVisible && !this.controlsVisible;
+    overlay.classList.toggle("hidden", !shouldShowOverlay);
     const uiState = this.lastUiTickState || (this.lastUiTickState = {});
     const nextPreviewText = `${formatTime(currentPreview)} / ${formatTime(duration)}`;
     const nextDirectionText = this.seekPreviewDirection < 0 ? "<<" : this.seekPreviewDirection > 0 ? ">>" : "";
@@ -2082,7 +2307,7 @@ export const PlayerScreen = {
     }
 
     this.seekPreviewSeconds = next;
-    this.seekOverlayVisible = true;
+    this.seekOverlayVisible = !this.controlsVisible;
     this.renderSeekOverlay();
 
     if (this.seekOverlayTimer) {
@@ -2119,7 +2344,7 @@ export const PlayerScreen = {
       this.seekCommitTimer = null;
     }
 
-    this.seekOverlayVisible = true;
+    this.seekOverlayVisible = !this.controlsVisible;
     this.renderSeekOverlay();
 
     if (this.seekOverlayTimer) {
@@ -2156,6 +2381,7 @@ export const PlayerScreen = {
   },
 
   togglePause() {
+    const preserveProgressFocus = this.controlFocusZone === "progress";
     if (this.isExternalFrameMode()) {
       return;
     }
@@ -2163,13 +2389,19 @@ export const PlayerScreen = {
       PlayerController.resume();
       this.paused = false;
       this.setControlsVisible(true, { focus: false });
+      if (preserveProgressFocus) {
+        this.controlFocusZone = "progress";
+      }
       this.renderControlButtons();
       return;
     }
 
     PlayerController.pause();
     this.paused = true;
-    this.setControlsVisible(true, { focus: true });
+    this.setControlsVisible(true, { focus: !preserveProgressFocus });
+    if (preserveProgressFocus) {
+      this.controlFocusZone = "progress";
+    }
     this.renderControlButtons();
   },
 
@@ -2215,6 +2447,7 @@ export const PlayerScreen = {
 
     this.subtitleDialogVisible = false;
     this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
     this.selectedAddonSubtitleId = null;
     this.selectedSubtitleTrackIndex = -1;
     this.builtInSubtitleCount = 0;
@@ -2223,6 +2456,7 @@ export const PlayerScreen = {
     this.updateModalBackdrop();
     this.renderSubtitleDialog();
     this.renderAudioDialog();
+    this.renderSpeedDialog();
 
     const sourceCandidate = this.getStreamCandidateByUrl(streamUrl) || this.getCurrentStreamCandidate();
     this.activePlaybackUrl = streamUrl;
@@ -2853,7 +3087,7 @@ export const PlayerScreen = {
     if (tab === "addons") {
       if (!addonTracks.length) {
         if (this.subtitles.length) {
-          return this.subtitles.slice(0, 16).map((subtitle, index) => {
+          return this.subtitles.map((subtitle, index) => {
             const subtitleId = subtitle.id || subtitle.url || `subtitle-${index}`;
             return {
               id: `subtitle-addon-fallback-${subtitleId}`,
@@ -2925,39 +3159,204 @@ export const PlayerScreen = {
       }
     ];
   },
+
+  collectSubtitleOptionItems() {
+    const builtInEntries = this.getSubtitleEntries("builtIn").filter((entry) => !entry?.disabled || entry?.id === "subtitle-off");
+    const addonEntries = this.getSubtitleEntries("addons").filter((entry) => !entry?.disabled);
+    const options = [];
+
+    builtInEntries.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+      if (entry.id === "subtitle-off") {
+        options.push({
+          id: entry.id,
+          languageKey: SUBTITLE_LANGUAGE_OFF_KEY,
+          languageLabel: t("subtitle_none", {}, "Off"),
+          title: entry.label,
+          secondary: "",
+          selected: Boolean(entry.selected),
+          entry
+        });
+        return;
+      }
+      const languageSource = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : entry.label;
+      const languageKey = normalizeSubtitleLanguageKey(languageSource);
+      const languageLabel = subtitleLanguageLabel(languageKey);
+      options.push({
+        id: entry.id,
+        languageKey,
+        languageLabel,
+        title: languageLabel,
+        secondary: [t("subtitle_tab_builtin", {}, "Built-in"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" • "),
+        selected: Boolean(entry.selected),
+        entry
+      });
+    });
+
+    addonEntries.forEach((entry) => {
+      if (!entry) {
+        return;
+      }
+      const languageSource = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : entry.label;
+      const languageKey = normalizeSubtitleLanguageKey(languageSource);
+      const languageLabel = subtitleLanguageLabel(languageKey);
+      options.push({
+        id: entry.id,
+        languageKey,
+        languageLabel,
+        title: languageLabel,
+        secondary: [entry.secondary || t("subtitle_tab_addons", {}, "Addons"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" • "),
+        selected: Boolean(entry.selected),
+        entry
+      });
+    });
+
+    return options;
+  },
+
+  getSelectedSubtitleLanguageKey() {
+    const selected = this.collectSubtitleOptionItems().find((entry) => entry.selected);
+    return selected?.languageKey || SUBTITLE_LANGUAGE_OFF_KEY;
+  },
+
+  getSubtitleLanguageRailItems() {
+    const options = this.collectSubtitleOptionItems();
+    const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+    const groups = new Map();
+    options.forEach((option) => {
+      if (!groups.has(option.languageKey)) {
+        groups.set(option.languageKey, {
+          key: option.languageKey,
+          label: option.languageLabel || subtitleLanguageLabel(option.languageKey),
+          selected: false,
+          count: 0
+        });
+      }
+      const group = groups.get(option.languageKey);
+      group.count += 1;
+      group.selected = group.selected || Boolean(option.selected);
+    });
+    if (!groups.has(SUBTITLE_LANGUAGE_OFF_KEY)) {
+      groups.set(SUBTITLE_LANGUAGE_OFF_KEY, {
+        key: SUBTITLE_LANGUAGE_OFF_KEY,
+        label: t("subtitle_none", {}, "Off"),
+        selected: selectedLanguageKey === SUBTITLE_LANGUAGE_OFF_KEY,
+        count: 1
+      });
+    }
+    const values = Array.from(groups.values());
+    const offIndex = values.findIndex((entry) => entry.key === SUBTITLE_LANGUAGE_OFF_KEY);
+    if (offIndex > 0) {
+      const [offEntry] = values.splice(offIndex, 1);
+      values.unshift(offEntry);
+    }
+    return values;
+  },
+
+  syncSubtitleOptionIndexForFocusedLanguage() {
+    const languages = this.getSubtitleLanguageRailItems();
+    const activeLanguage = languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
+    const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+    const selectedIndex = options.findIndex((item) => item.selected);
+    this.subtitleOptionRailIndex = Math.max(0, selectedIndex >= 0 ? selectedIndex : 0);
+  },
+
+  scrollSubtitleDialogIntoView() {
+    const dialog = this.uiRefs?.subtitleDialog;
+    if (!dialog || !this.subtitleDialogVisible) {
+      return;
+    }
+    const block = this.subtitleDialogScrollMode === "start" ? "start" : "nearest";
+    const rails = [
+      dialog.querySelector(".player-subtitle-language-rail .player-dialog-item.focused"),
+      dialog.querySelector(".player-subtitle-options-rail .player-dialog-item.focused"),
+      dialog.querySelector(".player-subtitle-style-rail .player-dialog-item.focused")
+    ];
+    rails.forEach((node) => {
+      if (node instanceof HTMLElement) {
+        node.scrollIntoView({ block, inline: "nearest" });
+      }
+    });
+    this.subtitleDialogScrollMode = "nearest";
+  },
+
+  getSubtitleOptionsForLanguage(languageKey = this.getSelectedSubtitleLanguageKey()) {
+    return this.collectSubtitleOptionItems().filter((entry) => entry.languageKey === languageKey && entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
+  },
+
+  getSubtitleStyleControls() {
+    const style = this.subtitleStyleSettings || {};
+    return [
+      { id: "delay", label: t("subtitle_tab_delay", {}, "Delay"), value: formatSubtitleDelay(this.subtitleDelayMs) },
+      { id: "fontSize", label: t("subtitle_style_size", {}, "Font Size"), value: `${Number(style.fontSize || 100)}%` },
+      { id: "bold", label: t("subtitle_style_bold", {}, "Bold"), value: style.bold ? t("common.on", {}, "On") : t("common.off", {}, "Off") },
+      { id: "textColor", label: t("subtitle_style_text_color", {}, "Text Color"), value: styleChipLabel(style.textColor || "#FFFFFF") },
+      { id: "outlineEnabled", label: t("subtitle_style_outline", {}, "Outline"), value: style.outlineEnabled ? t("common.on", {}, "On") : t("common.off", {}, "Off") },
+      { id: "outlineColor", label: t("subtitle_style_outline_color", {}, "Outline Color"), value: styleChipLabel(style.outlineColor || "#000000") },
+      { id: "verticalOffset", label: t("subtitle_style_vertical_offset", {}, "Vertical Offset"), value: `${Number(style.verticalOffset || 0)}` },
+      { id: "reset", label: t("subtitle_style_defaults", {}, "Reset Defaults"), value: "" }
+    ];
+  },
+
+  adjustSubtitleStyleControl(controlId, delta = 0) {
+    const style = { ...(this.subtitleStyleSettings || {}) };
+    if (controlId === "delay") {
+      this.subtitleDelayMs = clamp(Number(this.subtitleDelayMs || 0) + (delta * SUBTITLE_DELAY_STEP_MS), -5000, 5000);
+    } else if (controlId === "fontSize") {
+      style.fontSize = clamp(Number(style.fontSize || 100) + (delta * SUBTITLE_FONT_STEP), 70, 180);
+    } else if (controlId === "bold" && delta !== 0) {
+      style.bold = !style.bold;
+    } else if (controlId === "textColor" && delta !== 0) {
+      const currentIndex = Math.max(0, SUBTITLE_TEXT_COLORS.indexOf(String(style.textColor || "#FFFFFF").toUpperCase()));
+      style.textColor = SUBTITLE_TEXT_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_TEXT_COLORS.length - 1)];
+    } else if (controlId === "outlineEnabled" && delta !== 0) {
+      style.outlineEnabled = !style.outlineEnabled;
+    } else if (controlId === "outlineColor" && delta !== 0) {
+      const currentIndex = Math.max(0, SUBTITLE_OUTLINE_COLORS.indexOf(String(style.outlineColor || "#000000").toUpperCase()));
+      style.outlineColor = SUBTITLE_OUTLINE_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_OUTLINE_COLORS.length - 1)];
+    } else if (controlId === "verticalOffset") {
+      style.verticalOffset = clamp(Number(style.verticalOffset || 0) + (delta * SUBTITLE_VERTICAL_OFFSET_STEP), -12, 12);
+    } else if (controlId === "reset") {
+      const defaults = PlayerSettingsStore.get().subtitleStyle;
+      this.subtitleDelayMs = 0;
+      this.subtitleStyleSettings = { ...defaults };
+      this.persistPlayerPresentationSettings();
+      this.applySubtitlePresentationSettings();
+      this.renderSubtitleDialog();
+      return;
+    }
+    this.subtitleStyleSettings = style;
+    this.persistPlayerPresentationSettings();
+    this.applySubtitlePresentationSettings();
+    this.renderSubtitleDialog();
+  },
   openSubtitleDialog() {
     this.cancelSeekPreview({ commit: false });
     this.syncTrackState();
     this.subtitleDialogVisible = true;
     this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
     this.sourcesPanelVisible = false;
-    const textTracks = this.getTextTracks();
-    const builtInBoundary = this.resolveBuiltInSubtitleBoundary(textTracks);
-    const dashSubtitleTracks = typeof PlayerController.getDashTextTracks === "function"
-      ? PlayerController.getDashTextTracks()
-      : [];
-    const avplaySubtitleTracks = typeof PlayerController.getAvPlaySubtitleTracks === "function"
-      ? PlayerController.getAvPlaySubtitleTracks()
-      : [];
-    const hasBuiltInTracks = builtInBoundary > 0 || avplaySubtitleTracks.length > 0 || dashSubtitleTracks.length > 0;
-    const hasAddonTracks = textTracks.length > builtInBoundary || this.subtitles.length > 0;
-    this.subtitleDialogTab = !hasBuiltInTracks && hasAddonTracks ? "addons" : "builtIn";
-    let entries = this.getSubtitleEntries(this.subtitleDialogTab);
-    if (!hasBuiltInTracks && !hasAddonTracks && !this.manifestSubtitleTracks.length) {
-      this.ensureTrackDataWarmup();
-      entries = this.getSubtitleEntries(this.subtitleDialogTab);
-    }
-    const selected = entries.findIndex((entry) => entry.selected);
-    this.subtitleDialogIndex = Math.max(0, selected >= 0 ? selected : 0);
+    const languageRail = this.getSubtitleLanguageRailItems();
+    const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+    this.subtitleLanguageRailIndex = Math.max(0, languageRail.findIndex((item) => item.key === selectedLanguageKey));
+    this.syncSubtitleOptionIndexForFocusedLanguage();
+    this.subtitleStyleRailIndex = 0;
+    this.subtitleFocusedRail = selectedLanguageKey === SUBTITLE_LANGUAGE_OFF_KEY ? "language" : "options";
+    this.subtitleDialogScrollMode = "start";
     this.setControlsVisible(true, { focus: false });
     this.renderSubtitleDialog();
     this.renderAudioDialog();
+    this.renderSpeedDialog();
     this.renderSourcesPanel();
     this.updateModalBackdrop();
   },
 
   closeSubtitleDialog() {
     this.subtitleDialogVisible = false;
+    this.subtitleFocusedRail = "language";
     this.renderSubtitleDialog();
     this.updateModalBackdrop();
     this.resetControlsAutoHide();
@@ -3137,60 +3536,155 @@ export const PlayerScreen = {
       return;
     }
 
-    const tabs = this.getSubtitleTabs();
-    const entries = this.getSubtitleEntries(this.subtitleDialogTab);
-    const focusIndex = clamp(this.subtitleDialogIndex, 0, Math.max(0, entries.length - 1));
-    this.subtitleDialogIndex = focusIndex;
+    const languages = this.getSubtitleLanguageRailItems();
+    this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex, 0, Math.max(0, languages.length - 1));
+    const activeLanguage = languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
+    const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+    this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex, 0, Math.max(0, options.length - 1));
+    const styleItems = this.getSubtitleStyleControls();
+    this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex, 0, Math.max(0, styleItems.length - 1));
+    const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY;
 
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("subtitle_dialog_title", {}, "Subtitles"))}</div>
-      <div class="player-dialog-tabs">
-        ${tabs.map((tab) => `
-          <div class="player-dialog-tab${tab.id === this.subtitleDialogTab ? " selected" : ""}">
-            ${escapeHtml(tab.label)}
-          </div>
-        `).join("")}
-      </div>
-      <div class="player-dialog-list">
-        ${entries.map((entry, index) => `
-          <div class="player-dialog-item${entry.selected ? " selected" : ""}${index === focusIndex ? " focused" : ""}${entry.disabled ? " disabled" : ""}">
-            <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
-            <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
-            <div class="player-dialog-item-check">${entry.selected ? "&#10003;" : ""}</div>
-          </div>
-        `).join("")}
+      <div class="player-subtitle-overlay-grid">
+        <div class="player-subtitle-rail player-subtitle-language-rail">
+          ${languages.map((item, index) => `
+            <div class="player-dialog-item${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "language" && index === this.subtitleLanguageRailIndex ? " focused" : ""}">
+              <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
+              <div class="player-dialog-item-sub">${item.key === SUBTITLE_LANGUAGE_OFF_KEY ? escapeHtml(t("subtitle_none", {}, "Off")) : escapeHtml(`${item.count} ${item.count === 1 ? "option" : "options"}`)}</div>
+              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
+            </div>
+          `).join("")}
+        </div>
+        <div class="player-subtitle-rail player-subtitle-options-rail${showOptionsRail ? "" : " hidden"}">
+          ${options.length ? options.map((item, index) => `
+            <div class="player-dialog-item${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "options" && index === this.subtitleOptionRailIndex ? " focused" : ""}">
+              <div class="player-dialog-item-main">${escapeHtml(item.title || "")}</div>
+              <div class="player-dialog-item-sub">${escapeHtml(item.secondary || "")}</div>
+              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
+            </div>
+          `).join("") : `<div class="player-dialog-empty">${escapeHtml(t("subtitle_none", {}, "No subtitles"))}</div>`}
+        </div>
+        <div class="player-subtitle-rail player-subtitle-style-rail${showOptionsRail ? "" : " hidden"}">
+          ${styleItems.map((item, index) => `
+            <div class="player-dialog-item${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex ? " focused" : ""}">
+              <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
+              <div class="player-dialog-item-sub">${escapeHtml(item.value || "")}</div>
+              <div class="player-dialog-item-check">${item.id === "reset" ? "&#8635;" : ""}</div>
+            </div>
+          `).join("")}
+        </div>
       </div>
     `;
+    this.scrollSubtitleDialogIntoView();
   },
 
   handleSubtitleDialogKey(event) {
     const keyCode = Number(event?.keyCode || 0);
-    const entries = this.getSubtitleEntries(this.subtitleDialogTab);
+    const languages = this.getSubtitleLanguageRailItems();
+    const activeLanguage = languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
+    const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+    const styleItems = this.getSubtitleStyleControls();
 
-    if (keyCode === 37) {
-      this.cycleSubtitleTab(-1);
-      return true;
-    }
-    if (keyCode === 39) {
-      this.cycleSubtitleTab(1);
-      return true;
-    }
     if (keyCode === 38) {
-      this.subtitleDialogIndex = clamp(this.subtitleDialogIndex - 1, 0, Math.max(0, entries.length - 1));
+      if (this.subtitleFocusedRail === "language") {
+        this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex - 1, 0, Math.max(0, languages.length - 1));
+        this.syncSubtitleOptionIndexForFocusedLanguage();
+      } else if (this.subtitleFocusedRail === "options") {
+        this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex - 1, 0, Math.max(0, options.length - 1));
+      } else {
+        this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex - 1, 0, Math.max(0, styleItems.length - 1));
+      }
       this.renderSubtitleDialog();
       return true;
     }
     if (keyCode === 40) {
-      this.subtitleDialogIndex = clamp(this.subtitleDialogIndex + 1, 0, Math.max(0, entries.length - 1));
+      if (this.subtitleFocusedRail === "language") {
+        this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex + 1, 0, Math.max(0, languages.length - 1));
+        this.syncSubtitleOptionIndexForFocusedLanguage();
+      } else if (this.subtitleFocusedRail === "options") {
+        this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex + 1, 0, Math.max(0, options.length - 1));
+      } else {
+        this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex + 1, 0, Math.max(0, styleItems.length - 1));
+      }
       this.renderSubtitleDialog();
       return true;
     }
-    if (keyCode === 13) {
-      this.applySubtitleEntry(entries[this.subtitleDialogIndex]);
+    if (keyCode === 37) {
+      if (this.subtitleFocusedRail === "style") {
+        this.subtitleFocusedRail = options.length ? "options" : "language";
+      } else if (this.subtitleFocusedRail === "options") {
+        this.subtitleFocusedRail = "language";
+      } else {
+        return false;
+      }
+      this.renderSubtitleDialog();
       return true;
     }
-
-    return false;
+    if (keyCode === 39) {
+      if (this.subtitleFocusedRail === "language" && activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY && options.length) {
+        this.subtitleFocusedRail = "options";
+        this.renderSubtitleDialog();
+        return true;
+      }
+      if (this.subtitleFocusedRail === "options") {
+        this.subtitleFocusedRail = "style";
+        this.renderSubtitleDialog();
+        return true;
+      }
+      if (this.subtitleFocusedRail === "style") {
+        const styleItem = styleItems[this.subtitleStyleRailIndex];
+        if (styleItem) {
+          this.adjustSubtitleStyleControl(styleItem.id, 1);
+        }
+        return true;
+      }
+      return true;
+    }
+    if (keyCode === 13) {
+      if (this.subtitleFocusedRail === "language") {
+        const language = languages[this.subtitleLanguageRailIndex];
+        if (!language) {
+          return true;
+        }
+        if (language.key === SUBTITLE_LANGUAGE_OFF_KEY) {
+          this.applySubtitleEntry(this.getSubtitleEntries("builtIn").find((entry) => entry.id === "subtitle-off") || { trackIndex: -1 });
+        } else {
+          const nextOptions = this.getSubtitleOptionsForLanguage(language.key);
+          if (nextOptions.length) {
+            this.subtitleFocusedRail = "options";
+            this.subtitleOptionRailIndex = Math.max(0, nextOptions.findIndex((item) => item.selected));
+          }
+        }
+        this.renderSubtitleDialog();
+        return true;
+      }
+      if (this.subtitleFocusedRail === "options") {
+        const option = options[this.subtitleOptionRailIndex];
+        if (option?.entry) {
+          this.applySubtitleEntry(option.entry);
+          this.subtitleFocusedRail = "style";
+        }
+        return true;
+      }
+      const styleItem = styleItems[this.subtitleStyleRailIndex];
+      if (styleItem) {
+        this.adjustSubtitleStyleControl(styleItem.id, styleItem.id === "delay" || styleItem.id === "fontSize" || styleItem.id === "verticalOffset" ? 1 : 1);
+      }
+      return true;
+    }
+    if (this.subtitleFocusedRail === "style" && (keyCode === 10009 || keyCode === 461)) {
+      return false;
+    }
+    if (this.subtitleFocusedRail === "style" && keyCode === 189) {
+      const styleItem = styleItems[this.subtitleStyleRailIndex];
+      if (styleItem) {
+        this.adjustSubtitleStyleControl(styleItem.id, -1);
+      }
+      return true;
+    }
+    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
   },
 
   getAudioEntries() {
@@ -3284,11 +3778,26 @@ export const PlayerScreen = {
     return [];
   },
 
+  adjustAudioAmplification(delta = 0) {
+    const nextDb = clamp(Number(this.audioAmplificationDb || 0) + Number(delta || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
+    this.audioAmplificationDb = nextDb;
+    this.persistPlayerPresentationSettings();
+    this.applyAudioAmplification();
+    this.renderAudioDialog();
+  },
+
+  togglePersistAudioAmplification() {
+    this.persistAudioAmplification = !this.persistAudioAmplification;
+    this.persistPlayerPresentationSettings();
+    this.renderAudioDialog();
+  },
+
   openAudioDialog() {
     this.cancelSeekPreview({ commit: false });
     this.syncTrackState();
     this.audioDialogVisible = true;
     this.subtitleDialogVisible = false;
+    this.speedDialogVisible = false;
     this.sourcesPanelVisible = false;
     let entries = this.getAudioEntries();
     if (!entries.length) {
@@ -3297,9 +3806,12 @@ export const PlayerScreen = {
     }
     const selectedEntry = entries.findIndex((entry) => entry.selected);
     this.audioDialogIndex = Math.max(0, selectedEntry >= 0 ? selectedEntry : 0);
+    this.audioFocusedColumn = "tracks";
+    this.audioMixFocusIndex = 0;
     this.setControlsVisible(true, { focus: false });
     this.renderSubtitleDialog();
     this.renderAudioDialog();
+    this.renderSpeedDialog();
     this.renderSourcesPanel();
     this.updateModalBackdrop();
   },
@@ -3420,21 +3932,43 @@ export const PlayerScreen = {
     }
 
     this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
+    this.audioMixFocusIndex = clamp(this.audioMixFocusIndex, 0, 2);
 
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
-      <div class="player-dialog-list">
-        ${entries.map((entry, index) => {
-          const selected = entry.selected;
-          const focused = index === this.audioDialogIndex;
-          return `
-            <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
-              <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
-              <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
+      <div class="player-audio-overlay-grid">
+        <div class="player-dialog-list player-audio-track-list">
+          ${entries.map((entry, index) => {
+            const selected = entry.selected;
+            const focused = this.audioFocusedColumn === "tracks" && index === this.audioDialogIndex;
+            return `
+              <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
+                <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
+                <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
+                <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        <div class="player-audio-mix-panel">
+          <div class="player-audio-mix-title">${escapeHtml(t("audio_boost_title", {}, "Audio Boost"))}</div>
+          <div class="player-audio-mix-value">${escapeHtml(`${this.audioAmplificationDb} dB`)}</div>
+          <div class="player-audio-mix-buttons">
+            <div class="player-dialog-item player-audio-mix-btn${this.audioFocusedColumn === "mix" && this.audioMixFocusIndex === 0 ? " focused" : ""}${this.audioAmplificationDb <= AUDIO_AMPLIFICATION_MIN_DB || !this.audioAmplificationAvailable ? " disabled" : ""}">
+              <div class="player-dialog-item-main">-</div>
+              <div class="player-dialog-item-sub">${escapeHtml(t("common.decrease", {}, "Decrease"))}</div>
             </div>
-          `;
-        }).join("")}
+            <div class="player-dialog-item player-audio-mix-btn${this.audioFocusedColumn === "mix" && this.audioMixFocusIndex === 1 ? " focused" : ""}${this.audioAmplificationDb >= AUDIO_AMPLIFICATION_MAX_DB || !this.audioAmplificationAvailable ? " disabled" : ""}">
+              <div class="player-dialog-item-main">+</div>
+              <div class="player-dialog-item-sub">${escapeHtml(t("common.increase", {}, "Increase"))}</div>
+            </div>
+          </div>
+          <div class="player-dialog-item player-audio-mix-persist${this.audioFocusedColumn === "mix" && this.audioMixFocusIndex === 2 ? " focused" : ""}${this.persistAudioAmplification ? " selected" : ""}">
+            <div class="player-dialog-item-main">${escapeHtml(t("audio_persist_amplification", {}, "Persist boost"))}</div>
+            <div class="player-dialog-item-sub">${escapeHtml(this.persistAudioAmplification ? t("common.on", {}, "On") : t("common.off", {}, "Off"))}</div>
+            <div class="player-dialog-item-check">${this.persistAudioAmplification ? "&#10003;" : ""}</div>
+          </div>
+        </div>
       </div>
     `;
   },
@@ -3447,24 +3981,130 @@ export const PlayerScreen = {
       return true;
     }
 
+    if (keyCode === 37) {
+      if (this.audioFocusedColumn === "mix") {
+        this.audioFocusedColumn = "tracks";
+        this.renderAudioDialog();
+      }
+      return true;
+    }
+
+    if (keyCode === 39) {
+      this.audioFocusedColumn = "mix";
+      this.renderAudioDialog();
+      return true;
+    }
+
     if (keyCode === 38) {
-      this.audioDialogIndex = clamp(this.audioDialogIndex - 1, 0, entries.length - 1);
+      if (this.audioFocusedColumn === "tracks") {
+        this.audioDialogIndex = clamp(this.audioDialogIndex - 1, 0, entries.length - 1);
+      } else {
+        this.audioMixFocusIndex = clamp(this.audioMixFocusIndex - 1, 0, 2);
+      }
       this.renderAudioDialog();
       return true;
     }
 
     if (keyCode === 40) {
-      this.audioDialogIndex = clamp(this.audioDialogIndex + 1, 0, entries.length - 1);
+      if (this.audioFocusedColumn === "tracks") {
+        this.audioDialogIndex = clamp(this.audioDialogIndex + 1, 0, entries.length - 1);
+      } else {
+        this.audioMixFocusIndex = clamp(this.audioMixFocusIndex + 1, 0, 2);
+      }
       this.renderAudioDialog();
       return true;
     }
 
     if (keyCode === 13) {
-      this.applyAudioTrack(this.audioDialogIndex);
+      if (this.audioFocusedColumn === "tracks") {
+        this.applyAudioTrack(this.audioDialogIndex);
+      } else if (this.audioMixFocusIndex === 0 && this.audioAmplificationDb > AUDIO_AMPLIFICATION_MIN_DB) {
+        this.adjustAudioAmplification(-1);
+      } else if (this.audioMixFocusIndex === 1 && this.audioAmplificationDb < AUDIO_AMPLIFICATION_MAX_DB) {
+        this.adjustAudioAmplification(1);
+      } else if (this.audioMixFocusIndex === 2) {
+        this.togglePersistAudioAmplification();
+      }
       return true;
     }
 
-    return false;
+    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
+  },
+
+  openSpeedDialog() {
+    const currentSpeed = Number(PlayerController.video?.playbackRate || 1);
+    this.speedDialogVisible = true;
+    this.subtitleDialogVisible = false;
+    this.audioDialogVisible = false;
+    this.sourcesPanelVisible = false;
+    this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.findIndex((value) => value === currentSpeed));
+    this.renderSubtitleDialog();
+    this.renderAudioDialog();
+    this.renderSourcesPanel();
+    this.renderSpeedDialog();
+    this.updateModalBackdrop();
+  },
+
+  closeSpeedDialog() {
+    this.speedDialogVisible = false;
+    this.renderSpeedDialog();
+    this.updateModalBackdrop();
+    this.resetControlsAutoHide();
+  },
+
+  applyPlaybackSpeed(speed = 1) {
+    const video = PlayerController.video;
+    if (!video) {
+      return;
+    }
+    video.playbackRate = Number(speed || 1);
+    this.renderControlButtons();
+    this.renderSpeedDialog();
+  },
+
+  renderSpeedDialog() {
+    const dialog = this.uiRefs?.speedDialog;
+    if (!dialog) {
+      return;
+    }
+    dialog.classList.toggle("hidden", !this.speedDialogVisible);
+    if (!this.speedDialogVisible) {
+      dialog.innerHTML = "";
+      return;
+    }
+    const currentSpeed = Number(PlayerController.video?.playbackRate || 1);
+    this.speedDialogIndex = clamp(this.speedDialogIndex, 0, PLAYER_SPEEDS.length - 1);
+    dialog.innerHTML = `
+      <div class="player-dialog-title">${escapeHtml(t("player_playback_speed", {}, "Playback speed"))}</div>
+      <div class="player-dialog-list">
+        ${PLAYER_SPEEDS.map((speed, index) => `
+          <div class="player-dialog-item${speed === currentSpeed ? " selected" : ""}${index === this.speedDialogIndex ? " focused" : ""}">
+            <div class="player-dialog-item-main">${escapeHtml(`${speed}x`)}</div>
+            <div class="player-dialog-item-sub">${escapeHtml(speed === 1 ? t("common.normal", {}, "Normal") : t("player_playback_speed", {}, "Playback speed"))}</div>
+            <div class="player-dialog-item-check">${speed === currentSpeed ? "&#10003;" : ""}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  },
+
+  handleSpeedDialogKey(event) {
+    const keyCode = Number(event?.keyCode || 0);
+    if (keyCode === 38) {
+      this.speedDialogIndex = clamp(this.speedDialogIndex - 1, 0, PLAYER_SPEEDS.length - 1);
+      this.renderSpeedDialog();
+      return true;
+    }
+    if (keyCode === 40) {
+      this.speedDialogIndex = clamp(this.speedDialogIndex + 1, 0, PLAYER_SPEEDS.length - 1);
+      this.renderSpeedDialog();
+      return true;
+    }
+    if (keyCode === 13) {
+      this.applyPlaybackSpeed(PLAYER_SPEEDS[this.speedDialogIndex] || 1);
+      return true;
+    }
+    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
   },
 
   getSourceFilters() {
@@ -3517,6 +4157,7 @@ export const PlayerScreen = {
     this.sourcesPanelVisible = true;
     this.subtitleDialogVisible = false;
     this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
     this.moreActionsVisible = false;
 
     const filters = this.getSourceFilters();
@@ -3525,6 +4166,7 @@ export const PlayerScreen = {
     this.renderControlButtons();
     this.renderSubtitleDialog();
     this.renderAudioDialog();
+    this.renderSpeedDialog();
     this.renderSourcesPanel();
     this.updateModalBackdrop();
 
@@ -3619,6 +4261,12 @@ export const PlayerScreen = {
           <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">${escapeHtml(t("sources_reload", {}, "Reload"))}</button>
           <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">${escapeHtml(t("sources_close", {}, "Close"))}</button>
         </div>
+      </div>
+
+      <div class="player-source-current-meta">
+        ${escapeHtml(this.params?.season != null && this.params?.episode != null
+          ? `S${this.params.season} E${this.params.episode}${this.params.playerSubtitle ? ` • ${this.params.playerSubtitle}` : ""}`
+          : (this.params?.playerTitle || this.params?.itemId || ""))}
       </div>
 
       <div class="player-sources-filters">
@@ -3880,11 +4528,13 @@ export const PlayerScreen = {
     this.episodePanelVisible = true;
     this.subtitleDialogVisible = false;
     this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
     this.sourcesPanelVisible = false;
     this.updateModalBackdrop();
     this.setControlsVisible(true, { focus: false });
     this.renderSubtitleDialog();
     this.renderAudioDialog();
+    this.renderSpeedDialog();
     this.renderSourcesPanel();
     this.renderEpisodePanel();
   },
@@ -3929,6 +4579,7 @@ export const PlayerScreen = {
   hideEpisodePanel() {
     this.episodePanelVisible = false;
     this.container?.querySelector("#episodeSidePanel")?.remove();
+    this.updateModalBackdrop();
     this.resetControlsAutoHide();
   },
 
@@ -4043,7 +4694,7 @@ export const PlayerScreen = {
       return;
     }
 
-    this.subtitles.slice(0, 16).forEach((subtitle, index) => {
+    this.subtitles.forEach((subtitle, index) => {
       if (!subtitle.url) {
         return;
       }
@@ -4057,31 +4708,35 @@ export const PlayerScreen = {
     });
   },
   moveControlFocus(delta) {
-    const controls = Array.from(this.container.querySelectorAll(".player-control-btn"));
+    const controls = this.getControlDefinitions();
     if (!controls.length) {
       return;
     }
-    const current = this.container.querySelector(".player-control-btn.focused") || controls[0];
-    let index = controls.indexOf(current);
-    if (index < 0) {
-      index = 0;
-    }
-    const nextIndex = clamp(index + delta, 0, controls.length - 1);
-    if (nextIndex === index) {
+    if (this.controlFocusZone === "progress") {
+      this.controlFocusZone = "buttons";
+      this.controlFocusIndex = delta < 0 ? 0 : 0;
+      this.renderControlButtons();
       return;
     }
-    current.classList.remove("focused");
-    controls[nextIndex].classList.add("focused");
-    controls[nextIndex].focus();
+    const nextIndex = clamp(this.controlFocusIndex + delta, 0, controls.length - 1);
+    this.controlFocusZone = "buttons";
+    this.controlFocusIndex = nextIndex;
+    this.renderControlButtons();
     this.resetControlsAutoHide();
   },
 
   performFocusedControl() {
-    const current = this.container.querySelector(".player-control-btn.focused");
+    if (this.controlFocusZone === "progress") {
+      this.cancelSeekPreview({ commit: true });
+      this.resetControlsAutoHide();
+      return;
+    }
+    const controls = this.getControlDefinitions();
+    const current = controls[this.controlFocusIndex] || null;
     if (!current) {
       return;
     }
-    this.performControlAction(current.dataset.action || "");
+    this.performControlAction(current.action || "");
   },
 
   performControlAction(action) {
@@ -4125,15 +4780,22 @@ export const PlayerScreen = {
 
     if (action === "more") {
       this.moreActionsVisible = true;
+      this.controlFocusZone = "buttons";
+      this.controlFocusIndex = Math.max(0, this.getControlDefinitions().findIndex((entry) => entry.action === "speed"));
       this.renderControlButtons();
-      this.focusFirstControl();
       return;
     }
 
     if (action === "backFromMore") {
       this.moreActionsVisible = false;
+      this.controlFocusZone = "buttons";
+      this.controlFocusIndex = Math.max(0, this.getControlDefinitions().findIndex((entry) => entry.action === "more"));
       this.renderControlButtons();
-      this.focusFirstControl();
+      return;
+    }
+
+    if (action === "speed") {
+      this.openSpeedDialog();
       return;
     }
 
@@ -4161,6 +4823,11 @@ export const PlayerScreen = {
 
     if (this.audioDialogVisible) {
       this.closeAudioDialog();
+      return true;
+    }
+
+    if (this.speedDialogVisible) {
+      this.closeSpeedDialog();
       return true;
     }
 
@@ -4199,6 +4866,12 @@ export const PlayerScreen = {
 
     if (this.audioDialogVisible) {
       if (this.handleAudioDialogKey(event)) {
+        return;
+      }
+    }
+
+    if (this.speedDialogVisible) {
+      if (this.handleSpeedDialogKey(event)) {
         return;
       }
     }
@@ -4276,12 +4949,41 @@ export const PlayerScreen = {
       return;
     }
 
+    if (this.controlFocusZone === "progress") {
+      if (keyCode === 37) {
+        this.beginSeekPreview(-1, Boolean(event?.repeat));
+        return;
+      }
+      if (keyCode === 39) {
+        this.beginSeekPreview(1, Boolean(event?.repeat));
+        return;
+      }
+      if (keyCode === 38) {
+        this.setControlsVisible(false);
+        return;
+      }
+      if (keyCode === 40) {
+        this.controlFocusZone = "buttons";
+        this.renderControlButtons();
+        return;
+      }
+      if (keyCode === 13) {
+        this.togglePause();
+        this.renderControlButtons();
+        return;
+      }
+    }
+
     if (keyCode === 37) {
       this.moveControlFocus(-1);
       return;
     }
     if (keyCode === 39) {
       this.moveControlFocus(1);
+      return;
+    }
+    if (keyCode === 38) {
+      this.focusProgressBar();
       return;
     }
     if (keyCode === 40) {

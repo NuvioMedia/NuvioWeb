@@ -62,9 +62,6 @@ class SubtitleRepository {
         merged.push(subtitle);
       });
 
-      if (merged.length) {
-        break;
-      }
     }
 
     return merged;
