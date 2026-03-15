@@ -17,6 +17,7 @@ const DEFAULTS = {
   focusedPosterBackdropTrailerPlaybackTarget: "hero_media",
   posterCardWidthDp: 126,
   posterCardCornerRadiusDp: 12,
+  detailPageTrailerButtonEnabled: false,
   collapseSidebar: false,
   modernSidebar: false,
   modernSidebarBlur: false,
@@ -42,6 +43,7 @@ function normalizeLayoutPreferences(value = {}) {
       : "hero_media",
     posterCardWidthDp: Math.max(72, Number(merged.posterCardWidthDp ?? 126) || 126),
     posterCardCornerRadiusDp: Math.max(0, Number(merged.posterCardCornerRadiusDp ?? 12) || 12),
+    detailPageTrailerButtonEnabled: Boolean(merged.detailPageTrailerButtonEnabled),
     collapseSidebar: modernSidebar ? false : Boolean(merged.collapseSidebar),
     modernSidebar,
     modernSidebarBlur: modernSidebar ? Boolean(merged.modernSidebarBlur) : Boolean(merged.modernSidebarBlur)

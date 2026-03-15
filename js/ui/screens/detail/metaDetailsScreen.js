@@ -9,6 +9,7 @@ import { savedLibraryRepository } from "../../../data/repository/savedLibraryRep
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
+import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
@@ -69,72 +70,119 @@ function extractCast(meta = {}) {
     }
     return raw;
   };
+  const normalizeCastValue = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const selectBetterCastEntry = (current, candidate) => {
+    if (!candidate) {
+      return current;
+    }
+    if (!current) {
+      return candidate;
+    }
+    const currentScore = Number(Boolean(current.photo)) + Number(Boolean(current.tmdbId));
+    const candidateScore = Number(Boolean(candidate.photo)) + Number(Boolean(candidate.tmdbId));
+    return candidateScore > currentScore ? candidate : current;
+  };
+  const mergeCastEntries = (primary = [], supplemental = []) => {
+    if (!primary.length) {
+      return supplemental;
+    }
+    if (!supplemental.length) {
+      return primary;
+    }
+
+    const exactMatches = new Map();
+    const nameMatches = new Map();
+    supplemental.forEach((entry) => {
+      const normalizedName = normalizeCastValue(entry?.name);
+      if (!normalizedName) {
+        return;
+      }
+      const normalizedCharacter = normalizeCastValue(entry?.character);
+      if (normalizedCharacter) {
+        const exactKey = `${normalizedName}|${normalizedCharacter}`;
+        exactMatches.set(exactKey, selectBetterCastEntry(exactMatches.get(exactKey), entry));
+      }
+      nameMatches.set(normalizedName, selectBetterCastEntry(nameMatches.get(normalizedName), entry));
+    });
+
+    return primary.map((entry) => {
+      const normalizedName = normalizeCastValue(entry?.name);
+      const normalizedCharacter = normalizeCastValue(entry?.character);
+      const exactKey = normalizedName && normalizedCharacter ? `${normalizedName}|${normalizedCharacter}` : "";
+      const match = (exactKey ? exactMatches.get(exactKey) : null) || (normalizedName ? nameMatches.get(normalizedName) : null);
+      return {
+        ...entry,
+        character: entry?.character || match?.character || "",
+        photo: entry?.photo || match?.photo || "",
+        tmdbId: entry?.tmdbId || match?.tmdbId || null
+      };
+    });
+  };
+  const mapCastEntries = (items = [], mapper) => (Array.isArray(items) ? items : [])
+    .map(mapper)
+    .filter((entry) => Boolean(entry?.name));
+
   const members = Array.isArray(meta.castMembers) ? meta.castMembers : [];
-  if (members.length) {
-    return members
-      .map((entry) => ({
-        name: entry?.name || "",
-        character: entry?.character || entry?.role || "",
-        photo: toPhoto(
-          entry?.photo
-          || entry?.profilePath
-          || entry?.profile_path
-          || entry?.avatar
-          || entry?.image
-          || entry?.poster
-          || ""
-        ),
-        tmdbId: entry?.tmdbId || entry?.id || null
-      }))
-      .filter((entry) => Boolean(entry?.name))
-      .slice(0, 18);
-  }
+  const memberEntries = mapCastEntries(members, (entry) => ({
+    name: entry?.name || "",
+    character: entry?.character || entry?.role || "",
+    photo: toPhoto(
+      entry?.photo
+      || entry?.profilePath
+      || entry?.profile_path
+      || entry?.avatar
+      || entry?.image
+      || entry?.poster
+      || ""
+    ),
+    tmdbId: entry?.tmdbId || entry?.id || null
+  }));
 
   const direct = Array.isArray(meta.cast) ? meta.cast : [];
-  if (direct.length) {
-    return direct
-      .map((entry) => {
-        if (typeof entry === "string") {
-          return { name: entry, character: "", photo: "", tmdbId: null };
-        }
-        return {
-          name: entry?.name || "",
-          character: entry?.character || "",
-          photo: toPhoto(
-            entry?.photo
-            || entry?.profilePath
-            || entry?.profile_path
-            || entry?.avatar
-            || entry?.image
-            || entry?.poster
-            || ""
-          ),
-          tmdbId: entry?.tmdbId || entry?.id || null
-        };
-      })
-      .filter((entry) => Boolean(entry?.name))
-      .slice(0, 12);
-  }
+  const directEntries = mapCastEntries(direct, (entry) => {
+    if (typeof entry === "string") {
+      return { name: entry, character: "", photo: "", tmdbId: null };
+    }
+    return {
+      name: entry?.name || "",
+      character: entry?.character || "",
+      photo: toPhoto(
+        entry?.photo
+        || entry?.profilePath
+        || entry?.profile_path
+        || entry?.avatar
+        || entry?.image
+        || entry?.poster
+        || ""
+      ),
+      tmdbId: entry?.tmdbId || entry?.id || null
+    };
+  });
 
   const credits = meta.credits?.cast;
-  if (Array.isArray(credits)) {
-    return credits
-      .map((entry) => ({
-        name: entry?.name || entry?.character || "",
-        character: entry?.character || "",
-        photo: toPhoto(
-          entry?.profile_path
-          || entry?.photo
-          || entry?.profilePath
-          || entry?.avatar_path
-          || entry?.avatar
-          || entry?.image
-          || ""
-        ),
-        tmdbId: entry?.id || null
-      }))
-      .filter((entry) => Boolean(entry.name))
-      .slice(0, 12);
+  const creditEntries = mapCastEntries(credits, (entry) => ({
+    name: entry?.name || entry?.character || "",
+    character: entry?.character || "",
+    photo: toPhoto(
+      entry?.profile_path
+      || entry?.photo
+      || entry?.profilePath
+      || entry?.avatar_path
+      || entry?.avatar
+      || entry?.image
+      || ""
+    ),
+    tmdbId: entry?.id || null
+  }));
+
+  if (memberEntries.length) {
+    return mergeCastEntries(memberEntries, [...directEntries, ...creditEntries]).slice(0, 18);
+  }
+  if (directEntries.length) {
+    return mergeCastEntries(directEntries, creditEntries).slice(0, 12);
+  }
+  if (creditEntries.length) {
+    return creditEntries.slice(0, 12);
   }
 
   return [];
@@ -238,6 +286,16 @@ function renderTrailerGlyph() {
   return `<img class="series-btn-svg" src="assets/icons/trailer_play_button.svg" alt="" aria-hidden="true" />`;
 }
 
+function renderLibraryGlyph(isSaved = false) {
+  return isSaved
+    ? "&#10003;"
+    : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`;
+}
+
+function renderWatchedGlyph(isWatched = false) {
+  return `<img class="series-btn-svg" src="assets/icons/${isWatched ? "visibility" : "visibility_off"}.svg" alt="" aria-hidden="true" />`;
+}
+
 function ratingToneClass(value) {
   const num = Number(value || 0);
   if (num >= 9) return "excellent";
@@ -305,9 +363,15 @@ function normalizePreviewItem(item = {}, fallbackType = "movie") {
     id: String(item.id || ""),
     name: item.name || item.title || "Untitled",
     type: item.type || item.apiType || fallbackType,
-    poster: item.landscapePoster || item.background || item.poster || "",
+    poster: item.poster || "",
+    landscapePoster: item.landscapePoster || item.background || item.poster || "",
     releaseInfo: item.releaseInfo || item.year || ""
   };
+}
+
+function extractPreviewYear(value = "") {
+  const match = String(value || "").match(/\b(19|20)\d{2}\b/);
+  return match ? match[0] : "";
 }
 
 function resolveYoutubeId(value = "") {
@@ -339,23 +403,41 @@ function buildYoutubeEmbedUrl(ytId = "") {
     return "";
   }
   const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-  if (!proxyBase) {
+  if (proxyBase) {
+    try {
+      const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+      proxyUrl.searchParams.set("v", cleanId);
+      proxyUrl.searchParams.set("autoplay", "1");
+      proxyUrl.searchParams.set("muted", "1");
+      proxyUrl.searchParams.set("controls", "0");
+      proxyUrl.searchParams.set("loop", "1");
+      proxyUrl.searchParams.set("playlist", cleanId);
+      proxyUrl.searchParams.set("playsinline", "1");
+      proxyUrl.searchParams.set("rel", "0");
+      return proxyUrl.toString();
+    } catch (_) {
+      return "";
+    }
+  }
+  if (!Environment.isBrowser()) {
     return "";
   }
-  try {
-    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
-    proxyUrl.searchParams.set("v", cleanId);
-    proxyUrl.searchParams.set("autoplay", "1");
-    proxyUrl.searchParams.set("muted", "1");
-    proxyUrl.searchParams.set("controls", "0");
-    proxyUrl.searchParams.set("loop", "1");
-    proxyUrl.searchParams.set("playlist", cleanId);
-    proxyUrl.searchParams.set("playsinline", "1");
-    proxyUrl.searchParams.set("rel", "0");
-    return proxyUrl.toString();
-  } catch (_) {
-    return "";
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: "1",
+    controls: "0",
+    loop: "1",
+    playlist: cleanId,
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1"
+  });
+  const origin = String(globalThis?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) {
+    params.set("origin", origin);
   }
+  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
 function scoreTrailerStream(entry = {}) {
@@ -499,6 +581,8 @@ export const MetaDetailsScreen = {
       selectedRatingSeason: Number(this.selectedRatingSeason || 0),
       seriesInsightTab: String(this.seriesInsightTab || "cast"),
       movieInsightTab: String(this.movieInsightTab || "cast"),
+      episodeFocusIndexBySeason: this.episodeFocusIndexBySeason ? { ...this.episodeFocusIndexBySeason } : {},
+      railFocusIndexByKey: this.railFocusIndexByKey ? { ...this.railFocusIndexByKey } : {},
       pendingFocusRestore: this.captureDetailFocus(),
       contentScrollTop: Number(content?.scrollTop || 0),
       trackScrollLeftByKey: captureHorizontalScrollMap(this.container),
@@ -530,6 +614,12 @@ export const MetaDetailsScreen = {
     this.selectedRatingSeason = Number(snapshot.selectedRatingSeason || this.selectedSeason || 1);
     this.seriesInsightTab = String(snapshot.seriesInsightTab || "cast");
     this.movieInsightTab = String(snapshot.movieInsightTab || "cast");
+    this.episodeFocusIndexBySeason = snapshot.episodeFocusIndexBySeason && typeof snapshot.episodeFocusIndexBySeason === "object"
+      ? { ...snapshot.episodeFocusIndexBySeason }
+      : {};
+    this.railFocusIndexByKey = snapshot.railFocusIndexByKey && typeof snapshot.railFocusIndexByKey === "object"
+      ? { ...snapshot.railFocusIndexByKey }
+      : {};
     this.pendingFocusRestore = snapshot.pendingFocusRestore ? { ...snapshot.pendingFocusRestore } : null;
     this.restoredContentScrollTop = Number(snapshot.contentScrollTop || 0);
     this.restoredTrackScrollLeftByKey = snapshot.trackScrollLeftByKey && typeof snapshot.trackScrollLeftByKey === "object"
@@ -570,6 +660,7 @@ export const MetaDetailsScreen = {
     ScreenUtils.show(this.container);
     this.stopTrailerPlayback({ keepDom: false });
     this.params = params;
+    this.isBackNavigation = Boolean(navigationContext?.isBackNavigation);
     this.pendingEpisodeSelection = null;
     this.pendingMovieSelection = null;
     this.streamChooserFocus = null;
@@ -585,7 +676,10 @@ export const MetaDetailsScreen = {
     this.trailerSource = null;
     this.isTrailerPlaying = false;
     this.episodeProgressMap = new Map();
+    this.episodeFocusIndexBySeason = {};
+    this.railFocusIndexByKey = {};
     this.watchedEpisodeKeys = new Set();
+    this.autoOpenedContinueWatchingStream = false;
     this.restoredContentScrollTop = 0;
     this.restoredTrackScrollLeftByKey = {};
     this.bindBackHandler();
@@ -679,6 +773,7 @@ export const MetaDetailsScreen = {
     }
     this.render(meta);
     this.isLoadingDetail = false;
+    this.maybeAutoOpenContinueWatchingStream();
 
     // Background enrichments: do not block initial screen rendering.
     (async () => {
@@ -701,7 +796,7 @@ export const MetaDetailsScreen = {
       this.selectedSeason = this.selectedSeason || this.episodes[0]?.season || 1;
       this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
       this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
-      this.render(this.meta);
+      this.updateRenderedDetailSections(this.meta);
 
       const tasks = [
         withTimeout(this.fetchMoreLikeThis(this.meta), 5000, [])
@@ -722,7 +817,7 @@ export const MetaDetailsScreen = {
         this.collectionItems = Array.isArray(results[1]?.items) ? results[1].items : [];
         this.collectionName = results[1]?.name || "";
       }
-      this.render(this.meta);
+      this.updateRenderedDetailSections(this.meta);
     })().catch((error) => {
       console.warn("Detail background enrichment failed", error);
     });
@@ -866,6 +961,45 @@ export const MetaDetailsScreen = {
     }
   },
 
+  findContinueWatchingEpisodeTarget() {
+    const resumeVideoId = String(this.params?.resumeVideoId || "").trim();
+    if (resumeVideoId) {
+      const directMatch = this.episodes.find((entry) => String(entry?.id || "") === resumeVideoId);
+      if (directMatch) {
+        return directMatch;
+      }
+    }
+    const resumeSeason = Number(this.params?.resumeSeason || 0);
+    const resumeEpisode = Number(this.params?.resumeEpisode || 0);
+    if (resumeSeason > 0 && resumeEpisode > 0) {
+      const episodeMatch = this.episodes.find((entry) => Number(entry?.season || 0) === resumeSeason && Number(entry?.episode || 0) === resumeEpisode);
+      if (episodeMatch) {
+        return episodeMatch;
+      }
+    }
+    return this.nextEpisodeToWatch || this.episodes[0] || null;
+  },
+
+  maybeAutoOpenContinueWatchingStream() {
+    if (!this.params?.autoOpenContinueWatching || this.autoOpenedContinueWatchingStream || this.isBackNavigation) {
+      return;
+    }
+    this.autoOpenedContinueWatchingStream = true;
+    const extraParams = {
+      resumePositionMs: Number(this.params?.resumeProgressMs || 0) || 0,
+      returnToDetail: true
+    };
+    const itemType = String(this.params?.itemType || this.meta?.type || "movie").toLowerCase();
+    if (itemType === "series" || itemType === "tv") {
+      const episode = this.findContinueWatchingEpisodeTarget();
+      if (episode) {
+        this.navigateToStreamScreenForEpisode(episode, extraParams);
+        return;
+      }
+    }
+    this.navigateToStreamScreenForMovie(extraParams);
+  },
+
   async enrichMeta(meta) {
     const settings = TmdbSettingsStore.get();
     if (!settings.enabled || !settings.apiKey || !meta?.id) {
@@ -907,6 +1041,12 @@ export const MetaDetailsScreen = {
         networks: Array.isArray(enrichment.networks)
           ? enrichment.networks
           : (Array.isArray(meta.networks) ? meta.networks : []),
+        trailers: Array.isArray(meta.trailers) && meta.trailers.length
+          ? meta.trailers
+          : (Array.isArray(enrichment.trailers) ? enrichment.trailers : []),
+        trailerYtIds: Array.isArray(meta.trailerYtIds) && meta.trailerYtIds.length
+          ? meta.trailerYtIds
+          : (Array.isArray(enrichment.trailerYtIds) ? enrichment.trailerYtIds : []),
         collectionId: enrichment.collectionId || meta.collectionId || meta?.belongsToCollection?.id || meta?.belongs_to_collection?.id || null,
         collectionName: enrichment.collectionName || meta.collectionName || meta?.belongsToCollection?.name || meta?.belongs_to_collection?.name || "",
         belongsToCollection: enrichment.collectionId
@@ -1052,8 +1192,7 @@ export const MetaDetailsScreen = {
     }
   },
 
-  renderSeriesLayout(meta) {
-    const backdrop = meta.background || meta.poster || "";
+  renderSeriesHeroMarkup(meta) {
     const nextEpisodeLabel = this.nextEpisodeToWatch
       ? `Next S${this.nextEpisodeToWatch.season}E${this.nextEpisodeToWatch.episode}`
       : "Play";
@@ -1065,6 +1204,30 @@ export const MetaDetailsScreen = {
     const creditPrefix = Array.isArray(meta.director) && meta.director.length
       ? "Creator"
       : "Writer";
+    return this.renderHeroSection({
+      meta,
+      playLabel: nextEpisodeLabel,
+      creditLine,
+      creditPrefix,
+      showWatchedButton: false
+    });
+  },
+
+  renderMovieHeroMarkup(meta) {
+    const directorLine = Array.isArray(meta.director)
+      ? meta.director.slice(0, 2).join(", ")
+      : (meta.director || "");
+    return this.renderHeroSection({
+      meta,
+      playLabel: "Play",
+      creditLine: directorLine,
+      creditPrefix: "Director",
+      showWatchedButton: true
+    });
+  },
+
+  renderSeriesLayout(meta) {
+    const backdrop = meta.background || meta.poster || "";
     if (!this.selectedRatingSeason || !this.seriesRatingsBySeason?.[this.selectedRatingSeason]) {
       this.selectedRatingSeason = this.selectedSeason || this.episodes?.[0]?.season || 1;
     }
@@ -1077,17 +1240,15 @@ export const MetaDetailsScreen = {
         <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content">
-          ${this.renderHeroSection({
-            meta,
-            playLabel: nextEpisodeLabel,
-            creditLine,
-            creditPrefix,
-            showWatchedButton: false
-          })}
-          <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
-          <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
-          ${this.renderSeriesInsightSection()}
-          ${this.renderCompanySections(meta)}
+          <div id="detailHeroSection">${this.renderSeriesHeroMarkup(meta)}</div>
+          <div id="detailSeasonRowMount">
+            <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
+          </div>
+          <div id="detailEpisodeTrackMount">
+            <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
+          </div>
+          <div id="detailInsightSectionMount">${this.renderSeriesInsightSection()}</div>
+          <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
         </div>
 
         <div id="episodeStreamChooserMount"></div>
@@ -1105,7 +1266,12 @@ export const MetaDetailsScreen = {
       ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml(meta.name || "logo")}" />`
       : `<h1 class="series-detail-title">${escapeHtml(meta.name || "Untitled")}</h1>`;
     const externalRatings = this.renderExternalRatingsRow(meta);
-    const trailerButton = this.trailerSource
+    const trailerSource = this.trailerSource || resolveTrailerSource(meta);
+    if (!this.trailerSource && trailerSource) {
+      this.trailerSource = trailerSource;
+    }
+    const trailerButtonEnabled = Boolean(LayoutPreferences.get().detailPageTrailerButtonEnabled);
+    const trailerButton = trailerButtonEnabled && trailerSource
       ? `
           <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="Play trailer">
             ${renderTrailerGlyph()}
@@ -1124,9 +1290,9 @@ export const MetaDetailsScreen = {
             <span>${escapeHtml(playLabel)}</span>
           </button>
           <button class="series-circle-btn focusable" data-action="toggleLibrary">
-            ${this.isSavedInLibrary ? "&#10003;" : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`}
+            ${renderLibraryGlyph(this.isSavedInLibrary)}
           </button>
-          ${showWatchedButton ? `<button class="series-circle-btn focusable" data-action="toggleWatched">${this.isMarkedWatched ? "&#10003;" : "&#9675;"}</button>` : ""}
+          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${this.isMarkedWatched ? "Mark unwatched" : "Mark watched"}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
           ${trailerButton}
         </div>
         ${creditLine ? `<p class="series-detail-support">${escapeHtml(creditPrefix)}: ${escapeHtml(creditLine)}</p>` : ""}
@@ -1282,9 +1448,6 @@ export const MetaDetailsScreen = {
 
   renderMovieLayout(meta) {
     const backdrop = meta.background || meta.poster || "";
-    const directorLine = Array.isArray(meta.director)
-      ? meta.director.slice(0, 2).join(", ")
-      : (meta.director || "");
 
     this.container.innerHTML = `
       <div class="series-detail-shell movie-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
@@ -1294,15 +1457,9 @@ export const MetaDetailsScreen = {
         <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content movie-detail-content">
-          ${this.renderHeroSection({
-            meta,
-            playLabel: "Play",
-            creditLine: directorLine,
-            creditPrefix: "Director",
-            showWatchedButton: true
-          })}
-          ${this.renderMovieInsightSection(meta)}
-          ${this.renderCompanySections(meta)}
+          <div id="detailHeroSection">${this.renderMovieHeroMarkup(meta)}</div>
+          <div id="detailInsightSectionMount">${this.renderMovieInsightSection(meta)}</div>
+          <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
         </div>
         <div id="movieStreamChooserMount"></div>
       </div>
@@ -1312,6 +1469,57 @@ export const MetaDetailsScreen = {
     if (!this.pendingFocusRestore) {
       ScreenUtils.setInitialFocus(this.container, ".movie-detail-content .focusable");
     }
+    this.bindDetailChrome();
+  },
+
+  captureRenderedChromeState() {
+    const content = this.getDetailContentScroller();
+    this.restoredContentScrollTop = Number(content?.scrollTop || 0);
+    this.restoredTrackScrollLeftByKey = captureHorizontalScrollMap(this.container);
+  },
+
+  updateRenderedDetailSections(meta) {
+    if (!this.container || !meta || !this.container.querySelector(".series-detail-shell")) {
+      this.render(meta);
+      return;
+    }
+
+    const focusRestore = this.captureDetailFocus();
+    this.captureRenderedChromeState();
+    const isSeries = meta.type === "series" || meta.type === "tv";
+    const backdropNode = this.container.querySelector(".series-detail-backdrop");
+    if (backdropNode instanceof HTMLElement) {
+      const backdrop = meta.background || meta.poster || "";
+      backdropNode.style.backgroundImage = backdrop ? `url('${backdrop.replace(/'/g, "%27")}')` : "";
+    }
+
+    const heroMount = this.container.querySelector("#detailHeroSection");
+    if (heroMount) {
+      heroMount.innerHTML = isSeries ? this.renderSeriesHeroMarkup(meta) : this.renderMovieHeroMarkup(meta);
+    }
+
+    const seasonMount = this.container.querySelector("#detailSeasonRowMount");
+    if (isSeries && seasonMount) {
+      seasonMount.innerHTML = `<div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>`;
+    }
+
+    const episodeMount = this.container.querySelector("#detailEpisodeTrackMount");
+    if (isSeries && episodeMount) {
+      episodeMount.innerHTML = `<div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>`;
+    }
+
+    const insightMount = this.container.querySelector("#detailInsightSectionMount");
+    if (insightMount) {
+      insightMount.innerHTML = isSeries ? this.renderSeriesInsightSection() : this.renderMovieInsightSection(meta);
+    }
+
+    const companyMount = this.container.querySelector("#detailCompanySectionsMount");
+    if (companyMount) {
+      companyMount.innerHTML = this.renderCompanySections(meta);
+    }
+
+    ScreenUtils.indexFocusables(this.container);
+    this.pendingFocusRestore = focusRestore;
     this.bindDetailChrome();
   },
   renderMovieInsightSection(meta) {
@@ -1414,7 +1622,7 @@ export const MetaDetailsScreen = {
                data-cast-key="${escapeHtml(String(person.tmdbId || `${person.name || ""}:${person.character || ""}`))}"
                data-cast-name="${escapeHtml(person.name || "")}"
                data-cast-role="${escapeHtml(person.character || "")}"
-               data-cast-photo="${person.photo || ""}">
+               data-cast-photo="${escapeHtml(person.photo || "")}">
         <div class="movie-cast-avatar"${person.photo ? ` style="background-image:url('${String(person.photo).replace(/'/g, "%27")}')"` : ""}></div>
         <div class="movie-cast-name">${escapeHtml(person.name || "")}</div>
         <div class="movie-cast-role">${escapeHtml(person.character || "")}</div>
@@ -1526,15 +1734,23 @@ export const MetaDetailsScreen = {
     }
     const cards = items.map((rawItem) => {
       const item = normalizePreviewItem(rawItem, fallbackType);
+      const year = extractPreviewYear(item.releaseInfo);
+      const primaryImage = item.landscapePoster || item.poster || "";
+      const fallbackImage = item.poster && item.poster !== primaryImage ? item.poster : "";
       return `
       <article class="detail-morelike-card focusable"
            data-action="openMoreLikeDetail"
            data-item-id="${item.id}"
            data-item-type="${item.type || this.params?.itemType || "movie"}"
            data-item-title="${escapeHtml(item.name || "Untitled")}">
-        <div class="detail-morelike-poster"${item.poster ? ` style="background-image:url('${item.poster.replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="detail-morelike-poster-wrap">
+          ${primaryImage
+            ? `<img class="detail-morelike-poster-image" src="${escapeHtml(primaryImage)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml(fallbackImage)}"` : ""} onerror="const next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; const placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />`
+            : ""}
+          <div class="detail-morelike-poster placeholder"${primaryImage ? " hidden" : ""}></div>
+        </div>
         <div class="detail-morelike-name">${escapeHtml(item.name || "Untitled")}</div>
-        ${item.releaseInfo ? `<div class="detail-morelike-type">${escapeHtml(item.releaseInfo)}</div>` : ""}
+        ${year ? `<div class="detail-morelike-type">${escapeHtml(year)}</div>` : ""}
       </article>
     `;
     }).join("");
@@ -1621,12 +1837,12 @@ export const MetaDetailsScreen = {
         }
         if ((this.meta?.type === "series" || this.meta?.type === "tv") && tab !== this.seriesInsightTab) {
           this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-          this.render(this.meta, { selector: `.series-insight-tab[data-tab="${this.seriesInsightTab}"]` });
+          this.updateRenderedDetailSections(this.meta);
           return;
         }
         if (this.meta?.type !== "series" && this.meta?.type !== "tv" && tab !== this.movieInsightTab) {
           this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-          this.render(this.meta, { selector: `.series-insight-tab[data-tab="${this.movieInsightTab}"]` });
+          this.updateRenderedDetailSections(this.meta);
         }
         return;
       }
@@ -1658,6 +1874,36 @@ export const MetaDetailsScreen = {
       }
       node.scrollLeft = Number(this.restoredTrackScrollLeftByKey?.[key] || 0);
     });
+  },
+
+  syncDetailActionButtons() {
+    if (!this.container) {
+      return;
+    }
+    Array.from(this.container.querySelectorAll('[data-action="toggleLibrary"]')).forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      if (node.classList.contains("series-circle-btn")) {
+        node.innerHTML = renderLibraryGlyph(this.isSavedInLibrary);
+        node.setAttribute("aria-label", this.isSavedInLibrary ? "Remove from library" : "Add to library");
+      } else {
+        node.textContent = this.isSavedInLibrary ? "Remove from Library" : "Add to Library";
+      }
+    });
+    Array.from(this.container.querySelectorAll('[data-action="toggleWatched"]')).forEach((node) => {
+      if (!(node instanceof HTMLElement)) {
+        return;
+      }
+      if (node.classList.contains("series-circle-btn")) {
+        node.classList.toggle("is-selected", this.isMarkedWatched);
+        node.innerHTML = renderWatchedGlyph(this.isMarkedWatched);
+        node.setAttribute("aria-label", this.isMarkedWatched ? "Mark unwatched" : "Mark watched");
+      } else {
+        node.textContent = this.isMarkedWatched ? "Mark Unwatched" : "Mark Watched";
+      }
+    });
+    Router.captureCurrentRouteState();
   },
 
   captureDetailFocus() {
@@ -1719,7 +1965,53 @@ export const MetaDetailsScreen = {
     if (!(target instanceof HTMLElement)) {
       return false;
     }
-    return this.focusInList([target], 0);
+    return this.focusInList([target], 0, { animated: false });
+  },
+
+  animateScroll(container, axis, targetValue, duration = 150) {
+    if (!container) {
+      return;
+    }
+    const property = axis === "y" ? "scrollTop" : "scrollLeft";
+    const max = axis === "y"
+      ? Math.max(0, container.scrollHeight - container.clientHeight)
+      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const startValue = Number(container[property] || 0);
+    if (Math.abs(startValue - nextValue) <= 1) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (prefersReducedMotion) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const map = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
+    const key = axis === "y" ? "y" : "x";
+    const existing = map.get(container) || {};
+    if (existing[key]) {
+      cancelAnimationFrame(existing[key]);
+    }
+
+    const startTime = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - startTime) / duration);
+      container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
+      if (progress < 1) {
+        existing[key] = requestAnimationFrame(tick);
+        map.set(container, existing);
+      } else {
+        existing[key] = null;
+        map.set(container, existing);
+      }
+    };
+
+    existing[key] = requestAnimationFrame(tick);
+    map.set(container, existing);
   },
 
   restartTrailerAutoplayTimer() {
@@ -2052,7 +2344,7 @@ export const MetaDetailsScreen = {
     });
   },
 
-  navigateToStreamScreenForEpisode(episode) {
+  navigateToStreamScreenForEpisode(episode, extraParams = {}) {
     if (!episode?.id) {
       return;
     }
@@ -2075,11 +2367,12 @@ export const MetaDetailsScreen = {
       episodeTitle: episode.title || "",
       episodes: this.episodes || [],
       nextEpisodeVideoId: nextEpisode?.id || null,
-      nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null
+      nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null,
+      ...extraParams
     });
   },
 
-  navigateToStreamScreenForMovie() {
+  navigateToStreamScreenForMovie(extraParams = {}) {
     const releaseYear = String(this.meta?.releaseInfo || "").match(/\b(19|20)\d{2}\b/)?.[0] || "";
     const streamBackdrop = this.meta?.background || this.meta?.landscapePoster || this.meta?.poster || null;
     Router.navigate("stream", {
@@ -2095,7 +2388,8 @@ export const MetaDetailsScreen = {
       parentalWarnings: this.meta?.parentalWarnings || null,
       parentalGuide: this.meta?.parentalGuide || null,
       videoId: this.params?.itemId || null,
-      episodes: []
+      episodes: [],
+      ...extraParams
     });
   },
 
@@ -2138,10 +2432,143 @@ export const MetaDetailsScreen = {
     ScreenUtils.setInitialFocus(this.container);
   },
 
-  focusInList(list, targetIndex) {
+  getDetailContentScroller() {
+    return this.container?.querySelector(".series-detail-content") || null;
+  },
+
+  getDetailFocusGroup(node) {
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+    return node.closest(".series-detail-actions, .series-season-row, .series-episode-track, .series-insight-tabs, .movie-cast-track, .series-cast-track, .series-rating-seasons, .series-episode-ratings-grid, .detail-morelike-track, .detail-company-track") || node;
+  },
+
+  getHorizontalTrackScrollLeft(horizontalTrack, target) {
+    if (!(horizontalTrack instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+      return 0;
+    }
+    const maxScrollLeft = Math.max(0, horizontalTrack.scrollWidth - horizontalTrack.clientWidth);
+    if (horizontalTrack.classList.contains("series-episode-track")) {
+      const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(horizontalTrack) : null;
+      const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
+      return Math.max(0, Math.min(maxScrollLeft, target.offsetLeft - leftPad));
+    }
+    if (horizontalTrack.classList.contains("detail-morelike-track")) {
+      const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(horizontalTrack) : null;
+      const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
+      return Math.max(0, Math.min(maxScrollLeft, target.offsetLeft - leftPad));
+    }
+
+    const edgePadding = horizontalTrack.classList.contains("home-track") ? 0 : 24;
+    const targetLeft = target.offsetLeft;
+    const targetRight = targetLeft + target.offsetWidth;
+    const viewLeft = horizontalTrack.scrollLeft;
+    const viewRight = viewLeft + horizontalTrack.clientWidth;
+    if (targetRight > (viewRight - edgePadding)) {
+      return Math.max(0, Math.min(maxScrollLeft, targetRight - horizontalTrack.clientWidth + edgePadding));
+    }
+    if (targetLeft < (viewLeft + edgePadding)) {
+      return Math.max(0, Math.min(maxScrollLeft, targetLeft - edgePadding));
+    }
+    return viewLeft;
+  },
+
+  syncDetailScrollBounds(target) {
+    const detailContent = this.getDetailContentScroller();
+    if (!detailContent || !(target instanceof HTMLElement) || !detailContent.contains(target)) {
+      return;
+    }
+    const focusables = Array.from(detailContent.querySelectorAll(".focusable")).filter((node) => node instanceof HTMLElement);
+    if (!focusables.length) {
+      return;
+    }
+    const targetGroup = this.getDetailFocusGroup(target);
+    const firstGroup = this.getDetailFocusGroup(focusables[0]);
+    const lastGroup = this.getDetailFocusGroup(focusables[focusables.length - 1]);
+    if (targetGroup && firstGroup && targetGroup === firstGroup) {
+      detailContent.scrollTop = 0;
+      return;
+    }
+    if (targetGroup && lastGroup && targetGroup === lastGroup) {
+      detailContent.scrollTop = Math.max(0, detailContent.scrollHeight - detailContent.clientHeight);
+    }
+  },
+
+  getRememberedEpisodeIndex(episodes = []) {
+    if (!Array.isArray(episodes) || !episodes.length) {
+      return 0;
+    }
+    const seasonKey = String(Number(this.selectedSeason || 0) || 0);
+    const remembered = Number(this.episodeFocusIndexBySeason?.[seasonKey]);
+    if (Number.isFinite(remembered) && remembered >= 0) {
+      return Math.min(episodes.length - 1, remembered);
+    }
+    return 0;
+  },
+
+  getSelectedSeasonIndex(seasons = []) {
+    if (!Array.isArray(seasons) || !seasons.length) {
+      return 0;
+    }
+    const selectedIndex = seasons.findIndex((node) => Number(node?.dataset?.season || 0) === Number(this.selectedSeason || 0));
+    return selectedIndex >= 0 ? selectedIndex : 0;
+  },
+
+  rememberEpisodeFocus(target, list = null) {
+    if (!(target instanceof HTMLElement) || !target.matches(".series-episode-card")) {
+      return;
+    }
+    const seasonKey = String(Number(this.selectedSeason || 0) || 0);
+    const items = Array.isArray(list) && list.length
+      ? list
+      : Array.from(this.container?.querySelectorAll(".series-episode-track .series-episode-card.focusable") || []);
+    const index = items.indexOf(target);
+    if (index >= 0) {
+      this.episodeFocusIndexBySeason[seasonKey] = index;
+    }
+  },
+
+  getRememberedRailIndex(railKey, items = []) {
+    if (!railKey || !Array.isArray(items) || !items.length) {
+      return 0;
+    }
+    const remembered = Number(this.railFocusIndexByKey?.[railKey]);
+    if (Number.isFinite(remembered) && remembered >= 0) {
+      return Math.min(items.length - 1, remembered);
+    }
+    return 0;
+  },
+
+  rememberRailFocus(target, list = null) {
+    if (!(target instanceof HTMLElement) || !target.matches(".detail-morelike-card")) {
+      return;
+    }
+    const track = target.closest("[data-scroll-key]");
+    const railKey = String(track?.dataset?.scrollKey || "").trim();
+    if (!railKey) {
+      return;
+    }
+    const items = Array.isArray(list) && list.length
+      ? list
+      : Array.from(track.querySelectorAll(".detail-morelike-card.focusable"));
+    const index = items.indexOf(target);
+    if (index >= 0) {
+      this.railFocusIndexByKey[railKey] = index;
+    }
+  },
+
+  getMoreLikeRailKey() {
+    return this.meta?.type === "series" || this.meta?.type === "tv"
+      ? "morelike:series"
+      : "morelike:movie";
+  },
+
+  focusInList(list, targetIndex, options = {}) {
     if (!Array.isArray(list) || !list.length) {
       return false;
     }
+    const preserveVerticalScroll = Boolean(options?.preserveVerticalScroll);
+    const animated = options?.animated !== false;
     const index = Math.max(0, Math.min(list.length - 1, targetIndex));
     const target = list[index];
     if (!target) {
@@ -2150,34 +2577,43 @@ export const MetaDetailsScreen = {
     this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     target.focus();
+    this.rememberEpisodeFocus(target, list);
+    this.rememberRailFocus(target, list);
     const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons, .detail-morelike-track, .detail-company-track, .series-season-row, .series-insight-tabs");
     if (horizontalTrack) {
-      const targetLeft = target.offsetLeft;
-      const targetRight = targetLeft + target.offsetWidth;
-      const viewLeft = horizontalTrack.scrollLeft;
-      const viewRight = viewLeft + horizontalTrack.clientWidth;
-      const isStrictEdgeTrack = horizontalTrack.classList.contains("series-episode-track")
-        || horizontalTrack.classList.contains("home-track");
-      const edgePadding = isStrictEdgeTrack ? 0 : 24;
-      if (targetRight > (viewRight - edgePadding)) {
-        horizontalTrack.scrollLeft = Math.max(0, targetRight - horizontalTrack.clientWidth + edgePadding);
-      } else if (targetLeft < (viewLeft + edgePadding)) {
-        horizontalTrack.scrollLeft = Math.max(0, targetLeft - edgePadding);
+      const nextScrollLeft = this.getHorizontalTrackScrollLeft(horizontalTrack, target);
+      if (animated) {
+        this.animateScroll(horizontalTrack, "x", nextScrollLeft, 140);
+      } else {
+        horizontalTrack.scrollLeft = nextScrollLeft;
       }
-      const detailContent = this.container?.querySelector(".series-detail-content");
-      if (detailContent && detailContent.contains(horizontalTrack)) {
+      const detailContent = this.getDetailContentScroller();
+      if (!preserveVerticalScroll && detailContent && detailContent.contains(horizontalTrack)) {
         const rect = horizontalTrack.getBoundingClientRect();
         const contentRect = detailContent.getBoundingClientRect();
         const topPad = 72;
         const bottomPad = 120;
         if (rect.bottom > contentRect.bottom - bottomPad) {
-          detailContent.scrollTop += Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
+          const nextScrollTop = detailContent.scrollTop + Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
+          if (animated) {
+            this.animateScroll(detailContent, "y", nextScrollTop, 150);
+          } else {
+            detailContent.scrollTop = nextScrollTop;
+          }
         } else if (rect.top < contentRect.top + topPad) {
-          detailContent.scrollTop -= Math.ceil(contentRect.top + topPad - rect.top);
+          const nextScrollTop = detailContent.scrollTop - Math.ceil(contentRect.top + topPad - rect.top);
+          if (animated) {
+            this.animateScroll(detailContent, "y", nextScrollTop, 150);
+          } else {
+            detailContent.scrollTop = nextScrollTop;
+          }
         }
       }
     } else if (typeof target.scrollIntoView === "function") {
       target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+    if (!preserveVerticalScroll) {
+      this.syncDetailScrollBounds(target);
     }
     return true;
   },
@@ -2384,6 +2820,7 @@ export const MetaDetailsScreen = {
     const ratingSeasons = Array.from(this.container.querySelectorAll(".series-rating-seasons .series-rating-season.focusable"));
     const ratingChips = Array.from(this.container.querySelectorAll(".series-episode-ratings-grid .series-episode-rating-chip.focusable"));
     const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+    const moreLikeRememberedIndex = this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards);
     const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
     const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
 
@@ -2400,7 +2837,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(seasons, Math.min(actionIndex, seasons.length - 1)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, actionIndex) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       return true;
@@ -2417,7 +2854,7 @@ export const MetaDetailsScreen = {
       }
       if (direction === "down") {
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(seasonIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       return true;
@@ -2425,11 +2862,11 @@ export const MetaDetailsScreen = {
 
     const episodeIndex = episodes.indexOf(current);
     if (episodeIndex >= 0) {
-      if (direction === "left") return this.focusInList(episodes, episodeIndex - 1) || true;
-      if (direction === "right") return this.focusInList(episodes, episodeIndex + 1) || true;
+      if (direction === "left") return this.focusInList(episodes, episodeIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(episodes, episodeIndex + 1, { preserveVerticalScroll: true }) || true;
       if (direction === "up") {
         if (seasons.length) {
-          return this.focusInList(seasons, Math.min(episodeIndex, seasons.length - 1)) || true;
+          return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (actions.length) {
           return this.focusInList(actions, Math.min(episodeIndex, actions.length - 1)) || true;
@@ -2446,7 +2883,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(castCards, 0) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, 0) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (companyCards[0]?.length) {
           return this.focusInList(companyCards[0], 0) || true;
@@ -2457,11 +2894,11 @@ export const MetaDetailsScreen = {
 
     const tabIndex = insightTabs.indexOf(current);
     if (tabIndex >= 0) {
-      if (direction === "left") return this.focusInList(insightTabs, tabIndex - 1) || true;
-      if (direction === "right") return this.focusInList(insightTabs, tabIndex + 1) || true;
+      if (direction === "left") return this.focusInList(insightTabs, tabIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(insightTabs, tabIndex + 1, { preserveVerticalScroll: true }) || true;
       if (direction === "up") {
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(tabIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       if (direction === "down") {
@@ -2472,7 +2909,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(castCards, Math.min(tabIndex, castCards.length - 1)) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, 0) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (companyCards[0]?.length) {
           return this.focusInList(companyCards[0], 0) || true;
@@ -2487,14 +2924,14 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(castCards, castIndex + 1) || true;
       if (direction === "up") {
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, 0) || true;
+          return this.focusInList(insightTabs, 0, { preserveVerticalScroll: true }) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(castIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, Math.min(castIndex, moreLikeCards.length - 1)) || true;
+        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], Math.min(castIndex, companyCards[0].length - 1)) || true;
@@ -2508,17 +2945,17 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(ratingSeasons, ratingSeasonIndex + 1) || true;
       if (direction === "up") {
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, 1) || true;
+          return this.focusInList(insightTabs, 1, { preserveVerticalScroll: true }) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(ratingSeasonIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       if (direction === "down" && ratingChips.length) {
         return this.focusInList(ratingChips, Math.min(ratingSeasonIndex, ratingChips.length - 1)) || true;
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, Math.min(ratingSeasonIndex, moreLikeCards.length - 1)) || true;
+        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
       return true;
     }
@@ -2532,14 +2969,14 @@ export const MetaDetailsScreen = {
           return this.focusInList(ratingSeasons, Math.min(ratingChipIndex, ratingSeasons.length - 1)) || true;
         }
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, 1) || true;
+          return this.focusInList(insightTabs, 1, { preserveVerticalScroll: true }) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(ratingChipIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, Math.min(ratingChipIndex, moreLikeCards.length - 1)) || true;
+        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], Math.min(ratingChipIndex, companyCards[0].length - 1)) || true;
@@ -2552,20 +2989,12 @@ export const MetaDetailsScreen = {
       if (direction === "left") return this.focusInList(moreLikeCards, moreLikeIndex - 1) || true;
       if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
       if (direction === "up") {
-        if (this.seriesInsightTab === "ratings" && ratingChips.length) {
-          return this.focusInList(ratingChips, Math.min(moreLikeIndex, ratingChips.length - 1)) || true;
-        }
-        if (this.seriesInsightTab === "ratings" && ratingSeasons.length) {
-          return this.focusInList(ratingSeasons, Math.min(moreLikeIndex, ratingSeasons.length - 1)) || true;
-        }
-        if (castCards.length) {
-          return this.focusInList(castCards, Math.min(moreLikeIndex, castCards.length - 1)) || true;
-        }
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, 0) || true;
+          const moreLikeTabIndex = Math.max(0, insightTabs.findIndex((node) => String(node?.dataset?.tab || "") === "morelike"));
+          return this.focusInList(insightTabs, moreLikeTabIndex, { preserveVerticalScroll: true }) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(moreLikeIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       if (direction === "down" && companyCards[0]?.length) {
@@ -2587,7 +3016,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(companyCards[trackIndex - 1], Math.min(companyIndex, companyCards[trackIndex - 1].length - 1)) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, Math.min(companyIndex, moreLikeCards.length - 1)) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (this.seriesInsightTab === "ratings" && ratingChips.length) {
           return this.focusInList(ratingChips, Math.min(companyIndex, ratingChips.length - 1)) || true;
@@ -2599,7 +3028,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, 0) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, Math.min(companyIndex, episodes.length - 1)) || true;
+          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
       if (direction === "down" && trackIndex < companyCards.length - 1 && companyCards[trackIndex + 1]?.length) {
@@ -2633,6 +3062,7 @@ export const MetaDetailsScreen = {
     const tabs = Array.from(this.container.querySelectorAll(".series-insight-tabs .series-insight-tab.focusable"));
     const cast = Array.from(this.container.querySelectorAll(".movie-cast-track .movie-cast-card.focusable"));
     const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+    const moreLikeRememberedIndex = this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards);
     const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
     const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
 
@@ -2646,13 +3076,13 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(actions, actionIndex + 1) || true;
       if (direction === "down") {
         if (tabs.length) {
-          return this.focusInList(tabs, 0) || true;
+          return this.focusInList(tabs, 0, { preserveVerticalScroll: true }) || true;
         }
         if (cast.length) {
           return this.focusInList(cast, actionIndex) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, actionIndex) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (companyCards[0]?.length) {
           return this.focusInList(companyCards[0], Math.min(actionIndex, companyCards[0].length - 1)) || true;
@@ -2663,12 +3093,12 @@ export const MetaDetailsScreen = {
 
     const tabIndex = tabs.indexOf(current);
     if (tabIndex >= 0) {
-      if (direction === "left") return this.focusInList(tabs, tabIndex - 1) || true;
-      if (direction === "right") return this.focusInList(tabs, tabIndex + 1) || true;
+      if (direction === "left") return this.focusInList(tabs, tabIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(tabs, tabIndex + 1, { preserveVerticalScroll: true }) || true;
       if (direction === "up") return this.focusInList(actions, Math.min(tabIndex, actions.length - 1)) || true;
       if (direction === "down") {
         if (cast.length) return this.focusInList(cast, Math.min(tabIndex, cast.length - 1)) || true;
-        if (moreLikeCards.length) return this.focusInList(moreLikeCards, Math.min(tabIndex, moreLikeCards.length - 1)) || true;
+        if (moreLikeCards.length) return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         if (companyCards[0]?.length) return this.focusInList(companyCards[0], Math.min(tabIndex, companyCards[0].length - 1)) || true;
       }
       return true;
@@ -2680,12 +3110,12 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(cast, castIndex + 1) || true;
       if (direction === "up") {
         if (tabs.length) {
-          return this.focusInList(tabs, 0) || true;
+          return this.focusInList(tabs, 0, { preserveVerticalScroll: true }) || true;
         }
         return this.focusInList(actions, Math.min(castIndex, actions.length - 1)) || true;
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, Math.min(castIndex, moreLikeCards.length - 1)) || true;
+        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], Math.min(castIndex, companyCards[0].length - 1)) || true;
@@ -2698,11 +3128,12 @@ export const MetaDetailsScreen = {
       if (direction === "left") return this.focusInList(moreLikeCards, moreLikeIndex - 1) || true;
       if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
       if (direction === "up") {
+        if (tabs.length) {
+          const moreLikeTabIndex = Math.max(0, tabs.findIndex((node) => String(node?.dataset?.tab || "") === "morelike"));
+          return this.focusInList(tabs, moreLikeTabIndex, { preserveVerticalScroll: true }) || true;
+        }
         if (cast.length) {
           return this.focusInList(cast, Math.min(moreLikeIndex, cast.length - 1)) || true;
-        }
-        if (tabs.length) {
-          return this.focusInList(tabs, 0) || true;
         }
         return this.focusInList(actions, Math.min(moreLikeIndex, actions.length - 1)) || true;
       }
@@ -2725,13 +3156,13 @@ export const MetaDetailsScreen = {
           return this.focusInList(companyCards[trackIndex - 1], Math.min(companyIndex, companyCards[trackIndex - 1].length - 1)) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, Math.min(companyIndex, moreLikeCards.length - 1)) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (cast.length) {
           return this.focusInList(cast, Math.min(companyIndex, cast.length - 1)) || true;
         }
         if (tabs.length) {
-          return this.focusInList(tabs, 0) || true;
+          return this.focusInList(tabs, 0, { preserveVerticalScroll: true }) || true;
         }
         return this.focusInList(actions, Math.min(companyIndex, actions.length - 1)) || true;
       }
@@ -2847,7 +3278,7 @@ export const MetaDetailsScreen = {
       const tab = String(current.dataset.tab || "cast");
       if (tab !== this.seriesInsightTab) {
         this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-        this.render(this.meta);
+        this.updateRenderedDetailSections(this.meta);
       }
       return;
     }
@@ -2856,7 +3287,7 @@ export const MetaDetailsScreen = {
       const tab = String(current.dataset.tab || "cast");
       if (tab !== this.movieInsightTab) {
         this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-        this.render(this.meta);
+        this.updateRenderedDetailSections(this.meta);
       }
       return;
     }
@@ -2925,7 +3356,8 @@ export const MetaDetailsScreen = {
         poster: this.meta?.poster || null,
         background: this.meta?.background || null
       });
-      await this.loadDetail();
+      this.isSavedInLibrary = !this.isSavedInLibrary;
+      this.syncDetailActionButtons();
       return;
     }
 
@@ -2933,6 +3365,7 @@ export const MetaDetailsScreen = {
       if (this.isMarkedWatched) {
         await watchedItemsRepository.unmark(this.params?.itemId);
         await watchProgressRepository.removeProgress(this.params?.itemId);
+        this.isMarkedWatched = false;
       } else {
         await watchedItemsRepository.mark({
           contentId: this.params?.itemId,
@@ -2948,8 +3381,9 @@ export const MetaDetailsScreen = {
           durationMs: 100,
           updatedAt: Date.now()
         });
+        this.isMarkedWatched = true;
       }
-      await this.loadDetail();
+      this.syncDetailActionButtons();
       return;
     }
 
