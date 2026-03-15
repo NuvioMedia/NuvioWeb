@@ -61,7 +61,7 @@ async function bootstrapApp() {
   AuthManager.subscribe((state) => {
     if (state === AuthState.LOADING) {
       StartupSyncService.stop();
-      Router.navigate("splash");
+      return;
     }
 
     if (state === AuthState.SIGNED_OUT) {

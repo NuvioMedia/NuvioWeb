@@ -4,6 +4,7 @@ import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";
+import { renderFilterPicker } from "../../components/filterPicker.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -32,6 +33,49 @@ function formatAddonTypeLabel(value) {
   if (type === "series") return "Series";
   if (type === "movie") return "Movie";
   return toTitleCase(type);
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function groupNodesByOffsetTop(nodes = []) {
+  const grouped = [];
+  nodes.forEach((node) => {
+    const top = Math.round(node.offsetTop);
+    const bucket = grouped.find((entry) => Math.abs(entry.top - top) <= 6);
+    if (bucket) {
+      bucket.nodes.push(node);
+      return;
+    }
+    grouped.push({ top, nodes: [node] });
+  });
+  grouped.sort((left, right) => left.top - right.top);
+  return grouped.map((entry) => entry.nodes);
+}
+
+function extractReleaseYear(item = {}) {
+  const candidates = [
+    item?.released,
+    item?.releaseDate,
+    item?.release_date,
+    item?.releaseInfo,
+    item?.year
+  ].filter(Boolean);
+
+  for (const value of candidates) {
+    const match = String(value).match(/\b(19|20)\d{2}\b/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return "";
 }
 
 function isKey(event, code, aliases = []) {
@@ -63,7 +107,58 @@ function isEnterKey(event) {
 
 export const DiscoverScreen = {
 
-  async mount() {
+  getRouteStateKey() {
+    return "discover";
+  },
+
+  captureRouteState() {
+    this.captureViewState();
+    return {
+      selectedType: String(this.selectedType || "movie"),
+      catalogs: Array.isArray(this.catalogs) ? [...this.catalogs] : [],
+      selectedCatalogKey: String(this.selectedCatalogKey || ""),
+      selectedGenre: String(this.selectedGenre || "Default"),
+      items: Array.isArray(this.items) ? [...this.items] : [],
+      nextSkip: Number(this.nextSkip || 0),
+      hasMore: Boolean(this.hasMore),
+      lastFocusedAction: String(this.lastFocusedAction || "discoverFilterType"),
+      lastFocusedKey: this.lastFocusedKey ? String(this.lastFocusedKey) : null,
+      lastFocusedDiscoverItemId: this.lastFocusedDiscoverItemId ? String(this.lastFocusedDiscoverItemId) : "",
+      savedScrollTop: Number(this.savedScrollTop || 0),
+      rowFocusedIndexByRow: this.rowFocusedIndexByRow && typeof this.rowFocusedIndexByRow === "object"
+        ? { ...this.rowFocusedIndexByRow }
+        : {},
+      focusZone: String(this.focusZone || "content")
+    };
+  },
+
+  hydrateFromRouteState(restoredState = null) {
+    const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
+    if (!snapshot) {
+      return false;
+    }
+    this.selectedType = String(snapshot.selectedType || "movie");
+    this.catalogs = Array.isArray(snapshot.catalogs) ? [...snapshot.catalogs] : [];
+    this.selectedCatalogKey = String(snapshot.selectedCatalogKey || "");
+    this.selectedGenre = String(snapshot.selectedGenre || "Default");
+    this.items = Array.isArray(snapshot.items) ? [...snapshot.items] : [];
+    this.nextSkip = Number(snapshot.nextSkip || 0);
+    this.hasMore = Boolean(snapshot.hasMore);
+    this.lastFocusedAction = String(snapshot.lastFocusedAction || "discoverFilterType");
+    this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
+    this.lastFocusedDiscoverItemId = String(snapshot.lastFocusedDiscoverItemId || "");
+    this.savedScrollTop = Number(snapshot.savedScrollTop || 0);
+    this.rowFocusedIndexByRow = snapshot.rowFocusedIndexByRow && typeof snapshot.rowFocusedIndexByRow === "object"
+      ? { ...snapshot.rowFocusedIndexByRow }
+      : {};
+    this.focusZone = String(snapshot.focusZone || "content");
+    this.loading = false;
+    this.updateCatalogOptions();
+    this.pendingRestoreFocus = true;
+    return true;
+  },
+
+  async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("discover");
     ScreenUtils.show(this.container);
     this.sidebarProfile = await getSidebarProfileState();
@@ -85,6 +180,17 @@ export const DiscoverScreen = {
     this.openPicker = null;
     this.pickerOptionIndex = 0;
     this.lastFocusedAction = "discoverFilterType";
+    this.lastFocusedKey = null;
+    this.savedScrollTop = 0;
+    this.rowFocusedIndexByRow = {};
+    this.pendingRestoreFocus = false;
+    this.nextSkip = 0;
+    this.hasMore = true;
+
+    if (navigationContext?.isBackNavigation && this.hydrateFromRouteState(navigationContext?.restoredState || null)) {
+      this.render();
+      return;
+    }
 
     this.render();
     await this.loadCatalogsAndContent();
@@ -146,16 +252,45 @@ export const DiscoverScreen = {
   },
 
   async reloadItems() {
-    const token = this.loadToken;
     const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
-    this.loading = true;
+    this.captureViewState();
     this.items = [];
+    this.nextSkip = 0;
+    this.hasMore = true;
+    this.loading = true;
+    this.lastFocusedKey = null;
+    this.lastFocusedDiscoverItemId = "";
+    this.pendingRestoreFocus = false;
+    this.savedScrollTop = 0;
     this.render();
     if (!selectedCatalog) {
       this.loading = false;
+      this.hasMore = false;
       this.render();
       return;
     }
+
+    this.loading = false;
+    await this.loadNextPage({ restoreFocusToGrid: false });
+  },
+
+  async loadNextPage({ restoreFocusToGrid = true } = {}) {
+    if (this.loading || !this.hasMore) {
+      return;
+    }
+
+    const token = this.loadToken;
+    const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
+    if (!selectedCatalog) {
+      this.hasMore = false;
+      this.render();
+      return;
+    }
+
+    this.loading = true;
+    this.captureViewState();
+    this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
+    this.render();
 
     const extraArgs = {};
     if (this.selectedGenre && this.selectedGenre !== "Default") {
@@ -169,15 +304,52 @@ export const DiscoverScreen = {
       catalogId: selectedCatalog.catalogId,
       catalogName: selectedCatalog.catalogName,
       type: selectedCatalog.type,
-      skip: 0,
+      skip: Math.max(0, Number(this.nextSkip || 0)),
       extraArgs,
       supportsSkip: true
     });
 
     if (token !== this.loadToken) return;
-    this.items = result.status === "success" ? (result.data?.items || []) : [];
+    if (result.status !== "success") {
+      this.loading = false;
+      this.hasMore = false;
+      this.render();
+      return;
+    }
+
+    const incoming = Array.isArray(result?.data?.items) ? result.data.items : [];
+    if (!this.items.length) {
+      this.items = [];
+    }
+    if (incoming.length) {
+      const seen = new Set(this.items.map((item) => item.id));
+      incoming.forEach((item) => {
+        if (!item?.id || seen.has(item.id)) {
+          return;
+        }
+        seen.add(item.id);
+        this.items.push(item);
+      });
+      this.nextSkip = Math.max(0, Number(this.nextSkip || 0)) + 100;
+    }
+    this.hasMore = incoming.length > 0;
     this.loading = false;
+    if (!this.lastFocusedKey && this.items[0]?.id) {
+      this.lastFocusedKey = `item:${this.items[0].id}`;
+      this.lastFocusedDiscoverItemId = String(this.items[0].id);
+    }
+    this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
     this.render();
+  },
+
+  maybeAutoLoadMore(index) {
+    if (this.loading || !this.hasMore) {
+      return;
+    }
+    const remaining = (this.items.length - 1) - Number(index || 0);
+    if (remaining <= 10) {
+      this.loadNextPage();
+    }
   },
 
   getPickerOptions(kind) {
@@ -256,7 +428,29 @@ export const DiscoverScreen = {
     if (!options.length) return;
     const next = this.pickerOptionIndex + delta;
     this.pickerOptionIndex = Math.min(options.length - 1, Math.max(0, next));
-    this.render();
+    this.refreshOpenPickerMenuState();
+  },
+
+  refreshOpenPickerMenuState() {
+    if (!this.openPicker) {
+      return;
+    }
+    const options = Array.from(this.container?.querySelectorAll(".discover-picker-menu .discover-picker-option") || []);
+    if (!options.length) {
+      this.render();
+      return;
+    }
+    const selectedValue = this.getCurrentPickerValue(this.openPicker);
+    const pickerOptions = this.getPickerOptions(this.openPicker);
+    options.forEach((node, index) => {
+      const option = pickerOptions[index] || null;
+      const isFocused = index === this.pickerOptionIndex;
+      const isSelected = option?.value === selectedValue;
+      node.classList.toggle("focused-option", isFocused);
+      node.classList.toggle("selected", isSelected);
+      node.setAttribute("aria-selected", isSelected ? "true" : "false");
+    });
+    this.syncOpenPickerScroll();
   },
 
   selectCurrentPickerOption() {
@@ -278,6 +472,7 @@ export const DiscoverScreen = {
     target.classList.add("focused");
     this.focusZone = "content";
     focusWithoutAutoScroll(target);
+    this.scrollContentToTop();
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
@@ -313,6 +508,7 @@ export const DiscoverScreen = {
     target.classList.add("focused");
     this.focusZone = "content";
     focusWithoutAutoScroll(target);
+    this.scrollContentToTop();
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
@@ -320,33 +516,179 @@ export const DiscoverScreen = {
     return true;
   },
 
-  moveCardFocus(direction) {
-    const selector = ".discover-grid .discover-card.focusable";
-    const before = this.container?.querySelector(`${selector}.focused`) || null;
-    ScreenUtils.moveFocusDirectional(this.container, direction, selector);
-    const after = this.container?.querySelector(`${selector}.focused`) || null;
-    return Boolean(after && before !== after);
+  captureViewState() {
+    const main = this.container?.querySelector(".discover-main");
+    if (main) {
+      this.savedScrollTop = main.scrollTop;
+    }
+    const focused = this.container?.querySelector(".seeall-card.focused") || this.container?.querySelector(".discover-card.focused");
+    if (focused?.dataset?.focusKey) {
+      this.lastFocusedKey = String(focused.dataset.focusKey || "");
+    }
+    if (focused?.dataset?.itemId) {
+      this.lastFocusedDiscoverItemId = String(focused.dataset.itemId || "");
+    }
   },
 
-  focusFirstContentCard() {
-    const preferredSelector = this.lastFocusedDiscoverItemId
-      ? `.discover-grid .discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`
-      : "";
-    const target = (preferredSelector ? this.container?.querySelector(preferredSelector) : null)
-      || this.container?.querySelector(".discover-grid .discover-card.focusable");
-    if (!target) {
-      return false;
+  restoreScrollState() {
+    const main = this.container?.querySelector(".discover-main");
+    if (main) {
+      main.scrollTop = Number(this.savedScrollTop || 0);
     }
-    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+  },
+
+  restoreFocusedCard() {
+    this.restoreScrollState();
+    const target = (this.lastFocusedKey
+      ? this.container?.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
+      : null)
+      || (this.lastFocusedDiscoverItemId
+        ? this.container?.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
+        : null)
+      || this.container?.querySelector(".seeall-card.focusable")
+      || (this.lastFocusedAction
+        ? this.container?.querySelector(`.discover-filter.focusable[data-action="${String(this.lastFocusedAction).replace(/["\\]/g, "\\$&")}"]`)
+        : null)
+      || this.container?.querySelector(".discover-filter.focusable")
+      || null;
+    if (!target) {
+      return;
+    }
+    this.container?.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (node !== target) node.classList.remove("focused");
+    });
+    target.classList.add("focused");
+    if (target.classList.contains("discover-filter")) {
+      focusWithoutAutoScroll(target);
+      this.scrollContentToTop();
+      return;
+    }
+    target.focus();
+    this.rememberRowFocus(target);
+    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+  },
+
+  syncOpenPickerScroll() {
+    const menu = this.container?.querySelector(".discover-picker-menu");
+    const option = menu?.querySelector(".discover-picker-option.focused-option");
+    if (menu && option) {
+      option.scrollIntoView({ block: "nearest" });
+    }
+  },
+
+  buildNavigationModel() {
+    const cards = Array.from(this.container?.querySelectorAll(".discover-grid .seeall-card.focusable") || []);
+    const rows = groupNodesByOffsetTop(cards);
+    rows.forEach((rowNodes, rowIndex) => {
+      rowNodes.forEach((node, colIndex) => {
+        node.dataset.navRow = String(rowIndex);
+        node.dataset.navCol = String(colIndex);
+      });
+    });
+    this.navModel = { rows };
+  },
+
+  rememberRowFocus(node) {
+    if (!node?.dataset) return;
+    const row = Number(node.dataset.navRow || -1);
+    const col = Number(node.dataset.navCol || 0);
+    if (row < 0) return;
+    this.rowFocusedIndexByRow = {
+      ...(this.rowFocusedIndexByRow || {}),
+      [row]: Math.max(0, col)
+    };
+  },
+
+  resolvePreferredNodeForRow(rowNodes = []) {
+    if (!Array.isArray(rowNodes) || !rowNodes.length) {
+      return null;
+    }
+    const rowIndex = Number(rowNodes[0]?.dataset?.navRow || -1);
+    const storedIndex = rowIndex >= 0 ? Number(this.rowFocusedIndexByRow?.[rowIndex]) : Number.NaN;
+    const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+    return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
+  },
+
+  focusNode(target) {
+    if (!target) return false;
+    this.container?.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (node !== target) {
+        node.classList.remove("focused");
+      }
+    });
     target.classList.add("focused");
     this.focusZone = "content";
-    focusWithoutAutoScroll(target);
+    this.lastFocusedAction = String(target.dataset.action || this.lastFocusedAction || "openDetail");
+    this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+    if (target.dataset.itemId) {
+      this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
+    }
+    this.rememberRowFocus(target);
+    target.focus();
+    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    this.maybeAutoLoadMore(target.dataset.itemIndex);
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
-    this.lastFocusedAction = String(target.dataset.action || "openDetail");
-    this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
     return true;
+  },
+
+  getContentScroller() {
+    return this.container?.querySelector(".discover-main") || null;
+  },
+
+  scrollContentToTop() {
+    const scroller = this.getContentScroller();
+    if (scroller) {
+      scroller.scrollTop = 0;
+    }
+  },
+
+  handleGridDpad(event) {
+    const code = Number(event?.keyCode || 0);
+    const direction = code === 38 ? "up"
+      : code === 40 ? "down"
+        : code === 37 ? "left"
+          : code === 39 ? "right"
+            : null;
+    if (!direction) {
+      return false;
+    }
+
+    const nav = this.navModel;
+    const current = this.container?.querySelector(".discover-grid .seeall-card.focused") || null;
+    if (!nav?.rows?.length || !current) {
+      return false;
+    }
+
+    event?.preventDefault?.();
+    const row = Number(current.dataset.navRow || 0);
+    const col = Number(current.dataset.navCol || 0);
+    const rowNodes = nav.rows[row] || [];
+
+    if (direction === "left") {
+      return this.focusNode(rowNodes[col - 1] || current) || true;
+    }
+    if (direction === "right") {
+      return this.focusNode(rowNodes[col + 1] || current) || true;
+    }
+
+    const delta = direction === "up" ? -1 : 1;
+    const targetRowNodes = nav.rows[row + delta] || null;
+    if (!targetRowNodes?.length) {
+      return true;
+    }
+    return this.focusNode(this.resolvePreferredNodeForRow(targetRowNodes)) || true;
+  },
+
+  focusFirstContentCard() {
+    const target = (this.lastFocusedKey
+      ? this.container?.querySelector(`.discover-grid .seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
+      : null)
+      || this.container?.querySelector(".discover-grid .seeall-card.focusable")
+      || null;
+    return this.focusNode(target);
   },
 
   focusSidebarNode() {
@@ -376,15 +718,18 @@ export const DiscoverScreen = {
   },
 
   restoreContentFocus() {
-    const selector = this.lastFocusedAction
+    const selector = this.lastFocusedAction && this.lastFocusedAction !== "openDetail"
       ? `.focusable[data-action="${this.lastFocusedAction}"]`
-      : ".discover-filter.focusable";
-    const target = this.container?.querySelector(selector)
+      : "";
+    const target = (this.lastFocusedKey
+      ? this.container?.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
+      : null)
+      || (selector ? this.container?.querySelector(selector) : null)
       || (this.lastFocusedDiscoverItemId
-        ? this.container?.querySelector(`.discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
+        ? this.container?.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
         : null)
       || this.container?.querySelector(".discover-filter.focusable")
-      || this.container?.querySelector(".discover-card.focusable")
+      || this.container?.querySelector(".seeall-card.focusable")
       || null;
     if (!target) {
       return false;
@@ -392,7 +737,14 @@ export const DiscoverScreen = {
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusZone = "content";
-    focusWithoutAutoScroll(target);
+    if (target.classList.contains("discover-filter")) {
+      focusWithoutAutoScroll(target);
+      this.scrollContentToTop();
+    } else {
+      target.focus();
+      this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    }
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
@@ -416,36 +768,32 @@ export const DiscoverScreen = {
   },
 
   renderFilterPicker(kind, title, value) {
-    const action = kind === "type"
-      ? "discoverFilterType"
-      : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
     const isOpen = this.openPicker === kind;
     const options = isOpen ? this.getPickerOptions(kind) : [];
     const currentValue = this.getCurrentPickerValue(kind);
-
-    return `
-      <div class="discover-filter-shell">
-        <button class="discover-filter focusable" data-action="${action}">
-          <span class="discover-filter-label">${title}</span>
-          <span class="discover-filter-line">
-            <span class="discover-filter-value">${value}</span>
-            <span class="discover-filter-chevron" aria-hidden="true">${isOpen ? "&#9652;" : "&#9662;"}</span>
-          </span>
-        </button>
-        ${isOpen ? `
-          <div class="discover-picker-menu" role="listbox" aria-label="${title}">
-            ${options.map((option, index) => `
-              <div class="discover-picker-option${option.value === currentValue ? " selected" : ""}${index === this.pickerOptionIndex ? " focused-option" : ""}"
-                   data-option-index="${index}"
-                   role="option"
-                   aria-selected="${option.value === currentValue ? "true" : "false"}">
-                ${option.label}
-              </div>
-            `).join("")}
-          </div>
-        ` : ""}
-      </div>
-    `;
+    const selectedIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
+    const anchorAction = kind === "type"
+      ? "discoverFilterType"
+      : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
+    return renderFilterPicker({
+      picker: kind,
+      title,
+      value,
+      options,
+      open: isOpen,
+      focusIndex: this.pickerOptionIndex,
+      selectedIndex,
+      widthClass: "library-picker-flex",
+      classPrefix: "library-picker",
+      wrapperExtraClass: "discover-filter-shell",
+      anchorExtraClass: "library-primary discover-filter",
+      menuExtraClass: "discover-picker-menu",
+      optionExtraClass: "discover-picker-option",
+      focusedOptionClass: "focused-option",
+      selectedOptionClass: "selected",
+      optionFocusable: true,
+      anchorAction
+    });
   },
 
   render() {
@@ -457,26 +805,33 @@ export const DiscoverScreen = {
     }
 
     const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
-    const title = selectedCatalog
-      ? `${selectedCatalog.addonName || "Addon"} - ${formatAddonTypeLabel(selectedCatalog.type)}`
-      : "No catalog selected";
-    const cards = this.loading
-      ? `<div class="discover-empty">Loading...</div>`
-      : (this.items.length
-          ? this.items.map((item) => `
-              <article class="discover-card focusable"
-                       data-action="openDetail"
-                       data-item-id="${item.id || ""}"
-                       data-item-type="${item.type || selectedCatalog?.type || "movie"}"
-                       data-item-title="${item.name || "Untitled"}">
-                <div class="discover-card-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-                <div class="discover-card-title">${item.name || "Untitled"}</div>
-              </article>
-            `).join("")
-          : `<div class="discover-empty">No content found.</div>`);
+    const contextLabel = selectedCatalog
+      ? `${selectedCatalog.addonName || "Addon"} • ${formatAddonTypeLabel(selectedCatalog.type)}`
+      : "Choose a catalog to start browsing";
+    const cards = this.items.length
+      ? this.items.map((item, index) => `
+              <article class="discover-card seeall-card focusable"
+                        data-action="openDetail"
+                        data-item-id="${item.id || ""}"
+                        data-item-type="${item.type || selectedCatalog?.type || "movie"}"
+                        data-item-title="${item.name || "Untitled"}"
+                        data-focus-key="item:${item.id || index}"
+                        data-item-index="${index}">
+                 <div class="seeall-card-poster-wrap">
+                   ${item.poster
+                     ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" />`
+                     : `<div class="seeall-card-poster placeholder"></div>`}
+                 </div>
+                 ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
+                   <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
+                   <div class="seeall-card-year">${escapeHtml(extractReleaseYear(item))}</div>
+                 ` : ""}
+               </article>
+             `).join("")
+      : `<div class="seeall-empty">No items available.</div>`;
 
     this.container.innerHTML = `
-      <div class="discover-shell">
+      <div class="home-shell search-screen-shell discover-shell">
         ${renderRootSidebar({
           selectedRoute: "search",
           profile: this.sidebarProfile,
@@ -484,33 +839,65 @@ export const DiscoverScreen = {
           expanded: Boolean(this.sidebarExpanded),
           pillIconOnly: Boolean(this.pillIconOnly)
         })}
-        <main class="discover-main">
-          <h1 class="discover-title">Discover</h1>
-          <section class="discover-filters">
-            ${this.renderFilterPicker("type", "Type", formatAddonTypeLabel(this.selectedType))}
-            ${this.renderFilterPicker("catalog", "Catalog", selectedCatalog?.catalogName || "Select")}
-            ${this.renderFilterPicker("genre", "Genre", this.selectedGenre || "Default")}
-          </section>
-          <div class="discover-row-title">${title}</div>
-          <section class="discover-grid">
-            ${cards}
-          </section>
+        <main class="home-main discover-main">
+          <div class="seeall-shell discover-seeall-shell">
+            <header class="seeall-header discover-header">
+              <h2 class="seeall-title">Discover</h2>
+              <div class="seeall-subtitle">${escapeHtml(contextLabel)}</div>
+            </header>
+            <section class="library-picker-row discover-picker-row">
+              ${this.renderFilterPicker("type", "Type", formatAddonTypeLabel(this.selectedType))}
+              ${this.renderFilterPicker("catalog", "Catalog", selectedCatalog?.catalogName || "Select")}
+              ${this.renderFilterPicker("genre", "Genre", this.selectedGenre || "Default")}
+            </section>
+            <section class="seeall-grid discover-grid">
+              ${cards}
+            </section>
+            ${this.loading ? `<div class="seeall-loading">Loading...</div>` : ""}
+          </div>
         </main>
       </div>
     `;
 
     ScreenUtils.indexFocusables(this.container);
+    this.buildNavigationModel();
+    this.bindCardEvents();
     bindRootSidebarEvents(this.container, {
       currentRoute: "search",
       onSelectedAction: () => this.closeSidebarToContent(),
       onExpandSidebar: () => this.openSidebar()
     });
     this.bindPointerEvents();
+    if (this.pendingRestoreFocus) {
+      this.pendingRestoreFocus = false;
+      this.restoreFocusedCard();
+      this.syncOpenPickerScroll();
+      return;
+    }
+    this.restoreScrollState();
     if (this.focusZone === "sidebar") {
       this.focusSidebarNode();
     } else {
       this.restoreContentFocus();
     }
+    this.syncOpenPickerScroll();
+  },
+
+  bindCardEvents() {
+    this.container?.querySelectorAll(".seeall-card.focusable").forEach((node) => {
+      if (node.__boundDiscoverCardHandlers) return;
+      node.__boundDiscoverCardHandlers = true;
+      node.addEventListener("focus", () => {
+        this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
+        this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
+        this.savedScrollTop = this.container?.querySelector(".discover-main")?.scrollTop || 0;
+        this.maybeAutoLoadMore(node.dataset.itemIndex);
+      });
+      node.addEventListener("mouseenter", () => {
+        this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
+        this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
+      });
+    });
   },
 
   bindPointerEvents() {
@@ -540,6 +927,8 @@ export const DiscoverScreen = {
 
       const cardNode = event.target?.closest?.(".discover-card");
       if (cardNode) {
+        this.savedScrollTop = this.container?.querySelector(".discover-main")?.scrollTop || 0;
+        this.lastFocusedKey = String(cardNode.dataset.focusKey || this.lastFocusedKey || "");
         this.lastFocusedDiscoverItemId = String(cardNode.dataset.itemId || "");
         Router.navigate("detail", {
           itemId: cardNode.dataset.itemId,
@@ -642,6 +1031,7 @@ export const DiscoverScreen = {
 
     const currentAction = String(current?.dataset?.action || "");
     if (currentAction === "openDetail" && current?.dataset?.itemId) {
+      this.lastFocusedKey = String(current.dataset.focusKey || this.lastFocusedKey || "");
       this.lastFocusedDiscoverItemId = String(current.dataset.itemId || "");
     }
     const focusedFilterKind = this.getKindFromFilterAction(currentAction);
@@ -666,24 +1056,17 @@ export const DiscoverScreen = {
     }
 
     if (currentAction === "openDetail") {
-      if (isLeftKey(event)) {
-        if (!this.moveCardFocus("left")) {
-          ScreenUtils.moveFocusDirectional(this.container, "left");
-        }
+      if (isLeftKey(event) && Number(current.dataset.navCol || 0) === 0) {
+        event?.preventDefault?.();
+        await this.openSidebar();
         return;
       }
-      if (isRightKey(event)) {
-        this.moveCardFocus("right");
+      if (isUpKey(event) && Number(current.dataset.navRow || 0) === 0) {
+        event?.preventDefault?.();
+        this.focusNearestFilterFromCard(current);
         return;
       }
-      if (isDownKey(event)) {
-        this.moveCardFocus("down");
-        return;
-      }
-      if (isUpKey(event)) {
-        if (!this.moveCardFocus("up")) {
-          this.focusNearestFilterFromCard(current);
-        }
+      if (this.handleGridDpad(event)) {
         return;
       }
     }
@@ -708,6 +1091,8 @@ export const DiscoverScreen = {
     if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
     if (action === "discoverFilterGenre") this.openPickerMenu("genre");
     if (action === "openDetail") {
+      this.savedScrollTop = this.container?.querySelector(".discover-main")?.scrollTop || 0;
+      this.lastFocusedKey = String(current.dataset.focusKey || this.lastFocusedKey || "");
       Router.navigate("detail", {
         itemId: current.dataset.itemId,
         itemType: current.dataset.itemType || "movie",

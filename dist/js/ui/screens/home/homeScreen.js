@@ -412,10 +412,19 @@ function normalizeContinueWatchingItem(item) {
     heroSource: "continueWatching",
     id: String(item.contentId || item.id || "").trim(),
     contentId: String(item.contentId || item.id || "").trim(),
+    videoId: item.videoId || null,
+    season: Number.isFinite(Number(item.season)) ? Number(item.season) : null,
+    episode: Number.isFinite(Number(item.episode)) ? Number(item.episode) : null,
+    positionMs: Number(item.positionMs || 0) || 0,
+    durationMs: Number(item.durationMs || 0) || 0,
     type,
     apiType: type,
     name: title,
     title,
+    landscapePoster: firstNonEmpty(item.landscapePoster, item.thumbnail, item.backdrop, item.background, item.poster),
+    thumbnail: firstNonEmpty(item.thumbnail, item.episodeThumbnail, item.poster, item.backdrop, item.background),
+    backdrop: firstNonEmpty(item.backdrop, item.background, item.thumbnail, item.poster, item.episodeThumbnail),
+    episodeThumbnail: firstNonEmpty(item.episodeThumbnail, item.thumbnail, item.backdrop, item.background, item.poster),
     poster: isSeries
       ? firstNonEmpty(item.poster, item.episodeThumbnail, item.thumbnail, item.backdrop, item.background)
       : firstNonEmpty(item.poster, item.backdrop, item.background, item.thumbnail, item.episodeThumbnail),
@@ -437,6 +446,40 @@ function normalizeContinueWatchingItem(item) {
     episodeCode: formatEpisodeCode(item.season, item.episode),
     episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
   };
+}
+
+function isRawContinueWatchingTitle(item) {
+  const contentId = String(item?.contentId || item?.id || "").trim();
+  const title = firstNonEmpty(item?.title, item?.name);
+  return Boolean(title) && Boolean(contentId) && title === prettyId(contentId);
+}
+
+function hasContinueWatchingArtwork(item) {
+  return Boolean(firstNonEmpty(
+    item?.poster,
+    item?.background,
+    item?.backdrop,
+    item?.backdropUrl,
+    item?.thumbnail,
+    item?.episodeThumbnail,
+    item?.logo
+  ));
+}
+
+function isPresentableContinueWatchingItem(item, { requireArtwork = false } = {}) {
+  const normalized = normalizeContinueWatchingItem(item);
+  if (!normalized) {
+    return false;
+  }
+  const hasMeaningfulTitle = Boolean(firstNonEmpty(normalized.title, normalized.name)) && !isRawContinueWatchingTitle(normalized);
+  const hasArtwork = hasContinueWatchingArtwork(normalized);
+  return requireArtwork ? (hasMeaningfulTitle && hasArtwork) : (hasMeaningfulTitle || hasArtwork);
+}
+
+function buildVisibleContinueWatchingItems(items = [], options = {}) {
+  return (items || [])
+    .map((item) => normalizeContinueWatchingItem(item))
+    .filter((item) => isPresentableContinueWatchingItem(item, options));
 }
 
 function buildHeroDisplayModel(hero, layoutMode) {
@@ -683,6 +726,32 @@ function renderRowHeader(title, subtitle = "") {
 function renderContinueWatchingCard(item, index) {
   const normalized = normalizeContinueWatchingItem(item);
   const subtitle = firstNonEmpty(normalized.episodeTitle, normalized.releaseInfo, toTitleCase(normalized.type));
+  const isSeries = String(normalized.type || "movie").toLowerCase() === "series";
+  const cardImage = isSeries
+    ? firstNonEmpty(
+        item?.episodeThumbnail,
+        normalized.episodeThumbnail,
+        item?.thumbnail,
+        normalized.thumbnail,
+        item?.poster,
+        normalized.poster,
+        item?.backdrop,
+        normalized.backdrop,
+        item?.background,
+        normalized.background
+      )
+    : firstNonEmpty(
+        item?.backdrop,
+        normalized.backdrop,
+        item?.landscapePoster,
+        normalized.landscapePoster,
+        item?.thumbnail,
+        normalized.thumbnail,
+        item?.poster,
+        normalized.poster,
+        item?.background,
+        normalized.background
+      );
   return `
     <article class="home-content-card home-continue-card focusable"
              data-action="resumeProgress"
@@ -690,7 +759,7 @@ function renderContinueWatchingCard(item, index) {
              data-item-id="${escapeAttribute(normalized.contentId)}"
              data-item-type="${escapeAttribute(normalized.type || "movie")}"
              data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
-      <div class="home-continue-media"${normalized.poster ? ` style="background-image:url('${escapeAttribute(normalized.poster)}')"` : ""}>
+      <div class="home-continue-media"${cardImage ? ` style="background-image:url('${escapeAttribute(cardImage)}')"` : ""}>
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || "Continue")}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
@@ -703,18 +772,41 @@ function renderContinueWatchingCard(item, index) {
   `;
 }
 
+function renderContinueWatchingLoadingCard(index = 0) {
+  return `
+    <article class="home-content-card home-continue-card home-continue-card-loading focusable"
+              data-action="continueWatchingLoading"
+             data-cw-loading-index="${index}"
+             aria-disabled="true">
+      <div class="home-continue-media home-continue-media-loading">
+        <span class="home-continue-badge">Loading</span>
+        <div class="home-continue-copy">
+          <div class="home-continue-kicker">Continue Watching</div>
+          <div class="home-continue-title">Loading...</div>
+          <div class="home-continue-subtitle">Fetching your recent progress</div>
+        </div>
+        <div class="home-continue-progress"><span style="width:38%"></span></div>
+      </div>
+    </article>
+  `;
+}
+
 function renderContinueWatchingSection(items = [], options = {}) {
-  if (!items.length) {
+  const loading = Boolean(options?.loading);
+  if (!items.length && !loading) {
     return "";
   }
   const rowKey = String(options?.rowKey || "").trim();
+  const loadingCount = Math.max(1, Math.min(10, Number(options?.loadingCount || items.length || 3)));
   return `
     <section class="home-row home-row-continue"${rowKey ? ` data-row-key="${escapeAttribute(rowKey)}"` : ""}>
       <div class="home-row-head">
         <h2 class="home-row-title">Continue Watching</h2>
       </div>
       <div class="home-track home-track-continue"${rowKey ? ` data-track-row-key="${escapeAttribute(rowKey)}"` : ""}>
-        ${items.map((item, index) => renderContinueWatchingCard(item, index)).join("")}
+        ${items.length
+          ? items.map((item, index) => renderContinueWatchingCard(item, index)).join("")
+          : Array.from({ length: loadingCount }, (_, index) => renderContinueWatchingLoadingCard(index)).join("")}
       </div>
     </section>
   `;
@@ -1045,6 +1137,23 @@ export const HomeScreen = {
     return true;
   },
 
+  focusInitialContinueWatchingCard() {
+    const target = this.container?.querySelector(".home-row-continue .home-content-card.focusable") || null;
+    if (!target) {
+      return false;
+    }
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    this.focusWithoutAutoScroll(target);
+    this.lastMainFocus = target;
+    this.rememberMainRowFocus(target);
+    this.ensureTrackHorizontalVisibility(target);
+    this.ensureMainVerticalVisibility(target);
+    this.scheduleModernHeroUpdate(target);
+    this.scheduleFocusedPosterFlow(target);
+    return true;
+  },
+
   cancelScrollAnimation(container, axis = "x") {
     const map = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
     const state = map.get(container);
@@ -1360,6 +1469,32 @@ export const HomeScreen = {
       return normalizeCatalogItem(item, row?.type || "movie");
     }
     return null;
+  },
+
+  getContinueWatchingItemFromNode(node) {
+    const index = Number(node?.dataset?.cwIndex ?? -1);
+    if (!Number.isFinite(index) || index < 0) {
+      return null;
+    }
+    return normalizeContinueWatchingItem(this.continueWatchingDisplay?.[index] || this.continueWatching?.[index] || null);
+  },
+
+  openContinueWatchingFromNode(node) {
+    const item = this.getContinueWatchingItemFromNode(node);
+    if (!item?.contentId) {
+      return;
+    }
+    Router.navigate("detail", {
+      itemId: item.contentId,
+      itemType: item.type || "movie",
+      fallbackTitle: item.title || item.contentId || "Untitled",
+      autoOpenContinueWatching: true,
+      resumeProgressMs: Number(item.positionMs || 0) || 0,
+      resumeVideoId: item.videoId || null,
+      resumeSeason: item.season,
+      resumeEpisode: item.episode,
+      resumeEpisodeTitle: item.episodeTitle || ""
+    });
   },
 
   scheduleModernHeroUpdate(node) {
@@ -1719,23 +1854,8 @@ export const HomeScreen = {
     }
     const edgePadding = this.getTrackEdgePadding();
     const targetLeft = target.offsetLeft;
-    const targetRight = targetLeft + target.offsetWidth;
-    const viewLeft = track.scrollLeft;
-    const viewRight = viewLeft + track.clientWidth;
-    const visibleLeft = viewLeft + edgePadding;
-    const visibleRight = viewRight - edgePadding;
-
-    if (targetRight > visibleRight) {
-      const nextLeft = direction === "right"
-        ? targetRight - track.clientWidth + edgePadding
-        : targetLeft - edgePadding;
-      this.animateScroll(track, "x", nextLeft, 140);
-      return;
-    }
-
-    if (targetLeft < visibleLeft) {
-      this.animateScroll(track, "x", targetLeft - edgePadding, 140);
-    }
+    const targetScrollLeft = Math.max(0, targetLeft - edgePadding);
+    this.animateScroll(track, "x", targetScrollLeft, 140);
   },
 
   focusNode(current, target, direction = null) {
@@ -1959,11 +2079,7 @@ export const HomeScreen = {
           return;
         }
         if (action === "resumeProgress") {
-          Router.navigate("detail", {
-            itemId: target.dataset.itemId,
-            itemType: target.dataset.itemType || "movie",
-            fallbackTitle: target.dataset.itemTitle || target.dataset.itemId || "Untitled"
-          });
+          this.openContinueWatchingFromNode(target);
         }
       };
     }
@@ -1984,10 +2100,13 @@ export const HomeScreen = {
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
     this.homeRouteEnterPending = true;
+    this.forceInitialContinueWatchingFocus = false;
+    this.continueWatchingLoading = false;
     const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
     const profileChanged = activeProfileId !== String(this.loadedProfileId || "");
     if (profileChanged) {
       this.hasLoadedOnce = false;
+      this.hasAppliedInitialContinueWatchingFocus = false;
     }
 
     if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
@@ -2000,6 +2119,7 @@ export const HomeScreen = {
     }
 
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+    this.hasAppliedInitialContinueWatchingFocus = false;
     this.container.innerHTML = `
       <div class="home-boot">
         <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
@@ -2047,10 +2167,8 @@ export const HomeScreen = {
     if (token !== this.homeLoadToken) {
       return;
     }
-    this.continueWatchingDisplay = this.continueWatching.map((item) => ({
-      ...item,
-      title: prettyId(item.contentId)
-    }));
+    this.continueWatchingLoading = Boolean(this.continueWatching?.length);
+    this.continueWatchingDisplay = [];
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
@@ -2094,20 +2212,29 @@ export const HomeScreen = {
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
       }
-      this.continueWatchingDisplay = enriched.map((item) => normalizeContinueWatchingItem(item));
-      if (this.layoutMode === "modern" && (!this.heroItem || this.heroItem.heroSource === "continueWatching")) {
+      this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+      this.continueWatchingLoading = false;
+      if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
         this.heroItem = this.pickInitialHero();
+        if (!this.hasAppliedInitialContinueWatchingFocus) {
+          this.forceInitialContinueWatchingFocus = true;
+        }
       }
       this.render();
     }).catch((error) => {
       console.warn("Continue watching async enrichment failed", error);
+      this.continueWatchingLoading = false;
+      this.render();
     });
   },
 
   pickInitialHero() {
     if (this.layoutMode === "modern") {
-      const continueHero = normalizeContinueWatchingItem(this.continueWatchingDisplay?.[0] || this.continueWatching?.[0] || null);
-      if (continueHero) {
+      if (this.continueWatchingLoading && Array.isArray(this.continueWatching) && this.continueWatching.length && !this.continueWatchingDisplay?.length) {
+        return null;
+      }
+      const continueHero = normalizeContinueWatchingItem(this.continueWatchingDisplay?.[0] || null);
+      if (continueHero && isPresentableContinueWatchingItem(continueHero, { requireArtwork: true })) {
         return continueHero;
       }
     }
@@ -2159,7 +2286,14 @@ export const HomeScreen = {
     const retainedFocusState = this.captureCurrentFocusState();
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
-    const heroItem = normalizeCatalogItem(this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows), "movie");
+    const shouldHoldHeroForContinueWatching = this.layoutMode === "modern"
+      && Boolean(this.continueWatchingLoading)
+      && Array.isArray(this.continueWatching)
+      && this.continueWatching.length > 0
+      && !this.continueWatchingDisplay?.length;
+    const heroItem = shouldHoldHeroForContinueWatching
+      ? null
+      : normalizeCatalogItem(this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows), "movie");
     const showHeroSection = Boolean(this.layoutPrefs?.heroSectionEnabled) && Boolean(heroItem);
     const layoutClass = `home-layout-${this.layoutMode}`;
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
@@ -2176,6 +2310,8 @@ export const HomeScreen = {
         heroItem,
         heroCandidates: this.heroCandidates,
         continueWatchingItems: this.continueWatchingDisplay || [],
+        continueWatchingLoading: Boolean(this.continueWatchingLoading),
+        continueWatchingLoadingCount: Number(this.continueWatching?.length || 0),
         showHeroSection,
         showPosterLabels,
         showCatalogTypeSuffix,
@@ -2191,7 +2327,9 @@ export const HomeScreen = {
       mainContentMarkup = modernLayoutPayload.markup;
     } else {
       const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
-        rowKey: "continue_watching"
+        rowKey: "continue_watching",
+        loading: Boolean(this.continueWatchingLoading),
+        loadingCount: Number(this.continueWatching?.length || 0)
       });
       const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
         layoutMode: this.layoutMode,
@@ -2234,14 +2372,23 @@ export const HomeScreen = {
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
-    const restoredFocus = this.restoreFocusState(retainedFocusState);
-    if (!restoredFocus) {
-      ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
-      const current = this.container.querySelector(".home-main .focusable.focused");
-      if (current && this.isMainNode(current)) {
-        this.lastMainFocus = current;
-        this.scheduleModernHeroUpdate(current);
-        this.scheduleFocusedPosterFlow(current);
+    if (shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      this.lastMainFocus = null;
+      this.hasAppliedInitialContinueWatchingFocus = false;
+    } else if (this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
+      this.forceInitialContinueWatchingFocus = false;
+      this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
+    } else {
+      const restoredFocus = this.restoreFocusState(retainedFocusState);
+      if (!restoredFocus) {
+        ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
+        const current = this.container.querySelector(".home-main .focusable.focused");
+        if (current && this.isMainNode(current)) {
+          this.lastMainFocus = current;
+          this.scheduleModernHeroUpdate(current);
+          this.scheduleFocusedPosterFlow(current);
+        }
       }
     }
     if (!this.layoutPrefs?.modernSidebar) {
@@ -2302,6 +2449,8 @@ export const HomeScreen = {
           return {
             ...item,
             title: result.data.name || prettyId(item.contentId),
+            landscapePoster: result.data.landscapePoster || result.data.thumbnail || result.data.backdrop || result.data.background || null,
+            episodeThumbnail: result.data.episodeThumbnail || null,
             poster: result.data.poster || result.data.thumbnail || result.data.background || result.data.backdrop || null,
             background: result.data.background || result.data.backdrop || result.data.thumbnail || result.data.poster || null,
             backdrop: result.data.backdrop || result.data.background || null,
@@ -2323,14 +2472,23 @@ export const HomeScreen = {
       }
       return {
         ...item,
-        title: prettyId(item.contentId),
-        poster: null,
-        background: null,
-        logo: null,
-        description: "",
-        releaseInfo: "",
-        genres: [],
-        runtimeMinutes: 0
+        title: firstNonEmpty(item.title, item.name),
+        landscapePoster: item.landscapePoster || item.thumbnail || item.backdrop || item.background || null,
+        episodeThumbnail: item.episodeThumbnail || null,
+        poster: item.poster || item.thumbnail || null,
+        background: item.background || item.backdrop || item.poster || null,
+        backdrop: item.backdrop || item.background || null,
+        thumbnail: item.thumbnail || item.poster || null,
+        logo: item.logo || null,
+        description: item.description || "",
+        releaseInfo: item.releaseInfo || "",
+        genres: Array.isArray(item.genres) ? item.genres : [],
+        runtimeMinutes: Number(item.runtimeMinutes ?? item.runtime ?? 0) || 0,
+        ageRating: firstNonEmpty(item.ageRating, item.age_rating),
+        status: firstNonEmpty(item.status),
+        language: firstNonEmpty(item.language),
+        country: firstNonEmpty(item.country),
+        episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
       };
     }));
     return enriched;
@@ -2500,11 +2658,7 @@ export const HomeScreen = {
     if (action === "openDetail") this.openDetailFromNode(current);
     if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
     if (action === "resumeProgress") {
-      Router.navigate("detail", {
-        itemId: current.dataset.itemId,
-        itemType: current.dataset.itemType || "movie",
-        fallbackTitle: current.dataset.itemTitle || current.dataset.itemId || "Untitled"
-      });
+      this.openContinueWatchingFromNode(current);
     }
   },
 

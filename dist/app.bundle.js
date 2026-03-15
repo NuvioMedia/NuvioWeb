@@ -112,334 +112,6 @@
     });
   }
 
-  // js/core/auth/authState.js
-  var AuthState = {
-    LOADING: "loading",
-    SIGNED_OUT: "signedOut",
-    AUTHENTICATED: "authenticated"
-  };
-
-  // js/core/storage/sessionStore.js
-  var SessionStore = {
-    normalizeToken(value) {
-      const text = String(value != null ? value : "").trim();
-      if (!text || text === "null" || text === "undefined") {
-        return null;
-      }
-      return text;
-    },
-    get isAnonymousSession() {
-      return localStorage.getItem("is_anonymous_session") === "1";
-    },
-    set isAnonymousSession(value) {
-      if (value) {
-        localStorage.setItem("is_anonymous_session", "1");
-      } else {
-        localStorage.removeItem("is_anonymous_session");
-      }
-    },
-    get accessToken() {
-      return this.normalizeToken(localStorage.getItem("access_token"));
-    },
-    set accessToken(value) {
-      const normalized = this.normalizeToken(value);
-      if (!normalized) {
-        localStorage.removeItem("access_token");
-        return;
-      }
-      localStorage.setItem("access_token", normalized);
-    },
-    get refreshToken() {
-      return this.normalizeToken(localStorage.getItem("refresh_token"));
-    },
-    set refreshToken(value) {
-      const normalized = this.normalizeToken(value);
-      if (!normalized) {
-        localStorage.removeItem("refresh_token");
-        return;
-      }
-      localStorage.setItem("refresh_token", normalized);
-    },
-    clear() {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      localStorage.removeItem("is_anonymous_session");
-    }
-  };
-
-  // js/config.js
-  var runtimeEnv = globalThis.__NUVIO_ENV__ || {};
-  function normalizePlaybackOrder(value) {
-    if (Array.isArray(value)) {
-      return value.map((entry) => String(entry).trim()).filter(Boolean);
-    }
-    if (typeof value === "string") {
-      return value.split(",").map((entry) => entry.trim()).filter(Boolean);
-    }
-    return [];
-  }
-  var SUPABASE_URL = String(runtimeEnv.SUPABASE_URL || "").trim();
-  var SUPABASE_ANON_KEY = String(runtimeEnv.SUPABASE_ANON_KEY || "").trim();
-  var TV_LOGIN_REDIRECT_BASE_URL = String(runtimeEnv.TV_LOGIN_REDIRECT_BASE_URL || "").trim();
-  var YOUTUBE_PROXY_URL = String(runtimeEnv.YOUTUBE_PROXY_URL || "").trim();
-  var ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
-  var ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
-  var PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
-  var TMDB_API_KEY = String(runtimeEnv.TMDB_API_KEY || "").trim();
-
-  // js/core/auth/authManager.js
-  var AuthManagerClass = class {
-    constructor() {
-      this.state = AuthState.LOADING;
-      this.listeners = [];
-      this.cachedEffectiveUserId = null;
-      this.cachedEffectiveUserSourceUserId = null;
-      this.refreshPromise = null;
-    }
-    // ------------------------------------
-    // SUBSCRIBE (equivalente StateFlow)
-    // ------------------------------------
-    subscribe(listener) {
-      this.listeners.push(listener);
-      listener(this.state);
-      return () => {
-        this.listeners = this.listeners.filter((l) => l !== listener);
-      };
-    }
-    setState(newState) {
-      this.state = newState;
-      this.listeners.forEach((l) => l(newState));
-    }
-    // ------------------------------------
-    // BOOTSTRAP (equivalente observeSessionStatus)
-    // ------------------------------------
-    bootstrap() {
-      return __async(this, null, function* () {
-        const token = SessionStore.accessToken;
-        if (!token) {
-          this.setState(AuthState.SIGNED_OUT);
-          return;
-        }
-        if (SessionStore.isAnonymousSession) {
-          this.setState(AuthState.SIGNED_OUT);
-          return;
-        }
-        const refreshed = yield this.refreshSessionIfNeeded();
-        if (!refreshed) {
-          this.setState(AuthState.SIGNED_OUT);
-          return;
-        }
-        this.setState(AuthState.AUTHENTICATED);
-      });
-    }
-    getAuthState() {
-      return this.state;
-    }
-    get isAuthenticated() {
-      return this.state === AuthState.AUTHENTICATED;
-    }
-    // ------------------------------------
-    // EMAIL LOGIN
-    // ------------------------------------
-    signInWithEmail(email, password) {
-      return __async(this, null, function* () {
-        const res = yield fetch(
-          `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_ANON_KEY
-            },
-            body: JSON.stringify({ email, password })
-          }
-        );
-        if (!res.ok) throw new Error("Login failed");
-        const data = yield res.json();
-        SessionStore.accessToken = data.access_token;
-        SessionStore.refreshToken = data.refresh_token;
-        SessionStore.isAnonymousSession = false;
-        this.setState(AuthState.AUTHENTICATED);
-      });
-    }
-    signOut() {
-      return __async(this, null, function* () {
-        SessionStore.clear();
-        this.cachedEffectiveUserId = null;
-        this.cachedEffectiveUserSourceUserId = null;
-        this.setState(AuthState.SIGNED_OUT);
-      });
-    }
-    refreshSessionIfNeeded() {
-      return __async(this, null, function* () {
-        if (this.refreshPromise) {
-          return this.refreshPromise;
-        }
-        const refreshToken = SessionStore.refreshToken;
-        if (!refreshToken) {
-          return Boolean(SessionStore.accessToken);
-        }
-        this.refreshPromise = (() => __async(this, null, function* () {
-          try {
-            const res = yield fetch(
-              `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  "apikey": SUPABASE_ANON_KEY
-                },
-                body: JSON.stringify({ refresh_token: refreshToken })
-              }
-            );
-            if (!res.ok) {
-              return false;
-            }
-            const data = yield res.json();
-            if (!(data == null ? void 0 : data.access_token)) {
-              return false;
-            }
-            SessionStore.accessToken = data.access_token;
-            if (data.refresh_token) {
-              SessionStore.refreshToken = data.refresh_token;
-            }
-            return true;
-          } catch (error) {
-            console.warn("Session refresh failed", error);
-            return false;
-          } finally {
-            this.refreshPromise = null;
-          }
-        }))();
-        return this.refreshPromise;
-      });
-    }
-    // ------------------------------------
-    // QR LOGIN FLOW
-    // ------------------------------------
-    startTvLoginSession(deviceNonce, deviceName, redirectBaseUrl) {
-      return __async(this, null, function* () {
-        const res = yield fetch(
-          `${SUPABASE_URL}/rest/v1/rpc/start_tv_login_session`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_ANON_KEY,
-              "Authorization": `Bearer ${SessionStore.accessToken}`
-            },
-            body: JSON.stringify(__spreadValues({
-              p_device_nonce: deviceNonce,
-              p_redirect_base_url: redirectBaseUrl
-            }, deviceName && { p_device_name: deviceName }))
-          }
-        );
-        if (!res.ok) throw new Error(yield res.text());
-        const data = yield res.json();
-        return data[0];
-      });
-    }
-    pollTvLoginSession(code, deviceNonce) {
-      return __async(this, null, function* () {
-        const res = yield fetch(
-          `${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_ANON_KEY,
-              "Authorization": `Bearer ${SessionStore.accessToken}`
-            },
-            body: JSON.stringify({
-              p_code: code,
-              p_device_nonce: deviceNonce
-            })
-          }
-        );
-        if (!res.ok) throw new Error(yield res.text());
-        const data = yield res.json();
-        return data[0];
-      });
-    }
-    exchangeTvLoginSession(code, deviceNonce) {
-      return __async(this, null, function* () {
-        const res = yield fetch(
-          `${SUPABASE_URL}/functions/v1/tv-logins-exchange`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_ANON_KEY,
-              "Authorization": `Bearer ${SessionStore.accessToken}`
-            },
-            body: JSON.stringify({
-              code,
-              device_nonce: deviceNonce
-            })
-          }
-        );
-        if (!res.ok) throw new Error(yield res.text());
-        const data = yield res.json();
-        SessionStore.accessToken = data.accessToken;
-        SessionStore.refreshToken = data.refreshToken;
-        this.setState(AuthState.AUTHENTICATED);
-      });
-    }
-    // ------------------------------------
-    // EFFECTIVE USER ID (PORTING CACHE LOGIC)
-    // ------------------------------------
-    getEffectiveUserId() {
-      return __async(this, null, function* () {
-        if (this.cachedEffectiveUserId)
-          return this.cachedEffectiveUserId;
-        if (!SessionStore.accessToken) {
-          const refreshed = yield this.refreshSessionIfNeeded();
-          if (!refreshed || !SessionStore.accessToken) {
-            yield this.signOut();
-            throw new Error("Missing valid session token");
-          }
-        }
-        const authHeaders = {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SessionStore.accessToken}`
-        };
-        let res = yield fetch(
-          `${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`,
-          {
-            method: "POST",
-            headers: authHeaders
-          }
-        );
-        if (res.status === 401) {
-          const refreshed = yield this.refreshSessionIfNeeded();
-          if (refreshed) {
-            res = yield fetch(
-              `${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`,
-              {
-                method: "POST",
-                headers: __spreadProps(__spreadValues({}, authHeaders), {
-                  "Authorization": `Bearer ${SessionStore.accessToken}`
-                })
-              }
-            );
-          }
-        }
-        if (!res.ok) {
-          if (res.status === 401) {
-            yield this.signOut();
-          }
-          throw new Error(yield res.text());
-        }
-        const data = yield res.json();
-        const id = data;
-        this.cachedEffectiveUserId = id;
-        return id;
-      });
-    }
-  };
-  var AuthManager = new AuthManagerClass();
-
   // js/core/storage/localStore.js
   var LocalStore = {
     get(key, defaultValue = null) {
@@ -463,46 +135,6 @@
     },
     clear() {
       localStorage.clear();
-    }
-  };
-
-  // js/ui/screens/splash/splashScreen.js
-  var SplashScreen = {
-    mount() {
-      return __async(this, null, function* () {
-        const container = document.getElementById("splash");
-        container.style.display = "block";
-        container.innerHTML = `
-      <div class="splash-container">
-        <img src="assets/brand/app_logo_wordmark.png" class="splash-logo" />
-      </div>
-    `;
-        yield this.bootstrap();
-      });
-    },
-    bootstrap() {
-      return __async(this, null, function* () {
-        yield new Promise((resolve) => setTimeout(resolve, 800));
-        const authState = AuthManager.getAuthState();
-        const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
-        if (!hasSeenQr && authState !== AuthState.AUTHENTICATED) {
-          Router.navigate("authQrSignIn", { onboardingMode: true });
-          return;
-        }
-        if (authState === AuthState.AUTHENTICATED) {
-          Router.navigate("profileSelection");
-        } else {
-          Router.navigate("authQrSignIn", { onboardingMode: !hasSeenQr });
-        }
-      });
-    },
-    cleanup() {
-      const container = document.getElementById("splash");
-      if (!container) {
-        return;
-      }
-      container.style.display = "none";
-      container.innerHTML = "";
     }
   };
 
@@ -707,6 +339,54 @@
       }
     });
   }
+
+  // js/core/storage/sessionStore.js
+  var SessionStore = {
+    normalizeToken(value) {
+      const text = String(value != null ? value : "").trim();
+      if (!text || text === "null" || text === "undefined") {
+        return null;
+      }
+      return text;
+    },
+    get isAnonymousSession() {
+      return localStorage.getItem("is_anonymous_session") === "1";
+    },
+    set isAnonymousSession(value) {
+      if (value) {
+        localStorage.setItem("is_anonymous_session", "1");
+      } else {
+        localStorage.removeItem("is_anonymous_session");
+      }
+    },
+    get accessToken() {
+      return this.normalizeToken(localStorage.getItem("access_token"));
+    },
+    set accessToken(value) {
+      const normalized = this.normalizeToken(value);
+      if (!normalized) {
+        localStorage.removeItem("access_token");
+        return;
+      }
+      localStorage.setItem("access_token", normalized);
+    },
+    get refreshToken() {
+      return this.normalizeToken(localStorage.getItem("refresh_token"));
+    },
+    set refreshToken(value) {
+      const normalized = this.normalizeToken(value);
+      if (!normalized) {
+        localStorage.removeItem("refresh_token");
+        return;
+      }
+      localStorage.setItem("refresh_token", normalized);
+    },
+    clear() {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("is_anonymous_session");
+    }
+  };
 
   // js/core/network/httpClient.js
   function toHeaderObject(headers) {
@@ -1419,6 +1099,7 @@
     focusedPosterBackdropTrailerPlaybackTarget: "hero_media",
     posterCardWidthDp: 126,
     posterCardCornerRadiusDp: 12,
+    detailPageTrailerButtonEnabled: false,
     collapseSidebar: false,
     modernSidebar: false,
     modernSidebarBlur: false,
@@ -1437,6 +1118,7 @@
       focusedPosterBackdropTrailerPlaybackTarget: String(merged.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase() === "expanded_card" ? "expanded_card" : "hero_media",
       posterCardWidthDp: Math.max(72, Number((_b = merged.posterCardWidthDp) != null ? _b : 126) || 126),
       posterCardCornerRadiusDp: Math.max(0, Number((_c = merged.posterCardCornerRadiusDp) != null ? _c : 12) || 12),
+      detailPageTrailerButtonEnabled: Boolean(merged.detailPageTrailerButtonEnabled),
       collapseSidebar: modernSidebar ? false : Boolean(merged.collapseSidebar),
       modernSidebar,
       modernSidebarBlur: modernSidebar ? Boolean(merged.modernSidebarBlur) : Boolean(merged.modernSidebarBlur)
@@ -1494,6 +1176,27 @@
       LocalStore.set(KEY2, DEFAULTS2);
     }
   };
+
+  // js/config.js
+  var runtimeEnv = globalThis.__NUVIO_ENV__ || {};
+  function normalizePlaybackOrder(value) {
+    if (Array.isArray(value)) {
+      return value.map((entry) => String(entry).trim()).filter(Boolean);
+    }
+    if (typeof value === "string") {
+      return value.split(",").map((entry) => entry.trim()).filter(Boolean);
+    }
+    return [];
+  }
+  var SUPABASE_URL = String(runtimeEnv.SUPABASE_URL || "").trim();
+  var SUPABASE_ANON_KEY = String(runtimeEnv.SUPABASE_ANON_KEY || "").trim();
+  var TV_LOGIN_REDIRECT_BASE_URL = String(runtimeEnv.TV_LOGIN_REDIRECT_BASE_URL || "").trim();
+  var PUBLIC_APP_URL = String(runtimeEnv.PUBLIC_APP_URL || "").trim();
+  var YOUTUBE_PROXY_URL = String(runtimeEnv.YOUTUBE_PROXY_URL || "").trim();
+  var ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
+  var ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
+  var PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
+  var TMDB_API_KEY = String(runtimeEnv.TMDB_API_KEY || "").trim();
 
   // js/data/local/tmdbSettingsStore.js
   var KEY3 = "tmdbSettings";
@@ -1564,6 +1267,7 @@
   // js/core/tmdb/tmdbMetadataService.js
   var TMDB_BASE_URL2 = "https://api.themoviedb.org/3";
   var IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
+  var TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US";
   function resolveType(contentType) {
     const normalized = String(contentType || "").toLowerCase();
     if (normalized === "series" || normalized === "tv" || normalized === "show") {
@@ -1577,6 +1281,86 @@
     }
     return `${IMAGE_BASE_URL}${path}`;
   }
+  function normalizeTmdbTrailerLanguage(language = "") {
+    const normalized = String(language || "").trim().replace(/_/g, "-");
+    if (!normalized) {
+      return TMDB_TRAILER_FALLBACK_LANGUAGE;
+    }
+    if (normalized.includes("-")) {
+      const [locale, region] = normalized.split("-", 2);
+      return region ? `${locale.toLowerCase()}-${region.toUpperCase()}` : locale.toLowerCase();
+    }
+    if (normalized.toLowerCase() === "en") {
+      return TMDB_TRAILER_FALLBACK_LANGUAGE;
+    }
+    return normalized.toLowerCase();
+  }
+  function videoTypePriority(type = "") {
+    const normalized = String(type || "").trim().toLowerCase();
+    if (normalized === "trailer") return 0;
+    if (normalized === "teaser") return 1;
+    return 2;
+  }
+  function parsePublishedAtEpoch(value = "") {
+    const parsed = Date.parse(String(value || ""));
+    return Number.isFinite(parsed) ? parsed : Number.MIN_SAFE_INTEGER;
+  }
+  function rankTmdbVideoCandidates(results = []) {
+    return (Array.isArray(results) ? results : []).filter((entry) => String((entry == null ? void 0 : entry.site) || "").toLowerCase() === "youtube").filter((entry) => Boolean(String((entry == null ? void 0 : entry.key) || "").trim())).filter((entry) => {
+      const normalizedType = String((entry == null ? void 0 : entry.type) || "").trim().toLowerCase();
+      return normalizedType === "trailer" || normalizedType === "teaser";
+    }).sort((left, right) => {
+      const typeDiff = videoTypePriority(left == null ? void 0 : left.type) - videoTypePriority(right == null ? void 0 : right.type);
+      if (typeDiff !== 0) return typeDiff;
+      const officialDiff = Number(Boolean(right == null ? void 0 : right.official)) - Number(Boolean(left == null ? void 0 : left.official));
+      if (officialDiff !== 0) return officialDiff;
+      const sizeDiff = Number((right == null ? void 0 : right.size) || 0) - Number((left == null ? void 0 : left.size) || 0);
+      if (sizeDiff !== 0) return sizeDiff;
+      return parsePublishedAtEpoch(right == null ? void 0 : right.published_at) - parsePublishedAtEpoch(left == null ? void 0 : left.published_at);
+    });
+  }
+  function fetchTmdbVideos(_0) {
+    return __async(this, arguments, function* ({ type, tmdbId, apiKey, language }) {
+      const url = `${TMDB_BASE_URL2}/${type}/${encodeURIComponent(String(tmdbId))}/videos?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(language)}`;
+      const response = yield fetch(url);
+      if (!response.ok) {
+        return [];
+      }
+      const data = yield response.json();
+      return Array.isArray(data == null ? void 0 : data.results) ? data.results : [];
+    });
+  }
+  function resolveTrailerCandidates(_0) {
+    return __async(this, arguments, function* ({ type, tmdbId, apiKey, language, initialResults = [] }) {
+      const preferredLanguage = normalizeTmdbTrailerLanguage(language);
+      const preferred = rankTmdbVideoCandidates(initialResults);
+      if (preferred.length || preferredLanguage === TMDB_TRAILER_FALLBACK_LANGUAGE) {
+        return preferred;
+      }
+      const fallback = yield fetchTmdbVideos({
+        type,
+        tmdbId,
+        apiKey,
+        language: TMDB_TRAILER_FALLBACK_LANGUAGE
+      });
+      return rankTmdbVideoCandidates(fallback);
+    });
+  }
+  function mapTrailerCandidates(items = []) {
+    return (Array.isArray(items) ? items : []).map((entry) => {
+      const key = String((entry == null ? void 0 : entry.key) || "").trim();
+      return {
+        ytId: key,
+        youtubeId: key,
+        source: key ? `https://www.youtube.com/watch?v=${key}` : "",
+        type: (entry == null ? void 0 : entry.type) || "Trailer",
+        name: (entry == null ? void 0 : entry.name) || "Trailer",
+        official: Boolean(entry == null ? void 0 : entry.official),
+        publishedAt: (entry == null ? void 0 : entry.published_at) || "",
+        size: Number((entry == null ? void 0 : entry.size) || 0) || 0
+      };
+    }).filter((entry) => entry.ytId);
+  }
   function mapCompanies(items = []) {
     return (Array.isArray(items) ? items : []).map((company) => ({
       name: (company == null ? void 0 : company.name) || "",
@@ -1586,7 +1370,7 @@
   var TmdbMetadataService = {
     fetchEnrichment() {
       return __async(this, arguments, function* ({ tmdbId, contentType, language = null } = {}) {
-        var _a, _b, _c, _d;
+        var _a, _b, _c, _d, _e;
         const settings = TmdbSettingsStore.get();
         const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
         if (!settings.enabled || !apiKey || !tmdbId) {
@@ -1594,7 +1378,7 @@
         }
         const type = resolveType(contentType);
         const lang = language || settings.language || "en-US";
-        const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings&include_image_language=${encodeURIComponent(lang)},null`;
+        const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos&include_image_language=${encodeURIComponent(lang)},null`;
         const url = `${TMDB_BASE_URL2}/${type}/${encodeURIComponent(String(tmdbId))}?${params}`;
         const response = yield fetch(url);
         if (!response.ok) {
@@ -1608,6 +1392,14 @@
         const spokenLanguage = Array.isArray(data == null ? void 0 : data.spoken_languages) ? data.spoken_languages[0] : null;
         const countryValue = Array.isArray(data == null ? void 0 : data.origin_country) && data.origin_country.length ? data.origin_country.join(", ") : Array.isArray(data == null ? void 0 : data.production_countries) ? data.production_countries.map((item) => (item == null ? void 0 : item.iso_3166_1) || (item == null ? void 0 : item.name) || "").filter(Boolean).join(", ") : "";
         const runtimeValue = type === "tv" ? Number((Array.isArray(data == null ? void 0 : data.episode_run_time) ? data.episode_run_time[0] : 0) || 0) : Number((data == null ? void 0 : data.runtime) || 0);
+        const trailerCandidates = yield resolveTrailerCandidates({
+          type,
+          tmdbId,
+          apiKey,
+          language: lang,
+          initialResults: Array.isArray((_c = data == null ? void 0 : data.videos) == null ? void 0 : _c.results) ? data.videos.results : []
+        });
+        const trailers = mapTrailerCandidates(trailerCandidates);
         return {
           localizedTitle: data.title || data.name || null,
           description: data.overview || null,
@@ -1624,8 +1416,10 @@
           companies,
           productionCompanies: companies,
           networks,
-          collectionId: ((_c = data == null ? void 0 : data.belongs_to_collection) == null ? void 0 : _c.id) ? String(data.belongs_to_collection.id) : null,
-          collectionName: ((_d = data == null ? void 0 : data.belongs_to_collection) == null ? void 0 : _d.name) || null
+          trailers,
+          trailerYtIds: trailers.map((entry) => entry.ytId).filter(Boolean),
+          collectionId: ((_d = data == null ? void 0 : data.belongs_to_collection) == null ? void 0 : _d.id) ? String(data.belongs_to_collection.id) : null,
+          collectionName: ((_e = data == null ? void 0 : data.belongs_to_collection) == null ? void 0 : _e.name) || null
         };
       });
     },
@@ -2107,6 +1901,8 @@
     heroItem = null,
     heroCandidates = [],
     continueWatchingItems = [],
+    continueWatchingLoading = false,
+    continueWatchingLoadingCount = 0,
     showHeroSection = false,
     showPosterLabels = true,
     showCatalogTypeSuffix = true,
@@ -2115,7 +1911,7 @@
     createPosterCardMarkup: createPosterCardMarkup2,
     createSeeAllCardMarkup: createSeeAllCardMarkup2,
     formatCatalogRowTitle: formatCatalogRowTitle3,
-    escapeHtml: escapeHtml13,
+    escapeHtml: escapeHtml15,
     escapeAttribute: escapeAttribute2
   } = {}) {
     const catalogSeeAllMap = /* @__PURE__ */ new Map();
@@ -2149,11 +1945,11 @@
         "modern"
       )).join("");
       sectionsMarkup.push(`
-      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml13(rowKey)}" data-row-index="${rowIndex}">
+      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml15(rowKey)}" data-row-index="${rowIndex}">
         <div class="home-row-head">
-          <h2 class="home-row-title">${escapeHtml13(rowTitle)}</h2>
+          <h2 class="home-row-title">${escapeHtml15(rowTitle)}</h2>
         </div>
-        <div class="home-track" data-track-row-key="${escapeHtml13(rowKey)}">
+        <div class="home-track" data-track-row-key="${escapeHtml15(rowKey)}">
           ${cardsMarkup}
           ${hasSeeAll ? createSeeAllCardMarkup2(seeAllId, rowData) : ""}
         </div>
@@ -2168,12 +1964,16 @@
         heroItem,
         heroCandidates,
         buildModernHeroPresentation: buildModernHeroPresentation2,
-        escapeHtml: escapeHtml13,
+        escapeHtml: escapeHtml15,
         escapeAttribute: escapeAttribute2
-      }) : ""}
+      }) : continueWatchingLoading ? renderModernHeroSkeletonMarkup() : ""}
         <div class="home-modern-rows-viewport">
           <div class="home-modern-rows-scroll">
-            ${renderContinueWatchingSection2(continueWatchingItems, { rowKey: "continue_watching" })}
+            ${renderContinueWatchingSection2(continueWatchingItems, {
+        rowKey: "continue_watching",
+        loading: continueWatchingLoading,
+        loadingCount: continueWatchingLoadingCount
+      })}
             ${sectionsMarkup.join("")}
           </div>
         </div>
@@ -2220,40 +2020,40 @@
     heroItem,
     heroCandidates,
     buildModernHeroPresentation: buildModernHeroPresentation2,
-    escapeHtml: escapeHtml13,
+    escapeHtml: escapeHtml15,
     escapeAttribute: escapeAttribute2
   }) {
     const display = buildModernHeroPresentation2(heroItem);
     if (!display) {
       return "";
     }
-    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml13(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
-    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml13(token)}</span>`);
+    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml15(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
+    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml15(token)}</span>`);
     if (display.showImdbPrimary) {
       primaryRightParts.push(`
       <span class="home-hero-imdb">
         <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
-        <span>${escapeHtml13(display.imdbText)}</span>
+        <span>${escapeHtml15(display.imdbText)}</span>
       </span>
     `);
     }
     const secondaryParts = [];
     if (display.secondaryHighlightText) {
-      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml13(display.secondaryHighlightText)}</span>`);
+      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml15(display.secondaryHighlightText)}</span>`);
     }
     display.badges.forEach((badge) => {
-      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml13(badge)}</span>`);
+      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml15(badge)}</span>`);
     });
     if (display.showImdbSecondary) {
       secondaryParts.push(`
       <span class="home-hero-imdb">
         <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
-        <span>${escapeHtml13(display.imdbText)}</span>
+        <span>${escapeHtml15(display.imdbText)}</span>
       </span>
     `);
     }
     if (display.languageText) {
-      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml13(display.languageText)}</span>`);
+      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml15(display.languageText)}</span>`);
     }
     return `
     <section class="home-hero home-hero-modern">
@@ -2270,7 +2070,7 @@
         <div class="home-hero-copy home-modern-hero-copy">
           <div class="home-hero-brand">
             ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title)}" />` : ""}
-            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml13(display.title)}</h1>
+            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml15(display.title)}</h1>
           </div>
           <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">
             <div class="home-modern-hero-meta-group">
@@ -2283,9 +2083,22 @@
           <div class="home-modern-hero-secondary${display.secondaryHighlightText || display.badges.length || display.showImdbSecondary || display.languageText ? "" : " is-empty"}">
             ${secondaryParts.join('<span class="home-hero-dot">\u2022</span>')}
           </div>
-          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml13(display.description)}</p>
+          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml15(display.description)}</p>
         </div>
         <div class="home-hero-indicators">${buildHeroIndicators(heroCandidates, heroItem)}</div>
+      </article>
+    </section>
+  `;
+  }
+  function renderModernHeroSkeletonMarkup() {
+    return `
+    <section class="home-hero home-hero-modern home-hero-modern-loading" aria-hidden="true">
+      <article class="home-hero-card home-modern-hero-card home-modern-hero-card-loading">
+        <div class="home-modern-hero-media home-modern-hero-media-loading">
+          <div class="home-hero-backdrop-wrap">
+            <div class="home-hero-backdrop placeholder home-hero-backdrop-loading"></div>
+          </div>
+        </div>
       </article>
     </section>
   `;
@@ -2345,6 +2158,102 @@
       canMoveDown: index < array.length - 1
     }));
   }
+
+  // js/data/remote/supabase/supabaseApi.js
+  function buildHeaders(extra = {}, useSession = true) {
+    const headers = __spreadValues({
+      apikey: SUPABASE_ANON_KEY
+    }, extra);
+    if (useSession && SessionStore.accessToken) {
+      headers.Authorization = `Bearer ${SessionStore.accessToken}`;
+    } else if (headers.Authorization == null) {
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+    }
+    return headers;
+  }
+  var SupabaseApi = {
+    rpc(functionName, body = {}, useSession = true) {
+      return httpRequest(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+        method: "POST",
+        headers: buildHeaders({ "Content-Type": "application/json" }, useSession),
+        body: JSON.stringify(body)
+      });
+    },
+    select(table, query = "", useSession = true) {
+      const suffix = query ? `?${query}` : "";
+      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${suffix}`, {
+        method: "GET",
+        headers: buildHeaders({}, useSession)
+      });
+    },
+    upsert(table, rows, onConflict = null, useSession = true) {
+      const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
+      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+        method: "POST",
+        headers: buildHeaders({
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=representation"
+        }, useSession),
+        body: JSON.stringify(rows)
+      });
+    },
+    delete(table, query, useSession = true) {
+      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+        method: "DELETE",
+        headers: buildHeaders({ Prefer: "return=representation" }, useSession)
+      });
+    }
+  };
+
+  // js/data/remote/supabase/avatarRepository.js
+  var AVATAR_BUCKET = "avatars";
+  var cachedCatalog = null;
+  function avatarImageUrl(storagePath = "") {
+    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
+    if (!normalizedPath) {
+      return null;
+    }
+    return `${String(SUPABASE_URL || "").replace(/\/+$/, "")}/storage/v1/object/public/${AVATAR_BUCKET}/${normalizedPath}`;
+  }
+  function mapAvatar(row = {}) {
+    return {
+      id: String(row.id || ""),
+      displayName: String(row.display_name || row.displayName || "Avatar"),
+      imageUrl: avatarImageUrl(row.storage_path || row.storagePath || ""),
+      category: String(row.category || "all").trim().toLowerCase(),
+      sortOrder: Number(row.sort_order || row.sortOrder || 0),
+      bgColor: row.bg_color || row.bgColor || null
+    };
+  }
+  var AvatarRepository = {
+    getAvatarCatalog() {
+      return __async(this, null, function* () {
+        if (Array.isArray(cachedCatalog) && cachedCatalog.length) {
+          return cachedCatalog;
+        }
+        const response = yield SupabaseApi.rpc("get_avatar_catalog", {}, false);
+        cachedCatalog = (Array.isArray(response) ? response : []).map((row) => mapAvatar(row)).filter((avatar) => avatar.id && avatar.imageUrl).sort((left, right) => {
+          const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
+          if (orderDelta !== 0) {
+            return orderDelta;
+          }
+          return String(left.displayName).localeCompare(String(right.displayName));
+        });
+        return cachedCatalog;
+      });
+    },
+    getAvatarImageUrl(avatarId, catalog = cachedCatalog || []) {
+      var _a;
+      const normalizedId = String(avatarId || "").trim();
+      if (!normalizedId) {
+        return null;
+      }
+      return ((_a = catalog.find((avatar) => avatar.id === normalizedId)) == null ? void 0 : _a.imageUrl) || null;
+    },
+    invalidateCache() {
+      cachedCatalog = null;
+    }
+  };
 
   // js/data/local/themeStore.js
   var KEY4 = "themeSettings";
@@ -2685,7 +2594,9 @@
       "auth.qr.missingExtension": "QR backend missing required extension.",
       "auth.qr.missingFunction": "QR backend function is missing.",
       "auth.qr.networkError": "Network error while generating QR.",
+      "auth.qr.notConfigured": "QR sign-in is not configured on this app yet.",
       "auth.qr.qrImageAlt": "QR code",
+      "auth.qr.serviceUnavailable": "QR sign-in is temporarily unavailable. Please try again later.",
       "auth.qr.unavailableWithReason": "QR unavailable: {{reason}}",
       "auth.qr.waitingApproval": "Waiting for approval on your phone...",
       "auth.signIn.devEmailLogin": "Dev Email Login",
@@ -2776,7 +2687,9 @@
       "auth.qr.missingExtension": "Al backend QR manca un'estensione richiesta.",
       "auth.qr.missingFunction": "La funzione backend QR manca.",
       "auth.qr.networkError": "Errore di rete durante la generazione del QR.",
+      "auth.qr.notConfigured": "L'accesso tramite QR non e' ancora configurato in questa app.",
       "auth.qr.qrImageAlt": "Codice QR",
+      "auth.qr.serviceUnavailable": "L'accesso tramite QR e' temporaneamente non disponibile. Riprova piu' tardi.",
       "auth.qr.unavailableWithReason": "QR non disponibile: {{reason}}",
       "auth.qr.waitingApproval": "In attesa di approvazione dal telefono...",
       "auth.signIn.devEmailLogin": "Login email dev",
@@ -3037,11 +2950,14 @@
     return __async(this, null, function* () {
       const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
       const profiles = yield ProfileManager.getProfiles();
+      const avatarCatalog = yield AvatarRepository.getAvatarCatalog().catch(() => []);
       const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId3) || profiles[0] || null;
+      const activeProfileAvatarUrl = AvatarRepository.getAvatarImageUrl(activeProfile == null ? void 0 : activeProfile.avatarId, avatarCatalog);
       return {
         activeProfileName: String((activeProfile == null ? void 0 : activeProfile.name) || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback"),
         activeProfileInitial: profileInitial((activeProfile == null ? void 0 : activeProfile.name) || t("sidebar.profileFallback")),
         activeProfileColorHex: String((activeProfile == null ? void 0 : activeProfile.avatarColorHex) || "#1E88E5"),
+        activeProfileAvatarUrl: String(activeProfileAvatarUrl || ""),
         showProfileSelector: profiles.length > 1
       };
     });
@@ -3083,7 +2999,9 @@
         <button class="home-profile-pill focusable"
                 data-action="gotoAccount"
                 aria-label="${t("sidebar.switchProfile")}">
-          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">
+            ${profileState.activeProfileAvatarUrl ? `<img class="sidebar-profile-avatar-image" src="${profileState.activeProfileAvatarUrl}" alt="${profileState.activeProfileName || t("sidebar.profileFallback")}" />` : profileState.activeProfileInitial || "P"}
+          </span>
           <span class="home-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
         </button>
       ` : ""}
@@ -3128,7 +3046,9 @@
       <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
         ${showProfileSelector ? `
           <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
-            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">
+              ${profileState.activeProfileAvatarUrl ? `<img class="sidebar-profile-avatar-image" src="${profileState.activeProfileAvatarUrl}" alt="${profileState.activeProfileName || t("sidebar.profileFallback")}" />` : profileState.activeProfileInitial || "P"}
+            </span>
             <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
           </button>
         ` : ""}
@@ -3581,10 +3501,19 @@
       heroSource: "continueWatching",
       id: String(item.contentId || item.id || "").trim(),
       contentId: String(item.contentId || item.id || "").trim(),
+      videoId: item.videoId || null,
+      season: Number.isFinite(Number(item.season)) ? Number(item.season) : null,
+      episode: Number.isFinite(Number(item.episode)) ? Number(item.episode) : null,
+      positionMs: Number(item.positionMs || 0) || 0,
+      durationMs: Number(item.durationMs || 0) || 0,
       type,
       apiType: type,
       name: title,
       title,
+      landscapePoster: firstNonEmpty(item.landscapePoster, item.thumbnail, item.backdrop, item.background, item.poster),
+      thumbnail: firstNonEmpty(item.thumbnail, item.episodeThumbnail, item.poster, item.backdrop, item.background),
+      backdrop: firstNonEmpty(item.backdrop, item.background, item.thumbnail, item.poster, item.episodeThumbnail),
+      episodeThumbnail: firstNonEmpty(item.episodeThumbnail, item.thumbnail, item.backdrop, item.background, item.poster),
       poster: isSeries ? firstNonEmpty(item.poster, item.episodeThumbnail, item.thumbnail, item.backdrop, item.background) : firstNonEmpty(item.poster, item.backdrop, item.background, item.thumbnail, item.episodeThumbnail),
       background: isSeries ? firstNonEmpty(item.background, item.backdrop, item.poster, item.episodeThumbnail, item.thumbnail) : firstNonEmpty(item.background, item.backdrop, item.poster, item.thumbnail, item.episodeThumbnail),
       logo: firstNonEmpty(item.logo),
@@ -3602,6 +3531,34 @@
       episodeCode: formatEpisodeCode(item.season, item.episode),
       episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
     });
+  }
+  function isRawContinueWatchingTitle(item) {
+    const contentId = String((item == null ? void 0 : item.contentId) || (item == null ? void 0 : item.id) || "").trim();
+    const title = firstNonEmpty(item == null ? void 0 : item.title, item == null ? void 0 : item.name);
+    return Boolean(title) && Boolean(contentId) && title === prettyId(contentId);
+  }
+  function hasContinueWatchingArtwork(item) {
+    return Boolean(firstNonEmpty(
+      item == null ? void 0 : item.poster,
+      item == null ? void 0 : item.background,
+      item == null ? void 0 : item.backdrop,
+      item == null ? void 0 : item.backdropUrl,
+      item == null ? void 0 : item.thumbnail,
+      item == null ? void 0 : item.episodeThumbnail,
+      item == null ? void 0 : item.logo
+    ));
+  }
+  function isPresentableContinueWatchingItem(item, { requireArtwork = false } = {}) {
+    const normalized = normalizeContinueWatchingItem(item);
+    if (!normalized) {
+      return false;
+    }
+    const hasMeaningfulTitle = Boolean(firstNonEmpty(normalized.title, normalized.name)) && !isRawContinueWatchingTitle(normalized);
+    const hasArtwork = hasContinueWatchingArtwork(normalized);
+    return requireArtwork ? hasMeaningfulTitle && hasArtwork : hasMeaningfulTitle || hasArtwork;
+  }
+  function buildVisibleContinueWatchingItems(items = [], options = {}) {
+    return (items || []).map((item) => normalizeContinueWatchingItem(item)).filter((item) => isPresentableContinueWatchingItem(item, options));
   }
   function buildHeroDisplayModel(hero, layoutMode) {
     const year = extractYear(hero);
@@ -3820,6 +3777,30 @@
   function renderContinueWatchingCard(item, index) {
     const normalized = normalizeContinueWatchingItem(item);
     const subtitle = firstNonEmpty(normalized.episodeTitle, normalized.releaseInfo, toTitleCase(normalized.type));
+    const isSeries = String(normalized.type || "movie").toLowerCase() === "series";
+    const cardImage = isSeries ? firstNonEmpty(
+      item == null ? void 0 : item.episodeThumbnail,
+      normalized.episodeThumbnail,
+      item == null ? void 0 : item.thumbnail,
+      normalized.thumbnail,
+      item == null ? void 0 : item.poster,
+      normalized.poster,
+      item == null ? void 0 : item.backdrop,
+      normalized.backdrop,
+      item == null ? void 0 : item.background,
+      normalized.background
+    ) : firstNonEmpty(
+      item == null ? void 0 : item.backdrop,
+      normalized.backdrop,
+      item == null ? void 0 : item.landscapePoster,
+      normalized.landscapePoster,
+      item == null ? void 0 : item.thumbnail,
+      normalized.thumbnail,
+      item == null ? void 0 : item.poster,
+      normalized.poster,
+      item == null ? void 0 : item.background,
+      normalized.background
+    );
     return `
     <article class="home-content-card home-continue-card focusable"
              data-action="resumeProgress"
@@ -3827,7 +3808,7 @@
              data-item-id="${escapeAttribute(normalized.contentId)}"
              data-item-type="${escapeAttribute(normalized.type || "movie")}"
              data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
-      <div class="home-continue-media"${normalized.poster ? ` style="background-image:url('${escapeAttribute(normalized.poster)}')"` : ""}>
+      <div class="home-continue-media"${cardImage ? ` style="background-image:url('${escapeAttribute(cardImage)}')"` : ""}>
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || "Continue")}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
@@ -3839,18 +3820,38 @@
     </article>
   `;
   }
+  function renderContinueWatchingLoadingCard(index = 0) {
+    return `
+    <article class="home-content-card home-continue-card home-continue-card-loading focusable"
+              data-action="continueWatchingLoading"
+             data-cw-loading-index="${index}"
+             aria-disabled="true">
+      <div class="home-continue-media home-continue-media-loading">
+        <span class="home-continue-badge">Loading</span>
+        <div class="home-continue-copy">
+          <div class="home-continue-kicker">Continue Watching</div>
+          <div class="home-continue-title">Loading...</div>
+          <div class="home-continue-subtitle">Fetching your recent progress</div>
+        </div>
+        <div class="home-continue-progress"><span style="width:38%"></span></div>
+      </div>
+    </article>
+  `;
+  }
   function renderContinueWatchingSection(items = [], options = {}) {
-    if (!items.length) {
+    const loading = Boolean(options == null ? void 0 : options.loading);
+    if (!items.length && !loading) {
       return "";
     }
     const rowKey = String((options == null ? void 0 : options.rowKey) || "").trim();
+    const loadingCount = Math.max(1, Math.min(10, Number((options == null ? void 0 : options.loadingCount) || items.length || 3)));
     return `
     <section class="home-row home-row-continue"${rowKey ? ` data-row-key="${escapeAttribute(rowKey)}"` : ""}>
       <div class="home-row-head">
         <h2 class="home-row-title">Continue Watching</h2>
       </div>
       <div class="home-track home-track-continue"${rowKey ? ` data-track-row-key="${escapeAttribute(rowKey)}"` : ""}>
-        ${items.map((item, index) => renderContinueWatchingCard(item, index)).join("")}
+        ${items.length ? items.map((item, index) => renderContinueWatchingCard(item, index)).join("") : Array.from({ length: loadingCount }, (_, index) => renderContinueWatchingLoadingCard(index)).join("")}
       </div>
     </section>
   `;
@@ -4128,6 +4129,23 @@
       this.ensureMainVerticalVisibility(target);
       return true;
     },
+    focusInitialContinueWatchingCard() {
+      var _a;
+      const target = ((_a = this.container) == null ? void 0 : _a.querySelector(".home-row-continue .home-content-card.focusable")) || null;
+      if (!target) {
+        return false;
+      }
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      target.classList.add("focused");
+      this.focusWithoutAutoScroll(target);
+      this.lastMainFocus = target;
+      this.rememberMainRowFocus(target);
+      this.ensureTrackHorizontalVisibility(target);
+      this.ensureMainVerticalVisibility(target);
+      this.scheduleModernHeroUpdate(target);
+      this.scheduleFocusedPosterFlow(target);
+      return true;
+    },
     cancelScrollAnimation(container, axis = "x") {
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const state = map.get(container);
@@ -4155,7 +4173,7 @@
         container[property] = nextValue;
         return;
       }
-      const easeOutCubic = (t4) => 1 - Math.pow(1 - t4, 3);
+      const easeOutCubic = (t5) => 1 - Math.pow(1 - t5, 3);
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const key = axis === "y" ? "y" : "x";
       const existing = map.get(container) || {};
@@ -4413,6 +4431,31 @@
         return normalizeCatalogItem(item, (row == null ? void 0 : row.type) || "movie");
       }
       return null;
+    },
+    getContinueWatchingItemFromNode(node) {
+      var _a, _b, _c, _d;
+      const index = Number((_b = (_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.cwIndex) != null ? _b : -1);
+      if (!Number.isFinite(index) || index < 0) {
+        return null;
+      }
+      return normalizeContinueWatchingItem(((_c = this.continueWatchingDisplay) == null ? void 0 : _c[index]) || ((_d = this.continueWatching) == null ? void 0 : _d[index]) || null);
+    },
+    openContinueWatchingFromNode(node) {
+      const item = this.getContinueWatchingItemFromNode(node);
+      if (!(item == null ? void 0 : item.contentId)) {
+        return;
+      }
+      Router.navigate("detail", {
+        itemId: item.contentId,
+        itemType: item.type || "movie",
+        fallbackTitle: item.title || item.contentId || "Untitled",
+        autoOpenContinueWatching: true,
+        resumeProgressMs: Number(item.positionMs || 0) || 0,
+        resumeVideoId: item.videoId || null,
+        resumeSeason: item.season,
+        resumeEpisode: item.episode,
+        resumeEpisodeTitle: item.episodeTitle || ""
+      });
     },
     scheduleModernHeroUpdate(node) {
       if (this.layoutMode !== "modern") {
@@ -4756,19 +4799,8 @@
       }
       const edgePadding = this.getTrackEdgePadding();
       const targetLeft = target.offsetLeft;
-      const targetRight = targetLeft + target.offsetWidth;
-      const viewLeft = track.scrollLeft;
-      const viewRight = viewLeft + track.clientWidth;
-      const visibleLeft = viewLeft + edgePadding;
-      const visibleRight = viewRight - edgePadding;
-      if (targetRight > visibleRight) {
-        const nextLeft = direction === "right" ? targetRight - track.clientWidth + edgePadding : targetLeft - edgePadding;
-        this.animateScroll(track, "x", nextLeft, 140);
-        return;
-      }
-      if (targetLeft < visibleLeft) {
-        this.animateScroll(track, "x", targetLeft - edgePadding, 140);
-      }
+      const targetScrollLeft = Math.max(0, targetLeft - edgePadding);
+      this.animateScroll(track, "x", targetScrollLeft, 140);
     },
     focusNode(current, target, direction = null) {
       if (!current || !target || current === target) {
@@ -4965,11 +4997,7 @@
             return;
           }
           if (action === "resumeProgress") {
-            Router.navigate("detail", {
-              itemId: target.dataset.itemId,
-              itemType: target.dataset.itemType || "movie",
-              fallbackTitle: target.dataset.itemTitle || target.dataset.itemId || "Untitled"
-            });
+            this.openContinueWatchingFromNode(target);
           }
         };
       }
@@ -4990,10 +5018,13 @@
         ScreenUtils.show(this.container);
         this.ensureDelegatedEventsBound();
         this.homeRouteEnterPending = true;
+        this.forceInitialContinueWatchingFocus = false;
+        this.continueWatchingLoading = false;
         const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
         const profileChanged = activeProfileId3 !== String(this.loadedProfileId || "");
         if (profileChanged) {
           this.hasLoadedOnce = false;
+          this.hasAppliedInitialContinueWatchingFocus = false;
         }
         if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
           this.homeLoadToken = (this.homeLoadToken || 0) + 1;
@@ -5004,6 +5035,7 @@
           return;
         }
         this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+        this.hasAppliedInitialContinueWatchingFocus = false;
         this.container.innerHTML = `
       <div class="home-boot">
         <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
@@ -5015,7 +5047,7 @@
     },
     loadData() {
       return __async(this, null, function* () {
-        var _a;
+        var _a, _b;
         const token = this.homeLoadToken;
         const prefs = LayoutPreferences.get();
         this.layoutPrefs = prefs;
@@ -5046,9 +5078,8 @@
         if (token !== this.homeLoadToken) {
           return;
         }
-        this.continueWatchingDisplay = this.continueWatching.map((item) => __spreadProps(__spreadValues({}, item), {
-          title: prettyId(item.contentId)
-        }));
+        this.continueWatchingLoading = Boolean((_b = this.continueWatching) == null ? void 0 : _b.length);
+        this.continueWatchingDisplay = [];
         this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
         this.heroIndex = 0;
         this.heroItem = this.pickInitialHero();
@@ -5089,21 +5120,30 @@
           if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
             return;
           }
-          this.continueWatchingDisplay = enriched.map((item) => normalizeContinueWatchingItem(item));
-          if (this.layoutMode === "modern" && (!this.heroItem || this.heroItem.heroSource === "continueWatching")) {
+          this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+          this.continueWatchingLoading = false;
+          if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
             this.heroItem = this.pickInitialHero();
+            if (!this.hasAppliedInitialContinueWatchingFocus) {
+              this.forceInitialContinueWatchingFocus = true;
+            }
           }
           this.render();
         }).catch((error) => {
           console.warn("Continue watching async enrichment failed", error);
+          this.continueWatchingLoading = false;
+          this.render();
         });
       });
     },
     pickInitialHero() {
       var _a, _b;
       if (this.layoutMode === "modern") {
-        const continueHero = normalizeContinueWatchingItem(((_a = this.continueWatchingDisplay) == null ? void 0 : _a[0]) || ((_b = this.continueWatching) == null ? void 0 : _b[0]) || null);
-        if (continueHero) {
+        if (this.continueWatchingLoading && Array.isArray(this.continueWatching) && this.continueWatching.length && !((_a = this.continueWatchingDisplay) == null ? void 0 : _a.length)) {
+          return null;
+        }
+        const continueHero = normalizeContinueWatchingItem(((_b = this.continueWatchingDisplay) == null ? void 0 : _b[0]) || null);
+        if (continueHero && isPresentableContinueWatchingItem(continueHero, { requireArtwork: true })) {
           return continueHero;
         }
       }
@@ -5148,16 +5188,17 @@
       return enabledRows;
     },
     render() {
-      var _a, _b, _c, _d, _e, _f;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
       const retainedFocusState = this.captureCurrentFocusState();
       this.cancelFocusedPosterFlow();
       this.expandedPosterNode = null;
-      const heroItem = normalizeCatalogItem(this.heroItem || ((_a = this.heroCandidates) == null ? void 0 : _a[this.heroIndex]) || this.pickHeroItem(this.rows), "movie");
-      const showHeroSection = Boolean((_b = this.layoutPrefs) == null ? void 0 : _b.heroSectionEnabled) && Boolean(heroItem);
+      const shouldHoldHeroForContinueWatching = this.layoutMode === "modern" && Boolean(this.continueWatchingLoading) && Array.isArray(this.continueWatching) && this.continueWatching.length > 0 && !((_a = this.continueWatchingDisplay) == null ? void 0 : _a.length);
+      const heroItem = shouldHoldHeroForContinueWatching ? null : normalizeCatalogItem(this.heroItem || ((_b = this.heroCandidates) == null ? void 0 : _b[this.heroIndex]) || this.pickHeroItem(this.rows), "movie");
+      const showHeroSection = Boolean((_c = this.layoutPrefs) == null ? void 0 : _c.heroSectionEnabled) && Boolean(heroItem);
       const layoutClass = `home-layout-${this.layoutMode}`;
-      const showPosterLabels = ((_c = this.layoutPrefs) == null ? void 0 : _c.posterLabelsEnabled) !== false;
-      const showCatalogAddonName = ((_d = this.layoutPrefs) == null ? void 0 : _d.catalogAddonNameEnabled) !== false;
-      const showCatalogTypeSuffix = ((_e = this.layoutPrefs) == null ? void 0 : _e.catalogTypeSuffixEnabled) !== false;
+      const showPosterLabels = ((_d = this.layoutPrefs) == null ? void 0 : _d.posterLabelsEnabled) !== false;
+      const showCatalogAddonName = ((_e = this.layoutPrefs) == null ? void 0 : _e.catalogAddonNameEnabled) !== false;
+      const showCatalogTypeSuffix = ((_f = this.layoutPrefs) == null ? void 0 : _f.catalogTypeSuffixEnabled) !== false;
       this.teardownGridStickyHeader();
       let mainContentMarkup = "";
       let modernLayoutPayload = null;
@@ -5167,6 +5208,8 @@
           heroItem,
           heroCandidates: this.heroCandidates,
           continueWatchingItems: this.continueWatchingDisplay || [],
+          continueWatchingLoading: Boolean(this.continueWatchingLoading),
+          continueWatchingLoadingCount: Number(((_g = this.continueWatching) == null ? void 0 : _g.length) || 0),
           showHeroSection,
           showPosterLabels,
           showCatalogTypeSuffix,
@@ -5182,7 +5225,9 @@
         mainContentMarkup = modernLayoutPayload.markup;
       } else {
         const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
-          rowKey: "continue_watching"
+          rowKey: "continue_watching",
+          loading: Boolean(this.continueWatchingLoading),
+          loadingCount: Number(((_h = this.continueWatching) == null ? void 0 : _h.length) || 0)
         });
         const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
           layoutMode: this.layoutMode,
@@ -5222,17 +5267,26 @@
       });
       ScreenUtils.indexFocusables(this.container);
       this.buildNavigationModel();
-      const restoredFocus = this.restoreFocusState(retainedFocusState);
-      if (!restoredFocus) {
-        ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
-        const current = this.container.querySelector(".home-main .focusable.focused");
-        if (current && this.isMainNode(current)) {
-          this.lastMainFocus = current;
-          this.scheduleModernHeroUpdate(current);
-          this.scheduleFocusedPosterFlow(current);
+      if (shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
+        this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+        this.lastMainFocus = null;
+        this.hasAppliedInitialContinueWatchingFocus = false;
+      } else if (this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
+        this.forceInitialContinueWatchingFocus = false;
+        this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
+      } else {
+        const restoredFocus = this.restoreFocusState(retainedFocusState);
+        if (!restoredFocus) {
+          ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
+          const current = this.container.querySelector(".home-main .focusable.focused");
+          if (current && this.isMainNode(current)) {
+            this.lastMainFocus = current;
+            this.scheduleModernHeroUpdate(current);
+            this.scheduleFocusedPosterFlow(current);
+          }
         }
       }
-      if (!((_f = this.layoutPrefs) == null ? void 0 : _f.modernSidebar)) {
+      if (!((_i = this.layoutPrefs) == null ? void 0 : _i.modernSidebar)) {
         this.setSidebarExpanded(false);
       }
       if (this.layoutMode === "grid") {
@@ -5279,7 +5333,7 @@
     enrichContinueWatching() {
       return __async(this, arguments, function* (items = []) {
         const enriched = yield Promise.all((items || []).map((item) => __async(null, null, function* () {
-          var _a, _b;
+          var _a, _b, _c, _d;
           try {
             const result = yield withTimeout(
               metaRepository.getMetaFromAllAddons(item.contentType || "movie", item.contentId),
@@ -5289,6 +5343,8 @@
             if ((result == null ? void 0 : result.status) === "success" && (result == null ? void 0 : result.data)) {
               return __spreadProps(__spreadValues({}, item), {
                 title: result.data.name || prettyId(item.contentId),
+                landscapePoster: result.data.landscapePoster || result.data.thumbnail || result.data.backdrop || result.data.background || null,
+                episodeThumbnail: result.data.episodeThumbnail || null,
                 poster: result.data.poster || result.data.thumbnail || result.data.background || result.data.backdrop || null,
                 background: result.data.background || result.data.backdrop || result.data.thumbnail || result.data.poster || null,
                 backdrop: result.data.backdrop || result.data.background || null,
@@ -5309,14 +5365,23 @@
             console.warn("Continue watching enrichment failed", error);
           }
           return __spreadProps(__spreadValues({}, item), {
-            title: prettyId(item.contentId),
-            poster: null,
-            background: null,
-            logo: null,
-            description: "",
-            releaseInfo: "",
-            genres: [],
-            runtimeMinutes: 0
+            title: firstNonEmpty(item.title, item.name),
+            landscapePoster: item.landscapePoster || item.thumbnail || item.backdrop || item.background || null,
+            episodeThumbnail: item.episodeThumbnail || null,
+            poster: item.poster || item.thumbnail || null,
+            background: item.background || item.backdrop || item.poster || null,
+            backdrop: item.backdrop || item.background || null,
+            thumbnail: item.thumbnail || item.poster || null,
+            logo: item.logo || null,
+            description: item.description || "",
+            releaseInfo: item.releaseInfo || "",
+            genres: Array.isArray(item.genres) ? item.genres : [],
+            runtimeMinutes: Number((_d = (_c = item.runtimeMinutes) != null ? _c : item.runtime) != null ? _d : 0) || 0,
+            ageRating: firstNonEmpty(item.ageRating, item.age_rating),
+            status: firstNonEmpty(item.status),
+            language: firstNonEmpty(item.language),
+            country: firstNonEmpty(item.country),
+            episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
           });
         })));
         return enriched;
@@ -5479,11 +5544,7 @@
       if (action === "openDetail") this.openDetailFromNode(current);
       if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
       if (action === "resumeProgress") {
-        Router.navigate("detail", {
-          itemId: current.dataset.itemId,
-          itemType: current.dataset.itemType || "movie",
-          fallbackTitle: current.dataset.itemTitle || current.dataset.itemId || "Untitled"
-        });
+        this.openContinueWatchingFromNode(current);
       }
     },
     cleanup() {
@@ -5498,51 +5559,265 @@
     }
   };
 
-  // js/data/remote/supabase/supabaseApi.js
-  function buildHeaders(extra = {}, useSession = true) {
-    const headers = __spreadValues({
-      apikey: SUPABASE_ANON_KEY
-    }, extra);
-    if (useSession && SessionStore.accessToken) {
-      headers.Authorization = `Bearer ${SessionStore.accessToken}`;
-    } else if (headers.Authorization == null) {
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+  // js/core/auth/authState.js
+  var AuthState = {
+    LOADING: "loading",
+    SIGNED_OUT: "signedOut",
+    AUTHENTICATED: "authenticated"
+  };
+
+  // js/core/auth/authManager.js
+  var AuthManagerClass = class {
+    constructor() {
+      this.state = AuthState.LOADING;
+      this.listeners = [];
+      this.cachedEffectiveUserId = null;
+      this.cachedEffectiveUserSourceUserId = null;
+      this.refreshPromise = null;
     }
-    return headers;
-  }
-  var SupabaseApi = {
-    rpc(functionName, body = {}, useSession = true) {
-      return httpRequest(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
-        method: "POST",
-        headers: buildHeaders({ "Content-Type": "application/json" }, useSession),
-        body: JSON.stringify(body)
+    // ------------------------------------
+    // SUBSCRIBE (equivalente StateFlow)
+    // ------------------------------------
+    subscribe(listener) {
+      this.listeners.push(listener);
+      listener(this.state);
+      return () => {
+        this.listeners = this.listeners.filter((l) => l !== listener);
+      };
+    }
+    setState(newState) {
+      this.state = newState;
+      this.listeners.forEach((l) => l(newState));
+    }
+    // ------------------------------------
+    // BOOTSTRAP (equivalente observeSessionStatus)
+    // ------------------------------------
+    bootstrap() {
+      return __async(this, null, function* () {
+        const token = SessionStore.accessToken;
+        if (!token) {
+          this.setState(AuthState.SIGNED_OUT);
+          return;
+        }
+        if (SessionStore.isAnonymousSession) {
+          this.setState(AuthState.SIGNED_OUT);
+          return;
+        }
+        const refreshed = yield this.refreshSessionIfNeeded();
+        if (!refreshed) {
+          this.setState(AuthState.SIGNED_OUT);
+          return;
+        }
+        this.setState(AuthState.AUTHENTICATED);
       });
-    },
-    select(table, query = "", useSession = true) {
-      const suffix = query ? `?${query}` : "";
-      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${suffix}`, {
-        method: "GET",
-        headers: buildHeaders({}, useSession)
+    }
+    getAuthState() {
+      return this.state;
+    }
+    get isAuthenticated() {
+      return this.state === AuthState.AUTHENTICATED;
+    }
+    // ------------------------------------
+    // EMAIL LOGIN
+    // ------------------------------------
+    signInWithEmail(email, password) {
+      return __async(this, null, function* () {
+        const res = yield fetch(
+          `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_ANON_KEY
+            },
+            body: JSON.stringify({ email, password })
+          }
+        );
+        if (!res.ok) throw new Error("Login failed");
+        const data = yield res.json();
+        SessionStore.accessToken = data.access_token;
+        SessionStore.refreshToken = data.refresh_token;
+        SessionStore.isAnonymousSession = false;
+        this.setState(AuthState.AUTHENTICATED);
       });
-    },
-    upsert(table, rows, onConflict = null, useSession = true) {
-      const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
-      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
-        method: "POST",
-        headers: buildHeaders({
+    }
+    signOut() {
+      return __async(this, null, function* () {
+        SessionStore.clear();
+        this.cachedEffectiveUserId = null;
+        this.cachedEffectiveUserSourceUserId = null;
+        this.setState(AuthState.SIGNED_OUT);
+      });
+    }
+    refreshSessionIfNeeded() {
+      return __async(this, null, function* () {
+        if (this.refreshPromise) {
+          return this.refreshPromise;
+        }
+        const refreshToken = SessionStore.refreshToken;
+        if (!refreshToken) {
+          return Boolean(SessionStore.accessToken);
+        }
+        this.refreshPromise = (() => __async(this, null, function* () {
+          try {
+            const res = yield fetch(
+              `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  "apikey": SUPABASE_ANON_KEY
+                },
+                body: JSON.stringify({ refresh_token: refreshToken })
+              }
+            );
+            if (!res.ok) {
+              return false;
+            }
+            const data = yield res.json();
+            if (!(data == null ? void 0 : data.access_token)) {
+              return false;
+            }
+            SessionStore.accessToken = data.access_token;
+            if (data.refresh_token) {
+              SessionStore.refreshToken = data.refresh_token;
+            }
+            return true;
+          } catch (error) {
+            console.warn("Session refresh failed", error);
+            return false;
+          } finally {
+            this.refreshPromise = null;
+          }
+        }))();
+        return this.refreshPromise;
+      });
+    }
+    // ------------------------------------
+    // QR LOGIN FLOW
+    // ------------------------------------
+    startTvLoginSession(deviceNonce, deviceName, redirectBaseUrl) {
+      return __async(this, null, function* () {
+        const res = yield fetch(
+          `${SUPABASE_URL}/rest/v1/rpc/start_tv_login_session`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_ANON_KEY,
+              "Authorization": `Bearer ${SessionStore.accessToken}`
+            },
+            body: JSON.stringify(__spreadValues({
+              p_device_nonce: deviceNonce,
+              p_redirect_base_url: redirectBaseUrl
+            }, deviceName && { p_device_name: deviceName }))
+          }
+        );
+        if (!res.ok) throw new Error(yield res.text());
+        const data = yield res.json();
+        return data[0];
+      });
+    }
+    pollTvLoginSession(code, deviceNonce) {
+      return __async(this, null, function* () {
+        const res = yield fetch(
+          `${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_ANON_KEY,
+              "Authorization": `Bearer ${SessionStore.accessToken}`
+            },
+            body: JSON.stringify({
+              p_code: code,
+              p_device_nonce: deviceNonce
+            })
+          }
+        );
+        if (!res.ok) throw new Error(yield res.text());
+        const data = yield res.json();
+        return data[0];
+      });
+    }
+    exchangeTvLoginSession(code, deviceNonce) {
+      return __async(this, null, function* () {
+        const res = yield fetch(
+          `${SUPABASE_URL}/functions/v1/tv-logins-exchange`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "apikey": SUPABASE_ANON_KEY,
+              "Authorization": `Bearer ${SessionStore.accessToken}`
+            },
+            body: JSON.stringify({
+              code,
+              device_nonce: deviceNonce
+            })
+          }
+        );
+        if (!res.ok) throw new Error(yield res.text());
+        const data = yield res.json();
+        SessionStore.accessToken = data.accessToken;
+        SessionStore.refreshToken = data.refreshToken;
+        this.setState(AuthState.AUTHENTICATED);
+      });
+    }
+    // ------------------------------------
+    // EFFECTIVE USER ID (PORTING CACHE LOGIC)
+    // ------------------------------------
+    getEffectiveUserId() {
+      return __async(this, null, function* () {
+        if (this.cachedEffectiveUserId)
+          return this.cachedEffectiveUserId;
+        if (!SessionStore.accessToken) {
+          const refreshed = yield this.refreshSessionIfNeeded();
+          if (!refreshed || !SessionStore.accessToken) {
+            yield this.signOut();
+            throw new Error("Missing valid session token");
+          }
+        }
+        const authHeaders = {
           "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=representation"
-        }, useSession),
-        body: JSON.stringify(rows)
-      });
-    },
-    delete(table, query, useSession = true) {
-      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-        method: "DELETE",
-        headers: buildHeaders({ Prefer: "return=representation" }, useSession)
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": `Bearer ${SessionStore.accessToken}`
+        };
+        let res = yield fetch(
+          `${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`,
+          {
+            method: "POST",
+            headers: authHeaders
+          }
+        );
+        if (res.status === 401) {
+          const refreshed = yield this.refreshSessionIfNeeded();
+          if (refreshed) {
+            res = yield fetch(
+              `${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`,
+              {
+                method: "POST",
+                headers: __spreadProps(__spreadValues({}, authHeaders), {
+                  "Authorization": `Bearer ${SessionStore.accessToken}`
+                })
+              }
+            );
+          }
+        }
+        if (!res.ok) {
+          if (res.status === 401) {
+            yield this.signOut();
+          }
+          throw new Error(yield res.text());
+        }
+        const data = yield res.json();
+        const id = data;
+        this.cachedEffectiveUserId = id;
+        return id;
       });
     }
   };
+  var AuthManager = new AuthManagerClass();
 
   // js/core/profile/watchProgressSyncService.js
   var TABLE = "tv_watch_progress";
@@ -7696,7 +7971,7 @@
         document.addEventListener("visibilitychange", this.visibilityFlushHandler);
       }
     },
-    play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
+    play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
       if (!this.video) return;
       try {
         this.video.muted = false;
@@ -7711,6 +7986,10 @@
       this.currentVideoId = videoId;
       this.currentSeason = season == null ? null : Number(season);
       this.currentEpisode = episode == null ? null : Number(episode);
+      this.currentItemTitle = title || null;
+      this.currentItemPoster = poster || null;
+      this.currentItemBackground = background || null;
+      this.currentEpisodeTitle = episodeTitle || null;
       this.currentPlaybackUrl = String(url || "").trim();
       this.currentPlaybackHeaders = __spreadValues({}, requestHeaders || {});
       this.currentPlaybackMediaSourceType = mediaSourceType || null;
@@ -7908,6 +8187,10 @@
       this.currentVideoId = null;
       this.currentSeason = null;
       this.currentEpisode = null;
+      this.currentItemTitle = null;
+      this.currentItemPoster = null;
+      this.currentItemBackground = null;
+      this.currentEpisodeTitle = null;
       this.currentPlaybackUrl = "";
       this.currentPlaybackHeaders = {};
       this.currentPlaybackMediaSourceType = null;
@@ -7926,7 +8209,11 @@
         itemType: this.currentItemType || "movie",
         videoId: this.currentVideoId || null,
         season: Number.isFinite(this.currentSeason) ? this.currentSeason : null,
-        episode: Number.isFinite(this.currentEpisode) ? this.currentEpisode : null
+        episode: Number.isFinite(this.currentEpisode) ? this.currentEpisode : null,
+        title: this.currentItemTitle || null,
+        poster: this.currentItemPoster || null,
+        background: this.currentItemBackground || null,
+        episodeTitle: this.currentEpisodeTitle || null
       };
     },
     flushProgress(positionMs, durationMs, clear = false, context = null) {
@@ -7952,6 +8239,10 @@
           videoId: active.videoId || null,
           season: active.season,
           episode: active.episode,
+          title: active.title || null,
+          poster: active.poster || null,
+          background: active.background || null,
+          episodeTitle: active.episodeTitle || null,
           positionMs: Math.max(0, Math.trunc(safePosition)),
           durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : 0
         });
@@ -8036,9 +8327,6 @@
             seen.add(key);
             merged.push(subtitle);
           });
-          if (merged.length) {
-            break;
-          }
         }
         return merged;
       });
@@ -8388,6 +8676,84 @@
   };
   var streamRepository = new StreamRepository();
 
+  // js/data/local/playerSettingsStore.js
+  var KEY6 = "playerSettings";
+  var DEFAULTS4 = {
+    autoplayNextEpisode: true,
+    subtitlesEnabled: true,
+    subtitleLanguage: "system",
+    secondarySubtitleLanguage: "off",
+    preferredAudioLanguage: "system",
+    preferredQuality: "auto",
+    preferredPlayer: "auto",
+    trailerAutoplay: false,
+    subtitleRenderMode: "native",
+    subtitleDelayMs: 0,
+    subtitleStyle: {
+      fontSize: 100,
+      textColor: "#FFFFFF",
+      bold: false,
+      outlineEnabled: true,
+      outlineColor: "#000000",
+      verticalOffset: 0,
+      preferredLanguage: "system",
+      secondaryPreferredLanguage: "off"
+    },
+    audioAmplificationDb: 0,
+    persistAudioAmplification: false
+  };
+  function normalizeSelectableSubtitleLanguageCode(language) {
+    const code = String(language != null ? language : "").trim().toLowerCase();
+    if (!code) {
+      return "system";
+    }
+    switch (code) {
+      case "pt-br":
+      case "pt_br":
+      case "br":
+      case "pob":
+        return "pt-br";
+      case "pt-pt":
+      case "pt_pt":
+      case "por":
+        return "pt";
+      case "forced":
+      case "force":
+      case "forc":
+        return "forced";
+      case "none":
+      case "off":
+        return "off";
+      default:
+        return code;
+    }
+  }
+  function normalizePlayerSettings(settings = {}) {
+    var _a, _b, _c, _d;
+    const subtitleStyle = __spreadValues(__spreadValues({}, DEFAULTS4.subtitleStyle), settings.subtitleStyle || {});
+    return __spreadProps(__spreadValues(__spreadValues({}, DEFAULTS4), settings), {
+      subtitleLanguage: normalizeSelectableSubtitleLanguageCode((_a = settings.subtitleLanguage) != null ? _a : DEFAULTS4.subtitleLanguage),
+      secondarySubtitleLanguage: normalizeSelectableSubtitleLanguageCode((_b = settings.secondarySubtitleLanguage) != null ? _b : DEFAULTS4.secondarySubtitleLanguage),
+      subtitleStyle: __spreadProps(__spreadValues({}, subtitleStyle), {
+        preferredLanguage: normalizeSelectableSubtitleLanguageCode((_c = subtitleStyle.preferredLanguage) != null ? _c : DEFAULTS4.subtitleStyle.preferredLanguage),
+        secondaryPreferredLanguage: normalizeSelectableSubtitleLanguageCode((_d = subtitleStyle.secondaryPreferredLanguage) != null ? _d : DEFAULTS4.subtitleStyle.secondaryPreferredLanguage)
+      })
+    });
+  }
+  var PlayerSettingsStore = {
+    get() {
+      const stored = LocalStore.get(KEY6, {}) || {};
+      return normalizePlayerSettings(stored);
+    },
+    set(partial) {
+      const current = this.get();
+      const next = __spreadProps(__spreadValues(__spreadValues({}, current), partial || {}), {
+        subtitleStyle: __spreadValues(__spreadValues({}, current.subtitleStyle), (partial || {}).subtitleStyle || {})
+      });
+      LocalStore.set(KEY6, normalizePlayerSettings(next));
+    }
+  };
+
   // js/platform/environment.js
   var Environment = {
     isWebOS() {
@@ -8463,6 +8829,16 @@
     vie: "vi",
     zho: "zh"
   };
+  var SUBTITLE_LANGUAGE_OFF_KEY = "__off__";
+  var SUBTITLE_LANGUAGE_UNKNOWN_KEY = "__unknown__";
+  var SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C5C", "#00FF88"];
+  var SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
+  var SUBTITLE_DELAY_STEP_MS = 250;
+  var SUBTITLE_FONT_STEP = 10;
+  var SUBTITLE_VERTICAL_OFFSET_STEP = 2;
+  var AUDIO_AMPLIFICATION_MIN_DB = 0;
+  var AUDIO_AMPLIFICATION_MAX_DB = 10;
+  var PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   function t2(key, params = {}, fallback = key) {
     return I18n.t(key, params, { fallback });
   }
@@ -8816,6 +9192,33 @@
     if (text.includes("480")) return "480p";
     return "Auto";
   }
+  function formatSubtitleDelay(delayMs = 0) {
+    const seconds = Number(delayMs || 0) / 1e3;
+    return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(3)}s`;
+  }
+  function normalizeSubtitleLanguageKey(value) {
+    const code = normalizeTrackLanguageCode(value);
+    if (code) {
+      return code;
+    }
+    const cleaned = cleanDisplayText(value);
+    return cleaned ? cleaned.toLowerCase() : SUBTITLE_LANGUAGE_UNKNOWN_KEY;
+  }
+  function subtitleLanguageLabel(languageKey) {
+    if (languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
+      return t2("subtitle_none", {}, "Off");
+    }
+    if (languageKey === SUBTITLE_LANGUAGE_UNKNOWN_KEY) {
+      return t2("common.unknown", {}, "Unknown");
+    }
+    return getTrackLanguageLabel({ language: languageKey }) || String(languageKey || "").toUpperCase();
+  }
+  function styleChipLabel(value = "") {
+    return String(value || "").replace(/^#/, "").toUpperCase();
+  }
+  function dbToGain(db = 0) {
+    return Math.pow(10, Number(db || 0) / 20);
+  }
   function flattenStreamGroups(streamResult) {
     if (!streamResult || streamResult.status !== "success") {
       return [];
@@ -8944,7 +9347,7 @@
   var PlayerScreen = {
     mount() {
       return __async(this, arguments, function* (params = {}) {
-        var _a;
+        var _a, _b, _c;
         this.container = document.getElementById("player");
         this.container.style.display = "block";
         this.params = params;
@@ -8973,12 +9376,19 @@
         this.subtitleDialogVisible = false;
         this.subtitleDialogTab = "builtIn";
         this.subtitleDialogIndex = 0;
+        this.subtitleLanguageRailIndex = 0;
+        this.subtitleOptionRailIndex = 0;
+        this.subtitleStyleRailIndex = 0;
+        this.subtitleFocusedRail = "language";
+        this.subtitleDialogScrollMode = "nearest";
         this.selectedSubtitleTrackIndex = -1;
         this.selectedAddonSubtitleId = null;
         this.builtInSubtitleCount = 0;
         this.externalTrackNodes = [];
         this.audioDialogVisible = false;
         this.audioDialogIndex = 0;
+        this.audioMixFocusIndex = 0;
+        this.audioFocusedColumn = "tracks";
         this.selectedAudioTrackIndex = -1;
         this.sourcesPanelVisible = false;
         this.sourcesLoading = false;
@@ -8988,6 +9398,8 @@
         this.sourceLoadToken = 0;
         this.aspectModeIndex = 0;
         this.aspectToastTimer = null;
+        this.speedDialogVisible = false;
+        this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.indexOf(1));
         this.episodes = Array.isArray(params.episodes) ? params.episodes : [];
         this.episodePanelVisible = false;
         this.episodePanelIndex = Math.max(0, this.episodes.findIndex((entry) => entry.id === params.videoId));
@@ -9014,7 +9426,10 @@
         this.selectedManifestAudioTrackId = null;
         this.selectedManifestSubtitleTrackId = null;
         this.activePlaybackUrl = initialStreamUrl || null;
-        this.pendingPlaybackRestore = null;
+        this.pendingPlaybackRestore = Number(params.resumePositionMs || 0) > 0 ? {
+          timeSeconds: Number(params.resumePositionMs || 0) / 1e3,
+          paused: false
+        } : null;
         this.trackDiscoveryToken = 0;
         this.trackDiscoveryInProgress = false;
         this.trackDiscoveryTimer = null;
@@ -9032,12 +9447,28 @@
         this.controlsVisible = true;
         this.loadingVisible = true;
         this.moreActionsVisible = false;
+        this.controlFocusZone = "buttons";
+        this.controlFocusIndex = 0;
         this.controlsHideTimer = null;
         this.tickTimer = null;
         this.videoListeners = [];
+        const playerSettings = PlayerSettingsStore.get();
+        this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
+        this.subtitleStyleSettings = __spreadProps(__spreadValues({}, playerSettings.subtitleStyle), {
+          preferredLanguage: String(((_a = playerSettings.subtitleStyle) == null ? void 0 : _a.preferredLanguage) || playerSettings.subtitleLanguage || "system"),
+          secondaryPreferredLanguage: String(((_b = playerSettings.subtitleStyle) == null ? void 0 : _b.secondaryPreferredLanguage) || playerSettings.secondarySubtitleLanguage || "off")
+        });
+        this.audioAmplificationDb = clamp(Number(playerSettings.audioAmplificationDb || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
+        this.persistAudioAmplification = Boolean(playerSettings.persistAudioAmplification);
+        this.audioAmplificationAvailable = false;
+        this.audioContext = null;
+        this.audioGainNode = null;
+        this.audioMediaSource = null;
         this.renderPlayerUi();
         if (!this.isExternalFrameMode()) {
           this.bindVideoEvents();
+          this.applyAudioAmplification();
+          this.applySubtitlePresentationSettings();
         }
         this.renderEpisodePanel();
         this.applyAspectMode({ showToast: false });
@@ -9058,7 +9489,7 @@
           this.endedHandler = () => {
             this.handlePlaybackEnded();
           };
-          (_a = PlayerController.video) == null ? void 0 : _a.addEventListener("ended", this.endedHandler);
+          (_c = PlayerController.video) == null ? void 0 : _c.addEventListener("ended", this.endedHandler);
           this.setControlsVisible(true, { focus: true });
         } else {
           this.loadingVisible = false;
@@ -9082,6 +9513,10 @@
         videoId: this.params.videoId || null,
         season: this.params.season == null ? null : Number(this.params.season),
         episode: this.params.episode == null ? null : Number(this.params.episode),
+        title: this.params.playerTitle || this.params.itemTitle || null,
+        poster: this.params.poster || null,
+        background: this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
+        episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
         requestHeaders,
         mediaSourceType
       };
@@ -9751,19 +10186,23 @@
         <div id="playerAspectToast" class="player-aspect-toast hidden"></div>
 
         <div id="playerSeekOverlay" class="player-seek-overlay hidden">
-          <div class="player-seek-overlay-top">
+          <div class="player-seek-overlay-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
+          <div class="player-seek-overlay-bottom">
             <span id="playerSeekDirection" class="player-seek-direction"></span>
-            <span id="playerSeekPreview" class="player-seek-preview">0:00</span>
+            <span id="playerSeekPreview" class="player-seek-preview">0:00 / 0:00</span>
           </div>
-          <div class="player-seek-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
         </div>
 
         <div id="playerModalBackdrop" class="player-modal-backdrop hidden"></div>
         <div id="playerSubtitleDialog" class="player-modal player-subtitle-modal hidden"></div>
         <div id="playerAudioDialog" class="player-modal player-audio-modal hidden"></div>
+        <div id="playerSpeedDialog" class="player-modal player-speed-modal hidden"></div>
         <div id="playerSourcesPanel" class="player-sources-panel hidden"></div>
 
         <div id="playerControlsOverlay" class="player-controls-overlay">
+          <div class="player-controls-gradient player-controls-gradient-top"></div>
+          <div class="player-controls-gradient player-controls-gradient-bottom"></div>
+
           <div class="player-controls-top">
             <div id="playerClock" class="player-clock">--:--</div>
             <div id="playerEndsAt" class="player-ends-at">${escapeHtml2(t2("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
@@ -9776,8 +10215,10 @@
             </div>
 
             <div class="player-controls-bar">
-              <div class="player-progress-track">
-                <div id="playerProgressFill" class="player-progress-fill"></div>
+              <div id="playerProgressShell" class="player-progress-shell">
+                <div class="player-progress-track">
+                  <div id="playerProgressFill" class="player-progress-fill"></div>
+                </div>
               </div>
 
               <div class="player-controls-row">
@@ -9795,6 +10236,7 @@
         this.renderControlButtons();
         this.renderSubtitleDialog();
         this.renderAudioDialog();
+        this.renderSpeedDialog();
         this.renderSourcesPanel();
         this.renderParentalGuideOverlay();
         this.renderSeekOverlay();
@@ -9815,8 +10257,10 @@
         modalBackdrop: uiRoot.querySelector("#playerModalBackdrop"),
         subtitleDialog: uiRoot.querySelector("#playerSubtitleDialog"),
         audioDialog: uiRoot.querySelector("#playerAudioDialog"),
+        speedDialog: uiRoot.querySelector("#playerSpeedDialog"),
         sourcesPanel: uiRoot.querySelector("#playerSourcesPanel"),
         controlsOverlay: uiRoot.querySelector("#playerControlsOverlay"),
+        progressShell: uiRoot.querySelector("#playerProgressShell"),
         clock: uiRoot.querySelector("#playerClock"),
         endsAt: uiRoot.querySelector("#playerEndsAt"),
         progressFill: uiRoot.querySelector("#playerProgressFill"),
@@ -9832,8 +10276,114 @@
         timeLabelText: "",
         seekWidth: "",
         seekPreviewText: "",
-        seekDirectionText: ""
+        seekDirectionText: "",
+        progressFocused: false
       };
+    },
+    getPlayerUiState() {
+      var _a, _b, _c, _d, _e, _f, _g, _h;
+      return {
+        isPlaying: !this.paused,
+        isBuffering: Boolean(this.loadingVisible),
+        currentPosition: Math.round(this.getPlaybackCurrentSeconds() * 1e3),
+        duration: Math.round(this.getPlaybackDurationSeconds() * 1e3),
+        title: String(((_a = this.params) == null ? void 0 : _a.playerTitle) || ((_b = this.params) == null ? void 0 : _b.itemId) || "Untitled"),
+        currentSeason: ((_c = this.params) == null ? void 0 : _c.season) == null ? null : Number(this.params.season),
+        currentEpisode: ((_d = this.params) == null ? void 0 : _d.episode) == null ? null : Number(this.params.episode),
+        currentEpisodeTitle: String(((_e = this.params) == null ? void 0 : _e.playerSubtitle) || "").trim() || null,
+        currentStreamName: ((_f = this.getCurrentStreamCandidate()) == null ? void 0 : _f.label) || null,
+        currentStreamUrl: ((_g = this.getCurrentStreamCandidate()) == null ? void 0 : _g.url) || null,
+        showControls: Boolean(this.controlsVisible),
+        showSeekOverlay: Boolean(this.seekOverlayVisible),
+        pendingPreviewSeekPosition: this.seekPreviewSeconds == null ? null : Math.round(Number(this.seekPreviewSeconds || 0) * 1e3),
+        playbackSpeed: Number(((_h = PlayerController.video) == null ? void 0 : _h.playbackRate) || 1),
+        showAudioOverlay: Boolean(this.audioDialogVisible),
+        showSubtitleOverlay: Boolean(this.subtitleDialogVisible),
+        subtitleDelayMs: Number(this.subtitleDelayMs || 0),
+        subtitleStyle: __spreadValues({}, this.subtitleStyleSettings),
+        audioAmplificationDb: Number(this.audioAmplificationDb || 0),
+        isAudioAmplificationAvailable: Boolean(this.audioAmplificationAvailable),
+        persistAudioAmplification: Boolean(this.persistAudioAmplification),
+        showEpisodesPanel: Boolean(this.episodePanelVisible),
+        episodesAll: Array.isArray(this.episodes) ? this.episodes : [],
+        showSourcesPanel: Boolean(this.sourcesPanelVisible),
+        isLoadingSourceStreams: Boolean(this.sourcesLoading),
+        sourceStreamsError: this.sourcesError || null,
+        sourceAllStreams: Array.isArray(this.streamCandidates) ? this.streamCandidates : [],
+        sourceSelectedAddonFilter: this.sourceFilter === "all" ? null : this.sourceFilter,
+        sourceFilteredStreams: this.getFilteredSources(),
+        sourceAvailableAddons: this.getSourceFilters().filter((entry) => entry !== "all")
+      };
+    },
+    persistPlayerPresentationSettings() {
+      var _a, _b;
+      PlayerSettingsStore.set({
+        subtitleDelayMs: Number(this.subtitleDelayMs || 0),
+        subtitleStyle: __spreadValues({}, this.subtitleStyleSettings),
+        subtitleLanguage: ((_a = this.subtitleStyleSettings) == null ? void 0 : _a.preferredLanguage) || "system",
+        secondarySubtitleLanguage: ((_b = this.subtitleStyleSettings) == null ? void 0 : _b.secondaryPreferredLanguage) || "off",
+        audioAmplificationDb: Number(this.audioAmplificationDb || 0),
+        persistAudioAmplification: Boolean(this.persistAudioAmplification)
+      });
+    },
+    ensureAudioAmplificationGraph() {
+      const video = PlayerController.video;
+      if (!video || this.audioGainNode) {
+        return Boolean(this.audioGainNode);
+      }
+      const AudioContextCtor = globalThis.AudioContext || globalThis.webkitAudioContext;
+      if (typeof AudioContextCtor !== "function") {
+        return false;
+      }
+      try {
+        this.audioContext = this.audioContext || new AudioContextCtor();
+        this.audioMediaSource = this.audioMediaSource || this.audioContext.createMediaElementSource(video);
+        this.audioGainNode = this.audioGainNode || this.audioContext.createGain();
+        this.audioMediaSource.connect(this.audioGainNode);
+        this.audioGainNode.connect(this.audioContext.destination);
+        this.audioAmplificationAvailable = true;
+        return true;
+      } catch (_) {
+        this.audioAmplificationAvailable = false;
+        return false;
+      }
+    },
+    applyAudioAmplification() {
+      var _a;
+      if (!this.ensureAudioAmplificationGraph()) {
+        this.audioAmplificationAvailable = false;
+        return;
+      }
+      try {
+        if (((_a = this.audioContext) == null ? void 0 : _a.state) === "suspended") {
+          void this.audioContext.resume().catch(() => {
+          });
+        }
+        this.audioGainNode.gain.value = dbToGain(this.audioAmplificationDb);
+        this.audioAmplificationAvailable = true;
+      } catch (_) {
+        this.audioAmplificationAvailable = false;
+      }
+    },
+    applySubtitlePresentationSettings() {
+      var _a;
+      const uiRoot = (_a = this.uiRefs) == null ? void 0 : _a.root;
+      const video = PlayerController.video;
+      if (!uiRoot || !video) {
+        return;
+      }
+      const style = this.subtitleStyleSettings || {};
+      uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
+      uiRoot.style.setProperty("--player-subtitle-outline-color", String(style.outlineColor || "#000000"));
+      uiRoot.style.setProperty("--player-subtitle-font-size", `${clamp(Number(style.fontSize || 100), 70, 180)}%`);
+      uiRoot.style.setProperty("--player-subtitle-font-weight", style.bold ? "700" : "500");
+      uiRoot.style.setProperty("--player-subtitle-shadow", style.outlineEnabled ? `0 0 2px ${style.outlineColor || "#000000"}, 0 0 4px ${style.outlineColor || "#000000"}` : "none");
+      uiRoot.style.setProperty("--player-subtitle-offset", `${clamp(Number(style.verticalOffset || 0), -12, 12) * -2}vh`);
+      video.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
+      video.style.setProperty("--player-subtitle-outline-color", String(style.outlineColor || "#000000"));
+      video.style.setProperty("--player-subtitle-font-size", `${clamp(Number(style.fontSize || 100), 70, 180)}%`);
+      video.style.setProperty("--player-subtitle-font-weight", style.bold ? "700" : "500");
+      video.style.setProperty("--player-subtitle-shadow", style.outlineEnabled ? `0 0 2px ${style.outlineColor || "#000000"}, 0 0 4px ${style.outlineColor || "#000000"}` : "none");
     },
     updateModalBackdrop() {
       var _a;
@@ -9841,7 +10391,7 @@
       if (!modalBackdrop) {
         return;
       }
-      const hasModal = this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible;
+      const hasModal = this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible || this.speedDialogVisible;
       modalBackdrop.classList.toggle("hidden", !hasModal);
     },
     bindVideoEvents() {
@@ -9867,6 +10417,8 @@
         this.paused = false;
         this.updateLoadingVisibility();
         this.refreshTrackDialogs();
+        this.applyAudioAmplification();
+        this.applySubtitlePresentationSettings();
         this.updateUiTick();
         this.resetControlsAutoHide();
         if (!this.parentalGuideShown && this.parentalWarnings.length) {
@@ -9913,6 +10465,8 @@
         this.loadingVisible = false;
         this.updateLoadingVisibility();
         this.markPlaybackProgress();
+        this.applyAudioAmplification();
+        this.applySubtitlePresentationSettings();
         this.ensureTrackDataWarmup();
         this.startTrackDiscoveryWindow({ durationMs: 5e3, intervalMs: 300 });
         setTimeout(() => {
@@ -9921,6 +10475,7 @@
       };
       const onPlayable = () => {
         this.refreshTrackDialogs();
+        this.applySubtitlePresentationSettings();
         this.updateUiTick();
       };
       const onTrackListChanged = () => {
@@ -9995,35 +10550,44 @@
       this.videoListeners = [];
     },
     getControlDefinitions() {
+      var _a, _b;
+      const uiState = this.getPlayerUiState();
       const base = [
         {
           action: "playPause",
           label: this.paused ? ">" : "II",
           icon: this.paused ? "assets/icons/ic_player_play.svg" : "assets/icons/ic_player_pause.svg",
-          title: "Play/Pause"
-        },
-        { action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t2("subtitle_dialog_title", {}, "Subtitles") },
-        {
+          title: "Play/Pause",
+          primary: true
+        }
+      ];
+      if (this.hasSubtitleTracksAvailable()) {
+        base.push({ action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t2("subtitle_dialog_title", {}, "Subtitles") });
+      }
+      if (this.hasAudioTracksAvailable()) {
+        base.push({
           action: "audioTrack",
           icon: this.selectedAudioTrackIndex >= 0 || this.selectedManifestAudioTrackId ? "assets/icons/ic_player_audio_filled.svg" : "assets/icons/ic_player_audio_outline.svg",
           title: t2("audio_dialog_title", {}, "Audio")
-        },
-        { action: "source", icon: "assets/icons/ic_player_source.svg", title: t2("sources_title", {}, "Sources") },
-        { action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t2("episodes_panel_title", {}, "Episodes") },
-        { action: "more", label: this.moreActionsVisible ? "<" : ">", title: t2("player_more_actions_title", {}, "More Actions") }
-      ];
+        });
+      }
+      base.push({ action: "source", icon: "assets/icons/ic_player_source.svg", title: t2("sources_title", {}, "Sources") });
+      if (Array.isArray(uiState.episodesAll) && uiState.episodesAll.length) {
+        base.push({ action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t2("episodes_panel_title", {}, "Episodes") });
+      }
+      base.push({ action: "more", label: this.moreActionsVisible ? "<" : ">", title: t2("player_more_actions_title", {}, "More Actions") });
       if (!this.moreActionsVisible) {
         return base;
       }
       return [
         ...base.slice(0, Math.max(0, base.length - 1)),
+        { action: "speed", label: `${Number(((_a = PlayerController.video) == null ? void 0 : _a.playbackRate) || 1).toFixed(Number(((_b = PlayerController.video) == null ? void 0 : _b.playbackRate) || 1) % 1 ? 2 : 0)}x`, title: t2("player_playback_speed", {}, "Playback speed") },
         { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t2("player_more_aspect_ratio", {}, "Aspect Ratio") },
-        { action: "source", icon: "assets/icons/ic_player_source.svg", title: t2("sources_title", {}, "Sources") },
         { action: "backFromMore", label: "<", title: t2("player_go_back", {}, "Back") }
       ];
     },
     renderControlButtons() {
-      var _a, _b, _c;
+      var _a, _b;
       if (this.isExternalFrameMode()) {
         return;
       }
@@ -10031,22 +10595,26 @@
       if (!wrap) {
         return;
       }
-      const currentAction = ((_c = (_b = wrap.querySelector(".player-control-btn.focused")) == null ? void 0 : _b.dataset) == null ? void 0 : _c.action) || "";
       const controls = this.getControlDefinitions();
+      this.controlFocusIndex = clamp(this.controlFocusIndex, 0, Math.max(0, controls.length - 1));
       wrap.innerHTML = controls.map((control) => `
-      <button class="player-control-btn focusable"
+      <button class="player-control-btn focusable${control.primary ? " is-primary" : ""}"
               data-action="${control.action}"
               title="${escapeHtml2(control.title || "")}">
         ${control.icon ? `<img class="player-control-icon" src="${control.icon}" alt="" aria-hidden="true" />` : `<span class="player-control-label">${escapeHtml2(control.label || "")}</span>`}
       </button>
     `).join("");
-      const preferred = wrap.querySelector(`.player-control-btn[data-action="${currentAction}"]`) || wrap.querySelector(".player-control-btn");
-      if (preferred) {
-        preferred.classList.add("focused");
+      const buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
+      buttons.forEach((button, index) => {
+        button.classList.toggle("focused", this.controlFocusZone === "buttons" && index === this.controlFocusIndex);
+      });
+      const progressShell = (_b = this.uiRefs) == null ? void 0 : _b.progressShell;
+      if (progressShell) {
+        progressShell.classList.toggle("focused", this.controlFocusZone === "progress");
       }
     },
     isDialogOpen() {
-      return this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible;
+      return this.subtitleDialogVisible || this.audioDialogVisible || this.sourcesPanelVisible || this.episodePanelVisible || this.speedDialogVisible;
     },
     setControlsVisible(visible, { focus = false } = {}) {
       var _a;
@@ -10070,13 +10638,16 @@
       }
     },
     focusFirstControl() {
-      const buttons = Array.from(this.container.querySelectorAll(".player-control-btn"));
-      if (!buttons.length) {
-        return;
-      }
-      buttons.forEach((node) => node.classList.remove("focused"));
-      buttons[0].classList.add("focused");
-      buttons[0].focus();
+      var _a;
+      this.controlFocusZone = "buttons";
+      this.controlFocusIndex = 0;
+      this.renderControlButtons();
+      const firstButton = this.container.querySelector(".player-control-btn[data-action]");
+      (_a = firstButton == null ? void 0 : firstButton.focus) == null ? void 0 : _a.call(firstButton);
+    },
+    focusProgressBar() {
+      this.controlFocusZone = "progress";
+      this.renderControlButtons();
     },
     clearControlsAutoHide() {
       if (this.controlsHideTimer) {
@@ -10132,7 +10703,8 @@
       }
       const current = this.getPlaybackCurrentSeconds();
       const duration = this.getPlaybackDurationSeconds();
-      const progress = duration > 0 ? clamp(current / duration, 0, 1) : 0;
+      const effectiveProgressSeconds = this.controlsVisible && this.controlFocusZone === "progress" && this.seekPreviewSeconds != null ? Number(this.seekPreviewSeconds) : current;
+      const progress = duration > 0 ? clamp(effectiveProgressSeconds / duration, 0, 1) : 0;
       const uiRefs = this.uiRefs || {};
       const uiState = this.lastUiTickState || (this.lastUiTickState = {});
       const progressFill = uiRefs.progressFill;
@@ -10167,7 +10739,7 @@
       }
       const timeLabel = uiRefs.timeLabel;
       if (timeLabel) {
-        const nextTimeLabel = `${formatTime(current)} / ${formatTime(duration)}`;
+        const nextTimeLabel = `${formatTime(effectiveProgressSeconds)} / ${formatTime(duration)}`;
         if (uiState.timeLabelText !== nextTimeLabel) {
           timeLabel.textContent = nextTimeLabel;
           uiState.timeLabelText = nextTimeLabel;
@@ -10188,7 +10760,8 @@
       }
       const duration = this.getPlaybackDurationSeconds();
       const currentPreview = this.seekPreviewSeconds != null ? Number(this.seekPreviewSeconds) : this.getPlaybackCurrentSeconds();
-      overlay.classList.toggle("hidden", !this.seekOverlayVisible);
+      const shouldShowOverlay = this.seekOverlayVisible && !this.controlsVisible;
+      overlay.classList.toggle("hidden", !shouldShowOverlay);
       const uiState = this.lastUiTickState || (this.lastUiTickState = {});
       const nextPreviewText = `${formatTime(currentPreview)} / ${formatTime(duration)}`;
       const nextDirectionText = this.seekPreviewDirection < 0 ? "<<" : this.seekPreviewDirection > 0 ? ">>" : "";
@@ -10227,7 +10800,7 @@
         next = Math.max(0, next);
       }
       this.seekPreviewSeconds = next;
-      this.seekOverlayVisible = true;
+      this.seekOverlayVisible = !this.controlsVisible;
       this.renderSeekOverlay();
       if (this.seekOverlayTimer) {
         clearTimeout(this.seekOverlayTimer);
@@ -10257,7 +10830,7 @@
         clearTimeout(this.seekCommitTimer);
         this.seekCommitTimer = null;
       }
-      this.seekOverlayVisible = true;
+      this.seekOverlayVisible = !this.controlsVisible;
       this.renderSeekOverlay();
       if (this.seekOverlayTimer) {
         clearTimeout(this.seekOverlayTimer);
@@ -10289,6 +10862,7 @@
       this.renderSeekOverlay();
     },
     togglePause() {
+      const preserveProgressFocus = this.controlFocusZone === "progress";
       if (this.isExternalFrameMode()) {
         return;
       }
@@ -10296,12 +10870,18 @@
         PlayerController.resume();
         this.paused = false;
         this.setControlsVisible(true, { focus: false });
+        if (preserveProgressFocus) {
+          this.controlFocusZone = "progress";
+        }
         this.renderControlButtons();
         return;
       }
       PlayerController.pause();
       this.paused = true;
-      this.setControlsVisible(true, { focus: true });
+      this.setControlsVisible(true, { focus: !preserveProgressFocus });
+      if (preserveProgressFocus) {
+        this.controlFocusZone = "progress";
+      }
       this.renderControlButtons();
     },
     playStreamByUrl(_0) {
@@ -10341,6 +10921,7 @@
         }
         this.subtitleDialogVisible = false;
         this.audioDialogVisible = false;
+        this.speedDialogVisible = false;
         this.selectedAddonSubtitleId = null;
         this.selectedSubtitleTrackIndex = -1;
         this.builtInSubtitleCount = 0;
@@ -10349,6 +10930,7 @@
         this.updateModalBackdrop();
         this.renderSubtitleDialog();
         this.renderAudioDialog();
+        this.renderSpeedDialog();
         const sourceCandidate = this.getStreamCandidateByUrl(streamUrl) || this.getCurrentStreamCandidate();
         this.activePlaybackUrl = streamUrl;
         PlayerController.play(this.activePlaybackUrl, __spreadProps(__spreadValues({}, this.buildPlaybackContext(sourceCandidate)), {
@@ -10855,7 +11437,7 @@
       if (tab === "addons") {
         if (!addonTracks.length) {
           if (this.subtitles.length) {
-            return this.subtitles.slice(0, 16).map((subtitle, index) => {
+            return this.subtitles.map((subtitle, index) => {
               const subtitleId = subtitle.id || subtitle.url || `subtitle-${index}`;
               return {
                 id: `subtitle-addon-fallback-${subtitleId}`,
@@ -10925,34 +11507,194 @@
         }
       ];
     },
+    collectSubtitleOptionItems() {
+      const builtInEntries = this.getSubtitleEntries("builtIn").filter((entry) => !(entry == null ? void 0 : entry.disabled) || (entry == null ? void 0 : entry.id) === "subtitle-off");
+      const addonEntries = this.getSubtitleEntries("addons").filter((entry) => !(entry == null ? void 0 : entry.disabled));
+      const options = [];
+      builtInEntries.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+        if (entry.id === "subtitle-off") {
+          options.push({
+            id: entry.id,
+            languageKey: SUBTITLE_LANGUAGE_OFF_KEY,
+            languageLabel: t2("subtitle_none", {}, "Off"),
+            title: entry.label,
+            secondary: "",
+            selected: Boolean(entry.selected),
+            entry
+          });
+          return;
+        }
+        const languageSource = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : entry.label;
+        const languageKey = normalizeSubtitleLanguageKey(languageSource);
+        const languageLabel = subtitleLanguageLabel(languageKey);
+        options.push({
+          id: entry.id,
+          languageKey,
+          languageLabel,
+          title: languageLabel,
+          secondary: [t2("subtitle_tab_builtin", {}, "Built-in"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" \u2022 "),
+          selected: Boolean(entry.selected),
+          entry
+        });
+      });
+      addonEntries.forEach((entry) => {
+        if (!entry) {
+          return;
+        }
+        const languageSource = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : entry.label;
+        const languageKey = normalizeSubtitleLanguageKey(languageSource);
+        const languageLabel = subtitleLanguageLabel(languageKey);
+        options.push({
+          id: entry.id,
+          languageKey,
+          languageLabel,
+          title: languageLabel,
+          secondary: [entry.secondary || t2("subtitle_tab_addons", {}, "Addons"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" \u2022 "),
+          selected: Boolean(entry.selected),
+          entry
+        });
+      });
+      return options;
+    },
+    getSelectedSubtitleLanguageKey() {
+      const selected = this.collectSubtitleOptionItems().find((entry) => entry.selected);
+      return (selected == null ? void 0 : selected.languageKey) || SUBTITLE_LANGUAGE_OFF_KEY;
+    },
+    getSubtitleLanguageRailItems() {
+      const options = this.collectSubtitleOptionItems();
+      const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+      const groups = /* @__PURE__ */ new Map();
+      options.forEach((option) => {
+        if (!groups.has(option.languageKey)) {
+          groups.set(option.languageKey, {
+            key: option.languageKey,
+            label: option.languageLabel || subtitleLanguageLabel(option.languageKey),
+            selected: false,
+            count: 0
+          });
+        }
+        const group = groups.get(option.languageKey);
+        group.count += 1;
+        group.selected = group.selected || Boolean(option.selected);
+      });
+      if (!groups.has(SUBTITLE_LANGUAGE_OFF_KEY)) {
+        groups.set(SUBTITLE_LANGUAGE_OFF_KEY, {
+          key: SUBTITLE_LANGUAGE_OFF_KEY,
+          label: t2("subtitle_none", {}, "Off"),
+          selected: selectedLanguageKey === SUBTITLE_LANGUAGE_OFF_KEY,
+          count: 1
+        });
+      }
+      const values = Array.from(groups.values());
+      const offIndex = values.findIndex((entry) => entry.key === SUBTITLE_LANGUAGE_OFF_KEY);
+      if (offIndex > 0) {
+        const [offEntry] = values.splice(offIndex, 1);
+        values.unshift(offEntry);
+      }
+      return values;
+    },
+    syncSubtitleOptionIndexForFocusedLanguage() {
+      var _a;
+      const languages = this.getSubtitleLanguageRailItems();
+      const activeLanguage = ((_a = languages[this.subtitleLanguageRailIndex]) == null ? void 0 : _a.key) || SUBTITLE_LANGUAGE_OFF_KEY;
+      const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+      const selectedIndex = options.findIndex((item) => item.selected);
+      this.subtitleOptionRailIndex = Math.max(0, selectedIndex >= 0 ? selectedIndex : 0);
+    },
+    scrollSubtitleDialogIntoView() {
+      var _a;
+      const dialog = (_a = this.uiRefs) == null ? void 0 : _a.subtitleDialog;
+      if (!dialog || !this.subtitleDialogVisible) {
+        return;
+      }
+      const block = this.subtitleDialogScrollMode === "start" ? "start" : "nearest";
+      const rails = [
+        dialog.querySelector(".player-subtitle-language-rail .player-dialog-item.focused"),
+        dialog.querySelector(".player-subtitle-options-rail .player-dialog-item.focused"),
+        dialog.querySelector(".player-subtitle-style-rail .player-dialog-item.focused")
+      ];
+      rails.forEach((node) => {
+        if (node instanceof HTMLElement) {
+          node.scrollIntoView({ block, inline: "nearest" });
+        }
+      });
+      this.subtitleDialogScrollMode = "nearest";
+    },
+    getSubtitleOptionsForLanguage(languageKey = this.getSelectedSubtitleLanguageKey()) {
+      return this.collectSubtitleOptionItems().filter((entry) => entry.languageKey === languageKey && entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
+    },
+    getSubtitleStyleControls() {
+      const style = this.subtitleStyleSettings || {};
+      return [
+        { id: "delay", label: t2("subtitle_tab_delay", {}, "Delay"), value: formatSubtitleDelay(this.subtitleDelayMs) },
+        { id: "fontSize", label: t2("subtitle_style_size", {}, "Font Size"), value: `${Number(style.fontSize || 100)}%` },
+        { id: "bold", label: t2("subtitle_style_bold", {}, "Bold"), value: style.bold ? t2("common.on", {}, "On") : t2("common.off", {}, "Off") },
+        { id: "textColor", label: t2("subtitle_style_text_color", {}, "Text Color"), value: styleChipLabel(style.textColor || "#FFFFFF") },
+        { id: "outlineEnabled", label: t2("subtitle_style_outline", {}, "Outline"), value: style.outlineEnabled ? t2("common.on", {}, "On") : t2("common.off", {}, "Off") },
+        { id: "outlineColor", label: t2("subtitle_style_outline_color", {}, "Outline Color"), value: styleChipLabel(style.outlineColor || "#000000") },
+        { id: "verticalOffset", label: t2("subtitle_style_vertical_offset", {}, "Vertical Offset"), value: `${Number(style.verticalOffset || 0)}` },
+        { id: "reset", label: t2("subtitle_style_defaults", {}, "Reset Defaults"), value: "" }
+      ];
+    },
+    adjustSubtitleStyleControl(controlId, delta = 0) {
+      const style = __spreadValues({}, this.subtitleStyleSettings || {});
+      if (controlId === "delay") {
+        this.subtitleDelayMs = clamp(Number(this.subtitleDelayMs || 0) + delta * SUBTITLE_DELAY_STEP_MS, -5e3, 5e3);
+      } else if (controlId === "fontSize") {
+        style.fontSize = clamp(Number(style.fontSize || 100) + delta * SUBTITLE_FONT_STEP, 70, 180);
+      } else if (controlId === "bold" && delta !== 0) {
+        style.bold = !style.bold;
+      } else if (controlId === "textColor" && delta !== 0) {
+        const currentIndex = Math.max(0, SUBTITLE_TEXT_COLORS.indexOf(String(style.textColor || "#FFFFFF").toUpperCase()));
+        style.textColor = SUBTITLE_TEXT_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_TEXT_COLORS.length - 1)];
+      } else if (controlId === "outlineEnabled" && delta !== 0) {
+        style.outlineEnabled = !style.outlineEnabled;
+      } else if (controlId === "outlineColor" && delta !== 0) {
+        const currentIndex = Math.max(0, SUBTITLE_OUTLINE_COLORS.indexOf(String(style.outlineColor || "#000000").toUpperCase()));
+        style.outlineColor = SUBTITLE_OUTLINE_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_OUTLINE_COLORS.length - 1)];
+      } else if (controlId === "verticalOffset") {
+        style.verticalOffset = clamp(Number(style.verticalOffset || 0) + delta * SUBTITLE_VERTICAL_OFFSET_STEP, -12, 12);
+      } else if (controlId === "reset") {
+        const defaults = PlayerSettingsStore.get().subtitleStyle;
+        this.subtitleDelayMs = 0;
+        this.subtitleStyleSettings = __spreadValues({}, defaults);
+        this.persistPlayerPresentationSettings();
+        this.applySubtitlePresentationSettings();
+        this.renderSubtitleDialog();
+        return;
+      }
+      this.subtitleStyleSettings = style;
+      this.persistPlayerPresentationSettings();
+      this.applySubtitlePresentationSettings();
+      this.renderSubtitleDialog();
+    },
     openSubtitleDialog() {
       this.cancelSeekPreview({ commit: false });
       this.syncTrackState();
       this.subtitleDialogVisible = true;
       this.audioDialogVisible = false;
+      this.speedDialogVisible = false;
       this.sourcesPanelVisible = false;
-      const textTracks = this.getTextTracks();
-      const builtInBoundary = this.resolveBuiltInSubtitleBoundary(textTracks);
-      const dashSubtitleTracks = typeof PlayerController.getDashTextTracks === "function" ? PlayerController.getDashTextTracks() : [];
-      const avplaySubtitleTracks = typeof PlayerController.getAvPlaySubtitleTracks === "function" ? PlayerController.getAvPlaySubtitleTracks() : [];
-      const hasBuiltInTracks = builtInBoundary > 0 || avplaySubtitleTracks.length > 0 || dashSubtitleTracks.length > 0;
-      const hasAddonTracks = textTracks.length > builtInBoundary || this.subtitles.length > 0;
-      this.subtitleDialogTab = !hasBuiltInTracks && hasAddonTracks ? "addons" : "builtIn";
-      let entries = this.getSubtitleEntries(this.subtitleDialogTab);
-      if (!hasBuiltInTracks && !hasAddonTracks && !this.manifestSubtitleTracks.length) {
-        this.ensureTrackDataWarmup();
-        entries = this.getSubtitleEntries(this.subtitleDialogTab);
-      }
-      const selected = entries.findIndex((entry) => entry.selected);
-      this.subtitleDialogIndex = Math.max(0, selected >= 0 ? selected : 0);
+      const languageRail = this.getSubtitleLanguageRailItems();
+      const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
+      this.subtitleLanguageRailIndex = Math.max(0, languageRail.findIndex((item) => item.key === selectedLanguageKey));
+      this.syncSubtitleOptionIndexForFocusedLanguage();
+      this.subtitleStyleRailIndex = 0;
+      this.subtitleFocusedRail = selectedLanguageKey === SUBTITLE_LANGUAGE_OFF_KEY ? "language" : "options";
+      this.subtitleDialogScrollMode = "start";
       this.setControlsVisible(true, { focus: false });
       this.renderSubtitleDialog();
       this.renderAudioDialog();
+      this.renderSpeedDialog();
       this.renderSourcesPanel();
       this.updateModalBackdrop();
     },
     closeSubtitleDialog() {
       this.subtitleDialogVisible = false;
+      this.subtitleFocusedRail = "language";
       this.renderSubtitleDialog();
       this.updateModalBackdrop();
       this.resetControlsAutoHide();
@@ -11088,7 +11830,7 @@
       this.renderSubtitleDialog();
     },
     renderSubtitleDialog() {
-      var _a;
+      var _a, _b;
       const dialog = (_a = this.uiRefs) == null ? void 0 : _a.subtitleDialog;
       if (!dialog) {
         return;
@@ -11098,56 +11840,153 @@
         dialog.innerHTML = "";
         return;
       }
-      const tabs = this.getSubtitleTabs();
-      const entries = this.getSubtitleEntries(this.subtitleDialogTab);
-      const focusIndex = clamp(this.subtitleDialogIndex, 0, Math.max(0, entries.length - 1));
-      this.subtitleDialogIndex = focusIndex;
+      const languages = this.getSubtitleLanguageRailItems();
+      this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex, 0, Math.max(0, languages.length - 1));
+      const activeLanguage = ((_b = languages[this.subtitleLanguageRailIndex]) == null ? void 0 : _b.key) || SUBTITLE_LANGUAGE_OFF_KEY;
+      const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+      this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex, 0, Math.max(0, options.length - 1));
+      const styleItems = this.getSubtitleStyleControls();
+      this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex, 0, Math.max(0, styleItems.length - 1));
+      const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY;
       dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml2(t2("subtitle_dialog_title", {}, "Subtitles"))}</div>
-      <div class="player-dialog-tabs">
-        ${tabs.map((tab) => `
-          <div class="player-dialog-tab${tab.id === this.subtitleDialogTab ? " selected" : ""}">
-            ${escapeHtml2(tab.label)}
-          </div>
-        `).join("")}
-      </div>
-      <div class="player-dialog-list">
-        ${entries.map((entry, index) => `
-          <div class="player-dialog-item${entry.selected ? " selected" : ""}${index === focusIndex ? " focused" : ""}${entry.disabled ? " disabled" : ""}">
-            <div class="player-dialog-item-main">${escapeHtml2(entry.label || "")}</div>
-            <div class="player-dialog-item-sub">${escapeHtml2(entry.secondary || "")}</div>
-            <div class="player-dialog-item-check">${entry.selected ? "&#10003;" : ""}</div>
-          </div>
-        `).join("")}
+      <div class="player-subtitle-overlay-grid">
+        <div class="player-subtitle-rail player-subtitle-language-rail">
+          ${languages.map((item, index) => `
+            <div class="player-dialog-item${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "language" && index === this.subtitleLanguageRailIndex ? " focused" : ""}">
+              <div class="player-dialog-item-main">${escapeHtml2(item.label)}</div>
+              <div class="player-dialog-item-sub">${item.key === SUBTITLE_LANGUAGE_OFF_KEY ? escapeHtml2(t2("subtitle_none", {}, "Off")) : escapeHtml2(`${item.count} ${item.count === 1 ? "option" : "options"}`)}</div>
+              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
+            </div>
+          `).join("")}
+        </div>
+        <div class="player-subtitle-rail player-subtitle-options-rail${showOptionsRail ? "" : " hidden"}">
+          ${options.length ? options.map((item, index) => `
+            <div class="player-dialog-item${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "options" && index === this.subtitleOptionRailIndex ? " focused" : ""}">
+              <div class="player-dialog-item-main">${escapeHtml2(item.title || "")}</div>
+              <div class="player-dialog-item-sub">${escapeHtml2(item.secondary || "")}</div>
+              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
+            </div>
+          `).join("") : `<div class="player-dialog-empty">${escapeHtml2(t2("subtitle_none", {}, "No subtitles"))}</div>`}
+        </div>
+        <div class="player-subtitle-rail player-subtitle-style-rail${showOptionsRail ? "" : " hidden"}">
+          ${styleItems.map((item, index) => `
+            <div class="player-dialog-item${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex ? " focused" : ""}">
+              <div class="player-dialog-item-main">${escapeHtml2(item.label)}</div>
+              <div class="player-dialog-item-sub">${escapeHtml2(item.value || "")}</div>
+              <div class="player-dialog-item-check">${item.id === "reset" ? "&#8635;" : ""}</div>
+            </div>
+          `).join("")}
+        </div>
       </div>
     `;
+      this.scrollSubtitleDialogIntoView();
     },
     handleSubtitleDialogKey(event) {
+      var _a;
       const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
-      const entries = this.getSubtitleEntries(this.subtitleDialogTab);
-      if (keyCode === 37) {
-        this.cycleSubtitleTab(-1);
-        return true;
-      }
-      if (keyCode === 39) {
-        this.cycleSubtitleTab(1);
-        return true;
-      }
+      const languages = this.getSubtitleLanguageRailItems();
+      const activeLanguage = ((_a = languages[this.subtitleLanguageRailIndex]) == null ? void 0 : _a.key) || SUBTITLE_LANGUAGE_OFF_KEY;
+      const options = this.getSubtitleOptionsForLanguage(activeLanguage);
+      const styleItems = this.getSubtitleStyleControls();
       if (keyCode === 38) {
-        this.subtitleDialogIndex = clamp(this.subtitleDialogIndex - 1, 0, Math.max(0, entries.length - 1));
+        if (this.subtitleFocusedRail === "language") {
+          this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex - 1, 0, Math.max(0, languages.length - 1));
+          this.syncSubtitleOptionIndexForFocusedLanguage();
+        } else if (this.subtitleFocusedRail === "options") {
+          this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex - 1, 0, Math.max(0, options.length - 1));
+        } else {
+          this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex - 1, 0, Math.max(0, styleItems.length - 1));
+        }
         this.renderSubtitleDialog();
         return true;
       }
       if (keyCode === 40) {
-        this.subtitleDialogIndex = clamp(this.subtitleDialogIndex + 1, 0, Math.max(0, entries.length - 1));
+        if (this.subtitleFocusedRail === "language") {
+          this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex + 1, 0, Math.max(0, languages.length - 1));
+          this.syncSubtitleOptionIndexForFocusedLanguage();
+        } else if (this.subtitleFocusedRail === "options") {
+          this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex + 1, 0, Math.max(0, options.length - 1));
+        } else {
+          this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex + 1, 0, Math.max(0, styleItems.length - 1));
+        }
         this.renderSubtitleDialog();
         return true;
       }
-      if (keyCode === 13) {
-        this.applySubtitleEntry(entries[this.subtitleDialogIndex]);
+      if (keyCode === 37) {
+        if (this.subtitleFocusedRail === "style") {
+          this.subtitleFocusedRail = options.length ? "options" : "language";
+        } else if (this.subtitleFocusedRail === "options") {
+          this.subtitleFocusedRail = "language";
+        } else {
+          return false;
+        }
+        this.renderSubtitleDialog();
         return true;
       }
-      return false;
+      if (keyCode === 39) {
+        if (this.subtitleFocusedRail === "language" && activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY && options.length) {
+          this.subtitleFocusedRail = "options";
+          this.renderSubtitleDialog();
+          return true;
+        }
+        if (this.subtitleFocusedRail === "options") {
+          this.subtitleFocusedRail = "style";
+          this.renderSubtitleDialog();
+          return true;
+        }
+        if (this.subtitleFocusedRail === "style") {
+          const styleItem = styleItems[this.subtitleStyleRailIndex];
+          if (styleItem) {
+            this.adjustSubtitleStyleControl(styleItem.id, 1);
+          }
+          return true;
+        }
+        return true;
+      }
+      if (keyCode === 13) {
+        if (this.subtitleFocusedRail === "language") {
+          const language = languages[this.subtitleLanguageRailIndex];
+          if (!language) {
+            return true;
+          }
+          if (language.key === SUBTITLE_LANGUAGE_OFF_KEY) {
+            this.applySubtitleEntry(this.getSubtitleEntries("builtIn").find((entry) => entry.id === "subtitle-off") || { trackIndex: -1 });
+          } else {
+            const nextOptions = this.getSubtitleOptionsForLanguage(language.key);
+            if (nextOptions.length) {
+              this.subtitleFocusedRail = "options";
+              this.subtitleOptionRailIndex = Math.max(0, nextOptions.findIndex((item) => item.selected));
+            }
+          }
+          this.renderSubtitleDialog();
+          return true;
+        }
+        if (this.subtitleFocusedRail === "options") {
+          const option = options[this.subtitleOptionRailIndex];
+          if (option == null ? void 0 : option.entry) {
+            this.applySubtitleEntry(option.entry);
+            this.subtitleFocusedRail = "style";
+          }
+          return true;
+        }
+        const styleItem = styleItems[this.subtitleStyleRailIndex];
+        if (styleItem) {
+          this.adjustSubtitleStyleControl(styleItem.id, styleItem.id === "delay" || styleItem.id === "fontSize" || styleItem.id === "verticalOffset" ? 1 : 1);
+        }
+        return true;
+      }
+      if (this.subtitleFocusedRail === "style" && (keyCode === 10009 || keyCode === 461)) {
+        return false;
+      }
+      if (this.subtitleFocusedRail === "style" && keyCode === 189) {
+        const styleItem = styleItems[this.subtitleStyleRailIndex];
+        if (styleItem) {
+          this.adjustSubtitleStyleControl(styleItem.id, -1);
+        }
+        return true;
+      }
+      return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
     },
     getAudioEntries() {
       const avplayAudioTracks = typeof PlayerController.getAvPlayAudioTracks === "function" ? PlayerController.getAvPlayAudioTracks() : [];
@@ -11223,11 +12062,24 @@
       }
       return [];
     },
+    adjustAudioAmplification(delta = 0) {
+      const nextDb = clamp(Number(this.audioAmplificationDb || 0) + Number(delta || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
+      this.audioAmplificationDb = nextDb;
+      this.persistPlayerPresentationSettings();
+      this.applyAudioAmplification();
+      this.renderAudioDialog();
+    },
+    togglePersistAudioAmplification() {
+      this.persistAudioAmplification = !this.persistAudioAmplification;
+      this.persistPlayerPresentationSettings();
+      this.renderAudioDialog();
+    },
     openAudioDialog() {
       this.cancelSeekPreview({ commit: false });
       this.syncTrackState();
       this.audioDialogVisible = true;
       this.subtitleDialogVisible = false;
+      this.speedDialogVisible = false;
       this.sourcesPanelVisible = false;
       let entries = this.getAudioEntries();
       if (!entries.length) {
@@ -11236,9 +12088,12 @@
       }
       const selectedEntry = entries.findIndex((entry) => entry.selected);
       this.audioDialogIndex = Math.max(0, selectedEntry >= 0 ? selectedEntry : 0);
+      this.audioFocusedColumn = "tracks";
+      this.audioMixFocusIndex = 0;
       this.setControlsVisible(true, { focus: false });
       this.renderSubtitleDialog();
       this.renderAudioDialog();
+      this.renderSpeedDialog();
       this.renderSourcesPanel();
       this.updateModalBackdrop();
     },
@@ -11337,20 +12192,42 @@
         return;
       }
       this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
+      this.audioMixFocusIndex = clamp(this.audioMixFocusIndex, 0, 2);
       dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml2(t2("audio_dialog_title", {}, "Audio"))}</div>
-      <div class="player-dialog-list">
-        ${entries.map((entry, index) => {
+      <div class="player-audio-overlay-grid">
+        <div class="player-dialog-list player-audio-track-list">
+          ${entries.map((entry, index) => {
         const selected = entry.selected;
-        const focused = index === this.audioDialogIndex;
+        const focused = this.audioFocusedColumn === "tracks" && index === this.audioDialogIndex;
         return `
-            <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              <div class="player-dialog-item-main">${escapeHtml2(entry.label || "")}</div>
-              <div class="player-dialog-item-sub">${escapeHtml2(entry.secondary || "")}</div>
-              <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
-            </div>
-          `;
+              <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
+                <div class="player-dialog-item-main">${escapeHtml2(entry.label || "")}</div>
+                <div class="player-dialog-item-sub">${escapeHtml2(entry.secondary || "")}</div>
+                <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
+              </div>
+            `;
       }).join("")}
+        </div>
+        <div class="player-audio-mix-panel">
+          <div class="player-audio-mix-title">${escapeHtml2(t2("audio_boost_title", {}, "Audio Boost"))}</div>
+          <div class="player-audio-mix-value">${escapeHtml2(`${this.audioAmplificationDb} dB`)}</div>
+          <div class="player-audio-mix-buttons">
+            <div class="player-dialog-item player-audio-mix-btn${this.audioFocusedColumn === "mix" && this.audioMixFocusIndex === 0 ? " focused" : ""}${this.audioAmplificationDb <= AUDIO_AMPLIFICATION_MIN_DB || !this.audioAmplificationAvailable ? " disabled" : ""}">
+              <div class="player-dialog-item-main">-</div>
+              <div class="player-dialog-item-sub">${escapeHtml2(t2("common.decrease", {}, "Decrease"))}</div>
+            </div>
+            <div class="player-dialog-item player-audio-mix-btn${this.audioFocusedColumn === "mix" && this.audioMixFocusIndex === 1 ? " focused" : ""}${this.audioAmplificationDb >= AUDIO_AMPLIFICATION_MAX_DB || !this.audioAmplificationAvailable ? " disabled" : ""}">
+              <div class="player-dialog-item-main">+</div>
+              <div class="player-dialog-item-sub">${escapeHtml2(t2("common.increase", {}, "Increase"))}</div>
+            </div>
+          </div>
+          <div class="player-dialog-item player-audio-mix-persist${this.audioFocusedColumn === "mix" && this.audioMixFocusIndex === 2 ? " focused" : ""}${this.persistAudioAmplification ? " selected" : ""}">
+            <div class="player-dialog-item-main">${escapeHtml2(t2("audio_persist_amplification", {}, "Persist boost"))}</div>
+            <div class="player-dialog-item-sub">${escapeHtml2(this.persistAudioAmplification ? t2("common.on", {}, "On") : t2("common.off", {}, "Off"))}</div>
+            <div class="player-dialog-item-check">${this.persistAudioAmplification ? "&#10003;" : ""}</div>
+          </div>
+        </div>
       </div>
     `;
     },
@@ -11360,21 +12237,122 @@
       if (!entries.length) {
         return true;
       }
+      if (keyCode === 37) {
+        if (this.audioFocusedColumn === "mix") {
+          this.audioFocusedColumn = "tracks";
+          this.renderAudioDialog();
+        }
+        return true;
+      }
+      if (keyCode === 39) {
+        this.audioFocusedColumn = "mix";
+        this.renderAudioDialog();
+        return true;
+      }
       if (keyCode === 38) {
-        this.audioDialogIndex = clamp(this.audioDialogIndex - 1, 0, entries.length - 1);
+        if (this.audioFocusedColumn === "tracks") {
+          this.audioDialogIndex = clamp(this.audioDialogIndex - 1, 0, entries.length - 1);
+        } else {
+          this.audioMixFocusIndex = clamp(this.audioMixFocusIndex - 1, 0, 2);
+        }
         this.renderAudioDialog();
         return true;
       }
       if (keyCode === 40) {
-        this.audioDialogIndex = clamp(this.audioDialogIndex + 1, 0, entries.length - 1);
+        if (this.audioFocusedColumn === "tracks") {
+          this.audioDialogIndex = clamp(this.audioDialogIndex + 1, 0, entries.length - 1);
+        } else {
+          this.audioMixFocusIndex = clamp(this.audioMixFocusIndex + 1, 0, 2);
+        }
         this.renderAudioDialog();
         return true;
       }
       if (keyCode === 13) {
-        this.applyAudioTrack(this.audioDialogIndex);
+        if (this.audioFocusedColumn === "tracks") {
+          this.applyAudioTrack(this.audioDialogIndex);
+        } else if (this.audioMixFocusIndex === 0 && this.audioAmplificationDb > AUDIO_AMPLIFICATION_MIN_DB) {
+          this.adjustAudioAmplification(-1);
+        } else if (this.audioMixFocusIndex === 1 && this.audioAmplificationDb < AUDIO_AMPLIFICATION_MAX_DB) {
+          this.adjustAudioAmplification(1);
+        } else if (this.audioMixFocusIndex === 2) {
+          this.togglePersistAudioAmplification();
+        }
         return true;
       }
-      return false;
+      return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
+    },
+    openSpeedDialog() {
+      var _a;
+      const currentSpeed = Number(((_a = PlayerController.video) == null ? void 0 : _a.playbackRate) || 1);
+      this.speedDialogVisible = true;
+      this.subtitleDialogVisible = false;
+      this.audioDialogVisible = false;
+      this.sourcesPanelVisible = false;
+      this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.findIndex((value) => value === currentSpeed));
+      this.renderSubtitleDialog();
+      this.renderAudioDialog();
+      this.renderSourcesPanel();
+      this.renderSpeedDialog();
+      this.updateModalBackdrop();
+    },
+    closeSpeedDialog() {
+      this.speedDialogVisible = false;
+      this.renderSpeedDialog();
+      this.updateModalBackdrop();
+      this.resetControlsAutoHide();
+    },
+    applyPlaybackSpeed(speed = 1) {
+      const video = PlayerController.video;
+      if (!video) {
+        return;
+      }
+      video.playbackRate = Number(speed || 1);
+      this.renderControlButtons();
+      this.renderSpeedDialog();
+    },
+    renderSpeedDialog() {
+      var _a, _b;
+      const dialog = (_a = this.uiRefs) == null ? void 0 : _a.speedDialog;
+      if (!dialog) {
+        return;
+      }
+      dialog.classList.toggle("hidden", !this.speedDialogVisible);
+      if (!this.speedDialogVisible) {
+        dialog.innerHTML = "";
+        return;
+      }
+      const currentSpeed = Number(((_b = PlayerController.video) == null ? void 0 : _b.playbackRate) || 1);
+      this.speedDialogIndex = clamp(this.speedDialogIndex, 0, PLAYER_SPEEDS.length - 1);
+      dialog.innerHTML = `
+      <div class="player-dialog-title">${escapeHtml2(t2("player_playback_speed", {}, "Playback speed"))}</div>
+      <div class="player-dialog-list">
+        ${PLAYER_SPEEDS.map((speed, index) => `
+          <div class="player-dialog-item${speed === currentSpeed ? " selected" : ""}${index === this.speedDialogIndex ? " focused" : ""}">
+            <div class="player-dialog-item-main">${escapeHtml2(`${speed}x`)}</div>
+            <div class="player-dialog-item-sub">${escapeHtml2(speed === 1 ? t2("common.normal", {}, "Normal") : t2("player_playback_speed", {}, "Playback speed"))}</div>
+            <div class="player-dialog-item-check">${speed === currentSpeed ? "&#10003;" : ""}</div>
+          </div>
+        `).join("")}
+      </div>
+    `;
+    },
+    handleSpeedDialogKey(event) {
+      const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (keyCode === 38) {
+        this.speedDialogIndex = clamp(this.speedDialogIndex - 1, 0, PLAYER_SPEEDS.length - 1);
+        this.renderSpeedDialog();
+        return true;
+      }
+      if (keyCode === 40) {
+        this.speedDialogIndex = clamp(this.speedDialogIndex + 1, 0, PLAYER_SPEEDS.length - 1);
+        this.renderSpeedDialog();
+        return true;
+      }
+      if (keyCode === 13) {
+        this.applyPlaybackSpeed(PLAYER_SPEEDS[this.speedDialogIndex] || 1);
+        return true;
+      }
+      return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
     },
     getSourceFilters() {
       const addons = Array.from(new Set(this.streamCandidates.map((stream) => stream.addonName).filter(Boolean)));
@@ -11419,12 +12397,14 @@
       this.sourcesPanelVisible = true;
       this.subtitleDialogVisible = false;
       this.audioDialogVisible = false;
+      this.speedDialogVisible = false;
       this.moreActionsVisible = false;
       const filters = this.getSourceFilters();
       this.sourcesFocus = { zone: "filter", index: clamp(filters.indexOf(this.sourceFilter), 0, Math.max(0, filters.length - 1)) };
       this.renderControlButtons();
       this.renderSubtitleDialog();
       this.renderAudioDialog();
+      this.renderSpeedDialog();
       this.renderSourcesPanel();
       this.updateModalBackdrop();
       if (forceReload || !this.streamCandidates.length) {
@@ -11492,7 +12472,7 @@
       });
     },
     renderSourcesPanel() {
-      var _a;
+      var _a, _b, _c, _d, _e;
       const panel = (_a = this.uiRefs) == null ? void 0 : _a.sourcesPanel;
       if (!panel) {
         return;
@@ -11512,6 +12492,10 @@
           <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">${escapeHtml2(t2("sources_reload", {}, "Reload"))}</button>
           <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">${escapeHtml2(t2("sources_close", {}, "Close"))}</button>
         </div>
+      </div>
+
+      <div class="player-source-current-meta">
+        ${escapeHtml2(((_b = this.params) == null ? void 0 : _b.season) != null && ((_c = this.params) == null ? void 0 : _c.episode) != null ? `S${this.params.season} E${this.params.episode}${this.params.playerSubtitle ? ` \u2022 ${this.params.playerSubtitle}` : ""}` : ((_d = this.params) == null ? void 0 : _d.playerTitle) || ((_e = this.params) == null ? void 0 : _e.itemId) || "")}
       </div>
 
       <div class="player-sources-filters">
@@ -11753,11 +12737,13 @@
       this.episodePanelVisible = true;
       this.subtitleDialogVisible = false;
       this.audioDialogVisible = false;
+      this.speedDialogVisible = false;
       this.sourcesPanelVisible = false;
       this.updateModalBackdrop();
       this.setControlsVisible(true, { focus: false });
       this.renderSubtitleDialog();
       this.renderAudioDialog();
+      this.renderSpeedDialog();
       this.renderSourcesPanel();
       this.renderEpisodePanel();
     },
@@ -11799,6 +12785,7 @@
       var _a, _b;
       this.episodePanelVisible = false;
       (_b = (_a = this.container) == null ? void 0 : _a.querySelector("#episodeSidePanel")) == null ? void 0 : _b.remove();
+      this.updateModalBackdrop();
       this.resetControlsAutoHide();
     },
     playEpisodeFromPanel() {
@@ -11903,7 +12890,7 @@
       if (usingAvPlay) {
         return;
       }
-      this.subtitles.slice(0, 16).forEach((subtitle, index) => {
+      this.subtitles.forEach((subtitle, index) => {
         if (!subtitle.url) {
           return;
         }
@@ -11917,30 +12904,34 @@
       });
     },
     moveControlFocus(delta) {
-      const controls = Array.from(this.container.querySelectorAll(".player-control-btn"));
+      const controls = this.getControlDefinitions();
       if (!controls.length) {
         return;
       }
-      const current = this.container.querySelector(".player-control-btn.focused") || controls[0];
-      let index = controls.indexOf(current);
-      if (index < 0) {
-        index = 0;
-      }
-      const nextIndex = clamp(index + delta, 0, controls.length - 1);
-      if (nextIndex === index) {
+      if (this.controlFocusZone === "progress") {
+        this.controlFocusZone = "buttons";
+        this.controlFocusIndex = delta < 0 ? 0 : 0;
+        this.renderControlButtons();
         return;
       }
-      current.classList.remove("focused");
-      controls[nextIndex].classList.add("focused");
-      controls[nextIndex].focus();
+      const nextIndex = clamp(this.controlFocusIndex + delta, 0, controls.length - 1);
+      this.controlFocusZone = "buttons";
+      this.controlFocusIndex = nextIndex;
+      this.renderControlButtons();
       this.resetControlsAutoHide();
     },
     performFocusedControl() {
-      const current = this.container.querySelector(".player-control-btn.focused");
+      if (this.controlFocusZone === "progress") {
+        this.cancelSeekPreview({ commit: true });
+        this.resetControlsAutoHide();
+        return;
+      }
+      const controls = this.getControlDefinitions();
+      const current = controls[this.controlFocusIndex] || null;
       if (!current) {
         return;
       }
-      this.performControlAction(current.dataset.action || "");
+      this.performControlAction(current.action || "");
     },
     performControlAction(action) {
       if (action === "playPause") {
@@ -11978,14 +12969,20 @@
       }
       if (action === "more") {
         this.moreActionsVisible = true;
+        this.controlFocusZone = "buttons";
+        this.controlFocusIndex = Math.max(0, this.getControlDefinitions().findIndex((entry) => entry.action === "speed"));
         this.renderControlButtons();
-        this.focusFirstControl();
         return;
       }
       if (action === "backFromMore") {
         this.moreActionsVisible = false;
+        this.controlFocusZone = "buttons";
+        this.controlFocusIndex = Math.max(0, this.getControlDefinitions().findIndex((entry) => entry.action === "more"));
         this.renderControlButtons();
-        this.focusFirstControl();
+        return;
+      }
+      if (action === "speed") {
+        this.openSpeedDialog();
         return;
       }
       if (action === "aspect") {
@@ -12008,6 +13005,10 @@
       }
       if (this.audioDialogVisible) {
         this.closeAudioDialog();
+        return true;
+      }
+      if (this.speedDialogVisible) {
+        this.closeSpeedDialog();
         return true;
       }
       if (this.episodePanelVisible) {
@@ -12041,6 +13042,11 @@
         }
         if (this.audioDialogVisible) {
           if (this.handleAudioDialogKey(event)) {
+            return;
+          }
+        }
+        if (this.speedDialogVisible) {
+          if (this.handleSpeedDialogKey(event)) {
             return;
           }
         }
@@ -12110,12 +13116,40 @@
           }
           return;
         }
+        if (this.controlFocusZone === "progress") {
+          if (keyCode === 37) {
+            this.beginSeekPreview(-1, Boolean(event == null ? void 0 : event.repeat));
+            return;
+          }
+          if (keyCode === 39) {
+            this.beginSeekPreview(1, Boolean(event == null ? void 0 : event.repeat));
+            return;
+          }
+          if (keyCode === 38) {
+            this.setControlsVisible(false);
+            return;
+          }
+          if (keyCode === 40) {
+            this.controlFocusZone = "buttons";
+            this.renderControlButtons();
+            return;
+          }
+          if (keyCode === 13) {
+            this.togglePause();
+            this.renderControlButtons();
+            return;
+          }
+        }
         if (keyCode === 37) {
           this.moveControlFocus(-1);
           return;
         }
         if (keyCode === 39) {
           this.moveControlFocus(1);
+          return;
+        }
+        if (keyCode === 38) {
+          this.focusProgressBar();
           return;
         }
         if (keyCode === 40) {
@@ -12389,6 +13423,9 @@
 
   // js/core/auth/qrLoginService.js
   var lastError = null;
+  function hasQrAuthConfig() {
+    return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+  }
   function isJwtLike(token) {
     const value = String(token || "").trim();
     return value.split(".").length === 3;
@@ -12500,10 +13537,37 @@
   }
   function parseErrorText(response) {
     return __async(this, null, function* () {
+      const status = Number((response == null ? void 0 : response.status) || 0);
       try {
-        return yield response.text();
+        const rawText = yield response.text();
+        const text = String(rawText || "").trim();
+        if (!text) {
+          return status ? `HTTP ${status}` : "Request failed";
+        }
+        try {
+          const parsed = JSON.parse(text);
+          const jsonMessage = [
+            parsed == null ? void 0 : parsed.msg,
+            parsed == null ? void 0 : parsed.message,
+            parsed == null ? void 0 : parsed.error_description,
+            parsed == null ? void 0 : parsed.error,
+            parsed == null ? void 0 : parsed.hint
+          ].find((value) => typeof value === "string" && value.trim());
+          if (jsonMessage) {
+            return status ? `HTTP ${status}: ${jsonMessage.trim()}` : jsonMessage.trim();
+          }
+        } catch (e) {
+        }
+        const strippedHtml = text.replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (!strippedHtml) {
+          return status ? `HTTP ${status}` : "Request failed";
+        }
+        if (/<!doctype html>|<html[\s>]/i.test(text) && status) {
+          return `HTTP ${status}: ${strippedHtml}`;
+        }
+        return status ? `HTTP ${status}: ${strippedHtml}` : strippedHtml;
       } catch (e) {
-        return `HTTP ${response.status}`;
+        return status ? `HTTP ${status}` : "Request failed";
       }
     });
   }
@@ -12626,6 +13690,9 @@
       return __async(this, null, function* () {
         lastError = null;
         try {
+          if (!hasQrAuthConfig()) {
+            throw new Error("QR auth is not configured");
+          }
           yield ensureQrSessionAuthenticated();
           const deviceNonce = generateDeviceNonce();
           const redirectCandidates = buildRedirectCandidates();
@@ -12683,6 +13750,10 @@
         var _a;
         lastError = null;
         try {
+          if (!hasQrAuthConfig()) {
+            lastError = "QR auth is not configured";
+            return null;
+          }
           yield ensureQrSessionAuthenticated();
           const response = yield fetch(`${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`, {
             method: "POST",
@@ -12713,6 +13784,10 @@
       return __async(this, null, function* () {
         lastError = null;
         try {
+          if (!hasQrAuthConfig()) {
+            lastError = "QR auth is not configured";
+            return false;
+          }
           yield ensureQrSessionAuthenticated();
           const token = getBearerToken();
           const response = yield fetch(`${SUPABASE_URL}/functions/v1/tv-logins-exchange`, {
@@ -12911,9 +13986,14 @@
       }), Math.max(2, Number(pollIntervalSeconds || 3)) * 1e3);
     },
     toFriendlyQrError(rawError) {
-      const message = String(rawError || "").toLowerCase();
+      const normalizedError = String(rawError || "").replace(/\s+/g, " ").trim();
+      const conciseReason = normalizedError.length > 160 ? `${normalizedError.slice(0, 157)}...` : normalizedError;
+      const message = normalizedError.toLowerCase();
       if (!message) {
         return I18n.t("auth.qr.unavailable");
+      }
+      if (message.includes("qr auth is not configured") || message.includes("missing redirect_base_url configuration") || message.includes("apikey") || message.includes("api key") || message.includes("anon key")) {
+        return I18n.t("auth.qr.notConfigured");
       }
       if (message.includes("invalid tv login redirect base url")) {
         return I18n.t("auth.qr.invalidRedirect");
@@ -12927,7 +14007,10 @@
       if (message.includes("network") || message.includes("failed to fetch")) {
         return I18n.t("auth.qr.networkError");
       }
-      return I18n.t("auth.qr.unavailableWithReason", { reason: rawError });
+      if (message.includes("unsupported method") || message.includes("error response") || message.includes("http 5") || message.includes("http 404") || message.includes("http 405")) {
+        return I18n.t("auth.qr.serviceUnavailable");
+      }
+      return I18n.t("auth.qr.unavailableWithReason", { reason: conciseReason });
     },
     setStatus(text) {
       var _a;
@@ -13105,7 +14188,7 @@
   };
 
   // js/ui/screens/account/syncCodeScreen.js
-  var KEY6 = "manualSyncCode";
+  var KEY7 = "manualSyncCode";
   var SyncCodeScreen = {
     mount() {
       return __async(this, null, function* () {
@@ -13115,7 +14198,7 @@
       });
     },
     render() {
-      const value = LocalStore.get(KEY6, "");
+      const value = LocalStore.get(KEY7, "");
       this.container.innerHTML = `
       <div class="row">
         <h2>${I18n.t("auth.syncCode.title")}</h2>
@@ -13143,15 +14226,15 @@
       }
       const action = current.dataset.action;
       if (action === "setCode") {
-        const value = window.prompt(I18n.t("auth.syncCode.prompt"), LocalStore.get(KEY6, ""));
+        const value = window.prompt(I18n.t("auth.syncCode.prompt"), LocalStore.get(KEY7, ""));
         if (value !== null) {
-          LocalStore.set(KEY6, String(value).trim());
+          LocalStore.set(KEY7, String(value).trim());
           this.render();
         }
         return;
       }
       if (action === "clearCode") {
-        LocalStore.remove(KEY6);
+        LocalStore.remove(KEY7);
         this.render();
         return;
       }
@@ -14179,56 +15262,6 @@
     }
   };
 
-  // js/data/remote/supabase/avatarRepository.js
-  var AVATAR_BUCKET = "avatars";
-  var cachedCatalog = null;
-  function avatarImageUrl(storagePath = "") {
-    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
-    if (!normalizedPath) {
-      return null;
-    }
-    return `${String(SUPABASE_URL || "").replace(/\/+$/, "")}/storage/v1/object/public/${AVATAR_BUCKET}/${normalizedPath}`;
-  }
-  function mapAvatar(row = {}) {
-    return {
-      id: String(row.id || ""),
-      displayName: String(row.display_name || row.displayName || "Avatar"),
-      imageUrl: avatarImageUrl(row.storage_path || row.storagePath || ""),
-      category: String(row.category || "all").trim().toLowerCase(),
-      sortOrder: Number(row.sort_order || row.sortOrder || 0),
-      bgColor: row.bg_color || row.bgColor || null
-    };
-  }
-  var AvatarRepository = {
-    getAvatarCatalog() {
-      return __async(this, null, function* () {
-        if (Array.isArray(cachedCatalog) && cachedCatalog.length) {
-          return cachedCatalog;
-        }
-        const response = yield SupabaseApi.rpc("get_avatar_catalog", {}, false);
-        cachedCatalog = (Array.isArray(response) ? response : []).map((row) => mapAvatar(row)).filter((avatar) => avatar.id && avatar.imageUrl).sort((left, right) => {
-          const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
-          if (orderDelta !== 0) {
-            return orderDelta;
-          }
-          return String(left.displayName).localeCompare(String(right.displayName));
-        });
-        return cachedCatalog;
-      });
-    },
-    getAvatarImageUrl(avatarId, catalog = cachedCatalog || []) {
-      var _a;
-      const normalizedId = String(avatarId || "").trim();
-      if (!normalizedId) {
-        return null;
-      }
-      return ((_a = catalog.find((avatar) => avatar.id === normalizedId)) == null ? void 0 : _a.imageUrl) || null;
-    },
-    invalidateCache() {
-      cachedCatalog = null;
-    }
-  };
-
   // js/core/profile/profileSelectionScreen.js
   var PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
   var DEFAULT_PROFILE_COLOR = "#1E88E5";
@@ -15043,27 +16076,6 @@
     }
   };
 
-  // js/data/local/playerSettingsStore.js
-  var KEY7 = "playerSettings";
-  var DEFAULTS4 = {
-    autoplayNextEpisode: true,
-    subtitlesEnabled: true,
-    subtitleLanguage: "system",
-    preferredAudioLanguage: "system",
-    preferredQuality: "auto",
-    preferredPlayer: "auto",
-    trailerAutoplay: false,
-    subtitleRenderMode: "native"
-  };
-  var PlayerSettingsStore = {
-    get() {
-      return __spreadValues(__spreadValues({}, DEFAULTS4), LocalStore.get(KEY7, {}) || {});
-    },
-    set(partial) {
-      LocalStore.set(KEY7, __spreadValues(__spreadValues({}, this.get()), partial || {}));
-    }
-  };
-
   // js/ui/screens/detail/metaDetailsScreen.js
   var TMDB_BASE_URL3 = "https://api.themoviedb.org/3";
   function toEpisodeEntry(video = {}) {
@@ -15111,43 +16123,92 @@
       }
       return raw;
     };
+    const normalizeCastValue = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+    const selectBetterCastEntry = (current, candidate) => {
+      if (!candidate) {
+        return current;
+      }
+      if (!current) {
+        return candidate;
+      }
+      const currentScore = Number(Boolean(current.photo)) + Number(Boolean(current.tmdbId));
+      const candidateScore = Number(Boolean(candidate.photo)) + Number(Boolean(candidate.tmdbId));
+      return candidateScore > currentScore ? candidate : current;
+    };
+    const mergeCastEntries = (primary = [], supplemental = []) => {
+      if (!primary.length) {
+        return supplemental;
+      }
+      if (!supplemental.length) {
+        return primary;
+      }
+      const exactMatches = /* @__PURE__ */ new Map();
+      const nameMatches = /* @__PURE__ */ new Map();
+      supplemental.forEach((entry) => {
+        const normalizedName = normalizeCastValue(entry == null ? void 0 : entry.name);
+        if (!normalizedName) {
+          return;
+        }
+        const normalizedCharacter = normalizeCastValue(entry == null ? void 0 : entry.character);
+        if (normalizedCharacter) {
+          const exactKey = `${normalizedName}|${normalizedCharacter}`;
+          exactMatches.set(exactKey, selectBetterCastEntry(exactMatches.get(exactKey), entry));
+        }
+        nameMatches.set(normalizedName, selectBetterCastEntry(nameMatches.get(normalizedName), entry));
+      });
+      return primary.map((entry) => {
+        const normalizedName = normalizeCastValue(entry == null ? void 0 : entry.name);
+        const normalizedCharacter = normalizeCastValue(entry == null ? void 0 : entry.character);
+        const exactKey = normalizedName && normalizedCharacter ? `${normalizedName}|${normalizedCharacter}` : "";
+        const match = (exactKey ? exactMatches.get(exactKey) : null) || (normalizedName ? nameMatches.get(normalizedName) : null);
+        return __spreadProps(__spreadValues({}, entry), {
+          character: (entry == null ? void 0 : entry.character) || (match == null ? void 0 : match.character) || "",
+          photo: (entry == null ? void 0 : entry.photo) || (match == null ? void 0 : match.photo) || "",
+          tmdbId: (entry == null ? void 0 : entry.tmdbId) || (match == null ? void 0 : match.tmdbId) || null
+        });
+      });
+    };
+    const mapCastEntries = (items = [], mapper) => (Array.isArray(items) ? items : []).map(mapper).filter((entry) => Boolean(entry == null ? void 0 : entry.name));
     const members = Array.isArray(meta.castMembers) ? meta.castMembers : [];
-    if (members.length) {
-      return members.map((entry) => ({
+    const memberEntries = mapCastEntries(members, (entry) => ({
+      name: (entry == null ? void 0 : entry.name) || "",
+      character: (entry == null ? void 0 : entry.character) || (entry == null ? void 0 : entry.role) || "",
+      photo: toPhoto(
+        (entry == null ? void 0 : entry.photo) || (entry == null ? void 0 : entry.profilePath) || (entry == null ? void 0 : entry.profile_path) || (entry == null ? void 0 : entry.avatar) || (entry == null ? void 0 : entry.image) || (entry == null ? void 0 : entry.poster) || ""
+      ),
+      tmdbId: (entry == null ? void 0 : entry.tmdbId) || (entry == null ? void 0 : entry.id) || null
+    }));
+    const direct = Array.isArray(meta.cast) ? meta.cast : [];
+    const directEntries = mapCastEntries(direct, (entry) => {
+      if (typeof entry === "string") {
+        return { name: entry, character: "", photo: "", tmdbId: null };
+      }
+      return {
         name: (entry == null ? void 0 : entry.name) || "",
-        character: (entry == null ? void 0 : entry.character) || (entry == null ? void 0 : entry.role) || "",
+        character: (entry == null ? void 0 : entry.character) || "",
         photo: toPhoto(
           (entry == null ? void 0 : entry.photo) || (entry == null ? void 0 : entry.profilePath) || (entry == null ? void 0 : entry.profile_path) || (entry == null ? void 0 : entry.avatar) || (entry == null ? void 0 : entry.image) || (entry == null ? void 0 : entry.poster) || ""
         ),
         tmdbId: (entry == null ? void 0 : entry.tmdbId) || (entry == null ? void 0 : entry.id) || null
-      })).filter((entry) => Boolean(entry == null ? void 0 : entry.name)).slice(0, 18);
-    }
-    const direct = Array.isArray(meta.cast) ? meta.cast : [];
-    if (direct.length) {
-      return direct.map((entry) => {
-        if (typeof entry === "string") {
-          return { name: entry, character: "", photo: "", tmdbId: null };
-        }
-        return {
-          name: (entry == null ? void 0 : entry.name) || "",
-          character: (entry == null ? void 0 : entry.character) || "",
-          photo: toPhoto(
-            (entry == null ? void 0 : entry.photo) || (entry == null ? void 0 : entry.profilePath) || (entry == null ? void 0 : entry.profile_path) || (entry == null ? void 0 : entry.avatar) || (entry == null ? void 0 : entry.image) || (entry == null ? void 0 : entry.poster) || ""
-          ),
-          tmdbId: (entry == null ? void 0 : entry.tmdbId) || (entry == null ? void 0 : entry.id) || null
-        };
-      }).filter((entry) => Boolean(entry == null ? void 0 : entry.name)).slice(0, 12);
-    }
+      };
+    });
     const credits = (_a = meta.credits) == null ? void 0 : _a.cast;
-    if (Array.isArray(credits)) {
-      return credits.map((entry) => ({
-        name: (entry == null ? void 0 : entry.name) || (entry == null ? void 0 : entry.character) || "",
-        character: (entry == null ? void 0 : entry.character) || "",
-        photo: toPhoto(
-          (entry == null ? void 0 : entry.profile_path) || (entry == null ? void 0 : entry.photo) || (entry == null ? void 0 : entry.profilePath) || (entry == null ? void 0 : entry.avatar_path) || (entry == null ? void 0 : entry.avatar) || (entry == null ? void 0 : entry.image) || ""
-        ),
-        tmdbId: (entry == null ? void 0 : entry.id) || null
-      })).filter((entry) => Boolean(entry.name)).slice(0, 12);
+    const creditEntries = mapCastEntries(credits, (entry) => ({
+      name: (entry == null ? void 0 : entry.name) || (entry == null ? void 0 : entry.character) || "",
+      character: (entry == null ? void 0 : entry.character) || "",
+      photo: toPhoto(
+        (entry == null ? void 0 : entry.profile_path) || (entry == null ? void 0 : entry.photo) || (entry == null ? void 0 : entry.profilePath) || (entry == null ? void 0 : entry.avatar_path) || (entry == null ? void 0 : entry.avatar) || (entry == null ? void 0 : entry.image) || ""
+      ),
+      tmdbId: (entry == null ? void 0 : entry.id) || null
+    }));
+    if (memberEntries.length) {
+      return mergeCastEntries(memberEntries, [...directEntries, ...creditEntries]).slice(0, 18);
+    }
+    if (directEntries.length) {
+      return mergeCastEntries(directEntries, creditEntries).slice(0, 12);
+    }
+    if (creditEntries.length) {
+      return creditEntries.slice(0, 12);
     }
     return [];
   }
@@ -15242,6 +16303,12 @@
   function renderTrailerGlyph() {
     return `<img class="series-btn-svg" src="assets/icons/trailer_play_button.svg" alt="" aria-hidden="true" />`;
   }
+  function renderLibraryGlyph(isSaved = false) {
+    return isSaved ? "&#10003;" : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`;
+  }
+  function renderWatchedGlyph(isWatched = false) {
+    return `<img class="series-btn-svg" src="assets/icons/${isWatched ? "visibility" : "visibility_off"}.svg" alt="" aria-hidden="true" />`;
+  }
   function ratingToneClass(value) {
     const num = Number(value || 0);
     if (num >= 9) return "excellent";
@@ -15295,9 +16362,14 @@
       id: String(item.id || ""),
       name: item.name || item.title || "Untitled",
       type: item.type || item.apiType || fallbackType,
-      poster: item.landscapePoster || item.background || item.poster || "",
+      poster: item.poster || "",
+      landscapePoster: item.landscapePoster || item.background || item.poster || "",
       releaseInfo: item.releaseInfo || item.year || ""
     };
+  }
+  function extractPreviewYear(value = "") {
+    const match = String(value || "").match(/\b(19|20)\d{2}\b/);
+    return match ? match[0] : "";
   }
   function resolveYoutubeId2(value = "") {
     const raw = String(value || "").trim();
@@ -15322,29 +16394,47 @@
     return "";
   }
   function buildYoutubeEmbedUrl2(ytId = "") {
-    var _a;
+    var _a, _b;
     const cleanId = String(ytId || "").trim();
     if (!cleanId) {
       return "";
     }
     const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-    if (!proxyBase) {
+    if (proxyBase) {
+      try {
+        const proxyUrl = new URL(proxyBase, ((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.href) || "https://example.com/");
+        proxyUrl.searchParams.set("v", cleanId);
+        proxyUrl.searchParams.set("autoplay", "1");
+        proxyUrl.searchParams.set("muted", "1");
+        proxyUrl.searchParams.set("controls", "0");
+        proxyUrl.searchParams.set("loop", "1");
+        proxyUrl.searchParams.set("playlist", cleanId);
+        proxyUrl.searchParams.set("playsinline", "1");
+        proxyUrl.searchParams.set("rel", "0");
+        return proxyUrl.toString();
+      } catch (_) {
+        return "";
+      }
+    }
+    if (!Environment.isBrowser()) {
       return "";
     }
-    try {
-      const proxyUrl = new URL(proxyBase, ((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.href) || "https://example.com/");
-      proxyUrl.searchParams.set("v", cleanId);
-      proxyUrl.searchParams.set("autoplay", "1");
-      proxyUrl.searchParams.set("muted", "1");
-      proxyUrl.searchParams.set("controls", "0");
-      proxyUrl.searchParams.set("loop", "1");
-      proxyUrl.searchParams.set("playlist", cleanId);
-      proxyUrl.searchParams.set("playsinline", "1");
-      proxyUrl.searchParams.set("rel", "0");
-      return proxyUrl.toString();
-    } catch (_) {
-      return "";
+    const params = new URLSearchParams({
+      autoplay: "1",
+      mute: "1",
+      controls: "0",
+      loop: "1",
+      playlist: cleanId,
+      playsinline: "1",
+      rel: "0",
+      modestbranding: "1",
+      enablejsapi: "1"
+    });
+    const origin = String(((_b = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _b.origin) || "").trim();
+    if (/^https?:\/\//i.test(origin)) {
+      params.set("origin", origin);
     }
+    return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
   }
   function scoreTrailerStream2(entry = {}) {
     const text = [
@@ -15469,6 +16559,8 @@
         selectedRatingSeason: Number(this.selectedRatingSeason || 0),
         seriesInsightTab: String(this.seriesInsightTab || "cast"),
         movieInsightTab: String(this.movieInsightTab || "cast"),
+        episodeFocusIndexBySeason: this.episodeFocusIndexBySeason ? __spreadValues({}, this.episodeFocusIndexBySeason) : {},
+        railFocusIndexByKey: this.railFocusIndexByKey ? __spreadValues({}, this.railFocusIndexByKey) : {},
         pendingFocusRestore: this.captureDetailFocus(),
         contentScrollTop: Number((content == null ? void 0 : content.scrollTop) || 0),
         trackScrollLeftByKey: captureHorizontalScrollMap(this.container),
@@ -15500,6 +16592,8 @@
       this.selectedRatingSeason = Number(snapshot.selectedRatingSeason || this.selectedSeason || 1);
       this.seriesInsightTab = String(snapshot.seriesInsightTab || "cast");
       this.movieInsightTab = String(snapshot.movieInsightTab || "cast");
+      this.episodeFocusIndexBySeason = snapshot.episodeFocusIndexBySeason && typeof snapshot.episodeFocusIndexBySeason === "object" ? __spreadValues({}, snapshot.episodeFocusIndexBySeason) : {};
+      this.railFocusIndexByKey = snapshot.railFocusIndexByKey && typeof snapshot.railFocusIndexByKey === "object" ? __spreadValues({}, snapshot.railFocusIndexByKey) : {};
       this.pendingFocusRestore = snapshot.pendingFocusRestore ? __spreadValues({}, snapshot.pendingFocusRestore) : null;
       this.restoredContentScrollTop = Number(snapshot.contentScrollTop || 0);
       this.restoredTrackScrollLeftByKey = snapshot.trackScrollLeftByKey && typeof snapshot.trackScrollLeftByKey === "object" ? __spreadValues({}, snapshot.trackScrollLeftByKey) : {};
@@ -15537,6 +16631,7 @@
         ScreenUtils.show(this.container);
         this.stopTrailerPlayback({ keepDom: false });
         this.params = params;
+        this.isBackNavigation = Boolean(navigationContext == null ? void 0 : navigationContext.isBackNavigation);
         this.pendingEpisodeSelection = null;
         this.pendingMovieSelection = null;
         this.streamChooserFocus = null;
@@ -15552,7 +16647,10 @@
         this.trailerSource = null;
         this.isTrailerPlaying = false;
         this.episodeProgressMap = /* @__PURE__ */ new Map();
+        this.episodeFocusIndexBySeason = {};
+        this.railFocusIndexByKey = {};
         this.watchedEpisodeKeys = /* @__PURE__ */ new Set();
+        this.autoOpenedContinueWatchingStream = false;
         this.restoredContentScrollTop = 0;
         this.restoredTrackScrollLeftByKey = {};
         this.bindBackHandler();
@@ -15638,6 +16736,7 @@
         }
         this.render(meta);
         this.isLoadingDetail = false;
+        this.maybeAutoOpenContinueWatchingStream();
         (() => __async(this, null, function* () {
           var _a2, _b, _c, _d;
           const enrichedMeta = yield withTimeout2(this.enrichMeta(meta), 4e3, meta);
@@ -15658,7 +16757,7 @@
           this.selectedSeason = this.selectedSeason || ((_b = this.episodes[0]) == null ? void 0 : _b.season) || 1;
           this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
           this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
-          this.render(this.meta);
+          this.updateRenderedDetailSections(this.meta);
           const tasks = [
             withTimeout2(this.fetchMoreLikeThis(this.meta), 5e3, [])
           ];
@@ -15678,7 +16777,7 @@
             this.collectionItems = Array.isArray((_c = results[1]) == null ? void 0 : _c.items) ? results[1].items : [];
             this.collectionName = ((_d = results[1]) == null ? void 0 : _d.name) || "";
           }
-          this.render(this.meta);
+          this.updateRenderedDetailSections(this.meta);
         }))().catch((error) => {
           console.warn("Detail background enrichment failed", error);
         });
@@ -15816,6 +16915,45 @@
         }
       });
     },
+    findContinueWatchingEpisodeTarget() {
+      var _a, _b, _c;
+      const resumeVideoId = String(((_a = this.params) == null ? void 0 : _a.resumeVideoId) || "").trim();
+      if (resumeVideoId) {
+        const directMatch = this.episodes.find((entry) => String((entry == null ? void 0 : entry.id) || "") === resumeVideoId);
+        if (directMatch) {
+          return directMatch;
+        }
+      }
+      const resumeSeason = Number(((_b = this.params) == null ? void 0 : _b.resumeSeason) || 0);
+      const resumeEpisode = Number(((_c = this.params) == null ? void 0 : _c.resumeEpisode) || 0);
+      if (resumeSeason > 0 && resumeEpisode > 0) {
+        const episodeMatch = this.episodes.find((entry) => Number((entry == null ? void 0 : entry.season) || 0) === resumeSeason && Number((entry == null ? void 0 : entry.episode) || 0) === resumeEpisode);
+        if (episodeMatch) {
+          return episodeMatch;
+        }
+      }
+      return this.nextEpisodeToWatch || this.episodes[0] || null;
+    },
+    maybeAutoOpenContinueWatchingStream() {
+      var _a, _b, _c, _d;
+      if (!((_a = this.params) == null ? void 0 : _a.autoOpenContinueWatching) || this.autoOpenedContinueWatchingStream || this.isBackNavigation) {
+        return;
+      }
+      this.autoOpenedContinueWatchingStream = true;
+      const extraParams = {
+        resumePositionMs: Number(((_b = this.params) == null ? void 0 : _b.resumeProgressMs) || 0) || 0,
+        returnToDetail: true
+      };
+      const itemType = String(((_c = this.params) == null ? void 0 : _c.itemType) || ((_d = this.meta) == null ? void 0 : _d.type) || "movie").toLowerCase();
+      if (itemType === "series" || itemType === "tv") {
+        const episode = this.findContinueWatchingEpisodeTarget();
+        if (episode) {
+          this.navigateToStreamScreenForEpisode(episode, extraParams);
+          return;
+        }
+      }
+      this.navigateToStreamScreenForMovie(extraParams);
+    },
     enrichMeta(meta) {
       return __async(this, null, function* () {
         var _a, _b, _c, _d, _e;
@@ -15852,6 +16990,8 @@
             companies: Array.isArray(enrichment.companies) ? enrichment.companies : meta.companies || [],
             productionCompanies: Array.isArray(enrichment.productionCompanies) ? enrichment.productionCompanies : Array.isArray(meta.productionCompanies) ? meta.productionCompanies : [],
             networks: Array.isArray(enrichment.networks) ? enrichment.networks : Array.isArray(meta.networks) ? meta.networks : [],
+            trailers: Array.isArray(meta.trailers) && meta.trailers.length ? meta.trailers : Array.isArray(enrichment.trailers) ? enrichment.trailers : [],
+            trailerYtIds: Array.isArray(meta.trailerYtIds) && meta.trailerYtIds.length ? meta.trailerYtIds : Array.isArray(enrichment.trailerYtIds) ? enrichment.trailerYtIds : [],
             collectionId: enrichment.collectionId || meta.collectionId || ((_b = meta == null ? void 0 : meta.belongsToCollection) == null ? void 0 : _b.id) || ((_c = meta == null ? void 0 : meta.belongs_to_collection) == null ? void 0 : _c.id) || null,
             collectionName: enrichment.collectionName || meta.collectionName || ((_d = meta == null ? void 0 : meta.belongsToCollection) == null ? void 0 : _d.name) || ((_e = meta == null ? void 0 : meta.belongs_to_collection) == null ? void 0 : _e.name) || "",
             belongsToCollection: enrichment.collectionId ? { id: enrichment.collectionId, name: enrichment.collectionName || "" } : meta.belongsToCollection || meta.belongs_to_collection || null
@@ -15995,12 +17135,31 @@
         this.renderMovieStreamChooser();
       }
     },
-    renderSeriesLayout(meta) {
-      var _a, _b, _c;
-      const backdrop = meta.background || meta.poster || "";
+    renderSeriesHeroMarkup(meta) {
       const nextEpisodeLabel = this.nextEpisodeToWatch ? `Next S${this.nextEpisodeToWatch.season}E${this.nextEpisodeToWatch.episode}` : "Play";
       const creditLine = Array.isArray(meta.director) && meta.director.length ? meta.director.slice(0, 2).join(", ") : Array.isArray(meta.writer) && meta.writer.length ? meta.writer.slice(0, 2).join(", ") : meta.director || meta.writer || "";
       const creditPrefix = Array.isArray(meta.director) && meta.director.length ? "Creator" : "Writer";
+      return this.renderHeroSection({
+        meta,
+        playLabel: nextEpisodeLabel,
+        creditLine,
+        creditPrefix,
+        showWatchedButton: false
+      });
+    },
+    renderMovieHeroMarkup(meta) {
+      const directorLine = Array.isArray(meta.director) ? meta.director.slice(0, 2).join(", ") : meta.director || "";
+      return this.renderHeroSection({
+        meta,
+        playLabel: "Play",
+        creditLine: directorLine,
+        creditPrefix: "Director",
+        showWatchedButton: true
+      });
+    },
+    renderSeriesLayout(meta) {
+      var _a, _b, _c;
+      const backdrop = meta.background || meta.poster || "";
       if (!this.selectedRatingSeason || !((_a = this.seriesRatingsBySeason) == null ? void 0 : _a[this.selectedRatingSeason])) {
         this.selectedRatingSeason = this.selectedSeason || ((_c = (_b = this.episodes) == null ? void 0 : _b[0]) == null ? void 0 : _c.season) || 1;
       }
@@ -16012,17 +17171,15 @@
         <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content">
-          ${this.renderHeroSection({
-        meta,
-        playLabel: nextEpisodeLabel,
-        creditLine,
-        creditPrefix,
-        showWatchedButton: false
-      })}
-          <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
-          <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
-          ${this.renderSeriesInsightSection()}
-          ${this.renderCompanySections(meta)}
+          <div id="detailHeroSection">${this.renderSeriesHeroMarkup(meta)}</div>
+          <div id="detailSeasonRowMount">
+            <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
+          </div>
+          <div id="detailEpisodeTrackMount">
+            <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
+          </div>
+          <div id="detailInsightSectionMount">${this.renderSeriesInsightSection()}</div>
+          <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
         </div>
 
         <div id="episodeStreamChooserMount"></div>
@@ -16037,7 +17194,12 @@
     renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
       const logoOrTitle = meta.logo ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml4(meta.name || "logo")}" />` : `<h1 class="series-detail-title">${escapeHtml4(meta.name || "Untitled")}</h1>`;
       const externalRatings = this.renderExternalRatingsRow(meta);
-      const trailerButton = this.trailerSource ? `
+      const trailerSource = this.trailerSource || resolveTrailerSource2(meta);
+      if (!this.trailerSource && trailerSource) {
+        this.trailerSource = trailerSource;
+      }
+      const trailerButtonEnabled = Boolean(LayoutPreferences.get().detailPageTrailerButtonEnabled);
+      const trailerButton = trailerButtonEnabled && trailerSource ? `
           <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="Play trailer">
             ${renderTrailerGlyph()}
           </button>
@@ -16054,9 +17216,9 @@
             <span>${escapeHtml4(playLabel)}</span>
           </button>
           <button class="series-circle-btn focusable" data-action="toggleLibrary">
-            ${this.isSavedInLibrary ? "&#10003;" : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`}
+            ${renderLibraryGlyph(this.isSavedInLibrary)}
           </button>
-          ${showWatchedButton ? `<button class="series-circle-btn focusable" data-action="toggleWatched">${this.isMarkedWatched ? "&#10003;" : "&#9675;"}</button>` : ""}
+          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${this.isMarkedWatched ? "Mark unwatched" : "Mark watched"}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
           ${trailerButton}
         </div>
         ${creditLine ? `<p class="series-detail-support">${escapeHtml4(creditPrefix)}: ${escapeHtml4(creditLine)}</p>` : ""}
@@ -16203,7 +17365,6 @@
     },
     renderMovieLayout(meta) {
       const backdrop = meta.background || meta.poster || "";
-      const directorLine = Array.isArray(meta.director) ? meta.director.slice(0, 2).join(", ") : meta.director || "";
       this.container.innerHTML = `
       <div class="series-detail-shell movie-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
         <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
@@ -16212,15 +17373,9 @@
         <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content movie-detail-content">
-          ${this.renderHeroSection({
-        meta,
-        playLabel: "Play",
-        creditLine: directorLine,
-        creditPrefix: "Director",
-        showWatchedButton: true
-      })}
-          ${this.renderMovieInsightSection(meta)}
-          ${this.renderCompanySections(meta)}
+          <div id="detailHeroSection">${this.renderMovieHeroMarkup(meta)}</div>
+          <div id="detailInsightSectionMount">${this.renderMovieInsightSection(meta)}</div>
+          <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
         </div>
         <div id="movieStreamChooserMount"></div>
       </div>
@@ -16229,6 +17384,48 @@
       if (!this.pendingFocusRestore) {
         ScreenUtils.setInitialFocus(this.container, ".movie-detail-content .focusable");
       }
+      this.bindDetailChrome();
+    },
+    captureRenderedChromeState() {
+      const content = this.getDetailContentScroller();
+      this.restoredContentScrollTop = Number((content == null ? void 0 : content.scrollTop) || 0);
+      this.restoredTrackScrollLeftByKey = captureHorizontalScrollMap(this.container);
+    },
+    updateRenderedDetailSections(meta) {
+      if (!this.container || !meta || !this.container.querySelector(".series-detail-shell")) {
+        this.render(meta);
+        return;
+      }
+      const focusRestore = this.captureDetailFocus();
+      this.captureRenderedChromeState();
+      const isSeries = meta.type === "series" || meta.type === "tv";
+      const backdropNode = this.container.querySelector(".series-detail-backdrop");
+      if (backdropNode instanceof HTMLElement) {
+        const backdrop = meta.background || meta.poster || "";
+        backdropNode.style.backgroundImage = backdrop ? `url('${backdrop.replace(/'/g, "%27")}')` : "";
+      }
+      const heroMount = this.container.querySelector("#detailHeroSection");
+      if (heroMount) {
+        heroMount.innerHTML = isSeries ? this.renderSeriesHeroMarkup(meta) : this.renderMovieHeroMarkup(meta);
+      }
+      const seasonMount = this.container.querySelector("#detailSeasonRowMount");
+      if (isSeries && seasonMount) {
+        seasonMount.innerHTML = `<div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>`;
+      }
+      const episodeMount = this.container.querySelector("#detailEpisodeTrackMount");
+      if (isSeries && episodeMount) {
+        episodeMount.innerHTML = `<div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>`;
+      }
+      const insightMount = this.container.querySelector("#detailInsightSectionMount");
+      if (insightMount) {
+        insightMount.innerHTML = isSeries ? this.renderSeriesInsightSection() : this.renderMovieInsightSection(meta);
+      }
+      const companyMount = this.container.querySelector("#detailCompanySectionsMount");
+      if (companyMount) {
+        companyMount.innerHTML = this.renderCompanySections(meta);
+      }
+      ScreenUtils.indexFocusables(this.container);
+      this.pendingFocusRestore = focusRestore;
       this.bindDetailChrome();
     },
     renderMovieInsightSection(meta) {
@@ -16322,7 +17519,7 @@
                data-cast-key="${escapeHtml4(String(person.tmdbId || `${person.name || ""}:${person.character || ""}`))}"
                data-cast-name="${escapeHtml4(person.name || "")}"
                data-cast-role="${escapeHtml4(person.character || "")}"
-               data-cast-photo="${person.photo || ""}">
+               data-cast-photo="${escapeHtml4(person.photo || "")}">
         <div class="movie-cast-avatar"${person.photo ? ` style="background-image:url('${String(person.photo).replace(/'/g, "%27")}')"` : ""}></div>
         <div class="movie-cast-name">${escapeHtml4(person.name || "")}</div>
         <div class="movie-cast-role">${escapeHtml4(person.character || "")}</div>
@@ -16432,15 +17629,21 @@
       const cards = items.map((rawItem) => {
         var _a;
         const item = normalizePreviewItem(rawItem, fallbackType);
+        const year = extractPreviewYear(item.releaseInfo);
+        const primaryImage = item.landscapePoster || item.poster || "";
+        const fallbackImage = item.poster && item.poster !== primaryImage ? item.poster : "";
         return `
       <article class="detail-morelike-card focusable"
            data-action="openMoreLikeDetail"
            data-item-id="${item.id}"
            data-item-type="${item.type || ((_a = this.params) == null ? void 0 : _a.itemType) || "movie"}"
            data-item-title="${escapeHtml4(item.name || "Untitled")}">
-        <div class="detail-morelike-poster"${item.poster ? ` style="background-image:url('${item.poster.replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="detail-morelike-poster-wrap">
+          ${primaryImage ? `<img class="detail-morelike-poster-image" src="${escapeHtml4(primaryImage)}" alt="${escapeHtml4(item.name || "content")}" loading="lazy" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml4(fallbackImage)}"` : ""} onerror="const next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; const placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />` : ""}
+          <div class="detail-morelike-poster placeholder"${primaryImage ? " hidden" : ""}></div>
+        </div>
         <div class="detail-morelike-name">${escapeHtml4(item.name || "Untitled")}</div>
-        ${item.releaseInfo ? `<div class="detail-morelike-type">${escapeHtml4(item.releaseInfo)}</div>` : ""}
+        ${year ? `<div class="detail-morelike-type">${escapeHtml4(year)}</div>` : ""}
       </article>
     `;
       }).join("");
@@ -16526,12 +17729,12 @@
           }
           if ((((_b = this.meta) == null ? void 0 : _b.type) === "series" || ((_c = this.meta) == null ? void 0 : _c.type) === "tv") && tab !== this.seriesInsightTab) {
             this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-            this.render(this.meta, { selector: `.series-insight-tab[data-tab="${this.seriesInsightTab}"]` });
+            this.updateRenderedDetailSections(this.meta);
             return;
           }
           if (((_d = this.meta) == null ? void 0 : _d.type) !== "series" && ((_e = this.meta) == null ? void 0 : _e.type) !== "tv" && tab !== this.movieInsightTab) {
             this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-            this.render(this.meta, { selector: `.series-insight-tab[data-tab="${this.movieInsightTab}"]` });
+            this.updateRenderedDetailSections(this.meta);
           }
           return;
         }
@@ -16564,6 +17767,35 @@
         }
         node.scrollLeft = Number(((_a2 = this.restoredTrackScrollLeftByKey) == null ? void 0 : _a2[key]) || 0);
       });
+    },
+    syncDetailActionButtons() {
+      if (!this.container) {
+        return;
+      }
+      Array.from(this.container.querySelectorAll('[data-action="toggleLibrary"]')).forEach((node) => {
+        if (!(node instanceof HTMLElement)) {
+          return;
+        }
+        if (node.classList.contains("series-circle-btn")) {
+          node.innerHTML = renderLibraryGlyph(this.isSavedInLibrary);
+          node.setAttribute("aria-label", this.isSavedInLibrary ? "Remove from library" : "Add to library");
+        } else {
+          node.textContent = this.isSavedInLibrary ? "Remove from Library" : "Add to Library";
+        }
+      });
+      Array.from(this.container.querySelectorAll('[data-action="toggleWatched"]')).forEach((node) => {
+        if (!(node instanceof HTMLElement)) {
+          return;
+        }
+        if (node.classList.contains("series-circle-btn")) {
+          node.classList.toggle("is-selected", this.isMarkedWatched);
+          node.innerHTML = renderWatchedGlyph(this.isMarkedWatched);
+          node.setAttribute("aria-label", this.isMarkedWatched ? "Mark unwatched" : "Mark watched");
+        } else {
+          node.textContent = this.isMarkedWatched ? "Mark Unwatched" : "Mark Watched";
+        }
+      });
+      Router.captureCurrentRouteState();
     },
     captureDetailFocus() {
       if (!this.container) {
@@ -16623,7 +17855,47 @@
       if (!(target instanceof HTMLElement)) {
         return false;
       }
-      return this.focusInList([target], 0);
+      return this.focusInList([target], 0, { animated: false });
+    },
+    animateScroll(container, axis, targetValue, duration = 150) {
+      var _a, _b;
+      if (!container) {
+        return;
+      }
+      const property = axis === "y" ? "scrollTop" : "scrollLeft";
+      const max = axis === "y" ? Math.max(0, container.scrollHeight - container.clientHeight) : Math.max(0, container.scrollWidth - container.clientWidth);
+      const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+      const startValue = Number(container[property] || 0);
+      if (Math.abs(startValue - nextValue) <= 1) {
+        container[property] = nextValue;
+        return;
+      }
+      const prefersReducedMotion = (_b = (_a = globalThis == null ? void 0 : globalThis.matchMedia) == null ? void 0 : _a.call(globalThis, "(prefers-reduced-motion: reduce)")) == null ? void 0 : _b.matches;
+      if (prefersReducedMotion) {
+        container[property] = nextValue;
+        return;
+      }
+      const easeOutCubic = (t5) => 1 - Math.pow(1 - t5, 3);
+      const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
+      const key = axis === "y" ? "y" : "x";
+      const existing = map.get(container) || {};
+      if (existing[key]) {
+        cancelAnimationFrame(existing[key]);
+      }
+      const startTime = performance.now();
+      const tick = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        container[property] = Math.round(startValue + (nextValue - startValue) * easeOutCubic(progress));
+        if (progress < 1) {
+          existing[key] = requestAnimationFrame(tick);
+          map.set(container, existing);
+        } else {
+          existing[key] = null;
+          map.set(container, existing);
+        }
+      };
+      existing[key] = requestAnimationFrame(tick);
+      map.set(container, existing);
     },
     restartTrailerAutoplayTimer() {
       if (this.trailerAutoplayTimer) {
@@ -16925,7 +18197,7 @@
         nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null
       });
     },
-    navigateToStreamScreenForEpisode(episode) {
+    navigateToStreamScreenForEpisode(episode, extraParams = {}) {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k;
       if (!(episode == null ? void 0 : episode.id)) {
         return;
@@ -16933,7 +18205,7 @@
       const currentIndex = this.episodes.findIndex((entry) => entry.id === episode.id);
       const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
       const streamBackdrop = ((_a = this.meta) == null ? void 0 : _a.background) || ((_b = this.meta) == null ? void 0 : _b.landscapePoster) || ((_c = this.meta) == null ? void 0 : _c.poster) || null;
-      Router.navigate("stream", {
+      Router.navigate("stream", __spreadValues({
         itemId: ((_d = this.params) == null ? void 0 : _d.itemId) || null,
         itemType: "series",
         itemTitle: ((_e = this.meta) == null ? void 0 : _e.name) || ((_f = this.params) == null ? void 0 : _f.fallbackTitle) || ((_g = this.params) == null ? void 0 : _g.itemId) || "Untitled",
@@ -16950,13 +18222,13 @@
         episodes: this.episodes || [],
         nextEpisodeVideoId: (nextEpisode == null ? void 0 : nextEpisode.id) || null,
         nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null
-      });
+      }, extraParams));
     },
-    navigateToStreamScreenForMovie() {
+    navigateToStreamScreenForMovie(extraParams = {}) {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
       const releaseYear = ((_b = String(((_a = this.meta) == null ? void 0 : _a.releaseInfo) || "").match(/\b(19|20)\d{2}\b/)) == null ? void 0 : _b[0]) || "";
       const streamBackdrop = ((_c = this.meta) == null ? void 0 : _c.background) || ((_d = this.meta) == null ? void 0 : _d.landscapePoster) || ((_e = this.meta) == null ? void 0 : _e.poster) || null;
-      Router.navigate("stream", {
+      Router.navigate("stream", __spreadValues({
         itemId: ((_f = this.params) == null ? void 0 : _f.itemId) || null,
         itemType: "movie",
         itemTitle: ((_g = this.meta) == null ? void 0 : _g.name) || ((_h = this.params) == null ? void 0 : _h.fallbackTitle) || ((_i = this.params) == null ? void 0 : _i.itemId) || "Untitled",
@@ -16970,7 +18242,7 @@
         parentalGuide: ((_n = this.meta) == null ? void 0 : _n.parentalGuide) || null,
         videoId: ((_o = this.params) == null ? void 0 : _o.itemId) || null,
         episodes: []
-      });
+      }, extraParams));
     },
     playMovieFromSelectedStream(streamId) {
       var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
@@ -17010,11 +18282,135 @@
       ScreenUtils.indexFocusables(this.container);
       ScreenUtils.setInitialFocus(this.container);
     },
-    focusInList(list, targetIndex) {
+    getDetailContentScroller() {
       var _a;
+      return ((_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-content")) || null;
+    },
+    getDetailFocusGroup(node) {
+      if (!(node instanceof HTMLElement)) {
+        return null;
+      }
+      return node.closest(".series-detail-actions, .series-season-row, .series-episode-track, .series-insight-tabs, .movie-cast-track, .series-cast-track, .series-rating-seasons, .series-episode-ratings-grid, .detail-morelike-track, .detail-company-track") || node;
+    },
+    getHorizontalTrackScrollLeft(horizontalTrack, target) {
+      if (!(horizontalTrack instanceof HTMLElement) || !(target instanceof HTMLElement)) {
+        return 0;
+      }
+      const maxScrollLeft = Math.max(0, horizontalTrack.scrollWidth - horizontalTrack.clientWidth);
+      if (horizontalTrack.classList.contains("series-episode-track")) {
+        const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(horizontalTrack) : null;
+        const leftPad = Math.max(0, Number.parseFloat((styles == null ? void 0 : styles.paddingLeft) || "0") || 0);
+        return Math.max(0, Math.min(maxScrollLeft, target.offsetLeft - leftPad));
+      }
+      if (horizontalTrack.classList.contains("detail-morelike-track")) {
+        const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(horizontalTrack) : null;
+        const leftPad = Math.max(0, Number.parseFloat((styles == null ? void 0 : styles.paddingLeft) || "0") || 0);
+        return Math.max(0, Math.min(maxScrollLeft, target.offsetLeft - leftPad));
+      }
+      const edgePadding = horizontalTrack.classList.contains("home-track") ? 0 : 24;
+      const targetLeft = target.offsetLeft;
+      const targetRight = targetLeft + target.offsetWidth;
+      const viewLeft = horizontalTrack.scrollLeft;
+      const viewRight = viewLeft + horizontalTrack.clientWidth;
+      if (targetRight > viewRight - edgePadding) {
+        return Math.max(0, Math.min(maxScrollLeft, targetRight - horizontalTrack.clientWidth + edgePadding));
+      }
+      if (targetLeft < viewLeft + edgePadding) {
+        return Math.max(0, Math.min(maxScrollLeft, targetLeft - edgePadding));
+      }
+      return viewLeft;
+    },
+    syncDetailScrollBounds(target) {
+      const detailContent = this.getDetailContentScroller();
+      if (!detailContent || !(target instanceof HTMLElement) || !detailContent.contains(target)) {
+        return;
+      }
+      const focusables = Array.from(detailContent.querySelectorAll(".focusable")).filter((node) => node instanceof HTMLElement);
+      if (!focusables.length) {
+        return;
+      }
+      const targetGroup = this.getDetailFocusGroup(target);
+      const firstGroup = this.getDetailFocusGroup(focusables[0]);
+      const lastGroup = this.getDetailFocusGroup(focusables[focusables.length - 1]);
+      if (targetGroup && firstGroup && targetGroup === firstGroup) {
+        detailContent.scrollTop = 0;
+        return;
+      }
+      if (targetGroup && lastGroup && targetGroup === lastGroup) {
+        detailContent.scrollTop = Math.max(0, detailContent.scrollHeight - detailContent.clientHeight);
+      }
+    },
+    getRememberedEpisodeIndex(episodes = []) {
+      var _a;
+      if (!Array.isArray(episodes) || !episodes.length) {
+        return 0;
+      }
+      const seasonKey = String(Number(this.selectedSeason || 0) || 0);
+      const remembered = Number((_a = this.episodeFocusIndexBySeason) == null ? void 0 : _a[seasonKey]);
+      if (Number.isFinite(remembered) && remembered >= 0) {
+        return Math.min(episodes.length - 1, remembered);
+      }
+      return 0;
+    },
+    getSelectedSeasonIndex(seasons = []) {
+      if (!Array.isArray(seasons) || !seasons.length) {
+        return 0;
+      }
+      const selectedIndex = seasons.findIndex((node) => {
+        var _a;
+        return Number(((_a = node == null ? void 0 : node.dataset) == null ? void 0 : _a.season) || 0) === Number(this.selectedSeason || 0);
+      });
+      return selectedIndex >= 0 ? selectedIndex : 0;
+    },
+    rememberEpisodeFocus(target, list = null) {
+      var _a;
+      if (!(target instanceof HTMLElement) || !target.matches(".series-episode-card")) {
+        return;
+      }
+      const seasonKey = String(Number(this.selectedSeason || 0) || 0);
+      const items = Array.isArray(list) && list.length ? list : Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".series-episode-track .series-episode-card.focusable")) || []);
+      const index = items.indexOf(target);
+      if (index >= 0) {
+        this.episodeFocusIndexBySeason[seasonKey] = index;
+      }
+    },
+    getRememberedRailIndex(railKey, items = []) {
+      var _a;
+      if (!railKey || !Array.isArray(items) || !items.length) {
+        return 0;
+      }
+      const remembered = Number((_a = this.railFocusIndexByKey) == null ? void 0 : _a[railKey]);
+      if (Number.isFinite(remembered) && remembered >= 0) {
+        return Math.min(items.length - 1, remembered);
+      }
+      return 0;
+    },
+    rememberRailFocus(target, list = null) {
+      var _a;
+      if (!(target instanceof HTMLElement) || !target.matches(".detail-morelike-card")) {
+        return;
+      }
+      const track = target.closest("[data-scroll-key]");
+      const railKey = String(((_a = track == null ? void 0 : track.dataset) == null ? void 0 : _a.scrollKey) || "").trim();
+      if (!railKey) {
+        return;
+      }
+      const items = Array.isArray(list) && list.length ? list : Array.from(track.querySelectorAll(".detail-morelike-card.focusable"));
+      const index = items.indexOf(target);
+      if (index >= 0) {
+        this.railFocusIndexByKey[railKey] = index;
+      }
+    },
+    getMoreLikeRailKey() {
+      var _a, _b;
+      return ((_a = this.meta) == null ? void 0 : _a.type) === "series" || ((_b = this.meta) == null ? void 0 : _b.type) === "tv" ? "morelike:series" : "morelike:movie";
+    },
+    focusInList(list, targetIndex, options = {}) {
       if (!Array.isArray(list) || !list.length) {
         return false;
       }
+      const preserveVerticalScroll = Boolean(options == null ? void 0 : options.preserveVerticalScroll);
+      const animated = (options == null ? void 0 : options.animated) !== false;
       const index = Math.max(0, Math.min(list.length - 1, targetIndex));
       const target = list[index];
       if (!target) {
@@ -17023,33 +18419,43 @@
       this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
       target.classList.add("focused");
       target.focus();
+      this.rememberEpisodeFocus(target, list);
+      this.rememberRailFocus(target, list);
       const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons, .detail-morelike-track, .detail-company-track, .series-season-row, .series-insight-tabs");
       if (horizontalTrack) {
-        const targetLeft = target.offsetLeft;
-        const targetRight = targetLeft + target.offsetWidth;
-        const viewLeft = horizontalTrack.scrollLeft;
-        const viewRight = viewLeft + horizontalTrack.clientWidth;
-        const isStrictEdgeTrack = horizontalTrack.classList.contains("series-episode-track") || horizontalTrack.classList.contains("home-track");
-        const edgePadding = isStrictEdgeTrack ? 0 : 24;
-        if (targetRight > viewRight - edgePadding) {
-          horizontalTrack.scrollLeft = Math.max(0, targetRight - horizontalTrack.clientWidth + edgePadding);
-        } else if (targetLeft < viewLeft + edgePadding) {
-          horizontalTrack.scrollLeft = Math.max(0, targetLeft - edgePadding);
+        const nextScrollLeft = this.getHorizontalTrackScrollLeft(horizontalTrack, target);
+        if (animated) {
+          this.animateScroll(horizontalTrack, "x", nextScrollLeft, 140);
+        } else {
+          horizontalTrack.scrollLeft = nextScrollLeft;
         }
-        const detailContent = (_a = this.container) == null ? void 0 : _a.querySelector(".series-detail-content");
-        if (detailContent && detailContent.contains(horizontalTrack)) {
+        const detailContent = this.getDetailContentScroller();
+        if (!preserveVerticalScroll && detailContent && detailContent.contains(horizontalTrack)) {
           const rect = horizontalTrack.getBoundingClientRect();
           const contentRect = detailContent.getBoundingClientRect();
           const topPad = 72;
           const bottomPad = 120;
           if (rect.bottom > contentRect.bottom - bottomPad) {
-            detailContent.scrollTop += Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
+            const nextScrollTop = detailContent.scrollTop + Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
+            if (animated) {
+              this.animateScroll(detailContent, "y", nextScrollTop, 150);
+            } else {
+              detailContent.scrollTop = nextScrollTop;
+            }
           } else if (rect.top < contentRect.top + topPad) {
-            detailContent.scrollTop -= Math.ceil(contentRect.top + topPad - rect.top);
+            const nextScrollTop = detailContent.scrollTop - Math.ceil(contentRect.top + topPad - rect.top);
+            if (animated) {
+              this.animateScroll(detailContent, "y", nextScrollTop, 150);
+            } else {
+              detailContent.scrollTop = nextScrollTop;
+            }
           }
         }
       } else if (typeof target.scrollIntoView === "function") {
         target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      }
+      if (!preserveVerticalScroll) {
+        this.syncDetailScrollBounds(target);
       }
       return true;
     },
@@ -17233,6 +18639,7 @@
       const ratingSeasons = Array.from(this.container.querySelectorAll(".series-rating-seasons .series-rating-season.focusable"));
       const ratingChips = Array.from(this.container.querySelectorAll(".series-episode-ratings-grid .series-episode-rating-chip.focusable"));
       const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+      const moreLikeRememberedIndex = this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards);
       const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
       const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
       if (typeof event.preventDefault === "function") {
@@ -17247,7 +18654,7 @@
             return this.focusInList(seasons, Math.min(actionIndex, seasons.length - 1)) || true;
           }
           if (episodes.length) {
-            return this.focusInList(episodes, actionIndex) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         return true;
@@ -17263,18 +18670,18 @@
         }
         if (direction === "down") {
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(seasonIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         return true;
       }
       const episodeIndex = episodes.indexOf(current);
       if (episodeIndex >= 0) {
-        if (direction === "left") return this.focusInList(episodes, episodeIndex - 1) || true;
-        if (direction === "right") return this.focusInList(episodes, episodeIndex + 1) || true;
+        if (direction === "left") return this.focusInList(episodes, episodeIndex - 1, { preserveVerticalScroll: true }) || true;
+        if (direction === "right") return this.focusInList(episodes, episodeIndex + 1, { preserveVerticalScroll: true }) || true;
         if (direction === "up") {
           if (seasons.length) {
-            return this.focusInList(seasons, Math.min(episodeIndex, seasons.length - 1)) || true;
+            return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
           }
           if (actions.length) {
             return this.focusInList(actions, Math.min(episodeIndex, actions.length - 1)) || true;
@@ -17291,7 +18698,7 @@
             return this.focusInList(castCards, 0) || true;
           }
           if (moreLikeCards.length) {
-            return this.focusInList(moreLikeCards, 0) || true;
+            return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
           }
           if ((_a = companyCards[0]) == null ? void 0 : _a.length) {
             return this.focusInList(companyCards[0], 0) || true;
@@ -17301,11 +18708,11 @@
       }
       const tabIndex = insightTabs.indexOf(current);
       if (tabIndex >= 0) {
-        if (direction === "left") return this.focusInList(insightTabs, tabIndex - 1) || true;
-        if (direction === "right") return this.focusInList(insightTabs, tabIndex + 1) || true;
+        if (direction === "left") return this.focusInList(insightTabs, tabIndex - 1, { preserveVerticalScroll: true }) || true;
+        if (direction === "right") return this.focusInList(insightTabs, tabIndex + 1, { preserveVerticalScroll: true }) || true;
         if (direction === "up") {
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(tabIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         if (direction === "down") {
@@ -17316,7 +18723,7 @@
             return this.focusInList(castCards, Math.min(tabIndex, castCards.length - 1)) || true;
           }
           if (moreLikeCards.length) {
-            return this.focusInList(moreLikeCards, 0) || true;
+            return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
           }
           if ((_b = companyCards[0]) == null ? void 0 : _b.length) {
             return this.focusInList(companyCards[0], 0) || true;
@@ -17330,14 +18737,14 @@
         if (direction === "right") return this.focusInList(castCards, castIndex + 1) || true;
         if (direction === "up") {
           if (insightTabs.length) {
-            return this.focusInList(insightTabs, 0) || true;
+            return this.focusInList(insightTabs, 0, { preserveVerticalScroll: true }) || true;
           }
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(castIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         if (direction === "down" && moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, Math.min(castIndex, moreLikeCards.length - 1)) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (direction === "down" && ((_c = companyCards[0]) == null ? void 0 : _c.length)) {
           return this.focusInList(companyCards[0], Math.min(castIndex, companyCards[0].length - 1)) || true;
@@ -17350,17 +18757,17 @@
         if (direction === "right") return this.focusInList(ratingSeasons, ratingSeasonIndex + 1) || true;
         if (direction === "up") {
           if (insightTabs.length) {
-            return this.focusInList(insightTabs, 1) || true;
+            return this.focusInList(insightTabs, 1, { preserveVerticalScroll: true }) || true;
           }
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(ratingSeasonIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         if (direction === "down" && ratingChips.length) {
           return this.focusInList(ratingChips, Math.min(ratingSeasonIndex, ratingChips.length - 1)) || true;
         }
         if (direction === "down" && moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, Math.min(ratingSeasonIndex, moreLikeCards.length - 1)) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         return true;
       }
@@ -17373,14 +18780,14 @@
             return this.focusInList(ratingSeasons, Math.min(ratingChipIndex, ratingSeasons.length - 1)) || true;
           }
           if (insightTabs.length) {
-            return this.focusInList(insightTabs, 1) || true;
+            return this.focusInList(insightTabs, 1, { preserveVerticalScroll: true }) || true;
           }
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(ratingChipIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         if (direction === "down" && moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, Math.min(ratingChipIndex, moreLikeCards.length - 1)) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (direction === "down" && ((_d = companyCards[0]) == null ? void 0 : _d.length)) {
           return this.focusInList(companyCards[0], Math.min(ratingChipIndex, companyCards[0].length - 1)) || true;
@@ -17392,20 +18799,15 @@
         if (direction === "left") return this.focusInList(moreLikeCards, moreLikeIndex - 1) || true;
         if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
         if (direction === "up") {
-          if (this.seriesInsightTab === "ratings" && ratingChips.length) {
-            return this.focusInList(ratingChips, Math.min(moreLikeIndex, ratingChips.length - 1)) || true;
-          }
-          if (this.seriesInsightTab === "ratings" && ratingSeasons.length) {
-            return this.focusInList(ratingSeasons, Math.min(moreLikeIndex, ratingSeasons.length - 1)) || true;
-          }
-          if (castCards.length) {
-            return this.focusInList(castCards, Math.min(moreLikeIndex, castCards.length - 1)) || true;
-          }
           if (insightTabs.length) {
-            return this.focusInList(insightTabs, 0) || true;
+            const moreLikeTabIndex = Math.max(0, insightTabs.findIndex((node) => {
+              var _a2;
+              return String(((_a2 = node == null ? void 0 : node.dataset) == null ? void 0 : _a2.tab) || "") === "morelike";
+            }));
+            return this.focusInList(insightTabs, moreLikeTabIndex, { preserveVerticalScroll: true }) || true;
           }
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(moreLikeIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         if (direction === "down" && ((_e = companyCards[0]) == null ? void 0 : _e.length)) {
@@ -17426,7 +18828,7 @@
             return this.focusInList(companyCards[trackIndex - 1], Math.min(companyIndex, companyCards[trackIndex - 1].length - 1)) || true;
           }
           if (moreLikeCards.length) {
-            return this.focusInList(moreLikeCards, Math.min(companyIndex, moreLikeCards.length - 1)) || true;
+            return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
           }
           if (this.seriesInsightTab === "ratings" && ratingChips.length) {
             return this.focusInList(ratingChips, Math.min(companyIndex, ratingChips.length - 1)) || true;
@@ -17438,7 +18840,7 @@
             return this.focusInList(insightTabs, 0) || true;
           }
           if (episodes.length) {
-            return this.focusInList(episodes, Math.min(companyIndex, episodes.length - 1)) || true;
+            return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
           }
         }
         if (direction === "down" && trackIndex < companyCards.length - 1 && ((_g = companyCards[trackIndex + 1]) == null ? void 0 : _g.length)) {
@@ -17466,6 +18868,7 @@
       const tabs = Array.from(this.container.querySelectorAll(".series-insight-tabs .series-insight-tab.focusable"));
       const cast = Array.from(this.container.querySelectorAll(".movie-cast-track .movie-cast-card.focusable"));
       const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+      const moreLikeRememberedIndex = this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards);
       const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
       const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
       if (typeof (event == null ? void 0 : event.preventDefault) === "function") {
@@ -17477,13 +18880,13 @@
         if (direction === "right") return this.focusInList(actions, actionIndex + 1) || true;
         if (direction === "down") {
           if (tabs.length) {
-            return this.focusInList(tabs, 0) || true;
+            return this.focusInList(tabs, 0, { preserveVerticalScroll: true }) || true;
           }
           if (cast.length) {
             return this.focusInList(cast, actionIndex) || true;
           }
           if (moreLikeCards.length) {
-            return this.focusInList(moreLikeCards, actionIndex) || true;
+            return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
           }
           if ((_a = companyCards[0]) == null ? void 0 : _a.length) {
             return this.focusInList(companyCards[0], Math.min(actionIndex, companyCards[0].length - 1)) || true;
@@ -17493,12 +18896,12 @@
       }
       const tabIndex = tabs.indexOf(current);
       if (tabIndex >= 0) {
-        if (direction === "left") return this.focusInList(tabs, tabIndex - 1) || true;
-        if (direction === "right") return this.focusInList(tabs, tabIndex + 1) || true;
+        if (direction === "left") return this.focusInList(tabs, tabIndex - 1, { preserveVerticalScroll: true }) || true;
+        if (direction === "right") return this.focusInList(tabs, tabIndex + 1, { preserveVerticalScroll: true }) || true;
         if (direction === "up") return this.focusInList(actions, Math.min(tabIndex, actions.length - 1)) || true;
         if (direction === "down") {
           if (cast.length) return this.focusInList(cast, Math.min(tabIndex, cast.length - 1)) || true;
-          if (moreLikeCards.length) return this.focusInList(moreLikeCards, Math.min(tabIndex, moreLikeCards.length - 1)) || true;
+          if (moreLikeCards.length) return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
           if ((_b = companyCards[0]) == null ? void 0 : _b.length) return this.focusInList(companyCards[0], Math.min(tabIndex, companyCards[0].length - 1)) || true;
         }
         return true;
@@ -17509,12 +18912,12 @@
         if (direction === "right") return this.focusInList(cast, castIndex + 1) || true;
         if (direction === "up") {
           if (tabs.length) {
-            return this.focusInList(tabs, 0) || true;
+            return this.focusInList(tabs, 0, { preserveVerticalScroll: true }) || true;
           }
           return this.focusInList(actions, Math.min(castIndex, actions.length - 1)) || true;
         }
         if (direction === "down" && moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, Math.min(castIndex, moreLikeCards.length - 1)) || true;
+          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
         }
         if (direction === "down" && ((_c = companyCards[0]) == null ? void 0 : _c.length)) {
           return this.focusInList(companyCards[0], Math.min(castIndex, companyCards[0].length - 1)) || true;
@@ -17526,11 +18929,15 @@
         if (direction === "left") return this.focusInList(moreLikeCards, moreLikeIndex - 1) || true;
         if (direction === "right") return this.focusInList(moreLikeCards, moreLikeIndex + 1) || true;
         if (direction === "up") {
+          if (tabs.length) {
+            const moreLikeTabIndex = Math.max(0, tabs.findIndex((node) => {
+              var _a2;
+              return String(((_a2 = node == null ? void 0 : node.dataset) == null ? void 0 : _a2.tab) || "") === "morelike";
+            }));
+            return this.focusInList(tabs, moreLikeTabIndex, { preserveVerticalScroll: true }) || true;
+          }
           if (cast.length) {
             return this.focusInList(cast, Math.min(moreLikeIndex, cast.length - 1)) || true;
-          }
-          if (tabs.length) {
-            return this.focusInList(tabs, 0) || true;
           }
           return this.focusInList(actions, Math.min(moreLikeIndex, actions.length - 1)) || true;
         }
@@ -17552,13 +18959,13 @@
             return this.focusInList(companyCards[trackIndex - 1], Math.min(companyIndex, companyCards[trackIndex - 1].length - 1)) || true;
           }
           if (moreLikeCards.length) {
-            return this.focusInList(moreLikeCards, Math.min(companyIndex, moreLikeCards.length - 1)) || true;
+            return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
           }
           if (cast.length) {
             return this.focusInList(cast, Math.min(companyIndex, cast.length - 1)) || true;
           }
           if (tabs.length) {
-            return this.focusInList(tabs, 0) || true;
+            return this.focusInList(tabs, 0, { preserveVerticalScroll: true }) || true;
           }
           return this.focusInList(actions, Math.min(companyIndex, actions.length - 1)) || true;
         }
@@ -17657,7 +19064,7 @@
           const tab = String(current.dataset.tab || "cast");
           if (tab !== this.seriesInsightTab) {
             this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-            this.render(this.meta);
+            this.updateRenderedDetailSections(this.meta);
           }
           return;
         }
@@ -17665,7 +19072,7 @@
           const tab = String(current.dataset.tab || "cast");
           if (tab !== this.movieInsightTab) {
             this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-            this.render(this.meta);
+            this.updateRenderedDetailSections(this.meta);
           }
           return;
         }
@@ -17728,13 +19135,15 @@
             poster: ((_n = this.meta) == null ? void 0 : _n.poster) || null,
             background: ((_o = this.meta) == null ? void 0 : _o.background) || null
           });
-          yield this.loadDetail();
+          this.isSavedInLibrary = !this.isSavedInLibrary;
+          this.syncDetailActionButtons();
           return;
         }
         if (action === "toggleWatched") {
           if (this.isMarkedWatched) {
             yield watchedItemsRepository.unmark((_p = this.params) == null ? void 0 : _p.itemId);
             yield watchProgressRepository.removeProgress((_q = this.params) == null ? void 0 : _q.itemId);
+            this.isMarkedWatched = false;
           } else {
             yield watchedItemsRepository.mark({
               contentId: (_r = this.params) == null ? void 0 : _r.itemId,
@@ -17750,8 +19159,9 @@
               durationMs: 100,
               updatedAt: Date.now()
             });
+            this.isMarkedWatched = true;
           }
-          yield this.loadDetail();
+          this.syncDetailActionButtons();
           return;
         }
         if (action === "playStream" && current.dataset.streamUrl) {
@@ -18811,8 +20221,99 @@
     }
   };
 
-  // js/ui/screens/library/libraryScreen.js
+  // js/ui/components/filterPicker.js
   function escapeHtml5(value) {
+    return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function chevronSvg(open, className) {
+    return `
+    <svg viewBox="0 0 24 24" class="${className}" aria-hidden="true" focusable="false">
+      <path d="${open ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.75"
+            stroke-linecap="round"
+            stroke-linejoin="round" />
+    </svg>
+  `;
+  }
+  function joinClasses(...values) {
+    return values.filter(Boolean).join(" ");
+  }
+  function renderFilterPicker({
+    picker,
+    title,
+    value,
+    options = [],
+    open = false,
+    focusIndex = 0,
+    widthClass = "",
+    classPrefix = "library-picker",
+    wrapperExtraClass = "",
+    anchorExtraClass = "",
+    menuExtraClass = "",
+    optionExtraClass = "",
+    focusedOptionClass = "",
+    selectedOptionClass = "",
+    targetOptionClass = "",
+    anchorAction = "togglePicker",
+    optionAction = "selectPickerOption",
+    optionFocusable = true,
+    selectedIndex = -1
+  } = {}) {
+    const normalizedFocusIndex = Number.isFinite(Number(focusIndex)) ? Number(focusIndex) : 0;
+    const normalizedSelectedIndex = Number.isFinite(Number(selectedIndex)) ? Number(selectedIndex) : -1;
+    const wrapperClassName = joinClasses(
+      classPrefix,
+      open ? "open" : "",
+      widthClass,
+      wrapperExtraClass
+    );
+    const anchorClassName = joinClasses(`${classPrefix}-anchor`, "focusable", anchorExtraClass);
+    const menuClassName = joinClasses(`${classPrefix}-menu`, menuExtraClass);
+    const chevronClassName = `${classPrefix}-chevron`;
+    return `
+    <div class="${wrapperClassName}">
+      <button class="${anchorClassName}"
+              data-action="${escapeHtml5(anchorAction)}"
+              data-picker="${escapeHtml5(picker)}">
+        <span class="${classPrefix}-copy">
+          <span class="${classPrefix}-title">${escapeHtml5(title)}</span>
+          <span class="${classPrefix}-value">${escapeHtml5(value)}</span>
+        </span>
+        <span class="${classPrefix}-icon">${chevronSvg(open, chevronClassName)}</span>
+      </button>
+      ${open ? `
+        <div class="${menuClassName}" role="listbox" aria-label="${escapeHtml5(title)}">
+          ${options.map((option, index) => {
+      var _a, _b;
+      const optionClassName = joinClasses(
+        `${classPrefix}-option`,
+        optionFocusable ? "focusable" : "",
+        optionExtraClass,
+        index === normalizedFocusIndex ? focusedOptionClass : "",
+        index === normalizedFocusIndex ? targetOptionClass : "",
+        index === normalizedSelectedIndex ? selectedOptionClass : ""
+      );
+      return `
+              <button class="${optionClassName}"
+                      data-action="${escapeHtml5(optionAction)}"
+                      data-picker="${escapeHtml5(picker)}"
+                      data-option-index="${index}"
+                      role="option"
+                      aria-selected="${index === normalizedSelectedIndex ? "true" : "false"}">
+                ${escapeHtml5((_b = (_a = option == null ? void 0 : option.label) != null ? _a : option == null ? void 0 : option.value) != null ? _b : "")}
+              </button>
+            `;
+    }).join("")}
+        </div>
+      ` : ""}
+    </div>
+  `;
+  }
+
+  // js/ui/screens/library/libraryScreen.js
+  function escapeHtml6(value) {
     return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function bookmarkOutlineSvg() {
@@ -18822,18 +20323,6 @@
             fill="none"
             stroke="currentColor"
             stroke-width="5.5"
-            stroke-linecap="round"
-            stroke-linejoin="round" />
-    </svg>
-  `;
-  }
-  function chevronSvg(open) {
-    return `
-    <svg viewBox="0 0 24 24" class="library-picker-chevron" aria-hidden="true" focusable="false">
-      <path d="${open ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.75"
             stroke-linecap="round"
             stroke-linejoin="round" />
     </svg>
@@ -18941,32 +20430,19 @@
     },
     renderPicker(picker, title, value, options, widthClass = "") {
       const state = this.controller.getState();
-      const open = state.expandedPicker === picker;
-      return `
-      <div class="library-picker${open ? " open" : ""} ${widthClass}">
-        <button class="library-picker-anchor focusable library-primary"
-                data-action="togglePicker"
-                data-picker="${picker}">
-          <span class="library-picker-copy">
-            <span class="library-picker-title">${escapeHtml5(title)}</span>
-            <span class="library-picker-value">${escapeHtml5(value)}</span>
-          </span>
-          <span class="library-picker-icon">${chevronSvg(open)}</span>
-        </button>
-        ${open ? `
-          <div class="library-picker-menu" role="listbox" aria-label="${escapeHtml5(title)}">
-            ${options.map((option, index) => `
-              <button class="library-picker-option focusable${index === Number(state.pickerFocusIndex || 0) ? " library-picker-option-target" : ""}"
-                      data-action="selectPickerOption"
-                      data-picker="${picker}"
-                      data-option-index="${index}">
-                ${escapeHtml5(option.label)}
-              </button>
-            `).join("")}
-          </div>
-        ` : ""}
-      </div>
-    `;
+      return renderFilterPicker({
+        picker,
+        title,
+        value,
+        options,
+        open: state.expandedPicker === picker,
+        focusIndex: Number(state.pickerFocusIndex || 0),
+        widthClass,
+        classPrefix: "library-picker",
+        anchorExtraClass: "library-primary",
+        optionFocusable: true,
+        targetOptionClass: "library-picker-option-target"
+      });
     },
     renderGrid(items) {
       return `
@@ -18977,12 +20453,12 @@
         return `
               <article class="library-grid-card focusable"
                        data-action="openDetail"
-                       data-item-id="${escapeHtml5(item.id)}"
-                       data-item-type="${escapeHtml5(item.type || "movie")}"
-                       data-item-title="${escapeHtml5(item.name || item.id || "Untitled")}"
-                       data-focus-key="${escapeHtml5(focusKey)}">
-                <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml5(item.poster)}')"` : ""}></div>
-                <div class="library-grid-title">${escapeHtml5(item.name || item.id || "Untitled")}</div>
+                       data-item-id="${escapeHtml6(item.id)}"
+                       data-item-type="${escapeHtml6(item.type || "movie")}"
+                       data-item-title="${escapeHtml6(item.name || item.id || "Untitled")}"
+                       data-focus-key="${escapeHtml6(focusKey)}">
+                <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml6(item.poster)}')"` : ""}></div>
+                <div class="library-grid-title">${escapeHtml6(item.name || item.id || "Untitled")}</div>
               </article>
             `;
       }).join("")}
@@ -18994,8 +20470,8 @@
       return `
       <section class="library-empty-state">
         ${bookmarkOutlineSvg()}
-        <h3 class="library-empty-title">${escapeHtml5(this.controller.getEmptyStateTitle())}</h3>
-        <p class="library-empty-subtitle">${escapeHtml5(this.controller.getEmptyStateSubtitle())}</p>
+        <h3 class="library-empty-title">${escapeHtml6(this.controller.getEmptyStateTitle())}</h3>
+        <p class="library-empty-subtitle">${escapeHtml6(this.controller.getEmptyStateSubtitle())}</p>
       </section>
     `;
     },
@@ -19027,14 +20503,14 @@
       <div class="library-overlay">
         <section class="library-dialog library-manage-dialog">
           <h3 class="library-dialog-title">Manage Trakt Lists</h3>
-          ${state.errorMessage ? `<p class="library-dialog-error">${escapeHtml5(state.errorMessage)}</p>` : ""}
+          ${state.errorMessage ? `<p class="library-dialog-error">${escapeHtml6(state.errorMessage)}</p>` : ""}
           <div class="library-manage-list">
             ${personalTabs.length ? personalTabs.map((tab) => `
                   <button class="library-manage-list-button focusable${tab.key === state.manageSelectedListKey ? " selected" : ""}"
                           data-action="selectManageList"
-                          data-list-key="${escapeHtml5(tab.key)}"
+                          data-list-key="${escapeHtml6(tab.key)}"
                           ${state.pendingOperation ? "disabled" : ""}>
-                    ${escapeHtml5(tab.title)}
+                    ${escapeHtml6(tab.title)}
                   </button>
                 `).join("") : `<div class="library-manage-empty">No lists yet.</div>`}
           </div>
@@ -19065,14 +20541,14 @@
             <span class="library-dialog-field-label">Name</span>
             <input class="library-dialog-input focusable"
                    data-editor-field="name"
-                   value="${escapeHtml5(editor.name)}"
+                   value="${escapeHtml6(editor.name)}"
                    ${state.pendingOperation ? "disabled" : ""} />
           </label>
           <label class="library-dialog-field">
             <span class="library-dialog-field-label">Description</span>
             <textarea class="library-dialog-textarea focusable"
                       data-editor-field="description"
-                      ${state.pendingOperation ? "disabled" : ""}>${escapeHtml5(editor.description)}</textarea>
+                      ${state.pendingOperation ? "disabled" : ""}>${escapeHtml6(editor.description)}</textarea>
           </label>
           <div class="library-dialog-field">
             <span class="library-dialog-field-label">Privacy</span>
@@ -19082,7 +20558,7 @@
                         data-action="selectPrivacy"
                         data-privacy="${privacy}"
                         ${state.pendingOperation ? "disabled" : ""}>
-                  ${escapeHtml5(privacy.charAt(0).toUpperCase() + privacy.slice(1))}
+                  ${escapeHtml6(privacy.charAt(0).toUpperCase() + privacy.slice(1))}
                 </button>
               `).join("")}
             </div>
@@ -19153,7 +20629,7 @@
           <section class="library-page">
             <header class="library-page-header">
               <h1 class="library-page-title">Library</h1>
-              <div class="library-page-source">${escapeHtml5(this.controller.getSourceLabel())}</div>
+              <div class="library-page-source">${escapeHtml6(this.controller.getSourceLabel())}</div>
             </header>
 
             <section class="library-picker-row">
@@ -19164,7 +20640,7 @@
 
             ${state.visibleItems.length ? this.renderGrid(state.visibleItems) : this.renderEmptyState()}
 
-            ${state.transientMessage ? `<div class="library-toast">${escapeHtml5(state.transientMessage)}</div>` : ""}
+            ${state.transientMessage ? `<div class="library-toast">${escapeHtml6(state.transientMessage)}</div>` : ""}
           </section>
         </main>
         ${this.renderManageListsDialog(state)}
@@ -19496,7 +20972,7 @@
   function clamp2(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function escapeHtml6(value) {
+  function escapeHtml7(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function toTitleCase2(value) {
@@ -19892,7 +21368,7 @@
       return this.rows.map((row, rowIndex) => {
         const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
         return `
-      <section class="search-results-row" data-row-key="${escapeHtml6(rowKey)}">
+      <section class="search-results-row" data-row-key="${escapeHtml7(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
         <div class="search-results-subtitle">${row.subtitle}</div>
         <div class="search-results-track">
@@ -19902,7 +21378,7 @@
                      data-item-id="${item.id || ""}"
                      data-item-type="${item.type || row.type || "movie"}"
                      data-item-title="${item.name || "Untitled"}"
-                     data-row-key="${escapeHtml6(rowKey)}">
+                     data-row-key="${escapeHtml7(rowKey)}">
               <div class="search-result-poster-wrap">
                 ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" />` : `<div class="search-result-poster placeholder"></div>`}
               </div>
@@ -19920,7 +21396,7 @@
                      data-catalog-name="${row.catalogName || ""}"
                      data-catalog-type="${row.type || "movie"}"
                      data-row-index="${rowIndex}"
-                     data-row-key="${escapeHtml6(rowKey)}">
+                     data-row-key="${escapeHtml7(rowKey)}">
               <div class="search-seeall-inner">
                 <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
                 <div class="search-seeall-label">See All</div>
@@ -19967,7 +21443,7 @@
               autocapitalize="off"
               spellcheck="false"
               placeholder="Search movies & series"
-              value="${escapeHtml6(queryText)}"
+              value="${escapeHtml7(queryText)}"
             />
           </section>
           ${this.renderRows()}
@@ -20184,49 +21660,97 @@
         this.ensureHeaderVisible();
       }
       if (zone === "results") {
-        const row = target.closest(".search-results-row");
-        row == null ? void 0 : row.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+        this.ensureResultsRowVisible(target);
         this.ensureResultCardVisible(current, target);
       }
       this.captureLiveViewState();
       return true;
     },
+    cancelScrollAnimation(container, axis = "x") {
+      const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
+      const state = map.get(container);
+      const key = axis === "y" ? "y" : "x";
+      if (state == null ? void 0 : state[key]) {
+        cancelAnimationFrame(state[key]);
+        state[key] = null;
+      }
+    },
+    animateScroll(container, axis, targetValue, duration = 150) {
+      var _a, _b;
+      if (!container) {
+        return;
+      }
+      const property = axis === "y" ? "scrollTop" : "scrollLeft";
+      const max = axis === "y" ? Math.max(0, container.scrollHeight - container.clientHeight) : Math.max(0, container.scrollWidth - container.clientWidth);
+      const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+      const startValue = Number(container[property] || 0);
+      if (Math.abs(startValue - nextValue) <= 1) {
+        container[property] = nextValue;
+        return;
+      }
+      const prefersReducedMotion = (_b = (_a = globalThis == null ? void 0 : globalThis.matchMedia) == null ? void 0 : _a.call(globalThis, "(prefers-reduced-motion: reduce)")) == null ? void 0 : _b.matches;
+      if (prefersReducedMotion) {
+        container[property] = nextValue;
+        return;
+      }
+      const easeOutCubic = (t5) => 1 - Math.pow(1 - t5, 3);
+      const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
+      const key = axis === "y" ? "y" : "x";
+      const existing = map.get(container) || {};
+      if (existing[key]) {
+        cancelAnimationFrame(existing[key]);
+      }
+      const startTime = performance.now();
+      const tick = (now) => {
+        const progress = Math.min(1, (now - startTime) / duration);
+        container[property] = Math.round(startValue + (nextValue - startValue) * easeOutCubic(progress));
+        if (progress < 1) {
+          existing[key] = requestAnimationFrame(tick);
+          map.set(container, existing);
+        } else {
+          existing[key] = null;
+          map.set(container, existing);
+        }
+      };
+      existing[key] = requestAnimationFrame(tick);
+      map.set(container, existing);
+    },
+    ensureResultsRowVisible(target) {
+      var _a, _b;
+      const content = (_a = this.container) == null ? void 0 : _a.querySelector(".search-content");
+      const row = (_b = target == null ? void 0 : target.closest) == null ? void 0 : _b.call(target, ".search-results-row");
+      if (!content || !row) {
+        return;
+      }
+      const contentRect = content.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const topInset = 18;
+      const bottomInset = 28;
+      const rowTop = rowRect.top - contentRect.top + content.scrollTop;
+      const rowBottom = rowRect.bottom - contentRect.top + content.scrollTop;
+      const visibleTop = contentRect.top + topInset;
+      const visibleBottom = contentRect.bottom - bottomInset;
+      if (rowRect.top < visibleTop) {
+        this.animateScroll(content, "y", rowTop - topInset, 150);
+        return;
+      }
+      if (rowRect.bottom > visibleBottom) {
+        this.animateScroll(content, "y", rowBottom - content.clientHeight + bottomInset, 150);
+      }
+    },
     ensureResultCardVisible(current, target) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
+      var _a;
       const track = (_a = target == null ? void 0 : target.closest) == null ? void 0 : _a.call(target, ".search-results-track");
       if (!track || !target) {
         return;
       }
-      const targetLeft = Number(target.offsetLeft || 0);
-      const targetRight = targetLeft + Number(target.offsetWidth || 0);
-      const viewLeft = Number(track.scrollLeft || 0);
-      const viewRight = viewLeft + Number(track.clientWidth || 0);
-      const leftPad = 72;
-      const rightPad = 88;
-      const currentRow = Number((_c = (_b = current == null ? void 0 : current.dataset) == null ? void 0 : _b.navRow) != null ? _c : -1);
-      const targetRow = Number((_e = (_d = target == null ? void 0 : target.dataset) == null ? void 0 : _d.navRow) != null ? _e : -1);
-      const currentCol = Number((_g = (_f = current == null ? void 0 : current.dataset) == null ? void 0 : _f.navCol) != null ? _g : -1);
-      const targetCol = Number((_i = (_h = target == null ? void 0 : target.dataset) == null ? void 0 : _h.navCol) != null ? _i : -1);
-      const sameRow = currentRow >= 0 && currentRow === targetRow;
-      if (sameRow && targetCol > currentCol) {
-        if (targetRight > viewRight - rightPad || targetLeft < viewLeft + leftPad) {
-          track.scrollLeft = Math.max(0, targetLeft - leftPad);
-        }
-        return;
-      }
-      if (sameRow && targetCol < currentCol) {
-        if (targetLeft < viewLeft + leftPad || targetRight > viewRight - rightPad) {
-          track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
-        }
-        return;
-      }
-      if (targetRight > viewRight - rightPad) {
-        track.scrollLeft = Math.max(0, targetLeft - leftPad);
-        return;
-      }
-      if (targetLeft < viewLeft + leftPad) {
-        track.scrollLeft = Math.max(0, targetRight - track.clientWidth + rightPad);
-      }
+      const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(track) : null;
+      const leftPad = Math.max(0, Number.parseFloat((styles == null ? void 0 : styles.paddingLeft) || "0") || 0);
+      const trackRect = track.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const targetLeft = targetRect.left - trackRect.left + Number(track.scrollLeft || 0);
+      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+      this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), 140);
     },
     ensureHeaderVisible() {
       var _a, _b;
@@ -20238,7 +21762,7 @@
       const topInset = 22;
       const visibleTop = contentRect.top + topInset;
       if (headerRect.top < visibleTop) {
-        content.scrollTop += headerRect.top - visibleTop;
+        this.animateScroll(content, "y", content.scrollTop + (headerRect.top - visibleTop), 150);
       }
     },
     handleSearchDpad(event) {
@@ -20590,6 +22114,39 @@
     if (type === "movie") return "Movie";
     return toTitleCase3(type);
   }
+  function escapeHtml8(value) {
+    return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&#39;");
+  }
+  function groupNodesByOffsetTop2(nodes = []) {
+    const grouped = [];
+    nodes.forEach((node) => {
+      const top = Math.round(node.offsetTop);
+      const bucket = grouped.find((entry) => Math.abs(entry.top - top) <= 6);
+      if (bucket) {
+        bucket.nodes.push(node);
+        return;
+      }
+      grouped.push({ top, nodes: [node] });
+    });
+    grouped.sort((left, right) => left.top - right.top);
+    return grouped.map((entry) => entry.nodes);
+  }
+  function extractReleaseYear(item = {}) {
+    const candidates = [
+      item == null ? void 0 : item.released,
+      item == null ? void 0 : item.releaseDate,
+      item == null ? void 0 : item.release_date,
+      item == null ? void 0 : item.releaseInfo,
+      item == null ? void 0 : item.year
+    ].filter(Boolean);
+    for (const value of candidates) {
+      const match = String(value).match(/\b(19|20)\d{2}\b/);
+      if (match) {
+        return match[0];
+      }
+    }
+    return "";
+  }
   function isKey(event, code, aliases = []) {
     const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
     if (keyCode === code) return true;
@@ -20612,8 +22169,52 @@
     return isKey(event, 13, ["Enter"]);
   }
   var DiscoverScreen = {
+    getRouteStateKey() {
+      return "discover";
+    },
+    captureRouteState() {
+      this.captureViewState();
+      return {
+        selectedType: String(this.selectedType || "movie"),
+        catalogs: Array.isArray(this.catalogs) ? [...this.catalogs] : [],
+        selectedCatalogKey: String(this.selectedCatalogKey || ""),
+        selectedGenre: String(this.selectedGenre || "Default"),
+        items: Array.isArray(this.items) ? [...this.items] : [],
+        nextSkip: Number(this.nextSkip || 0),
+        hasMore: Boolean(this.hasMore),
+        lastFocusedAction: String(this.lastFocusedAction || "discoverFilterType"),
+        lastFocusedKey: this.lastFocusedKey ? String(this.lastFocusedKey) : null,
+        lastFocusedDiscoverItemId: this.lastFocusedDiscoverItemId ? String(this.lastFocusedDiscoverItemId) : "",
+        savedScrollTop: Number(this.savedScrollTop || 0),
+        rowFocusedIndexByRow: this.rowFocusedIndexByRow && typeof this.rowFocusedIndexByRow === "object" ? __spreadValues({}, this.rowFocusedIndexByRow) : {},
+        focusZone: String(this.focusZone || "content")
+      };
+    },
+    hydrateFromRouteState(restoredState = null) {
+      const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
+      if (!snapshot) {
+        return false;
+      }
+      this.selectedType = String(snapshot.selectedType || "movie");
+      this.catalogs = Array.isArray(snapshot.catalogs) ? [...snapshot.catalogs] : [];
+      this.selectedCatalogKey = String(snapshot.selectedCatalogKey || "");
+      this.selectedGenre = String(snapshot.selectedGenre || "Default");
+      this.items = Array.isArray(snapshot.items) ? [...snapshot.items] : [];
+      this.nextSkip = Number(snapshot.nextSkip || 0);
+      this.hasMore = Boolean(snapshot.hasMore);
+      this.lastFocusedAction = String(snapshot.lastFocusedAction || "discoverFilterType");
+      this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
+      this.lastFocusedDiscoverItemId = String(snapshot.lastFocusedDiscoverItemId || "");
+      this.savedScrollTop = Number(snapshot.savedScrollTop || 0);
+      this.rowFocusedIndexByRow = snapshot.rowFocusedIndexByRow && typeof snapshot.rowFocusedIndexByRow === "object" ? __spreadValues({}, snapshot.rowFocusedIndexByRow) : {};
+      this.focusZone = String(snapshot.focusZone || "content");
+      this.loading = false;
+      this.updateCatalogOptions();
+      this.pendingRestoreFocus = true;
+      return true;
+    },
     mount() {
-      return __async(this, null, function* () {
+      return __async(this, arguments, function* (params = {}, navigationContext = {}) {
         var _a;
         this.container = document.getElementById("discover");
         ScreenUtils.show(this.container);
@@ -20634,6 +22235,16 @@
         this.openPicker = null;
         this.pickerOptionIndex = 0;
         this.lastFocusedAction = "discoverFilterType";
+        this.lastFocusedKey = null;
+        this.savedScrollTop = 0;
+        this.rowFocusedIndexByRow = {};
+        this.pendingRestoreFocus = false;
+        this.nextSkip = 0;
+        this.hasMore = true;
+        if ((navigationContext == null ? void 0 : navigationContext.isBackNavigation) && this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null)) {
+          this.render();
+          return;
+        }
         this.render();
         yield this.loadCatalogsAndContent();
       });
@@ -20691,17 +22302,44 @@
     },
     reloadItems() {
       return __async(this, null, function* () {
-        var _a;
-        const token = this.loadToken;
         const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
-        this.loading = true;
+        this.captureViewState();
         this.items = [];
+        this.nextSkip = 0;
+        this.hasMore = true;
+        this.loading = true;
+        this.lastFocusedKey = null;
+        this.lastFocusedDiscoverItemId = "";
+        this.pendingRestoreFocus = false;
+        this.savedScrollTop = 0;
         this.render();
         if (!selectedCatalog) {
           this.loading = false;
+          this.hasMore = false;
           this.render();
           return;
         }
+        this.loading = false;
+        yield this.loadNextPage({ restoreFocusToGrid: false });
+      });
+    },
+    loadNextPage() {
+      return __async(this, arguments, function* ({ restoreFocusToGrid = true } = {}) {
+        var _a, _b;
+        if (this.loading || !this.hasMore) {
+          return;
+        }
+        const token = this.loadToken;
+        const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
+        if (!selectedCatalog) {
+          this.hasMore = false;
+          this.render();
+          return;
+        }
+        this.loading = true;
+        this.captureViewState();
+        this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
+        this.render();
         const extraArgs = {};
         if (this.selectedGenre && this.selectedGenre !== "Default") {
           extraArgs.genre = this.selectedGenre;
@@ -20713,15 +22351,50 @@
           catalogId: selectedCatalog.catalogId,
           catalogName: selectedCatalog.catalogName,
           type: selectedCatalog.type,
-          skip: 0,
+          skip: Math.max(0, Number(this.nextSkip || 0)),
           extraArgs,
           supportsSkip: true
         });
         if (token !== this.loadToken) return;
-        this.items = result.status === "success" ? ((_a = result.data) == null ? void 0 : _a.items) || [] : [];
+        if (result.status !== "success") {
+          this.loading = false;
+          this.hasMore = false;
+          this.render();
+          return;
+        }
+        const incoming = Array.isArray((_a = result == null ? void 0 : result.data) == null ? void 0 : _a.items) ? result.data.items : [];
+        if (!this.items.length) {
+          this.items = [];
+        }
+        if (incoming.length) {
+          const seen = new Set(this.items.map((item) => item.id));
+          incoming.forEach((item) => {
+            if (!(item == null ? void 0 : item.id) || seen.has(item.id)) {
+              return;
+            }
+            seen.add(item.id);
+            this.items.push(item);
+          });
+          this.nextSkip = Math.max(0, Number(this.nextSkip || 0)) + 100;
+        }
+        this.hasMore = incoming.length > 0;
         this.loading = false;
+        if (!this.lastFocusedKey && ((_b = this.items[0]) == null ? void 0 : _b.id)) {
+          this.lastFocusedKey = `item:${this.items[0].id}`;
+          this.lastFocusedDiscoverItemId = String(this.items[0].id);
+        }
+        this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
         this.render();
       });
+    },
+    maybeAutoLoadMore(index) {
+      if (this.loading || !this.hasMore) {
+        return;
+      }
+      const remaining = this.items.length - 1 - Number(index || 0);
+      if (remaining <= 10) {
+        this.loadNextPage();
+      }
     },
     getPickerOptions(kind) {
       if (kind === "type") {
@@ -20792,7 +22465,29 @@
       if (!options.length) return;
       const next = this.pickerOptionIndex + delta;
       this.pickerOptionIndex = Math.min(options.length - 1, Math.max(0, next));
-      this.render();
+      this.refreshOpenPickerMenuState();
+    },
+    refreshOpenPickerMenuState() {
+      var _a;
+      if (!this.openPicker) {
+        return;
+      }
+      const options = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".discover-picker-menu .discover-picker-option")) || []);
+      if (!options.length) {
+        this.render();
+        return;
+      }
+      const selectedValue = this.getCurrentPickerValue(this.openPicker);
+      const pickerOptions = this.getPickerOptions(this.openPicker);
+      options.forEach((node, index) => {
+        const option = pickerOptions[index] || null;
+        const isFocused = index === this.pickerOptionIndex;
+        const isSelected = (option == null ? void 0 : option.value) === selectedValue;
+        node.classList.toggle("focused-option", isFocused);
+        node.classList.toggle("selected", isSelected);
+        node.setAttribute("aria-selected", isSelected ? "true" : "false");
+      });
+      this.syncOpenPickerScroll();
     },
     selectCurrentPickerOption() {
       if (!this.openPicker) return;
@@ -20813,6 +22508,7 @@
       target.classList.add("focused");
       this.focusZone = "content";
       focusWithoutAutoScroll(target);
+      this.scrollContentToTop();
       if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
         setLegacySidebarExpanded(this.container, false);
       }
@@ -20847,37 +22543,161 @@
       target.classList.add("focused");
       this.focusZone = "content";
       focusWithoutAutoScroll(target);
+      this.scrollContentToTop();
       if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
         setLegacySidebarExpanded(this.container, false);
       }
       this.lastFocusedAction = String(target.dataset.action || "discoverFilterType");
       return true;
     },
-    moveCardFocus(direction) {
-      var _a, _b;
-      const selector = ".discover-grid .discover-card.focusable";
-      const before = ((_a = this.container) == null ? void 0 : _a.querySelector(`${selector}.focused`)) || null;
-      ScreenUtils.moveFocusDirectional(this.container, direction, selector);
-      const after = ((_b = this.container) == null ? void 0 : _b.querySelector(`${selector}.focused`)) || null;
-      return Boolean(after && before !== after);
-    },
-    focusFirstContentCard() {
-      var _a, _b, _c;
-      const preferredSelector = this.lastFocusedDiscoverItemId ? `.discover-grid .discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]` : "";
-      const target = (preferredSelector ? (_a = this.container) == null ? void 0 : _a.querySelector(preferredSelector) : null) || ((_b = this.container) == null ? void 0 : _b.querySelector(".discover-grid .discover-card.focusable"));
-      if (!target) {
-        return false;
+    captureViewState() {
+      var _a, _b, _c, _d, _e;
+      const main = (_a = this.container) == null ? void 0 : _a.querySelector(".discover-main");
+      if (main) {
+        this.savedScrollTop = main.scrollTop;
       }
-      this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+      const focused = ((_b = this.container) == null ? void 0 : _b.querySelector(".seeall-card.focused")) || ((_c = this.container) == null ? void 0 : _c.querySelector(".discover-card.focused"));
+      if ((_d = focused == null ? void 0 : focused.dataset) == null ? void 0 : _d.focusKey) {
+        this.lastFocusedKey = String(focused.dataset.focusKey || "");
+      }
+      if ((_e = focused == null ? void 0 : focused.dataset) == null ? void 0 : _e.itemId) {
+        this.lastFocusedDiscoverItemId = String(focused.dataset.itemId || "");
+      }
+    },
+    restoreScrollState() {
+      var _a;
+      const main = (_a = this.container) == null ? void 0 : _a.querySelector(".discover-main");
+      if (main) {
+        main.scrollTop = Number(this.savedScrollTop || 0);
+      }
+    },
+    restoreFocusedCard() {
+      var _a, _b, _c, _d, _e, _f;
+      this.restoreScrollState();
+      const target = (this.lastFocusedKey ? (_a = this.container) == null ? void 0 : _a.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`) : null) || (this.lastFocusedDiscoverItemId ? (_b = this.container) == null ? void 0 : _b.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`) : null) || ((_c = this.container) == null ? void 0 : _c.querySelector(".seeall-card.focusable")) || (this.lastFocusedAction ? (_d = this.container) == null ? void 0 : _d.querySelector(`.discover-filter.focusable[data-action="${String(this.lastFocusedAction).replace(/["\\]/g, "\\$&")}"]`) : null) || ((_e = this.container) == null ? void 0 : _e.querySelector(".discover-filter.focusable")) || null;
+      if (!target) {
+        return;
+      }
+      (_f = this.container) == null ? void 0 : _f.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) node.classList.remove("focused");
+      });
+      target.classList.add("focused");
+      if (target.classList.contains("discover-filter")) {
+        focusWithoutAutoScroll(target);
+        this.scrollContentToTop();
+        return;
+      }
+      target.focus();
+      this.rememberRowFocus(target);
+      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+    },
+    syncOpenPickerScroll() {
+      var _a;
+      const menu = (_a = this.container) == null ? void 0 : _a.querySelector(".discover-picker-menu");
+      const option = menu == null ? void 0 : menu.querySelector(".discover-picker-option.focused-option");
+      if (menu && option) {
+        option.scrollIntoView({ block: "nearest" });
+      }
+    },
+    buildNavigationModel() {
+      var _a;
+      const cards = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".discover-grid .seeall-card.focusable")) || []);
+      const rows = groupNodesByOffsetTop2(cards);
+      rows.forEach((rowNodes, rowIndex) => {
+        rowNodes.forEach((node, colIndex) => {
+          node.dataset.navRow = String(rowIndex);
+          node.dataset.navCol = String(colIndex);
+        });
+      });
+      this.navModel = { rows };
+    },
+    rememberRowFocus(node) {
+      if (!(node == null ? void 0 : node.dataset)) return;
+      const row = Number(node.dataset.navRow || -1);
+      const col = Number(node.dataset.navCol || 0);
+      if (row < 0) return;
+      this.rowFocusedIndexByRow = __spreadProps(__spreadValues({}, this.rowFocusedIndexByRow || {}), {
+        [row]: Math.max(0, col)
+      });
+    },
+    resolvePreferredNodeForRow(rowNodes = []) {
+      var _a, _b, _c;
+      if (!Array.isArray(rowNodes) || !rowNodes.length) {
+        return null;
+      }
+      const rowIndex = Number(((_b = (_a = rowNodes[0]) == null ? void 0 : _a.dataset) == null ? void 0 : _b.navRow) || -1);
+      const storedIndex = rowIndex >= 0 ? Number((_c = this.rowFocusedIndexByRow) == null ? void 0 : _c[rowIndex]) : Number.NaN;
+      const preferredIndex = Number.isFinite(storedIndex) ? storedIndex : 0;
+      return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
+    },
+    focusNode(target) {
+      var _a, _b;
+      if (!target) return false;
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) {
+          node.classList.remove("focused");
+        }
+      });
       target.classList.add("focused");
       this.focusZone = "content";
-      focusWithoutAutoScroll(target);
-      if (!((_c = this.layoutPrefs) == null ? void 0 : _c.modernSidebar)) {
+      this.lastFocusedAction = String(target.dataset.action || this.lastFocusedAction || "openDetail");
+      this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+      if (target.dataset.itemId) {
+        this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
+      }
+      this.rememberRowFocus(target);
+      target.focus();
+      target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      this.maybeAutoLoadMore(target.dataset.itemIndex);
+      if (!((_b = this.layoutPrefs) == null ? void 0 : _b.modernSidebar)) {
         setLegacySidebarExpanded(this.container, false);
       }
-      this.lastFocusedAction = String(target.dataset.action || "openDetail");
-      this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
       return true;
+    },
+    getContentScroller() {
+      var _a;
+      return ((_a = this.container) == null ? void 0 : _a.querySelector(".discover-main")) || null;
+    },
+    scrollContentToTop() {
+      const scroller = this.getContentScroller();
+      if (scroller) {
+        scroller.scrollTop = 0;
+      }
+    },
+    handleGridDpad(event) {
+      var _a, _b, _c;
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      const direction = code === 38 ? "up" : code === 40 ? "down" : code === 37 ? "left" : code === 39 ? "right" : null;
+      if (!direction) {
+        return false;
+      }
+      const nav = this.navModel;
+      const current = ((_a = this.container) == null ? void 0 : _a.querySelector(".discover-grid .seeall-card.focused")) || null;
+      if (!((_b = nav == null ? void 0 : nav.rows) == null ? void 0 : _b.length) || !current) {
+        return false;
+      }
+      (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
+      const row = Number(current.dataset.navRow || 0);
+      const col = Number(current.dataset.navCol || 0);
+      const rowNodes = nav.rows[row] || [];
+      if (direction === "left") {
+        return this.focusNode(rowNodes[col - 1] || current) || true;
+      }
+      if (direction === "right") {
+        return this.focusNode(rowNodes[col + 1] || current) || true;
+      }
+      const delta = direction === "up" ? -1 : 1;
+      const targetRowNodes = nav.rows[row + delta] || null;
+      if (!(targetRowNodes == null ? void 0 : targetRowNodes.length)) {
+        return true;
+      }
+      return this.focusNode(this.resolvePreferredNodeForRow(targetRowNodes)) || true;
+    },
+    focusFirstContentCard() {
+      var _a, _b;
+      const target = (this.lastFocusedKey ? (_a = this.container) == null ? void 0 : _a.querySelector(`.discover-grid .seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`) : null) || ((_b = this.container) == null ? void 0 : _b.querySelector(".discover-grid .seeall-card.focusable")) || null;
+      return this.focusNode(target);
     },
     focusSidebarNode() {
       var _a;
@@ -20906,17 +22726,24 @@
       });
     },
     restoreContentFocus() {
-      var _a, _b, _c, _d, _e;
-      const selector = this.lastFocusedAction ? `.focusable[data-action="${this.lastFocusedAction}"]` : ".discover-filter.focusable";
-      const target = ((_a = this.container) == null ? void 0 : _a.querySelector(selector)) || (this.lastFocusedDiscoverItemId ? (_b = this.container) == null ? void 0 : _b.querySelector(`.discover-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`) : null) || ((_c = this.container) == null ? void 0 : _c.querySelector(".discover-filter.focusable")) || ((_d = this.container) == null ? void 0 : _d.querySelector(".discover-card.focusable")) || null;
+      var _a, _b, _c, _d, _e, _f;
+      const selector = this.lastFocusedAction && this.lastFocusedAction !== "openDetail" ? `.focusable[data-action="${this.lastFocusedAction}"]` : "";
+      const target = (this.lastFocusedKey ? (_a = this.container) == null ? void 0 : _a.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`) : null) || (selector ? (_b = this.container) == null ? void 0 : _b.querySelector(selector) : null) || (this.lastFocusedDiscoverItemId ? (_c = this.container) == null ? void 0 : _c.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`) : null) || ((_d = this.container) == null ? void 0 : _d.querySelector(".discover-filter.focusable")) || ((_e = this.container) == null ? void 0 : _e.querySelector(".seeall-card.focusable")) || null;
       if (!target) {
         return false;
       }
       this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
       target.classList.add("focused");
       this.focusZone = "content";
-      focusWithoutAutoScroll(target);
-      if (!((_e = this.layoutPrefs) == null ? void 0 : _e.modernSidebar)) {
+      if (target.classList.contains("discover-filter")) {
+        focusWithoutAutoScroll(target);
+        this.scrollContentToTop();
+      } else {
+        target.focus();
+        this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
+        target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+      }
+      if (!((_f = this.layoutPrefs) == null ? void 0 : _f.modernSidebar)) {
         setLegacySidebarExpanded(this.container, false);
       }
       return true;
@@ -20939,33 +22766,30 @@
       return null;
     },
     renderFilterPicker(kind, title, value) {
-      const action = kind === "type" ? "discoverFilterType" : kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre";
       const isOpen = this.openPicker === kind;
       const options = isOpen ? this.getPickerOptions(kind) : [];
       const currentValue = this.getCurrentPickerValue(kind);
-      return `
-      <div class="discover-filter-shell">
-        <button class="discover-filter focusable" data-action="${action}">
-          <span class="discover-filter-label">${title}</span>
-          <span class="discover-filter-line">
-            <span class="discover-filter-value">${value}</span>
-            <span class="discover-filter-chevron" aria-hidden="true">${isOpen ? "&#9652;" : "&#9662;"}</span>
-          </span>
-        </button>
-        ${isOpen ? `
-          <div class="discover-picker-menu" role="listbox" aria-label="${title}">
-            ${options.map((option, index) => `
-              <div class="discover-picker-option${option.value === currentValue ? " selected" : ""}${index === this.pickerOptionIndex ? " focused-option" : ""}"
-                   data-option-index="${index}"
-                   role="option"
-                   aria-selected="${option.value === currentValue ? "true" : "false"}">
-                ${option.label}
-              </div>
-            `).join("")}
-          </div>
-        ` : ""}
-      </div>
-    `;
+      const selectedIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
+      const anchorAction = kind === "type" ? "discoverFilterType" : kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre";
+      return renderFilterPicker({
+        picker: kind,
+        title,
+        value,
+        options,
+        open: isOpen,
+        focusIndex: this.pickerOptionIndex,
+        selectedIndex,
+        widthClass: "library-picker-flex",
+        classPrefix: "library-picker",
+        wrapperExtraClass: "discover-filter-shell",
+        anchorExtraClass: "library-primary discover-filter",
+        menuExtraClass: "discover-picker-menu",
+        optionExtraClass: "discover-picker-option",
+        focusedOptionClass: "focused-option",
+        selectedOptionClass: "selected",
+        optionFocusable: true,
+        anchorAction
+      });
     },
     render() {
       var _a, _b, _c;
@@ -20976,19 +22800,29 @@
         this.lastFocusedAction = String(currentFocused.dataset.action);
       }
       const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
-      const title = selectedCatalog ? `${selectedCatalog.addonName || "Addon"} - ${formatAddonTypeLabel(selectedCatalog.type)}` : "No catalog selected";
-      const cards = this.loading ? `<div class="discover-empty">Loading...</div>` : this.items.length ? this.items.map((item) => `
-              <article class="discover-card focusable"
-                       data-action="openDetail"
-                       data-item-id="${item.id || ""}"
-                       data-item-type="${item.type || (selectedCatalog == null ? void 0 : selectedCatalog.type) || "movie"}"
-                       data-item-title="${item.name || "Untitled"}">
-                <div class="discover-card-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-                <div class="discover-card-title">${item.name || "Untitled"}</div>
-              </article>
-            `).join("") : `<div class="discover-empty">No content found.</div>`;
+      const contextLabel = selectedCatalog ? `${selectedCatalog.addonName || "Addon"} \u2022 ${formatAddonTypeLabel(selectedCatalog.type)}` : "Choose a catalog to start browsing";
+      const cards = this.items.length ? this.items.map((item, index) => {
+        var _a2;
+        return `
+              <article class="discover-card seeall-card focusable"
+                        data-action="openDetail"
+                        data-item-id="${item.id || ""}"
+                        data-item-type="${item.type || (selectedCatalog == null ? void 0 : selectedCatalog.type) || "movie"}"
+                        data-item-title="${item.name || "Untitled"}"
+                        data-focus-key="item:${item.id || index}"
+                        data-item-index="${index}">
+                 <div class="seeall-card-poster-wrap">
+                   ${item.poster ? `<img class="seeall-card-poster-image" src="${escapeHtml8(item.poster)}" alt="${escapeHtml8(item.name || "content")}" />` : `<div class="seeall-card-poster placeholder"></div>`}
+                 </div>
+                 ${((_a2 = this.layoutPrefs) == null ? void 0 : _a2.posterLabelsEnabled) !== false ? `
+                   <div class="seeall-card-title">${escapeHtml8(item.name || "Untitled")}</div>
+                   <div class="seeall-card-year">${escapeHtml8(extractReleaseYear(item))}</div>
+                 ` : ""}
+               </article>
+             `;
+      }).join("") : `<div class="seeall-empty">No items available.</div>`;
       this.container.innerHTML = `
-      <div class="discover-shell">
+      <div class="home-shell search-screen-shell discover-shell">
         ${renderRootSidebar({
         selectedRoute: "search",
         profile: this.sidebarProfile,
@@ -20996,38 +22830,71 @@
         expanded: Boolean(this.sidebarExpanded),
         pillIconOnly: Boolean(this.pillIconOnly)
       })}
-        <main class="discover-main">
-          <h1 class="discover-title">Discover</h1>
-          <section class="discover-filters">
-            ${this.renderFilterPicker("type", "Type", formatAddonTypeLabel(this.selectedType))}
-            ${this.renderFilterPicker("catalog", "Catalog", (selectedCatalog == null ? void 0 : selectedCatalog.catalogName) || "Select")}
-            ${this.renderFilterPicker("genre", "Genre", this.selectedGenre || "Default")}
-          </section>
-          <div class="discover-row-title">${title}</div>
-          <section class="discover-grid">
-            ${cards}
-          </section>
+        <main class="home-main discover-main">
+          <div class="seeall-shell discover-seeall-shell">
+            <header class="seeall-header discover-header">
+              <h2 class="seeall-title">Discover</h2>
+              <div class="seeall-subtitle">${escapeHtml8(contextLabel)}</div>
+            </header>
+            <section class="library-picker-row discover-picker-row">
+              ${this.renderFilterPicker("type", "Type", formatAddonTypeLabel(this.selectedType))}
+              ${this.renderFilterPicker("catalog", "Catalog", (selectedCatalog == null ? void 0 : selectedCatalog.catalogName) || "Select")}
+              ${this.renderFilterPicker("genre", "Genre", this.selectedGenre || "Default")}
+            </section>
+            <section class="seeall-grid discover-grid">
+              ${cards}
+            </section>
+            ${this.loading ? `<div class="seeall-loading">Loading...</div>` : ""}
+          </div>
         </main>
       </div>
     `;
       ScreenUtils.indexFocusables(this.container);
+      this.buildNavigationModel();
+      this.bindCardEvents();
       bindRootSidebarEvents(this.container, {
         currentRoute: "search",
         onSelectedAction: () => this.closeSidebarToContent(),
         onExpandSidebar: () => this.openSidebar()
       });
       this.bindPointerEvents();
+      if (this.pendingRestoreFocus) {
+        this.pendingRestoreFocus = false;
+        this.restoreFocusedCard();
+        this.syncOpenPickerScroll();
+        return;
+      }
+      this.restoreScrollState();
       if (this.focusZone === "sidebar") {
         this.focusSidebarNode();
       } else {
         this.restoreContentFocus();
       }
+      this.syncOpenPickerScroll();
+    },
+    bindCardEvents() {
+      var _a;
+      (_a = this.container) == null ? void 0 : _a.querySelectorAll(".seeall-card.focusable").forEach((node) => {
+        if (node.__boundDiscoverCardHandlers) return;
+        node.__boundDiscoverCardHandlers = true;
+        node.addEventListener("focus", () => {
+          var _a2, _b;
+          this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
+          this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
+          this.savedScrollTop = ((_b = (_a2 = this.container) == null ? void 0 : _a2.querySelector(".discover-main")) == null ? void 0 : _b.scrollTop) || 0;
+          this.maybeAutoLoadMore(node.dataset.itemIndex);
+        });
+        node.addEventListener("mouseenter", () => {
+          this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
+          this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
+        });
+      });
     },
     bindPointerEvents() {
       if (!this.container || this.container.__discoverPointerBound) return;
       this.container.__discoverPointerBound = true;
       this.container.addEventListener("click", (event) => {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         const optionNode = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".discover-picker-option");
         if (optionNode && this.openPicker) {
           const optionIndex = Number(optionNode.dataset.optionIndex || -1);
@@ -21048,6 +22915,8 @@
         }
         const cardNode = (_f = (_e = event.target) == null ? void 0 : _e.closest) == null ? void 0 : _f.call(_e, ".discover-card");
         if (cardNode) {
+          this.savedScrollTop = ((_h = (_g = this.container) == null ? void 0 : _g.querySelector(".discover-main")) == null ? void 0 : _h.scrollTop) || 0;
+          this.lastFocusedKey = String(cardNode.dataset.focusKey || this.lastFocusedKey || "");
           this.lastFocusedDiscoverItemId = String(cardNode.dataset.itemId || "");
           Router.navigate("detail", {
             itemId: cardNode.dataset.itemId,
@@ -21059,7 +22928,7 @@
     },
     onKeyDown(event) {
       return __async(this, null, function* () {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n;
         if (Platform.isBackEvent(event)) {
           (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
           if (this.openPicker) {
@@ -21145,6 +23014,7 @@
         }
         const currentAction = String(((_i = current == null ? void 0 : current.dataset) == null ? void 0 : _i.action) || "");
         if (currentAction === "openDetail" && ((_j = current == null ? void 0 : current.dataset) == null ? void 0 : _j.itemId)) {
+          this.lastFocusedKey = String(current.dataset.focusKey || this.lastFocusedKey || "");
           this.lastFocusedDiscoverItemId = String(current.dataset.itemId || "");
         }
         const focusedFilterKind = this.getKindFromFilterAction(currentAction);
@@ -21167,24 +23037,17 @@
           }
         }
         if (currentAction === "openDetail") {
-          if (isLeftKey(event)) {
-            if (!this.moveCardFocus("left")) {
-              ScreenUtils.moveFocusDirectional(this.container, "left");
-            }
+          if (isLeftKey(event) && Number(current.dataset.navCol || 0) === 0) {
+            (_k = event == null ? void 0 : event.preventDefault) == null ? void 0 : _k.call(event);
+            yield this.openSidebar();
             return;
           }
-          if (isRightKey(event)) {
-            this.moveCardFocus("right");
+          if (isUpKey(event) && Number(current.dataset.navRow || 0) === 0) {
+            (_l = event == null ? void 0 : event.preventDefault) == null ? void 0 : _l.call(event);
+            this.focusNearestFilterFromCard(current);
             return;
           }
-          if (isDownKey(event)) {
-            this.moveCardFocus("down");
-            return;
-          }
-          if (isUpKey(event)) {
-            if (!this.moveCardFocus("up")) {
-              this.focusNearestFilterFromCard(current);
-            }
+          if (this.handleGridDpad(event)) {
             return;
           }
         }
@@ -21206,6 +23069,8 @@
         if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
         if (action === "discoverFilterGenre") this.openPickerMenu("genre");
         if (action === "openDetail") {
+          this.savedScrollTop = ((_n = (_m = this.container) == null ? void 0 : _m.querySelector(".discover-main")) == null ? void 0 : _n.scrollTop) || 0;
+          this.lastFocusedKey = String(current.dataset.focusKey || this.lastFocusedKey || "");
           Router.navigate("detail", {
             itemId: current.dataset.itemId,
             itemType: current.dataset.itemType || "movie",
@@ -21415,6 +23280,92 @@
     { id: "en", labelKey: "common.english" },
     { id: "it", labelKey: "common.italian" }
   ];
+  var AVAILABLE_SUBTITLE_LANGUAGES = [
+    { id: "af", label: "Afrikaans" },
+    { id: "sq", label: "Albanian" },
+    { id: "am", label: "Amharic" },
+    { id: "ar", label: "Arabic" },
+    { id: "hy", label: "Armenian" },
+    { id: "az", label: "Azerbaijani" },
+    { id: "eu", label: "Basque" },
+    { id: "be", label: "Belarusian" },
+    { id: "bn", label: "Bengali" },
+    { id: "bs", label: "Bosnian" },
+    { id: "bg", label: "Bulgarian" },
+    { id: "my", label: "Burmese" },
+    { id: "ca", label: "Catalan" },
+    { id: "zh", label: "Chinese" },
+    { id: "zh-cn", label: "Chinese (Simplified)" },
+    { id: "zh-tw", label: "Chinese (Traditional)" },
+    { id: "hr", label: "Croatian" },
+    { id: "cs", label: "Czech" },
+    { id: "da", label: "Danish" },
+    { id: "nl", label: "Dutch" },
+    { id: "en", label: "English" },
+    { id: "et", label: "Estonian" },
+    { id: "tl", label: "Filipino" },
+    { id: "fi", label: "Finnish" },
+    { id: "fr", label: "French" },
+    { id: "gl", label: "Galician" },
+    { id: "ka", label: "Georgian" },
+    { id: "de", label: "German" },
+    { id: "el", label: "Greek" },
+    { id: "gu", label: "Gujarati" },
+    { id: "he", label: "Hebrew" },
+    { id: "hi", label: "Hindi" },
+    { id: "hu", label: "Hungarian" },
+    { id: "is", label: "Icelandic" },
+    { id: "id", label: "Indonesian" },
+    { id: "ga", label: "Irish" },
+    { id: "it", label: "Italian" },
+    { id: "ja", label: "Japanese" },
+    { id: "kn", label: "Kannada" },
+    { id: "kk", label: "Kazakh" },
+    { id: "km", label: "Khmer" },
+    { id: "ko", label: "Korean" },
+    { id: "lo", label: "Lao" },
+    { id: "lv", label: "Latvian" },
+    { id: "lt", label: "Lithuanian" },
+    { id: "mk", label: "Macedonian" },
+    { id: "ms", label: "Malay" },
+    { id: "ml", label: "Malayalam" },
+    { id: "mt", label: "Maltese" },
+    { id: "mr", label: "Marathi" },
+    { id: "mn", label: "Mongolian" },
+    { id: "ne", label: "Nepali" },
+    { id: "no", label: "Norwegian" },
+    { id: "pa", label: "Punjabi" },
+    { id: "fa", label: "Persian" },
+    { id: "pl", label: "Polish" },
+    { id: "pt", label: "Portuguese (Portugal)" },
+    { id: "pt-br", label: "Portuguese (Brazil)" },
+    { id: "ro", label: "Romanian" },
+    { id: "ru", label: "Russian" },
+    { id: "sr", label: "Serbian" },
+    { id: "si", label: "Sinhala" },
+    { id: "sk", label: "Slovak" },
+    { id: "sl", label: "Slovenian" },
+    { id: "es", label: "Spanish" },
+    { id: "es-419", label: "Spanish (Latin America)" },
+    { id: "sw", label: "Swahili" },
+    { id: "sv", label: "Swedish" },
+    { id: "ta", label: "Tamil" },
+    { id: "te", label: "Telugu" },
+    { id: "th", label: "Thai" },
+    { id: "tr", label: "Turkish" },
+    { id: "uk", label: "Ukrainian" },
+    { id: "ur", label: "Urdu" },
+    { id: "uz", label: "Uzbek" },
+    { id: "vi", label: "Vietnamese" },
+    { id: "cy", label: "Welsh" },
+    { id: "zu", label: "Zulu" }
+  ].sort((left, right) => left.label.localeCompare(right.label));
+  var PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
+    { id: "system", labelKey: "common.system" },
+    { id: "off", label: "Off" },
+    { id: "forced", label: "Forced" },
+    ...AVAILABLE_SUBTITLE_LANGUAGES
+  ];
   var HOME_LAYOUT_OPTIONS = [
     { id: "modern", labelKey: "settings.layout.homeLayouts.modern.label", captionKey: "settings.layout.homeLayouts.modern.caption" },
     { id: "grid", labelKey: "settings.layout.homeLayouts.grid.label", captionKey: "settings.layout.homeLayouts.grid.caption" },
@@ -21460,8 +23411,54 @@
   function t3(key, params = {}, fallback = key) {
     return I18n.t(key, params, { fallback });
   }
-  function escapeHtml7(value) {
+  function escapeHtml9(value) {
     return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+  function renderLayoutPreviewMarkup(layoutId) {
+    const normalized = String(layoutId || "classic").toLowerCase();
+    if (normalized === "modern") {
+      return `
+      <span class="settings-layout-preview-modern-hero"></span>
+      <span class="settings-layout-preview-modern-row">
+        <span class="settings-layout-preview-modern-card is-strong"></span>
+        <span class="settings-layout-preview-modern-card"></span>
+        <span class="settings-layout-preview-modern-card"></span>
+        <span class="settings-layout-preview-modern-card is-strong"></span>
+      </span>
+    `;
+    }
+    if (normalized === "grid") {
+      return `
+      <span class="settings-layout-preview-grid-canvas">
+        ${Array.from({ length: 20 }, (_, index) => `
+          <span class="settings-layout-preview-grid-cell${index % 3 === 2 ? " is-dim" : ""}"></span>
+        `).join("")}
+      </span>
+    `;
+    }
+    return `
+    <span class="settings-layout-preview-classic-row is-top">
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+    </span>
+    <span class="settings-layout-preview-classic-row is-featured">
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+    </span>
+    <span class="settings-layout-preview-classic-row is-bottom">
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+    </span>
+  `;
   }
   function iconSvg(path, className = "settings-inline-icon", viewBox = "0 0 24 24") {
     return `<svg class="${className}" viewBox="${viewBox}" aria-hidden="true" focusable="false">${path}</svg>`;
@@ -21530,6 +23527,39 @@
     return translateOptionLabel(
       PREFERRED_PLAYBACK_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
       t3("common.system")
+    );
+  }
+  function normalizeSelectableSubtitleLanguageCode2(language) {
+    const code = String(language != null ? language : "").trim().toLowerCase();
+    if (!code) {
+      return "system";
+    }
+    switch (code) {
+      case "pt-br":
+      case "pt_br":
+      case "br":
+      case "pob":
+        return "pt-br";
+      case "pt-pt":
+      case "pt_pt":
+      case "por":
+        return "pt";
+      case "forced":
+      case "force":
+      case "forc":
+        return "forced";
+      case "none":
+      case "off":
+        return "off";
+      default:
+        return code;
+    }
+  }
+  function labelForSubtitlePlaybackLanguage(language) {
+    const normalized = normalizeSelectableSubtitleLanguageCode2(language);
+    return translateOptionLabel(
+      PREFERRED_SUBTITLE_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
+      normalized === "off" ? "Off" : normalized === "forced" ? "Forced" : normalized === "system" ? t3("common.system") : String(language || "system")
     );
   }
   function qualityLabel(value) {
@@ -21731,7 +23761,17 @@
         expandedSections: normalizeExpandedSections(this.expandedSections)
       });
     },
+    collapseExpandedSection(sectionId) {
+      if (!sectionId) {
+        return;
+      }
+      this.expandedSections[sectionId] = createDefaultExpandedState(sectionId);
+    },
     setActiveSection(sectionId) {
+      const nextSectionId = sectionId || null;
+      if (this.activeSection && this.activeSection !== nextSectionId) {
+        this.collapseExpandedSection(this.activeSection);
+      }
       this.activeSection = sectionId || null;
       this.persistUiState();
     },
@@ -21742,7 +23782,7 @@
     },
     registerAction(focusKey, action) {
       this.actionMap.set(focusKey, action);
-      return `data-focus-key="${escapeHtml7(focusKey)}"`;
+      return `data-focus-key="${escapeHtml9(focusKey)}"`;
     },
     collectModel() {
       return __async(this, null, function* () {
@@ -21778,7 +23818,10 @@
               data-section="${item.id}">
         <span class="settings-nav-leading">
           ${renderSectionNavIcon(item.id)}
-          <span class="settings-nav-label">${escapeHtml7(translateSectionCopy(item).label)}</span>
+          <span class="settings-nav-label-wrap">
+            <span class="settings-nav-label">${escapeHtml9(translateSectionCopy(item).label)}</span>
+            ${item.id === "appearance" ? '<span class="settings-nav-badge">Beta</span>' : ""}
+          </span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
       </button>
@@ -21788,8 +23831,8 @@
       const copy = translateSectionCopy(section);
       return `
       <header class="settings-content-header">
-        <h1 class="settings-title">${escapeHtml7(copy.label)}</h1>
-        <p class="settings-subtitle">${escapeHtml7(copy.subtitle)}</p>
+        <h1 class="settings-title">${escapeHtml9(copy.label)}</h1>
+        <p class="settings-subtitle">${escapeHtml9(copy.subtitle)}</p>
       </header>
     `;
     },
@@ -21807,8 +23850,8 @@
       const inert = disabled || planned;
       const trailing = external ? "external" : icon;
       const tailContent = [
-        planned ? `<span class="settings-row-badge">${escapeHtml7(t3("common.soon"))}</span>` : "",
-        value ? `<span class="settings-row-value">${escapeHtml7(value)}</span>` : "",
+        planned ? `<span class="settings-row-badge">${escapeHtml9(t3("common.soon"))}</span>` : "",
+        value ? `<span class="settings-row-value">${escapeHtml9(value)}</span>` : "",
         trailing ? iconSvg(ROW_ICONS[trailing], `settings-row-icon${external ? " is-external" : ""}`) : ""
       ].filter(Boolean).join("");
       return `
@@ -21818,8 +23861,8 @@
       } : this.actionMap.get(focusKey))}
               data-role="action">
         <span class="settings-row-copy">
-          <span class="settings-row-title">${escapeHtml7(title)}</span>
-          ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
+          <span class="settings-row-title">${escapeHtml9(title)}</span>
+          ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml9(subtitle)}</span>` : ""}
         </span>
         ${tailContent ? `<span class="settings-row-tail">${tailContent}</span>` : ""}
       </button>
@@ -21834,11 +23877,11 @@
       } : this.actionMap.get(focusKey))}
               data-role="toggle">
         <span class="settings-row-copy">
-          <span class="settings-row-title">${escapeHtml7(title)}</span>
-          ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
+          <span class="settings-row-title">${escapeHtml9(title)}</span>
+          ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml9(subtitle)}</span>` : ""}
         </span>
         <span class="settings-row-tail">
-          ${planned ? `<span class="settings-row-badge">${escapeHtml7(t3("common.soon"))}</span>` : ""}
+          ${planned ? `<span class="settings-row-badge">${escapeHtml9(t3("common.soon"))}</span>` : ""}
           <span class="settings-toggle-pill${checked ? " is-checked" : ""}">
             <span class="settings-toggle-thumb"></span>
           </span>
@@ -21853,12 +23896,12 @@
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-theme-swatch-wrap">
-          <span class="settings-theme-swatch" style="background:${escapeHtml7(theme.color)};">
+          <span class="settings-theme-swatch" style="background:${escapeHtml9(theme.color)};">
             ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
           </span>
         </span>
-        <span class="settings-theme-name">${escapeHtml7(translateOptionLabel(theme))}</span>
-        <span class="settings-theme-underline" style="background:${escapeHtml7(theme.color)};"></span>
+        <span class="settings-theme-name">${escapeHtml9(translateOptionLabel(theme))}</span>
+        <span class="settings-theme-underline" style="background:${escapeHtml9(theme.color)};"></span>
       </button>
     `;
     },
@@ -21867,9 +23910,9 @@
       <button class="settings-layout-card settings-content-focusable focusable${selected ? " is-selected" : ""}"
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
-        <span class="settings-layout-preview settings-layout-preview-${escapeHtml7(option.id)}"></span>
-        <span class="settings-layout-name">${escapeHtml7(translateOptionLabel(option))}</span>
-        <span class="settings-layout-caption">${escapeHtml7(translateOptionCaption(option))}</span>
+        <span class="settings-layout-preview settings-layout-preview-${escapeHtml9(option.id)}">${renderLayoutPreviewMarkup(option.id)}</span>
+        <span class="settings-layout-name">${escapeHtml9(translateOptionLabel(option))}</span>
+        <span class="settings-layout-caption">${escapeHtml9(translateOptionCaption(option))}</span>
       </button>
     `;
     },
@@ -21878,11 +23921,11 @@
       return `
       <button class="settings-plugin-icon-button settings-content-focusable focusable${inert ? " is-disabled" : ""}${destructive ? " is-destructive" : ""}${planned ? " is-planned" : ""}"
               data-zone="content"
-              aria-label="${escapeHtml7(label)}"
-              title="${escapeHtml7(label)}"
+              aria-label="${escapeHtml9(label)}"
+              title="${escapeHtml9(label)}"
               ${this.registerAction(focusKey, inert ? () => {
       } : this.actionMap.get(focusKey))}>
-        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml7(t3("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
+        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml9(t3("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
       </button>
     `;
     },
@@ -21891,14 +23934,14 @@
       return `
       <article class="settings-plugin-repo-card">
         <div class="settings-plugin-repo-copy">
-          <div class="settings-plugin-repo-title">${escapeHtml7(addon.displayName || addon.name || t3("common.repository"))}</div>
+          <div class="settings-plugin-repo-title">${escapeHtml9(addon.displayName || addon.name || t3("common.repository"))}</div>
           <div class="settings-plugin-repo-meta">
-            ${escapeHtml7(t3(
+            ${escapeHtml9(t3(
         streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
         { count: streamResourceCount, version: addon.version || "0.0.0" }
       ))}
           </div>
-          <div class="settings-plugin-repo-url">${escapeHtml7(addon.baseUrl || addon.description || addonKindsLabel(addon))}</div>
+          <div class="settings-plugin-repo-url">${escapeHtml9(addon.baseUrl || addon.description || addonKindsLabel(addon))}</div>
         </div>
         <div class="settings-plugin-repo-actions">
           ${this.renderPluginIconButton({
@@ -21943,14 +23986,14 @@
       return `
       <div class="settings-dialog-backdrop">
         <div class="settings-dialog">
-          <div class="settings-dialog-title">${escapeHtml7(this.optionDialog.title || t3("common.selectOption"))}</div>
+          <div class="settings-dialog-title">${escapeHtml9(this.optionDialog.title || t3("common.selectOption"))}</div>
           <div class="settings-dialog-list">
             ${this.optionDialog.options.map((option, index) => `
               <button class="settings-dialog-option settings-content-focusable focusable${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
                       data-zone="dialog"
                       data-dialog-index="${index}"
-                      data-dialog-option-id="${escapeHtml7(option.id)}">
-                <span class="settings-dialog-option-label">${escapeHtml7(translateOptionLabel(option))}</span>
+                      data-dialog-option-id="${escapeHtml9(option.id)}">
+                <span class="settings-dialog-option-label">${escapeHtml9(translateOptionLabel(option))}</span>
               </button>
             `).join("")}
           </div>
@@ -21968,20 +24011,26 @@
     }) {
       return `
       <div class="settings-collapsible${classes ? ` ${classes}` : ""}${expanded ? " is-open" : ""}">
-        <button class="settings-action-row settings-content-focusable focusable${expanded ? " is-open" : ""}"
+        <button class="settings-action-row settings-collapsible-trigger settings-content-focusable focusable${expanded ? " is-open" : ""}"
                 data-zone="content"
                 ${this.registerAction(focusKey, this.actionMap.get(focusKey))}
                 data-role="section-toggle">
           <span class="settings-row-copy">
-            <span class="settings-row-title">${escapeHtml7(title)}</span>
-            ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml7(subtitle)}</span>` : ""}
+            <span class="settings-row-title">${escapeHtml9(title)}</span>
+            ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml9(subtitle)}</span>` : ""}
           </span>
           <span class="settings-row-tail">
             <span class="settings-row-value">${expanded ? t3("common.open") : t3("common.closed")}</span>
             ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
           </span>
         </button>
-        ${expanded ? `<div class="settings-collapsible-body">${bodyHtml}</div>` : ""}
+        ${expanded ? `
+          <div class="settings-collapsible-body">
+            <div class="settings-group-card settings-subsection-card">
+              ${bodyHtml}
+            </div>
+          </div>
+        ` : ""}
       </div>
     `;
     },
@@ -21998,7 +24047,7 @@
         <div class="settings-stack">
           ${signedIn ? `<div class="settings-account-status">
                 <span class="settings-account-status-label">${t3("settings.status.signedIn")}</span>
-                <strong class="settings-account-status-value">${escapeHtml7(model.accountEmail || t3("settings.status.linkedFallback"))}</strong>
+                <strong class="settings-account-status-value">${escapeHtml9(model.accountEmail || t3("settings.status.linkedFallback"))}</strong>
               </div>` : `<p class="settings-account-note">${t3("settings.account.syncNote")}</p>
               ${this.renderActionRow({
         focusKey: "account:signin",
@@ -22191,6 +24240,9 @@
           }
         });
       });
+      this.actionMap.set("layout:detail:trailerButton", () => {
+        LayoutPreferences.set({ detailPageTrailerButtonEnabled: !LayoutPreferences.get().detailPageTrailerButtonEnabled });
+      });
       const selectedLayout = String(model.layout.homeLayout || "").toLowerCase();
       const isModernLayout = selectedLayout === "modern";
       const isModernLandscape = isModernLayout && Boolean(model.layout.modernLandscapePostersEnabled);
@@ -22283,8 +24335,7 @@
         focusKey: "layout:detail:trailerButton",
         title: t3("settings.layout.showTrailerButton.title"),
         subtitle: t3("settings.layout.showTrailerButton.subtitle"),
-        checked: false,
-        disabled: true
+        checked: Boolean(model.layout.detailPageTrailerButtonEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:preferExternalMeta",
@@ -22404,7 +24455,7 @@
             <button class="settings-plugin-input settings-content-focusable focusable"
                     data-zone="content"
                     ${this.registerAction("plugins:editDraft", this.actionMap.get("plugins:editDraft"))}>
-              ${escapeHtml7(this.pluginDraft || "https://example.com/manifest.json")}
+              ${escapeHtml9(this.pluginDraft || "https://example.com/manifest.json")}
             </button>
             <button class="settings-plugin-add settings-content-focusable focusable${this.pluginDraft ? "" : " is-disabled"}"
                     data-zone="content"
@@ -22718,13 +24769,21 @@
         PlayerSettingsStore.set({ subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled });
       });
       this.actionMap.set("playback:subtitleLanguage", () => {
+        var _a;
+        const currentSettings = PlayerSettingsStore.get();
         this.openOptionDialog({
           title: t3("settings.dialogs.preferredSubtitleLanguage"),
-          options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
-          selectedId: PlayerSettingsStore.get().subtitleLanguage,
+          options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
+          selectedId: normalizeSelectableSubtitleLanguageCode2(((_a = currentSettings.subtitleStyle) == null ? void 0 : _a.preferredLanguage) || currentSettings.subtitleLanguage),
           returnFocusKey: "playback:subtitleLanguage",
           onSelect: (option) => {
-            PlayerSettingsStore.set({ subtitleLanguage: option.id });
+            const normalized = normalizeSelectableSubtitleLanguageCode2(option.id);
+            PlayerSettingsStore.set({
+              subtitleLanguage: normalized,
+              subtitleStyle: __spreadProps(__spreadValues({}, currentSettings.subtitleStyle), {
+                preferredLanguage: normalized
+              })
+            });
           }
         });
       });
@@ -22796,7 +24855,7 @@
         focusKey: "playback:subtitleLanguage",
         title: t3("settings.playback.subtitleLanguage.title"),
         subtitle: t3("settings.playback.subtitleLanguage.subtitle"),
-        value: labelForPlaybackLanguage(model.player.subtitleLanguage)
+        value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
       })}
         ${this.renderActionRow({
         focusKey: "playback:renderMode",
@@ -23337,8 +25396,11 @@
   function clamp4(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function escapeHtml8(value) {
+  function escapeHtml10(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
+  }
+  function t4(key, fallback = key) {
+    return I18n.t(key, {}, { fallback });
   }
   function isLoopbackHostname(hostname) {
     const normalized = String(hostname || "").trim().toLowerCase();
@@ -23449,7 +25511,7 @@
         this.pillIconOnly = false;
         this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
         this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
-        this.qrOverlayOpen = Boolean(this.qrOverlayOpen);
+        this.qrOverlayOpen = false;
         yield this.render();
       });
     },
@@ -23551,8 +25613,8 @@
         this.rowColumns = /* @__PURE__ */ new Map();
         this.actionMap = /* @__PURE__ */ new Map();
         this.setRowColumns(0, [0]);
+        const manageFromPhonePlanned = true;
         this.actionMap.set("manage_from_phone", () => __async(this, null, function* () {
-          yield this.openQrOverlay();
         }));
         this.actionMap.set("close_qr_overlay", () => __async(this, null, function* () {
           yield this.closeQrOverlay();
@@ -23573,9 +25635,9 @@
               <p class="addons-lede">
                 Manage addons and home catalogs from your phone.
               </p>
-              <p class="addons-meta">${escapeHtml8(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
+              <p class="addons-meta">${escapeHtml10(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
               <button type="button"
-                      class="addons-large-row addons-large-row-centered addons-focusable"
+                      class="addons-large-row addons-large-row-centered addons-focusable${manageFromPhonePlanned ? " is-disabled is-planned" : ""}"
                       data-zone="content"
                       data-row="0"
                       data-col="0"
@@ -23586,7 +25648,10 @@
                   <strong>Manage addons</strong>
                   <small>Manage addons and home catalogs from your phone</small>
                 </span>
-                <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
+                <span class="addons-large-row-tail-group">
+                  ${manageFromPhonePlanned ? `<span class="addons-large-row-badge">${escapeHtml10(t4("common.soon", "Soon"))}</span>` : ""}
+                  <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
+                </span>
               </button>
             </section>
           </div>
@@ -23596,7 +25661,7 @@
             <div class="addons-qr-dialog">
               <p class="addons-qr-instruction">Manage addons and home catalogs from your phone</p>
               ${this.model.phoneManagerUrl ? '<canvas class="addons-qr-canvas" width="440" height="440" aria-label="QR code"></canvas>' : '<div class="addons-qr-error">Open the app from a phone-reachable `http(s)` address or set `ADDON_REMOTE_BASE_URL` in the wrapper.</div>'}
-              ${this.model.phoneManagerUrl ? `<p class="addons-qr-url">${escapeHtml8(this.model.phoneManagerUrl)}</p>` : ""}
+              ${this.model.phoneManagerUrl ? `<p class="addons-qr-url">${escapeHtml10(this.model.phoneManagerUrl)}</p>` : ""}
               <button type="button" class="addons-qr-close addons-focusable focused" data-action-id="close_qr_overlay">
                 <span class="material-icons" aria-hidden="true">close</span>
                 <span>Close</span>
@@ -23827,7 +25892,7 @@
   function clamp5(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function escapeHtml9(value) {
+  function escapeHtml11(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   var CatalogOrderScreen = {
@@ -23946,19 +26011,19 @@
           return `
         <article class="catalog-order-card">
           <div class="catalog-order-card-copy">
-            <h2>${escapeHtml9(item.catalogName)} - ${escapeHtml9(toDisplayTypeLabel(item.type))}</h2>
-            <p class="catalog-order-card-subtitle">${escapeHtml9(item.addonName)}</p>
+            <h2>${escapeHtml11(item.catalogName)} - ${escapeHtml11(toDisplayTypeLabel(item.type))}</h2>
+            <p class="catalog-order-card-subtitle">${escapeHtml11(item.addonName)}</p>
             ${item.isDisabled ? '<p class="catalog-order-card-disabled">Disabled on Home</p>' : ""}
           </div>
           <div class="catalog-order-card-actions">
             <button type="button"
                     class="catalog-order-action ${item.canMoveUp ? "catalog-order-focusable" : "is-disabled"}"
-                    ${item.canMoveUp ? `data-row="${index}" data-col="0" data-action="up" data-key="${escapeHtml9(item.key)}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
+                    ${item.canMoveUp ? `data-row="${index}" data-col="0" data-action="up" data-key="${escapeHtml11(item.key)}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
               <span class="material-icons" aria-hidden="true">arrow_upward</span>
             </button>
             <button type="button"
                     class="catalog-order-action ${item.canMoveDown ? "catalog-order-focusable" : "is-disabled"}"
-                    ${item.canMoveDown ? `data-row="${index}" data-col="1" data-action="down" data-key="${escapeHtml9(item.key)}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
+                    ${item.canMoveDown ? `data-row="${index}" data-col="1" data-action="down" data-key="${escapeHtml11(item.key)}" tabindex="-1"` : 'tabindex="-1" aria-disabled="true"'}>
               <span class="material-icons" aria-hidden="true">arrow_downward</span>
             </button>
             <button type="button"
@@ -23966,7 +26031,7 @@
                     data-row="${index}"
                     data-col="2"
                     data-action="toggle"
-                    data-disable-key="${escapeHtml9(item.disableKey)}"
+                    data-disable-key="${escapeHtml11(item.disableKey)}"
                     tabindex="-1">${item.isDisabled ? "Enable" : "Disable"}</button>
           </div>
         </article>
@@ -24058,7 +26123,7 @@
   function clamp6(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function escapeHtml10(value = "") {
+  function escapeHtml12(value = "") {
     return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   function getDpadDirection2(event) {
@@ -24192,7 +26257,7 @@
     return `
     <span class="stream-route-meta-item ${kind}">
       <span class="stream-route-meta-icon">${iconSvg2(kind)}</span>
-      <span>${escapeHtml10(text)}</span>
+      <span>${escapeHtml12(text)}</span>
     </span>
   `;
   }
@@ -24602,9 +26667,9 @@
       ].filter(Boolean).join(" ");
       const spinner = chipStatus === "loading" ? '<span class="stream-route-chip-spinner" aria-hidden="true"></span>' : "";
       return `
-      <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml10(name)}">
+      <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml12(name)}">
         ${spinner}
-        <span>${escapeHtml10(name === "all" ? "All" : name)}</span>
+        <span>${escapeHtml12(name === "all" ? "All" : name)}</span>
       </button>
     `;
     },
@@ -24618,20 +26683,20 @@
         renderMetaItem("size", formatBytes((_a = stream.behaviorHints) == null ? void 0 : _a.videoSize)),
         renderMetaItem("source", extractIndexerName(stream))
       ].filter(Boolean).join("");
-      const addonBadge = stream.addonLogo ? `<img src="${stream.addonLogo}" alt="${escapeHtml10(stream.addonName || "Addon")}" />` : `<span>${escapeHtml10(getAddonBadgeLabel(stream.addonName || ""))}</span>`;
+      const addonBadge = stream.addonLogo ? `<img src="${stream.addonLogo}" alt="${escapeHtml12(stream.addonName || "Addon")}" />` : `<span>${escapeHtml12(getAddonBadgeLabel(stream.addonName || ""))}</span>`;
       return `
       <article class="stream-route-card focusable${this.focusState.zone === "card" && this.focusState.index === index ? " focused" : ""}"
                data-action="playStream"
-               data-stream-id="${escapeHtml10(stream.id)}">
+               data-stream-id="${escapeHtml12(stream.id)}">
         <div class="stream-route-card-copy">
-          <div class="stream-route-card-heading">${escapeHtml10(headline)}</div>
-          <div class="stream-route-card-quality">${escapeHtml10(quality)}</div>
-          ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml10(line)}</div>`).join("")}
+          <div class="stream-route-card-heading">${escapeHtml12(headline)}</div>
+          <div class="stream-route-card-quality">${escapeHtml12(quality)}</div>
+          ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml12(line)}</div>`).join("")}
           ${meta ? `<div class="stream-route-card-meta">${meta}</div>` : ""}
         </div>
         <div class="stream-route-card-side">
           <div class="stream-route-addon-badge">${addonBadge}</div>
-          <div class="stream-route-addon-name">${escapeHtml10(stream.addonName || "Addon")}</div>
+          <div class="stream-route-addon-name">${escapeHtml12(stream.addonName || "Addon")}</div>
         </div>
       </article>
     `;
@@ -24664,7 +26729,7 @@
       if (this.loading) {
         body = this.renderLoadingCards();
       } else if (this.error) {
-        body = `<div class="stream-route-empty">${escapeHtml10(this.error)}</div>`;
+        body = `<div class="stream-route-empty">${escapeHtml12(this.error)}</div>`;
       } else if (!filtered.length) {
         body = `<div class="stream-route-empty">No sources found for this filter.</div>`;
       } else {
@@ -24679,10 +26744,10 @@
         <div class="stream-route-content">
           <section class="stream-route-left">
             <div class="stream-route-left-inner">
-              ${logo ? `<img src="${logo}" class="stream-route-logo" alt="${escapeHtml10(title)}" />` : `<h1 class="stream-route-title">${escapeHtml10(title)}</h1>`}
-              ${episodeLabel ? `<div class="stream-route-episode-code">${escapeHtml10(episodeLabel)}</div>` : ""}
-              ${subtitle ? `<div class="stream-route-subtitle">${escapeHtml10(subtitle)}</div>` : ""}
-              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml10(detailLine)}</div>` : !isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml10(subtitle)}</div>` : ""}
+              ${logo ? `<img src="${logo}" class="stream-route-logo" alt="${escapeHtml12(title)}" />` : `<h1 class="stream-route-title">${escapeHtml12(title)}</h1>`}
+              ${episodeLabel ? `<div class="stream-route-episode-code">${escapeHtml12(episodeLabel)}</div>` : ""}
+              ${subtitle ? `<div class="stream-route-subtitle">${escapeHtml12(subtitle)}</div>` : ""}
+              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml12(detailLine)}</div>` : !isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml12(subtitle)}</div>` : ""}
             </div>
           </section>
           <section class="stream-route-right">
@@ -24703,7 +26768,7 @@
       this.applyFocus();
     },
     playStream(streamId) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q;
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r;
       const filtered = this.getFilteredStreams();
       const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
       const targetUrl = (selected == null ? void 0 : selected.url) || (selected == null ? void 0 : selected.externalUrl) || "";
@@ -24716,19 +26781,20 @@
         itemId: ((_b = this.params) == null ? void 0 : _b.itemId) || null,
         itemType: isSeries ? "series" : "movie",
         videoId: ((_c = this.params) == null ? void 0 : _c.videoId) || null,
-        episodeLabel: ((_d = this.params) == null ? void 0 : _d.season) && ((_e = this.params) == null ? void 0 : _e.episode) ? `S${this.params.season}E${this.params.episode}` : null,
-        playerTitle: ((_f = this.params) == null ? void 0 : _f.itemTitle) || ((_g = this.params) == null ? void 0 : _g.playerTitle) || "Untitled",
-        playerSubtitle: ((_h = this.params) == null ? void 0 : _h.episodeTitle) || ((_i = this.params) == null ? void 0 : _i.playerSubtitle) || "",
+        resumePositionMs: Number(((_d = this.params) == null ? void 0 : _d.resumePositionMs) || 0) || 0,
+        episodeLabel: ((_e = this.params) == null ? void 0 : _e.season) && ((_f = this.params) == null ? void 0 : _f.episode) ? `S${this.params.season}E${this.params.episode}` : null,
+        playerTitle: ((_g = this.params) == null ? void 0 : _g.itemTitle) || ((_h = this.params) == null ? void 0 : _h.playerTitle) || "Untitled",
+        playerSubtitle: ((_i = this.params) == null ? void 0 : _i.episodeTitle) || ((_j = this.params) == null ? void 0 : _j.playerSubtitle) || "",
         playerBackdropUrl: this.getBackdropUrl() || null,
-        playerLogoUrl: ((_j = this.params) == null ? void 0 : _j.logo) || null,
-        parentalWarnings: ((_k = this.params) == null ? void 0 : _k.parentalWarnings) || null,
-        parentalGuide: ((_l = this.params) == null ? void 0 : _l.parentalGuide) || null,
-        season: ((_m = this.params) == null ? void 0 : _m.season) == null ? null : Number(this.params.season),
-        episode: ((_n = this.params) == null ? void 0 : _n.episode) == null ? null : Number(this.params.episode),
-        episodes: Array.isArray((_o = this.params) == null ? void 0 : _o.episodes) ? this.params.episodes : [],
+        playerLogoUrl: ((_k = this.params) == null ? void 0 : _k.logo) || null,
+        parentalWarnings: ((_l = this.params) == null ? void 0 : _l.parentalWarnings) || null,
+        parentalGuide: ((_m = this.params) == null ? void 0 : _m.parentalGuide) || null,
+        season: ((_n = this.params) == null ? void 0 : _n.season) == null ? null : Number(this.params.season),
+        episode: ((_o = this.params) == null ? void 0 : _o.episode) == null ? null : Number(this.params.episode),
+        episodes: Array.isArray((_p = this.params) == null ? void 0 : _p.episodes) ? this.params.episodes : [],
         streamCandidates: filtered,
-        nextEpisodeVideoId: ((_p = this.params) == null ? void 0 : _p.nextEpisodeVideoId) || null,
-        nextEpisodeLabel: ((_q = this.params) == null ? void 0 : _q.nextEpisodeLabel) || null
+        nextEpisodeVideoId: ((_q = this.params) == null ? void 0 : _q.nextEpisodeVideoId) || null,
+        nextEpisodeLabel: ((_r = this.params) == null ? void 0 : _r.nextEpisodeLabel) || null
       });
     },
     onKeyDown(event) {
@@ -25037,10 +27103,26 @@
   function isBackEvent5(event) {
     return Environment.isBackEvent(event);
   }
-  function escapeHtml11(value) {
+  function escapeHtml13(value) {
     return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
-  function groupNodesByOffsetTop2(nodes = []) {
+  function extractReleaseYear2(item = {}) {
+    const candidates = [
+      item == null ? void 0 : item.released,
+      item == null ? void 0 : item.releaseDate,
+      item == null ? void 0 : item.release_date,
+      item == null ? void 0 : item.releaseInfo,
+      item == null ? void 0 : item.year
+    ].filter(Boolean);
+    for (const value of candidates) {
+      const match = String(value).match(/\b(19|20)\d{2}\b/);
+      if (match) {
+        return match[0];
+      }
+    }
+    return "";
+  }
+  function groupNodesByOffsetTop3(nodes = []) {
     const grouped = [];
     nodes.forEach((node) => {
       const top = Math.round(node.offsetTop);
@@ -25198,7 +27280,7 @@
     buildNavigationModel() {
       var _a;
       const cards = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".seeall-card.focusable")) || []);
-      const rows = groupNodesByOffsetTop2(cards);
+      const rows = groupNodesByOffsetTop3(cards);
       rows.forEach((rowNodes, rowIndex) => {
         rowNodes.forEach((node, colIndex) => {
           node.dataset.navRow = String(rowIndex);
@@ -25309,20 +27391,25 @@
           <article class="seeall-card focusable"
                    data-action="openDetail"
                    data-item-id="${item.id || ""}"
-                   data-item-type="${item.type || descriptor.type || "movie"}"
-                   data-item-title="${escapeHtml11(item.name || "Untitled")}"
-                   data-focus-key="item:${item.id || index}"
-                   data-item-index="${index}">
-            <div class="seeall-card-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-            ${((_a2 = this.layoutPrefs) == null ? void 0 : _a2.posterLabelsEnabled) !== false ? `<div class="seeall-card-title">${escapeHtml11(item.name || "Untitled")}</div>` : ""}
+                    data-item-type="${item.type || descriptor.type || "movie"}"
+                    data-item-title="${escapeHtml13(item.name || "Untitled")}"
+                    data-focus-key="item:${item.id || index}"
+                    data-item-index="${index}">
+            <div class="seeall-card-poster-wrap">
+              ${item.poster ? `<img class="seeall-card-poster-image" src="${escapeHtml13(item.poster)}" alt="${escapeHtml13(item.name || "content")}" />` : `<div class="seeall-card-poster placeholder"></div>`}
+            </div>
+            ${((_a2 = this.layoutPrefs) == null ? void 0 : _a2.posterLabelsEnabled) !== false ? `
+              <div class="seeall-card-title">${escapeHtml13(item.name || "Untitled")}</div>
+              <div class="seeall-card-year">${escapeHtml13(extractReleaseYear2(item))}</div>
+            ` : ""}
           </article>
         `;
       }).join("") : `<div class="seeall-empty">No items available.</div>`;
       this.container.innerHTML = `
       <div class="seeall-shell">
         <header class="seeall-header">
-          <h2 class="seeall-title">${escapeHtml11(title)}</h2>
-          ${((_a = this.layoutPrefs) == null ? void 0 : _a.catalogAddonNameEnabled) !== false && descriptor.addonName ? `<div class="seeall-subtitle">from ${escapeHtml11(descriptor.addonName)}</div>` : ""}
+          <h2 class="seeall-title">${escapeHtml13(title)}</h2>
+          ${((_a = this.layoutPrefs) == null ? void 0 : _a.catalogAddonNameEnabled) !== false && descriptor.addonName ? `<div class="seeall-subtitle">from ${escapeHtml13(descriptor.addonName)}</div>` : ""}
         </header>
         <section class="seeall-grid">
           ${cards}
@@ -25424,7 +27511,6 @@
 
   // js/ui/navigation/router.js
   var NON_BACKSTACK_ROUTES = /* @__PURE__ */ new Set([
-    "splash",
     "profileSelection",
     "authQrSignIn",
     "authSignIn",
@@ -25437,7 +27523,6 @@
     historyInitialized: false,
     popstateBound: false,
     routes: {
-      splash: SplashScreen,
       home: HomeScreen,
       player: PlayerScreen,
       account: AccountScreen,
@@ -25716,7 +27801,6 @@
   // js/bootstrap/renderAppShell.js
   var APP_SHELL = `
   <div id="app">
-    <div id="splash" class="screen"></div>
     <div id="account" class="screen"></div>
     <div id="profileSelection" class="screen"></div>
     <div id="home" class="screen"></div>
@@ -25743,7 +27827,7 @@
   }
 
   // js/bootstrap/renderAddonRemotePage.js
-  function escapeHtml12(value) {
+  function escapeHtml14(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   function normalizeAddonUrl(input) {
@@ -26173,9 +28257,9 @@
               <button class="addon-remote-btn" data-addon-down="${index}" ${index === this.draftAddons.length - 1 ? "disabled" : ""}>Down</button>
             </div>
             <div class="addon-remote-copy">
-              <strong>${escapeHtml12(addon.displayName || addon.name || addon.baseUrl)}</strong>
-              <span>${escapeHtml12(addon.baseUrl)}</span>
-              ${addon.description ? `<span>${escapeHtml12(addon.description)}</span>` : ""}
+              <strong>${escapeHtml14(addon.displayName || addon.name || addon.baseUrl)}</strong>
+              <span>${escapeHtml14(addon.baseUrl)}</span>
+              ${addon.description ? `<span>${escapeHtml14(addon.description)}</span>` : ""}
             </div>
             <div class="addon-remote-actions">
               <button class="addon-remote-btn addon-remote-btn-danger" data-addon-remove="${index}">Remove</button>
@@ -26189,12 +28273,12 @@
               <button class="addon-remote-btn" data-catalog-down="${index}" ${index === this.catalogItems.length - 1 ? "disabled" : ""}>Down</button>
             </div>
             <div class="addon-remote-copy">
-              <strong>${escapeHtml12(item.catalogName)}${item.isDisabled ? ' <span style="color:#ffb5c0;">Disabled</span>' : ""}</strong>
-              <span>${escapeHtml12(`${item.addonName} - ${toDisplayTypeLabel(item.type)}`)}</span>
+              <strong>${escapeHtml14(item.catalogName)}${item.isDisabled ? ' <span style="color:#ffb5c0;">Disabled</span>' : ""}</strong>
+              <span>${escapeHtml14(`${item.addonName} - ${toDisplayTypeLabel(item.type)}`)}</span>
             </div>
             <div class="addon-remote-actions">
               <button class="addon-remote-btn addon-remote-btn-toggle${item.isDisabled ? " is-disabled" : ""}"
-                      data-catalog-toggle="${escapeHtml12(item.disableKey)}">
+                      data-catalog-toggle="${escapeHtml14(item.disableKey)}">
                 ${item.isDisabled ? "Enable" : "Disable"}
               </button>
             </div>
@@ -26204,7 +28288,7 @@
       <header class="addon-remote-header">
         <h1>Addons</h1>
         <p>Manage addons and home catalogs from your phone.</p>
-        <div class="addon-remote-banner${AuthManager.isAuthenticated ? "" : " is-warn"}">${escapeHtml12(infoBanner)}</div>
+        <div class="addon-remote-banner${AuthManager.isAuthenticated ? "" : " is-warn"}">${escapeHtml14(infoBanner)}</div>
       </header>
 
       <section class="addon-remote-section">
@@ -26212,12 +28296,12 @@
         <div class="addon-remote-add">
           <input class="addon-remote-input"
                  type="url"
-                 value="${escapeHtml12(this.addonDraft)}"
+                 value="${escapeHtml14(this.addonDraft)}"
                  placeholder="https://example.com/manifest.json"
                  data-action="draft" />
           <button class="addon-remote-btn" data-action="add">Add</button>
         </div>
-        <div class="addon-remote-error">${escapeHtml12(this.addError)}</div>
+        <div class="addon-remote-error">${escapeHtml14(this.addError)}</div>
       </section>
 
       <section class="addon-remote-section">
@@ -26233,7 +28317,7 @@
       <button class="addon-remote-save" data-action="save" ${this.isSaving || !this.isDirty() ? "disabled" : ""}>
         ${this.isSaving ? "Saving..." : "Save changes"}
       </button>
-      <div class="addon-remote-status">${escapeHtml12(this.statusMessage)}</div>
+      <div class="addon-remote-status">${escapeHtml14(this.statusMessage)}</div>
     `;
       this.bindEvents();
     }
@@ -26324,7 +28408,7 @@
       AuthManager.subscribe((state) => {
         if (state === AuthState.LOADING) {
           StartupSyncService.stop();
-          Router.navigate("splash");
+          return;
         }
         if (state === AuthState.SIGNED_OUT) {
           StartupSyncService.stop();

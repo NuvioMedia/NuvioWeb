@@ -1,4 +1,3 @@
-import { SplashScreen } from "../screens/splash/splashScreen.js";
 import { HomeScreen } from "../screens/home/homeScreen.js";
 import { PlayerScreen } from "../screens/player/playerScreen.js";
 import { AccountScreen } from "../screens/account/accountScreen.js";
@@ -20,7 +19,6 @@ import { Platform } from "../../platform/index.js";
 import { RouteStateStore } from "./routeStateStore.js";
 
 const NON_BACKSTACK_ROUTES = new Set([
-  "splash",
   "profileSelection",
   "authQrSignIn",
   "authSignIn",
@@ -36,7 +34,6 @@ export const Router = {
   popstateBound: false,
 
   routes: {
-    splash: SplashScreen,
     home: HomeScreen,
     player: PlayerScreen,
     account: AccountScreen,

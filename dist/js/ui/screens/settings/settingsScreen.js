@@ -76,6 +76,94 @@ const PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
   { id: "it", labelKey: "common.italian" }
 ];
 
+const AVAILABLE_SUBTITLE_LANGUAGES = [
+  { id: "af", label: "Afrikaans" },
+  { id: "sq", label: "Albanian" },
+  { id: "am", label: "Amharic" },
+  { id: "ar", label: "Arabic" },
+  { id: "hy", label: "Armenian" },
+  { id: "az", label: "Azerbaijani" },
+  { id: "eu", label: "Basque" },
+  { id: "be", label: "Belarusian" },
+  { id: "bn", label: "Bengali" },
+  { id: "bs", label: "Bosnian" },
+  { id: "bg", label: "Bulgarian" },
+  { id: "my", label: "Burmese" },
+  { id: "ca", label: "Catalan" },
+  { id: "zh", label: "Chinese" },
+  { id: "zh-cn", label: "Chinese (Simplified)" },
+  { id: "zh-tw", label: "Chinese (Traditional)" },
+  { id: "hr", label: "Croatian" },
+  { id: "cs", label: "Czech" },
+  { id: "da", label: "Danish" },
+  { id: "nl", label: "Dutch" },
+  { id: "en", label: "English" },
+  { id: "et", label: "Estonian" },
+  { id: "tl", label: "Filipino" },
+  { id: "fi", label: "Finnish" },
+  { id: "fr", label: "French" },
+  { id: "gl", label: "Galician" },
+  { id: "ka", label: "Georgian" },
+  { id: "de", label: "German" },
+  { id: "el", label: "Greek" },
+  { id: "gu", label: "Gujarati" },
+  { id: "he", label: "Hebrew" },
+  { id: "hi", label: "Hindi" },
+  { id: "hu", label: "Hungarian" },
+  { id: "is", label: "Icelandic" },
+  { id: "id", label: "Indonesian" },
+  { id: "ga", label: "Irish" },
+  { id: "it", label: "Italian" },
+  { id: "ja", label: "Japanese" },
+  { id: "kn", label: "Kannada" },
+  { id: "kk", label: "Kazakh" },
+  { id: "km", label: "Khmer" },
+  { id: "ko", label: "Korean" },
+  { id: "lo", label: "Lao" },
+  { id: "lv", label: "Latvian" },
+  { id: "lt", label: "Lithuanian" },
+  { id: "mk", label: "Macedonian" },
+  { id: "ms", label: "Malay" },
+  { id: "ml", label: "Malayalam" },
+  { id: "mt", label: "Maltese" },
+  { id: "mr", label: "Marathi" },
+  { id: "mn", label: "Mongolian" },
+  { id: "ne", label: "Nepali" },
+  { id: "no", label: "Norwegian" },
+  { id: "pa", label: "Punjabi" },
+  { id: "fa", label: "Persian" },
+  { id: "pl", label: "Polish" },
+  { id: "pt", label: "Portuguese (Portugal)" },
+  { id: "pt-br", label: "Portuguese (Brazil)" },
+  { id: "ro", label: "Romanian" },
+  { id: "ru", label: "Russian" },
+  { id: "sr", label: "Serbian" },
+  { id: "si", label: "Sinhala" },
+  { id: "sk", label: "Slovak" },
+  { id: "sl", label: "Slovenian" },
+  { id: "es", label: "Spanish" },
+  { id: "es-419", label: "Spanish (Latin America)" },
+  { id: "sw", label: "Swahili" },
+  { id: "sv", label: "Swedish" },
+  { id: "ta", label: "Tamil" },
+  { id: "te", label: "Telugu" },
+  { id: "th", label: "Thai" },
+  { id: "tr", label: "Turkish" },
+  { id: "uk", label: "Ukrainian" },
+  { id: "ur", label: "Urdu" },
+  { id: "uz", label: "Uzbek" },
+  { id: "vi", label: "Vietnamese" },
+  { id: "cy", label: "Welsh" },
+  { id: "zu", label: "Zulu" }
+].sort((left, right) => left.label.localeCompare(right.label));
+
+const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
+  { id: "system", labelKey: "common.system" },
+  { id: "off", label: "Off" },
+  { id: "forced", label: "Forced" },
+  ...AVAILABLE_SUBTITLE_LANGUAGES
+];
+
 const HOME_LAYOUT_OPTIONS = [
   { id: "modern", labelKey: "settings.layout.homeLayouts.modern.label", captionKey: "settings.layout.homeLayouts.modern.caption" },
   { id: "grid", labelKey: "settings.layout.homeLayouts.grid.label", captionKey: "settings.layout.homeLayouts.grid.caption" },
@@ -133,6 +221,55 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function renderLayoutPreviewMarkup(layoutId) {
+  const normalized = String(layoutId || "classic").toLowerCase();
+  if (normalized === "modern") {
+    return `
+      <span class="settings-layout-preview-modern-hero"></span>
+      <span class="settings-layout-preview-modern-row">
+        <span class="settings-layout-preview-modern-card is-strong"></span>
+        <span class="settings-layout-preview-modern-card"></span>
+        <span class="settings-layout-preview-modern-card"></span>
+        <span class="settings-layout-preview-modern-card is-strong"></span>
+      </span>
+    `;
+  }
+
+  if (normalized === "grid") {
+    return `
+      <span class="settings-layout-preview-grid-canvas">
+        ${Array.from({ length: 20 }, (_, index) => `
+          <span class="settings-layout-preview-grid-cell${index % 3 === 2 ? " is-dim" : ""}"></span>
+        `).join("")}
+      </span>
+    `;
+  }
+
+  return `
+    <span class="settings-layout-preview-classic-row is-top">
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+    </span>
+    <span class="settings-layout-preview-classic-row is-featured">
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+      <span class="settings-layout-preview-classic-card is-strong"></span>
+    </span>
+    <span class="settings-layout-preview-classic-row is-bottom">
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+      <span class="settings-layout-preview-classic-card"></span>
+    </span>
+  `;
 }
 
 function iconSvg(path, className = "settings-inline-icon", viewBox = "0 0 24 24") {
@@ -232,6 +369,47 @@ function labelForPlaybackLanguage(language) {
   return translateOptionLabel(
     PREFERRED_PLAYBACK_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
     t("common.system")
+  );
+}
+
+function normalizeSelectableSubtitleLanguageCode(language) {
+  const code = String(language ?? "").trim().toLowerCase();
+  if (!code) {
+    return "system";
+  }
+  switch (code) {
+    case "pt-br":
+    case "pt_br":
+    case "br":
+    case "pob":
+      return "pt-br";
+    case "pt-pt":
+    case "pt_pt":
+    case "por":
+      return "pt";
+    case "forced":
+    case "force":
+    case "forc":
+      return "forced";
+    case "none":
+    case "off":
+      return "off";
+    default:
+      return code;
+  }
+}
+
+function labelForSubtitlePlaybackLanguage(language) {
+  const normalized = normalizeSelectableSubtitleLanguageCode(language);
+  return translateOptionLabel(
+    PREFERRED_SUBTITLE_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
+    normalized === "off"
+      ? "Off"
+      : normalized === "forced"
+        ? "Forced"
+        : normalized === "system"
+          ? t("common.system")
+          : String(language || "system")
   );
 }
 
@@ -457,7 +635,18 @@ export const SettingsScreen = {
     });
   },
 
+  collapseExpandedSection(sectionId) {
+    if (!sectionId) {
+      return;
+    }
+    this.expandedSections[sectionId] = createDefaultExpandedState(sectionId);
+  },
+
   setActiveSection(sectionId) {
+    const nextSectionId = sectionId || null;
+    if (this.activeSection && this.activeSection !== nextSectionId) {
+      this.collapseExpandedSection(this.activeSection);
+    }
     this.activeSection = sectionId || null;
     this.persistUiState();
   },
@@ -507,7 +696,10 @@ export const SettingsScreen = {
               data-section="${item.id}">
         <span class="settings-nav-leading">
           ${renderSectionNavIcon(item.id)}
-          <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
+          <span class="settings-nav-label-wrap">
+            <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
+            ${item.id === "appearance" ? '<span class="settings-nav-badge">Beta</span>' : ""}
+          </span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
       </button>
@@ -599,7 +791,7 @@ export const SettingsScreen = {
       <button class="settings-layout-card settings-content-focusable focusable${selected ? " is-selected" : ""}"
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
-        <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}"></span>
+        <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}">${renderLayoutPreviewMarkup(option.id)}</span>
         <span class="settings-layout-name">${escapeHtml(translateOptionLabel(option))}</span>
         <span class="settings-layout-caption">${escapeHtml(translateOptionCaption(option))}</span>
       </button>
@@ -708,7 +900,7 @@ export const SettingsScreen = {
   }) {
     return `
       <div class="settings-collapsible${classes ? ` ${classes}` : ""}${expanded ? " is-open" : ""}">
-        <button class="settings-action-row settings-content-focusable focusable${expanded ? " is-open" : ""}"
+        <button class="settings-action-row settings-collapsible-trigger settings-content-focusable focusable${expanded ? " is-open" : ""}"
                 data-zone="content"
                 ${this.registerAction(focusKey, this.actionMap.get(focusKey))}
                 data-role="section-toggle">
@@ -721,7 +913,13 @@ export const SettingsScreen = {
             ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
           </span>
         </button>
-        ${expanded ? `<div class="settings-collapsible-body">${bodyHtml}</div>` : ""}
+        ${expanded ? `
+          <div class="settings-collapsible-body">
+            <div class="settings-group-card settings-subsection-card">
+              ${bodyHtml}
+            </div>
+          </div>
+        ` : ""}
       </div>
     `;
   },
@@ -943,6 +1141,9 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("layout:detail:trailerButton", () => {
+      LayoutPreferences.set({ detailPageTrailerButtonEnabled: !LayoutPreferences.get().detailPageTrailerButtonEnabled });
+    });
 
     const selectedLayout = String(model.layout.homeLayout || "").toLowerCase();
     const isModernLayout = selectedLayout === "modern";
@@ -1039,8 +1240,7 @@ export const SettingsScreen = {
           focusKey: "layout:detail:trailerButton",
           title: t("settings.layout.showTrailerButton.title"),
           subtitle: t("settings.layout.showTrailerButton.subtitle"),
-          checked: false,
-          disabled: true
+          checked: Boolean(model.layout.detailPageTrailerButtonEnabled)
         })}
         ${this.renderToggleRow({
           focusKey: "layout:detail:preferExternalMeta",
@@ -1500,13 +1700,21 @@ export const SettingsScreen = {
       PlayerSettingsStore.set({ subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled });
     });
     this.actionMap.set("playback:subtitleLanguage", () => {
+      const currentSettings = PlayerSettingsStore.get();
       this.openOptionDialog({
         title: t("settings.dialogs.preferredSubtitleLanguage"),
-        options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
-        selectedId: PlayerSettingsStore.get().subtitleLanguage,
+        options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
+        selectedId: normalizeSelectableSubtitleLanguageCode(currentSettings.subtitleStyle?.preferredLanguage || currentSettings.subtitleLanguage),
         returnFocusKey: "playback:subtitleLanguage",
         onSelect: (option) => {
-          PlayerSettingsStore.set({ subtitleLanguage: option.id });
+          const normalized = normalizeSelectableSubtitleLanguageCode(option.id);
+          PlayerSettingsStore.set({
+            subtitleLanguage: normalized,
+            subtitleStyle: {
+              ...currentSettings.subtitleStyle,
+              preferredLanguage: normalized
+            }
+          });
         }
       });
     });
@@ -1582,7 +1790,7 @@ export const SettingsScreen = {
           focusKey: "playback:subtitleLanguage",
           title: t("settings.playback.subtitleLanguage.title"),
           subtitle: t("settings.playback.subtitleLanguage.subtitle"),
-          value: labelForPlaybackLanguage(model.player.subtitleLanguage)
+          value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
         })}
         ${this.renderActionRow({
           focusKey: "playback:renderMode",

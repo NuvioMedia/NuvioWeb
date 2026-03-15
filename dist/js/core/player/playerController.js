@@ -1838,7 +1838,7 @@ export const PlayerController = {
     }
   },
 
-  play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
+  play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
     if (!this.video) return;
 
     try {
@@ -1856,6 +1856,10 @@ export const PlayerController = {
     this.currentVideoId = videoId;
     this.currentSeason = season == null ? null : Number(season);
     this.currentEpisode = episode == null ? null : Number(episode);
+    this.currentItemTitle = title || null;
+    this.currentItemPoster = poster || null;
+    this.currentItemBackground = background || null;
+    this.currentEpisodeTitle = episodeTitle || null;
     this.currentPlaybackUrl = String(url || "").trim();
     this.currentPlaybackHeaders = { ...(requestHeaders || {}) };
     this.currentPlaybackMediaSourceType = mediaSourceType || null;
@@ -2072,6 +2076,10 @@ export const PlayerController = {
     this.currentVideoId = null;
     this.currentSeason = null;
     this.currentEpisode = null;
+    this.currentItemTitle = null;
+    this.currentItemPoster = null;
+    this.currentItemBackground = null;
+    this.currentEpisodeTitle = null;
     this.currentPlaybackUrl = "";
     this.currentPlaybackHeaders = {};
     this.currentPlaybackMediaSourceType = null;
@@ -2092,7 +2100,11 @@ export const PlayerController = {
       itemType: this.currentItemType || "movie",
       videoId: this.currentVideoId || null,
       season: Number.isFinite(this.currentSeason) ? this.currentSeason : null,
-      episode: Number.isFinite(this.currentEpisode) ? this.currentEpisode : null
+      episode: Number.isFinite(this.currentEpisode) ? this.currentEpisode : null,
+      title: this.currentItemTitle || null,
+      poster: this.currentItemPoster || null,
+      background: this.currentItemBackground || null,
+      episodeTitle: this.currentEpisodeTitle || null
     };
   },
 
@@ -2122,6 +2134,10 @@ export const PlayerController = {
       videoId: active.videoId || null,
       season: active.season,
       episode: active.episode,
+      title: active.title || null,
+      poster: active.poster || null,
+      background: active.background || null,
+      episodeTitle: active.episodeTitle || null,
       positionMs: Math.max(0, Math.trunc(safePosition)),
       durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : 0
     });

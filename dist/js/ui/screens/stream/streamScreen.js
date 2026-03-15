@@ -735,6 +735,7 @@ export const StreamScreen = {
       itemId: this.params?.itemId || null,
       itemType: isSeries ? "series" : "movie",
       videoId: this.params?.videoId || null,
+      resumePositionMs: Number(this.params?.resumePositionMs || 0) || 0,
       episodeLabel: this.params?.season && this.params?.episode
         ? `S${this.params.season}E${this.params.episode}`
         : null,

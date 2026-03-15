@@ -4,7 +4,8 @@ import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
-import { ADDON_REMOTE_BASE_URL } from "../../../config.js";
+import { ADDON_REMOTE_BASE_URL, PUBLIC_APP_URL } from "../../../config.js";
+import { I18n } from "../../../i18n/index.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -32,6 +33,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function t(key, fallback = key) {
+  return I18n.t(key, {}, { fallback });
 }
 
 function isLoopbackHostname(hostname) {
@@ -164,7 +169,7 @@ export const PluginScreen = {
     this.pillIconOnly = false;
     this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
     this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
-    this.qrOverlayOpen = Boolean(this.qrOverlayOpen);
+    this.qrOverlayOpen = false;
     await this.render();
   },
 
@@ -267,10 +272,9 @@ export const PluginScreen = {
     this.rowColumns = new Map();
     this.actionMap = new Map();
     this.setRowColumns(0, [0]);
+    const manageFromPhonePlanned = true;
 
-    this.actionMap.set("manage_from_phone", async () => {
-      await this.openQrOverlay();
-    });
+    this.actionMap.set("manage_from_phone", async () => {});
     this.actionMap.set("close_qr_overlay", async () => {
       await this.closeQrOverlay();
     });
@@ -293,7 +297,7 @@ export const PluginScreen = {
               </p>
               <p class="addons-meta">${escapeHtml(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
               <button type="button"
-                      class="addons-large-row addons-large-row-centered addons-focusable"
+                      class="addons-large-row addons-large-row-centered addons-focusable${manageFromPhonePlanned ? " is-disabled is-planned" : ""}"
                       data-zone="content"
                       data-row="0"
                       data-col="0"
@@ -304,7 +308,10 @@ export const PluginScreen = {
                   <strong>Manage addons</strong>
                   <small>Manage addons and home catalogs from your phone</small>
                 </span>
-                <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
+                <span class="addons-large-row-tail-group">
+                  ${manageFromPhonePlanned ? `<span class="addons-large-row-badge">${escapeHtml(t("common.soon", "Soon"))}</span>` : ""}
+                  <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
+                </span>
               </button>
             </section>
           </div>
