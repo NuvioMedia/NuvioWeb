@@ -28,6 +28,25 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
+function extractReleaseYear(item = {}) {
+  const candidates = [
+    item?.released,
+    item?.releaseDate,
+    item?.release_date,
+    item?.releaseInfo,
+    item?.year
+  ].filter(Boolean);
+
+  for (const value of candidates) {
+    const match = String(value).match(/\b(19|20)\d{2}\b/);
+    if (match) {
+      return match[0];
+    }
+  }
+
+  return "";
+}
+
 function bookmarkOutlineSvg() {
   return `
     <svg viewBox="0 0 80 80" class="library-empty-icon" aria-hidden="true" focusable="false">
@@ -54,6 +73,21 @@ function selectorValue(value) {
   return raw.replace(/["\\]/g, "\\$&");
 }
 
+function scrollIntoNearestView(node) {
+  if (!node || typeof node.scrollIntoView !== "function") {
+    return;
+  }
+  try {
+    node.scrollIntoView({
+      behavior: "auto",
+      block: "nearest",
+      inline: "nearest"
+    });
+  } catch (_) {
+    node.scrollIntoView();
+  }
+}
+
 export const LibraryScreen = {
 
   async mount() {
@@ -67,6 +101,8 @@ export const LibraryScreen = {
     this.pillIconOnly = false;
     this.focusZone = "content";
     this.lastMainFocus = null;
+    this.lastActionsRowAction = "openManageLists";
+    this.lastPrivacyFocus = "private";
 
     this.render();
     this.bindEvents();
@@ -117,6 +153,13 @@ export const LibraryScreen = {
     }
     if (!sidebarFocused) {
       this.lastMainFocus = target;
+      scrollIntoNearestView(target);
+      if (target.closest?.(".library-actions-row") && target.dataset.action) {
+        this.lastActionsRowAction = String(target.dataset.action);
+      }
+      if (target.closest?.(".library-privacy-row") && target.dataset.privacy) {
+        this.lastPrivacyFocus = String(target.dataset.privacy);
+      }
     }
     if (target.dataset.focusKey) {
       this.controller.setFocusedPosterKey(target.dataset.focusKey);
@@ -171,6 +214,7 @@ export const LibraryScreen = {
         <div class="library-grid">
           ${items.map((item) => {
             const focusKey = `${item.type}:${item.id}`;
+            const year = extractReleaseYear(item);
             return `
               <article class="library-grid-card focusable"
                        data-action="openDetail"
@@ -180,6 +224,7 @@ export const LibraryScreen = {
                        data-focus-key="${escapeHtml(focusKey)}">
                 <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml(item.poster)}')"` : ""}></div>
                 <div class="library-grid-title">${escapeHtml(item.name || item.id || "Untitled")}</div>
+                ${year ? `<div class="library-grid-year">${escapeHtml(year)}</div>` : ""}
               </article>
             `;
           }).join("")}
@@ -386,7 +431,7 @@ export const LibraryScreen = {
     ScreenUtils.indexFocusables(this.container);
     bindRootSidebarEvents(this.container, {
       currentRoute: "library",
-      onSelectedAction: () => this.focusMainNode(),
+      onSelectedAction: () => this.focusMainNode(null, { preferEntryPoint: true }),
       onExpandSidebar: () => this.focusSidebarNode()
     });
     this.restoreFocus();
@@ -414,6 +459,12 @@ export const LibraryScreen = {
       || this.container?.querySelector(".library-picker-anchor.focusable")
       || this.container?.querySelector(".library-grid-card.focusable")
       || this.container?.querySelector(".home-main .focusable")
+      || null;
+  },
+
+  resolveMainEntryFocus() {
+    return this.container?.querySelector(".library-picker-row .library-picker-anchor.focusable")
+      || this.resolveLastMainFocus()
       || null;
   },
 
@@ -463,7 +514,127 @@ export const LibraryScreen = {
     if (state.expandedPicker) {
       return ".library-picker.open .focusable";
     }
-    return ".focusable";
+    if (this.focusZone === "sidebar") {
+      return ".home-sidebar .focusable, .modern-sidebar-panel .focusable";
+    }
+    return ".home-main .focusable";
+  },
+
+  resolvePreferredActionsRowNode() {
+    const buttons = Array.from(this.container?.querySelectorAll(".library-actions-row .focusable") || []);
+    if (!buttons.length) {
+      return null;
+    }
+    return buttons.find((node) => String(node.dataset.action || "") === this.lastActionsRowAction && !node.disabled)
+      || buttons.find((node) => !node.disabled)
+      || buttons[0]
+      || null;
+  },
+
+  handleContentRowMemoryNavigation(event, current) {
+    const state = this.controller.getState();
+    if (state.sourceMode !== "trakt" || state.expandedPicker || !current) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const fromPickerRow = code === 40
+      && current.matches?.(".library-picker-anchor.focusable")
+      && Boolean(current.closest?.(".library-picker-row"));
+    const fromGrid = code === 38
+      && current.matches?.(".library-grid-card.focusable")
+      && Boolean(current.closest?.(".library-grid"));
+    if (!fromPickerRow && !fromGrid) {
+      return false;
+    }
+    const target = this.resolvePreferredActionsRowNode();
+    if (!target) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.setFocusedNode(target);
+    return true;
+  },
+
+  handleFilterRowHorizontalNavigation(event, current) {
+    if (!current || !current.matches?.(".library-picker-anchor.focusable") || !current.closest?.(".library-picker-row")) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const delta = code === 37 ? -1 : (code === 39 ? 1 : 0);
+    if (!delta) {
+      return false;
+    }
+    const anchors = Array.from(this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []);
+    if (!anchors.length) {
+      return false;
+    }
+    const currentIndex = Math.max(0, anchors.indexOf(current));
+    const nextIndex = Math.max(0, Math.min(anchors.length - 1, currentIndex + delta));
+    if (nextIndex === currentIndex) {
+      event?.preventDefault?.();
+      return true;
+    }
+    const target = anchors[nextIndex] || null;
+    if (!target) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.setFocusedNode(target);
+    return true;
+  },
+
+  handleSidebarVerticalNavigation(event, current) {
+    if (!current || !this.isSidebarNode(current)) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const delta = code === 38 ? -1 : (code === 40 ? 1 : 0);
+    if (!delta) {
+      return false;
+    }
+    const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+    if (!nodes.length) {
+      return false;
+    }
+    const currentIndex = Math.max(0, nodes.indexOf(current));
+    const nextIndex = Math.max(0, Math.min(nodes.length - 1, currentIndex + delta));
+    event?.preventDefault?.();
+    this.setFocusedNode(nodes[nextIndex] || current);
+    return true;
+  },
+
+  resolvePreferredPrivacyNode() {
+    const options = Array.from(this.container?.querySelectorAll(".library-list-editor .library-privacy-button.focusable") || []);
+    if (!options.length) {
+      return null;
+    }
+    return options.find((node) => String(node.dataset.privacy || "") === this.lastPrivacyFocus && !node.disabled)
+      || options.find((node) => node.classList.contains("selected") && !node.disabled)
+      || options.find((node) => !node.disabled)
+      || options[0]
+      || null;
+  },
+
+  handlePrivacyMemoryNavigation(event, current) {
+    const state = this.controller.getState();
+    if (!state.listEditorState || !current) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const fromDescription = code === 40
+      && current.matches?.(".library-dialog-textarea.focusable[data-editor-field='description']");
+    const fromActions = code === 38
+      && current.matches?.(".library-list-editor .library-action-button.focusable[data-action='saveListEditor'], .library-list-editor .library-action-button.focusable[data-action='cancelListEditor']");
+    if (!fromDescription && !fromActions) {
+      return false;
+    }
+    const target = this.resolvePreferredPrivacyNode();
+    if (!target) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.setFocusedNode(target);
+    return true;
   },
 
   isSidebarNode(node) {
@@ -487,13 +658,14 @@ export const LibraryScreen = {
     return true;
   },
 
-  async focusMainNode(preferredNode = null) {
+  async focusMainNode(preferredNode = null, { preferEntryPoint = false } = {}) {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
       setModernSidebarExpanded(this.container, false);
     }
     const target = preferredNode
+      || (preferEntryPoint ? this.resolveMainEntryFocus() : null)
       || this.resolveLastMainFocus()
       || null;
     if (!target) {
@@ -605,10 +777,14 @@ export const LibraryScreen = {
       return;
     }
     if (action === "createList") {
+      this.lastPrivacyFocus = "private";
       this.controller.startCreateList();
       return;
     }
     if (action === "editList") {
+      const state = this.controller.getState();
+      const selected = state.listTabs.find((item) => item.key === state.manageSelectedListKey && item.type === "personal");
+      this.lastPrivacyFocus = String(selected?.privacy || "private");
       this.controller.startEditList();
       return;
     }
@@ -690,7 +866,19 @@ export const LibraryScreen = {
 
     if (!sidebarLocked && code === 39 && current && this.isSidebarNode(current)) {
       event?.preventDefault?.();
-      await this.focusMainNode();
+      await this.focusMainNode(null, { preferEntryPoint: true });
+      return;
+    }
+
+    if (!sidebarLocked && this.handleSidebarVerticalNavigation(event, current)) {
+      return;
+    }
+
+    if (!sidebarLocked && this.handleFilterRowHorizontalNavigation(event, current)) {
+      return;
+    }
+
+    if (!sidebarLocked && this.handleContentRowMemoryNavigation(event, current)) {
       return;
     }
 
@@ -700,10 +888,14 @@ export const LibraryScreen = {
       return;
     }
 
+    if (this.handlePrivacyMemoryNavigation(event, current)) {
+      return;
+    }
+
     if (ScreenUtils.handleDpadNavigation(event, this.container, this.getFocusScopeSelector())) {
       const current = this.container?.querySelector(`${this.getFocusScopeSelector()}.focused`) || this.container?.querySelector(".focusable.focused");
-      if (current?.dataset?.focusKey) {
-        this.controller.setFocusedPosterKey(String(current.dataset.focusKey));
+      if (current) {
+        this.setFocusedNode(current);
       }
       return;
     }

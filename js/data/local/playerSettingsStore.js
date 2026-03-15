@@ -5,7 +5,7 @@ const KEY = "playerSettings";
 const DEFAULTS = {
   autoplayNextEpisode: true,
   subtitlesEnabled: true,
-  subtitleLanguage: "system",
+  subtitleLanguage: "off",
   secondarySubtitleLanguage: "off",
   preferredAudioLanguage: "system",
   preferredQuality: "auto",
@@ -20,7 +20,7 @@ const DEFAULTS = {
     outlineEnabled: true,
     outlineColor: "#000000",
     verticalOffset: 0,
-    preferredLanguage: "system",
+    preferredLanguage: "off",
     secondaryPreferredLanguage: "off"
   },
   audioAmplificationDb: 0,
@@ -30,7 +30,7 @@ const DEFAULTS = {
 function normalizeSelectableSubtitleLanguageCode(language) {
   const code = String(language ?? "").trim().toLowerCase();
   if (!code) {
-    return "system";
+      return "off";
   }
   switch (code) {
     case "pt-br":

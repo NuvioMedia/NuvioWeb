@@ -554,21 +554,25 @@ export const ProfileSelectionScreen = {
       .find((node) => String(node.dataset.focusKey || "") === String(focusKey)) || null;
   },
 
-  updateBackground(colorHex) {
-    const screen = this.container?.querySelector(".profile-screen");
-    if (!screen) {
-      return;
-    }
+  buildBackgroundStyle(colorHex) {
     const rootStyles = getComputedStyle(document.documentElement);
     const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
     const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
     const accent = parseHexColor(colorHex, parseHexColor(DEFAULT_PROFILE_COLOR));
     const gradientTop = mixColors(elevated, accent, 0.3);
     const gradientMid = mixColors(background, accent, 0.14);
-    screen.style.background = `
+    return `
       linear-gradient(180deg, ${colorToRgba(gradientTop, 1)} 0%, ${colorToRgba(gradientMid, 1)} 42%, ${colorToRgba(background, 1)} 100%),
       linear-gradient(90deg, ${colorToRgba(accent, 0.26)} 0%, ${colorToRgba(accent, 0.08)} 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%)
     `;
+  },
+
+  updateBackground(colorHex) {
+    const screen = this.container?.querySelector(".profile-screen");
+    if (!screen) {
+      return;
+    }
+    screen.style.background = this.buildBackgroundStyle(colorHex);
   },
 
   syncEditorPreview() {
