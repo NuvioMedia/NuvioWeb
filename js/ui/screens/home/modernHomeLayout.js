@@ -12,6 +12,8 @@ export function renderModernHomeLayout({
   heroItem = null,
   heroCandidates = [],
   continueWatchingItems = [],
+  continueWatchingLoading = false,
+  continueWatchingLoadingCount = 0,
   showHeroSection = false,
   showPosterLabels = true,
   showCatalogTypeSuffix = true,
@@ -79,10 +81,14 @@ export function renderModernHomeLayout({
           buildModernHeroPresentation,
           escapeHtml,
           escapeAttribute
-        }) : ""}
+        }) : (continueWatchingLoading ? renderModernHeroSkeletonMarkup() : "")}
         <div class="home-modern-rows-viewport">
           <div class="home-modern-rows-scroll">
-            ${renderContinueWatchingSection(continueWatchingItems, { rowKey: "continue_watching" })}
+            ${renderContinueWatchingSection(continueWatchingItems, {
+              rowKey: "continue_watching",
+              loading: continueWatchingLoading,
+              loadingCount: continueWatchingLoadingCount
+            })}
             ${sectionsMarkup.join("")}
           </div>
         </div>
@@ -206,6 +212,20 @@ function renderModernHeroMarkup({
           <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml(display.description)}</p>
         </div>
         <div class="home-hero-indicators">${buildHeroIndicators(heroCandidates, heroItem)}</div>
+      </article>
+    </section>
+  `;
+}
+
+function renderModernHeroSkeletonMarkup() {
+  return `
+    <section class="home-hero home-hero-modern home-hero-modern-loading" aria-hidden="true">
+      <article class="home-hero-card home-modern-hero-card home-modern-hero-card-loading">
+        <div class="home-modern-hero-media home-modern-hero-media-loading">
+          <div class="home-hero-backdrop-wrap">
+            <div class="home-hero-backdrop placeholder home-hero-backdrop-loading"></div>
+          </div>
+        </div>
       </article>
     </section>
   `;
