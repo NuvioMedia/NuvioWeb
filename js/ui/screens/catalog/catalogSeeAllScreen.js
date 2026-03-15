@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { Environment } from "../../../platform/environment.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { focusWithoutAutoScroll } from "../../components/sidebarNavigation.js";
 
 function isBackEvent(event) {
   return Environment.isBackEvent(event);
@@ -51,6 +52,62 @@ function groupNodesByOffsetTop(nodes = []) {
   return grouped.map((entry) => entry.nodes);
 }
 
+function setContainerScrollTop(container, top, behavior = "auto") {
+  if (!(container instanceof HTMLElement)) {
+    return 0;
+  }
+  const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  const resolvedTop = Math.max(0, Math.min(maxScrollTop, Number(top || 0)));
+  if (behavior === "smooth") {
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ top: resolvedTop, behavior: "smooth" });
+    } else {
+      container.scrollTop = resolvedTop;
+    }
+    return resolvedTop;
+  }
+
+  const previousBehavior = container.style.scrollBehavior;
+  container.style.scrollBehavior = "auto";
+  container.scrollTop = resolvedTop;
+  void container.offsetHeight;
+  container.style.scrollBehavior = previousBehavior;
+  return resolvedTop;
+}
+
+function scrollNodeIntoContainerView(node, container, { center = false, padding = 18, behavior = "smooth" } = {}) {
+  if (!(node instanceof HTMLElement) || !(container instanceof HTMLElement)) {
+    return null;
+  }
+  const itemTop = node.offsetTop;
+  const itemBottom = itemTop + node.offsetHeight;
+  const currentTop = container.scrollTop;
+  const viewTop = currentTop + padding;
+  const viewBottom = currentTop + container.clientHeight - padding;
+  let nextScrollTop = currentTop;
+
+  if (center) {
+    nextScrollTop = itemTop - ((container.clientHeight - node.offsetHeight) / 2);
+  } else if (itemTop < viewTop) {
+    nextScrollTop = itemTop - padding;
+  } else if (itemBottom > viewBottom) {
+    nextScrollTop = itemBottom - container.clientHeight + padding;
+  }
+  const resolvedTop = Math.max(0, nextScrollTop);
+  if (Math.abs(resolvedTop - currentTop) <= 1) {
+    return resolvedTop;
+  }
+  if (behavior === "smooth") {
+    container.scrollTo({
+      top: resolvedTop,
+      behavior: "smooth"
+    });
+  } else {
+    setContainerScrollTop(container, resolvedTop, "auto");
+  }
+  return resolvedTop;
+}
+
 export const CatalogSeeAllScreen = {
 
   getRouteStateKey(params = {}) {
@@ -92,6 +149,7 @@ export const CatalogSeeAllScreen = {
     this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
     this.savedScrollTop = Number(snapshot.savedScrollTop || 0);
     this.pendingRestoreFocus = true;
+    this.preserveViewportOnNextRender = false;
     return true;
   },
 
@@ -106,6 +164,7 @@ export const CatalogSeeAllScreen = {
     this.hasMore = true;
     this.lastFocusedKey = this.items[0]?.id ? `item:${this.items[0].id}` : null;
     this.pendingRestoreFocus = false;
+    this.preserveViewportOnNextRender = false;
     this.savedScrollTop = 0;
     this.loadToken = (this.loadToken || 0) + 1;
 
@@ -121,7 +180,7 @@ export const CatalogSeeAllScreen = {
     }
   },
 
-  async loadNextPage() {
+  async loadNextPage({ preserveViewport = false } = {}) {
     if (this.loading || !this.hasMore) {
       return;
     }
@@ -134,7 +193,10 @@ export const CatalogSeeAllScreen = {
     this.loading = true;
     this.captureViewState();
     this.pendingRestoreFocus = true;
-    this.render();
+    this.preserveViewportOnNextRender = Boolean(preserveViewport);
+    if (!preserveViewport) {
+      this.render();
+    }
     const token = this.loadToken;
     const skip = Math.max(0, Number(this.nextSkip || 0));
     const result = await catalogRepository.getCatalog({
@@ -153,10 +215,12 @@ export const CatalogSeeAllScreen = {
     if (result.status !== "success") {
       this.loading = false;
       this.hasMore = false;
+      this.preserveViewportOnNextRender = false;
       this.render();
       return;
     }
     const incoming = Array.isArray(result?.data?.items) ? result.data.items : [];
+    let addedCount = 0;
     if (incoming.length) {
       const seen = new Set(this.items.map((item) => item.id));
       incoming.forEach((item) => {
@@ -165,12 +229,14 @@ export const CatalogSeeAllScreen = {
         }
         seen.add(item.id);
         this.items.push(item);
+        addedCount += 1;
       });
       this.nextSkip = skip + 100;
     }
     this.hasMore = incoming.length > 0;
     this.loading = false;
     this.pendingRestoreFocus = true;
+    this.preserveViewportOnNextRender = Boolean(preserveViewport && addedCount > 0);
     this.render();
   },
 
@@ -185,14 +251,20 @@ export const CatalogSeeAllScreen = {
     }
   },
 
-  maybeAutoLoadMore(index) {
+  shouldAutoLoadMore(index) {
     if (this.loading || !this.hasMore) {
-      return;
+      return false;
     }
     const remaining = (this.items.length - 1) - Number(index || 0);
-    if (remaining <= 10) {
-      this.loadNextPage();
+    return remaining <= 10;
+  },
+
+  shouldAutoLoadMoreFromScroll(shell) {
+    if (!(shell instanceof HTMLElement) || this.loading || !this.hasMore) {
+      return false;
     }
+    const remaining = shell.scrollHeight - (shell.scrollTop + shell.clientHeight);
+    return remaining <= 640;
   },
 
   buildNavigationModel() {
@@ -242,11 +314,25 @@ export const CatalogSeeAllScreen = {
       }
     });
     target.classList.add("focused");
-    target.focus();
+    focusWithoutAutoScroll(target);
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
     this.rememberRowFocus(target);
-    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
-    this.maybeAutoLoadMore(target.dataset.itemIndex);
+    const shell = this.container?.querySelector(".seeall-shell") || null;
+    const isFirstRow = Number(target.dataset.navRow || 0) === 0;
+    const shouldLoadMore = this.shouldAutoLoadMore(target.dataset.itemIndex);
+    const nextScrollTop = isFirstRow
+      ? setContainerScrollTop(shell, 0, "smooth")
+      : scrollNodeIntoContainerView(target, shell, {
+        center: false,
+        padding: 20,
+        behavior: shouldLoadMore ? "auto" : "smooth"
+      });
+    if (Number.isFinite(nextScrollTop)) {
+      this.savedScrollTop = nextScrollTop;
+    }
+    if (shouldLoadMore) {
+      this.loadNextPage({ preserveViewport: true });
+    }
     return true;
   },
 
@@ -285,6 +371,10 @@ export const CatalogSeeAllScreen = {
       const delta = direction === "up" ? -1 : 1;
       const targetRowNodes = nav.rows[row + delta] || null;
       if (!targetRowNodes?.length) {
+        if (direction === "up" && row === 0) {
+          const shell = this.container?.querySelector(".seeall-shell") || null;
+          this.savedScrollTop = setContainerScrollTop(shell, 0, "smooth");
+        }
         return true;
       }
       return this.focusNode(this.resolvePreferredNodeForRow(targetRowNodes)) || true;
@@ -293,7 +383,7 @@ export const CatalogSeeAllScreen = {
     return false;
   },
 
-  restoreFocusedCard() {
+  restoreFocusedCard({ scrollMode = "center" } = {}) {
     const shell = this.container?.querySelector(".seeall-shell");
     const target = (this.lastFocusedKey
       ? this.container?.querySelector(`.seeall-card[data-focus-key="${this.lastFocusedKey}"]`)
@@ -302,7 +392,7 @@ export const CatalogSeeAllScreen = {
       || null;
 
     if (shell) {
-      shell.scrollTop = Number(this.savedScrollTop || 0);
+      this.savedScrollTop = setContainerScrollTop(shell, this.savedScrollTop, "auto");
     }
 
     if (!target) {
@@ -313,9 +403,11 @@ export const CatalogSeeAllScreen = {
       if (node !== target) node.classList.remove("focused");
     });
     target.classList.add("focused");
-    target.focus();
+    focusWithoutAutoScroll(target);
     this.rememberRowFocus(target);
-    target.scrollIntoView({ behavior: "auto", block: "nearest", inline: "nearest" });
+    if (scrollMode !== "none") {
+      scrollNodeIntoContainerView(target, shell, { center: scrollMode === "center", padding: 20 });
+    }
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
   },
 
@@ -362,9 +454,12 @@ export const CatalogSeeAllScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
     this.bindCardEvents();
+    this.bindShellEvents();
     if (this.pendingRestoreFocus) {
+      const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
       this.pendingRestoreFocus = false;
-      this.restoreFocusedCard();
+      this.preserveViewportOnNextRender = false;
+      this.restoreFocusedCard({ scrollMode });
       return;
     }
     ScreenUtils.setInitialFocus(this.container);
@@ -377,12 +472,25 @@ export const CatalogSeeAllScreen = {
       node.addEventListener("focus", () => {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
         this.savedScrollTop = this.container?.querySelector(".seeall-shell")?.scrollTop || 0;
-        this.maybeAutoLoadMore(node.dataset.itemIndex);
       });
       node.addEventListener("mouseenter", () => {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
       });
     });
+  },
+
+  bindShellEvents() {
+    const shell = this.container?.querySelector(".seeall-shell") || null;
+    if (!shell || shell.__catalogSeeAllShellBound) {
+      return;
+    }
+    shell.__catalogSeeAllShellBound = true;
+    shell.addEventListener("scroll", () => {
+      this.savedScrollTop = Number(shell.scrollTop || 0);
+      if (this.shouldAutoLoadMoreFromScroll(shell)) {
+        this.loadNextPage({ preserveViewport: true });
+      }
+    }, { passive: true });
   },
 
   async onKeyDown(event) {
