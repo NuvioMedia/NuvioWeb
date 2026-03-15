@@ -88,6 +88,26 @@ function scrollIntoNearestView(node) {
   }
 }
 
+function findNearestNodeByCenterX(referenceNode, nodes = []) {
+  if (!referenceNode || !nodes.length) {
+    return nodes[0] || null;
+  }
+  const referenceRect = referenceNode.getBoundingClientRect();
+  const referenceCenter = referenceRect.left + (referenceRect.width / 2);
+  let bestNode = nodes[0] || null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  nodes.forEach((node) => {
+    const rect = node.getBoundingClientRect();
+    const center = rect.left + (rect.width / 2);
+    const distance = Math.abs(center - referenceCenter);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestNode = node;
+    }
+  });
+  return bestNode;
+}
+
 export const LibraryScreen = {
 
   async mount() {
@@ -102,6 +122,7 @@ export const LibraryScreen = {
     this.focusZone = "content";
     this.lastMainFocus = null;
     this.lastActionsRowAction = "openManageLists";
+    this.pendingPickerRestore = null;
     this.lastPrivacyFocus = "private";
 
     this.render();
@@ -119,6 +140,9 @@ export const LibraryScreen = {
     this.container.addEventListener("click", async (event) => {
       const target = event.target?.closest?.(".focusable, .library-dialog-input, .library-dialog-textarea");
       if (!target || !this.container.contains(target)) {
+        return;
+      }
+      if (this.isSidebarNode(target)) {
         return;
       }
       if (target.classList.contains("focusable")) {
@@ -482,6 +506,8 @@ export const LibraryScreen = {
         : '.library-manage-dialog .focusable';
     } else if (state.expandedPicker) {
       selector = `.library-picker.open .library-picker-option[data-option-index="${Number(state.pickerFocusIndex || 0)}"]`;
+    } else if (this.pendingPickerRestore) {
+      selector = `.library-picker-anchor[data-picker="${selectorValue(this.pendingPickerRestore)}"]`;
     } else if (state.lastFocusedPosterKey) {
       selector = `.library-grid-card[data-focus-key="${selectorValue(state.lastFocusedPosterKey)}"]`;
     } else {
@@ -498,6 +524,9 @@ export const LibraryScreen = {
       return;
     }
     this.setFocusedNode(target);
+    if (this.pendingPickerRestore) {
+      this.pendingPickerRestore = null;
+    }
   },
 
   getFocusScopeSelector() {
@@ -520,6 +549,17 @@ export const LibraryScreen = {
     return ".home-main .focusable";
   },
 
+  getScopedFocusedNode() {
+    const scopeSelector = String(this.getFocusScopeSelector() || "").trim();
+    if (!scopeSelector) {
+      return this.container?.querySelector(".focusable.focused") || null;
+    }
+    return Array.from(this.container?.querySelectorAll(scopeSelector) || [])
+      .find((node) => node.classList?.contains("focused"))
+      || this.container?.querySelector(".focusable.focused")
+      || null;
+  },
+
   resolvePreferredActionsRowNode() {
     const buttons = Array.from(this.container?.querySelectorAll(".library-actions-row .focusable") || []);
     if (!buttons.length) {
@@ -529,6 +569,72 @@ export const LibraryScreen = {
       || buttons.find((node) => !node.disabled)
       || buttons[0]
       || null;
+  },
+
+  resolvePreferredPickerRowNode(referenceNode = null) {
+    const anchors = Array.from(this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []);
+    if (!anchors.length) {
+      return null;
+    }
+    const remembered = this.lastMainFocus && this.lastMainFocus.closest?.(".library-picker-row")
+      ? this.resolveLastMainFocus()
+      : null;
+    return remembered
+      || findNearestNodeByCenterX(referenceNode, anchors)
+      || anchors[0]
+      || null;
+  },
+
+  resolvePreferredGridNode(referenceNode = null) {
+    const cards = Array.from(this.container?.querySelectorAll(".library-grid-card.focusable") || []);
+    if (!cards.length) {
+      return null;
+    }
+    const remembered = this.lastMainFocus && this.lastMainFocus.closest?.(".library-grid")
+      ? this.resolveLastMainFocus()
+      : null;
+    return remembered
+      || findNearestNodeByCenterX(referenceNode, cards)
+      || cards[0]
+      || null;
+  },
+
+  handleActionsRowNavigation(event, current) {
+    if (!current || !current.closest?.(".library-actions-row")) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    if (code === 37 || code === 39) {
+      const buttons = Array.from(this.container?.querySelectorAll(".library-actions-row .focusable") || [])
+        .filter((node) => !node.disabled);
+      if (!buttons.length) {
+        return false;
+      }
+      const currentIndex = Math.max(0, buttons.indexOf(current));
+      const nextIndex = Math.max(0, Math.min(buttons.length - 1, currentIndex + (code === 37 ? -1 : 1)));
+      event?.preventDefault?.();
+      this.setFocusedNode(buttons[nextIndex] || current);
+      return true;
+    }
+    if (code === 38) {
+      const target = this.resolvePreferredPickerRowNode(current);
+      if (!target) {
+        return false;
+      }
+      event?.preventDefault?.();
+      this.setFocusedNode(target);
+      return true;
+    }
+    if (code === 40) {
+      const target = this.resolvePreferredGridNode(current);
+      if (!target) {
+        return false;
+      }
+      event?.preventDefault?.();
+      this.setFocusedNode(target);
+      return true;
+    }
+    return false;
   },
 
   handleContentRowMemoryNavigation(event, current) {
@@ -543,6 +649,10 @@ export const LibraryScreen = {
     const fromGrid = code === 38
       && current.matches?.(".library-grid-card.focusable")
       && Boolean(current.closest?.(".library-grid"));
+    const fromActionsRow = current.closest?.(".library-actions-row") || null;
+    if (fromActionsRow) {
+      return this.handleActionsRowNavigation(event, current);
+    }
     if (!fromPickerRow && !fromGrid) {
       return false;
     }
@@ -703,6 +813,7 @@ export const LibraryScreen = {
       return true;
     }
     if (state.expandedPicker) {
+      this.pendingPickerRestore = state.expandedPicker;
       this.controller.closePicker();
       return true;
     }
@@ -734,12 +845,16 @@ export const LibraryScreen = {
       return;
     }
     if (action === "togglePicker") {
-      this.controller.togglePicker(String(node.dataset.picker || ""));
+      const picker = String(node.dataset.picker || "");
+      const state = this.controller.getState();
+      this.pendingPickerRestore = state.expandedPicker === picker ? picker : null;
+      this.controller.togglePicker(picker);
       return;
     }
     if (action === "selectPickerOption") {
       const picker = String(node.dataset.picker || "");
       const index = Number(node.dataset.optionIndex || 0);
+      this.pendingPickerRestore = picker || null;
       this.controller.setState({
         pickerFocusIndex: index,
         expandedPicker: picker
@@ -893,7 +1008,7 @@ export const LibraryScreen = {
     }
 
     if (ScreenUtils.handleDpadNavigation(event, this.container, this.getFocusScopeSelector())) {
-      const current = this.container?.querySelector(`${this.getFocusScopeSelector()}.focused`) || this.container?.querySelector(".focusable.focused");
+      const current = this.getScopedFocusedNode();
       if (current) {
         this.setFocusedNode(current);
       }
@@ -903,10 +1018,11 @@ export const LibraryScreen = {
     if (code !== 13) {
       return;
     }
-    const focused = this.container?.querySelector(`${this.getFocusScopeSelector()}.focused`) || this.container?.querySelector(".focusable.focused");
+    const focused = this.getScopedFocusedNode();
     if (!focused) {
       return;
     }
+    event?.preventDefault?.();
     await this.activateNode(focused);
   },
 

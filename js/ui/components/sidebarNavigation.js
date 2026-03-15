@@ -235,7 +235,10 @@ export function bindRootSidebarEvents(container, {
   onSelectedAction = null
 } = {}) {
   container?.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((node) => {
-    node.onclick = async () => {
+    node.onclick = async (event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
       const action = String(node.dataset.action || "");
       activateLegacySidebarAction(action, currentRoute);
       if (isSelectedSidebarAction(action, currentRoute) && typeof onSelectedAction === "function") {
@@ -245,7 +248,10 @@ export function bindRootSidebarEvents(container, {
   });
 
   container?.querySelectorAll(".modern-sidebar-pill[data-action='expandSidebar']").forEach((node) => {
-    node.onclick = () => {
+    node.onclick = (event) => {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
       if (typeof onExpandSidebar === "function") {
         onExpandSidebar(node);
       }

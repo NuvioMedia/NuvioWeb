@@ -282,6 +282,12 @@ export const SearchScreen = {
     this.voiceRecognition = this.voiceRecognition || null;
     this.searchToastTimer = null;
     this.hydrateFromRouteState(navigationContext?.restoredState || null, params);
+    if (!navigationContext?.isBackNavigation) {
+      this.focusZone = "content";
+      this.sidebarExpanded = false;
+      this.sidebarFocusIndex = 0;
+      this.pillIconOnly = false;
+    }
     this.loadToken = (this.loadToken || 0) + 1;
     const hasExplicitQuery = Boolean(String(params.query || "").trim());
     const restoredQuery = String(navigationContext?.restoredState?.query || "").trim();

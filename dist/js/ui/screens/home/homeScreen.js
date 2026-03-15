@@ -3479,6 +3479,14 @@ export const HomeScreen = {
     }
   },
 
+  consumeBackRequest() {
+    if (this.continueWatchingMenu) {
+      this.closeContinueWatchingMenu();
+      return true;
+    }
+    return false;
+  },
+
   cleanup() {
     this.cancelPendingContinueWatchingEnter();
     this.continueWatchingMenu = null;

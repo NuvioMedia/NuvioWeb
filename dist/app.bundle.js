@@ -3233,7 +3233,11 @@
     onSelectedAction = null
   } = {}) {
     container == null ? void 0 : container.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((node) => {
-      node.onclick = () => __async(null, null, function* () {
+      node.onclick = (event) => __async(null, null, function* () {
+        var _a, _b, _c;
+        (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+        (_b = event == null ? void 0 : event.stopPropagation) == null ? void 0 : _b.call(event);
+        (_c = event == null ? void 0 : event.stopImmediatePropagation) == null ? void 0 : _c.call(event);
         const action = String(node.dataset.action || "");
         activateLegacySidebarAction(action, currentRoute);
         if (isSelectedSidebarAction(action, currentRoute) && typeof onSelectedAction === "function") {
@@ -3242,7 +3246,11 @@
       });
     });
     container == null ? void 0 : container.querySelectorAll(".modern-sidebar-pill[data-action='expandSidebar']").forEach((node) => {
-      node.onclick = () => {
+      node.onclick = (event) => {
+        var _a, _b, _c;
+        (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+        (_b = event == null ? void 0 : event.stopPropagation) == null ? void 0 : _b.call(event);
+        (_c = event == null ? void 0 : event.stopImmediatePropagation) == null ? void 0 : _c.call(event);
         if (typeof onExpandSidebar === "function") {
           onExpandSidebar(node);
         }
@@ -6457,6 +6465,13 @@
       if (action === "resumeProgress") {
         this.scheduleContinueWatchingEnter(current);
       }
+    },
+    consumeBackRequest() {
+      if (this.continueWatchingMenu) {
+        this.closeContinueWatchingMenu();
+        return true;
+      }
+      return false;
     },
     cleanup() {
       this.cancelPendingContinueWatchingEnter();
@@ -18189,6 +18204,7 @@ ${normalized}`;
         if (this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params)) {
           this.isLoadingDetail = false;
           this.render(this.meta, this.pendingFocusRestore);
+          this.maybeAutoOpenContinueWatchingStream();
           return;
         }
         this.container.innerHTML = `
@@ -22171,6 +22187,25 @@ ${normalized}`;
       node.scrollIntoView();
     }
   }
+  function findNearestNodeByCenterX(referenceNode, nodes = []) {
+    if (!referenceNode || !nodes.length) {
+      return nodes[0] || null;
+    }
+    const referenceRect = referenceNode.getBoundingClientRect();
+    const referenceCenter = referenceRect.left + referenceRect.width / 2;
+    let bestNode = nodes[0] || null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    nodes.forEach((node) => {
+      const rect = node.getBoundingClientRect();
+      const center = rect.left + rect.width / 2;
+      const distance = Math.abs(center - referenceCenter);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        bestNode = node;
+      }
+    });
+    return bestNode;
+  }
   var LibraryScreen = {
     mount() {
       return __async(this, null, function* () {
@@ -22185,6 +22220,7 @@ ${normalized}`;
         this.focusZone = "content";
         this.lastMainFocus = null;
         this.lastActionsRowAction = "openManageLists";
+        this.pendingPickerRestore = null;
         this.lastPrivacyFocus = "private";
         this.render();
         this.bindEvents();
@@ -22201,6 +22237,9 @@ ${normalized}`;
         var _a, _b;
         const target = (_b = (_a = event.target) == null ? void 0 : _a.closest) == null ? void 0 : _b.call(_a, ".focusable, .library-dialog-input, .library-dialog-textarea");
         if (!target || !this.container.contains(target)) {
+          return;
+        }
+        if (this.isSidebarNode(target)) {
           return;
         }
         if (target.classList.contains("focusable")) {
@@ -22536,6 +22575,8 @@ ${normalized}`;
         selector = state.manageSelectedListKey ? `.library-manage-list-button[data-list-key="${selectorValue(state.manageSelectedListKey)}"]` : ".library-manage-dialog .focusable";
       } else if (state.expandedPicker) {
         selector = `.library-picker.open .library-picker-option[data-option-index="${Number(state.pickerFocusIndex || 0)}"]`;
+      } else if (this.pendingPickerRestore) {
+        selector = `.library-picker-anchor[data-picker="${selectorValue(this.pendingPickerRestore)}"]`;
       } else if (state.lastFocusedPosterKey) {
         selector = `.library-grid-card[data-focus-key="${selectorValue(state.lastFocusedPosterKey)}"]`;
       } else {
@@ -22546,6 +22587,9 @@ ${normalized}`;
         return;
       }
       this.setFocusedNode(target);
+      if (this.pendingPickerRestore) {
+        this.pendingPickerRestore = null;
+      }
     },
     getFocusScopeSelector() {
       const state = this.controller.getState();
@@ -22566,6 +22610,17 @@ ${normalized}`;
       }
       return ".home-main .focusable";
     },
+    getScopedFocusedNode() {
+      var _a, _b, _c;
+      const scopeSelector = String(this.getFocusScopeSelector() || "").trim();
+      if (!scopeSelector) {
+        return ((_a = this.container) == null ? void 0 : _a.querySelector(".focusable.focused")) || null;
+      }
+      return Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll(scopeSelector)) || []).find((node) => {
+        var _a2;
+        return (_a2 = node.classList) == null ? void 0 : _a2.contains("focused");
+      }) || ((_c = this.container) == null ? void 0 : _c.querySelector(".focusable.focused")) || null;
+    },
     resolvePreferredActionsRowNode() {
       var _a;
       const buttons = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".library-actions-row .focusable")) || []);
@@ -22574,8 +22629,63 @@ ${normalized}`;
       }
       return buttons.find((node) => String(node.dataset.action || "") === this.lastActionsRowAction && !node.disabled) || buttons.find((node) => !node.disabled) || buttons[0] || null;
     },
-    handleContentRowMemoryNavigation(event, current) {
+    resolvePreferredPickerRowNode(referenceNode = null) {
+      var _a, _b, _c;
+      const anchors = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".library-picker-row .library-picker-anchor.focusable")) || []);
+      if (!anchors.length) {
+        return null;
+      }
+      const remembered = this.lastMainFocus && ((_c = (_b = this.lastMainFocus).closest) == null ? void 0 : _c.call(_b, ".library-picker-row")) ? this.resolveLastMainFocus() : null;
+      return remembered || findNearestNodeByCenterX(referenceNode, anchors) || anchors[0] || null;
+    },
+    resolvePreferredGridNode(referenceNode = null) {
+      var _a, _b, _c;
+      const cards = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".library-grid-card.focusable")) || []);
+      if (!cards.length) {
+        return null;
+      }
+      const remembered = this.lastMainFocus && ((_c = (_b = this.lastMainFocus).closest) == null ? void 0 : _c.call(_b, ".library-grid")) ? this.resolveLastMainFocus() : null;
+      return remembered || findNearestNodeByCenterX(referenceNode, cards) || cards[0] || null;
+    },
+    handleActionsRowNavigation(event, current) {
       var _a, _b, _c, _d, _e;
+      if (!current || !((_a = current.closest) == null ? void 0 : _a.call(current, ".library-actions-row"))) {
+        return false;
+      }
+      const code = Number((event == null ? void 0 : event.keyCode) || 0);
+      if (code === 37 || code === 39) {
+        const buttons = Array.from(((_b = this.container) == null ? void 0 : _b.querySelectorAll(".library-actions-row .focusable")) || []).filter((node) => !node.disabled);
+        if (!buttons.length) {
+          return false;
+        }
+        const currentIndex = Math.max(0, buttons.indexOf(current));
+        const nextIndex = Math.max(0, Math.min(buttons.length - 1, currentIndex + (code === 37 ? -1 : 1)));
+        (_c = event == null ? void 0 : event.preventDefault) == null ? void 0 : _c.call(event);
+        this.setFocusedNode(buttons[nextIndex] || current);
+        return true;
+      }
+      if (code === 38) {
+        const target = this.resolvePreferredPickerRowNode(current);
+        if (!target) {
+          return false;
+        }
+        (_d = event == null ? void 0 : event.preventDefault) == null ? void 0 : _d.call(event);
+        this.setFocusedNode(target);
+        return true;
+      }
+      if (code === 40) {
+        const target = this.resolvePreferredGridNode(current);
+        if (!target) {
+          return false;
+        }
+        (_e = event == null ? void 0 : event.preventDefault) == null ? void 0 : _e.call(event);
+        this.setFocusedNode(target);
+        return true;
+      }
+      return false;
+    },
+    handleContentRowMemoryNavigation(event, current) {
+      var _a, _b, _c, _d, _e, _f;
       const state = this.controller.getState();
       if (state.sourceMode !== "trakt" || state.expandedPicker || !current) {
         return false;
@@ -22583,6 +22693,10 @@ ${normalized}`;
       const code = Number((event == null ? void 0 : event.keyCode) || 0);
       const fromPickerRow = code === 40 && ((_a = current.matches) == null ? void 0 : _a.call(current, ".library-picker-anchor.focusable")) && Boolean((_b = current.closest) == null ? void 0 : _b.call(current, ".library-picker-row"));
       const fromGrid = code === 38 && ((_c = current.matches) == null ? void 0 : _c.call(current, ".library-grid-card.focusable")) && Boolean((_d = current.closest) == null ? void 0 : _d.call(current, ".library-grid"));
+      const fromActionsRow = ((_e = current.closest) == null ? void 0 : _e.call(current, ".library-actions-row")) || null;
+      if (fromActionsRow) {
+        return this.handleActionsRowNavigation(event, current);
+      }
       if (!fromPickerRow && !fromGrid) {
         return false;
       }
@@ -22590,7 +22704,7 @@ ${normalized}`;
       if (!target) {
         return false;
       }
-      (_e = event == null ? void 0 : event.preventDefault) == null ? void 0 : _e.call(event);
+      (_f = event == null ? void 0 : event.preventDefault) == null ? void 0 : _f.call(event);
       this.setFocusedNode(target);
       return true;
     },
@@ -22733,6 +22847,7 @@ ${normalized}`;
         return true;
       }
       if (state.expandedPicker) {
+        this.pendingPickerRestore = state.expandedPicker;
         this.controller.closePicker();
         return true;
       }
@@ -22762,12 +22877,16 @@ ${normalized}`;
           return;
         }
         if (action === "togglePicker") {
-          this.controller.togglePicker(String(node.dataset.picker || ""));
+          const picker = String(node.dataset.picker || "");
+          const state = this.controller.getState();
+          this.pendingPickerRestore = state.expandedPicker === picker ? picker : null;
+          this.controller.togglePicker(picker);
           return;
         }
         if (action === "selectPickerOption") {
           const picker = String(node.dataset.picker || "");
           const index = Number(node.dataset.optionIndex || 0);
+          this.pendingPickerRestore = picker || null;
           this.controller.setState({
             pickerFocusIndex: index,
             expandedPicker: picker
@@ -22856,7 +22975,7 @@ ${normalized}`;
     },
     onKeyDown(event) {
       return __async(this, null, function* () {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
+        var _a, _b, _c, _d, _e, _f, _g;
         if (Environment.isBackEvent(event)) {
           (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
           if (this.closeTopOverlay()) {
@@ -22914,7 +23033,7 @@ ${normalized}`;
           return;
         }
         if (ScreenUtils.handleDpadNavigation(event, this.container, this.getFocusScopeSelector())) {
-          const current2 = ((_g = this.container) == null ? void 0 : _g.querySelector(`${this.getFocusScopeSelector()}.focused`)) || ((_h = this.container) == null ? void 0 : _h.querySelector(".focusable.focused"));
+          const current2 = this.getScopedFocusedNode();
           if (current2) {
             this.setFocusedNode(current2);
           }
@@ -22923,10 +23042,11 @@ ${normalized}`;
         if (code !== 13) {
           return;
         }
-        const focused = ((_i = this.container) == null ? void 0 : _i.querySelector(`${this.getFocusScopeSelector()}.focused`)) || ((_j = this.container) == null ? void 0 : _j.querySelector(".focusable.focused"));
+        const focused = this.getScopedFocusedNode();
         if (!focused) {
           return;
         }
+        (_g = event == null ? void 0 : event.preventDefault) == null ? void 0 : _g.call(event);
         yield this.activateNode(focused);
       });
     },
@@ -23166,6 +23286,12 @@ ${normalized}`;
         this.voiceRecognition = this.voiceRecognition || null;
         this.searchToastTimer = null;
         this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params);
+        if (!(navigationContext == null ? void 0 : navigationContext.isBackNavigation)) {
+          this.focusZone = "content";
+          this.sidebarExpanded = false;
+          this.sidebarFocusIndex = 0;
+          this.pillIconOnly = false;
+        }
         this.loadToken = (this.loadToken || 0) + 1;
         const hasExplicitQuery = Boolean(String(params.query || "").trim());
         const restoredQuery = String(((_a = navigationContext == null ? void 0 : navigationContext.restoredState) == null ? void 0 : _a.query) || "").trim();

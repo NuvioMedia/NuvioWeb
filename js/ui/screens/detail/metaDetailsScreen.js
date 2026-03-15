@@ -689,6 +689,7 @@ export const MetaDetailsScreen = {
     if (this.hydrateFromRouteState(navigationContext?.restoredState || null, params)) {
       this.isLoadingDetail = false;
       this.render(this.meta, this.pendingFocusRestore);
+      this.maybeAutoOpenContinueWatchingStream();
       return;
     }
 

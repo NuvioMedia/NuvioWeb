@@ -2,6 +2,7 @@ AGENTS.md
 
 nuvio.env.js
 dist/nuvio.env.js
+node_modules/
 
 *.ipk
 
