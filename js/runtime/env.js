@@ -20,6 +20,7 @@
     SUPABASE_URL: typeof existing.SUPABASE_URL === "undefined" ? "" : existing.SUPABASE_URL,
     SUPABASE_ANON_KEY: typeof existing.SUPABASE_ANON_KEY === "undefined" ? "" : existing.SUPABASE_ANON_KEY,
     TV_LOGIN_REDIRECT_BASE_URL: typeof existing.TV_LOGIN_REDIRECT_BASE_URL === "undefined" ? "" : existing.TV_LOGIN_REDIRECT_BASE_URL,
+    PUBLIC_APP_URL: typeof existing.PUBLIC_APP_URL === "undefined" ? "" : existing.PUBLIC_APP_URL,
     YOUTUBE_PROXY_URL: typeof existing.YOUTUBE_PROXY_URL === "undefined" ? "" : existing.YOUTUBE_PROXY_URL,
     ADDON_REMOTE_BASE_URL: typeof existing.ADDON_REMOTE_BASE_URL === "undefined" ? "" : existing.ADDON_REMOTE_BASE_URL,
     ENABLE_REMOTE_WRAPPER_MODE: typeof existing.ENABLE_REMOTE_WRAPPER_MODE === "undefined" ? false : Boolean(existing.ENABLE_REMOTE_WRAPPER_MODE),

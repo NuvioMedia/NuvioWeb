@@ -1,6 +1,5 @@
 const APP_SHELL = `
   <div id="app">
-    <div id="splash" class="screen"></div>
     <div id="account" class="screen"></div>
     <div id="profileSelection" class="screen"></div>
     <div id="home" class="screen"></div>

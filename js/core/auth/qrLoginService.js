@@ -6,6 +6,10 @@ import { AuthState } from "./authState.js";
 
 let lastError = null;
 
+function hasQrAuthConfig() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+}
+
 function isJwtLike(token) {
   const value = String(token || "").trim();
   return value.split(".").length === 3;
@@ -128,10 +132,48 @@ function isLegacyStartSignatureError(text) {
 }
 
 async function parseErrorText(response) {
+  const status = Number(response?.status || 0);
   try {
-    return await response.text();
+    const rawText = await response.text();
+    const text = String(rawText || "").trim();
+    if (!text) {
+      return status ? `HTTP ${status}` : "Request failed";
+    }
+
+    try {
+      const parsed = JSON.parse(text);
+      const jsonMessage = [
+        parsed?.msg,
+        parsed?.message,
+        parsed?.error_description,
+        parsed?.error,
+        parsed?.hint
+      ].find((value) => typeof value === "string" && value.trim());
+      if (jsonMessage) {
+        return status ? `HTTP ${status}: ${jsonMessage.trim()}` : jsonMessage.trim();
+      }
+    } catch {
+      // Ignore non-JSON payloads.
+    }
+
+    const strippedHtml = text
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!strippedHtml) {
+      return status ? `HTTP ${status}` : "Request failed";
+    }
+
+    if (/<!doctype html>|<html[\s>]/i.test(text) && status) {
+      return `HTTP ${status}: ${strippedHtml}`;
+    }
+
+    return status ? `HTTP ${status}: ${strippedHtml}` : strippedHtml;
   } catch {
-    return `HTTP ${response.status}`;
+    return status ? `HTTP ${status}` : "Request failed";
   }
 }
 
@@ -262,6 +304,9 @@ export const QrLoginService = {
   async start() {
     lastError = null;
     try {
+      if (!hasQrAuthConfig()) {
+        throw new Error("QR auth is not configured");
+      }
       await ensureQrSessionAuthenticated();
       const deviceNonce = generateDeviceNonce();
       const redirectCandidates = buildRedirectCandidates();
@@ -321,6 +366,10 @@ export const QrLoginService = {
   async poll(code, deviceNonce) {
     lastError = null;
     try {
+      if (!hasQrAuthConfig()) {
+        lastError = "QR auth is not configured";
+        return null;
+      }
       await ensureQrSessionAuthenticated();
       const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`, {
         method: "POST",
@@ -352,6 +401,10 @@ export const QrLoginService = {
   async exchange(code, deviceNonce) {
     lastError = null;
     try {
+      if (!hasQrAuthConfig()) {
+        lastError = "QR auth is not configured";
+        return false;
+      }
       await ensureQrSessionAuthenticated();
       const token = getBearerToken();
       const response = await fetch(`${SUPABASE_URL}/functions/v1/tv-logins-exchange`, {

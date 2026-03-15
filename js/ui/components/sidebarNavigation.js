@@ -1,5 +1,6 @@
 import { Router } from "../navigation/router.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
+import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
 import { I18n } from "../../i18n/index.js";
 import { Platform } from "../../platform/index.js";
 
@@ -78,14 +79,17 @@ function getItemForAction(action = "") {
 export async function getSidebarProfileState() {
   const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
   const profiles = await ProfileManager.getProfiles();
+  const avatarCatalog = await AvatarRepository.getAvatarCatalog().catch(() => []);
   const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId)
     || profiles[0]
     || null;
+  const activeProfileAvatarUrl = AvatarRepository.getAvatarImageUrl(activeProfile?.avatarId, avatarCatalog);
 
   return {
     activeProfileName: String(activeProfile?.name || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback"),
     activeProfileInitial: profileInitial(activeProfile?.name || t("sidebar.profileFallback")),
     activeProfileColorHex: String(activeProfile?.avatarColorHex || "#1E88E5"),
+    activeProfileAvatarUrl: String(activeProfileAvatarUrl || ""),
     showProfileSelector: profiles.length > 1
   };
 }
@@ -130,7 +134,11 @@ export function renderLegacySidebar({
         <button class="home-profile-pill focusable"
                 data-action="gotoAccount"
                 aria-label="${t("sidebar.switchProfile")}">
-          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">
+            ${profileState.activeProfileAvatarUrl
+              ? `<img class="sidebar-profile-avatar-image" src="${profileState.activeProfileAvatarUrl}" alt="${profileState.activeProfileName || t("sidebar.profileFallback")}" />`
+              : (profileState.activeProfileInitial || "P")}
+          </span>
           <span class="home-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
         </button>
       ` : ""}
@@ -177,7 +185,11 @@ export function renderModernSidebar({
       <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
         ${showProfileSelector ? `
           <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
-            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">${profileState.activeProfileInitial || "P"}</span>
+            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">
+              ${profileState.activeProfileAvatarUrl
+                ? `<img class="sidebar-profile-avatar-image" src="${profileState.activeProfileAvatarUrl}" alt="${profileState.activeProfileName || t("sidebar.profileFallback")}" />`
+                : (profileState.activeProfileInitial || "P")}
+            </span>
             <span class="modern-sidebar-profile-name">${profileState.activeProfileName || t("sidebar.profileFallback")}</span>
           </button>
         ` : ""}

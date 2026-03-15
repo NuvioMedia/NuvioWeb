@@ -176,9 +176,18 @@ export const AuthQrSignInScreen = {
   },
 
   toFriendlyQrError(rawError) {
-    const message = String(rawError || "").toLowerCase();
+    const normalizedError = String(rawError || "").replace(/\s+/g, " ").trim();
+    const conciseReason = normalizedError.length > 160 ? `${normalizedError.slice(0, 157)}...` : normalizedError;
+    const message = normalizedError.toLowerCase();
     if (!message) {
       return I18n.t("auth.qr.unavailable");
+    }
+    if (message.includes("qr auth is not configured")
+      || message.includes("missing redirect_base_url configuration")
+      || message.includes("apikey")
+      || message.includes("api key")
+      || message.includes("anon key")) {
+      return I18n.t("auth.qr.notConfigured");
     }
     if (message.includes("invalid tv login redirect base url")) {
       return I18n.t("auth.qr.invalidRedirect");
@@ -192,7 +201,14 @@ export const AuthQrSignInScreen = {
     if (message.includes("network") || message.includes("failed to fetch")) {
       return I18n.t("auth.qr.networkError");
     }
-    return I18n.t("auth.qr.unavailableWithReason", { reason: rawError });
+    if (message.includes("unsupported method")
+      || message.includes("error response")
+      || message.includes("http 5")
+      || message.includes("http 404")
+      || message.includes("http 405")) {
+      return I18n.t("auth.qr.serviceUnavailable");
+    }
+    return I18n.t("auth.qr.unavailableWithReason", { reason: conciseReason });
   },
 
   setStatus(text) {

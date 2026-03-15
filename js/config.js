@@ -13,6 +13,7 @@ function normalizePlaybackOrder(value) {
 export const SUPABASE_URL = String(runtimeEnv.SUPABASE_URL || "").trim();
 export const SUPABASE_ANON_KEY = String(runtimeEnv.SUPABASE_ANON_KEY || "").trim();
 export const TV_LOGIN_REDIRECT_BASE_URL = String(runtimeEnv.TV_LOGIN_REDIRECT_BASE_URL || "").trim();
+export const PUBLIC_APP_URL = String(runtimeEnv.PUBLIC_APP_URL || "").trim();
 export const YOUTUBE_PROXY_URL = String(runtimeEnv.YOUTUBE_PROXY_URL || "").trim();
 export const ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
 export const ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
