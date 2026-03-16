@@ -1,0 +1,45 @@
+name: Release webOS Artifact
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to dispatch to private platform repos
+        required: true
+      release_id:
+        description: Existing GitHub release ID
+        required: false
+
+jobs:
+  dispatch-webos-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve release payload
+        id: payload
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+            echo "release_id=${{ github.event.release.id }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "release_id=${{ inputs.release_id }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch webOS build
+        if: ${{ vars.WEBOS_REPO != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+          TARGET_REPO: ${{ vars.WEBOS_REPO }}
+          TAG_NAME: ${{ steps.payload.outputs.tag }}
+          RELEASE_ID: ${{ steps.payload.outputs.release_id }}
+          SOURCE_REPO: ${{ github.repository }}
+        run: |
+          gh api --method POST "repos/$TARGET_REPO/dispatches" \
+            -f event_type=build-release \
+            -F client_payload[source_repo]="$SOURCE_REPO" \
+            -F client_payload[tag]="$TAG_NAME" \
+            -F client_payload[release_id]="$RELEASE_ID"
