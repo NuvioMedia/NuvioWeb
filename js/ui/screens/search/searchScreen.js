@@ -467,7 +467,7 @@ export const SearchScreen = {
                      data-item-title="${item.name || "Untitled"}"
                      data-row-key="${escapeHtml(rowKey)}">
               <div class="search-result-poster-wrap">
-                ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" />` : `<div class="search-result-poster placeholder"></div>`}
+                ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" loading="lazy" decoding="async" />` : `<div class="search-result-poster placeholder"></div>`}
               </div>
               <div class="search-result-name">${item.name || "Untitled"}</div>
               <div class="search-result-date">${formatReleaseYear(item)}</div>

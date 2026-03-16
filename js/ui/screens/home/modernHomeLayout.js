@@ -14,9 +14,13 @@ export function renderModernHomeLayout({
   continueWatchingItems = [],
   continueWatchingLoading = false,
   continueWatchingLoadingCount = 0,
+  rowItemLimit = 15,
   showHeroSection = false,
   showPosterLabels = true,
   showCatalogTypeSuffix = true,
+  focusedRowKey = "",
+  focusedItemIndex = -1,
+  expandFocusedPoster = false,
   buildModernHeroPresentation,
   renderContinueWatchingSection,
   createPosterCardMarkup,
@@ -30,24 +34,29 @@ export function renderModernHomeLayout({
 
   rows.forEach((rowData, rowIndex) => {
     const items = Array.isArray(rowData?.result?.data?.items) ? rowData.result.data.items : [];
-    if (!items.length) {
+    const isLoading = rowData?.result?.status === "loading";
+    const rowItems = items.length ? items : (rowData.loadingItems || []);
+    if (!rowItems.length) {
       return;
     }
 
     const rowKey = buildModernRowKey(rowData);
     const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-    catalogSeeAllMap.set(seeAllId, {
-      addonBaseUrl: rowData.addonBaseUrl || "",
-      addonId: rowData.addonId || "",
-      addonName: rowData.addonName || "",
-      catalogId: rowData.catalogId || "",
-      catalogName: rowData.catalogName || "",
-      type: rowData.type || "movie",
-      initialItems: items
-    });
+    if (!isLoading) {
+      catalogSeeAllMap.set(seeAllId, {
+        addonBaseUrl: rowData.addonBaseUrl || "",
+        addonId: rowData.addonId || "",
+        addonName: rowData.addonName || "",
+        catalogId: rowData.catalogId || "",
+        catalogName: rowData.catalogName || "",
+        type: rowData.type || "movie",
+        initialItems: items
+      });
+    }
 
-    const hasSeeAll = items.length >= 15;
-    const visibleItems = items.slice(0, 15);
+    const maxItems = Math.max(1, Number(rowItemLimit || 15));
+    const hasSeeAll = !isLoading && items.length > maxItems;
+    const visibleItems = rowItems.slice(0, maxItems);
     const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
     const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
       item,
@@ -55,7 +64,8 @@ export function renderModernHomeLayout({
       itemIndex,
       rowData.type,
       showPosterLabels,
-      "modern"
+      "modern",
+      expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex
     )).join("");
 
     sectionsMarkup.push(`
@@ -187,15 +197,15 @@ function renderModernHeroMarkup({
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}">
         <div class="home-modern-hero-media">
           <div class="home-hero-backdrop-wrap">
-            ${display.backdrop
-              ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" />`
+          ${display.backdrop
+              ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" />`
               : '<div class="home-hero-backdrop placeholder"></div>'}
           </div>
           <div class="home-hero-trailer-layer"></div>
         </div>
         <div class="home-hero-copy home-modern-hero-copy">
           <div class="home-hero-brand">
-            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title)}" />` : ""}
+            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" />` : ""}
             <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml(display.title)}</h1>
           </div>
           <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">

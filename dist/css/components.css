@@ -3061,7 +3061,7 @@ button:focus-visible {
   display: block;
   width: auto;
   max-width: 100%;
-  max-height: 80px;
+  max-height: 96px;
   object-fit: contain;
 }
 
@@ -3134,8 +3134,8 @@ button:focus-visible {
   margin: 0;
   max-width: 100%;
   color: rgba(255, 255, 255, 0.82);
-  font-size: 14px;
-  line-height: 1.43;
+  font-size: 18px;
+  line-height: 1.55;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   overflow: hidden;
@@ -3186,7 +3186,7 @@ button:focus-visible {
 .home-screen-shell .home-row-subtitle {
   margin-top: 2px;
   color: rgba(255, 255, 255, 0.52);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.33;
 }
 
@@ -3212,7 +3212,7 @@ button:focus-visible {
   border: 2px solid transparent;
   background: transparent;
   overflow: visible;
-  transition: transform 180ms ease, border-color 180ms ease;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), border-color 200ms ease, box-shadow 200ms ease;
 }
 
 .home-screen-shell .home-content-card.focused {
@@ -3245,7 +3245,7 @@ button:focus-visible {
   border-radius: calc(var(--home-poster-radius) - 2px);
   background-color: transparent;
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition: border-color 180ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 0.61, 0.36, 1), background-color 180ms ease;
 }
 
 .home-screen-shell .home-poster-card.focused .home-poster-frame {
@@ -3268,12 +3268,12 @@ button:focus-visible {
 
 .home-screen-shell .home-poster-card .content-poster {
   background: linear-gradient(180deg, rgba(26, 26, 26, 1), rgba(10, 10, 10, 1));
-  transition: opacity 250ms ease;
+  transition: opacity 280ms ease;
 }
 
 .home-screen-shell .home-poster-card .home-poster-expanded-backdrop {
   opacity: 0;
-  transition: opacity 180ms ease;
+  transition: opacity 220ms ease;
 }
 
 .home-screen-shell .home-poster-card .home-poster-expanded-backdrop.placeholder {
@@ -3334,14 +3334,14 @@ button:focus-visible {
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 
 .home-screen-shell .home-poster-expanded-description {
   margin-top: 4px;
   color: #fff;
-  font-size: 13px;
-  line-height: 1.38;
+  font-size: 14px;
+  line-height: 1.45;
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -3364,17 +3364,17 @@ button:focus-visible {
   line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 
 .home-screen-shell .home-poster-subtitle {
   margin-top: 2px;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.3;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
 }
 
 .home-screen-shell .home-seeall-card {
@@ -3464,7 +3464,7 @@ button:focus-visible {
     linear-gradient(145deg, #393939, #111);
   background-position: center;
   background-size: cover;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition: border-color 180ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 0.61, 0.36, 1), background-color 180ms ease;
 }
 
 .home-screen-shell .home-continue-card.focused,
@@ -3513,14 +3513,14 @@ button:focus-visible {
 
 .home-screen-shell .home-continue-kicker {
   color: rgba(255, 255, 255, 0.88);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.33;
 }
 
 .home-screen-shell .home-continue-title {
   margin-top: 2px;
   color: #fff;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1.25;
   font-weight: 500;
 }
@@ -3528,7 +3528,7 @@ button:focus-visible {
 .home-screen-shell .home-continue-subtitle {
   margin-top: 2px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.33;
 }
 
@@ -3685,6 +3685,53 @@ button:focus-visible {
   height: 16px;
 }
 
+.home-screen-shell .home-poster-card-loading {
+  pointer-events: none;
+}
+
+.home-screen-shell .home-poster-card-loading .home-poster-frame {
+  position: relative;
+  overflow: hidden;
+}
+
+.home-screen-shell .home-poster-card-loading .home-poster-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  background-size: 220% 100%;
+  animation: homeContinueLoadingShimmer 1.4s linear infinite;
+  z-index: 2;
+}
+
+.home-screen-shell .home-poster-card-loading .content-poster.placeholder {
+  background: linear-gradient(145deg, #262626, #101010);
+}
+
+.home-screen-shell .home-poster-copy-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+}
+
+.home-screen-shell .home-poster-skeleton-line {
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
+  background-size: 220% 100%;
+  animation: homeContinueLoadingShimmer 1.2s linear infinite;
+}
+
+.home-screen-shell .home-poster-skeleton-title {
+  width: var(--poster-skeleton-title, 120px);
+  height: 14px;
+}
+
+.home-screen-shell .home-poster-skeleton-subtitle {
+  width: var(--poster-skeleton-subtitle, 90px);
+  height: 12px;
+}
+
 .home-screen-shell .home-continue-skeleton-subtitle {
   width: var(--cw-skeleton-subtitle, 118px);
   height: 12px;
@@ -3747,7 +3794,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-classic .home-hero-logo {
   max-width: 420px;
-  max-height: 80px;
+  max-height: 96px;
 }
 
 .home-screen-shell.home-layout-classic .home-hero-title-text {
@@ -3771,7 +3818,8 @@ button:focus-visible {
 .home-screen-shell.home-layout-classic .home-hero-description {
   margin-top: 8px;
   max-width: 560px;
-  -webkit-line-clamp: 2;
+  display: block;
+  max-height: calc(1.55em * 2);
 }
 
 .home-screen-shell.home-layout-classic .home-hero-indicators {
@@ -3850,7 +3898,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-grid .home-hero-logo {
   max-width: 420px;
-  max-height: 80px;
+  max-height: 96px;
 }
 
 .home-screen-shell.home-layout-grid .home-hero-title-text {
@@ -3869,7 +3917,8 @@ button:focus-visible {
 .home-screen-shell.home-layout-grid .home-hero-description {
   margin-top: 8px;
   max-width: 540px;
-  -webkit-line-clamp: 2;
+  display: block;
+  max-height: calc(1.55em * 2);
 }
 
 .home-screen-shell.home-layout-grid .home-hero-meta-secondary {
@@ -4000,6 +4049,10 @@ button:focus-visible {
   --home-poster-radius: 12px;
   --home-continue-width: 520px;
   --home-continue-height: 293px;
+}
+
+.home-screen-shell.home-layout-modern.modern-sidebar-enabled {
+  --home-content-start: calc(var(--modern-sidebar-collapsed-width) + 16px);
 }
 
 .home-screen-shell.home-layout-modern .home-main {
@@ -4135,7 +4188,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-hero-logo {
   max-width: 220px;
-  max-height: 100px;
+  max-height: 118px;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-title-text {
@@ -4207,7 +4260,8 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-hero-description {
   margin-top: 8px;
   max-width: 100%;
-  -webkit-line-clamp: 4;
+  display: block;
+  max-height: calc(1.55em * 4);
   color: rgba(255, 255, 255, 0.72);
 }
 
@@ -4283,7 +4337,7 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card {
-  transition: flex-basis 200ms ease, min-width 200ms ease, max-width 200ms ease;
+  transition: flex-basis 240ms cubic-bezier(0.22, 0.61, 0.36, 1), min-width 240ms cubic-bezier(0.22, 0.61, 0.36, 1), max-width 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-expanded {
@@ -6096,6 +6150,12 @@ button:focus-visible {
   z-index: 5;
   pointer-events: auto;
   background: #000;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.player-external-frame-shell::-webkit-scrollbar {
+  display: none;
 }
 
 .player-external-frame {
@@ -6104,6 +6164,7 @@ button:focus-visible {
   border: 0;
   display: block;
   background: #000;
+  overflow: hidden;
 }
 
 #playerUiRoot {
@@ -7330,8 +7391,8 @@ button:focus-visible {
 }
 
 .series-season-btn {
-  height: 62px;
-  padding: 0 26px;
+  height: 44px;
+  padding: 0 18px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(0, 0, 0, 0.34);
@@ -7339,6 +7400,10 @@ button:focus-visible {
   font-size: 32px;
   font-weight: 600;
   pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .series-season-btn.selected {
@@ -8020,6 +8085,7 @@ button:focus-visible {
   z-index: 0;
   opacity: 0;
   transition: opacity 600ms ease;
+  overflow: hidden;
 }
 
 .detail-trailer-active .detail-trailer-layer {
@@ -8032,6 +8098,7 @@ button:focus-visible {
   height: 100%;
   border: 0;
   object-fit: cover;
+  overflow: hidden;
 }
 
 .series-detail-vignette {
@@ -8268,8 +8335,8 @@ button:focus-visible {
 .series-detail-support {
   margin: 0 0 12px;
   max-width: 60%;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 15px;
+  line-height: 22px;
   color: var(--detail-text-secondary);
   transition: opacity 400ms ease, transform 400ms ease;
 }
@@ -8302,8 +8369,8 @@ button:focus-visible {
 .series-detail-description {
   margin: 0 0 12px;
   max-width: 60%;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 16px;
+  line-height: 22px;
   color: var(--detail-text-primary);
   transition: opacity 400ms ease, transform 400ms ease;
 }
@@ -8413,15 +8480,19 @@ button:focus-visible {
 }
 
 .series-season-btn {
-  min-height: 40px;
-  padding: 10px 20px;
+  min-height: 28px;
+  padding: 6px 16px;
   border-radius: 20px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--detail-bg-card);
   color: var(--detail-text-secondary);
-  font-size: 16px;
-  line-height: 24px;
+  font-size: 15px;
+  line-height: 18px;
   font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .series-season-btn.selected {
@@ -8525,7 +8596,7 @@ button:focus-visible {
 .series-episode-overview {
   margin-top: 0;
   max-height: none;
-  font-size: 12px;
+  font-size: 14px;
   line-height: 22px;
   color: rgba(255, 255, 255, 0.9);
   -webkit-line-clamp: 4;
@@ -9190,7 +9261,7 @@ button:focus-visible {
   align-items: center;
   gap: 30px;
   transform-origin: center;
-  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
 }
 
 .stream-route-card:focus {
@@ -9199,6 +9270,61 @@ button:focus-visible {
 
 .stream-route-card:last-child {
   margin-bottom: 0;
+}
+
+.performance-constrained * {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 140ms !important;
+  transition-delay: 0ms !important;
+}
+
+.performance-constrained .home-route-content-enter,
+.performance-constrained .addons-route-enter,
+.performance-constrained .search-route-enter,
+.performance-constrained .library-route-enter {
+  animation: none !important;
+}
+
+.performance-constrained .home-content-card,
+.performance-constrained .home-poster-frame,
+.performance-constrained .home-poster-card,
+.performance-constrained .home-continue-card,
+.performance-constrained .stream-route-card {
+  transition-duration: 200ms !important;
+  transition-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1) !important;
+}
+
+.performance-constrained .home-content-card.focused {
+  transform: scale(1.01) !important;
+}
+
+.performance-constrained .home-boot-shimmer,
+.performance-constrained .home-continue-media-loading,
+.performance-constrained .home-continue-card-loading,
+.performance-constrained .home-continue-card-loading .home-continue-progress,
+.performance-constrained .home-continue-skeleton-line,
+.performance-constrained .home-modern-hero-card-loading,
+.performance-constrained .home-modern-hero-media-loading .home-hero-backdrop-loading,
+.performance-constrained .home-hero-backdrop-loading {
+  animation: none !important;
+}
+
+.performance-constrained .modern-sidebar-panel,
+.performance-constrained .modern-sidebar-pill-chip,
+.performance-constrained .series-episode-card,
+.performance-constrained .series-stream-panel,
+.performance-constrained .stream-route-panel-shell {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.performance-constrained .home-content-card.focused,
+.performance-constrained .home-continue-card.focused,
+.performance-constrained .home-poster-card.focused .home-poster-frame,
+.performance-constrained .series-episode-card.focused,
+.performance-constrained .series-season-btn.focused {
+  box-shadow: none !important;
 }
 
 .stream-route-card.focused {

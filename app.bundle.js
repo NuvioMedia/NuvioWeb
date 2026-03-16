@@ -2028,374 +2028,6 @@
     }
   };
 
-  // js/ui/screens/home/modernHomeLayout.js
-  var MODERN_HOME_CONSTANTS = {
-    heroFocusDelayMs: 90,
-    heroRapidNavThresholdMs: 130,
-    heroRapidSettleMs: 170,
-    keyRepeatThrottleMs: 80,
-    rowFocusInset: 40,
-    trackEdgePadding: 52
-  };
-  function renderModernHomeLayout({
-    rows = [],
-    heroItem = null,
-    heroCandidates = [],
-    continueWatchingItems = [],
-    continueWatchingLoading = false,
-    continueWatchingLoadingCount = 0,
-    showHeroSection = false,
-    showPosterLabels = true,
-    showCatalogTypeSuffix = true,
-    buildModernHeroPresentation: buildModernHeroPresentation2,
-    renderContinueWatchingSection: renderContinueWatchingSection2,
-    createPosterCardMarkup: createPosterCardMarkup2,
-    createSeeAllCardMarkup: createSeeAllCardMarkup2,
-    formatCatalogRowTitle: formatCatalogRowTitle3,
-    escapeHtml: escapeHtml16,
-    escapeAttribute: escapeAttribute3
-  } = {}) {
-    const catalogSeeAllMap = /* @__PURE__ */ new Map();
-    const sectionsMarkup = [];
-    rows.forEach((rowData, rowIndex) => {
-      var _a, _b;
-      const items = Array.isArray((_b = (_a = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) ? rowData.result.data.items : [];
-      if (!items.length) {
-        return;
-      }
-      const rowKey = buildModernRowKey(rowData);
-      const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-      catalogSeeAllMap.set(seeAllId, {
-        addonBaseUrl: rowData.addonBaseUrl || "",
-        addonId: rowData.addonId || "",
-        addonName: rowData.addonName || "",
-        catalogId: rowData.catalogId || "",
-        catalogName: rowData.catalogName || "",
-        type: rowData.type || "movie",
-        initialItems: items
-      });
-      const hasSeeAll = items.length >= 15;
-      const visibleItems = items.slice(0, 15);
-      const rowTitle = formatCatalogRowTitle3(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
-      const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup2(
-        item,
-        rowIndex,
-        itemIndex,
-        rowData.type,
-        showPosterLabels,
-        "modern"
-      )).join("");
-      sectionsMarkup.push(`
-      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml16(rowKey)}" data-row-index="${rowIndex}">
-        <div class="home-row-head">
-          <h2 class="home-row-title">${escapeHtml16(rowTitle)}</h2>
-        </div>
-        <div class="home-track" data-track-row-key="${escapeHtml16(rowKey)}">
-          ${cardsMarkup}
-          ${hasSeeAll ? createSeeAllCardMarkup2(seeAllId, rowData) : ""}
-        </div>
-      </section>
-    `);
-    });
-    return {
-      catalogSeeAllMap,
-      markup: `
-      <section class="home-modern-stage">
-        ${showHeroSection ? renderModernHeroMarkup({
-        heroItem,
-        heroCandidates,
-        buildModernHeroPresentation: buildModernHeroPresentation2,
-        escapeHtml: escapeHtml16,
-        escapeAttribute: escapeAttribute3
-      }) : continueWatchingLoading ? renderModernHeroSkeletonMarkup() : ""}
-        <div class="home-modern-rows-viewport">
-          <div class="home-modern-rows-scroll">
-            ${renderContinueWatchingSection2(continueWatchingItems, {
-        rowKey: "continue_watching",
-        loading: continueWatchingLoading,
-        loadingCount: continueWatchingLoadingCount
-      })}
-            ${sectionsMarkup.join("")}
-          </div>
-        </div>
-      </section>
-    `
-    };
-  }
-  function buildModernNavigationRows(container) {
-    const rows = [];
-    const continueTrack = container == null ? void 0 : container.querySelector(".home-row-continue .home-track");
-    if (continueTrack) {
-      const continueNodes = Array.from(continueTrack.querySelectorAll(".home-content-card.focusable"));
-      if (continueNodes.length) {
-        rows.push(continueNodes);
-      }
-    }
-    const rowSections = Array.from((container == null ? void 0 : container.querySelectorAll(".home-modern-row")) || []);
-    rowSections.forEach((section) => {
-      const track = section.querySelector(".home-track");
-      if (!track) {
-        return;
-      }
-      const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
-      if (cards.length) {
-        rows.push(cards);
-      }
-    });
-    return rows;
-  }
-  function buildModernRowKey(rowData = {}) {
-    return `${rowData.addonId || ""}_${rowData.type || ""}_${rowData.catalogId || ""}`;
-  }
-  function buildHeroIndicators(items = [], activeItem = null) {
-    if (!Array.isArray(items) || items.length <= 1) {
-      return "";
-    }
-    const activeId = String((activeItem == null ? void 0 : activeItem.id) || "");
-    const activeIndex = items.findIndex((item) => String((item == null ? void 0 : item.id) || "") === activeId);
-    return items.map((_, index) => `
-    <span class="home-hero-indicator${index === activeIndex ? " is-active" : ""}"></span>
-  `).join("");
-  }
-  function renderModernHeroMarkup({
-    heroItem,
-    heroCandidates,
-    buildModernHeroPresentation: buildModernHeroPresentation2,
-    escapeHtml: escapeHtml16,
-    escapeAttribute: escapeAttribute3
-  }) {
-    const display = buildModernHeroPresentation2(heroItem);
-    if (!display) {
-      return "";
-    }
-    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml16(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
-    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml16(token)}</span>`);
-    if (display.showImdbPrimary) {
-      primaryRightParts.push(`
-      <span class="home-hero-imdb">
-        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
-        <span>${escapeHtml16(display.imdbText)}</span>
-      </span>
-    `);
-    }
-    const secondaryParts = [];
-    if (display.secondaryHighlightText) {
-      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml16(display.secondaryHighlightText)}</span>`);
-    }
-    display.badges.forEach((badge) => {
-      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml16(badge)}</span>`);
-    });
-    if (display.showImdbSecondary) {
-      secondaryParts.push(`
-      <span class="home-hero-imdb">
-        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
-        <span>${escapeHtml16(display.imdbText)}</span>
-      </span>
-    `);
-    }
-    if (display.languageText) {
-      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml16(display.languageText)}</span>`);
-    }
-    return `
-    <section class="home-hero home-hero-modern">
-      <article class="home-hero-card home-modern-hero-card"
-               data-item-id="${escapeAttribute3((heroItem == null ? void 0 : heroItem.id) || "")}"
-               data-item-type="${escapeAttribute3((heroItem == null ? void 0 : heroItem.type) || "movie")}"
-               data-item-title="${escapeAttribute3((heroItem == null ? void 0 : heroItem.name) || "Untitled")}">
-        <div class="home-modern-hero-media">
-          <div class="home-hero-backdrop-wrap">
-            ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute3(display.backdrop)}" alt="${escapeAttribute3(display.title)}" />` : '<div class="home-hero-backdrop placeholder"></div>'}
-          </div>
-          <div class="home-hero-trailer-layer"></div>
-        </div>
-        <div class="home-hero-copy home-modern-hero-copy">
-          <div class="home-hero-brand">
-            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute3(display.logo)}" alt="${escapeAttribute3(display.title)}" />` : ""}
-            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml16(display.title)}</h1>
-          </div>
-          <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">
-            <div class="home-modern-hero-meta-group">
-              ${primaryLeft}
-            </div>
-            <div class="home-modern-hero-meta-group">
-              ${primaryRightParts.join('<span class="home-hero-dot">\u2022</span>')}
-            </div>
-          </div>
-          <div class="home-modern-hero-secondary${display.secondaryHighlightText || display.badges.length || display.showImdbSecondary || display.languageText ? "" : " is-empty"}">
-            ${secondaryParts.join('<span class="home-hero-dot">\u2022</span>')}
-          </div>
-          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml16(display.description)}</p>
-        </div>
-        <div class="home-hero-indicators">${buildHeroIndicators(heroCandidates, heroItem)}</div>
-      </article>
-    </section>
-  `;
-  }
-  function renderModernHeroSkeletonMarkup() {
-    return `
-    <section class="home-hero home-hero-modern home-hero-modern-loading" aria-hidden="true">
-      <article class="home-hero-card home-modern-hero-card home-modern-hero-card-loading">
-        <div class="home-modern-hero-media home-modern-hero-media-loading">
-          <div class="home-hero-backdrop-wrap">
-            <div class="home-hero-backdrop placeholder home-hero-backdrop-loading"></div>
-          </div>
-        </div>
-      </article>
-    </section>
-  `;
-  }
-
-  // js/core/addons/homeCatalogs.js
-  function isSearchOnlyCatalog(catalog) {
-    return Array.isArray(catalog == null ? void 0 : catalog.extra) && catalog.extra.some(
-      (entry) => String((entry == null ? void 0 : entry.name) || "").toLowerCase() === "search" && Boolean(entry == null ? void 0 : entry.isRequired)
-    );
-  }
-  function buildCatalogOrderKey(addonId, type, catalogId) {
-    return `${addonId}_${type}_${catalogId}`;
-  }
-  function buildCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName) {
-    return `${addonBaseUrl}_${type}_${catalogId}_${catalogName}`;
-  }
-  function toDisplayTypeLabel(value) {
-    const raw = String(value || "").trim();
-    if (!raw) {
-      return "";
-    }
-    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-  }
-  function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKeys = []) {
-    const defaultEntries = [];
-    const seenKeys = /* @__PURE__ */ new Set();
-    const disabledSet = new Set(disabledKeys || []);
-    (addons || []).forEach((addon) => {
-      (addon.catalogs || []).filter((catalog) => !isSearchOnlyCatalog(catalog)).forEach((catalog) => {
-        const key = buildCatalogOrderKey(addon.id, catalog.apiType, catalog.id);
-        if (seenKeys.has(key)) {
-          return;
-        }
-        seenKeys.add(key);
-        defaultEntries.push({
-          key,
-          disableKey: buildCatalogDisableKey(addon.baseUrl, catalog.apiType, catalog.id, catalog.name),
-          addonBaseUrl: addon.baseUrl,
-          addonId: addon.id,
-          addonName: addon.displayName,
-          catalogId: catalog.id,
-          catalogName: catalog.name,
-          type: catalog.apiType,
-          isDisabled: false
-        });
-      });
-    });
-    const entryByKey = new Map(defaultEntries.map((entry) => [entry.key, entry]));
-    const defaultOrderKeys = defaultEntries.map((entry) => entry.key);
-    const savedValid = (savedOrderKeys || []).filter((key, index, array) => array.indexOf(key) === index && entryByKey.has(key));
-    const savedSet = new Set(savedValid);
-    const effectiveOrder = [...savedValid, ...defaultOrderKeys.filter((key) => !savedSet.has(key))];
-    return effectiveOrder.map((key) => entryByKey.get(key)).filter(Boolean).map((entry, index, array) => __spreadProps(__spreadValues({}, entry), {
-      isDisabled: disabledSet.has(entry.disableKey),
-      canMoveUp: index > 0,
-      canMoveDown: index < array.length - 1
-    }));
-  }
-
-  // js/data/remote/supabase/supabaseApi.js
-  function buildHeaders(extra = {}, useSession = true) {
-    const headers = __spreadValues({
-      apikey: SUPABASE_ANON_KEY
-    }, extra);
-    if (useSession && SessionStore.accessToken) {
-      headers.Authorization = `Bearer ${SessionStore.accessToken}`;
-    } else if (headers.Authorization == null) {
-      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
-    }
-    return headers;
-  }
-  var SupabaseApi = {
-    rpc(functionName, body = {}, useSession = true) {
-      return httpRequest(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
-        method: "POST",
-        headers: buildHeaders({ "Content-Type": "application/json" }, useSession),
-        body: JSON.stringify(body)
-      });
-    },
-    select(table, query = "", useSession = true) {
-      const suffix = query ? `?${query}` : "";
-      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${suffix}`, {
-        method: "GET",
-        headers: buildHeaders({}, useSession)
-      });
-    },
-    upsert(table, rows, onConflict = null, useSession = true) {
-      const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
-      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
-        method: "POST",
-        headers: buildHeaders({
-          "Content-Type": "application/json",
-          Prefer: "resolution=merge-duplicates,return=representation"
-        }, useSession),
-        body: JSON.stringify(rows)
-      });
-    },
-    delete(table, query, useSession = true) {
-      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
-        method: "DELETE",
-        headers: buildHeaders({ Prefer: "return=representation" }, useSession)
-      });
-    }
-  };
-
-  // js/data/remote/supabase/avatarRepository.js
-  var AVATAR_BUCKET = "avatars";
-  var cachedCatalog = null;
-  function avatarImageUrl(storagePath = "") {
-    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
-    if (!normalizedPath) {
-      return null;
-    }
-    return `${String(SUPABASE_URL || "").replace(/\/+$/, "")}/storage/v1/object/public/${AVATAR_BUCKET}/${normalizedPath}`;
-  }
-  function mapAvatar(row = {}) {
-    return {
-      id: String(row.id || ""),
-      displayName: String(row.display_name || row.displayName || "Avatar"),
-      imageUrl: avatarImageUrl(row.storage_path || row.storagePath || ""),
-      category: String(row.category || "all").trim().toLowerCase(),
-      sortOrder: Number(row.sort_order || row.sortOrder || 0),
-      bgColor: row.bg_color || row.bgColor || null
-    };
-  }
-  var AvatarRepository = {
-    getAvatarCatalog() {
-      return __async(this, null, function* () {
-        if (Array.isArray(cachedCatalog) && cachedCatalog.length) {
-          return cachedCatalog;
-        }
-        const response = yield SupabaseApi.rpc("get_avatar_catalog", {}, false);
-        cachedCatalog = (Array.isArray(response) ? response : []).map((row) => mapAvatar(row)).filter((avatar) => avatar.id && avatar.imageUrl).sort((left, right) => {
-          const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
-          if (orderDelta !== 0) {
-            return orderDelta;
-          }
-          return String(left.displayName).localeCompare(String(right.displayName));
-        });
-        return cachedCatalog;
-      });
-    },
-    getAvatarImageUrl(avatarId, catalog = cachedCatalog || []) {
-      var _a;
-      const normalizedId = String(avatarId || "").trim();
-      if (!normalizedId) {
-        return null;
-      }
-      return ((_a = catalog.find((avatar) => avatar.id === normalizedId)) == null ? void 0 : _a.imageUrl) || null;
-    },
-    invalidateCache() {
-      cachedCatalog = null;
-    }
-  };
-
   // js/data/local/themeStore.js
   var KEY4 = "themeSettings";
   var ACCENT_MIGRATION_FLAG_KEY = "themeAccentMigratedToWhite";
@@ -2653,194 +2285,6 @@
     "auth.syncCode.back": "auth_qr_back",
     "auth.syncCode.title": "account_sync_code_title"
   };
-  var EXTRA_MESSAGES = {
-    en: {
-      "common.auto": "Auto",
-      "common.closed": "Closed",
-      "common.comingSoon": "Coming soon.",
-      "common.comingSoonWithContext": "{{subject}} Coming soon.",
-      "common.arabic": "Arabic",
-      "common.chinese": "Chinese",
-      "common.dutch": "Dutch",
-      "common.english": "English",
-      "common.french": "French",
-      "common.german": "German",
-      "common.hindi": "Hindi",
-      "common.htmlOverlay": "HTML overlay",
-      "common.hungarian": "Hungarian",
-      "common.italian": "Italian",
-      "common.japanese": "Japanese",
-      "common.korean": "Korean",
-      "common.native": "Native",
-      "common.open": "Open",
-      "common.polish": "Polish",
-      "common.portuguese": "Portuguese",
-      "common.provider": "Provider",
-      "common.repository": "Repository",
-      "common.romanian": "Romanian",
-      "common.russian": "Russian",
-      "common.selectOption": "Select option",
-      "common.soon": "Soon",
-      "common.slovak": "Slovak",
-      "common.slovenian": "Slovenian",
-      "common.spanish": "Spanish",
-      "common.swedish": "Swedish",
-      "common.system": "System",
-      "common.turkish": "Turkish",
-      "common.unknownUser": "User",
-      "common.vietnamese": "Vietnamese",
-      "player.track.audioDescription": "Audio description",
-      "player.track.commentary": "Commentary",
-      "player.track.stereo": "Stereo",
-      "player.track.surround": "Surround",
-      "sidebar.profileFallback": "Profile",
-      "sidebar.switchProfile": "Switch profile",
-      "settings.about.portedBy": "Ported by edoedac0 and WhiteGiso.",
-      "settings.account.signOutSubtitle": "Disconnect this TV from your account.",
-      "settings.appearance.themes.amber": "Amber",
-      "settings.appearance.themes.crimson": "Crimson",
-      "settings.appearance.themes.emerald": "Emerald",
-      "settings.appearance.themes.ocean": "Ocean",
-      "settings.appearance.themes.rose": "Rose",
-      "settings.appearance.themes.violet": "Violet",
-      "settings.appearance.themes.white": "White",
-      "settings.dialogs.playerPreference": "Player preference",
-      "settings.dialogs.preferredQuality": "Preferred quality",
-      "settings.dialogs.preferredSubtitleLanguage": "Preferred subtitle language",
-      "settings.dialogs.subtitleRenderMode": "Subtitle render mode",
-      "settings.integration.backToIntegrations.subtitle": "Return to integration list",
-      "settings.integration.backToIntegrations.title": "Back to Integrations",
-      "settings.integration.tmdb.apiKey.prompt": "TMDB API key",
-      "settings.integration.tmdb.apiKey.subtitle": "Configure TMDB credentials",
-      "settings.integration.tmdb.apiKey.title": "API Key",
-      "settings.playback.enableSubtitles.subtitle": "Turn subtitles on by default.",
-      "settings.playback.enableSubtitles.title": "Enable Subtitles",
-      "settings.playback.preferredAudio.subtitle": "Choose the default audio language.",
-      "settings.playback.preferredPlayer.subtitle": "Select the playback engine priority.",
-      "settings.playback.preferredQuality.subtitle": "Choose the default quality target.",
-      "settings.playback.preferredQuality.title": "Preferred Quality",
-      "settings.playback.renderMode.subtitle": "Choose how subtitles are drawn.",
-      "settings.playback.renderMode.title": "Render Mode",
-      "settings.playback.subtitleLanguage.subtitle": "Preferred subtitle language.",
-      "settings.plugins.addRepositoryPrompt": "Add repository URL",
-      "settings.plugins.customProviderTemplate": "Custom provider template",
-      "settings.plugins.noRepositoriesSubtitle": "Add a repository to get started.",
-      "settings.plugins.noRepositoriesTitle": "No repositories added yet.",
-      "settings.plugins.providerTesting": "Provider testing",
-      "settings.plugins.providerTestingSubtitle": "Run local provider tests and inspect results.",
-      "settings.plugins.refreshRepository": "Refresh repository",
-      "settings.plugins.removeRepository": "Remove repository",
-      "settings.status.linkedFallback": "Account linked on this TV",
-      "auth.qr.invalidRedirect": "QR backend redirect URL is invalid.",
-      "auth.qr.missingExtension": "QR backend missing required extension.",
-      "auth.qr.missingFunction": "QR backend function is missing.",
-      "auth.qr.networkError": "Network error while generating QR.",
-      "auth.qr.notConfigured": "QR sign-in is not configured on this app yet.",
-      "auth.qr.qrImageAlt": "QR code",
-      "auth.qr.serviceUnavailable": "QR sign-in is temporarily unavailable. Please try again later.",
-      "auth.qr.unavailableWithReason": "QR unavailable: {{reason}}",
-      "auth.qr.waitingApproval": "Waiting for approval on your phone...",
-      "auth.signIn.devEmailLogin": "Dev Email Login",
-      "auth.syncCode.clearCode": "Clear Code",
-      "auth.syncCode.currentCode": "Current code: {{value}}",
-      "auth.syncCode.emptyValue": "(empty)",
-      "auth.syncCode.prompt": "Insert sync code",
-      "auth.syncCode.setCode": "Set Code"
-    },
-    it: {
-      "common.auto": "Auto",
-      "common.closed": "Chiuso",
-      "common.comingSoon": "In arrivo.",
-      "common.comingSoonWithContext": "{{subject}} In arrivo.",
-      "common.arabic": "Arabo",
-      "common.chinese": "Cinese",
-      "common.dutch": "Olandese",
-      "common.english": "Inglese",
-      "common.french": "Francese",
-      "common.german": "Tedesco",
-      "common.hindi": "Hindi",
-      "common.htmlOverlay": "Overlay HTML",
-      "common.hungarian": "Ungherese",
-      "common.italian": "Italiano",
-      "common.japanese": "Giapponese",
-      "common.korean": "Coreano",
-      "common.native": "Nativo",
-      "common.open": "Aperto",
-      "common.polish": "Polacco",
-      "common.portuguese": "Portoghese",
-      "common.provider": "Provider",
-      "common.repository": "Repository",
-      "common.romanian": "Rumeno",
-      "common.russian": "Russo",
-      "common.selectOption": "Seleziona opzione",
-      "common.soon": "Presto",
-      "common.slovak": "Slovacco",
-      "common.slovenian": "Sloveno",
-      "common.spanish": "Spagnolo",
-      "common.swedish": "Svedese",
-      "common.system": "Sistema",
-      "common.turkish": "Turco",
-      "common.unknownUser": "Utente",
-      "common.vietnamese": "Vietnamita",
-      "player.track.audioDescription": "Audiodescrizione",
-      "player.track.commentary": "Commento",
-      "player.track.stereo": "Stereo",
-      "player.track.surround": "Surround",
-      "sidebar.profileFallback": "Profilo",
-      "sidebar.switchProfile": "Cambia profilo",
-      "settings.about.portedBy": "Ported by edoedac0 and WhiteGiso.",
-      "settings.account.signOutSubtitle": "Disconnetti questa TV dal tuo account.",
-      "settings.appearance.themes.amber": "Ambra",
-      "settings.appearance.themes.crimson": "Cremisi",
-      "settings.appearance.themes.emerald": "Smeraldo",
-      "settings.appearance.themes.ocean": "Oceano",
-      "settings.appearance.themes.rose": "Rosa",
-      "settings.appearance.themes.violet": "Violetto",
-      "settings.appearance.themes.white": "Bianco",
-      "settings.dialogs.playerPreference": "Preferenza player",
-      "settings.dialogs.preferredQuality": "Qualita preferita",
-      "settings.dialogs.preferredSubtitleLanguage": "Lingua sottotitoli preferita",
-      "settings.dialogs.subtitleRenderMode": "Modalita rendering sottotitoli",
-      "settings.integration.backToIntegrations.subtitle": "Torna alla lista integrazioni",
-      "settings.integration.backToIntegrations.title": "Torna alle integrazioni",
-      "settings.integration.tmdb.apiKey.prompt": "Chiave API TMDB",
-      "settings.integration.tmdb.apiKey.subtitle": "Configura le credenziali TMDB",
-      "settings.integration.tmdb.apiKey.title": "Chiave API",
-      "settings.playback.enableSubtitles.subtitle": "Attiva i sottotitoli di default.",
-      "settings.playback.enableSubtitles.title": "Abilita sottotitoli",
-      "settings.playback.preferredAudio.subtitle": "Scegli la lingua audio predefinita.",
-      "settings.playback.preferredPlayer.subtitle": "Seleziona la priorita del motore di riproduzione.",
-      "settings.playback.preferredQuality.subtitle": "Scegli la qualita predefinita.",
-      "settings.playback.preferredQuality.title": "Qualita preferita",
-      "settings.playback.renderMode.subtitle": "Scegli come vengono disegnati i sottotitoli.",
-      "settings.playback.renderMode.title": "Modalita rendering",
-      "settings.playback.subtitleLanguage.subtitle": "Lingua preferita dei sottotitoli.",
-      "settings.plugins.addRepositoryPrompt": "Aggiungi URL repository",
-      "settings.plugins.customProviderTemplate": "Template provider personalizzato",
-      "settings.plugins.noRepositoriesSubtitle": "Aggiungi una repository per iniziare.",
-      "settings.plugins.noRepositoriesTitle": "Nessuna repository ancora aggiunta.",
-      "settings.plugins.providerTesting": "Test provider",
-      "settings.plugins.providerTestingSubtitle": "Esegui test locali del provider e controlla i risultati.",
-      "settings.plugins.refreshRepository": "Aggiorna repository",
-      "settings.plugins.removeRepository": "Rimuovi repository",
-      "settings.status.linkedFallback": "Account collegato su questa TV",
-      "auth.qr.invalidRedirect": "L'URL di redirect del QR non e' valido.",
-      "auth.qr.missingExtension": "Al backend QR manca un'estensione richiesta.",
-      "auth.qr.missingFunction": "La funzione backend QR manca.",
-      "auth.qr.networkError": "Errore di rete durante la generazione del QR.",
-      "auth.qr.notConfigured": "L'accesso tramite QR non e' ancora configurato in questa app.",
-      "auth.qr.qrImageAlt": "Codice QR",
-      "auth.qr.serviceUnavailable": "L'accesso tramite QR e' temporaneamente non disponibile. Riprova piu' tardi.",
-      "auth.qr.unavailableWithReason": "QR non disponibile: {{reason}}",
-      "auth.qr.waitingApproval": "In attesa di approvazione dal telefono...",
-      "auth.signIn.devEmailLogin": "Login email dev",
-      "auth.syncCode.clearCode": "Cancella codice",
-      "auth.syncCode.currentCode": "Codice attuale: {{value}}",
-      "auth.syncCode.emptyValue": "(vuoto)",
-      "auth.syncCode.prompt": "Inserisci codice sync",
-      "auth.syncCode.setCode": "Imposta codice"
-    }
-  };
   var warnedKeys = /* @__PURE__ */ new Set();
   var activeMessages = /* @__PURE__ */ Object.create(null);
   var currentLocale = DEFAULT_LOCALE;
@@ -2952,10 +2396,6 @@
       return messages;
     });
   }
-  function getExtraMessage(locale, key) {
-    var _a, _b, _c;
-    return (_c = (_a = EXTRA_MESSAGES[locale]) == null ? void 0 : _a[key]) != null ? _c : (_b = EXTRA_MESSAGES[DEFAULT_LOCALE]) == null ? void 0 : _b[key];
-  }
   function warnMissingKey(locale, key) {
     const warningKey = `${locale}:${key}`;
     if (warnedKeys.has(warningKey)) {
@@ -3006,10 +2446,6 @@
       if (aliasedKey && typeof activeMessages[aliasedKey] === "string") {
         return interpolate(activeMessages[aliasedKey], params);
       }
-      const extra = getExtraMessage(locale, key);
-      if (typeof extra === "string") {
-        return interpolate(extra, params);
-      }
       warnMissingKey(locale, key);
       return interpolate((_c = options == null ? void 0 : options.fallback) != null ? _c : key, params);
     },
@@ -3019,6 +2455,384 @@
         document.documentElement.lang = locale;
       }
       return locale;
+    }
+  };
+
+  // js/ui/screens/home/modernHomeLayout.js
+  var MODERN_HOME_CONSTANTS = {
+    heroFocusDelayMs: 90,
+    heroRapidNavThresholdMs: 130,
+    heroRapidSettleMs: 170,
+    keyRepeatThrottleMs: 80,
+    rowFocusInset: 40,
+    trackEdgePadding: 52
+  };
+  function renderModernHomeLayout({
+    rows = [],
+    heroItem = null,
+    heroCandidates = [],
+    continueWatchingItems = [],
+    continueWatchingLoading = false,
+    continueWatchingLoadingCount = 0,
+    rowItemLimit = 15,
+    showHeroSection = false,
+    showPosterLabels = true,
+    showCatalogTypeSuffix = true,
+    focusedRowKey = "",
+    focusedItemIndex = -1,
+    expandFocusedPoster = false,
+    buildModernHeroPresentation: buildModernHeroPresentation2,
+    renderContinueWatchingSection: renderContinueWatchingSection2,
+    createPosterCardMarkup: createPosterCardMarkup2,
+    createSeeAllCardMarkup: createSeeAllCardMarkup2,
+    formatCatalogRowTitle: formatCatalogRowTitle3,
+    escapeHtml: escapeHtml16,
+    escapeAttribute: escapeAttribute4
+  } = {}) {
+    const catalogSeeAllMap = /* @__PURE__ */ new Map();
+    const sectionsMarkup = [];
+    rows.forEach((rowData, rowIndex) => {
+      var _a, _b, _c;
+      const items = Array.isArray((_b = (_a = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) ? rowData.result.data.items : [];
+      const isLoading = ((_c = rowData == null ? void 0 : rowData.result) == null ? void 0 : _c.status) === "loading";
+      const rowItems = items.length ? items : rowData.loadingItems || [];
+      if (!rowItems.length) {
+        return;
+      }
+      const rowKey = buildModernRowKey(rowData);
+      const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
+      if (!isLoading) {
+        catalogSeeAllMap.set(seeAllId, {
+          addonBaseUrl: rowData.addonBaseUrl || "",
+          addonId: rowData.addonId || "",
+          addonName: rowData.addonName || "",
+          catalogId: rowData.catalogId || "",
+          catalogName: rowData.catalogName || "",
+          type: rowData.type || "movie",
+          initialItems: items
+        });
+      }
+      const maxItems = Math.max(1, Number(rowItemLimit || 15));
+      const hasSeeAll = !isLoading && items.length > maxItems;
+      const visibleItems = rowItems.slice(0, maxItems);
+      const rowTitle = formatCatalogRowTitle3(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+      const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup2(
+        item,
+        rowIndex,
+        itemIndex,
+        rowData.type,
+        showPosterLabels,
+        "modern",
+        expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex
+      )).join("");
+      sectionsMarkup.push(`
+      <section class="home-row home-modern-row home-row-enter" data-row-key="${escapeHtml16(rowKey)}" data-row-index="${rowIndex}">
+        <div class="home-row-head">
+          <h2 class="home-row-title">${escapeHtml16(rowTitle)}</h2>
+        </div>
+        <div class="home-track" data-track-row-key="${escapeHtml16(rowKey)}">
+          ${cardsMarkup}
+          ${hasSeeAll ? createSeeAllCardMarkup2(seeAllId, rowData) : ""}
+        </div>
+      </section>
+    `);
+    });
+    return {
+      catalogSeeAllMap,
+      markup: `
+      <section class="home-modern-stage">
+        ${showHeroSection ? renderModernHeroMarkup({
+        heroItem,
+        heroCandidates,
+        buildModernHeroPresentation: buildModernHeroPresentation2,
+        escapeHtml: escapeHtml16,
+        escapeAttribute: escapeAttribute4
+      }) : continueWatchingLoading ? renderModernHeroSkeletonMarkup() : ""}
+        <div class="home-modern-rows-viewport">
+          <div class="home-modern-rows-scroll">
+            ${renderContinueWatchingSection2(continueWatchingItems, {
+        rowKey: "continue_watching",
+        loading: continueWatchingLoading,
+        loadingCount: continueWatchingLoadingCount
+      })}
+            ${sectionsMarkup.join("")}
+          </div>
+        </div>
+      </section>
+    `
+    };
+  }
+  function buildModernNavigationRows(container) {
+    const rows = [];
+    const continueTrack = container == null ? void 0 : container.querySelector(".home-row-continue .home-track");
+    if (continueTrack) {
+      const continueNodes = Array.from(continueTrack.querySelectorAll(".home-content-card.focusable"));
+      if (continueNodes.length) {
+        rows.push(continueNodes);
+      }
+    }
+    const rowSections = Array.from((container == null ? void 0 : container.querySelectorAll(".home-modern-row")) || []);
+    rowSections.forEach((section) => {
+      const track = section.querySelector(".home-track");
+      if (!track) {
+        return;
+      }
+      const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
+      if (cards.length) {
+        rows.push(cards);
+      }
+    });
+    return rows;
+  }
+  function buildModernRowKey(rowData = {}) {
+    return `${rowData.addonId || ""}_${rowData.type || ""}_${rowData.catalogId || ""}`;
+  }
+  function buildHeroIndicators(items = [], activeItem = null) {
+    if (!Array.isArray(items) || items.length <= 1) {
+      return "";
+    }
+    const activeId = String((activeItem == null ? void 0 : activeItem.id) || "");
+    const activeIndex = items.findIndex((item) => String((item == null ? void 0 : item.id) || "") === activeId);
+    return items.map((_, index) => `
+    <span class="home-hero-indicator${index === activeIndex ? " is-active" : ""}"></span>
+  `).join("");
+  }
+  function renderModernHeroMarkup({
+    heroItem,
+    heroCandidates,
+    buildModernHeroPresentation: buildModernHeroPresentation2,
+    escapeHtml: escapeHtml16,
+    escapeAttribute: escapeAttribute4
+  }) {
+    const display = buildModernHeroPresentation2(heroItem);
+    if (!display) {
+      return "";
+    }
+    const primaryLeft = display.leadingMeta.map((token) => `<span>${escapeHtml16(token)}</span>`).join('<span class="home-hero-dot">\u2022</span>');
+    const primaryRightParts = display.trailingMeta.map((token) => `<span>${escapeHtml16(token)}</span>`);
+    if (display.showImdbPrimary) {
+      primaryRightParts.push(`
+      <span class="home-hero-imdb">
+        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+        <span>${escapeHtml16(display.imdbText)}</span>
+      </span>
+    `);
+    }
+    const secondaryParts = [];
+    if (display.secondaryHighlightText) {
+      secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml16(display.secondaryHighlightText)}</span>`);
+    }
+    display.badges.forEach((badge) => {
+      secondaryParts.push(`<span class="home-modern-hero-badge">${escapeHtml16(badge)}</span>`);
+    });
+    if (display.showImdbSecondary) {
+      secondaryParts.push(`
+      <span class="home-hero-imdb">
+        <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
+        <span>${escapeHtml16(display.imdbText)}</span>
+      </span>
+    `);
+    }
+    if (display.languageText) {
+      secondaryParts.push(`<span class="home-modern-hero-secondary-detail">${escapeHtml16(display.languageText)}</span>`);
+    }
+    return `
+    <section class="home-hero home-hero-modern">
+      <article class="home-hero-card home-modern-hero-card"
+               data-item-id="${escapeAttribute4((heroItem == null ? void 0 : heroItem.id) || "")}"
+               data-item-type="${escapeAttribute4((heroItem == null ? void 0 : heroItem.type) || "movie")}"
+               data-item-title="${escapeAttribute4((heroItem == null ? void 0 : heroItem.name) || "Untitled")}">
+        <div class="home-modern-hero-media">
+          <div class="home-hero-backdrop-wrap">
+          ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute4(display.backdrop)}" alt="${escapeAttribute4(display.title)}" decoding="async" fetchpriority="high" />` : '<div class="home-hero-backdrop placeholder"></div>'}
+          </div>
+          <div class="home-hero-trailer-layer"></div>
+        </div>
+        <div class="home-hero-copy home-modern-hero-copy">
+          <div class="home-hero-brand">
+            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute4(display.logo)}" alt="${escapeAttribute4(display.title)}" decoding="async" fetchpriority="high" />` : ""}
+            <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml16(display.title)}</h1>
+          </div>
+          <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">
+            <div class="home-modern-hero-meta-group">
+              ${primaryLeft}
+            </div>
+            <div class="home-modern-hero-meta-group">
+              ${primaryRightParts.join('<span class="home-hero-dot">\u2022</span>')}
+            </div>
+          </div>
+          <div class="home-modern-hero-secondary${display.secondaryHighlightText || display.badges.length || display.showImdbSecondary || display.languageText ? "" : " is-empty"}">
+            ${secondaryParts.join('<span class="home-hero-dot">\u2022</span>')}
+          </div>
+          <p class="home-hero-description${display.description ? "" : " is-empty"}">${escapeHtml16(display.description)}</p>
+        </div>
+        <div class="home-hero-indicators">${buildHeroIndicators(heroCandidates, heroItem)}</div>
+      </article>
+    </section>
+  `;
+  }
+  function renderModernHeroSkeletonMarkup() {
+    return `
+    <section class="home-hero home-hero-modern home-hero-modern-loading" aria-hidden="true">
+      <article class="home-hero-card home-modern-hero-card home-modern-hero-card-loading">
+        <div class="home-modern-hero-media home-modern-hero-media-loading">
+          <div class="home-hero-backdrop-wrap">
+            <div class="home-hero-backdrop placeholder home-hero-backdrop-loading"></div>
+          </div>
+        </div>
+      </article>
+    </section>
+  `;
+  }
+
+  // js/core/addons/homeCatalogs.js
+  function isSearchOnlyCatalog(catalog) {
+    return Array.isArray(catalog == null ? void 0 : catalog.extra) && catalog.extra.some(
+      (entry) => String((entry == null ? void 0 : entry.name) || "").toLowerCase() === "search" && Boolean(entry == null ? void 0 : entry.isRequired)
+    );
+  }
+  function buildCatalogOrderKey(addonId, type, catalogId) {
+    return `${addonId}_${type}_${catalogId}`;
+  }
+  function buildCatalogDisableKey(addonBaseUrl, type, catalogId, catalogName) {
+    return `${addonBaseUrl}_${type}_${catalogId}_${catalogName}`;
+  }
+  function toDisplayTypeLabel(value) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return "";
+    }
+    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+  }
+  function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKeys = []) {
+    const defaultEntries = [];
+    const seenKeys = /* @__PURE__ */ new Set();
+    const disabledSet = new Set(disabledKeys || []);
+    (addons || []).forEach((addon) => {
+      (addon.catalogs || []).filter((catalog) => !isSearchOnlyCatalog(catalog)).forEach((catalog) => {
+        const key = buildCatalogOrderKey(addon.id, catalog.apiType, catalog.id);
+        if (seenKeys.has(key)) {
+          return;
+        }
+        seenKeys.add(key);
+        defaultEntries.push({
+          key,
+          disableKey: buildCatalogDisableKey(addon.baseUrl, catalog.apiType, catalog.id, catalog.name),
+          addonBaseUrl: addon.baseUrl,
+          addonId: addon.id,
+          addonName: addon.displayName,
+          catalogId: catalog.id,
+          catalogName: catalog.name,
+          type: catalog.apiType,
+          isDisabled: false
+        });
+      });
+    });
+    const entryByKey = new Map(defaultEntries.map((entry) => [entry.key, entry]));
+    const defaultOrderKeys = defaultEntries.map((entry) => entry.key);
+    const savedValid = (savedOrderKeys || []).filter((key, index, array) => array.indexOf(key) === index && entryByKey.has(key));
+    const savedSet = new Set(savedValid);
+    const effectiveOrder = [...savedValid, ...defaultOrderKeys.filter((key) => !savedSet.has(key))];
+    return effectiveOrder.map((key) => entryByKey.get(key)).filter(Boolean).map((entry, index, array) => __spreadProps(__spreadValues({}, entry), {
+      isDisabled: disabledSet.has(entry.disableKey),
+      canMoveUp: index > 0,
+      canMoveDown: index < array.length - 1
+    }));
+  }
+
+  // js/data/remote/supabase/supabaseApi.js
+  function buildHeaders(extra = {}, useSession = true) {
+    const headers = __spreadValues({
+      apikey: SUPABASE_ANON_KEY
+    }, extra);
+    if (useSession && SessionStore.accessToken) {
+      headers.Authorization = `Bearer ${SessionStore.accessToken}`;
+    } else if (headers.Authorization == null) {
+      headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
+    }
+    return headers;
+  }
+  var SupabaseApi = {
+    rpc(functionName, body = {}, useSession = true) {
+      return httpRequest(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
+        method: "POST",
+        headers: buildHeaders({ "Content-Type": "application/json" }, useSession),
+        body: JSON.stringify(body)
+      });
+    },
+    select(table, query = "", useSession = true) {
+      const suffix = query ? `?${query}` : "";
+      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${suffix}`, {
+        method: "GET",
+        headers: buildHeaders({}, useSession)
+      });
+    },
+    upsert(table, rows, onConflict = null, useSession = true) {
+      const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
+      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
+        method: "POST",
+        headers: buildHeaders({
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=representation"
+        }, useSession),
+        body: JSON.stringify(rows)
+      });
+    },
+    delete(table, query, useSession = true) {
+      return httpRequest(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+        method: "DELETE",
+        headers: buildHeaders({ Prefer: "return=representation" }, useSession)
+      });
+    }
+  };
+
+  // js/data/remote/supabase/avatarRepository.js
+  var AVATAR_BUCKET = "avatars";
+  var cachedCatalog = null;
+  function avatarImageUrl(storagePath = "") {
+    const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
+    if (!normalizedPath) {
+      return null;
+    }
+    return `${String(SUPABASE_URL || "").replace(/\/+$/, "")}/storage/v1/object/public/${AVATAR_BUCKET}/${normalizedPath}`;
+  }
+  function mapAvatar(row = {}) {
+    return {
+      id: String(row.id || ""),
+      displayName: String(row.display_name || row.displayName || "Avatar"),
+      imageUrl: avatarImageUrl(row.storage_path || row.storagePath || ""),
+      category: String(row.category || "all").trim().toLowerCase(),
+      sortOrder: Number(row.sort_order || row.sortOrder || 0),
+      bgColor: row.bg_color || row.bgColor || null
+    };
+  }
+  var AvatarRepository = {
+    getAvatarCatalog() {
+      return __async(this, null, function* () {
+        if (Array.isArray(cachedCatalog) && cachedCatalog.length) {
+          return cachedCatalog;
+        }
+        const response = yield SupabaseApi.rpc("get_avatar_catalog", {}, false);
+        cachedCatalog = (Array.isArray(response) ? response : []).map((row) => mapAvatar(row)).filter((avatar) => avatar.id && avatar.imageUrl).sort((left, right) => {
+          const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
+          if (orderDelta !== 0) {
+            return orderDelta;
+          }
+          return String(left.displayName).localeCompare(String(right.displayName));
+        });
+        return cachedCatalog;
+      });
+    },
+    getAvatarImageUrl(avatarId, catalog = cachedCatalog || []) {
+      var _a;
+      const normalizedId = String(avatarId || "").trim();
+      if (!normalizedId) {
+        return null;
+      }
+      return ((_a = catalog.find((avatar) => avatar.id === normalizedId)) == null ? void 0 : _a.imageUrl) || null;
+    },
+    invalidateCache() {
+      cachedCatalog = null;
     }
   };
 
@@ -3371,6 +3185,16 @@
   var CW_PROGRESS_START_THRESHOLD = 0.02;
   var CW_PROGRESS_END_THRESHOLD = 0.85;
   var CW_ENTER_DELAY_MS = 320;
+  var HOME_INITIAL_CATALOG_LOAD = 10;
+  var HOME_MAX_ITEMS_PER_ROW_DEFAULT = 15;
+  var HOME_MAX_ITEMS_PER_ROW_CONSTRAINED = 10;
+  var HOME_LOADING_ROW_ITEMS_DEFAULT = 10;
+  var HOME_LOADING_ROW_ITEMS_CONSTRAINED = 8;
+  var HOME_ROW_TIMEOUT_MS = 3500;
+  var HOME_ROW_RETRY_TIMEOUT_MS = 12e3;
+  function t2(key, params = {}, fallback = key) {
+    return I18n.t(key, params, { fallback });
+  }
   function escapeHtml2(value) {
     return String(value != null ? value : "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
@@ -3499,16 +3323,18 @@
     const value = Number(
       (_d = (_c = (_b = (_a = item == null ? void 0 : item.runtimeMinutes) != null ? _a : item == null ? void 0 : item.runtime) != null ? _b : item == null ? void 0 : item.durationMinutes) != null ? _c : item == null ? void 0 : item.duration_minutes) != null ? _d : 0
     );
-    if (!Number.isFinite(value) || value <= 0) {
+    return formatDurationMinutes(value);
+  }
+  function formatDurationMinutes(totalMinutes) {
+    const minutesValue = Number(totalMinutes || 0);
+    if (!Number.isFinite(minutesValue) || minutesValue <= 0) {
       return "";
     }
-    const hours = Math.floor(value / 60);
-    const minutes = Math.round(value % 60);
-    if (hours > 0 && minutes > 0) {
-      return `${hours}h ${minutes}m`;
-    }
+    const roundedMinutes = Math.max(0, Math.round(minutesValue));
+    const hours = Math.floor(roundedMinutes / 60);
+    const minutes = roundedMinutes % 60;
     if (hours > 0) {
-      return `${hours}h`;
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
     }
     return `${minutes}m`;
   }
@@ -3744,28 +3570,37 @@
   }
   function buildProgressStatus(item) {
     if (item == null ? void 0 : item.isNextUp) {
-      return "Next Up";
+      return t2("home.continueStatusNextUp", {}, "Next Up");
     }
     const durationMs = Number((item == null ? void 0 : item.durationMs) || 0);
     const positionMs = Number((item == null ? void 0 : item.positionMs) || 0);
     if (!durationMs || !positionMs) {
-      return "Continue";
+      return t2("home.continueStatusContinue", {}, "Continue");
     }
     const remainingMinutes = Math.max(0, Math.round((durationMs - positionMs) / 6e4));
     const progress = Math.max(0, Math.min(1, positionMs / durationMs));
     if (progress >= 0.85 || remainingMinutes <= 10) {
-      return "Almost done";
+      return t2("home.continueStatusAlmostDone", {}, "Almost done");
     }
     if (remainingMinutes > 0) {
-      return `${remainingMinutes}m left`;
+      const remainingLabel = formatDurationMinutes(remainingMinutes);
+      return t2("home.timeLeftDuration", { time: remainingLabel }, "{{time}} left");
     }
-    return "Continue";
+    return t2("home.continueStatusContinue", {}, "Continue");
   }
   function buildProgressFraction(item) {
     if (item == null ? void 0 : item.isNextUp) {
       return 0;
     }
     return progressFractionForContinueWatching(item);
+  }
+  function buildCatalogLoadingItems(rowKey, count = HOME_LOADING_ROW_ITEMS_DEFAULT) {
+    const safeCount = Math.max(1, Math.min(HOME_MAX_ITEMS_PER_ROW_DEFAULT, Number(count || HOME_LOADING_ROW_ITEMS_DEFAULT)));
+    return Array.from({ length: safeCount }, (_, index) => ({
+      id: `${rowKey || "row"}__loading_${index}`,
+      name: t2("common.loading", {}, "Loading"),
+      isLoading: true
+    }));
   }
   function normalizeCatalogItem(item, fallbackType = "movie") {
     var _a, _b;
@@ -4023,11 +3858,11 @@
                data-item-type="${escapeAttribute2((heroItem == null ? void 0 : heroItem.type) || "movie")}"
                data-item-title="${escapeAttribute2((heroItem == null ? void 0 : heroItem.name) || "Untitled")}"` : ""}>
         <div class="home-hero-backdrop-wrap">
-          ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute2(display.backdrop)}" alt="${escapeAttribute2(display.title)}" />` : '<div class="home-hero-backdrop placeholder"></div>'}
+          ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute2(display.backdrop)}" alt="${escapeAttribute2(display.title)}" decoding="async" fetchpriority="high" />` : '<div class="home-hero-backdrop placeholder"></div>'}
         </div>
         <div class="home-hero-copy">
           <div class="home-hero-brand">
-            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title)}" />` : ""}
+            ${display.logo ? `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title)}" decoding="async" fetchpriority="high" />` : ""}
             <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml2(display.title)}</h1>
           </div>
           <div class="home-hero-meta-primary${display.metaPrimary.length ? "" : " is-empty"}">${renderMetaTokens(display.metaPrimary)}</div>
@@ -4090,11 +3925,11 @@
              data-item-type="${escapeAttribute2(normalized.type || "movie")}"
              data-item-title="${escapeAttribute2(normalized.title || "Untitled")}">
       <div class="home-continue-media"${cardImage ? ` style="background-image:url('${escapeAttribute2(cardImage)}')"` : ""}>
-        <span class="home-continue-badge">${escapeHtml2(normalized.progressStatus || "Continue")}</span>
+        <span class="home-continue-badge">${escapeHtml2(normalized.progressStatus || t2("home.continueStatusContinue", {}, "Continue"))}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml2(normalized.episodeCode)}</div>` : ""}
           <div class="home-continue-title">${escapeHtml2(normalized.title)}</div>
-          <div class="home-continue-subtitle">${escapeHtml2(subtitle || "Continue watching")}</div>
+          <div class="home-continue-subtitle">${escapeHtml2(subtitle || t2("home.continueWatchingSubtitle", {}, "Continue watching"))}</div>
         </div>
         <div class="home-continue-progress"><span style="width:${Math.round((normalized.progressFraction || 0) * 100)}%"></span></div>
       </div>
@@ -4114,7 +3949,7 @@
               aria-disabled="true">
       <div class="home-continue-media home-continue-media-loading"
            style="--cw-skeleton-title:${titleWidth}px;--cw-skeleton-subtitle:${subtitleWidth}px;">
-        <span class="home-continue-badge" aria-hidden="true">Loading</span>
+        <span class="home-continue-badge" aria-hidden="true">${escapeHtml2(t2("common.loading", {}, "Loading"))}</span>
         <div class="home-continue-copy home-continue-copy-skeleton" aria-hidden="true">
           <div class="home-continue-skeleton-line home-continue-skeleton-kicker"></div>
           <div class="home-continue-skeleton-line home-continue-skeleton-title"></div>
@@ -4134,7 +3969,7 @@
     return `
     <section class="home-row home-row-continue"${rowKey ? ` data-row-key="${escapeAttribute2(rowKey)}"` : ""}>
       <div class="home-row-head">
-        <h2 class="home-row-title">Continue Watching</h2>
+        <h2 class="home-row-title">${escapeHtml2(t2("home.continueWatching", {}, "Continue Watching"))}</h2>
       </div>
       <div class="home-track home-track-continue"${rowKey ? ` data-track-row-key="${escapeAttribute2(rowKey)}"` : ""}>
         ${items.length ? items.map((item, index) => renderContinueWatchingCard(item, index)).join("") : Array.from({ length: loadingCount }, (_, index) => renderContinueWatchingLoadingCard(index)).join("")}
@@ -4173,38 +4008,50 @@
       layoutMode = "classic",
       showPosterLabels = true,
       showCatalogAddonName = true,
-      showCatalogTypeSuffix = true
+      showCatalogTypeSuffix = true,
+      focusedRowKey = "",
+      focusedItemIndex = -1,
+      expandFocusedPoster = false,
+      rowItemLimit = HOME_MAX_ITEMS_PER_ROW_DEFAULT
     } = options;
     const catalogSeeAllMap = /* @__PURE__ */ new Map();
     const sectionsMarkup = [];
     rows.forEach((rowData, rowIndex) => {
-      var _a, _b;
+      var _a, _b, _c;
       const items = Array.isArray((_b = (_a = rowData == null ? void 0 : rowData.result) == null ? void 0 : _a.data) == null ? void 0 : _b.items) ? rowData.result.data.items : [];
-      if (!items.length) {
+      const isLoading = ((_c = rowData == null ? void 0 : rowData.result) == null ? void 0 : _c.status) === "loading";
+      const rowKey = buildModernRowKey(rowData);
+      const loadingItems = isLoading ? rowData.loadingItems || buildCatalogLoadingItems(rowKey, rowItemLimit) : [];
+      const rowItems = items.length ? items : loadingItems;
+      if (!rowItems.length) {
         return;
       }
       const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-      catalogSeeAllMap.set(seeAllId, {
-        addonBaseUrl: rowData.addonBaseUrl || "",
-        addonId: rowData.addonId || "",
-        addonName: rowData.addonName || "",
-        catalogId: rowData.catalogId || "",
-        catalogName: rowData.catalogName || "",
-        type: rowData.type || "movie",
-        initialItems: items
-      });
-      const rowKey = buildModernRowKey(rowData);
+      if (!isLoading) {
+        catalogSeeAllMap.set(seeAllId, {
+          addonBaseUrl: rowData.addonBaseUrl || "",
+          addonId: rowData.addonId || "",
+          addonName: rowData.addonName || "",
+          catalogId: rowData.catalogId || "",
+          catalogName: rowData.catalogName || "",
+          type: rowData.type || "movie",
+          initialItems: items
+        });
+      }
       const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
       const rowSubtitle = layoutMode === "classic" && showCatalogAddonName && rowData.addonName ? `from ${rowData.addonName}` : "";
-      const hasSeeAll = items.length >= 15;
-      const visibleItems = layoutMode === "grid" ? hasSeeAll ? items.slice(0, 14) : items.slice(0, 15) : items.slice(0, 15);
+      const maxItems = Math.max(1, Number(rowItemLimit || HOME_MAX_ITEMS_PER_ROW_DEFAULT));
+      const hasSeeAll = !isLoading && items.length > maxItems;
+      const gridLimit = Math.max(1, hasSeeAll ? maxItems - 1 : maxItems);
+      const visibleItems = layoutMode === "grid" ? rowItems.slice(0, gridLimit) : rowItems.slice(0, maxItems);
       const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
         item,
         rowIndex,
         itemIndex,
         rowData.type,
         showPosterLabels,
-        layoutMode
+        layoutMode,
+        expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex
       )).join("");
       const trackMarkup = `
       <div class="${layoutMode === "grid" ? "home-grid-track" : "home-track"}" data-track-row-key="${escapeAttribute2(rowKey)}">
@@ -4270,16 +4117,26 @@
     grouped.sort((left, right) => left.top - right.top);
     return grouped.map((entry) => entry.nodes);
   }
-  function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic") {
+  function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic", isExpanded = false) {
+    const isLoading = Boolean(item == null ? void 0 : item.isLoading);
     const normalized = normalizeCatalogItem(item, itemType);
     const subtitle = buildPosterSubtitle(normalized, layoutMode);
     const expandedMeta = buildExpandedPosterMeta(normalized);
     const backdropSrc = firstNonEmpty(normalized.background, normalized.backdrop, normalized.backdropUrl, normalized.poster);
     const posterSrc = firstNonEmpty(normalized.poster, normalized.thumbnail, normalized.backdrop, normalized.backdropUrl);
     const expandedVisualSrc = firstNonEmpty(backdropSrc, posterSrc);
+    const expandedClass = isExpanded ? " is-expanded" : "";
+    const focusableClass = isLoading ? "" : " focusable";
+    const loadingClass = isLoading ? " home-poster-card-loading" : "";
+    const shouldShowLabels = showLabels && !isLoading;
+    const titleWidths = [116, 128, 104, 132, 120, 140, 110, 124, 136, 112];
+    const subtitleWidths = [82, 96, 74, 90, 88, 100, 80, 94, 86, 92];
+    const safeIndex = Math.max(0, Number(itemIndex) || 0);
+    const titleWidth = titleWidths[safeIndex % titleWidths.length];
+    const subtitleWidth = subtitleWidths[safeIndex % subtitleWidths.length];
     return `
-    <article class="home-content-card home-poster-card focusable"
-             data-action="openDetail"
+    <article class="home-content-card home-poster-card${focusableClass}${expandedClass}${loadingClass}"
+             ${isLoading ? 'aria-disabled="true"' : `data-action="openDetail"
              data-row-index="${rowIndex}"
              data-item-index="${itemIndex}"
              data-item-id="${escapeAttribute2(normalized.id)}"
@@ -4287,30 +4144,42 @@
              data-item-title="${escapeAttribute2(normalized.name || "Untitled")}"
              data-poster-src="${escapeAttribute2(posterSrc || "")}"
              data-backdrop-src="${escapeAttribute2(backdropSrc || "")}"
-             data-logo-src="${escapeAttribute2(normalized.logo || "")}">
+             data-logo-src="${escapeAttribute2(normalized.logo || "")}"`}>
       <div class="home-poster-frame">
-        ${posterSrc ? `<img class="content-poster" src="${escapeAttribute2(posterSrc)}" decoding="async" alt="${escapeAttribute2(normalized.name || "content")}" />` : '<div class="content-poster placeholder"></div>'}
-        ${expandedVisualSrc ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute2(expandedVisualSrc)}" decoding="async" alt="" aria-hidden="true" />` : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
+        ${!isLoading && posterSrc ? `<img class="content-poster" src="${escapeAttribute2(posterSrc)}" decoding="async" loading="lazy" alt="${escapeAttribute2(normalized.name || "content")}" />` : '<div class="content-poster placeholder"></div>'}
+        ${!isLoading && expandedVisualSrc ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute2(expandedVisualSrc)}" decoding="async" loading="lazy" alt="" aria-hidden="true" />` : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
         <div class="home-poster-trailer-layer"></div>
         <div class="home-poster-expanded-gradient"></div>
         <div class="home-poster-expanded-brand">
-          ${normalized.logo ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute2(normalized.logo)}" decoding="async" alt="${escapeAttribute2(normalized.name || "content")}" />` : `<div class="home-poster-expanded-title">${escapeHtml2(normalized.name || "Untitled")}</div>`}
+          ${!isLoading && normalized.logo ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute2(normalized.logo)}" decoding="async" loading="lazy" alt="${escapeAttribute2(normalized.name || "content")}" />` : `<div class="home-poster-expanded-title">${escapeHtml2(normalized.name || "Untitled")}</div>`}
         </div>
       </div>
       <div class="home-poster-expanded-copy">
-        ${expandedMeta ? `<div class="home-poster-expanded-meta">${escapeHtml2(expandedMeta)}</div>` : ""}
-        ${normalized.description ? `<div class="home-poster-expanded-description">${escapeHtml2(normalized.description)}</div>` : ""}
+        ${!isLoading && expandedMeta ? `<div class="home-poster-expanded-meta">${escapeHtml2(expandedMeta)}</div>` : ""}
+        ${!isLoading && normalized.description ? `<div class="home-poster-expanded-description">${escapeHtml2(normalized.description)}</div>` : ""}
       </div>
-      ${showLabels ? `
+      ${shouldShowLabels ? `
         <div class="home-poster-copy">
           <div class="home-poster-title">${escapeHtml2(normalized.name || "Untitled")}</div>
           ${subtitle ? `<div class="home-poster-subtitle">${escapeHtml2(subtitle)}</div>` : ""}
+        </div>
+      ` : isLoading ? `
+        <div class="home-poster-copy home-poster-copy-skeleton" aria-hidden="true"
+             style="--poster-skeleton-title:${titleWidth}px;--poster-skeleton-subtitle:${subtitleWidth}px;">
+          <div class="home-poster-skeleton-line home-poster-skeleton-title"></div>
+          <div class="home-poster-skeleton-line home-poster-skeleton-subtitle"></div>
         </div>
       ` : ""}
     </article>
   `;
   }
   var HomeScreen = {
+    getRouteStateKey() {
+      return "home";
+    },
+    captureRouteState() {
+      return this.captureCurrentFocusState();
+    },
     captureCurrentFocusState() {
       var _a, _b, _c, _d, _e;
       const layoutMode = String(this.renderedLayoutMode || this.layoutMode || "").toLowerCase();
@@ -4321,7 +4190,13 @@
       if (!viewport) {
         return null;
       }
-      const focused = this.container.querySelector(".home-main .focusable.focused");
+      let focused = this.container.querySelector(".home-main .focusable.focused") || this.lastMainFocus || null;
+      if (focused && !focused.isConnected) {
+        focused = null;
+      }
+      if (!focused) {
+        return null;
+      }
       const trackStates = Object.fromEntries(
         Array.from(this.container.querySelectorAll("[data-track-row-key]")).map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft]).filter(([key]) => key)
       );
@@ -4485,7 +4360,7 @@
         container[property] = nextValue;
         return;
       }
-      const easeOutCubic = (t5) => 1 - Math.pow(1 - t5, 3);
+      const easeOutCubic = (t7) => 1 - Math.pow(1 - t7, 3);
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const key = axis === "y" ? "y" : "x";
       const existing = map.get(container) || {};
@@ -4524,6 +4399,23 @@
         return 24;
       }
       return 48;
+    },
+    isPerformanceConstrained() {
+      var _a, _b, _c;
+      return Boolean((_c = (_b = (_a = globalThis.document) == null ? void 0 : _a.body) == null ? void 0 : _b.classList) == null ? void 0 : _c.contains("performance-constrained"));
+    },
+    getRowItemLimit() {
+      return this.isPerformanceConstrained() ? HOME_MAX_ITEMS_PER_ROW_CONSTRAINED : HOME_MAX_ITEMS_PER_ROW_DEFAULT;
+    },
+    getLoadingRowItemCount() {
+      return this.isPerformanceConstrained() ? HOME_LOADING_ROW_ITEMS_CONSTRAINED : HOME_LOADING_ROW_ITEMS_DEFAULT;
+    },
+    getScrollDuration(base) {
+      const baseline = Number.isFinite(base) ? base : 150;
+      if (this.isPerformanceConstrained()) {
+        return Math.min(baseline, 120);
+      }
+      return baseline + 40;
     },
     stopHeroRotation() {
       if (this.heroRotateTimer) {
@@ -4607,7 +4499,7 @@
           logoNode.setAttribute("src", display.logo);
           logoNode.setAttribute("alt", display.title || "logo");
         } else if (brandNode) {
-          brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title || "logo")}" />`);
+          brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo" src="${escapeAttribute2(display.logo)}" alt="${escapeAttribute2(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
         }
       } else if (logoNode) {
         logoNode.remove();
@@ -4655,6 +4547,7 @@
       if (descriptionNode) {
         descriptionNode.textContent = display.description || " ";
       }
+      this.scheduleHomeTruncationUpdate();
       const indicators = heroNode.querySelector(".home-hero-indicators");
       if (indicators) {
         indicators.innerHTML = buildHeroIndicators2(this.heroCandidates, hero);
@@ -4778,11 +4671,11 @@
       }
       const watched = this.isContinueWatchingItemWatched(item);
       return [
-        { action: "resume", label: "Resume" },
-        { action: "startOver", label: "Start Over" },
-        { action: "details", label: "View Details" },
-        { action: "toggleWatched", label: watched ? "Mark Unwatched" : "Mark Watched" },
-        { action: "remove", label: "Remove from Continue Watching" }
+        { action: "resume", label: t2("common.resume", {}, "Resume") },
+        { action: "startOver", label: t2("common.startOver", {}, "Start Over") },
+        { action: "details", label: t2("common.viewDetails", {}, "View Details") },
+        { action: "toggleWatched", label: watched ? t2("common.markUnwatched", {}, "Mark Unwatched") : t2("common.markWatched", {}, "Mark Watched") },
+        { action: "remove", label: t2("home.removeContinueWatching", {}, "Remove from Continue Watching") }
       ];
     },
     renderContinueWatchingMenu() {
@@ -4794,7 +4687,7 @@
       const options = this.getContinueWatchingMenuOptions();
       const subtitle = firstNonEmpty(item.episodeCode, item.episodeTitle, item.releaseInfo, toTitleCase(item.type));
       return renderHoldMenuMarkup({
-        kicker: "Continue Watching",
+        kicker: t2("home.continueWatching", {}, "Continue Watching"),
         title: item.title || "Untitled",
         subtitle,
         focusedIndex: Number(((_a = this.continueWatchingMenu) == null ? void 0 : _a.optionIndex) || 0),
@@ -5189,6 +5082,16 @@
       }
       node.classList.add("is-expanded");
       this.expandedPosterNode = node;
+      requestAnimationFrame(() => {
+        if (node.classList.contains("focused")) {
+          this.ensureTrackHorizontalVisibility(node);
+        }
+      });
+      setTimeout(() => {
+        if (node.classList.contains("focused") && node.classList.contains("is-expanded")) {
+          this.ensureTrackHorizontalVisibility(node);
+        }
+      }, 220);
     },
     getTrailerSourceForItem(item) {
       return __async(this, null, function* () {
@@ -5266,6 +5169,80 @@
       if (this.focusedPosterTimer) {
         clearTimeout(this.focusedPosterTimer);
         this.focusedPosterTimer = null;
+      }
+    },
+    scheduleHomeTruncationUpdate() {
+      if (!this.container) {
+        return;
+      }
+      if (this.homeTruncationFrame) {
+        cancelAnimationFrame(this.homeTruncationFrame);
+      }
+      this.homeTruncationFrame = requestAnimationFrame(() => {
+        this.homeTruncationFrame = null;
+        this.applyHomeTruncationState();
+      });
+    },
+    applyHomeTruncationState() {
+      if (!this.container) {
+        return;
+      }
+      const nodes = this.container.querySelectorAll(
+        ".home-hero-description, .home-poster-title, .home-poster-subtitle, .home-poster-expanded-meta, .home-poster-expanded-description"
+      );
+      nodes.forEach((node) => {
+        var _a;
+        if (!(node instanceof HTMLElement)) {
+          return;
+        }
+        const currentText = (_a = node.textContent) != null ? _a : "";
+        const storedText = node.dataset.fullText || "";
+        const shouldRefresh = !storedText || currentText && currentText !== storedText && !currentText.trim().endsWith("...");
+        const fullText = shouldRefresh ? currentText : storedText;
+        if (!fullText) {
+          return;
+        }
+        node.dataset.fullText = fullText;
+        node.textContent = fullText;
+        const fits = node.scrollWidth <= node.clientWidth + 1 && node.scrollHeight <= node.clientHeight + 1;
+        if (fits) {
+          node.classList.remove("is-truncated");
+          return;
+        }
+        const ellipsis = "...";
+        let low = 0;
+        let high = fullText.length;
+        while (low < high) {
+          const mid = Math.ceil((low + high) / 2);
+          node.textContent = `${fullText.slice(0, mid).trimEnd()}${ellipsis}`;
+          const overflows = node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1;
+          if (overflows) {
+            high = mid - 1;
+          } else {
+            low = mid;
+          }
+        }
+        const finalText = `${fullText.slice(0, Math.max(0, low)).trimEnd()}${ellipsis}`;
+        node.textContent = finalText;
+        node.classList.add("is-truncated");
+      });
+    },
+    ensureHomeTruncationObservers() {
+      var _a, _b;
+      if (this.homeTruncationObserversBound) {
+        return;
+      }
+      this.homeTruncationObserversBound = true;
+      if ((_b = (_a = globalThis == null ? void 0 : globalThis.document) == null ? void 0 : _a.fonts) == null ? void 0 : _b.ready) {
+        document.fonts.ready.then(() => {
+          this.scheduleHomeTruncationUpdate();
+        }).catch(() => {
+        });
+      }
+      if (typeof window !== "undefined") {
+        window.addEventListener("resize", () => {
+          this.scheduleHomeTruncationUpdate();
+        });
       }
     },
     scheduleFocusedPosterFlow(node) {
@@ -5365,16 +5342,16 @@
       const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop;
       if (this.layoutMode === "modern") {
         const centeredScrollTop = anchorTop - Math.max(0, (main.clientHeight - anchor.offsetHeight) / 2);
-        this.animateScroll(main, "y", centeredScrollTop, 150);
+        this.animateScroll(main, "y", centeredScrollTop, this.getScrollDuration(150));
         return;
       }
       if (anchorRect.top < visibleTop) {
-        this.animateScroll(main, "y", anchorTop - inset, 150);
+        this.animateScroll(main, "y", anchorTop - inset, this.getScrollDuration(150));
         return;
       }
       if (anchorRect.bottom > visibleBottom) {
         const targetScrollTop = anchorBottom - main.clientHeight + 24;
-        this.animateScroll(main, "y", targetScrollTop, 150);
+        this.animateScroll(main, "y", targetScrollTop, this.getScrollDuration(150));
       }
     },
     ensureTrackHorizontalVisibility(target, direction = null) {
@@ -5383,16 +5360,57 @@
       if (!track) {
         return;
       }
-      if (this.layoutMode !== "modern") {
-        const targetCenter = target.offsetLeft + target.offsetWidth / 2;
-        const centeredLeft = targetCenter - track.clientWidth / 2;
-        this.animateScroll(track, "x", centeredLeft, 160);
+      let leftPadding = this.getTrackEdgePadding();
+      let rightPadding = leftPadding;
+      const cachedLeft = Number.parseFloat(track.dataset.trackPadLeft || "");
+      const cachedRight = Number.parseFloat(track.dataset.trackPadRight || "");
+      if (Number.isFinite(cachedLeft) && cachedLeft >= 0) {
+        leftPadding = cachedLeft;
+      }
+      if (Number.isFinite(cachedRight) && cachedRight >= 0) {
+        rightPadding = cachedRight;
+      }
+      if ((!Number.isFinite(cachedLeft) || !Number.isFinite(cachedRight)) && typeof window !== "undefined" && window.getComputedStyle) {
+        const computed = window.getComputedStyle(track);
+        const paddingLeft = Number.parseFloat((computed == null ? void 0 : computed.paddingLeft) || "");
+        const paddingRight = Number.parseFloat((computed == null ? void 0 : computed.paddingRight) || "");
+        if (Number.isFinite(paddingLeft) && paddingLeft >= 0) {
+          leftPadding = paddingLeft;
+          track.dataset.trackPadLeft = String(paddingLeft);
+        }
+        if (Number.isFinite(paddingRight) && paddingRight >= 0) {
+          rightPadding = paddingRight;
+          track.dataset.trackPadRight = String(paddingRight);
+        }
+      }
+      const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
+      const targetLeft = target.offsetLeft;
+      const targetRight = targetLeft + target.offsetWidth;
+      const visibleLeft = track.scrollLeft + leftPadding;
+      const visibleRight = track.scrollLeft + track.clientWidth - safeRightPadding;
+      if (targetLeft < visibleLeft) {
+        this.animateScroll(
+          track,
+          "x",
+          targetLeft - leftPadding,
+          this.getScrollDuration(this.layoutMode === "modern" ? 140 : 160)
+        );
         return;
       }
-      const edgePadding = this.getTrackEdgePadding();
-      const targetLeft = target.offsetLeft;
-      const targetScrollLeft = Math.max(0, targetLeft - edgePadding);
-      this.animateScroll(track, "x", targetScrollLeft, 140);
+      if (targetRight > visibleRight) {
+        this.animateScroll(
+          track,
+          "x",
+          targetRight - track.clientWidth + safeRightPadding,
+          this.getScrollDuration(this.layoutMode === "modern" ? 140 : 160)
+        );
+        return;
+      }
+      if (this.layoutMode !== "modern" && !direction) {
+        const targetCenter = targetLeft + target.offsetWidth / 2;
+        const centeredLeft = targetCenter - track.clientWidth / 2;
+        this.animateScroll(track, "x", centeredLeft, this.getScrollDuration(160));
+      }
     },
     focusNode(current, target, direction = null) {
       if (!current || !target || current === target) {
@@ -5479,8 +5497,7 @@
       if (!nav) {
         return false;
       }
-      const all = Array.from(((_a = this.container) == null ? void 0 : _a.querySelectorAll(".focusable")) || []);
-      const current = this.container.querySelector(".focusable.focused") || all[0];
+      const current = this.container.querySelector(".focusable.focused") || ((_a = this.container) == null ? void 0 : _a.querySelector(".focusable")) || null;
       if (!current) {
         return false;
       }
@@ -5618,7 +5635,8 @@
       this.boundHomeEventContainer = this.container;
     },
     mount() {
-      return __async(this, null, function* () {
+      return __async(this, arguments, function* (params = {}, navigationContext = {}) {
+        var _a;
         this.container = document.getElementById("home");
         ScreenUtils.show(this.container);
         this.ensureDelegatedEventsBound();
@@ -5628,6 +5646,12 @@
         this.cancelPendingContinueWatchingEnter();
         this.forceInitialContinueWatchingFocus = false;
         this.continueWatchingLoading = false;
+        this.isRestoringFocusFromBack = Boolean(navigationContext == null ? void 0 : navigationContext.isBackNavigation);
+        if ((_a = navigationContext == null ? void 0 : navigationContext.restoredState) == null ? void 0 : _a.layoutMode) {
+          this.savedFocusStates = __spreadProps(__spreadValues({}, this.savedFocusStates || {}), {
+            [navigationContext.restoredState.layoutMode]: navigationContext.restoredState
+          });
+        }
         const activeProfileId3 = String(ProfileManager.getActiveProfileId() || "");
         const profileChanged = activeProfileId3 !== String(this.loadedProfileId || "");
         if (profileChanged) {
@@ -5671,7 +5695,7 @@
         const addons = yield addonRepository.getInstalledAddons();
         const catalogDescriptors = [];
         addons.forEach((addon) => {
-          addon.catalogs.filter((catalog) => !isSearchOnlyCatalog(catalog)).slice(0, 8).forEach((catalog) => {
+          addon.catalogs.filter((catalog) => !isSearchOnlyCatalog(catalog)).forEach((catalog) => {
             catalogDescriptors.push({
               addonBaseUrl: addon.baseUrl,
               addonId: addon.id,
@@ -5682,9 +5706,9 @@
             });
           });
         });
-        const initialDescriptors = catalogDescriptors.slice(0, 8);
-        const deferredDescriptors = catalogDescriptors.slice(8);
-        const initialRows = yield this.fetchCatalogRows(initialDescriptors);
+        const initialDescriptors = catalogDescriptors.slice(0, HOME_INITIAL_CATALOG_LOAD);
+        const deferredDescriptors = catalogDescriptors.slice(HOME_INITIAL_CATALOG_LOAD);
+        const initialRows = yield this.fetchCatalogRows(initialDescriptors, { allowLoading: true });
         if (token !== this.homeLoadToken) {
           return;
         }
@@ -5706,7 +5730,7 @@
         this.hasLoadedOnce = true;
         this.render();
         if (deferredDescriptors.length) {
-          this.fetchCatalogRows(deferredDescriptors).then((extraRows) => {
+          this.fetchCatalogRows(deferredDescriptors, { allowLoading: true }).then((extraRows) => {
             if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
               return;
             }
@@ -5720,6 +5744,7 @@
               this.heroItem = this.pickInitialHero();
             }
             this.render();
+            this.retryPendingCatalogRows();
           }).catch((error) => {
             console.warn("Deferred home rows load failed", error);
           });
@@ -5756,6 +5781,7 @@
           this.continueWatchingLoading = false;
           this.render();
         });
+        this.retryPendingCatalogRows();
       });
     },
     pickInitialHero() {
@@ -5772,8 +5798,11 @@
       return this.heroCandidates[0] || this.pickHeroItem(this.rows);
     },
     fetchCatalogRows() {
-      return __async(this, arguments, function* (descriptors = []) {
-        const rowResults = yield Promise.all((descriptors || []).map((catalog) => __async(null, null, function* () {
+      return __async(this, arguments, function* (descriptors = [], options = {}) {
+        const allowLoading = Boolean(options == null ? void 0 : options.allowLoading);
+        const timeoutMs = Number((options == null ? void 0 : options.timeoutMs) || HOME_ROW_TIMEOUT_MS);
+        const loadingCount = this.getLoadingRowItemCount();
+        const rowResults = yield Promise.all((descriptors || []).map((catalog) => __async(this, null, function* () {
           const result = yield withTimeout(catalogRepository.getCatalog({
             addonBaseUrl: catalog.addonBaseUrl,
             addonId: catalog.addonId,
@@ -5783,10 +5812,17 @@
             type: catalog.type,
             skip: 0,
             supportsSkip: true
-          }), 3500, { status: "error", message: "timeout" });
-          return __spreadProps(__spreadValues({}, catalog), { result });
+          }), timeoutMs, { status: "error", message: "timeout" });
+          const rowKey = buildModernRowKey(catalog);
+          return __spreadProps(__spreadValues({}, catalog), {
+            result: (result == null ? void 0 : result.status) === "success" ? result : allowLoading ? { status: "loading" } : result,
+            loadingItems: allowLoading && (result == null ? void 0 : result.status) !== "success" ? buildCatalogLoadingItems(rowKey, loadingCount) : null
+          });
         })));
-        return rowResults.filter((row) => row.result.status === "success").map((row) => __spreadProps(__spreadValues({}, row), {
+        return rowResults.filter((row) => {
+          var _a;
+          return ((_a = row.result) == null ? void 0 : _a.status) === "success" || allowLoading;
+        }).map((row) => __spreadProps(__spreadValues({}, row), {
           homeCatalogKey: buildCatalogOrderKey(row.addonId, row.type, row.catalogId),
           homeCatalogDisableKey: buildCatalogDisableKey(
             row.addonBaseUrl,
@@ -5809,21 +5845,80 @@
       });
       return enabledRows;
     },
+    retryPendingCatalogRows() {
+      if (this.catalogRetryInFlight) {
+        return;
+      }
+      const pendingRows = (this.rows || []).filter((row) => {
+        var _a;
+        return ((_a = row == null ? void 0 : row.result) == null ? void 0 : _a.status) === "loading";
+      });
+      if (!pendingRows.length) {
+        return;
+      }
+      const token = this.homeLoadToken;
+      this.catalogRetryInFlight = true;
+      const attempts = pendingRows.map((row) => __async(this, null, function* () {
+        try {
+          const result = yield withTimeout(catalogRepository.getCatalog({
+            addonBaseUrl: row.addonBaseUrl,
+            addonId: row.addonId,
+            addonName: row.addonName,
+            catalogId: row.catalogId,
+            catalogName: row.catalogName,
+            type: row.type,
+            skip: 0,
+            supportsSkip: true
+          }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+            return;
+          }
+          if ((result == null ? void 0 : result.status) !== "success") {
+            return;
+          }
+          const updatedRow = __spreadProps(__spreadValues({}, row), {
+            result
+          });
+          const combinedByKey = new Map((this.rows || []).map((entry) => [entry.homeCatalogKey, entry]));
+          combinedByKey.set(updatedRow.homeCatalogKey, updatedRow);
+          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
+          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+          if (!this.heroItem) {
+            this.heroItem = this.pickInitialHero();
+          }
+          this.render();
+        } catch (error) {
+          console.warn("Retry catalog row load failed", error);
+        }
+      }));
+      Promise.allSettled(attempts).finally(() => {
+        if (token === this.homeLoadToken) {
+          this.catalogRetryInFlight = false;
+        }
+      });
+    },
     render() {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j;
-      const retainedFocusState = this.captureCurrentFocusState();
+      var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o;
+      const retainedFocusState = this.captureCurrentFocusState() || ((_a = this.savedFocusStates) == null ? void 0 : _a[this.layoutMode]) || null;
       this.cancelFocusedPosterFlow();
       this.expandedPosterNode = null;
-      const shouldHoldHeroForContinueWatching = this.layoutMode === "modern" && Boolean(this.continueWatchingLoading) && !((_a = this.continueWatchingDisplay) == null ? void 0 : _a.length);
-      const heroItem = shouldHoldHeroForContinueWatching ? null : normalizeCatalogItem(this.heroItem || ((_b = this.heroCandidates) == null ? void 0 : _b[this.heroIndex]) || this.pickHeroItem(this.rows), "movie");
-      const showHeroSection = Boolean((_c = this.layoutPrefs) == null ? void 0 : _c.heroSectionEnabled) && Boolean(heroItem);
+      const shouldHoldHeroForContinueWatching = this.layoutMode === "modern" && Boolean(this.continueWatchingLoading) && !((_b = this.continueWatchingDisplay) == null ? void 0 : _b.length);
+      const heroItem = shouldHoldHeroForContinueWatching ? null : normalizeCatalogItem(this.heroItem || ((_c = this.heroCandidates) == null ? void 0 : _c[this.heroIndex]) || this.pickHeroItem(this.rows), "movie");
+      const showHeroSection = Boolean((_d = this.layoutPrefs) == null ? void 0 : _d.heroSectionEnabled) && Boolean(heroItem);
       const layoutClass = `home-layout-${this.layoutMode}`;
-      const showPosterLabels = ((_d = this.layoutPrefs) == null ? void 0 : _d.posterLabelsEnabled) !== false;
-      const showCatalogAddonName = ((_e = this.layoutPrefs) == null ? void 0 : _e.catalogAddonNameEnabled) !== false;
-      const showCatalogTypeSuffix = ((_f = this.layoutPrefs) == null ? void 0 : _f.catalogTypeSuffixEnabled) !== false;
-      const continueWatchingLoadingCount = Math.max(
-        Number(((_g = this.continueWatching) == null ? void 0 : _g.length) || 0),
-        Number(((_h = this.nextUpProgressCandidates) == null ? void 0 : _h.length) || 0)
+      const showPosterLabels = ((_e = this.layoutPrefs) == null ? void 0 : _e.posterLabelsEnabled) !== false;
+      const showCatalogAddonName = ((_f = this.layoutPrefs) == null ? void 0 : _f.catalogAddonNameEnabled) !== false;
+      const showCatalogTypeSuffix = ((_g = this.layoutPrefs) == null ? void 0 : _g.catalogTypeSuffixEnabled) !== false;
+      const focusState = retainedFocusState && retainedFocusState.focusKind === "item" ? retainedFocusState : null;
+      const expandFocusedPoster = this.layoutMode === "modern" && Boolean((_h = this.layoutPrefs) == null ? void 0 : _h.focusedPosterBackdropExpandEnabled) && Number((_j = (_i = this.layoutPrefs) == null ? void 0 : _i.focusedPosterBackdropExpandDelaySeconds) != null ? _j : 3) <= 0 && Boolean(focusState);
+      const rowItemLimit = this.getRowItemLimit();
+      const loadingRowItemCount = this.getLoadingRowItemCount();
+      const continueWatchingLoadingCount = Math.min(
+        Math.max(
+          Number(((_k = this.continueWatching) == null ? void 0 : _k.length) || 0),
+          Number(((_l = this.nextUpProgressCandidates) == null ? void 0 : _l.length) || 0)
+        ),
+        loadingRowItemCount
       );
       this.teardownGridStickyHeader();
       let mainContentMarkup = "";
@@ -5836,9 +5931,13 @@
           continueWatchingItems: this.continueWatchingDisplay || [],
           continueWatchingLoading: Boolean(this.continueWatchingLoading),
           continueWatchingLoadingCount,
+          rowItemLimit,
           showHeroSection,
           showPosterLabels,
           showCatalogTypeSuffix,
+          focusedRowKey: (focusState == null ? void 0 : focusState.rowKey) || "",
+          focusedItemIndex: Number.isFinite(focusState == null ? void 0 : focusState.itemIndex) ? focusState.itemIndex : -1,
+          expandFocusedPoster,
           buildModernHeroPresentation,
           renderContinueWatchingSection,
           createPosterCardMarkup,
@@ -5859,7 +5958,11 @@
           layoutMode: this.layoutMode,
           showPosterLabels,
           showCatalogAddonName,
-          showCatalogTypeSuffix
+          showCatalogTypeSuffix,
+          focusedRowKey: (focusState == null ? void 0 : focusState.rowKey) || "",
+          focusedItemIndex: Number.isFinite(focusState == null ? void 0 : focusState.itemIndex) ? focusState.itemIndex : -1,
+          expandFocusedPoster: false,
+          rowItemLimit
         });
         this.catalogSeeAllMap = legacyRowsPayload.catalogSeeAllMap;
         mainContentMarkup = `
@@ -5869,8 +5972,9 @@
         <section class="home-catalogs${this.layoutMode === "grid" ? " home-grid-catalogs" : ""}" id="homeCatalogRows">${legacyRowsPayload.markup}</section>
       `;
       }
+      const modernSidebarClass = ((_m = this.layoutPrefs) == null ? void 0 : _m.modernSidebar) ? " modern-sidebar-enabled" : "";
       this.container.innerHTML = `
-      <div class="home-shell home-screen-shell ${layoutClass}">
+      <div class="home-shell home-screen-shell ${layoutClass}${modernSidebarClass}">
         ${renderRootSidebar({
         selectedRoute: "home",
         profile: this.sidebarProfile,
@@ -5894,10 +5998,12 @@
       });
       ScreenUtils.indexFocusables(this.container);
       this.buildNavigationModel();
+      const canAttemptRestore = Boolean(retainedFocusState);
+      let restoredFocus = false;
       if (this.continueWatchingMenu) {
         this.applyContinueWatchingMenuFocus();
       } else if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
-        const cards = Array.from(((_i = this.container) == null ? void 0 : _i.querySelectorAll(".home-row-continue .home-content-card.focusable")) || []);
+        const cards = Array.from(((_n = this.container) == null ? void 0 : _n.querySelectorAll(".home-row-continue .home-content-card.focusable")) || []);
         const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))] || cards[cards.length - 1] || null;
         this.pendingContinueWatchingFocusIndex = null;
         if (target) {
@@ -5917,26 +6023,30 @@
             this.scheduleFocusedPosterFlow(current);
           }
         }
-      } else if (shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
+      } else if (canAttemptRestore) {
+        restoredFocus = this.restoreFocusState(retainedFocusState);
+        if (restoredFocus) {
+          this.isRestoringFocusFromBack = false;
+        }
+      }
+      if (!restoredFocus && !this.isRestoringFocusFromBack && shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
         this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
         this.lastMainFocus = null;
         this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
-      } else if (this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
+      } else if (!restoredFocus && !this.isRestoringFocusFromBack && this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
         this.forceInitialContinueWatchingFocus = false;
         this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
-      } else {
-        const restoredFocus = this.restoreFocusState(retainedFocusState);
-        if (!restoredFocus) {
-          ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
-          const current = this.container.querySelector(".home-main .focusable.focused");
-          if (current && this.isMainNode(current)) {
-            this.lastMainFocus = current;
-            this.scheduleModernHeroUpdate(current);
-            this.scheduleFocusedPosterFlow(current);
-          }
+      } else if (!restoredFocus) {
+        ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
+        const current = this.container.querySelector(".home-main .focusable.focused");
+        if (current && this.isMainNode(current)) {
+          this.lastMainFocus = current;
+          this.scheduleModernHeroUpdate(current);
+          this.scheduleFocusedPosterFlow(current);
         }
+        this.isRestoringFocusFromBack = false;
       }
-      if (!((_j = this.layoutPrefs) == null ? void 0 : _j.modernSidebar)) {
+      if (!((_o = this.layoutPrefs) == null ? void 0 : _o.modernSidebar)) {
         this.setSidebarExpanded(false);
       }
       if (this.layoutMode === "grid") {
@@ -5945,6 +6055,8 @@
       this.startHeroRotation();
       this.homeRouteEnterPending = false;
       this.renderedLayoutMode = this.layoutMode;
+      this.ensureHomeTruncationObservers();
+      this.scheduleHomeTruncationUpdate();
     },
     teardownGridStickyHeader() {
       if (this.gridStickyCleanup) {
@@ -9761,17 +9873,17 @@
   var AUDIO_AMPLIFICATION_MAX_DB = 10;
   var PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
   var NEXT_EPISODE_THRESHOLD_PERCENT = 0.97;
-  function t2(key, params = {}, fallback = key) {
+  function t3(key, params = {}, fallback = key) {
     return I18n.t(key, params, { fallback });
   }
   function buildIndexedLabel(baseLabel, index) {
     return `${baseLabel} ${index + 1}`;
   }
   function subtitleLabel(index) {
-    return buildIndexedLabel(t2("subtitle_dialog_title", {}, "Subtitle"), index);
+    return buildIndexedLabel(t3("subtitle_dialog_title", {}, "Subtitle"), index);
   }
   function audioLabel(index) {
-    return buildIndexedLabel(t2("audio_dialog_title", {}, "Audio"), index);
+    return buildIndexedLabel(t3("audio_dialog_title", {}, "Audio"), index);
   }
   function cleanDisplayText(value) {
     return String(value != null ? value : "").replace(/\s+/g, " ").trim();
@@ -9880,7 +9992,7 @@
         }
         if (!displayName) {
           const fallbackKey = AUDIO_TRACK_LANGUAGE_KEY_BY_CODE[normalizedCode.split("-")[0]];
-          displayName = fallbackKey ? t2(fallbackKey, {}, rawLanguage.toUpperCase()) : rawLanguage.toUpperCase();
+          displayName = fallbackKey ? t3(fallbackKey, {}, rawLanguage.toUpperCase()) : rawLanguage.toUpperCase();
         }
         LANGUAGE_DISPLAY_NAME_CACHE.set(cacheKey, displayName);
       }
@@ -10089,7 +10201,7 @@
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
   function buildEpisodePanelHint() {
-    return `UP/DOWN ${t2("discover_select_catalog", {}, "Select")} | OK ${t2("episodes_play", {}, "Play")} | BACK ${t2("episodes_panel_close", {}, "Close")}`;
+    return `UP/DOWN ${t3("discover_select_catalog", {}, "Select")} | OK ${t3("episodes_play", {}, "Play")} | BACK ${t3("episodes_panel_close", {}, "Close")}`;
   }
   function qualityLabelFromText(value) {
     const text = String(value || "").toLowerCase();
@@ -10113,10 +10225,10 @@
   }
   function subtitleLanguageLabel(languageKey) {
     if (languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
-      return t2("subtitle_none", {}, "Off");
+      return t3("subtitle_none", {}, "Off");
     }
     if (languageKey === SUBTITLE_LANGUAGE_UNKNOWN_KEY) {
-      return t2("common.unknown", {}, "Unknown");
+      return t3("common.unknown", {}, "Unknown");
     }
     return getTrackLanguageLabel({ language: languageKey }) || String(languageKey || "").toUpperCase();
   }
@@ -10259,6 +10371,8 @@
         this.container.style.display = "block";
         this.params = params;
         this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
+        this.fallbackExternalFrameUrl = String(params.fallbackExternalFrameUrl || "").trim();
+        this.externalFrameFallbackUsed = false;
         this.aspectModes = [
           { objectFit: "contain", label: "Fit" },
           { objectFit: "cover", label: "Fill" },
@@ -10415,6 +10529,32 @@
     },
     isExternalFrameMode() {
       return Boolean(this.externalFrameUrl);
+    },
+    attemptExternalFrameFallback(mediaErrorCode = 0) {
+      if (!this.fallbackExternalFrameUrl || this.isExternalFrameMode() || this.externalFrameFallbackUsed) {
+        return false;
+      }
+      if (Number(mediaErrorCode || 0) && Number(mediaErrorCode || 0) !== 4) {
+        return false;
+      }
+      this.externalFrameFallbackUsed = true;
+      this.externalFrameUrl = this.fallbackExternalFrameUrl;
+      this.clearPlaybackStallGuard();
+      this.unbindVideoEvents();
+      if (this.endedHandler && PlayerController.video) {
+        PlayerController.video.removeEventListener("ended", this.endedHandler);
+        this.endedHandler = null;
+      }
+      if (this.tickTimer) {
+        clearInterval(this.tickTimer);
+        this.tickTimer = null;
+      }
+      PlayerController.stop();
+      this.loadingVisible = false;
+      this.updateLoadingVisibility();
+      this.setControlsVisible(false);
+      this.renderPlayerUi();
+      return true;
     },
     buildPlaybackContext(streamCandidate = this.getCurrentStreamCandidate()) {
       var _a, _b;
@@ -11083,6 +11223,7 @@
             allow="autoplay; encrypted-media; picture-in-picture"
             referrerpolicy="strict-origin-when-cross-origin"
             allowfullscreen
+            scrolling="no"
           ></iframe>
         </div>
       `;
@@ -11125,7 +11266,7 @@
 
           <div class="player-controls-top">
             <div id="playerClock" class="player-clock">--:--</div>
-            <div id="playerEndsAt" class="player-ends-at">${escapeHtml3(t2("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
+            <div id="playerEndsAt" class="player-ends-at">${escapeHtml3(t3("player_ends_at", ["--:--"], "Ends at %1$s"))}</div>
           </div>
 
           <div class="player-controls-bottom">
@@ -11583,6 +11724,9 @@
         const detailErrorCode = Number(((_a = event == null ? void 0 : event.detail) == null ? void 0 : _a.mediaErrorCode) || 0);
         const controllerErrorCode = typeof PlayerController.getLastPlaybackErrorCode === "function" ? Number(PlayerController.getLastPlaybackErrorCode() || 0) : 0;
         const mediaErrorCode = detailErrorCode || Number(((_b = video == null ? void 0 : video.error) == null ? void 0 : _b.code) || 0) || controllerErrorCode;
+        if (this.attemptExternalFrameFallback(mediaErrorCode)) {
+          return;
+        }
         if (this.recoverFromPlaybackError(mediaErrorCode)) {
           return;
         }
@@ -11654,29 +11798,29 @@
           action: "playNextEpisode",
           icon: "assets/icons/ic_player_skip_next.svg",
           useMask: true,
-          title: t2("next_episode_label", {}, "Next episode")
+          title: t3("next_episode_label", {}, "Next episode")
         });
       }
-      base.push({ action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t2("subtitle_dialog_title", {}, "Subtitles") });
+      base.push({ action: "subtitleDialog", icon: "assets/icons/ic_player_subtitles.svg", title: t3("subtitle_dialog_title", {}, "Subtitles") });
       base.push({
         action: "audioTrack",
         icon: this.selectedAudioTrackIndex >= 0 || this.selectedManifestAudioTrackId ? "assets/icons/ic_player_audio_filled.svg" : "assets/icons/ic_player_audio_outline.svg",
         useMask: true,
-        title: t2("audio_dialog_title", {}, "Audio")
+        title: t3("audio_dialog_title", {}, "Audio")
       });
-      base.push({ action: "source", icon: "assets/icons/ic_player_source.svg", title: t2("sources_title", {}, "Sources") });
+      base.push({ action: "source", icon: "assets/icons/ic_player_source.svg", title: t3("sources_title", {}, "Sources") });
       if (Array.isArray(uiState.episodesAll) && uiState.episodesAll.length) {
-        base.push({ action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t2("episodes_panel_title", {}, "Episodes") });
+        base.push({ action: "episodes", icon: "assets/icons/ic_player_episodes.svg", title: t3("episodes_panel_title", {}, "Episodes") });
       }
-      base.push({ action: "more", label: this.moreActionsVisible ? "<" : ">", title: t2("player_more_actions_title", {}, "More Actions") });
+      base.push({ action: "more", label: this.moreActionsVisible ? "<" : ">", title: t3("player_more_actions_title", {}, "More Actions") });
       if (!this.moreActionsVisible) {
         return base;
       }
       return [
         ...base.slice(0, Math.max(0, base.length - 1)),
-        { action: "speed", label: `${Number(((_a = PlayerController.video) == null ? void 0 : _a.playbackRate) || 1).toFixed(Number(((_b = PlayerController.video) == null ? void 0 : _b.playbackRate) || 1) % 1 ? 2 : 0)}x`, title: t2("player_playback_speed", {}, "Playback speed") },
-        { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t2("player_more_aspect_ratio", {}, "Aspect Ratio") },
-        { action: "backFromMore", label: "<", title: t2("player_go_back", {}, "Back") }
+        { action: "speed", label: `${Number(((_a = PlayerController.video) == null ? void 0 : _a.playbackRate) || 1).toFixed(Number(((_b = PlayerController.video) == null ? void 0 : _b.playbackRate) || 1) % 1 ? 2 : 0)}x`, title: t3("player_playback_speed", {}, "Playback speed") },
+        { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t3("player_more_aspect_ratio", {}, "Aspect Ratio") },
+        { action: "backFromMore", label: "<", title: t3("player_go_back", {}, "Back") }
       ];
     },
     renderControlButtons() {
@@ -11925,7 +12069,7 @@
         return;
       }
       const titleLine = [nextEpisode.episodeLabel, nextEpisode.episodeTitle].filter(Boolean).join(" \u2022 ");
-      const statusText = nextEpisode.hasAired ? t2("next_episode_play", {}, "Play") : t2("next_episode_unaired", {}, "Unaired");
+      const statusText = nextEpisode.hasAired ? t3("next_episode_play", {}, "Play") : t3("next_episode_unaired", {}, "Unaired");
       const thumb = ((_b = this.episodes.find((entry) => String((entry == null ? void 0 : entry.id) || "") === String(nextEpisode.videoId || ""))) == null ? void 0 : _b.thumbnail) || "";
       card.innerHTML = `
       <div class="player-next-episode-card-inner${nextEpisode.hasAired ? " is-playable" : ""}${!this.controlsVisible ? " is-selected" : ""}">
@@ -11934,8 +12078,8 @@
           <div class="player-next-episode-thumb-shade"></div>
         </div>
         <div class="player-next-episode-copy">
-          <div class="player-next-episode-kicker">${escapeHtml3(t2("next_episode_label", {}, "Next episode"))}</div>
-          <div class="player-next-episode-title">${escapeHtml3(titleLine || t2("next_episode_label", {}, "Next episode"))}</div>
+          <div class="player-next-episode-kicker">${escapeHtml3(t3("next_episode_label", {}, "Next episode"))}</div>
+          <div class="player-next-episode-title">${escapeHtml3(titleLine || t3("next_episode_label", {}, "Next episode"))}</div>
         </div>
         <div class="player-next-episode-pill${nextEpisode.hasAired ? " is-playable" : ""}">
           <span class="player-next-episode-pill-icon">&#9654;</span>
@@ -11978,7 +12122,7 @@
         const remainingMs = Math.max(0, (Number(duration || 0) - Number(current || 0)) * 1e3);
         const nextEndsAtMinuteBucket = duration > 0 ? Math.floor((Date.now() + remainingMs) / 6e4) : -1;
         if (uiState.endsAtMinuteBucket !== nextEndsAtMinuteBucket) {
-          const nextEndsAtText = t2("player_ends_at", [formatEndsAt(current, duration)], "Ends at %1$s");
+          const nextEndsAtText = t3("player_ends_at", [formatEndsAt(current, duration)], "Ends at %1$s");
           endsAt.textContent = nextEndsAtText;
           uiState.endsAtText = nextEndsAtText;
           uiState.endsAtMinuteBucket = nextEndsAtMinuteBucket;
@@ -12406,10 +12550,10 @@
     },
     getSubtitleTabs() {
       return [
-        { id: "builtIn", label: t2("subtitle_tab_builtin", {}, "Built-in") },
-        { id: "addons", label: t2("subtitle_tab_addons", {}, "Addons") },
-        { id: "style", label: t2("subtitle_tab_style", {}, "Style") },
-        { id: "delay", label: t2("subtitle_tab_delay", {}, "Delay") }
+        { id: "builtIn", label: t3("subtitle_tab_builtin", {}, "Built-in") },
+        { id: "addons", label: t3("subtitle_tab_addons", {}, "Addons") },
+        { id: "style", label: t3("subtitle_tab_style", {}, "Style") },
+        { id: "delay", label: t3("subtitle_tab_delay", {}, "Delay") }
       ];
     },
     refreshTrackDialogs() {
@@ -12716,7 +12860,7 @@ ${normalized}`;
           return [
             {
               id: "subtitle-off",
-              label: t2("subtitle_none", {}, "None"),
+              label: t3("subtitle_none", {}, "None"),
               secondary: "",
               selected: selectedAvPlaySubtitleTrack < 0,
               trackIndex: -1,
@@ -12740,7 +12884,7 @@ ${normalized}`;
           return [
             {
               id: "subtitle-off",
-              label: t2("subtitle_none", {}, "None"),
+              label: t3("subtitle_none", {}, "None"),
               secondary: "",
               selected: selectedDashSubtitleTrack < 0,
               trackIndex: -1,
@@ -12762,7 +12906,7 @@ ${normalized}`;
         const entries = [
           {
             id: "subtitle-off",
-            label: t2("subtitle_none", {}, "None"),
+            label: t3("subtitle_none", {}, "None"),
             secondary: "",
             selected: this.selectedSubtitleTrackIndex < 0 && !this.selectedManifestSubtitleTrackId,
             trackIndex: -1
@@ -12776,7 +12920,7 @@ ${normalized}`;
           })),
           ...this.manifestSubtitleTracks.map((track) => ({
             id: `subtitle-manifest-${track.id}`,
-            label: track.name || t2("subtitle_dialog_title", {}, "Subtitle"),
+            label: track.name || t3("subtitle_dialog_title", {}, "Subtitle"),
             secondary: String(track.language || "").toUpperCase(),
             selected: this.selectedManifestSubtitleTrackId === track.id,
             trackIndex: null,
@@ -12806,7 +12950,7 @@ ${normalized}`;
             return {
               id: `subtitle-addon-fallback-${subtitleId}`,
               label: subtitle.lang || subtitleLabel(index),
-              secondary: subtitle.addonName || t2("nav_addons", {}, "Addon"),
+              secondary: subtitle.addonName || t3("nav_addons", {}, "Addon"),
               selected: this.selectedAddonSubtitleId === subtitleId || this.selectedAddonSubtitleId == null && absoluteIndex === this.selectedSubtitleTrackIndex,
               trackIndex: null,
               subtitleIndex: index,
@@ -12853,7 +12997,7 @@ ${normalized}`;
         return [
           {
             id: "subtitle-style-default",
-            label: t2("subtitle_style_defaults", {}, "Default"),
+            label: t3("subtitle_style_defaults", {}, "Default"),
             secondary: "System style",
             selected: true,
             disabled: true,
@@ -12884,7 +13028,7 @@ ${normalized}`;
           options.push({
             id: entry.id,
             languageKey: SUBTITLE_LANGUAGE_OFF_KEY,
-            languageLabel: t2("subtitle_none", {}, "Off"),
+            languageLabel: t3("subtitle_none", {}, "Off"),
             title: entry.label,
             secondary: "",
             selected: Boolean(entry.selected),
@@ -12903,7 +13047,7 @@ ${normalized}`;
           languageKey,
           languageLabel,
           title: languageLabel,
-          secondary: [t2("subtitle_tab_builtin", {}, "Built-in"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" \u2022 "),
+          secondary: [t3("subtitle_tab_builtin", {}, "Built-in"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" \u2022 "),
           selected: Boolean(entry.selected),
           sourceType: "internal",
           isForced,
@@ -12923,7 +13067,7 @@ ${normalized}`;
           languageKey,
           languageLabel,
           title: languageLabel,
-          secondary: [entry.secondary || t2("subtitle_tab_addons", {}, "Addons"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" \u2022 "),
+          secondary: [entry.secondary || t3("subtitle_tab_addons", {}, "Addons"), entry.label && normalizeComparableText(entry.label) !== normalizeComparableText(languageLabel) ? entry.label : ""].filter(Boolean).join(" \u2022 "),
           selected: Boolean(entry.selected),
           sourceType: "addon",
           isForced,
@@ -12956,7 +13100,7 @@ ${normalized}`;
       if (!groups.has(SUBTITLE_LANGUAGE_OFF_KEY)) {
         groups.set(SUBTITLE_LANGUAGE_OFF_KEY, {
           key: SUBTITLE_LANGUAGE_OFF_KEY,
-          label: t2("subtitle_none", {}, "Off"),
+          label: t3("subtitle_none", {}, "Off"),
           selected: selectedLanguageKey === SUBTITLE_LANGUAGE_OFF_KEY,
           count: 1
         });
@@ -13089,15 +13233,24 @@ ${normalized}`;
       }
       const options = this.collectSubtitleOptionItems().filter((entry) => entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
       const matchTarget = (entry, target) => this.matchesStartupSubtitleTarget(entry, target);
+      const findMatch = (target, { sourceType = null, forcedOnly = false } = {}) => options.find((entry) => {
+        if (sourceType && entry.sourceType !== sourceType) {
+          return false;
+        }
+        if (forcedOnly && !entry.isForced) {
+          return false;
+        }
+        return matchTarget(entry, target);
+      });
       for (const target of normalizedTargets) {
-        const internalMatch = options.find((entry) => entry.sourceType === "internal" && matchTarget(entry, target));
-        if (internalMatch) {
-          return internalMatch;
-        }
-        const addonMatch = options.find((entry) => entry.sourceType === "addon" && matchTarget(entry, target));
-        if (addonMatch) {
-          return addonMatch;
-        }
+        const forcedInternal = findMatch(target, { sourceType: "internal", forcedOnly: true });
+        if (forcedInternal) return forcedInternal;
+        const forcedAddon = findMatch(target, { sourceType: "addon", forcedOnly: true });
+        if (forcedAddon) return forcedAddon;
+        const internalMatch = findMatch(target, { sourceType: "internal" });
+        if (internalMatch) return internalMatch;
+        const addonMatch = findMatch(target, { sourceType: "addon" });
+        if (addonMatch) return addonMatch;
       }
       return null;
     },
@@ -13149,13 +13302,6 @@ ${normalized}`;
       if (!(preferredOption == null ? void 0 : preferredOption.entry)) {
         if (!isStillLoading) {
           this.startupSubtitlePreferenceApplied = true;
-          const offEntry = this.getSubtitleEntries("builtIn").find((entry) => entry.id === "subtitle-off") || { trackIndex: -1 };
-          this.startupSubtitlePreferenceApplying = true;
-          try {
-            this.applySubtitleEntry(offEntry);
-          } finally {
-            this.startupSubtitlePreferenceApplying = false;
-          }
         }
         return false;
       }
@@ -13173,14 +13319,14 @@ ${normalized}`;
     getSubtitleStyleControls() {
       const style = this.subtitleStyleSettings || {};
       return [
-        { id: "delay", label: t2("subtitle_tab_delay", {}, "Delay"), value: formatSubtitleDelay(this.subtitleDelayMs) },
-        { id: "fontSize", label: t2("subtitle_style_size", {}, "Font Size"), value: `${Number(style.fontSize || 100)}%` },
-        { id: "bold", label: t2("subtitle_style_bold", {}, "Bold"), value: style.bold ? t2("common.on", {}, "On") : t2("common.off", {}, "Off") },
-        { id: "textColor", label: t2("subtitle_style_text_color", {}, "Text Color"), value: styleChipLabel(style.textColor || "#FFFFFF") },
-        { id: "outlineEnabled", label: t2("subtitle_style_outline", {}, "Outline"), value: style.outlineEnabled ? t2("common.on", {}, "On") : t2("common.off", {}, "Off") },
-        { id: "outlineColor", label: t2("subtitle_style_outline_color", {}, "Outline Color"), value: styleChipLabel(style.outlineColor || "#000000") },
-        { id: "verticalOffset", label: t2("subtitle_style_vertical_offset", {}, "Vertical Offset"), value: `${Number(style.verticalOffset || 0)}` },
-        { id: "reset", label: t2("subtitle_style_defaults", {}, "Reset Defaults"), value: "" }
+        { id: "delay", label: t3("subtitle_tab_delay", {}, "Delay"), value: formatSubtitleDelay(this.subtitleDelayMs) },
+        { id: "fontSize", label: t3("subtitle_style_size", {}, "Font Size"), value: `${Number(style.fontSize || 100)}%` },
+        { id: "bold", label: t3("subtitle_style_bold", {}, "Bold"), value: style.bold ? t3("common.on", {}, "On") : t3("common.off", {}, "Off") },
+        { id: "textColor", label: t3("subtitle_style_text_color", {}, "Text Color"), value: styleChipLabel(style.textColor || "#FFFFFF") },
+        { id: "outlineEnabled", label: t3("subtitle_style_outline", {}, "Outline"), value: style.outlineEnabled ? t3("common.on", {}, "On") : t3("common.off", {}, "Off") },
+        { id: "outlineColor", label: t3("subtitle_style_outline_color", {}, "Outline Color"), value: styleChipLabel(style.outlineColor || "#000000") },
+        { id: "verticalOffset", label: t3("subtitle_style_vertical_offset", {}, "Vertical Offset"), value: `${Number(style.verticalOffset || 0)}` },
+        { id: "reset", label: t3("subtitle_style_defaults", {}, "Reset Defaults"), value: "" }
       ];
     },
     adjustSubtitleStyleControl(controlId, delta = 0) {
@@ -13431,13 +13577,13 @@ ${normalized}`;
       this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex, 0, Math.max(0, styleItems.length - 1));
       const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY;
       dialog.innerHTML = `
-      <div class="player-dialog-title">${escapeHtml3(t2("subtitle_dialog_title", {}, "Subtitles"))}</div>
+      <div class="player-dialog-title">${escapeHtml3(t3("subtitle_dialog_title", {}, "Subtitles"))}</div>
       <div class="player-subtitle-overlay-grid">
         <div class="player-subtitle-rail player-subtitle-language-rail">
           ${languages.map((item, index) => `
             <div class="player-dialog-item${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "language" && index === this.subtitleLanguageRailIndex ? " focused" : ""}">
               <div class="player-dialog-item-main">${escapeHtml3(item.label)}</div>
-              <div class="player-dialog-item-sub">${item.key === SUBTITLE_LANGUAGE_OFF_KEY ? escapeHtml3(t2("subtitle_none", {}, "Off")) : escapeHtml3(`${item.count} ${item.count === 1 ? "option" : "options"}`)}</div>
+              <div class="player-dialog-item-sub">${item.key === SUBTITLE_LANGUAGE_OFF_KEY ? escapeHtml3(t3("subtitle_none", {}, "Off")) : escapeHtml3(`${item.count} ${item.count === 1 ? "option" : "options"}`)}</div>
               <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
             </div>
           `).join("")}
@@ -13449,7 +13595,7 @@ ${normalized}`;
               <div class="player-dialog-item-sub">${escapeHtml3(item.secondary || "")}</div>
               <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
             </div>
-          `).join("") : `<div class="player-dialog-empty">${escapeHtml3(t2("subtitle_none", {}, "No subtitles"))}</div>`}
+          `).join("") : `<div class="player-dialog-empty">${escapeHtml3(t3("subtitle_none", {}, "No subtitles"))}</div>`}
         </div>
         <div class="player-subtitle-rail player-subtitle-style-rail${showOptionsRail ? "" : " hidden"}">
           ${styleItems.map((item, index) => `
@@ -13471,6 +13617,22 @@ ${normalized}`;
       const activeLanguage = ((_a = languages[this.subtitleLanguageRailIndex]) == null ? void 0 : _a.key) || SUBTITLE_LANGUAGE_OFF_KEY;
       const options = this.getSubtitleOptionsForLanguage(activeLanguage);
       const styleItems = this.getSubtitleStyleControls();
+      const isMinusKey = keyCode === 189 || keyCode === 109;
+      const isPlusKey = keyCode === 187 || keyCode === 107;
+      const isStyleRail = this.subtitleFocusedRail === "style";
+      const styleItem = styleItems[this.subtitleStyleRailIndex];
+      if (isStyleRail && (keyCode === 37 || isMinusKey)) {
+        if (styleItem) {
+          this.adjustSubtitleStyleControl(styleItem.id, -1);
+        }
+        return true;
+      }
+      if (isStyleRail && (keyCode === 39 || isPlusKey)) {
+        if (styleItem) {
+          this.adjustSubtitleStyleControl(styleItem.id, 1);
+        }
+        return true;
+      }
       if (keyCode === 38) {
         if (this.subtitleFocusedRail === "language") {
           this.subtitleLanguageRailIndex = clamp(this.subtitleLanguageRailIndex - 1, 0, Math.max(0, languages.length - 1));
@@ -13517,13 +13679,6 @@ ${normalized}`;
           this.renderSubtitleDialog();
           return true;
         }
-        if (this.subtitleFocusedRail === "style") {
-          const styleItem = styleItems[this.subtitleStyleRailIndex];
-          if (styleItem) {
-            this.adjustSubtitleStyleControl(styleItem.id, 1);
-          }
-          return true;
-        }
         return true;
       }
       if (keyCode === 13) {
@@ -13555,20 +13710,14 @@ ${normalized}`;
           }
           return true;
         }
-        const styleItem = styleItems[this.subtitleStyleRailIndex];
         if (styleItem) {
-          this.adjustSubtitleStyleControl(styleItem.id, styleItem.id === "delay" || styleItem.id === "fontSize" || styleItem.id === "verticalOffset" ? 1 : 1);
+          this.adjustSubtitleStyleControl(styleItem.id, 1);
         }
         return true;
       }
-      if (this.subtitleFocusedRail === "style" && (keyCode === 10009 || keyCode === 461)) {
-        return false;
-      }
-      if (this.subtitleFocusedRail === "style" && keyCode === 189) {
-        const styleItem = styleItems[this.subtitleStyleRailIndex];
-        if (styleItem) {
-          this.adjustSubtitleStyleControl(styleItem.id, -1);
-        }
+      if (isStyleRail && (keyCode === 10009 || keyCode === 461)) {
+        this.subtitleFocusedRail = options.length ? "options" : "language";
+        this.renderSubtitleDialog();
         return true;
       }
       return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
@@ -13807,14 +13956,14 @@ ${normalized}`;
         const loading = this.isCurrentSourceAdaptiveManifest() && (this.manifestLoading || this.trackDiscoveryInProgress);
         const emptyMessage = loading ? "Loading audio tracks..." : this.getUnavailableTrackMessage("audio");
         dialog.innerHTML = `
-        <div class="player-dialog-title">${escapeHtml3(t2("audio_dialog_title", {}, "Audio"))}</div>
+        <div class="player-dialog-title">${escapeHtml3(t3("audio_dialog_title", {}, "Audio"))}</div>
         <div class="player-dialog-empty">${emptyMessage}</div>
       `;
         return;
       }
       this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
       dialog.innerHTML = `
-      <div class="player-dialog-title">${escapeHtml3(t2("audio_dialog_title", {}, "Audio"))}</div>
+      <div class="player-dialog-title">${escapeHtml3(t3("audio_dialog_title", {}, "Audio"))}</div>
       <div class="player-dialog-list player-audio-track-list">
         ${entries.map((entry, index) => {
         const selected = entry.selected;
@@ -13909,12 +14058,12 @@ ${normalized}`;
       const currentSpeed = Number(((_b = PlayerController.video) == null ? void 0 : _b.playbackRate) || 1);
       this.speedDialogIndex = clamp(this.speedDialogIndex, 0, PLAYER_SPEEDS.length - 1);
       dialog.innerHTML = `
-      <div class="player-dialog-title">${escapeHtml3(t2("player_playback_speed", {}, "Playback speed"))}</div>
+      <div class="player-dialog-title">${escapeHtml3(t3("player_playback_speed", {}, "Playback speed"))}</div>
       <div class="player-dialog-list">
         ${PLAYER_SPEEDS.map((speed, index) => `
           <div class="player-dialog-item${speed === currentSpeed ? " selected" : ""}${index === this.speedDialogIndex ? " focused" : ""}">
             <div class="player-dialog-item-main">${escapeHtml3(`${speed}x`)}</div>
-            <div class="player-dialog-item-sub">${escapeHtml3(speed === 1 ? t2("common.normal", {}, "Normal") : t2("player_playback_speed", {}, "Playback speed"))}</div>
+            <div class="player-dialog-item-sub">${escapeHtml3(speed === 1 ? t3("common.normal", {}, "Normal") : t3("player_playback_speed", {}, "Playback speed"))}</div>
             <div class="player-dialog-item-check">${speed === currentSpeed ? "&#10003;" : ""}</div>
           </div>
         `).join("")}
@@ -14046,7 +14195,7 @@ ${normalized}`;
           }
         } catch (error) {
           if (token === this.sourceLoadToken) {
-            this.sourcesError = t2("panel_failed_load_streams", {}, "Failed to load streams");
+            this.sourcesError = t3("panel_failed_load_streams", {}, "Failed to load streams");
           }
         } finally {
           if (token === this.sourceLoadToken) {
@@ -14072,10 +14221,10 @@ ${normalized}`;
       this.ensureSourcesFocus();
       panel.innerHTML = `
       <div class="player-sources-header">
-        <div class="player-sources-title">${escapeHtml3(t2("sources_title", {}, "Sources"))}</div>
+        <div class="player-sources-title">${escapeHtml3(t3("sources_title", {}, "Sources"))}</div>
         <div class="player-sources-actions">
-          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">${escapeHtml3(t2("sources_reload", {}, "Reload"))}</button>
-          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">${escapeHtml3(t2("sources_close", {}, "Close"))}</button>
+          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload">${escapeHtml3(t3("sources_reload", {}, "Reload"))}</button>
+          <button class="player-sources-top-btn${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close">${escapeHtml3(t3("sources_close", {}, "Close"))}</button>
         </div>
       </div>
 
@@ -14089,16 +14238,16 @@ ${normalized}`;
         const focused = this.sourcesFocus.zone === "filter" && this.sourcesFocus.index === index;
         return `
             <div class="player-sources-filter${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              ${escapeHtml3(filter === "all" ? t2("subtitle_all", {}, "All") : filter)}
+              ${escapeHtml3(filter === "all" ? t3("subtitle_all", {}, "All") : filter)}
             </div>
           `;
       }).join("")}
       </div>
 
       <div class="player-sources-list">
-        ${this.sourcesLoading ? `<div class="player-sources-empty">${escapeHtml3(t2("stream_finding_source", {}, "Finding stream source"))}</div>` : ""}
+        ${this.sourcesLoading ? `<div class="player-sources-empty">${escapeHtml3(t3("stream_finding_source", {}, "Finding stream source"))}</div>` : ""}
         ${this.sourcesError ? `<div class="player-sources-empty">${escapeHtml3(this.sourcesError)}</div>` : ""}
-        ${!this.sourcesLoading && !filtered.length ? `<div class="player-sources-empty">${escapeHtml3(t2("sources_no_streams", {}, "No streams found"))}</div>` : filtered.map((stream, index) => {
+        ${!this.sourcesLoading && !filtered.length ? `<div class="player-sources-empty">${escapeHtml3(t3("sources_no_streams", {}, "No streams found"))}</div>` : filtered.map((stream, index) => {
         var _a2;
         const focused = this.sourcesFocus.zone === "list" && this.sourcesFocus.index === index;
         const isCurrent = ((_a2 = this.streamCandidates[this.currentStreamIndex]) == null ? void 0 : _a2.url) === stream.url;
@@ -14113,8 +14262,8 @@ ${normalized}`;
                   </div>
                 </div>
                 <div class="player-source-side">
-                  <div class="player-source-addon">${escapeHtml3(stream.addonName || t2("nav_addons", {}, "Addon"))}</div>
-                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml3(t2("sources_playing", {}, "Playing"))}</div>` : ""}
+                  <div class="player-source-addon">${escapeHtml3(stream.addonName || t3("nav_addons", {}, "Addon"))}</div>
+                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml3(t3("sources_playing", {}, "Playing"))}</div>` : ""}
                 </div>
               </article>
             `;
@@ -14354,13 +14503,13 @@ ${normalized}`;
         const selectedClass = selected ? " selected" : "";
         return `
         <div class="player-episode-item${selectedClass}">
-          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml3(episode.title || t2("episodes_episode", {}, "Episode"))}</div>
+          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml3(episode.title || t3("episodes_episode", {}, "Episode"))}</div>
           <div class="player-episode-item-subtitle">${escapeHtml3(episode.overview || "")}</div>
         </div>
       `;
       }).join("");
       panel.innerHTML = `
-      <div class="player-episode-panel-title">${escapeHtml3(t2("episodes_panel_title", {}, "Episodes"))}</div>
+      <div class="player-episode-panel-title">${escapeHtml3(t3("episodes_panel_title", {}, "Episodes"))}</div>
       <div class="player-episode-panel-hint">${escapeHtml3(buildEpisodePanelHint())}</div>
       ${cards}
     `;
@@ -17624,6 +17773,9 @@ ${normalized}`;
 
   // js/ui/screens/detail/metaDetailsScreen.js
   var TMDB_BASE_URL3 = "https://api.themoviedb.org/3";
+  function t4(key, params = {}, fallback = key) {
+    return I18n.t(key, params, { fallback });
+  }
   function toEpisodeEntry(video = {}) {
     const season = Number(video.season || 0);
     const episode = Number(video.episode || 0);
@@ -17826,13 +17978,20 @@ ${normalized}`;
     return null;
   }
   function formatRuntimeMinutes(runtime) {
-    const minutes = Number(runtime || 0);
-    if (!Number.isFinite(minutes) || minutes <= 0) {
+    return formatDurationMinutes2(runtime);
+  }
+  function formatDurationMinutes2(totalMinutes) {
+    const minutesValue = Number(totalMinutes || 0);
+    if (!Number.isFinite(minutesValue) || minutesValue <= 0) {
       return "";
     }
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    const roundedMinutes = Math.max(0, Math.round(minutesValue));
+    const hours = Math.floor(roundedMinutes / 60);
+    const minutes = roundedMinutes % 60;
+    if (hours > 0) {
+      return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
   }
   function resolveEpisodeRuntimeForSeason(episodes = [], season = null) {
     const seasonNumber = Number(season || 0);
@@ -17890,6 +18049,9 @@ ${normalized}`;
   function escapeHtml5(value = "") {
     return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
+  function escapeAttribute3(value = "") {
+    return escapeHtml5(value);
+  }
   function escapeSelectorValue(value = "") {
     const raw = String(value != null ? value : "");
     if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
@@ -17912,6 +18074,19 @@ ${normalized}`;
       landscapePoster: item.landscapePoster || item.background || item.poster || "",
       releaseInfo: item.releaseInfo || item.year || ""
     };
+  }
+  function normalizeEpisodeTitle(rawTitle, episodeNumber) {
+    const label = t4("episodes_episode", {}, "Episode");
+    const trimmed = String(rawTitle || "").trim();
+    const number = Number(episodeNumber || 0);
+    if (!trimmed) {
+      return number > 0 ? `${label} ${number}` : label;
+    }
+    const match = trimmed.match(/^episode\s*(\d+)$/i);
+    if (match) {
+      return `${label} ${match[1]}`;
+    }
+    return trimmed;
   }
   function extractPreviewYear(value = "") {
     const match = String(value || "").match(/\b(19|20)\d{2}\b/);
@@ -17981,6 +18156,30 @@ ${normalized}`;
       params.set("origin", origin);
     }
     return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
+  }
+  function buildYoutubeStreamUrl(ytId = "") {
+    var _a;
+    const cleanId = String(ytId || "").trim();
+    if (!cleanId) {
+      return "";
+    }
+    const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+    if (!proxyBase) {
+      return "";
+    }
+    const templated = proxyBase.replace(/\{(ytId|id)\}/gi, cleanId);
+    if (templated !== proxyBase) {
+      return templated;
+    }
+    try {
+      const proxyUrl = new URL(proxyBase, ((_a = globalThis == null ? void 0 : globalThis.location) == null ? void 0 : _a.href) || "https://example.com/");
+      proxyUrl.searchParams.set("v", cleanId);
+      proxyUrl.searchParams.set("stream", "1");
+      proxyUrl.searchParams.set("format", "mp4");
+      return proxyUrl.toString();
+    } catch (_) {
+      return "";
+    }
   }
   function scoreTrailerStream2(entry = {}) {
     const text = [
@@ -18684,9 +18883,13 @@ ${normalized}`;
       }
     },
     renderSeriesHeroMarkup(meta) {
-      const nextEpisodeLabel = this.nextEpisodeToWatch ? `Next S${this.nextEpisodeToWatch.season}E${this.nextEpisodeToWatch.episode}` : "Play";
+      const nextEpisodeLabel = this.nextEpisodeToWatch ? t4(
+        "detail.nextEpisodeShort",
+        { season: this.nextEpisodeToWatch.season, episode: this.nextEpisodeToWatch.episode },
+        "Next S{{season}}E{{episode}}"
+      ) : t4("detail.play", {}, "Play");
       const creditLine = Array.isArray(meta.director) && meta.director.length ? meta.director.slice(0, 2).join(", ") : Array.isArray(meta.writer) && meta.writer.length ? meta.writer.slice(0, 2).join(", ") : meta.director || meta.writer || "";
-      const creditPrefix = Array.isArray(meta.director) && meta.director.length ? "Creator" : "Writer";
+      const creditPrefix = Array.isArray(meta.director) && meta.director.length ? t4("detail.creator", {}, "Creator") : t4("detail.writer", {}, "Writer");
       return this.renderHeroSection({
         meta,
         playLabel: nextEpisodeLabel,
@@ -18699,9 +18902,9 @@ ${normalized}`;
       const directorLine = Array.isArray(meta.director) ? meta.director.slice(0, 2).join(", ") : meta.director || "";
       return this.renderHeroSection({
         meta,
-        playLabel: "Play",
+        playLabel: t4("detail.play", {}, "Play"),
         creditLine: directorLine,
-        creditPrefix: "Director",
+        creditPrefix: t4("detail.director", {}, "Director"),
         showWatchedButton: true
       });
     },
@@ -18744,7 +18947,7 @@ ${normalized}`;
       }
     },
     renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
-      const logoOrTitle = meta.logo ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml5(meta.name || "logo")}" />` : `<h1 class="series-detail-title">${escapeHtml5(meta.name || "Untitled")}</h1>`;
+      const logoOrTitle = meta.logo ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml5(meta.name || "logo")}" decoding="async" fetchpriority="high" />` : `<h1 class="series-detail-title">${escapeHtml5(meta.name || "Untitled")}</h1>`;
       const externalRatings = this.renderExternalRatingsRow(meta);
       const trailerSource = this.trailerSource || resolveTrailerSource2(meta);
       if (!this.trailerSource && trailerSource) {
@@ -18752,7 +18955,7 @@ ${normalized}`;
       }
       const trailerButtonEnabled = Boolean(LayoutPreferences.get().detailPageTrailerButtonEnabled);
       const trailerButton = trailerButtonEnabled && trailerSource ? `
-          <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="Play trailer">
+          <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="${escapeAttribute3(t4("detail.playTrailer", {}, "Play trailer"))}">
             ${renderTrailerGlyph()}
           </button>
         ` : "";
@@ -18760,7 +18963,7 @@ ${normalized}`;
       <section class="detail-hero-section">
         <div class="detail-hero-brand">
           ${logoOrTitle}
-          <p class="detail-trailer-hint">Press back to return to details</p>
+          <p class="detail-trailer-hint">${escapeHtml5(t4("detail.pressBackToReturn", {}, "Press back to return to details"))}</p>
         </div>
         <div class="series-detail-actions">
           <button class="series-primary-btn focusable" data-action="playDefault">
@@ -18770,12 +18973,12 @@ ${normalized}`;
           <button class="series-circle-btn focusable" data-action="toggleLibrary">
             ${renderLibraryGlyph(this.isSavedInLibrary)}
           </button>
-          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${this.isMarkedWatched ? "Mark unwatched" : "Mark watched"}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
+          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${escapeAttribute3(this.isMarkedWatched ? t4("common.markUnwatched", {}, "Mark Unwatched") : t4("common.markWatched", {}, "Mark Watched"))}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
           ${trailerButton}
         </div>
         ${creditLine ? `<p class="series-detail-support">${escapeHtml5(creditPrefix)}: ${escapeHtml5(creditLine)}</p>` : ""}
         ${externalRatings}
-        <p class="series-detail-description">${escapeHtml5(meta.description || "No description.")}</p>
+        <p class="series-detail-description">${escapeHtml5(meta.description || t4("detail.noDescription", {}, "No description."))}</p>
         ${this.renderHeroMetaRows(meta)}
       </section>
     `;
@@ -18846,8 +19049,11 @@ ${normalized}`;
     `;
     },
     renderCompanySections(meta = {}) {
-      const production = this.renderCompanyLogosSection(meta.productionCompanies || meta.production_companies || [], "Production");
-      const networks = this.renderCompanyLogosSection(meta.networks || [], "Network");
+      const production = this.renderCompanyLogosSection(
+        meta.productionCompanies || meta.production_companies || [],
+        t4("detail.productionCompanies", {}, "Production")
+      );
+      const networks = this.renderCompanyLogosSection(meta.networks || [], t4("detail.networks", {}, "Network"));
       if (meta.type === "series" || meta.type === "tv") {
         return `${networks}${production}`;
       }
@@ -18862,40 +19068,40 @@ ${normalized}`;
       this.container.innerHTML = `
       <div class="row">
         <h2>${meta.name || "Untitled"}</h2>
-        <p>${meta.description || "No description."}</p>
+        <p>${meta.description || t4("detail.noDescription", {}, "No description.")}</p>
         <p style="opacity:0.8;">Type: ${meta.type || "unknown"} | Id: ${meta.id || "-"}</p>
       </div>
       <div class="row">
-        <div class="card focusable" data-action="playDefault">${isSeries ? "Play Next Episode" : "Play"}</div>
-        <div class="card focusable" data-action="toggleLibrary">${this.isSavedInLibrary ? "Remove from Library" : "Add to Library"}</div>
-        <div class="card focusable" data-action="toggleWatched">${this.isMarkedWatched ? "Mark Unwatched" : "Mark Watched"}</div>
-        <div class="card focusable" data-action="openSearch">Search Similar</div>
-        <div class="card focusable" data-action="goBack">Back</div>
+        <div class="card focusable" data-action="playDefault">${isSeries ? t4("detail.playNextEpisode", {}, "Play Next Episode") : t4("detail.play", {}, "Play")}</div>
+        <div class="card focusable" data-action="toggleLibrary">${this.isSavedInLibrary ? t4("detail.removeFromLibrary", {}, "Remove from Library") : t4("detail.addToLibrary", {}, "Add to Library")}</div>
+        <div class="card focusable" data-action="toggleWatched">${this.isMarkedWatched ? t4("common.markUnwatched", {}, "Mark Unwatched") : t4("common.markWatched", {}, "Mark Watched")}</div>
+        <div class="card focusable" data-action="openSearch">${t4("detail.searchSimilar", {}, "Search Similar")}</div>
+        <div class="card focusable" data-action="goBack">${t4("common.back", {}, "Back")}</div>
       </div>
       ${isSeries ? `
       <div class="row">
-        <h3>Seasons</h3>
+        <h3>${t4("detail.seasons", {}, "Seasons")}</h3>
         <div id="detailSeasons">${seasonButtons}</div>
       </div>
       <div class="row">
-        <h3>Episodes</h3>
+        <h3>${t4("detail.episodes", {}, "Episodes")}</h3>
         <div id="detailEpisodes">${episodeCards}</div>
       </div>
       ` : ""}
       ${castCards ? `
       <div class="row">
-        <h3>Cast</h3>
+        <h3>${t4("detail.cast", {}, "Cast")}</h3>
         <div id="detailCast">${castCards}</div>
       </div>
       ` : ""}
       ${moreLikeCards ? `
       <div class="row">
-        <h3>More Like This</h3>
+        <h3>${t4("detail.moreLikeThis", {}, "More Like This")}</h3>
         <div id="detailMoreLike">${moreLikeCards}</div>
       </div>
       ` : ""}
       <div class="row">
-        <h3>Streams (${streamItems.length})</h3>
+        <h3>${t4("detail.streams", {}, "Streams")} (${streamItems.length})</h3>
         <div id="detailStreams"></div>
       </div>
     `;
@@ -18982,9 +19188,9 @@ ${normalized}`;
     },
     renderMovieInsightSection(meta) {
       const tabItems = [
-        ["cast", "Creator and Cast"],
-        ["ratings", "Ratings"],
-        ...this.moreLikeThisItems.length ? [["morelike", "More Like This"]] : [],
+        ["cast", t4("detail.creatorCast", {}, "Creator and Cast")],
+        ["ratings", t4("detail.ratings", {}, "Ratings")],
+        ...this.moreLikeThisItems.length ? [["morelike", t4("detail.moreLikeThis", {}, "More Like This")]] : [],
         ...this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : []
       ];
       const tabs = tabItems.length > 1 ? this.renderPeopleTabs("movie", this.movieInsightTab, tabItems) : "";
@@ -19033,9 +19239,9 @@ ${normalized}`;
     },
     renderSeriesInsightSection() {
       const tabItems = [
-        ["cast", "Creator and Cast"],
-        ["ratings", "Ratings"],
-        ...this.moreLikeThisItems.length ? [["morelike", "More Like This"]] : [],
+        ["cast", t4("detail.creatorCast", {}, "Creator and Cast")],
+        ["ratings", t4("detail.ratings", {}, "Ratings")],
+        ...this.moreLikeThisItems.length ? [["morelike", t4("detail.moreLikeThis", {}, "More Like This")]] : [],
         ...this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : []
       ];
       const tabs = tabItems.length > 1 ? this.renderPeopleTabs("series", this.seriesInsightTab, tabItems) : "";
@@ -19083,7 +19289,7 @@ ${normalized}`;
       var _a;
       const seasonKeys = Object.keys(this.seriesRatingsBySeason || {}).map((key) => Number(key)).filter((value) => value > 0).sort((a, b) => a - b);
       if (!seasonKeys.length) {
-        return `<div class="series-insight-empty">Ratings not available.</div>`;
+        return `<div class="series-insight-empty">${escapeHtml5(t4("detail.ratingsNotAvailable", {}, "Ratings not available."))}</div>`;
       }
       if (!seasonKeys.includes(Number(this.selectedRatingSeason))) {
         this.selectedRatingSeason = seasonKeys[0];
@@ -19100,35 +19306,35 @@ ${normalized}`;
             <span class="series-episode-rating-ep">E${entry.episode}</span>
             <span class="series-episode-rating-val">${entry.rating != null ? String(entry.rating).replace(".", ".") : "-"}</span>
           </div>
-        `).join("") : `<div class="series-insight-empty">No episode ratings in this season.</div>`;
+        `).join("") : `<div class="series-insight-empty">${escapeHtml5(t4("detail.noEpisodeRatings", {}, "No episode ratings in this season."))}</div>`;
       return `
       <div class="series-rating-seasons" data-scroll-key="rating-seasons">${seasonButtons}</div>
-      <div class="series-rating-summary">Season ${this.selectedRatingSeason} \u2022 ${ratings.length} episodes</div>
+      <div class="series-rating-summary">${escapeHtml5(t4("detail.seasonSummary", { season: this.selectedRatingSeason, count: ratings.length }, "Season {{season}} \u2022 {{count}} episodes"))}</div>
       <div class="series-episode-ratings-grid" data-scroll-key="rating-chips:${this.selectedRatingSeason}">${chips}</div>
     `;
     },
     renderSeasonButtons() {
       var _a;
       if (!((_a = this.episodes) == null ? void 0 : _a.length)) {
-        return "<p>No episodes found.</p>";
+        return `<p>${escapeHtml5(t4("detail.noEpisodesFound", {}, "No episodes found."))}</p>`;
       }
       const seasons = Array.from(new Set(this.episodes.map((episode) => episode.season)));
       return seasons.map((season) => `
       <button class="series-season-btn focusable${season === this.selectedSeason ? " selected" : ""}"
               data-action="selectSeason"
               data-season="${season}">
-        Season ${season}
+        ${escapeHtml5(t4("detail.seasonLabel", { season }, "Season {{season}}"))}
       </button>
     `).join("");
     },
     renderEpisodeCards() {
       var _a;
       if (!((_a = this.episodes) == null ? void 0 : _a.length)) {
-        return "<p>No episodes found.</p>";
+        return `<p>${escapeHtml5(t4("detail.noEpisodesFound", {}, "No episodes found."))}</p>`;
       }
       const selectedSeasonEpisodes = this.episodes.filter((episode) => episode.season === this.selectedSeason);
       if (!selectedSeasonEpisodes.length) {
-        return "<p>No episodes for selected season.</p>";
+        return `<p>${escapeHtml5(t4("episodes_panel_no_episodes", {}, "No episodes available"))}</p>`;
       }
       return selectedSeasonEpisodes.map((episode) => {
         var _a2, _b, _c, _d;
@@ -19152,9 +19358,9 @@ ${normalized}`;
             <div class="series-episode-overlay"></div>
             ${isWatched ? `<div class="series-episode-status complete">&#10003;</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
             <div class="series-episode-copy">
-              <div class="series-episode-badge">EPISODE ${Number(episode.episode || 0)}</div>
-              <div class="series-episode-title">${escapeHtml5(episode.title)}</div>
-              <div class="series-episode-overview">${escapeHtml5(episode.overview || "Episode")}</div>
+              <div class="series-episode-badge">${escapeHtml5(t4("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
+              <div class="series-episode-title">${escapeHtml5(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
+             <div class="series-episode-overview">${escapeHtml5(episode.overview || t4("episodes_episode", {}, "Episode"))}</div>
               ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
               ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
             </div>
@@ -19199,9 +19405,9 @@ ${normalized}`;
       const watched = this.isEpisodeMarkedWatched(episode);
       const hasResume = !watched && Number((progress == null ? void 0 : progress.positionMs) || 0) > 0;
       return [
-        { action: hasResume ? "resume" : "play", label: hasResume ? "Resume" : "Play" },
-        { action: "startOver", label: "Start Over" },
-        { action: "toggleWatched", label: watched ? "Mark Unwatched" : "Mark Watched" }
+        { action: hasResume ? "resume" : "play", label: hasResume ? t4("common.resume", {}, "Resume") : t4("detail.play", {}, "Play") },
+        { action: "startOver", label: t4("common.startOver", {}, "Start Over") },
+        { action: "toggleWatched", label: watched ? t4("common.markUnwatched", {}, "Mark Unwatched") : t4("common.markWatched", {}, "Mark Watched") }
       ];
     },
     renderEpisodeHoldMenu() {
@@ -19212,7 +19418,7 @@ ${normalized}`;
       }
       const subtitle = [`S${Number(episode.season || 0)}E${Number(episode.episode || 0)}`, episode.title || ""].filter(Boolean).join(" - ");
       return renderHoldMenuMarkup({
-        kicker: "Episode Options",
+        kicker: t4("detail.episodeOptions", {}, "Episode Options"),
         title: ((_a = this.meta) == null ? void 0 : _a.name) || ((_b = this.params) == null ? void 0 : _b.fallbackTitle) || ((_c = this.params) == null ? void 0 : _c.itemId) || "Untitled",
         subtitle,
         focusedIndex: Number(((_d = this.episodeHoldMenu) == null ? void 0 : _d.optionIndex) || 0),
@@ -19408,7 +19614,7 @@ ${normalized}`;
       const logos = companies.slice(0, 10).map((company) => `
       <article class="detail-company-card focusable"
                data-company-name="${escapeHtml5(company.name || "")}">
-        ${company.logo ? `<img src="${company.logo}" alt="${escapeHtml5(company.name || "Company")}" />` : `<span>${escapeHtml5(company.name || "")}</span>`}
+        ${company.logo ? `<img src="${company.logo}" alt="${escapeHtml5(company.name || "Company")}" loading="lazy" decoding="async" />` : `<span>${escapeHtml5(company.name || "")}</span>`}
       </article>
     `).join("");
       return `
@@ -19509,9 +19715,12 @@ ${normalized}`;
         }
         if (node.classList.contains("series-circle-btn")) {
           node.innerHTML = renderLibraryGlyph(this.isSavedInLibrary);
-          node.setAttribute("aria-label", this.isSavedInLibrary ? "Remove from library" : "Add to library");
+          node.setAttribute(
+            "aria-label",
+            this.isSavedInLibrary ? t4("detail.removeFromLibrary", {}, "Remove from Library") : t4("detail.addToLibrary", {}, "Add to Library")
+          );
         } else {
-          node.textContent = this.isSavedInLibrary ? "Remove from Library" : "Add to Library";
+          node.textContent = this.isSavedInLibrary ? t4("detail.removeFromLibrary", {}, "Remove from Library") : t4("detail.addToLibrary", {}, "Add to Library");
         }
       });
       Array.from(this.container.querySelectorAll('[data-action="toggleWatched"]')).forEach((node) => {
@@ -19521,9 +19730,12 @@ ${normalized}`;
         if (node.classList.contains("series-circle-btn")) {
           node.classList.toggle("is-selected", this.isMarkedWatched);
           node.innerHTML = renderWatchedGlyph(this.isMarkedWatched);
-          node.setAttribute("aria-label", this.isMarkedWatched ? "Mark unwatched" : "Mark watched");
+          node.setAttribute(
+            "aria-label",
+            this.isMarkedWatched ? t4("common.markUnwatched", {}, "Mark Unwatched") : t4("common.markWatched", {}, "Mark Watched")
+          );
         } else {
-          node.textContent = this.isMarkedWatched ? "Mark Unwatched" : "Mark Watched";
+          node.textContent = this.isMarkedWatched ? t4("common.markUnwatched", {}, "Mark Unwatched") : t4("common.markWatched", {}, "Mark Watched");
         }
       });
       Router.captureCurrentRouteState();
@@ -19610,7 +19822,7 @@ ${normalized}`;
         container[property] = nextValue;
         return;
       }
-      const easeOutCubic = (t5) => 1 - Math.pow(1 - t5, 3);
+      const easeOutCubic = (t7) => 1 - Math.pow(1 - t7, 3);
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const key = axis === "y" ? "y" : "x";
       const existing = map.get(container) || {};
@@ -19665,6 +19877,7 @@ ${normalized}`;
           allow="autoplay; encrypted-media; picture-in-picture"
           referrerpolicy="origin-when-cross-origin"
           allowfullscreen
+          scrolling="no"
         ></iframe>
       `;
         return;
@@ -19710,6 +19923,21 @@ ${normalized}`;
         return;
       }
       if (this.trailerSource.kind === "youtube" && this.trailerSource.embedUrl) {
+        const streamUrl = buildYoutubeStreamUrl(this.trailerSource.ytId);
+        if (streamUrl) {
+          Router.navigate("player", __spreadProps(__spreadValues({}, commonParams), {
+            streamUrl,
+            streamCandidates: [
+              {
+                url: streamUrl,
+                title: "Trailer",
+                addonName: "Trailer"
+              }
+            ],
+            fallbackExternalFrameUrl: this.trailerSource.embedUrl
+          }));
+          return;
+        }
         Router.navigate("player", __spreadProps(__spreadValues({}, commonParams), {
           externalFrameUrl: this.trailerSource.embedUrl
         }));
@@ -23287,7 +23515,10 @@ ${normalized}`;
         this.searchToastTimer = null;
         this.hydrateFromRouteState((navigationContext == null ? void 0 : navigationContext.restoredState) || null, params);
         if (!(navigationContext == null ? void 0 : navigationContext.isBackNavigation)) {
+          this.focusZone = "content";
           this.sidebarExpanded = false;
+          this.sidebarFocusIndex = 0;
+          this.pillIconOnly = false;
         }
         this.loadToken = (this.loadToken || 0) + 1;
         const hasExplicitQuery = Boolean(String(params.query || "").trim());
@@ -23473,7 +23704,7 @@ ${normalized}`;
                      data-item-title="${item.name || "Untitled"}"
                      data-row-key="${escapeHtml8(rowKey)}">
               <div class="search-result-poster-wrap">
-                ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" />` : `<div class="search-result-poster placeholder"></div>`}
+                ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" loading="lazy" decoding="async" />` : `<div class="search-result-poster placeholder"></div>`}
               </div>
               <div class="search-result-name">${item.name || "Untitled"}</div>
               <div class="search-result-date">${formatReleaseYear(item)}</div>
@@ -23786,7 +24017,7 @@ ${normalized}`;
         container[property] = nextValue;
         return;
       }
-      const easeOutCubic = (t5) => 1 - Math.pow(1 - t5, 3);
+      const easeOutCubic = (t7) => 1 - Math.pow(1 - t7, 3);
       const map = this.scrollAnimations || (this.scrollAnimations = /* @__PURE__ */ new WeakMap());
       const key = axis === "y" ? "y" : "x";
       const existing = map.get(container) || {};
@@ -24987,7 +25218,7 @@ ${normalized}`;
                         data-focus-key="item:${item.id || index}"
                         data-item-index="${index}">
                  <div class="seeall-card-poster-wrap">
-                   ${item.poster ? `<img class="seeall-card-poster-image" src="${escapeHtml9(item.poster)}" alt="${escapeHtml9(item.name || "content")}" />` : `<div class="seeall-card-poster placeholder"></div>`}
+                   ${item.poster ? `<img class="seeall-card-poster-image" src="${escapeHtml9(item.poster)}" alt="${escapeHtml9(item.name || "content")}" loading="lazy" decoding="async" />` : `<div class="seeall-card-poster placeholder"></div>`}
                  </div>
                  ${((_a2 = this.layoutPrefs) == null ? void 0 : _a2.posterLabelsEnabled) !== false ? `
                    <div class="seeall-card-title">${escapeHtml9(item.name || "Untitled")}</div>
@@ -25599,7 +25830,7 @@ ${normalized}`;
   function clamp3(value, min, max) {
     return Math.max(min, Math.min(max, value));
   }
-  function t3(key, params = {}, fallback = key) {
+  function t5(key, params = {}, fallback = key) {
     return I18n.t(key, params, { fallback });
   }
   function escapeHtml10(value) {
@@ -25659,7 +25890,7 @@ ${normalized}`;
       return fallback;
     }
     if (option.labelKey) {
-      return t3(option.labelKey, option.labelParams || {}, option.label || fallback);
+      return t5(option.labelKey, option.labelParams || {}, option.label || fallback);
     }
     return String(option.label || fallback);
   }
@@ -25668,7 +25899,7 @@ ${normalized}`;
       return fallback;
     }
     if (option.captionKey) {
-      return t3(option.captionKey, option.captionParams || {}, option.caption || fallback);
+      return t5(option.captionKey, option.captionParams || {}, option.caption || fallback);
     }
     return String(option.caption || fallback);
   }
@@ -25677,8 +25908,8 @@ ${normalized}`;
       return { label: "", subtitle: "" };
     }
     return {
-      label: section.labelKey ? t3(section.labelKey, section.labelParams || {}, section.label || "") : String(section.label || ""),
-      subtitle: section.subtitleKey ? t3(section.subtitleKey, section.subtitleParams || {}, section.subtitle || "") : String(section.subtitle || "")
+      label: section.labelKey ? t5(section.labelKey, section.labelParams || {}, section.label || "") : String(section.label || ""),
+      subtitle: section.subtitleKey ? t5(section.subtitleKey, section.subtitleParams || {}, section.subtitle || "") : String(section.subtitle || "")
     };
   }
   function renderSectionNavIcon(sectionId) {
@@ -25705,7 +25936,7 @@ ${normalized}`;
   function labelForLanguage(language) {
     return translateOptionLabel(
       LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
-      t3("common.systemDefault")
+      t5("common.systemDefault")
     );
   }
   function labelForTmdbLanguage(language) {
@@ -25717,7 +25948,7 @@ ${normalized}`;
   function labelForPlaybackLanguage(language) {
     return translateOptionLabel(
       PREFERRED_PLAYBACK_LANGUAGE_OPTIONS.find((item) => String(item.id) === String(language)),
-      t3("common.system")
+      t5("common.system")
     );
   }
   function normalizeSelectableSubtitleLanguageCode2(language) {
@@ -25750,7 +25981,7 @@ ${normalized}`;
     const normalized = normalizeSelectableSubtitleLanguageCode2(language);
     return translateOptionLabel(
       PREFERRED_SUBTITLE_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
-      normalized === "off" ? "Off" : normalized === "forced" ? "Forced" : normalized === "system" ? t3("common.system") : String(language || "system")
+      normalized === "off" ? "Off" : normalized === "forced" ? "Forced" : normalized === "system" ? t5("common.system") : String(language || "system")
     );
   }
   function subtitleLanguageOptionCode(option) {
@@ -25768,23 +25999,23 @@ ${normalized}`;
     if (normalized === "2160p") return "2160p";
     if (normalized === "1080p") return "1080p";
     if (normalized === "720p") return "720p";
-    return t3("common.auto");
+    return t5("common.auto");
   }
   function playerLabel(value) {
     const normalized = String(value || "auto").toLowerCase();
-    if (normalized === "native") return t3("common.native");
+    if (normalized === "native") return t5("common.native");
     if (normalized === "hls") return "HLS.js";
     if (normalized === "dash") return "dash.js";
-    return t3("common.auto");
+    return t5("common.auto");
   }
   function renderModeLabel(value) {
-    return String(value || "native").toLowerCase() === "html" ? t3("common.htmlOverlay") : t3("common.native");
+    return String(value || "native").toLowerCase() === "html" ? t5("common.htmlOverlay") : t5("common.native");
   }
   function escapeSelector(value) {
     return String(value != null ? value : "").replace(/["\\]/g, "\\$&");
   }
   function plannedSubtitle(subtitle) {
-    return subtitle ? t3("common.comingSoonWithContext", { subject: subtitle }) : t3("common.comingSoon");
+    return subtitle ? t5("common.comingSoonWithContext", { subject: subtitle }) : t5("common.comingSoon");
   }
   function focusKeySelector(selector, key) {
     return `${selector}[data-focus-key="${escapeSelector(String(key))}"]`;
@@ -25860,7 +26091,7 @@ ${normalized}`;
   function addonKindsLabel(addon) {
     const kinds = Array.isArray(addon == null ? void 0 : addon.types) ? addon.types.filter(Boolean) : [];
     if (!kinds.length) {
-      return t3("common.repository");
+      return t5("common.repository");
     }
     return kinds.map((entry) => String(entry)).join(", ");
   }
@@ -26051,7 +26282,7 @@ ${normalized}`;
       const inert = disabled || planned;
       const trailing = external ? "external" : icon;
       const tailContent = [
-        planned ? `<span class="settings-row-badge">${escapeHtml10(t3("common.soon"))}</span>` : "",
+        planned ? `<span class="settings-row-badge">${escapeHtml10(t5("common.soon"))}</span>` : "",
         value ? `<span class="settings-row-value">${escapeHtml10(value)}</span>` : "",
         trailing ? iconSvg(ROW_ICONS[trailing], `settings-row-icon${external ? " is-external" : ""}`) : ""
       ].filter(Boolean).join("");
@@ -26082,7 +26313,7 @@ ${normalized}`;
           ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml10(subtitle)}</span>` : ""}
         </span>
         <span class="settings-row-tail">
-          ${planned ? `<span class="settings-row-badge">${escapeHtml10(t3("common.soon"))}</span>` : ""}
+          ${planned ? `<span class="settings-row-badge">${escapeHtml10(t5("common.soon"))}</span>` : ""}
           <span class="settings-toggle-pill${checked ? " is-checked" : ""}">
             <span class="settings-toggle-thumb"></span>
           </span>
@@ -26126,7 +26357,7 @@ ${normalized}`;
               title="${escapeHtml10(label)}"
               ${this.registerAction(focusKey, inert ? () => {
       } : this.actionMap.get(focusKey))}>
-        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml10(t3("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
+        ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml10(t5("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
       </button>
     `;
     },
@@ -26135,9 +26366,9 @@ ${normalized}`;
       return `
       <article class="settings-plugin-repo-card">
         <div class="settings-plugin-repo-copy">
-          <div class="settings-plugin-repo-title">${escapeHtml10(addon.displayName || addon.name || t3("common.repository"))}</div>
+          <div class="settings-plugin-repo-title">${escapeHtml10(addon.displayName || addon.name || t5("common.repository"))}</div>
           <div class="settings-plugin-repo-meta">
-            ${escapeHtml10(t3(
+            ${escapeHtml10(t5(
         streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
         { count: streamResourceCount, version: addon.version || "0.0.0" }
       ))}
@@ -26148,12 +26379,12 @@ ${normalized}`;
           ${this.renderPluginIconButton({
         focusKey: `plugins:refresh:${index}`,
         icon: "refresh",
-        label: t3("settings.plugins.refreshRepository")
+        label: t5("settings.plugins.refreshRepository")
       })}
           ${this.renderPluginIconButton({
         focusKey: `plugins:remove:${index}`,
         icon: "trash",
-        label: t3("settings.plugins.removeRepository"),
+        label: t5("settings.plugins.removeRepository"),
         destructive: true
       })}
         </div>
@@ -26191,7 +26422,7 @@ ${normalized}`;
       return `
       <div class="settings-dialog-backdrop">
         <div class="settings-dialog${dialogClassName}">
-          <div class="settings-dialog-title">${escapeHtml10(this.optionDialog.title || t3("common.selectOption"))}</div>
+          <div class="settings-dialog-title">${escapeHtml10(this.optionDialog.title || t5("common.selectOption"))}</div>
           <div class="settings-dialog-list${useLanguageRenderer ? " settings-language-dialog-list" : ""}">
             ${this.optionDialog.options.map((option, index) => `
               <button class="settings-dialog-option settings-content-focusable focusable${useLanguageRenderer ? " settings-language-option" : ""}${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
@@ -26231,7 +26462,7 @@ ${normalized}`;
             ${subtitle ? `<span class="settings-row-subtitle">${escapeHtml10(subtitle)}</span>` : ""}
           </span>
           <span class="settings-row-tail">
-            <span class="settings-row-value">${expanded ? t3("common.open") : t3("common.closed")}</span>
+            <span class="settings-row-value">${expanded ? t5("common.open") : t5("common.closed")}</span>
             ${iconSvg(expanded ? ROW_ICONS.expand : ROW_ICONS.chevron, "settings-row-icon")}
           </span>
         </button>
@@ -26257,18 +26488,18 @@ ${normalized}`;
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${signedIn ? `<div class="settings-account-status">
-                <span class="settings-account-status-label">${t3("settings.status.signedIn")}</span>
-                <strong class="settings-account-status-value">${escapeHtml10(model.accountEmail || t3("settings.status.linkedFallback"))}</strong>
-              </div>` : `<p class="settings-account-note">${t3("settings.account.syncNote")}</p>
+                <span class="settings-account-status-label">${t5("settings.status.signedIn")}</span>
+                <strong class="settings-account-status-value">${escapeHtml10(model.accountEmail || t5("settings.status.linkedFallback"))}</strong>
+              </div>` : `<p class="settings-account-note">${t5("settings.account.syncNote")}</p>
               ${this.renderActionRow({
         focusKey: "account:signin",
-        title: t3("settings.account.signInWithQr"),
-        subtitle: t3("settings.account.signInWithQrSubtitle")
+        title: t5("settings.account.signInWithQr"),
+        subtitle: t5("settings.account.signInWithQrSubtitle")
       })}`}
           ${signedIn ? this.renderActionRow({
         focusKey: "account:signout",
-        title: t3("settings.account.signOut"),
-        subtitle: t3("settings.account.signOutSubtitle")
+        title: t5("settings.account.signOut"),
+        subtitle: t5("settings.account.signOutSubtitle")
       }) : ""}
         </div>
       </div>
@@ -26285,7 +26516,7 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "profiles:manage",
-        title: t3("settings.profiles.manageProfiles"),
+        title: t5("settings.profiles.manageProfiles"),
         subtitle: "",
         icon: null,
         classes: "settings-profile-manage-row"
@@ -26303,7 +26534,7 @@ ${normalized}`;
       });
       this.actionMap.set("appearance:font", () => {
         this.openOptionDialog({
-          title: t3("settings.dialogs.selectFont"),
+          title: t5("settings.dialogs.selectFont"),
           options: FONT_OPTIONS,
           selectedId: model.theme.fontFamily,
           returnFocusKey: "appearance:font",
@@ -26315,7 +26546,7 @@ ${normalized}`;
       });
       this.actionMap.set("appearance:language", () => {
         this.openOptionDialog({
-          title: t3("settings.dialogs.selectLanguage"),
+          title: t5("settings.dialogs.selectLanguage"),
           options: LANGUAGE_OPTIONS,
           selectedId: model.theme.language,
           returnFocusKey: "appearance:language",
@@ -26342,8 +26573,8 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "appearance:font",
-        title: t3("settings.appearance.appFont"),
-        subtitle: t3("settings.appearance.appFontSubtitle"),
+        title: t5("settings.appearance.appFont"),
+        subtitle: t5("settings.appearance.appFontSubtitle"),
         value: labelForFont(model.theme.fontFamily)
       })}
         </div>
@@ -26352,8 +26583,8 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "appearance:language",
-        title: t3("settings.appearance.appLanguage"),
-        subtitle: t3("settings.appearance.appLanguageSubtitle"),
+        title: t5("settings.appearance.appLanguage"),
+        subtitle: t5("settings.appearance.appLanguageSubtitle"),
         value: labelForLanguage(model.theme.language)
       })}
         </div>
@@ -26421,7 +26652,7 @@ ${normalized}`;
           label: `${value}s`
         }));
         this.openOptionDialog({
-          title: t3("settings.dialogs.backdropExpandDelay"),
+          title: t5("settings.dialogs.backdropExpandDelay"),
           options,
           selectedId: String((_a2 = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a2 : 3),
           returnFocusKey: "layout:focusedPosterExpandDelay",
@@ -26442,7 +26673,7 @@ ${normalized}`;
           { id: "expanded_card", labelKey: "settings.layout.trailerTargets.expandedCard" }
         ];
         this.openOptionDialog({
-          title: t3("settings.dialogs.modernTrailerPlaybackLocation"),
+          title: t5("settings.dialogs.modernTrailerPlaybackLocation"),
           options,
           selectedId: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media"),
           returnFocusKey: "layout:focusedPosterTrailerTarget",
@@ -26469,8 +26700,8 @@ ${normalized}`;
         </div>
         ${isModernLayout ? this.renderToggleRow({
         focusKey: "layout:modernLandscapePosters",
-        title: t3("settings.layout.landscapePosters.title"),
-        subtitle: t3("settings.layout.landscapePosters.subtitle"),
+        title: t5("settings.layout.landscapePosters.title"),
+        subtitle: t5("settings.layout.landscapePosters.subtitle"),
         checked: Boolean(model.layout.modernLandscapePostersEnabled)
       }) : ""}
       </div>
@@ -26479,56 +26710,56 @@ ${normalized}`;
       <div class="settings-stack">
         ${!model.layout.modernSidebar ? this.renderToggleRow({
         focusKey: "layout:collapseSidebar",
-        title: t3("settings.layout.collapseSidebar.title"),
-        subtitle: t3("settings.layout.collapseSidebar.subtitle"),
+        title: t5("settings.layout.collapseSidebar.title"),
+        subtitle: t5("settings.layout.collapseSidebar.subtitle"),
         checked: Boolean(model.layout.collapseSidebar)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:modernSidebar",
-        title: t3("settings.layout.modernSidebar.title"),
-        subtitle: t3("settings.layout.modernSidebar.subtitle"),
+        title: t5("settings.layout.modernSidebar.title"),
+        subtitle: t5("settings.layout.modernSidebar.subtitle"),
         checked: Boolean(model.layout.modernSidebar)
       })}
         ${model.layout.modernSidebar ? this.renderToggleRow({
         focusKey: "layout:modernSidebarBlur",
-        title: t3("settings.layout.modernSidebarBlur.title"),
-        subtitle: t3("settings.layout.modernSidebarBlur.subtitle"),
+        title: t5("settings.layout.modernSidebarBlur.title"),
+        subtitle: t5("settings.layout.modernSidebarBlur.subtitle"),
         checked: Boolean(model.layout.modernSidebarBlur)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:heroSection",
-        title: t3("settings.layout.heroSection.title"),
-        subtitle: t3("settings.layout.heroSection.subtitle"),
+        title: t5("settings.layout.heroSection.title"),
+        subtitle: t5("settings.layout.heroSection.subtitle"),
         checked: Boolean(model.layout.heroSectionEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:searchDiscover",
-        title: t3("settings.layout.searchDiscover.title"),
-        subtitle: t3("settings.layout.searchDiscover.subtitle"),
+        title: t5("settings.layout.searchDiscover.title"),
+        subtitle: t5("settings.layout.searchDiscover.subtitle"),
         checked: Boolean(model.layout.searchDiscoverEnabled)
       })}
         ${!isModernLayout ? this.renderToggleRow({
         focusKey: "layout:posterLabels",
-        title: t3("settings.layout.posterLabels.title"),
-        subtitle: t3("settings.layout.posterLabels.subtitle"),
+        title: t5("settings.layout.posterLabels.title"),
+        subtitle: t5("settings.layout.posterLabels.subtitle"),
         checked: Boolean(model.layout.posterLabelsEnabled)
       }) : ""}
         ${!isModernLayout ? this.renderToggleRow({
         focusKey: "layout:addonName",
-        title: t3("settings.layout.addonName.title"),
-        subtitle: t3("settings.layout.addonName.subtitle"),
+        title: t5("settings.layout.addonName.title"),
+        subtitle: t5("settings.layout.addonName.subtitle"),
         checked: Boolean(model.layout.catalogAddonNameEnabled)
       }) : ""}
         ${this.renderToggleRow({
         focusKey: "layout:catalogType",
-        title: t3("settings.layout.catalogType.title"),
-        subtitle: t3("settings.layout.catalogType.subtitle"),
+        title: t5("settings.layout.catalogType.title"),
+        subtitle: t5("settings.layout.catalogType.subtitle"),
         checked: Boolean(model.layout.catalogTypeSuffixEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:hideUnreleased",
-        title: t3("settings.layout.hideUnreleased.title"),
-        subtitle: t3("settings.layout.hideUnreleased.subtitle"),
+        title: t5("settings.layout.hideUnreleased.title"),
+        subtitle: t5("settings.layout.hideUnreleased.subtitle"),
         checked: Boolean(model.layout.hideUnreleasedContent)
       })}
       </div>
@@ -26537,21 +26768,21 @@ ${normalized}`;
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "layout:detail:blurUnwatched",
-        title: t3("settings.layout.blurUnwatched.title"),
-        subtitle: t3("settings.layout.blurUnwatched.subtitle"),
+        title: t5("settings.layout.blurUnwatched.title"),
+        subtitle: t5("settings.layout.blurUnwatched.subtitle"),
         checked: false,
         disabled: true
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:trailerButton",
-        title: t3("settings.layout.showTrailerButton.title"),
-        subtitle: t3("settings.layout.showTrailerButton.subtitle"),
+        title: t5("settings.layout.showTrailerButton.title"),
+        subtitle: t5("settings.layout.showTrailerButton.subtitle"),
         checked: Boolean(model.layout.detailPageTrailerButtonEnabled)
       })}
         ${this.renderToggleRow({
         focusKey: "layout:detail:preferExternalMeta",
-        title: t3("settings.layout.preferExternalMeta.title"),
-        subtitle: t3("settings.layout.preferExternalMeta.subtitle"),
+        title: t5("settings.layout.preferExternalMeta.title"),
+        subtitle: t5("settings.layout.preferExternalMeta.subtitle"),
         checked: false,
         disabled: true
       })}
@@ -26561,33 +26792,33 @@ ${normalized}`;
       <div class="settings-stack">
         ${!isModernLandscape ? this.renderToggleRow({
         focusKey: "layout:focusedPosterExpand",
-        title: t3("settings.layout.focusedPosterExpand.title"),
-        subtitle: t3("settings.layout.focusedPosterExpand.subtitle"),
+        title: t5("settings.layout.focusedPosterExpand.title"),
+        subtitle: t5("settings.layout.focusedPosterExpand.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
       }) : ""}
         ${!isModernLandscape && Boolean(model.layout.focusedPosterBackdropExpandEnabled) ? this.renderActionRow({
         focusKey: "layout:focusedPosterExpandDelay",
-        title: t3("settings.layout.focusedPosterExpandDelay.title"),
-        subtitle: t3("settings.layout.focusedPosterExpandDelay.subtitle"),
+        title: t5("settings.layout.focusedPosterExpandDelay.title"),
+        subtitle: t5("settings.layout.focusedPosterExpandDelay.subtitle"),
         value: `${Number((_a = model.layout.focusedPosterBackdropExpandDelaySeconds) != null ? _a : 3)}s`
       }) : ""}
         ${showAutoplayRow ? this.renderToggleRow({
         focusKey: "layout:focusedPosterTrailer",
-        title: isModernLayout ? t3("settings.layout.autoplayTrailer.title") : t3("settings.layout.autoplayTrailerExpandedCard.title"),
-        subtitle: isModernLayout ? t3("settings.layout.autoplayTrailer.subtitle") : t3("settings.layout.autoplayTrailerExpandedCard.subtitle"),
+        title: isModernLayout ? t5("settings.layout.autoplayTrailer.title") : t5("settings.layout.autoplayTrailerExpandedCard.title"),
+        subtitle: isModernLayout ? t5("settings.layout.autoplayTrailer.subtitle") : t5("settings.layout.autoplayTrailerExpandedCard.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
       }) : ""}
         ${showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderToggleRow({
         focusKey: "layout:focusedPosterTrailerMuted",
-        title: isModernLayout ? t3("settings.layout.trailerMuted.title") : t3("settings.layout.trailerMutedExpandedCard.title"),
-        subtitle: isModernLayout ? t3("settings.layout.trailerMuted.subtitle") : t3("settings.layout.trailerMutedExpandedCard.subtitle"),
+        title: isModernLayout ? t5("settings.layout.trailerMuted.title") : t5("settings.layout.trailerMutedExpandedCard.title"),
+        subtitle: isModernLayout ? t5("settings.layout.trailerMuted.subtitle") : t5("settings.layout.trailerMutedExpandedCard.subtitle"),
         checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
       }) : ""}
         ${isModernLayout && showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderActionRow({
         focusKey: "layout:focusedPosterTrailerTarget",
-        title: t3("settings.layout.trailerTarget.title"),
-        subtitle: t3("settings.layout.trailerTarget.subtitle"),
-        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? t3("settings.layout.trailerTargets.expandedCard") : t3("settings.layout.trailerTargets.heroMedia")
+        title: t5("settings.layout.trailerTarget.title"),
+        subtitle: t5("settings.layout.trailerTarget.subtitle"),
+        value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card" ? t5("settings.layout.trailerTargets.expandedCard") : t5("settings.layout.trailerTargets.heroMedia")
       }) : ""}
       </div>
     `;
@@ -26597,29 +26828,29 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:homeLayout",
-        title: t3("settings.layout.groups.homeLayout.title"),
-        subtitle: t3("settings.layout.groups.homeLayout.subtitle"),
+        title: t5("settings.layout.groups.homeLayout.title"),
+        subtitle: t5("settings.layout.groups.homeLayout.subtitle"),
         expanded: Boolean(expanded.homeLayout),
         bodyHtml: homeLayoutBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:homeContent",
-        title: t3("settings.layout.groups.homeContent.title"),
-        subtitle: t3("settings.layout.groups.homeContent.subtitle"),
+        title: t5("settings.layout.groups.homeContent.title"),
+        subtitle: t5("settings.layout.groups.homeContent.subtitle"),
         expanded: Boolean(expanded.homeContent),
         bodyHtml: homeContentBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:detailPage",
-        title: t3("settings.layout.groups.detailPage.title"),
-        subtitle: t3("settings.layout.groups.detailPage.subtitle"),
+        title: t5("settings.layout.groups.detailPage.title"),
+        subtitle: t5("settings.layout.groups.detailPage.subtitle"),
         expanded: Boolean(expanded.detailPage),
         bodyHtml: detailPageBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "layout:toggle:focusedPoster",
-        title: t3("settings.layout.groups.focusedPoster.title"),
-        subtitle: t3("settings.layout.groups.focusedPoster.subtitle"),
+        title: t5("settings.layout.groups.focusedPoster.title"),
+        subtitle: t5("settings.layout.groups.focusedPoster.subtitle"),
         expanded: Boolean(expanded.focusedPoster),
         bodyHtml: focusedPosterBody
       })}
@@ -26629,7 +26860,7 @@ ${normalized}`;
     },
     renderPluginsSection(model) {
       this.actionMap.set("plugins:editDraft", () => {
-        const value = window.prompt(t3("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
+        const value = window.prompt(t5("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
         if (value === null) {
           return;
         }
@@ -26661,7 +26892,7 @@ ${normalized}`;
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-plugin-builder">
-          <div class="settings-plugin-builder-title">${t3("settings.plugins.addRepository")}</div>
+          <div class="settings-plugin-builder-title">${t5("settings.plugins.addRepository")}</div>
           <div class="settings-plugin-builder-row">
             <button class="settings-plugin-input settings-content-focusable focusable"
                     data-zone="content"
@@ -26672,40 +26903,40 @@ ${normalized}`;
                     data-zone="content"
                     ${this.registerAction("plugins:addDraft", this.actionMap.get("plugins:addDraft"))}>
               ${iconSvg(ROW_ICONS.plus, "settings-plugin-add-icon")}
-              <span>${t3("common.add")}</span>
+              <span>${t5("common.add")}</span>
             </button>
           </div>
         </div>
 
         ${this.renderActionRow({
         focusKey: "plugins:phone",
-        title: t3("settings.plugins.manageFromPhone"),
-        subtitle: plannedSubtitle(t3("settings.plugins.manageFromPhoneSubtitle")),
+        title: t5("settings.plugins.manageFromPhone"),
+        subtitle: plannedSubtitle(t5("settings.plugins.manageFromPhoneSubtitle")),
         classes: "settings-plugins-phone",
         icon: "phone",
         planned: true
       })}
 
-        <div class="settings-repository-heading">${t3("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
+        <div class="settings-repository-heading">${t5("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
 
         ${model.addons.length ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>` : `<div class="settings-empty-state">
-              <p>${t3("settings.plugins.noRepositoriesTitle")}</p>
-              <p>${t3("settings.plugins.noRepositoriesSubtitle")}</p>
+              <p>${t5("settings.plugins.noRepositoriesTitle")}</p>
+              <p>${t5("settings.plugins.noRepositoriesSubtitle")}</p>
             </div>`}
 
         ${model.pluginSources.length ? `
-          <div class="settings-repository-heading settings-plugin-provider-heading">${t3("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
+          <div class="settings-repository-heading settings-plugin-provider-heading">${t5("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
           <div class="settings-stack">
             ${model.pluginSources.map((source) => this.renderToggleRow({
         focusKey: `plugins:provider:${source.id}`,
-        title: source.name || t3("common.provider"),
-        subtitle: source.urlTemplate || t3("settings.plugins.customProviderTemplate"),
+        title: source.name || t5("common.provider"),
+        subtitle: source.urlTemplate || t5("settings.plugins.customProviderTemplate"),
         checked: Boolean(source.enabled)
       })).join("")}
             ${this.renderActionRow({
         focusKey: "plugins:provider:test",
-        title: t3("settings.plugins.providerTesting"),
-        subtitle: plannedSubtitle(t3("settings.plugins.providerTestingSubtitle")),
+        title: t5("settings.plugins.providerTesting"),
+        subtitle: plannedSubtitle(t5("settings.plugins.providerTestingSubtitle")),
         planned: true
       })}
           </div>
@@ -26732,18 +26963,18 @@ ${normalized}`;
           <div class="settings-stack">
             ${this.renderActionRow({
         focusKey: "integration:hub:tmdb",
-        title: t3("settings.integration.tmdb.label"),
-        subtitle: t3("settings.integration.tmdb.subtitle")
+        title: t5("settings.integration.tmdb.label"),
+        subtitle: t5("settings.integration.tmdb.subtitle")
       })}
             ${this.renderActionRow({
         focusKey: "integration:hub:mdblist",
-        title: t3("settings.integration.mdblist.label"),
-        subtitle: t3("settings.integration.mdblist.subtitle")
+        title: t5("settings.integration.mdblist.label"),
+        subtitle: t5("settings.integration.mdblist.subtitle")
       })}
             ${this.renderActionRow({
         focusKey: "integration:hub:animeskip",
-        title: t3("settings.integration.animeskip.label"),
-        subtitle: t3("settings.integration.animeskip.subtitle")
+        title: t5("settings.integration.animeskip.label"),
+        subtitle: t5("settings.integration.animeskip.subtitle")
       })}
           </div>
         </div>
@@ -26769,7 +27000,7 @@ ${normalized}`;
         });
         this.actionMap.set("integration:tmdb:language", () => {
           this.openOptionDialog({
-            title: t3("settings.dialogs.selectTmdbLanguage"),
+            title: t5("settings.dialogs.selectTmdbLanguage"),
             options: TMDB_LANGUAGE_OPTIONS,
             selectedId: TmdbSettingsStore.get().language,
             returnFocusKey: "integration:tmdb:language",
@@ -26779,7 +27010,7 @@ ${normalized}`;
           });
         });
         this.actionMap.set("integration:tmdb:api", () => {
-          const value = window.prompt(t3("settings.integration.tmdb.apiKey.prompt"), TmdbSettingsStore.get().apiKey || "");
+          const value = window.prompt(t5("settings.integration.tmdb.apiKey.prompt"), TmdbSettingsStore.get().apiKey || "");
           if (value !== null) {
             TmdbSettingsStore.set({ apiKey: String(value).trim() });
           }
@@ -26790,48 +27021,48 @@ ${normalized}`;
           <div class="settings-stack">
             ${this.renderActionRow({
           focusKey: "integration:back",
-          title: t3("settings.integration.backToIntegrations.title"),
-          subtitle: t3("settings.integration.backToIntegrations.subtitle"),
+          title: t5("settings.integration.backToIntegrations.title"),
+          subtitle: t5("settings.integration.backToIntegrations.subtitle"),
           icon: "back"
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:enabled",
-          title: t3("settings.integration.tmdb.enable.title"),
-          subtitle: t3("settings.integration.tmdb.enable.subtitle"),
+          title: t5("settings.integration.tmdb.enable.title"),
+          subtitle: t5("settings.integration.tmdb.enable.subtitle"),
           checked: Boolean(model.tmdb.enabled)
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:artwork",
-          title: t3("settings.integration.tmdb.artwork.title"),
-          subtitle: t3("settings.integration.tmdb.artwork.subtitle"),
+          title: t5("settings.integration.tmdb.artwork.title"),
+          subtitle: t5("settings.integration.tmdb.artwork.subtitle"),
           checked: Boolean(model.tmdb.useArtwork),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:basic",
-          title: t3("settings.integration.tmdb.basicInfo.title"),
-          subtitle: t3("settings.integration.tmdb.basicInfo.subtitle"),
+          title: t5("settings.integration.tmdb.basicInfo.title"),
+          subtitle: t5("settings.integration.tmdb.basicInfo.subtitle"),
           checked: Boolean(model.tmdb.useBasicInfo),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderToggleRow({
           focusKey: "integration:tmdb:details",
-          title: t3("settings.integration.tmdb.details.title"),
-          subtitle: t3("settings.integration.tmdb.details.subtitle"),
+          title: t5("settings.integration.tmdb.details.title"),
+          subtitle: t5("settings.integration.tmdb.details.subtitle"),
           checked: Boolean(model.tmdb.useDetails),
           disabled: !model.tmdb.enabled
         })}
             ${this.renderActionRow({
           focusKey: "integration:tmdb:language",
-          title: t3("settings.integration.tmdb.language.title"),
-          subtitle: t3("settings.integration.tmdb.language.subtitle"),
+          title: t5("settings.integration.tmdb.language.title"),
+          subtitle: t5("settings.integration.tmdb.language.subtitle"),
           value: labelForTmdbLanguage(model.tmdb.language)
         })}
             ${this.renderActionRow({
           focusKey: "integration:tmdb:api",
-          title: t3("settings.integration.tmdb.apiKey.title"),
-          subtitle: t3("settings.integration.tmdb.apiKey.subtitle"),
-          value: maskValue(model.tmdb.apiKey, t3("common.notSet"))
+          title: t5("settings.integration.tmdb.apiKey.title"),
+          subtitle: t5("settings.integration.tmdb.apiKey.subtitle"),
+          value: maskValue(model.tmdb.apiKey, t5("common.notSet"))
         })}
           </div>
         </div>
@@ -26842,7 +27073,7 @@ ${normalized}`;
           MdbListSettingsStore.set({ enabled: !MdbListSettingsStore.get().enabled });
         });
         this.actionMap.set("integration:mdblist:key", () => {
-          const value = window.prompt(t3("settings.integration.mdblist.apiKey.prompt"), MdbListSettingsStore.get().apiKey || "");
+          const value = window.prompt(t5("settings.integration.mdblist.apiKey.prompt"), MdbListSettingsStore.get().apiKey || "");
           if (value !== null) {
             MdbListSettingsStore.set({ apiKey: String(value).trim() });
           }
@@ -26853,22 +27084,22 @@ ${normalized}`;
           <div class="settings-stack">
             ${this.renderActionRow({
           focusKey: "integration:back",
-          title: t3("settings.integration.backToIntegrations.title"),
-          subtitle: t3("settings.integration.backToIntegrations.subtitle"),
+          title: t5("settings.integration.backToIntegrations.title"),
+          subtitle: t5("settings.integration.backToIntegrations.subtitle"),
           icon: "back"
         })}
             ${this.renderToggleRow({
           focusKey: "integration:mdblist:enabled",
-          title: t3("settings.integration.mdblist.enable.title"),
-          subtitle: plannedSubtitle(t3("settings.integration.mdblist.enable.subtitle")),
+          title: t5("settings.integration.mdblist.enable.title"),
+          subtitle: plannedSubtitle(t5("settings.integration.mdblist.enable.subtitle")),
           checked: Boolean(model.mdbList.enabled),
           planned: true
         })}
             ${this.renderActionRow({
           focusKey: "integration:mdblist:key",
-          title: t3("settings.integration.mdblist.apiKey.title"),
-          subtitle: plannedSubtitle(t3("settings.integration.mdblist.apiKey.subtitle")),
-          value: maskValue(model.mdbList.apiKey, t3("common.notSet")),
+          title: t5("settings.integration.mdblist.apiKey.title"),
+          subtitle: plannedSubtitle(t5("settings.integration.mdblist.apiKey.subtitle")),
+          value: maskValue(model.mdbList.apiKey, t5("common.notSet")),
           disabled: !model.mdbList.enabled,
           planned: true
         })}
@@ -26880,7 +27111,7 @@ ${normalized}`;
         AnimeSkipSettingsStore.set({ enabled: !AnimeSkipSettingsStore.get().enabled });
       });
       this.actionMap.set("integration:animeskip:id", () => {
-        const value = window.prompt(t3("settings.integration.animeskip.clientId.prompt"), AnimeSkipSettingsStore.get().clientId || "");
+        const value = window.prompt(t5("settings.integration.animeskip.clientId.prompt"), AnimeSkipSettingsStore.get().clientId || "");
         if (value !== null) {
           AnimeSkipSettingsStore.set({ clientId: String(value).trim() });
         }
@@ -26891,22 +27122,22 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "integration:back",
-        title: t3("settings.integration.backToIntegrations.title"),
-        subtitle: t3("settings.integration.backToIntegrations.subtitle"),
+        title: t5("settings.integration.backToIntegrations.title"),
+        subtitle: t5("settings.integration.backToIntegrations.subtitle"),
         icon: "back"
       })}
           ${this.renderToggleRow({
         focusKey: "integration:animeskip:enabled",
-        title: t3("settings.integration.animeskip.enable.title"),
-        subtitle: plannedSubtitle(t3("settings.integration.animeskip.enable.subtitle")),
+        title: t5("settings.integration.animeskip.enable.title"),
+        subtitle: plannedSubtitle(t5("settings.integration.animeskip.enable.subtitle")),
         checked: Boolean(model.animeSkip.enabled),
         planned: true
       })}
           ${this.renderActionRow({
         focusKey: "integration:animeskip:id",
-        title: t3("settings.integration.animeskip.clientId.title"),
-        subtitle: plannedSubtitle(t3("settings.integration.animeskip.clientId.subtitle")),
-        value: maskValue(model.animeSkip.clientId, t3("common.notSet")),
+        title: t5("settings.integration.animeskip.clientId.title"),
+        subtitle: plannedSubtitle(t5("settings.integration.animeskip.clientId.subtitle")),
+        value: maskValue(model.animeSkip.clientId, t5("common.notSet")),
         disabled: !model.animeSkip.enabled,
         planned: true
       })}
@@ -26941,7 +27172,7 @@ ${normalized}`;
       this.actionMap.set("playback:quality", () => {
         const options = ["auto", "2160p", "1080p", "720p"];
         this.openOptionDialog({
-          title: t3("settings.dialogs.preferredQuality"),
+          title: t5("settings.dialogs.preferredQuality"),
           options: options.map((option) => ({ id: option, label: qualityLabel(option) })),
           selectedId: String(PlayerSettingsStore.get().preferredQuality || "auto"),
           returnFocusKey: "playback:quality",
@@ -26953,7 +27184,7 @@ ${normalized}`;
       this.actionMap.set("playback:player", () => {
         const options = ["auto", "native", "hls", "dash"];
         this.openOptionDialog({
-          title: t3("settings.dialogs.playerPreference"),
+          title: t5("settings.dialogs.playerPreference"),
           options: options.map((option) => ({ id: option, label: playerLabel(option) })),
           selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
           returnFocusKey: "playback:player",
@@ -26967,7 +27198,7 @@ ${normalized}`;
       });
       this.actionMap.set("playback:audioLanguage", () => {
         this.openOptionDialog({
-          title: t3("settings.dialogs.preferredAudioLanguage"),
+          title: t5("settings.dialogs.preferredAudioLanguage"),
           options: PREFERRED_PLAYBACK_LANGUAGE_OPTIONS,
           selectedId: PlayerSettingsStore.get().preferredAudioLanguage,
           returnFocusKey: "playback:audioLanguage",
@@ -26984,7 +27215,7 @@ ${normalized}`;
         const currentSettings = PlayerSettingsStore.get();
         const currentLanguage = normalizeSelectableSubtitleLanguageCode2(((_a = currentSettings.subtitleStyle) == null ? void 0 : _a.preferredLanguage) || currentSettings.subtitleLanguage);
         this.openOptionDialog({
-          title: t3("settings.dialogs.preferredSubtitleLanguage"),
+          title: t5("settings.dialogs.preferredSubtitleLanguage"),
           options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
           selectedId: currentLanguage === "system" ? "off" : currentLanguage,
           returnFocusKey: "playback:subtitleLanguage",
@@ -27003,7 +27234,7 @@ ${normalized}`;
       });
       this.actionMap.set("playback:renderMode", () => {
         this.openOptionDialog({
-          title: t3("settings.dialogs.subtitleRenderMode"),
+          title: t5("settings.dialogs.subtitleRenderMode"),
           options: [
             { id: "native", labelKey: "common.native" },
             { id: "html", labelKey: "common.htmlOverlay" }
@@ -27019,8 +27250,8 @@ ${normalized}`;
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:autoplay",
-        title: t3("settings.playback.autoplayNextEpisode.title"),
-        subtitle: t3("settings.playback.autoplayNextEpisode.subtitle"),
+        title: t5("settings.playback.autoplayNextEpisode.title"),
+        subtitle: t5("settings.playback.autoplayNextEpisode.subtitle"),
         checked: Boolean(model.player.autoplayNextEpisode)
       })}
       </div>
@@ -27029,14 +27260,14 @@ ${normalized}`;
       <div class="settings-stack">
         ${this.renderActionRow({
         focusKey: "playback:quality",
-        title: t3("settings.playback.preferredQuality.title"),
-        subtitle: t3("settings.playback.preferredQuality.subtitle"),
+        title: t5("settings.playback.preferredQuality.title"),
+        subtitle: t5("settings.playback.preferredQuality.subtitle"),
         value: qualityLabel(model.player.preferredQuality)
       })}
         ${this.renderActionRow({
         focusKey: "playback:player",
-        title: t3("settings.playback.preferredPlayer.title"),
-        subtitle: t3("settings.playback.preferredPlayer.subtitle"),
+        title: t5("settings.playback.preferredPlayer.title"),
+        subtitle: t5("settings.playback.preferredPlayer.subtitle"),
         value: playerLabel(model.player.preferredPlayer)
       })}
       </div>
@@ -27045,14 +27276,14 @@ ${normalized}`;
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:trailer",
-        title: t3("settings.playback.autoplayTrailer.title"),
-        subtitle: t3("settings.playback.autoplayTrailer.subtitle"),
+        title: t5("settings.playback.autoplayTrailer.title"),
+        subtitle: t5("settings.playback.autoplayTrailer.subtitle"),
         checked: Boolean(model.player.trailerAutoplay)
       })}
         ${this.renderActionRow({
         focusKey: "playback:audioLanguage",
-        title: t3("settings.playback.preferredAudio.title"),
-        subtitle: t3("settings.playback.preferredAudio.subtitle"),
+        title: t5("settings.playback.preferredAudio.title"),
+        subtitle: t5("settings.playback.preferredAudio.subtitle"),
         value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
       })}
       </div>
@@ -27061,20 +27292,20 @@ ${normalized}`;
       <div class="settings-stack">
         ${this.renderToggleRow({
         focusKey: "playback:subtitlesEnabled",
-        title: t3("settings.playback.enableSubtitles.title"),
-        subtitle: t3("settings.playback.enableSubtitles.subtitle"),
+        title: t5("settings.playback.enableSubtitles.title"),
+        subtitle: t5("settings.playback.enableSubtitles.subtitle"),
         checked: Boolean(model.player.subtitlesEnabled)
       })}
         ${this.renderActionRow({
         focusKey: "playback:subtitleLanguage",
-        title: t3("settings.playback.subtitleLanguage.title"),
-        subtitle: t3("settings.playback.subtitleLanguage.subtitle"),
+        title: t5("settings.playback.subtitleLanguage.title"),
+        subtitle: t5("settings.playback.subtitleLanguage.subtitle"),
         value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
       })}
         ${this.renderActionRow({
         focusKey: "playback:renderMode",
-        title: t3("settings.playback.renderMode.title"),
-        subtitle: t3("settings.playback.renderMode.subtitle"),
+        title: t5("settings.playback.renderMode.title"),
+        subtitle: t5("settings.playback.renderMode.subtitle"),
         value: renderModeLabel(model.player.subtitleRenderMode)
       })}
       </div>
@@ -27085,29 +27316,29 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:general",
-        title: t3("settings.playback.groups.general.title"),
-        subtitle: t3("settings.playback.groups.general.subtitle"),
+        title: t5("settings.playback.groups.general.title"),
+        subtitle: t5("settings.playback.groups.general.subtitle"),
         expanded: Boolean(expanded.general),
         bodyHtml: generalBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:stream",
-        title: t3("settings.playback.groups.stream.title"),
-        subtitle: t3("settings.playback.groups.stream.subtitle"),
+        title: t5("settings.playback.groups.stream.title"),
+        subtitle: t5("settings.playback.groups.stream.subtitle"),
         expanded: Boolean(expanded.stream),
         bodyHtml: streamBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:audio",
-        title: t3("settings.playback.groups.audio.title"),
-        subtitle: t3("settings.playback.groups.audio.subtitle"),
+        title: t5("settings.playback.groups.audio.title"),
+        subtitle: t5("settings.playback.groups.audio.subtitle"),
         expanded: Boolean(expanded.audio),
         bodyHtml: audioBody
       })}
           ${this.renderCollapsibleRow({
         focusKey: "playback:toggle:subtitles",
-        title: t3("settings.playback.groups.subtitles.title"),
-        subtitle: t3("settings.playback.groups.subtitles.subtitle"),
+        title: t5("settings.playback.groups.subtitles.title"),
+        subtitle: t5("settings.playback.groups.subtitles.subtitle"),
         expanded: Boolean(expanded.subtitles),
         bodyHtml: subtitleBody
       })}
@@ -27123,8 +27354,8 @@ ${normalized}`;
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "trakt:open",
-        title: t3("settings.trakt.openSettings"),
-        subtitle: plannedSubtitle(t3("settings.trakt.openSettingsSubtitle")),
+        title: t5("settings.trakt.openSettings"),
+        subtitle: plannedSubtitle(t5("settings.trakt.openSettingsSubtitle")),
         planned: true
       })}
         </div>
@@ -27145,21 +27376,21 @@ ${normalized}`;
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-about-brand">
           <img class="settings-about-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
-          <p class="settings-about-copy">${t3("settings.about.madeWithLove")}</p>
-          <p class="settings-about-copy">${t3("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
-          <p class="settings-about-copy">${t3("settings.about.portedBy")}</p>
+          <p class="settings-about-copy">${t5("settings.about.madeWithLove")}</p>
+          <p class="settings-about-copy">${t5("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
+          <p class="settings-about-copy">${t5("settings.about.portedBy")}</p>
         </div>
         <div class="settings-stack">
           ${this.renderActionRow({
         focusKey: "about:privacy",
-        title: t3("settings.about.privacyPolicy.title"),
-        subtitle: t3("settings.about.privacyPolicy.subtitle"),
+        title: t5("settings.about.privacyPolicy.title"),
+        subtitle: t5("settings.about.privacyPolicy.subtitle"),
         external: true
       })}
           ${this.renderActionRow({
         focusKey: "about:supporters",
-        title: t3("settings.about.supporters.title"),
-        subtitle: t3("settings.about.supporters.subtitle")
+        title: t5("settings.about.supporters.title"),
+        subtitle: t5("settings.about.supporters.subtitle")
       })}
         </div>
       </div>
@@ -27614,7 +27845,7 @@ ${normalized}`;
   function escapeHtml11(value) {
     return String(value != null ? value : "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
-  function t4(key, fallback = key) {
+  function t6(key, fallback = key) {
     return I18n.t(key, {}, { fallback });
   }
   function isLoopbackHostname(hostname) {
@@ -27864,7 +28095,7 @@ ${normalized}`;
                   <small>Manage addons and home catalogs from your phone</small>
                 </span>
                 <span class="addons-large-row-tail-group">
-                  ${manageFromPhonePlanned ? `<span class="addons-large-row-badge">${escapeHtml11(t4("common.soon", "Soon"))}</span>` : ""}
+                  ${manageFromPhonePlanned ? `<span class="addons-large-row-badge">${escapeHtml11(t6("common.soon", "Soon"))}</span>` : ""}
                   <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
                 </span>
               </button>
@@ -29714,7 +29945,7 @@ ${normalized}`;
                     data-focus-key="item:${item.id || index}"
                     data-item-index="${index}">
             <div class="seeall-card-poster-wrap">
-              ${item.poster ? `<img class="seeall-card-poster-image" src="${escapeHtml14(item.poster)}" alt="${escapeHtml14(item.name || "content")}" />` : `<div class="seeall-card-poster placeholder"></div>`}
+              ${item.poster ? `<img class="seeall-card-poster-image" src="${escapeHtml14(item.poster)}" alt="${escapeHtml14(item.name || "content")}" loading="lazy" decoding="async" />` : `<div class="seeall-card-poster placeholder"></div>`}
             </div>
             ${((_a2 = this.layoutPrefs) == null ? void 0 : _a2.posterLabelsEnabled) !== false ? `
               <div class="seeall-card-title">${escapeHtml14(item.name || "Untitled")}</div>
@@ -30721,6 +30952,19 @@ ${normalized}`;
     </div>
   `;
   }
+  function isLowEndDevice() {
+    var _a, _b;
+    const hardware = Number(((_a = globalThis.navigator) == null ? void 0 : _a.hardwareConcurrency) || 0);
+    const memory = Number(((_b = globalThis.navigator) == null ? void 0 : _b.deviceMemory) || 0);
+    const lowCpu = Number.isFinite(hardware) && hardware > 0 && hardware <= 4;
+    const lowMem = Number.isFinite(memory) && memory > 0 && memory <= 2;
+    return lowCpu || lowMem;
+  }
+  function applyPerformanceMode() {
+    const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
+    document.documentElement.classList.toggle("performance-constrained", constrained);
+    document.body.classList.toggle("performance-constrained", constrained);
+  }
   function isAddonRemoteMode() {
     try {
       return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
@@ -30732,6 +30976,7 @@ ${normalized}`;
     return __async(this, null, function* () {
       renderAppShell();
       Platform.init();
+      applyPerformanceMode();
       yield I18n.init();
       Router.init();
       PlayerController.init();

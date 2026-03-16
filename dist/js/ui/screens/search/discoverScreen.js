@@ -909,7 +909,7 @@ export const DiscoverScreen = {
                         data-item-index="${index}">
                  <div class="seeall-card-poster-wrap">
                    ${item.poster
-                     ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" />`
+                     ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
                      : `<div class="seeall-card-poster placeholder"></div>`}
                  </div>
                  ${this.layoutPrefs?.posterLabelsEnabled !== false ? `

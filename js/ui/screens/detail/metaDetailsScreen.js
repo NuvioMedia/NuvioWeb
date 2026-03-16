@@ -14,9 +14,14 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
+import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
 
 function toEpisodeEntry(video = {}) {
   const season = Number(video.season || 0);
@@ -260,13 +265,21 @@ function resolveImdbRating(meta = {}) {
 }
 
 function formatRuntimeMinutes(runtime) {
-  const minutes = Number(runtime || 0);
-  if (!Number.isFinite(minutes) || minutes <= 0) {
+  return formatDurationMinutes(runtime);
+}
+
+function formatDurationMinutes(totalMinutes) {
+  const minutesValue = Number(totalMinutes || 0);
+  if (!Number.isFinite(minutesValue) || minutesValue <= 0) {
     return "";
   }
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+  const roundedMinutes = Math.max(0, Math.round(minutesValue));
+  const hours = Math.floor(roundedMinutes / 60);
+  const minutes = roundedMinutes % 60;
+  if (hours > 0) {
+    return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+  }
+  return `${minutes}m`;
 }
 
 function resolveEpisodeRuntimeForSeason(episodes = [], season = null) {
@@ -340,6 +353,10 @@ function escapeHtml(value = "") {
     .replaceAll("'", "&#39;");
 }
 
+function escapeAttribute(value = "") {
+  return escapeHtml(value);
+}
+
 function escapeSelectorValue(value = "") {
   const raw = String(value ?? "");
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
@@ -368,6 +385,20 @@ function normalizePreviewItem(item = {}, fallbackType = "movie") {
     landscapePoster: item.landscapePoster || item.background || item.poster || "",
     releaseInfo: item.releaseInfo || item.year || ""
   };
+}
+
+function normalizeEpisodeTitle(rawTitle, episodeNumber) {
+  const label = t("episodes_episode", {}, "Episode");
+  const trimmed = String(rawTitle || "").trim();
+  const number = Number(episodeNumber || 0);
+  if (!trimmed) {
+    return number > 0 ? `${label} ${number}` : label;
+  }
+  const match = trimmed.match(/^episode\s*(\d+)$/i);
+  if (match) {
+    return `${label} ${match[1]}`;
+  }
+  return trimmed;
 }
 
 function extractPreviewYear(value = "") {
@@ -439,6 +470,30 @@ function buildYoutubeEmbedUrl(ytId = "") {
     params.set("origin", origin);
   }
   return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
+}
+
+function buildYoutubeStreamUrl(ytId = "") {
+  const cleanId = String(ytId || "").trim();
+  if (!cleanId) {
+    return "";
+  }
+  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  if (!proxyBase) {
+    return "";
+  }
+  const templated = proxyBase.replace(/\{(ytId|id)\}/gi, cleanId);
+  if (templated !== proxyBase) {
+    return templated;
+  }
+  try {
+    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+    proxyUrl.searchParams.set("v", cleanId);
+    proxyUrl.searchParams.set("stream", "1");
+    proxyUrl.searchParams.set("format", "mp4");
+    return proxyUrl.toString();
+  } catch (_) {
+    return "";
+  }
 }
 
 function scoreTrailerStream(entry = {}) {
@@ -1197,16 +1252,20 @@ export const MetaDetailsScreen = {
 
   renderSeriesHeroMarkup(meta) {
     const nextEpisodeLabel = this.nextEpisodeToWatch
-      ? `Next S${this.nextEpisodeToWatch.season}E${this.nextEpisodeToWatch.episode}`
-      : "Play";
+      ? t(
+        "detail.nextEpisodeShort",
+        { season: this.nextEpisodeToWatch.season, episode: this.nextEpisodeToWatch.episode },
+        "Next S{{season}}E{{episode}}"
+      )
+      : t("detail.play", {}, "Play");
     const creditLine = Array.isArray(meta.director) && meta.director.length
       ? meta.director.slice(0, 2).join(", ")
       : Array.isArray(meta.writer) && meta.writer.length
         ? meta.writer.slice(0, 2).join(", ")
         : (meta.director || meta.writer || "");
     const creditPrefix = Array.isArray(meta.director) && meta.director.length
-      ? "Creator"
-      : "Writer";
+      ? t("detail.creator", {}, "Creator")
+      : t("detail.writer", {}, "Writer");
     return this.renderHeroSection({
       meta,
       playLabel: nextEpisodeLabel,
@@ -1222,9 +1281,9 @@ export const MetaDetailsScreen = {
       : (meta.director || "");
     return this.renderHeroSection({
       meta,
-      playLabel: "Play",
+      playLabel: t("detail.play", {}, "Play"),
       creditLine: directorLine,
-      creditPrefix: "Director",
+      creditPrefix: t("detail.director", {}, "Director"),
       showWatchedButton: true
     });
   },
@@ -1270,7 +1329,7 @@ export const MetaDetailsScreen = {
   },
   renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
     const logoOrTitle = meta.logo
-      ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml(meta.name || "logo")}" />`
+      ? `<img src="${meta.logo}" class="series-detail-logo" alt="${escapeHtml(meta.name || "logo")}" decoding="async" fetchpriority="high" />`
       : `<h1 class="series-detail-title">${escapeHtml(meta.name || "Untitled")}</h1>`;
     const externalRatings = this.renderExternalRatingsRow(meta);
     const trailerSource = this.trailerSource || resolveTrailerSource(meta);
@@ -1280,7 +1339,7 @@ export const MetaDetailsScreen = {
     const trailerButtonEnabled = Boolean(LayoutPreferences.get().detailPageTrailerButtonEnabled);
     const trailerButton = trailerButtonEnabled && trailerSource
       ? `
-          <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="Play trailer">
+          <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="${escapeAttribute(t("detail.playTrailer", {}, "Play trailer"))}">
             ${renderTrailerGlyph()}
           </button>
         `
@@ -1289,7 +1348,7 @@ export const MetaDetailsScreen = {
       <section class="detail-hero-section">
         <div class="detail-hero-brand">
           ${logoOrTitle}
-          <p class="detail-trailer-hint">Press back to return to details</p>
+          <p class="detail-trailer-hint">${escapeHtml(t("detail.pressBackToReturn", {}, "Press back to return to details"))}</p>
         </div>
         <div class="series-detail-actions">
           <button class="series-primary-btn focusable" data-action="playDefault">
@@ -1299,12 +1358,12 @@ export const MetaDetailsScreen = {
           <button class="series-circle-btn focusable" data-action="toggleLibrary">
             ${renderLibraryGlyph(this.isSavedInLibrary)}
           </button>
-          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${this.isMarkedWatched ? "Mark unwatched" : "Mark watched"}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
+          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${escapeAttribute(this.isMarkedWatched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched"))}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
           ${trailerButton}
         </div>
         ${creditLine ? `<p class="series-detail-support">${escapeHtml(creditPrefix)}: ${escapeHtml(creditLine)}</p>` : ""}
         ${externalRatings}
-        <p class="series-detail-description">${escapeHtml(meta.description || "No description.")}</p>
+        <p class="series-detail-description">${escapeHtml(meta.description || t("detail.noDescription", {}, "No description."))}</p>
         ${this.renderHeroMetaRows(meta)}
       </section>
     `;
@@ -1380,8 +1439,11 @@ export const MetaDetailsScreen = {
   },
 
   renderCompanySections(meta = {}) {
-    const production = this.renderCompanyLogosSection(meta.productionCompanies || meta.production_companies || [], "Production");
-    const networks = this.renderCompanyLogosSection(meta.networks || [], "Network");
+    const production = this.renderCompanyLogosSection(
+      meta.productionCompanies || meta.production_companies || [],
+      t("detail.productionCompanies", {}, "Production")
+    );
+    const networks = this.renderCompanyLogosSection(meta.networks || [], t("detail.networks", {}, "Network"));
     if (meta.type === "series" || meta.type === "tv") {
       return `${networks}${production}`;
     }
@@ -1397,40 +1459,40 @@ export const MetaDetailsScreen = {
     this.container.innerHTML = `
       <div class="row">
         <h2>${meta.name || "Untitled"}</h2>
-        <p>${meta.description || "No description."}</p>
+        <p>${meta.description || t("detail.noDescription", {}, "No description.")}</p>
         <p style="opacity:0.8;">Type: ${meta.type || "unknown"} | Id: ${meta.id || "-"}</p>
       </div>
       <div class="row">
-        <div class="card focusable" data-action="playDefault">${isSeries ? "Play Next Episode" : "Play"}</div>
-        <div class="card focusable" data-action="toggleLibrary">${this.isSavedInLibrary ? "Remove from Library" : "Add to Library"}</div>
-        <div class="card focusable" data-action="toggleWatched">${this.isMarkedWatched ? "Mark Unwatched" : "Mark Watched"}</div>
-        <div class="card focusable" data-action="openSearch">Search Similar</div>
-        <div class="card focusable" data-action="goBack">Back</div>
+        <div class="card focusable" data-action="playDefault">${isSeries ? t("detail.playNextEpisode", {}, "Play Next Episode") : t("detail.play", {}, "Play")}</div>
+        <div class="card focusable" data-action="toggleLibrary">${this.isSavedInLibrary ? t("detail.removeFromLibrary", {}, "Remove from Library") : t("detail.addToLibrary", {}, "Add to Library")}</div>
+        <div class="card focusable" data-action="toggleWatched">${this.isMarkedWatched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched")}</div>
+        <div class="card focusable" data-action="openSearch">${t("detail.searchSimilar", {}, "Search Similar")}</div>
+        <div class="card focusable" data-action="goBack">${t("common.back", {}, "Back")}</div>
       </div>
       ${isSeries ? `
       <div class="row">
-        <h3>Seasons</h3>
+        <h3>${t("detail.seasons", {}, "Seasons")}</h3>
         <div id="detailSeasons">${seasonButtons}</div>
       </div>
       <div class="row">
-        <h3>Episodes</h3>
+        <h3>${t("detail.episodes", {}, "Episodes")}</h3>
         <div id="detailEpisodes">${episodeCards}</div>
       </div>
       ` : ""}
       ${castCards ? `
       <div class="row">
-        <h3>Cast</h3>
+        <h3>${t("detail.cast", {}, "Cast")}</h3>
         <div id="detailCast">${castCards}</div>
       </div>
       ` : ""}
       ${moreLikeCards ? `
       <div class="row">
-        <h3>More Like This</h3>
+        <h3>${t("detail.moreLikeThis", {}, "More Like This")}</h3>
         <div id="detailMoreLike">${moreLikeCards}</div>
       </div>
       ` : ""}
       <div class="row">
-        <h3>Streams (${streamItems.length})</h3>
+        <h3>${t("detail.streams", {}, "Streams")} (${streamItems.length})</h3>
         <div id="detailStreams"></div>
       </div>
     `;
@@ -1531,9 +1593,9 @@ export const MetaDetailsScreen = {
   },
   renderMovieInsightSection(meta) {
     const tabItems = [
-      ["cast", "Creator and Cast"],
-      ["ratings", "Ratings"],
-      ...(this.moreLikeThisItems.length ? [["morelike", "More Like This"]] : []),
+      ["cast", t("detail.creatorCast", {}, "Creator and Cast")],
+      ["ratings", t("detail.ratings", {}, "Ratings")],
+      ...(this.moreLikeThisItems.length ? [["morelike", t("detail.moreLikeThis", {}, "More Like This")]] : []),
       ...(this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : [])
     ];
     const tabs = tabItems.length > 1 ? this.renderPeopleTabs("movie", this.movieInsightTab, tabItems) : "";
@@ -1583,9 +1645,9 @@ export const MetaDetailsScreen = {
 
   renderSeriesInsightSection() {
     const tabItems = [
-      ["cast", "Creator and Cast"],
-      ["ratings", "Ratings"],
-      ...(this.moreLikeThisItems.length ? [["morelike", "More Like This"]] : []),
+      ["cast", t("detail.creatorCast", {}, "Creator and Cast")],
+      ["ratings", t("detail.ratings", {}, "Ratings")],
+      ...(this.moreLikeThisItems.length ? [["morelike", t("detail.moreLikeThis", {}, "More Like This")]] : []),
       ...(this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : [])
     ];
     const tabs = tabItems.length > 1 ? this.renderPeopleTabs("series", this.seriesInsightTab, tabItems) : "";
@@ -1641,7 +1703,7 @@ export const MetaDetailsScreen = {
   renderSeriesRatingsPanel() {
     const seasonKeys = Object.keys(this.seriesRatingsBySeason || {}).map((key) => Number(key)).filter((value) => value > 0).sort((a, b) => a - b);
     if (!seasonKeys.length) {
-      return `<div class="series-insight-empty">Ratings not available.</div>`;
+      return `<div class="series-insight-empty">${escapeHtml(t("detail.ratingsNotAvailable", {}, "Ratings not available."))}</div>`;
     }
     if (!seasonKeys.includes(Number(this.selectedRatingSeason))) {
       this.selectedRatingSeason = seasonKeys[0];
@@ -1660,35 +1722,35 @@ export const MetaDetailsScreen = {
             <span class="series-episode-rating-val">${entry.rating != null ? String(entry.rating).replace(".", ".") : "-"}</span>
           </div>
         `).join("")
-      : `<div class="series-insight-empty">No episode ratings in this season.</div>`;
+      : `<div class="series-insight-empty">${escapeHtml(t("detail.noEpisodeRatings", {}, "No episode ratings in this season."))}</div>`;
     return `
       <div class="series-rating-seasons" data-scroll-key="rating-seasons">${seasonButtons}</div>
-      <div class="series-rating-summary">Season ${this.selectedRatingSeason} • ${ratings.length} episodes</div>
+      <div class="series-rating-summary">${escapeHtml(t("detail.seasonSummary", { season: this.selectedRatingSeason, count: ratings.length }, "Season {{season}} • {{count}} episodes"))}</div>
       <div class="series-episode-ratings-grid" data-scroll-key="rating-chips:${this.selectedRatingSeason}">${chips}</div>
     `;
   },
 
   renderSeasonButtons() {
     if (!this.episodes?.length) {
-      return "<p>No episodes found.</p>";
+      return `<p>${escapeHtml(t("detail.noEpisodesFound", {}, "No episodes found."))}</p>`;
     }
     const seasons = Array.from(new Set(this.episodes.map((episode) => episode.season)));
     return seasons.map((season) => `
       <button class="series-season-btn focusable${season === this.selectedSeason ? " selected" : ""}"
               data-action="selectSeason"
               data-season="${season}">
-        Season ${season}
+        ${escapeHtml(t("detail.seasonLabel", { season }, "Season {{season}}"))}
       </button>
     `).join("");
   },
 
   renderEpisodeCards() {
     if (!this.episodes?.length) {
-      return "<p>No episodes found.</p>";
+      return `<p>${escapeHtml(t("detail.noEpisodesFound", {}, "No episodes found."))}</p>`;
     }
     const selectedSeasonEpisodes = this.episodes.filter((episode) => episode.season === this.selectedSeason);
     if (!selectedSeasonEpisodes.length) {
-      return "<p>No episodes for selected season.</p>";
+      return `<p>${escapeHtml(t("episodes_panel_no_episodes", {}, "No episodes available"))}</p>`;
     }
     return selectedSeasonEpisodes.map((episode) => {
       const progress = this.episodeProgressMap.get(`${episode.season}:${episode.episode}`) || null;
@@ -1711,9 +1773,9 @@ export const MetaDetailsScreen = {
             <div class="series-episode-overlay"></div>
             ${isWatched ? `<div class="series-episode-status complete">&#10003;</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
             <div class="series-episode-copy">
-              <div class="series-episode-badge">EPISODE ${Number(episode.episode || 0)}</div>
-              <div class="series-episode-title">${escapeHtml(episode.title)}</div>
-              <div class="series-episode-overview">${escapeHtml(episode.overview || "Episode")}</div>
+              <div class="series-episode-badge">${escapeHtml(t("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
+              <div class="series-episode-title">${escapeHtml(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
+             <div class="series-episode-overview">${escapeHtml(episode.overview || t("episodes_episode", {}, "Episode"))}</div>
               ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
               ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
             </div>
@@ -1763,9 +1825,9 @@ export const MetaDetailsScreen = {
     const watched = this.isEpisodeMarkedWatched(episode);
     const hasResume = !watched && Number(progress?.positionMs || 0) > 0;
     return [
-      { action: hasResume ? "resume" : "play", label: hasResume ? "Resume" : "Play" },
-      { action: "startOver", label: "Start Over" },
-      { action: "toggleWatched", label: watched ? "Mark Unwatched" : "Mark Watched" }
+      { action: hasResume ? "resume" : "play", label: hasResume ? t("common.resume", {}, "Resume") : t("detail.play", {}, "Play") },
+      { action: "startOver", label: t("common.startOver", {}, "Start Over") },
+      { action: "toggleWatched", label: watched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched") }
     ];
   },
 
@@ -1776,7 +1838,7 @@ export const MetaDetailsScreen = {
     }
     const subtitle = [`S${Number(episode.season || 0)}E${Number(episode.episode || 0)}`, episode.title || ""].filter(Boolean).join(" - ");
     return renderHoldMenuMarkup({
-      kicker: "Episode Options",
+      kicker: t("detail.episodeOptions", {}, "Episode Options"),
       title: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
       subtitle,
       focusedIndex: Number(this.episodeHoldMenu?.optionIndex || 0),
@@ -1976,7 +2038,7 @@ export const MetaDetailsScreen = {
     const logos = companies.slice(0, 10).map((company) => `
       <article class="detail-company-card focusable"
                data-company-name="${escapeHtml(company.name || "")}">
-        ${company.logo ? `<img src="${company.logo}" alt="${escapeHtml(company.name || "Company")}" />` : `<span>${escapeHtml(company.name || "")}</span>`}
+        ${company.logo ? `<img src="${company.logo}" alt="${escapeHtml(company.name || "Company")}" loading="lazy" decoding="async" />` : `<span>${escapeHtml(company.name || "")}</span>`}
       </article>
     `).join("");
     return `
@@ -2075,9 +2137,16 @@ export const MetaDetailsScreen = {
       }
       if (node.classList.contains("series-circle-btn")) {
         node.innerHTML = renderLibraryGlyph(this.isSavedInLibrary);
-        node.setAttribute("aria-label", this.isSavedInLibrary ? "Remove from library" : "Add to library");
+        node.setAttribute(
+          "aria-label",
+          this.isSavedInLibrary
+            ? t("detail.removeFromLibrary", {}, "Remove from Library")
+            : t("detail.addToLibrary", {}, "Add to Library")
+        );
       } else {
-        node.textContent = this.isSavedInLibrary ? "Remove from Library" : "Add to Library";
+        node.textContent = this.isSavedInLibrary
+          ? t("detail.removeFromLibrary", {}, "Remove from Library")
+          : t("detail.addToLibrary", {}, "Add to Library");
       }
     });
     Array.from(this.container.querySelectorAll('[data-action="toggleWatched"]')).forEach((node) => {
@@ -2087,9 +2156,16 @@ export const MetaDetailsScreen = {
       if (node.classList.contains("series-circle-btn")) {
         node.classList.toggle("is-selected", this.isMarkedWatched);
         node.innerHTML = renderWatchedGlyph(this.isMarkedWatched);
-        node.setAttribute("aria-label", this.isMarkedWatched ? "Mark unwatched" : "Mark watched");
+        node.setAttribute(
+          "aria-label",
+          this.isMarkedWatched
+            ? t("common.markUnwatched", {}, "Mark Unwatched")
+            : t("common.markWatched", {}, "Mark Watched")
+        );
       } else {
-        node.textContent = this.isMarkedWatched ? "Mark Unwatched" : "Mark Watched";
+        node.textContent = this.isMarkedWatched
+          ? t("common.markUnwatched", {}, "Mark Unwatched")
+          : t("common.markWatched", {}, "Mark Watched");
       }
     });
     Router.captureCurrentRouteState();
@@ -2245,6 +2321,7 @@ export const MetaDetailsScreen = {
           allow="autoplay; encrypted-media; picture-in-picture"
           referrerpolicy="origin-when-cross-origin"
           allowfullscreen
+          scrolling="no"
         ></iframe>
       `;
       return;
@@ -2292,6 +2369,22 @@ export const MetaDetailsScreen = {
       return;
     }
     if (this.trailerSource.kind === "youtube" && this.trailerSource.embedUrl) {
+      const streamUrl = buildYoutubeStreamUrl(this.trailerSource.ytId);
+      if (streamUrl) {
+        Router.navigate("player", {
+          ...commonParams,
+          streamUrl,
+          streamCandidates: [
+            {
+              url: streamUrl,
+              title: "Trailer",
+              addonName: "Trailer"
+            }
+          ],
+          fallbackExternalFrameUrl: this.trailerSource.embedUrl
+        });
+        return;
+      }
       Router.navigate("player", {
         ...commonParams,
         externalFrameUrl: this.trailerSource.embedUrl

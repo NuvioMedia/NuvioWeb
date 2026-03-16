@@ -735,6 +735,8 @@ export const PlayerScreen = {
     this.container.style.display = "block";
     this.params = params;
     this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
+    this.fallbackExternalFrameUrl = String(params.fallbackExternalFrameUrl || "").trim();
+    this.externalFrameFallbackUsed = false;
 
     this.aspectModes = [
       { objectFit: "contain", label: "Fit" },
@@ -909,6 +911,33 @@ export const PlayerScreen = {
 
   isExternalFrameMode() {
     return Boolean(this.externalFrameUrl);
+  },
+
+  attemptExternalFrameFallback(mediaErrorCode = 0) {
+    if (!this.fallbackExternalFrameUrl || this.isExternalFrameMode() || this.externalFrameFallbackUsed) {
+      return false;
+    }
+    if (Number(mediaErrorCode || 0) && Number(mediaErrorCode || 0) !== 4) {
+      return false;
+    }
+    this.externalFrameFallbackUsed = true;
+    this.externalFrameUrl = this.fallbackExternalFrameUrl;
+    this.clearPlaybackStallGuard();
+    this.unbindVideoEvents();
+    if (this.endedHandler && PlayerController.video) {
+      PlayerController.video.removeEventListener("ended", this.endedHandler);
+      this.endedHandler = null;
+    }
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
+    PlayerController.stop();
+    this.loadingVisible = false;
+    this.updateLoadingVisibility();
+    this.setControlsVisible(false);
+    this.renderPlayerUi();
+    return true;
   },
 
   buildPlaybackContext(streamCandidate = this.getCurrentStreamCandidate()) {
@@ -1695,6 +1724,7 @@ export const PlayerScreen = {
             allow="autoplay; encrypted-media; picture-in-picture"
             referrerpolicy="strict-origin-when-cross-origin"
             allowfullscreen
+            scrolling="no"
           ></iframe>
         </div>
       `;
@@ -2240,6 +2270,9 @@ export const PlayerScreen = {
         ? Number(PlayerController.getLastPlaybackErrorCode() || 0)
         : 0;
       const mediaErrorCode = detailErrorCode || Number(video?.error?.code || 0) || controllerErrorCode;
+      if (this.attemptExternalFrameFallback(mediaErrorCode)) {
+        return;
+      }
       if (this.recoverFromPlaybackError(mediaErrorCode)) {
         return;
       }
@@ -3994,16 +4027,25 @@ export const PlayerScreen = {
 
     const options = this.collectSubtitleOptionItems().filter((entry) => entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
     const matchTarget = (entry, target) => this.matchesStartupSubtitleTarget(entry, target);
+    const findMatch = (target, { sourceType = null, forcedOnly = false } = {}) => options.find((entry) => {
+      if (sourceType && entry.sourceType !== sourceType) {
+        return false;
+      }
+      if (forcedOnly && !entry.isForced) {
+        return false;
+      }
+      return matchTarget(entry, target);
+    });
 
     for (const target of normalizedTargets) {
-      const internalMatch = options.find((entry) => entry.sourceType === "internal" && matchTarget(entry, target));
-      if (internalMatch) {
-        return internalMatch;
-      }
-      const addonMatch = options.find((entry) => entry.sourceType === "addon" && matchTarget(entry, target));
-      if (addonMatch) {
-        return addonMatch;
-      }
+      const forcedInternal = findMatch(target, { sourceType: "internal", forcedOnly: true });
+      if (forcedInternal) return forcedInternal;
+      const forcedAddon = findMatch(target, { sourceType: "addon", forcedOnly: true });
+      if (forcedAddon) return forcedAddon;
+      const internalMatch = findMatch(target, { sourceType: "internal" });
+      if (internalMatch) return internalMatch;
+      const addonMatch = findMatch(target, { sourceType: "addon" });
+      if (addonMatch) return addonMatch;
     }
 
     return null;
@@ -4062,13 +4104,6 @@ export const PlayerScreen = {
     if (!preferredOption?.entry) {
       if (!isStillLoading) {
         this.startupSubtitlePreferenceApplied = true;
-        const offEntry = this.getSubtitleEntries("builtIn").find((entry) => entry.id === "subtitle-off") || { trackIndex: -1 };
-        this.startupSubtitlePreferenceApplying = true;
-        try {
-          this.applySubtitleEntry(offEntry);
-        } finally {
-          this.startupSubtitlePreferenceApplying = false;
-        }
       }
       return false;
     }
@@ -4430,6 +4465,24 @@ export const PlayerScreen = {
     const activeLanguage = languages[this.subtitleLanguageRailIndex]?.key || SUBTITLE_LANGUAGE_OFF_KEY;
     const options = this.getSubtitleOptionsForLanguage(activeLanguage);
     const styleItems = this.getSubtitleStyleControls();
+    const isMinusKey = keyCode === 189 || keyCode === 109;
+    const isPlusKey = keyCode === 187 || keyCode === 107;
+    const isStyleRail = this.subtitleFocusedRail === "style";
+    const styleItem = styleItems[this.subtitleStyleRailIndex];
+
+    if (isStyleRail && (keyCode === 37 || isMinusKey)) {
+      if (styleItem) {
+        this.adjustSubtitleStyleControl(styleItem.id, -1);
+      }
+      return true;
+    }
+
+    if (isStyleRail && (keyCode === 39 || isPlusKey)) {
+      if (styleItem) {
+        this.adjustSubtitleStyleControl(styleItem.id, 1);
+      }
+      return true;
+    }
 
     if (keyCode === 38) {
       if (this.subtitleFocusedRail === "language") {
@@ -4477,13 +4530,6 @@ export const PlayerScreen = {
         this.renderSubtitleDialog();
         return true;
       }
-      if (this.subtitleFocusedRail === "style") {
-        const styleItem = styleItems[this.subtitleStyleRailIndex];
-        if (styleItem) {
-          this.adjustSubtitleStyleControl(styleItem.id, 1);
-        }
-        return true;
-      }
       return true;
     }
     if (keyCode === 13) {
@@ -4515,20 +4561,14 @@ export const PlayerScreen = {
         }
         return true;
       }
-      const styleItem = styleItems[this.subtitleStyleRailIndex];
       if (styleItem) {
-        this.adjustSubtitleStyleControl(styleItem.id, styleItem.id === "delay" || styleItem.id === "fontSize" || styleItem.id === "verticalOffset" ? 1 : 1);
+        this.adjustSubtitleStyleControl(styleItem.id, 1);
       }
       return true;
     }
-    if (this.subtitleFocusedRail === "style" && (keyCode === 10009 || keyCode === 461)) {
-      return false;
-    }
-    if (this.subtitleFocusedRail === "style" && keyCode === 189) {
-      const styleItem = styleItems[this.subtitleStyleRailIndex];
-      if (styleItem) {
-        this.adjustSubtitleStyleControl(styleItem.id, -1);
-      }
+    if (isStyleRail && (keyCode === 10009 || keyCode === 461)) {
+      this.subtitleFocusedRail = options.length ? "options" : "language";
+      this.renderSubtitleDialog();
       return true;
     }
     return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;

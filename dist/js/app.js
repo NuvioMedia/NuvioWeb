@@ -38,6 +38,20 @@ function renderFatalError(error) {
   `;
 }
 
+function isLowEndDevice() {
+  const hardware = Number(globalThis.navigator?.hardwareConcurrency || 0);
+  const memory = Number(globalThis.navigator?.deviceMemory || 0);
+  const lowCpu = Number.isFinite(hardware) && hardware > 0 && hardware <= 4;
+  const lowMem = Number.isFinite(memory) && memory > 0 && memory <= 2;
+  return lowCpu || lowMem;
+}
+
+function applyPerformanceMode() {
+  const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
+  document.documentElement.classList.toggle("performance-constrained", constrained);
+  document.body.classList.toggle("performance-constrained", constrained);
+}
+
 function isAddonRemoteMode() {
   try {
     return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
@@ -49,6 +63,7 @@ function isAddonRemoteMode() {
 async function bootstrapApp() {
   renderAppShell();
   Platform.init();
+  applyPerformanceMode();
   await I18n.init();
 
   Router.init();
