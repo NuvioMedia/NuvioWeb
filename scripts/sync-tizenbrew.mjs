@@ -7,18 +7,53 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
-const defaultEnvFileContents = `(function defineNuvioEnv() {
+const defaultHostedEnvUrl = "https://nuvioapp.space/nuvio.env.js";
+const defaultEnvFileContents = `(function bootstrapTizenEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
-    SUPABASE_URL: "",
-    SUPABASE_ANON_KEY: "",
-    TV_LOGIN_REDIRECT_BASE_URL: "",
-    YOUTUBE_PROXY_URL: "",
-    ADDON_REMOTE_BASE_URL: "",
-    ENABLE_REMOTE_WRAPPER_MODE: false,
-    PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
-    TMDB_API_KEY: ""
-  });
+  var finished = false;
+
+  function normalizeUrl(value) {
+    return typeof value === "string" ? value.trim() : "";
+  }
+
+  function applyDefaults() {
+    root.__NUVIO_ENV__ = Object.assign({
+      SUPABASE_URL: "",
+      SUPABASE_ANON_KEY: "",
+      TV_LOGIN_REDIRECT_BASE_URL: "",
+      PUBLIC_APP_URL: "",
+      YOUTUBE_PROXY_URL: "",
+      ADDON_REMOTE_BASE_URL: "",
+      ENABLE_REMOTE_WRAPPER_MODE: false,
+      PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
+      TMDB_API_KEY: ""
+    }, root.__NUVIO_ENV__ || {});
+  }
+
+  function finish() {
+    if (finished) {
+      return;
+    }
+    finished = true;
+    applyDefaults();
+    if (typeof root.__NUVIO_TIZEN_BOOTSTRAP_APP__ === "function") {
+      root.__NUVIO_TIZEN_BOOTSTRAP_APP__();
+    }
+  }
+
+  var hostedEnvUrl = normalizeUrl(root.__NUVIO_TIZEN_ENV_URL__) || ${JSON.stringify(defaultHostedEnvUrl)};
+  if (!hostedEnvUrl || typeof document === "undefined") {
+    finish();
+    return;
+  }
+
+  var script = document.createElement("script");
+  script.src = hostedEnvUrl;
+  script.async = false;
+  script.onload = finish;
+  script.onerror = finish;
+  document.head.appendChild(script);
+  setTimeout(finish, 3000);
 }());
 `;
 const tizenIconSource = path.join(rootDir, "assets", "images", "tizenIcon.png");
@@ -90,15 +125,7 @@ async function syncBuild(targetAppDir) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetAppDir, "app.bundle.js"));
-
-  try {
-    await cp(path.join(distDir, "nuvio.env.js"), path.join(targetAppDir, "nuvio.env.js"));
-  } catch (error) {
-    if (error?.code !== "ENOENT") {
-      throw error;
-    }
-    await writeFile(path.join(targetAppDir, "nuvio.env.js"), defaultEnvFileContents, "utf8");
-  }
+  await writeFile(path.join(targetAppDir, "nuvio.env.js"), defaultEnvFileContents, "utf8");
 }
 
 function buildIndexHtml() {
@@ -140,10 +167,18 @@ function loadScript(src) {
   document.body.appendChild(script);
 }
 
+window.__NUVIO_TIZEN_BOOTSTRAP_APP__ = function bootstrapApp() {
+  if (window.__NUVIO_TIZEN_APP_BOOTSTRAPPED__) {
+    return;
+  }
+
+  window.__NUVIO_TIZEN_APP_BOOTSTRAPPED__ = true;
+  loadScript("js/runtime/env.js");
+  loadScript("assets/libs/qrcode-generator.js");
+  loadScript("app.bundle.js");
+};
+
 loadScript("nuvio.env.js");
-loadScript("js/runtime/env.js");
-loadScript("assets/libs/qrcode-generator.js");
-loadScript("app.bundle.js");
 `;
 }
 

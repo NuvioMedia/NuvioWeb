@@ -7,6 +7,7 @@ This repo stays the source of truth for the shared web app. On each published re
 - Add the public module repository name to the `TIZEN_REPO` GitHub Actions variable in this repo, for example `your-org/NuvioTVTizen`.
 - Add a `REPO_DISPATCH_TOKEN` secret in this repo with permission to push commits to that repository.
 - When a release is published here, `.github/workflows/release-platform-artifacts.yml` checks out the public Tizen repo, builds the shared app from the release tag, syncs the generated module files, and commits the update with a release-based commit message.
+- The synced Tizen module does not commit live env values. Its generated `app/nuvio.env.js` bootstraps env from `https://nuvioapp.space/nuvio.env.js` by default, or from `window.__NUVIO_TIZEN_ENV_URL__` if you override it.
 - TizenBrew then consumes the updated module directly from the public GitHub repository.
 
 ## webOS
