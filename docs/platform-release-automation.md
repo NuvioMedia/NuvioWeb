@@ -7,7 +7,7 @@ This repo stays the source of truth for the shared web app. On each published re
 - Add the public module repository name to the `TIZEN_REPO` GitHub Actions variable in this repo, for example `your-org/NuvioTVTizen`.
 - Add a `REPO_DISPATCH_TOKEN` secret in this repo with permission to push commits to that repository.
 - When a release is published here, `.github/workflows/release-platform-artifacts.yml` checks out the public Tizen repo, builds the shared app from the release tag, syncs the generated module files, and commits the update with a release-based commit message.
-- The synced Tizen module does not commit live env values. Its generated `app/nuvio.env.js` bootstraps env from `https://nuvioapp.space/nuvio.env.js` by default, or from `window.__NUVIO_TIZEN_ENV_URL__` if you override it.
+- If the private webOS repo contains `nuvio.env.js`, that file is used as the env source of truth during Tizen sync in CI. If it is missing, the Tizen sync falls back to a hosted env bootstrap.
 - TizenBrew then consumes the updated module directly from the public GitHub repository.
 
 ## webOS
@@ -15,6 +15,7 @@ This repo stays the source of truth for the shared web app. On each published re
 - Create a private GitHub repository for the local folder `/Users/edin/Documents/NuvioTV/NuvioWebOS`.
 - Add the repository name to the `WEBOS_REPO` GitHub Actions variable in this repo, for example `your-org/NuvioWebOS`.
 - Add a `REPO_DISPATCH_TOKEN` secret in this repo with permission to trigger workflows in that private repository.
+- Keep `nuvio.env.js` in the private webOS repo if you want it to be the CI source of truth for wrapper and Tizen module env values.
 - When a release is published here, `.github/workflows/release-platform-artifacts.yml` dispatches a `build-release` event to the private repository.
 - The private repository checks out this repo at the release tag, runs `npm ci` and `npm run build`, then runs `npm run sync:webos -- --path <wrapper-repo-root>` against the checked out source.
 - The private repository packages the wrapper with `ares-package` and uploads the generated `.ipk` back to the same release in this repo.

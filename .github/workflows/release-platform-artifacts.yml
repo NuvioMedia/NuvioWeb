@@ -51,6 +51,14 @@ jobs:
           token: ${{ secrets.REPO_DISPATCH_TOKEN }}
           path: tizen-module
 
+      - name: Check out private webOS repo for env source
+        if: ${{ vars.WEBOS_REPO != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.WEBOS_REPO }}
+          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
+          path: webos-private
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -69,7 +77,11 @@ jobs:
           RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
         run: |
           VERSION="${RELEASE_TAG#v}"
-          node ./tizen-module/scripts/prepare-module.mjs --shared "$GITHUB_WORKSPACE" --version "$VERSION"
+          EXTRA_ARGS=""
+          if [ -f "$GITHUB_WORKSPACE/webos-private/nuvio.env.js" ]; then
+            EXTRA_ARGS="--env-source $GITHUB_WORKSPACE/webos-private/nuvio.env.js"
+          fi
+          node ./tizen-module/scripts/prepare-module.mjs --shared "$GITHUB_WORKSPACE" --version "$VERSION" $EXTRA_ARGS
 
       - name: Commit synced TizenBrew files
         env:

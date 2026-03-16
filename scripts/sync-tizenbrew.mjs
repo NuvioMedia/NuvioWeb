@@ -64,6 +64,7 @@ function fail(message) {
 
 function parseArgs(argv) {
   let targetPath = "";
+  let envSourcePath = "";
   const positionalArgs = [];
   const npmConfigPath = process.env.npm_config_path;
   const npmProvidedPath = npmConfigPath && npmConfigPath !== "true" ? npmConfigPath : "";
@@ -73,6 +74,12 @@ function parseArgs(argv) {
 
     if (arg === "--path") {
       targetPath = argv[index + 1] || "";
+      index += 1;
+      continue;
+    }
+
+    if (arg === "--env-source") {
+      envSourcePath = argv[index + 1] || "";
       index += 1;
       continue;
     }
@@ -97,8 +104,13 @@ function parseArgs(argv) {
     fail(`Target path must be absolute: ${targetPath}`);
   }
 
+  if (envSourcePath && !path.isAbsolute(envSourcePath)) {
+    fail(`Env source path must be absolute: ${envSourcePath}`);
+  }
+
   return {
-    targetDir: targetPath
+    targetDir: targetPath,
+    envSourcePath
   };
 }
 
@@ -115,7 +127,7 @@ async function syncFolder(targetDir, folderName) {
   await cp(path.join(distDir, folderName), path.join(targetDir, folderName), { recursive: true });
 }
 
-async function syncBuild(targetAppDir) {
+async function syncBuild(targetAppDir, envSourcePath) {
   await mkdir(targetAppDir, { recursive: true });
   await Promise.all([
     syncFolder(targetAppDir, "assets"),
@@ -125,7 +137,11 @@ async function syncBuild(targetAppDir) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetAppDir, "app.bundle.js"));
-  await writeFile(path.join(targetAppDir, "nuvio.env.js"), defaultEnvFileContents, "utf8");
+  if (envSourcePath) {
+    await cp(envSourcePath, path.join(targetAppDir, "nuvio.env.js"));
+  } else {
+    await writeFile(path.join(targetAppDir, "nuvio.env.js"), defaultEnvFileContents, "utf8");
+  }
 }
 
 function buildIndexHtml() {
@@ -182,17 +198,17 @@ loadScript("nuvio.env.js");
 `;
 }
 
-async function syncModule(targetDir) {
+async function syncModule(targetDir, envSourcePath) {
   const appDir = path.join(targetDir, "app");
   await mkdir(targetDir, { recursive: true });
-  await syncBuild(appDir);
+  await syncBuild(appDir, envSourcePath);
   await cp(tizenIconSource, path.join(targetDir, "icon.png"));
   await writeFile(path.join(appDir, "index.html"), buildIndexHtml(), "utf8");
   await writeFile(path.join(appDir, "main.js"), buildMainJs(), "utf8");
 }
 
-const { targetDir } = parseArgs(process.argv.slice(2));
+const { targetDir, envSourcePath } = parseArgs(process.argv.slice(2));
 await assertDistExists();
-await syncModule(targetDir);
+await syncModule(targetDir, envSourcePath);
 
 console.log(`Synced TizenBrew module assets to ${targetDir}`);
