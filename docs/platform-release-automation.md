@@ -1,8 +1,13 @@
 # Platform Release Automation
 
-This repo stays the source of truth for the shared web app. The private webOS wrapper repository builds from tagged releases in this repo and uploads the `.ipk` back to the matching GitHub release here.
+This repo stays the source of truth for the shared web app. On each published release, it updates the public TizenBrew module repository and dispatches a private webOS build that uploads the `.ipk` back to the matching GitHub release here.
 
-TizenBrew no longer uses release dispatch from this repo. The public module lives in `NuvioMedia/NuvioTVTizen` and is consumed directly by TizenBrew.
+## TizenBrew
+
+- Add the public module repository name to the `TIZEN_REPO` GitHub Actions variable in this repo, for example `your-org/NuvioTVTizen`.
+- Add a `REPO_DISPATCH_TOKEN` secret in this repo with permission to push commits to that repository.
+- When a release is published here, `.github/workflows/release-platform-artifacts.yml` checks out the public Tizen repo, builds the shared app from the release tag, syncs the generated module files, and commits the update with a release-based commit message.
+- TizenBrew then consumes the updated module directly from the public GitHub repository.
 
 ## webOS
 
