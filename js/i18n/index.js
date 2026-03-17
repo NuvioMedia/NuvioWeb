@@ -272,6 +272,27 @@ function parseStringsXml(source) {
   }, {});
 }
 
+function loadXmlFileXhr(url) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", url, true);
+    xhr.onload = () => {
+      // status 0 is returned for successful file:// loads in webOS
+      if (xhr.status === 200 || xhr.status === 0) {
+        try {
+          resolve(parseStringsXml(xhr.responseText));
+        } catch (e) {
+          reject(e);
+        }
+      } else {
+        reject(new Error(`XHR status ${xhr.status} for ${url}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error(`XHR error for ${url}`));
+    xhr.send();
+  });
+}
+
 async function loadXmlFile(relativePath) {
   const candidates = [
     `res/${relativePath}`,
@@ -280,13 +301,9 @@ async function loadXmlFile(relativePath) {
 
   for (const candidate of candidates) {
     try {
-      const response = await fetch(candidate);
-      if (!response.ok) {
-        continue;
-      }
-      return parseStringsXml(await response.text());
+      return await loadXmlFileXhr(candidate);
     } catch (_) {
-      continue;
+      // try next candidate
     }
   }
 

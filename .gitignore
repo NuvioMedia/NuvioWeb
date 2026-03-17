@@ -1,7 +1,6 @@
 AGENTS.md
 
 nuvio.env.js
-dist/nuvio.env.js
 node_modules/
 
 *.ipk
@@ -9,3 +8,7 @@ node_modules/
 appinfo.json
 
 webOSTVjs-1.2.12/*
+
+# Build output
+dist/
+app.bundle.js
