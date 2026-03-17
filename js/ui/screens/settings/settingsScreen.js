@@ -502,18 +502,31 @@ function scrollSettingsRailItem(node) {
     return;
   }
 
-  const itemTop = node.offsetTop;
-  const itemHeight = node.offsetHeight || 0;
-  const targetCenter = clientHeight * 0.42;
-  const desiredTop = itemTop - (targetCenter - (itemHeight / 2));
-  const nextScrollTop = clamp(desiredTop, 0, maxScroll);
+  const railRect = rail.getBoundingClientRect();
+  const itemRect = node.getBoundingClientRect();
+  const itemTop = (itemRect.top - railRect.top) + rail.scrollTop;
+  const itemBottom = (itemRect.bottom - railRect.top) + rail.scrollTop;
+  const itemHeight = itemRect.height || node.offsetHeight || 0;
+  const padding = Math.max(12, Math.round(clientHeight * 0.12));
+  const viewTop = rail.scrollTop + padding;
+  const viewBottom = rail.scrollTop + clientHeight - padding;
+  let nextScrollTop = rail.scrollTop;
+
+  if (itemTop < viewTop) {
+    nextScrollTop = Math.max(0, itemTop - padding);
+  } else if (itemBottom > viewBottom) {
+    nextScrollTop = Math.min(maxScroll, itemBottom - clientHeight + padding);
+  } else {
+    return;
+  }
+
   if (Math.abs(rail.scrollTop - nextScrollTop) < 1) {
     return;
   }
   if (typeof rail.scrollTo === "function") {
     rail.scrollTo({
       top: nextScrollTop,
-      behavior: "smooth"
+      behavior: "auto"
     });
     return;
   }

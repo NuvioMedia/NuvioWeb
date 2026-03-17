@@ -169,8 +169,8 @@
 <string name="playback_skip_intro">Intro overslaan</string>
 <string name="playback_skip_intro_sub">Gebruik introdb.app om intro’s en samenvattingen te detecteren.</string>
 <string name="playback_auto_frame_rate">Automatische framerate</string>
-<string name="playback_section_player">Speler &amp; streamselectie</string>
-<string name="playback_section_player_desc">Spelervoorkeur, automatisch afspelen en bronfiltering.</string>
+<string name="playback_section_player">Streaming en kwaliteit</string>
+<string name="playback_section_player_desc">Kwaliteit, automatisch afspelen en bronfiltering.</string>
 <string name="playback_player">Speler</string>
 <string name="playback_player_internal">Intern</string>
 <string name="playback_player_external">Extern</string>

@@ -2799,6 +2799,7 @@ export const HomeScreen = {
     if (profileChanged) {
       this.hasLoadedOnce = false;
       this.hasAppliedInitialContinueWatchingFocus = false;
+      this.sidebarProfile = null;
     }
 
     if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
@@ -2835,6 +2836,10 @@ export const HomeScreen = {
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
 
+    const sidebarProfilePromise = getSidebarProfileState().catch(() => null);
+    const progressAllPromise = watchProgressRepository.getAll().catch(() => []);
+    const recentProgressPromise = watchProgressRepository.getRecent(10).catch(() => []);
+
     const addons = await addonRepository.getInstalledAddons();
     const catalogDescriptors = [];
 
@@ -2853,31 +2858,38 @@ export const HomeScreen = {
         });
     });
 
-    const initialDescriptors = catalogDescriptors.slice(0, HOME_INITIAL_CATALOG_LOAD);
-    const deferredDescriptors = catalogDescriptors.slice(HOME_INITIAL_CATALOG_LOAD);
+    const initialCatalogLoad = (Platform.isWebOS() || Platform.isTizen())
+      ? Math.min(HOME_INITIAL_CATALOG_LOAD, 6)
+      : HOME_INITIAL_CATALOG_LOAD;
+    const initialDescriptors = catalogDescriptors.slice(0, initialCatalogLoad);
+    const deferredDescriptors = catalogDescriptors.slice(initialCatalogLoad);
 
     const initialRows = await this.fetchCatalogRows(initialDescriptors, { allowLoading: true });
     if (token !== this.homeLoadToken) {
       return;
     }
     this.rows = this.sortAndFilterRows(initialRows);
-    this.allProgress = await watchProgressRepository.getAll();
-    this.continueWatching = await watchProgressRepository.getRecent(10);
-    this.watchedItems = await watchedItemsRepository.getAll(2000);
-    this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
-      .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
-    if (token !== this.homeLoadToken) {
-      return;
-    }
-    this.continueWatchingLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
     this.continueWatchingDisplay = [];
+    this.continueWatchingLoading = true;
+    this.allProgress = [];
+    this.continueWatching = [];
+    this.watchedItems = [];
+    this.nextUpProgressCandidates = [];
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
-    this.sidebarProfile = await getSidebarProfileState();
     this.hasLoadedOnce = true;
     this.render();
+    sidebarProfilePromise.then((profile) => {
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        return;
+      }
+      if (profile) {
+        this.sidebarProfile = profile;
+        this.render();
+      }
+    });
 
     if (deferredDescriptors.length) {
       this.fetchCatalogRows(deferredDescriptors, { allowLoading: true }).then((extraRows) => {
@@ -2911,25 +2923,57 @@ export const HomeScreen = {
       });
     }
 
-    this.enrichContinueWatching(this.continueWatching, {
-      allProgress: this.allProgress,
-      watchedItems: this.watchedItems,
-      nextUpProgressCandidates: this.nextUpProgressCandidates
-    }).then((enriched) => {
+    (async () => {
+      const [allProgress, continueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
       }
-      this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
-      this.continueWatchingLoading = false;
-      if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
-        this.heroItem = this.pickInitialHero();
-        if (!this.hasAppliedInitialContinueWatchingFocus) {
-          this.forceInitialContinueWatchingFocus = true;
-        }
+      this.allProgress = Array.isArray(allProgress) ? allProgress : [];
+      this.continueWatching = Array.isArray(continueWatching) ? continueWatching : [];
+      const needsNextUp = this.continueWatching.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        || this.allProgress.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type));
+      this.watchedItems = needsNextUp ? await watchedItemsRepository.getAll(2000).catch(() => []) : [];
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        return;
       }
+      this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
+        .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
+      this.continueWatchingLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
+      this.continueWatchingDisplay = [];
       this.render();
-    }).catch((error) => {
-      console.warn("Continue watching async enrichment failed", error);
+
+      if (!this.continueWatchingLoading) {
+        return;
+      }
+
+      try {
+        const enriched = await this.enrichContinueWatching(this.continueWatching, {
+          allProgress: this.allProgress,
+          watchedItems: this.watchedItems,
+          nextUpProgressCandidates: this.nextUpProgressCandidates
+        });
+        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+          return;
+        }
+        this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+        this.continueWatchingLoading = false;
+        if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
+          this.heroItem = this.pickInitialHero();
+          if (!this.hasAppliedInitialContinueWatchingFocus) {
+            this.forceInitialContinueWatchingFocus = true;
+          }
+        }
+        this.render();
+      } catch (error) {
+        console.warn("Continue watching async enrichment failed", error);
+        this.continueWatchingLoading = false;
+        this.render();
+      }
+    })().catch((error) => {
+      console.warn("Continue watching load failed", error);
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        return;
+      }
       this.continueWatchingLoading = false;
       this.render();
     });
@@ -3058,7 +3102,8 @@ export const HomeScreen = {
     this.expandedPosterNode = null;
     const shouldHoldHeroForContinueWatching = this.layoutMode === "modern"
       && Boolean(this.continueWatchingLoading)
-      && !this.continueWatchingDisplay?.length;
+      && !this.continueWatchingDisplay?.length
+      && !this.heroItem;
     const heroItem = shouldHoldHeroForContinueWatching
       ? null
       : normalizeCatalogItem(this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows), "movie");
@@ -3083,6 +3128,9 @@ export const HomeScreen = {
       ),
       loadingRowItemCount
     );
+    const effectiveContinueWatchingLoadingCount = (this.continueWatchingLoading && continueWatchingLoadingCount === 0)
+      ? loadingRowItemCount
+      : continueWatchingLoadingCount;
     this.teardownGridStickyHeader();
 
     let mainContentMarkup = "";
@@ -3095,7 +3143,7 @@ export const HomeScreen = {
         heroCandidates: this.heroCandidates,
         continueWatchingItems: this.continueWatchingDisplay || [],
         continueWatchingLoading: Boolean(this.continueWatchingLoading),
-        continueWatchingLoadingCount,
+        continueWatchingLoadingCount: effectiveContinueWatchingLoadingCount,
         rowItemLimit,
         showHeroSection,
         showPosterLabels,
@@ -3117,7 +3165,7 @@ export const HomeScreen = {
       const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
         rowKey: "continue_watching",
         loading: Boolean(this.continueWatchingLoading),
-        loadingCount: continueWatchingLoadingCount
+        loadingCount: effectiveContinueWatchingLoadingCount
       });
       const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
         layoutMode: this.layoutMode,

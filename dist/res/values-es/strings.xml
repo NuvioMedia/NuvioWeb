@@ -162,8 +162,8 @@
     <string name="playback_skip_intro">Saltar introducción</string>
     <string name="playback_skip_intro_sub">Utiliza introdb.app para detectar introducciones y recapitulaciones.</string>
     <string name="playback_auto_frame_rate">Frecuencia de fotogramas automática</string>
-    <string name="playback_section_player">Selección de reproductor y transmisión</string>
-    <string name="playback_section_player_desc">Preferencia de reproductor, reproducción automática y filtrado de fuentes.</string>
+    <string name="playback_section_player">Streaming y calidad</string>
+    <string name="playback_section_player_desc">Calidad, reproducción automática y filtrado de fuentes.</string>
     <string name="playback_player">Reproductor</string>
     <string name="playback_player_internal">Interno</string>
     <string name="playback_player_external">Externo</string>

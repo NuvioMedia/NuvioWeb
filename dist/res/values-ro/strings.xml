@@ -162,8 +162,8 @@
     <string name="playback_skip_intro">Sari peste introducere</string>
     <string name="playback_skip_intro_sub">Folosește introdb.app pentru a detecta introducerile și recapitulările.</string>
     <string name="playback_auto_frame_rate">Rată de cadre automată</string>
-    <string name="playback_section_player">Selectare player și flux</string>
-    <string name="playback_section_player_desc">Preferințe player, redare automată și filtrare sursă.</string>
+    <string name="playback_section_player">Streaming și calitate</string>
+    <string name="playback_section_player_desc">Calitate, redare automată și filtrare surse.</string>
     <string name="playback_player">Player</string>
     <string name="playback_player_internal">Intern</string>
     <string name="playback_player_external">Extern</string>

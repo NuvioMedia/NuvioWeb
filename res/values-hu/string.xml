@@ -228,8 +228,8 @@
     <string name="playback_skip_intro">Intro átugrása</string>
     <string name="playback_skip_intro_sub">Az introdb.app használata az intrók és összefoglalók felismeréséhez.</string>
     <string name="playback_auto_frame_rate">Automatikus képfrissítés (AFR)</string>
-    <string name="playback_section_player">Lejátszó és forrásválasztás</string>
-    <string name="playback_section_player_desc">Lejátszó, automatikus indítás és forrásszűrés.</string>
+    <string name="playback_section_player">Stream és minőség</string>
+    <string name="playback_section_player_desc">Minőség, automatikus lejátszás és forrásszűrés.</string>
     <string name="playback_player">Lejátszó</string>
     <string name="playback_player_internal">Belső</string>
     <string name="playback_player_external">Külső</string>

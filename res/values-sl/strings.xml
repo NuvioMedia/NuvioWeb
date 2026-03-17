@@ -191,8 +191,8 @@
 	<string name="playback_skip_intro">Preskoči uvod</string>
     <string name="playback_skip_intro_sub">Uporabi introdb.app za zaznavanje uvodov in povzetkov.</string>
     <string name="playback_auto_frame_rate">Samodejna hitrost sličic (AFR)</string>
-    <string name="playback_section_player">Predvajalnik in izbira prenosa</string>
-    <string name="playback_section_player_desc">Prednostni predvajalnik, samodejno predvajanje in filtriranje virov.</string>
+    <string name="playback_section_player">Pretakanje in kakovost</string>
+    <string name="playback_section_player_desc">Kakovost, samodejno predvajanje in filtriranje virov.</string>
     <string name="playback_player">Predvajalnik</string>
     <string name="playback_player_internal">Notranji</string>
     <string name="playback_player_external">Zunanji</string>
