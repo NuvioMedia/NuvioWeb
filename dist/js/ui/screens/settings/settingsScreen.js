@@ -502,9 +502,11 @@ function scrollSettingsRailItem(node) {
     return;
   }
 
-  const itemTop = node.offsetTop;
-  const itemHeight = node.offsetHeight || 0;
-  const itemBottom = itemTop + itemHeight;
+  const railRect = rail.getBoundingClientRect();
+  const itemRect = node.getBoundingClientRect();
+  const itemTop = (itemRect.top - railRect.top) + rail.scrollTop;
+  const itemBottom = (itemRect.bottom - railRect.top) + rail.scrollTop;
+  const itemHeight = itemRect.height || node.offsetHeight || 0;
   const padding = Math.max(12, Math.round(clientHeight * 0.12));
   const viewTop = rail.scrollTop + padding;
   const viewBottom = rail.scrollTop + clientHeight - padding;

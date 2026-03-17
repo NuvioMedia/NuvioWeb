@@ -3696,6 +3696,27 @@
   function buildVisibleContinueWatchingItems(items = [], options = {}) {
     return (items || []).map((item) => normalizeContinueWatchingItem(item)).filter((item) => isPresentableContinueWatchingItem(item, options));
   }
+  function buildContinueWatchingSignature(items = []) {
+    return (items || []).map((item) => {
+      var _a, _b, _c;
+      const normalized = normalizeContinueWatchingItem(item);
+      if (!normalized) {
+        return "";
+      }
+      const position = Math.round(Number(normalized.positionMs || 0) / 1e3);
+      const duration = Math.round(Number(normalized.durationMs || 0) / 1e3);
+      return [
+        normalized.contentId,
+        normalized.videoId || "",
+        (_a = normalized.season) != null ? _a : "",
+        (_b = normalized.episode) != null ? _b : "",
+        position,
+        duration,
+        normalized.progressStatus || "",
+        (_c = normalized.progressFraction) != null ? _c : ""
+      ].join("|");
+    }).join("::");
+  }
   function buildHeroDisplayModel(hero, layoutMode) {
     const year = extractYear(hero);
     const imdb = resolveImdbRating(hero);
@@ -4546,7 +4567,7 @@
       if (descriptionNode) {
         descriptionNode.textContent = display.description || " ";
       }
-      this.scheduleHomeTruncationUpdate();
+      this.scheduleHomeTruncationUpdate({ scope: heroNode });
       const indicators = heroNode.querySelector(".home-hero-indicators");
       if (indicators) {
         indicators.innerHTML = buildHeroIndicators2(this.heroCandidates, hero);
@@ -4967,25 +4988,42 @@
       var _a;
       return this.layoutMode === "modern" && Boolean((_a = node == null ? void 0 : node.classList) == null ? void 0 : _a.contains("home-poster-card"));
     },
-    hydrateFocusedPosterAssets(node) {
+    hydrateFocusedPosterAssets(node, { defer = false } = {}) {
       if (!this.isModernPosterNode(node)) {
         return;
       }
-      const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
-      if (backdrop) {
-        const src = String(backdrop.dataset.src || "").trim();
-        if (src && !backdrop.getAttribute("src")) {
-          backdrop.setAttribute("src", src);
+      const hydrate = () => {
+        const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
+        if (backdrop) {
+          const src = String(backdrop.dataset.src || "").trim();
+          if (src && !backdrop.getAttribute("src")) {
+            backdrop.setAttribute("src", src);
+          }
+          backdrop.removeAttribute("data-src");
         }
-        backdrop.removeAttribute("data-src");
+        const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
+        if (logo) {
+          const src = String(logo.dataset.src || "").trim();
+          if (src && !logo.getAttribute("src")) {
+            logo.setAttribute("src", src);
+          }
+          logo.removeAttribute("data-src");
+        }
+      };
+      if (!defer) {
+        hydrate();
+        return;
       }
-      const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
-      if (logo) {
-        const src = String(logo.dataset.src || "").trim();
-        if (src && !logo.getAttribute("src")) {
-          logo.setAttribute("src", src);
+      const run = () => {
+        if (!node.isConnected || !node.classList.contains("is-expanded")) {
+          return;
         }
-        logo.removeAttribute("data-src");
+        hydrate();
+      };
+      if (typeof requestIdleCallback === "function") {
+        requestIdleCallback(run, { timeout: 400 });
+      } else {
+        setTimeout(run, 0);
       }
     },
     clearTrailerLayer(container) {
@@ -5075,22 +5113,17 @@
       if (!this.isModernPosterNode(node)) {
         return;
       }
-      this.hydrateFocusedPosterAssets(node);
       if (this.expandedPosterNode && this.expandedPosterNode !== node) {
         this.collapseFocusedPoster(this.expandedPosterNode);
       }
       node.classList.add("is-expanded");
+      this.hydrateFocusedPosterAssets(node, { defer: true });
       this.expandedPosterNode = node;
       requestAnimationFrame(() => {
         if (node.classList.contains("focused")) {
           this.ensureTrackHorizontalVisibility(node);
         }
       });
-      setTimeout(() => {
-        if (node.classList.contains("focused") && node.classList.contains("is-expanded")) {
-          this.ensureTrackHorizontalVisibility(node);
-        }
-      }, 220);
     },
     getTrailerSourceForItem(item) {
       return __async(this, null, function* () {
@@ -5170,10 +5203,11 @@
         this.focusedPosterTimer = null;
       }
     },
-    scheduleHomeTruncationUpdate() {
+    scheduleHomeTruncationUpdate({ scope = null } = {}) {
       if (!this.container) {
         return;
       }
+      this.homeTruncationScope = scope || null;
       if (this.homeTruncationFrame) {
         cancelAnimationFrame(this.homeTruncationFrame);
       }
@@ -5186,7 +5220,9 @@
       if (!this.container) {
         return;
       }
-      const nodes = this.container.querySelectorAll(
+      const root = this.homeTruncationScope || this.container;
+      this.homeTruncationScope = null;
+      const nodes = root.querySelectorAll(
         ".home-hero-description, .home-poster-title, .home-poster-subtitle, .home-poster-expanded-meta, .home-poster-expanded-description"
       );
       nodes.forEach((node) => {
@@ -5260,9 +5296,6 @@
       if (!this.isModernPosterNode(node)) {
         this.collapseFocusedPoster();
         return;
-      }
-      if (shouldExpand) {
-        this.hydrateFocusedPosterAssets(node);
       }
       if (this.expandedPosterNode && this.expandedPosterNode !== node) {
         this.collapseFocusedPoster(this.expandedPosterNode);
@@ -5685,16 +5718,27 @@
       });
     },
     loadData() {
-      return __async(this, null, function* () {
-        var _a;
+      return __async(this, arguments, function* ({ background = false } = {}) {
+        var _a, _b;
         const token = this.homeLoadToken;
         const prefs = LayoutPreferences.get();
         this.layoutPrefs = prefs;
         this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
         this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
+        const preserveContinueWatching = Boolean(background && ((_b = this.continueWatchingDisplay) == null ? void 0 : _b.length));
+        const suppressContinueWatchingLoading = preserveContinueWatching;
+        const previousContinueWatchingSignature = preserveContinueWatching ? buildContinueWatchingSignature(this.continueWatchingDisplay) : "";
+        let progressAllError = null;
+        let recentProgressError = null;
         const sidebarProfilePromise = getSidebarProfileState().catch(() => null);
-        const progressAllPromise = watchProgressRepository.getAll().catch(() => []);
-        const recentProgressPromise = watchProgressRepository.getRecent(10).catch(() => []);
+        const progressAllPromise = watchProgressRepository.getAll().catch((error) => {
+          progressAllError = error;
+          return [];
+        });
+        const recentProgressPromise = watchProgressRepository.getRecent(10).catch((error) => {
+          recentProgressError = error;
+          return [];
+        });
         const addons = yield addonRepository.getInstalledAddons();
         const catalogDescriptors = [];
         addons.forEach((addon) => {
@@ -5717,12 +5761,16 @@
           return;
         }
         this.rows = this.sortAndFilterRows(initialRows);
-        this.continueWatchingDisplay = [];
-        this.continueWatchingLoading = true;
-        this.allProgress = [];
-        this.continueWatching = [];
-        this.watchedItems = [];
-        this.nextUpProgressCandidates = [];
+        if (!preserveContinueWatching) {
+          this.continueWatchingDisplay = [];
+          this.continueWatchingLoading = true;
+          this.allProgress = [];
+          this.continueWatching = [];
+          this.watchedItems = [];
+          this.nextUpProgressCandidates = [];
+        } else {
+          this.continueWatchingLoading = false;
+        }
         this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
         this.heroIndex = 0;
         this.heroItem = this.pickInitialHero();
@@ -5769,7 +5817,7 @@
           });
         }
         (() => __async(this, null, function* () {
-          var _a2, _b;
+          var _a2, _b2;
           const [allProgress, continueWatching] = yield Promise.all([progressAllPromise, recentProgressPromise]);
           if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
             return;
@@ -5782,10 +5830,27 @@
             return;
           }
           this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching).slice(0, CW_MAX_NEXT_UP_LOOKUPS);
-          this.continueWatchingLoading = Boolean((((_a2 = this.continueWatching) == null ? void 0 : _a2.length) || 0) + (((_b = this.nextUpProgressCandidates) == null ? void 0 : _b.length) || 0));
-          this.continueWatchingDisplay = [];
-          this.render();
-          if (!this.continueWatchingLoading) {
+          const shouldShowLoading = Boolean((((_a2 = this.continueWatching) == null ? void 0 : _a2.length) || 0) + (((_b2 = this.nextUpProgressCandidates) == null ? void 0 : _b2.length) || 0));
+          if (!suppressContinueWatchingLoading) {
+            this.continueWatchingLoading = shouldShowLoading;
+            this.continueWatchingDisplay = [];
+            this.render();
+          }
+          if (!shouldShowLoading) {
+            if (suppressContinueWatchingLoading && (progressAllError || recentProgressError)) {
+              this.continueWatchingLoading = false;
+              return;
+            }
+            if (preserveContinueWatching) {
+              const nextSignature = "";
+              if (nextSignature === previousContinueWatchingSignature) {
+                this.continueWatchingLoading = false;
+                return;
+              }
+            }
+            this.continueWatchingLoading = false;
+            this.continueWatchingDisplay = [];
+            this.render();
             return;
           }
           try {
@@ -5797,11 +5862,17 @@
             if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
               return;
             }
-            this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+            const nextDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+            const nextSignature = preserveContinueWatching ? buildContinueWatchingSignature(nextDisplay) : "";
+            if (preserveContinueWatching && nextSignature === previousContinueWatchingSignature) {
+              this.continueWatchingLoading = false;
+              return;
+            }
+            this.continueWatchingDisplay = nextDisplay;
             this.continueWatchingLoading = false;
             if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
               this.heroItem = this.pickInitialHero();
-              if (!this.hasAppliedInitialContinueWatchingFocus) {
+              if (!background && !this.hasAppliedInitialContinueWatchingFocus) {
                 this.forceInitialContinueWatchingFocus = true;
               }
             }
@@ -5809,7 +5880,9 @@
           } catch (error) {
             console.warn("Continue watching async enrichment failed", error);
             this.continueWatchingLoading = false;
-            this.render();
+            if (!suppressContinueWatchingLoading) {
+              this.render();
+            }
           }
         }))().catch((error) => {
           console.warn("Continue watching load failed", error);
@@ -5817,7 +5890,9 @@
             return;
           }
           this.continueWatchingLoading = false;
-          this.render();
+          if (!suppressContinueWatchingLoading) {
+            this.render();
+          }
         });
         this.retryPendingCatalogRows();
       });
@@ -26262,9 +26337,11 @@ ${normalized}`;
     if (!clientHeight || maxScroll <= 0) {
       return;
     }
-    const itemTop = node.offsetTop;
-    const itemHeight = node.offsetHeight || 0;
-    const itemBottom = itemTop + itemHeight;
+    const railRect = rail.getBoundingClientRect();
+    const itemRect = node.getBoundingClientRect();
+    const itemTop = itemRect.top - railRect.top + rail.scrollTop;
+    const itemBottom = itemRect.bottom - railRect.top + rail.scrollTop;
+    const itemHeight = itemRect.height || node.offsetHeight || 0;
     const padding = Math.max(12, Math.round(clientHeight * 0.12));
     const viewTop = rail.scrollTop + padding;
     const viewBottom = rail.scrollTop + clientHeight - padding;
