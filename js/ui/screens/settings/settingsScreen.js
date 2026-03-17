@@ -431,14 +431,6 @@ function qualityLabel(value) {
   return t("common.auto");
 }
 
-function playerLabel(value) {
-  const normalized = String(value || "auto").toLowerCase();
-  if (normalized === "native") return t("common.native");
-  if (normalized === "hls") return "HLS.js";
-  if (normalized === "dash") return "dash.js";
-  return t("common.auto");
-}
-
 function renderModeLabel(value) {
   return String(value || "native").toLowerCase() === "html" ? t("common.htmlOverlay") : t("common.native");
 }
@@ -1697,18 +1689,6 @@ export const SettingsScreen = {
         }
       });
     });
-    this.actionMap.set("playback:player", () => {
-      const options = ["auto", "native", "hls", "dash"];
-      this.openOptionDialog({
-        title: t("settings.dialogs.playerPreference"),
-        options: options.map((option) => ({ id: option, label: playerLabel(option) })),
-        selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
-        returnFocusKey: "playback:player",
-        onSelect: (option) => {
-          PlayerSettingsStore.set({ preferredPlayer: option.id });
-        }
-      });
-    });
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
@@ -1781,12 +1761,6 @@ export const SettingsScreen = {
           title: t("settings.playback.preferredQuality.title"),
           subtitle: t("settings.playback.preferredQuality.subtitle"),
           value: qualityLabel(model.player.preferredQuality)
-        })}
-        ${this.renderActionRow({
-          focusKey: "playback:player",
-          title: t("settings.playback.preferredPlayer.title"),
-          subtitle: t("settings.playback.preferredPlayer.subtitle"),
-          value: playerLabel(model.player.preferredPlayer)
         })}
       </div>
     `;

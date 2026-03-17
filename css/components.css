@@ -821,13 +821,14 @@ button:focus-visible {
   height: 9px;
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.12));
-  background-size: 220% 100%;
-  animation: homeBootShimmer 1.2s linear infinite;
+  background-size: 100% 100%;
+  opacity: 0.7;
+  animation: homeBootShimmer 1.8s ease-in-out infinite;
 }
 
 @keyframes homeBootShimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.95; }
 }
 
 .home-shell {
@@ -881,13 +882,13 @@ button:focus-visible {
 }
 
 .home-route-content-enter {
-  animation: homeRouteEnter 320ms ease both;
+  animation: homeRouteEnter 240ms ease-out both;
 }
 
 @keyframes homeRouteEnter {
   from {
     opacity: 0;
-    transform: translateY(4.1667%);
+    transform: translateY(2%);
   }
   to {
     opacity: 1;
@@ -2824,7 +2825,7 @@ button:focus-visible {
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: inherit;
   background: rgba(255, 255, 255, 0.06);
-  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
 .home-seeall-arrow {
@@ -3212,12 +3213,12 @@ button:focus-visible {
   border: 2px solid transparent;
   background: transparent;
   overflow: visible;
-  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), border-color 200ms ease, box-shadow 200ms ease;
+  transition: transform 160ms ease-out, border-color 160ms ease, box-shadow 160ms ease;
 }
 
 .home-screen-shell .home-content-card.focused {
   border-color: #fff;
-  transform: scale(1.02);
+  transform: scale(1.01);
   transform-origin: center center;
 }
 
@@ -3245,7 +3246,7 @@ button:focus-visible {
   border-radius: calc(var(--home-poster-radius) - 2px);
   background-color: transparent;
   overflow: hidden;
-  transition: border-color 180ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 0.61, 0.36, 1), background-color 180ms ease;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
 }
 
 .home-screen-shell .home-poster-card.focused .home-poster-frame {
@@ -3464,7 +3465,7 @@ button:focus-visible {
     linear-gradient(145deg, #393939, #111);
   background-position: center;
   background-size: cover;
-  transition: border-color 180ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 180ms cubic-bezier(0.22, 0.61, 0.36, 1), background-color 180ms ease;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
 }
 
 .home-screen-shell .home-continue-card.focused,
@@ -3635,8 +3636,8 @@ button:focus-visible {
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
     linear-gradient(145deg, #262626, #101010);
-  background-size: 220% 100%, cover;
-  animation: homeContinueLoadingShimmer 1.4s linear infinite;
+  background-size: 100% 100%, cover;
+  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
 
 .home-screen-shell .home-continue-card-loading {
@@ -3671,8 +3672,8 @@ button:focus-visible {
 .home-screen-shell .home-continue-skeleton-line {
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
-  background-size: 220% 100%;
-  animation: homeContinueLoadingShimmer 1.2s linear infinite;
+  background-size: 100% 100%;
+  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
 
 .home-screen-shell .home-continue-skeleton-kicker {
@@ -3699,8 +3700,8 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
-  background-size: 220% 100%;
-  animation: homeContinueLoadingShimmer 1.4s linear infinite;
+  background-size: 100% 100%;
+  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
   z-index: 2;
 }
 
@@ -3718,8 +3719,8 @@ button:focus-visible {
 .home-screen-shell .home-poster-skeleton-line {
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
-  background-size: 220% 100%;
-  animation: homeContinueLoadingShimmer 1.2s linear infinite;
+  background-size: 100% 100%;
+  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
 
 .home-screen-shell .home-poster-skeleton-title {
@@ -3739,11 +3740,11 @@ button:focus-visible {
 }
 
 @keyframes homeContinueLoadingShimmer {
-  from {
-    background-position: 200% 0, center;
+  0%, 100% {
+    opacity: 0.5;
   }
-  to {
-    background-position: -20% 0, center;
+  50% {
+    opacity: 0.92;
   }
 }
 
@@ -3754,8 +3755,8 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-modern-hero-media-loading .home-hero-backdrop-loading,
 .home-screen-shell.home-layout-modern .home-modern-skeleton-block {
   background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
-  background-size: 220% 100%;
-  animation: homeContinueLoadingShimmer 1.4s linear infinite;
+  background-size: 100% 100%;
+  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-backdrop-loading {
@@ -4025,7 +4026,7 @@ button:focus-visible {
   letter-spacing: -0.01em;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 200ms ease;
+  transition: opacity 160ms ease;
 }
 
 .home-screen-shell.home-layout-grid .home-grid-sticky.is-visible {
@@ -4141,7 +4142,7 @@ button:focus-visible {
   object-position: 100% 0;
   opacity: 1;
   filter: brightness(1.08) saturate(1.04);
-  transition: opacity 480ms ease;
+  transition: opacity 360ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-trailer-layer {
@@ -4151,7 +4152,7 @@ button:focus-visible {
   opacity: 0;
   overflow: hidden;
   pointer-events: none;
-  transition: opacity 480ms ease;
+  transition: opacity 360ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-frame,
@@ -4337,7 +4338,7 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card {
-  transition: flex-basis 240ms cubic-bezier(0.22, 0.61, 0.36, 1), min-width 240ms cubic-bezier(0.22, 0.61, 0.36, 1), max-width 240ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transition: flex-basis 180ms ease-out, min-width 180ms ease-out, max-width 180ms ease-out;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-expanded {
@@ -9296,7 +9297,7 @@ button:focus-visible {
 }
 
 .performance-constrained .home-content-card.focused {
-  transform: scale(1.01) !important;
+  transform: scale(1.005) !important;
 }
 
 .performance-constrained .home-boot-shimmer,
@@ -9317,6 +9318,10 @@ button:focus-visible {
 .performance-constrained .stream-route-panel-shell {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+.performance-constrained .home-screen-shell .home-hero-backdrop {
+  filter: none !important;
 }
 
 .performance-constrained .home-content-card.focused,

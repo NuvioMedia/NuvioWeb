@@ -144,7 +144,6 @@ const KEY_ALIASES = {
   "settings.playback.groups.subtitles.subtitle": "playback_section_subtitles_desc",
   "settings.playback.groups.subtitles.title": "playback_section_subtitles",
   "settings.playback.preferredAudio.title": "audio_preferred_lang",
-  "settings.playback.preferredPlayer.title": "playback_player",
   "settings.playback.subtitleLanguage.title": "sub_preferred_lang",
   "settings.plugins.addRepository": "plugin_add_repository",
   "settings.plugins.manageFromPhone": "plugin_manage_from_phone_title",

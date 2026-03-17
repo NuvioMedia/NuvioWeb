@@ -9,7 +9,6 @@ const DEFAULTS = {
   secondarySubtitleLanguage: "off",
   preferredAudioLanguage: "system",
   preferredQuality: "auto",
-  preferredPlayer: "auto",
   trailerAutoplay: false,
   subtitleRenderMode: "native",
   subtitleDelayMs: 0,
