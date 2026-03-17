@@ -1918,7 +1918,7 @@ button:focus-visible {
 .discover-action-card {
   width: 248px;
   scroll-margin-block: 12px;
-  transition: transform 180ms ease, filter 180ms ease;
+  transition: transform 180ms ease;
 }
 
 .discover-card.seeall-card {
@@ -5061,7 +5061,6 @@ button:focus-visible {
   margin-top: 6px;
   overflow: hidden;
   width: max-content;
-  animation: settingsLayoutModernPreviewScroll 4.2s linear infinite;
 }
 
 .settings-layout-preview-modern-card {
@@ -5075,7 +5074,6 @@ button:focus-visible {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 3px;
   height: 100%;
-  animation: settingsLayoutGridPreviewScroll 4s linear infinite;
 }
 
 .settings-layout-preview-grid-cell {
@@ -5113,6 +5111,21 @@ button:focus-visible {
 }
 
 .settings-layout-preview-classic-row.is-featured {
+  animation: none;
+}
+
+.settings-layout-card.focused .settings-layout-preview-modern-row,
+.settings-layout-card.is-selected .settings-layout-preview-modern-row {
+  animation: settingsLayoutModernPreviewScroll 4.2s linear infinite;
+}
+
+.settings-layout-card.focused .settings-layout-preview-grid-canvas,
+.settings-layout-card.is-selected .settings-layout-preview-grid-canvas {
+  animation: settingsLayoutGridPreviewScroll 4s linear infinite;
+}
+
+.settings-layout-card.focused .settings-layout-preview-classic-row.is-featured,
+.settings-layout-card.is-selected .settings-layout-preview-classic-row.is-featured {
   animation: settingsLayoutClassicPreviewScroll 4s linear infinite;
 }
 
@@ -5146,7 +5159,13 @@ button:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .settings-layout-preview-modern-row,
   .settings-layout-preview-grid-canvas,
-  .settings-layout-preview-classic-row.is-featured {
+  .settings-layout-preview-classic-row.is-featured,
+  .settings-layout-card.focused .settings-layout-preview-modern-row,
+  .settings-layout-card.is-selected .settings-layout-preview-modern-row,
+  .settings-layout-card.focused .settings-layout-preview-grid-canvas,
+  .settings-layout-card.is-selected .settings-layout-preview-grid-canvas,
+  .settings-layout-card.focused .settings-layout-preview-classic-row.is-featured,
+  .settings-layout-card.is-selected .settings-layout-preview-classic-row.is-featured {
     animation: none;
   }
 }
@@ -8978,7 +8997,7 @@ button:focus-visible {
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(35, 39, 47, 0.66), rgba(45, 50, 60, 0.92), rgba(35, 39, 47, 0.66));
   background-size: 220% 100%;
-  animation: detailLoadingShimmer 1.25s linear infinite;
+  animation: detailLoadingShimmer 2.2s ease-in-out infinite;
 }
 
 .detail-loading-poster {
@@ -9020,8 +9039,12 @@ button:focus-visible {
 }
 
 @keyframes detailLoadingShimmer {
-  0% { background-position: 100% 0; }
-  100% { background-position: -100% 0; }
+  0%, 100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.95;
+  }
 }
 
 .stream-screen-shell .series-detail-vignette {
@@ -9486,7 +9509,7 @@ button:focus-visible {
   border-radius: 999px;
   background: linear-gradient(90deg, rgba(56, 56, 56, 0.5), rgba(96, 96, 96, 0.85), rgba(56, 56, 56, 0.5));
   background-size: 220% 100%;
-  animation: detailLoadingShimmer 1.2s linear infinite;
+  animation: detailLoadingShimmer 2.2s ease-in-out infinite;
   margin-bottom: 14px;
 }
 

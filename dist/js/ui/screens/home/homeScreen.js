@@ -638,6 +638,29 @@ function buildVisibleContinueWatchingItems(items = [], options = {}) {
     .filter((item) => isPresentableContinueWatchingItem(item, options));
 }
 
+function buildContinueWatchingSignature(items = []) {
+  return (items || [])
+    .map((item) => {
+      const normalized = normalizeContinueWatchingItem(item);
+      if (!normalized) {
+        return "";
+      }
+      const position = Math.round(Number(normalized.positionMs || 0) / 1000);
+      const duration = Math.round(Number(normalized.durationMs || 0) / 1000);
+      return [
+        normalized.contentId,
+        normalized.videoId || "",
+        normalized.season ?? "",
+        normalized.episode ?? "",
+        position,
+        duration,
+        normalized.progressStatus || "",
+        normalized.progressFraction ?? ""
+      ].join("|");
+    })
+    .join("::");
+}
+
 function buildHeroDisplayModel(hero, layoutMode) {
   const year = extractYear(hero);
   const imdb = resolveImdbRating(hero);
@@ -1606,7 +1629,7 @@ export const HomeScreen = {
     if (descriptionNode) {
       descriptionNode.textContent = display.description || " ";
     }
-    this.scheduleHomeTruncationUpdate();
+    this.scheduleHomeTruncationUpdate({ scope: heroNode });
 
     const indicators = heroNode.querySelector(".home-hero-indicators");
     if (indicators) {
@@ -2058,25 +2081,42 @@ export const HomeScreen = {
     return this.layoutMode === "modern" && Boolean(node?.classList?.contains("home-poster-card"));
   },
 
-  hydrateFocusedPosterAssets(node) {
+  hydrateFocusedPosterAssets(node, { defer = false } = {}) {
     if (!this.isModernPosterNode(node)) {
       return;
     }
-    const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
-    if (backdrop) {
-      const src = String(backdrop.dataset.src || "").trim();
-      if (src && !backdrop.getAttribute("src")) {
-        backdrop.setAttribute("src", src);
+    const hydrate = () => {
+      const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
+      if (backdrop) {
+        const src = String(backdrop.dataset.src || "").trim();
+        if (src && !backdrop.getAttribute("src")) {
+          backdrop.setAttribute("src", src);
+        }
+        backdrop.removeAttribute("data-src");
       }
-      backdrop.removeAttribute("data-src");
+      const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
+      if (logo) {
+        const src = String(logo.dataset.src || "").trim();
+        if (src && !logo.getAttribute("src")) {
+          logo.setAttribute("src", src);
+        }
+        logo.removeAttribute("data-src");
+      }
+    };
+    if (!defer) {
+      hydrate();
+      return;
     }
-    const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
-    if (logo) {
-      const src = String(logo.dataset.src || "").trim();
-      if (src && !logo.getAttribute("src")) {
-        logo.setAttribute("src", src);
+    const run = () => {
+      if (!node.isConnected || !node.classList.contains("is-expanded")) {
+        return;
       }
-      logo.removeAttribute("data-src");
+      hydrate();
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(run, { timeout: 400 });
+    } else {
+      setTimeout(run, 0);
     }
   },
 
@@ -2166,22 +2206,17 @@ export const HomeScreen = {
     if (!this.isModernPosterNode(node)) {
       return;
     }
-    this.hydrateFocusedPosterAssets(node);
     if (this.expandedPosterNode && this.expandedPosterNode !== node) {
       this.collapseFocusedPoster(this.expandedPosterNode);
     }
     node.classList.add("is-expanded");
+    this.hydrateFocusedPosterAssets(node, { defer: true });
     this.expandedPosterNode = node;
     requestAnimationFrame(() => {
       if (node.classList.contains("focused")) {
         this.ensureTrackHorizontalVisibility(node);
       }
     });
-    setTimeout(() => {
-      if (node.classList.contains("focused") && node.classList.contains("is-expanded")) {
-        this.ensureTrackHorizontalVisibility(node);
-      }
-    }, 220);
   },
 
   async getTrailerSourceForItem(item) {
@@ -2263,10 +2298,11 @@ export const HomeScreen = {
     }
   },
 
-  scheduleHomeTruncationUpdate() {
+  scheduleHomeTruncationUpdate({ scope = null } = {}) {
     if (!this.container) {
       return;
     }
+    this.homeTruncationScope = scope || null;
     if (this.homeTruncationFrame) {
       cancelAnimationFrame(this.homeTruncationFrame);
     }
@@ -2280,7 +2316,9 @@ export const HomeScreen = {
     if (!this.container) {
       return;
     }
-    const nodes = this.container.querySelectorAll(
+    const root = this.homeTruncationScope || this.container;
+    this.homeTruncationScope = null;
+    const nodes = root.querySelectorAll(
       ".home-hero-description, .home-poster-title, .home-poster-subtitle, .home-poster-expanded-meta, .home-poster-expanded-description"
     );
     nodes.forEach((node) => {
@@ -2356,10 +2394,6 @@ export const HomeScreen = {
       this.collapseFocusedPoster();
       return;
     }
-    if (shouldExpand) {
-      this.hydrateFocusedPosterAssets(node);
-    }
-
     if (this.expandedPosterNode && this.expandedPosterNode !== node) {
       this.collapseFocusedPoster(this.expandedPosterNode);
     }
@@ -2829,16 +2863,30 @@ export const HomeScreen = {
     await this.loadData({ background: false });
   },
 
-  async loadData() {
+  async loadData({ background = false } = {}) {
     const token = this.homeLoadToken;
     const prefs = LayoutPreferences.get();
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
 
+    const preserveContinueWatching = Boolean(background && this.continueWatchingDisplay?.length);
+    const suppressContinueWatchingLoading = preserveContinueWatching;
+    const previousContinueWatchingSignature = preserveContinueWatching
+      ? buildContinueWatchingSignature(this.continueWatchingDisplay)
+      : "";
+
+    let progressAllError = null;
+    let recentProgressError = null;
     const sidebarProfilePromise = getSidebarProfileState().catch(() => null);
-    const progressAllPromise = watchProgressRepository.getAll().catch(() => []);
-    const recentProgressPromise = watchProgressRepository.getRecent(10).catch(() => []);
+    const progressAllPromise = watchProgressRepository.getAll().catch((error) => {
+      progressAllError = error;
+      return [];
+    });
+    const recentProgressPromise = watchProgressRepository.getRecent(10).catch((error) => {
+      recentProgressError = error;
+      return [];
+    });
 
     const addons = await addonRepository.getInstalledAddons();
     const catalogDescriptors = [];
@@ -2869,12 +2917,16 @@ export const HomeScreen = {
       return;
     }
     this.rows = this.sortAndFilterRows(initialRows);
-    this.continueWatchingDisplay = [];
-    this.continueWatchingLoading = true;
-    this.allProgress = [];
-    this.continueWatching = [];
-    this.watchedItems = [];
-    this.nextUpProgressCandidates = [];
+    if (!preserveContinueWatching) {
+      this.continueWatchingDisplay = [];
+      this.continueWatchingLoading = true;
+      this.allProgress = [];
+      this.continueWatching = [];
+      this.watchedItems = [];
+      this.nextUpProgressCandidates = [];
+    } else {
+      this.continueWatchingLoading = false;
+    }
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
@@ -2938,11 +2990,28 @@ export const HomeScreen = {
       }
       this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
         .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
-      this.continueWatchingLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
-      this.continueWatchingDisplay = [];
-      this.render();
+      const shouldShowLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
+      if (!suppressContinueWatchingLoading) {
+        this.continueWatchingLoading = shouldShowLoading;
+        this.continueWatchingDisplay = [];
+        this.render();
+      }
 
-      if (!this.continueWatchingLoading) {
+      if (!shouldShowLoading) {
+        if (suppressContinueWatchingLoading && (progressAllError || recentProgressError)) {
+          this.continueWatchingLoading = false;
+          return;
+        }
+        if (preserveContinueWatching) {
+          const nextSignature = "";
+          if (nextSignature === previousContinueWatchingSignature) {
+            this.continueWatchingLoading = false;
+            return;
+          }
+        }
+        this.continueWatchingLoading = false;
+        this.continueWatchingDisplay = [];
+        this.render();
         return;
       }
 
@@ -2955,11 +3024,19 @@ export const HomeScreen = {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
-        this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+        const nextDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+        const nextSignature = preserveContinueWatching
+          ? buildContinueWatchingSignature(nextDisplay)
+          : "";
+        if (preserveContinueWatching && nextSignature === previousContinueWatchingSignature) {
+          this.continueWatchingLoading = false;
+          return;
+        }
+        this.continueWatchingDisplay = nextDisplay;
         this.continueWatchingLoading = false;
         if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
           this.heroItem = this.pickInitialHero();
-          if (!this.hasAppliedInitialContinueWatchingFocus) {
+          if (!background && !this.hasAppliedInitialContinueWatchingFocus) {
             this.forceInitialContinueWatchingFocus = true;
           }
         }
@@ -2967,7 +3044,9 @@ export const HomeScreen = {
       } catch (error) {
         console.warn("Continue watching async enrichment failed", error);
         this.continueWatchingLoading = false;
-        this.render();
+        if (!suppressContinueWatchingLoading) {
+          this.render();
+        }
       }
     })().catch((error) => {
       console.warn("Continue watching load failed", error);
@@ -2975,7 +3054,9 @@ export const HomeScreen = {
         return;
       }
       this.continueWatchingLoading = false;
-      this.render();
+      if (!suppressContinueWatchingLoading) {
+        this.render();
+      }
     });
 
     this.retryPendingCatalogRows();
