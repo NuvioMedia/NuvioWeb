@@ -858,6 +858,8 @@ export const PlayerScreen = {
     this.controlsHideTimer = null;
     this.tickTimer = null;
     this.videoListeners = [];
+    this.mediaSessionHandlersBound = false;
+    this.mediaSessionActions = [];
 
     const playerSettings = PlayerSettingsStore.get();
     this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
@@ -876,6 +878,7 @@ export const PlayerScreen = {
     this.renderPlayerUi();
     if (!this.isExternalFrameMode()) {
       this.bindVideoEvents();
+      this.bindMediaSessionHandlers();
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
     }
@@ -2187,6 +2190,7 @@ export const PlayerScreen = {
       this.clearPlaybackStallGuard();
       this.loadingVisible = false;
       this.paused = false;
+      this.updateMediaSessionPlaybackState();
       this.updateLoadingVisibility();
       this.refreshTrackDialogs();
       this.applyAudioAmplification();
@@ -2214,6 +2218,7 @@ export const PlayerScreen = {
       }
       this.clearPlaybackStallGuard();
       this.paused = true;
+      this.updateMediaSessionPlaybackState();
       this.setControlsVisible(true, { focus: false });
       this.updateUiTick();
       this.renderControlButtons();
@@ -2790,7 +2795,15 @@ export const PlayerScreen = {
     this.seekPreviewDirection = direction;
     this.seekRepeatCount += 1;
 
-    const stepSeconds = this.seekRepeatCount >= 10 ? 30 : this.seekRepeatCount >= 4 ? 20 : 10;
+    const stepSeconds = this.seekRepeatCount >= 18
+      ? 120
+      : this.seekRepeatCount >= 12
+        ? 60
+        : this.seekRepeatCount >= 7
+          ? 30
+          : this.seekRepeatCount >= 3
+            ? 20
+            : 10;
     const duration = this.getPlaybackDurationSeconds();
     const base = this.seekPreviewSeconds == null ? currentTime : Number(this.seekPreviewSeconds);
     let next = base + (direction * stepSeconds);
@@ -2898,6 +2911,7 @@ export const PlayerScreen = {
     if (this.paused) {
       PlayerController.resume();
       this.paused = false;
+      this.updateMediaSessionPlaybackState();
       this.setControlsVisible(true, { focus: false });
       if (preserveProgressFocus) {
         this.controlFocusZone = "progress";
@@ -2908,11 +2922,175 @@ export const PlayerScreen = {
 
     PlayerController.pause();
     this.paused = true;
+    this.updateMediaSessionPlaybackState();
     this.setControlsVisible(true, { focus: !preserveProgressFocus });
     if (preserveProgressFocus) {
       this.controlFocusZone = "progress";
     }
     this.renderControlButtons();
+  },
+
+  resolveMediaAction(event) {
+    const key = String(event?.key || "");
+    const code = String(event?.code || "");
+    const keyCode = Number(event?.originalKeyCode || event?.keyCode || 0);
+
+    const keyMap = {
+      MediaPlayPause: "toggle",
+      MediaPlay: "play",
+      MediaPause: "pause",
+      MediaStop: "stop",
+      MediaFastForward: "fastForward",
+      MediaRewind: "rewind",
+      MediaTrackNext: "next",
+      MediaTrackPrevious: "previous",
+      Play: "play",
+      Pause: "pause"
+    };
+
+    if (keyMap[key]) {
+      return keyMap[key];
+    }
+    if (keyMap[code]) {
+      return keyMap[code];
+    }
+
+    const codeMap = {
+      179: "toggle",
+      415: "play",
+      19: "pause",
+      413: "stop",
+      178: "stop",
+      417: "fastForward",
+      412: "rewind",
+      176: "next",
+      177: "previous"
+    };
+
+    return codeMap[keyCode] || null;
+  },
+
+  applyMediaAction(action) {
+    if (this.isExternalFrameMode() || !action) {
+      return;
+    }
+
+    if (action === "play") {
+      if (this.paused) {
+        this.togglePause();
+      }
+      return;
+    }
+
+    if (action === "pause" || action === "stop") {
+      if (!this.paused) {
+        this.togglePause();
+      }
+      return;
+    }
+
+    if (action === "toggle") {
+      this.togglePause();
+      return;
+    }
+
+    if (action === "fastForward") {
+      this.quickSeekBy(30);
+      return;
+    }
+
+    if (action === "rewind") {
+      this.quickSeekBy(-30);
+    }
+  },
+
+  quickSeekBy(deltaSeconds) {
+    if (!this.isSeekBarAvailable()) {
+      return false;
+    }
+    const currentTime = this.getPlaybackCurrentSeconds();
+    if (Number.isNaN(currentTime)) {
+      return false;
+    }
+    const duration = this.getPlaybackDurationSeconds();
+    let target = currentTime + Number(deltaSeconds || 0);
+    if (duration > 0) {
+      target = clamp(target, 0, duration);
+    } else {
+      target = Math.max(0, target);
+    }
+    this.seekPreviewSeconds = target;
+    this.seekPreviewDirection = deltaSeconds < 0 ? -1 : 1;
+    this.seekOverlayVisible = !this.controlsVisible;
+    this.renderSeekOverlay();
+    this.seekPlaybackSeconds(target);
+    this.scheduleSeekPreviewCommit();
+    return true;
+  },
+
+  bindMediaSessionHandlers() {
+    const mediaSession = globalThis.navigator?.mediaSession;
+    if (!mediaSession || this.mediaSessionHandlersBound) {
+      return;
+    }
+    this.mediaSessionHandlersBound = true;
+    this.mediaSessionActions = [];
+
+    const safeBind = (action, handler) => {
+      try {
+        mediaSession.setActionHandler(action, handler);
+        this.mediaSessionActions.push(action);
+      } catch (_) {
+        // Ignore unsupported actions.
+      }
+    };
+
+    safeBind("play", () => this.applyMediaAction("play"));
+    safeBind("pause", () => this.applyMediaAction("pause"));
+    safeBind("stop", () => this.applyMediaAction("stop"));
+    safeBind("seekforward", (details) => {
+      const offset = Number(details?.seekOffset || 30);
+      this.quickSeekBy(Number.isFinite(offset) ? offset : 30);
+    });
+    safeBind("seekbackward", (details) => {
+      const offset = Number(details?.seekOffset || 30);
+      this.quickSeekBy(Number.isFinite(offset) ? -offset : -30);
+    });
+
+    this.updateMediaSessionPlaybackState();
+  },
+
+  clearMediaSessionHandlers() {
+    const mediaSession = globalThis.navigator?.mediaSession;
+    if (!mediaSession || !this.mediaSessionHandlersBound) {
+      return;
+    }
+    this.mediaSessionActions.forEach((action) => {
+      try {
+        mediaSession.setActionHandler(action, null);
+      } catch (_) {
+        // Ignore unsupported actions.
+      }
+    });
+    this.mediaSessionActions = [];
+    this.mediaSessionHandlersBound = false;
+    try {
+      mediaSession.playbackState = "none";
+    } catch (_) {
+      // Ignore unsupported playback state.
+    }
+  },
+
+  updateMediaSessionPlaybackState() {
+    const mediaSession = globalThis.navigator?.mediaSession;
+    if (!mediaSession) {
+      return;
+    }
+    try {
+      mediaSession.playbackState = this.paused ? "paused" : "playing";
+    } catch (_) {
+      // Ignore unsupported playback state.
+    }
   },
 
   async playStreamByUrl(streamUrl, { preservePanel = false, resetSilentAudioState = true, preservePlaybackState = false, forceEngine = null } = {}) {
@@ -5761,6 +5939,14 @@ export const PlayerScreen = {
     if (keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13) {
       event?.preventDefault?.();
     }
+    const mediaAction = this.resolveMediaAction(event);
+    if (mediaAction) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
+      this.applyMediaAction(mediaAction);
+      return;
+    }
 
     if (this.sourcesPanelVisible) {
       if (await this.handleSourcesPanelKey(event)) {
@@ -6104,6 +6290,7 @@ export const PlayerScreen = {
     }
 
     this.unbindVideoEvents();
+    this.clearMediaSessionHandlers();
 
     PlayerController.stop();
 

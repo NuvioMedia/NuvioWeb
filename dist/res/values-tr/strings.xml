@@ -228,8 +228,8 @@
     <string name="playback_skip_intro">İntroyu Atla</string>
     <string name="playback_skip_intro_sub">İntro ve özetleri algılamak için introdb.app kullan.</string>
     <string name="playback_auto_frame_rate">Otomatik Kare Hızı</string>
-    <string name="playback_section_player">Player &amp; Kaynak Seçimi</string>
-    <string name="playback_section_player_desc">Player tercihi, otomatik oynatma ve kaynak filtreleme.</string>
+    <string name="playback_section_player">Akış ve kalite</string>
+    <string name="playback_section_player_desc">Kalite, otomatik oynatma ve kaynak filtreleme.</string>
     <string name="playback_player">Player</string>
     <string name="playback_player_internal">Dahili</string>
     <string name="playback_player_external">Harici</string>

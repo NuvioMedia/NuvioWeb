@@ -431,14 +431,6 @@ function qualityLabel(value) {
   return t("common.auto");
 }
 
-function playerLabel(value) {
-  const normalized = String(value || "auto").toLowerCase();
-  if (normalized === "native") return t("common.native");
-  if (normalized === "hls") return "HLS.js";
-  if (normalized === "dash") return "dash.js";
-  return t("common.auto");
-}
-
 function renderModeLabel(value) {
   return String(value || "native").toLowerCase() === "html" ? t("common.htmlOverlay") : t("common.native");
 }
@@ -512,16 +504,27 @@ function scrollSettingsRailItem(node) {
 
   const itemTop = node.offsetTop;
   const itemHeight = node.offsetHeight || 0;
-  const targetCenter = clientHeight * 0.42;
-  const desiredTop = itemTop - (targetCenter - (itemHeight / 2));
-  const nextScrollTop = clamp(desiredTop, 0, maxScroll);
+  const itemBottom = itemTop + itemHeight;
+  const padding = Math.max(12, Math.round(clientHeight * 0.12));
+  const viewTop = rail.scrollTop + padding;
+  const viewBottom = rail.scrollTop + clientHeight - padding;
+  let nextScrollTop = rail.scrollTop;
+
+  if (itemTop < viewTop) {
+    nextScrollTop = Math.max(0, itemTop - padding);
+  } else if (itemBottom > viewBottom) {
+    nextScrollTop = Math.min(maxScroll, itemBottom - clientHeight + padding);
+  } else {
+    return;
+  }
+
   if (Math.abs(rail.scrollTop - nextScrollTop) < 1) {
     return;
   }
   if (typeof rail.scrollTo === "function") {
     rail.scrollTo({
       top: nextScrollTop,
-      behavior: "smooth"
+      behavior: "auto"
     });
     return;
   }
@@ -1697,18 +1700,6 @@ export const SettingsScreen = {
         }
       });
     });
-    this.actionMap.set("playback:player", () => {
-      const options = ["auto", "native", "hls", "dash"];
-      this.openOptionDialog({
-        title: t("settings.dialogs.playerPreference"),
-        options: options.map((option) => ({ id: option, label: playerLabel(option) })),
-        selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
-        returnFocusKey: "playback:player",
-        onSelect: (option) => {
-          PlayerSettingsStore.set({ preferredPlayer: option.id });
-        }
-      });
-    });
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
@@ -1781,12 +1772,6 @@ export const SettingsScreen = {
           title: t("settings.playback.preferredQuality.title"),
           subtitle: t("settings.playback.preferredQuality.subtitle"),
           value: qualityLabel(model.player.preferredQuality)
-        })}
-        ${this.renderActionRow({
-          focusKey: "playback:player",
-          title: t("settings.playback.preferredPlayer.title"),
-          subtitle: t("settings.playback.preferredPlayer.subtitle"),
-          value: playerLabel(model.player.preferredPlayer)
         })}
       </div>
     `;

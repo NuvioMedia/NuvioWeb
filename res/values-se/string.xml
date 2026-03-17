@@ -161,8 +161,8 @@
     <string name="playback_skip_intro">Hoppa över intro</string>
     <string name="playback_skip_intro_sub">Använd introdb.app för att upptäcka intron och sammanfattningar.</string>
     <string name="playback_auto_frame_rate">Automatisk bildfrekvens</string>
-    <string name="playback_section_player">Spelare &amp; strömval</string>
-    <string name="playback_section_player_desc">Spelarpreferens, automatisk uppspelning och källfiltrering.</string>
+    <string name="playback_section_player">Streaming och kvalitet</string>
+    <string name="playback_section_player_desc">Kvalitet, automatisk uppspelning och källfiltrering.</string>
     <string name="playback_player">Spelare</string>
     <string name="playback_player_internal">Intern</string>
     <string name="playback_player_external">Extern</string>

@@ -4522,7 +4522,7 @@ button:focus-visible {
   -ms-overflow-style: none;
   scrollbar-color: transparent transparent;
   overscroll-behavior: contain;
-  scroll-behavior: smooth;
+  scroll-behavior: auto;
 }
 
 .settings-sidebar::-webkit-scrollbar {

@@ -238,8 +238,8 @@
     <string name="playback_skip_intro">इंट्रो स्किप करें</string>
     <string name="playback_skip_intro_sub">इंट्रो और रिकैप पहचानने के लिए introdb.app का उपयोग करें।</string>
     <string name="playback_auto_frame_rate">ऑटो फ्रेम रेट</string>
-    <string name="playback_section_player">प्लेयर और स्ट्रीम चयन</string>
-    <string name="playback_section_player_desc">प्लेयर पसंद, ऑटो-प्ले और सोर्स फ़िल्टरिंग।</string>
+    <string name="playback_section_player">स्ट्रीमिंग और गुणवत्ता</string>
+    <string name="playback_section_player_desc">गुणवत्ता, ऑटो-प्ले और सोर्स फ़िल्टरिंग।</string>
     <string name="playback_player">प्लेयर</string>
     <string name="playback_player_internal">इंटरनल</string>
     <string name="playback_player_external">एक्सटर्नल</string>

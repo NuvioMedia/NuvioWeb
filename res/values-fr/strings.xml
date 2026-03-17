@@ -127,8 +127,8 @@
     <string name="playback_skip_intro">Passer l\'intro</string>
     <string name="playback_skip_intro_sub">Utiliser introdb.app pour détecter les intros et les récapitulatifs.</string>
     <string name="playback_auto_frame_rate">Fréquence d\'images automatique</string>
-    <string name="playback_section_player">Lecteur et sélection de flux</string>
-    <string name="playback_section_player_desc">Préférence de lecteur, lecture automatique et filtrage des sources.</string>
+    <string name="playback_section_player">Streaming et qualité</string>
+    <string name="playback_section_player_desc">Qualité, lecture automatique et filtrage des sources.</string>
     <string name="playback_player">Lecteur</string>
     <string name="playback_player_internal">Interne</string>
     <string name="playback_player_external">Externe</string>

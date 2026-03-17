@@ -161,8 +161,8 @@
     <string name="playback_skip_intro">イントロスキップ</string>
     <string name="playback_skip_intro_sub">introdb.appを使用してイントロとリキャップを検出。</string>
     <string name="playback_auto_frame_rate">自動フレームレート</string>
-    <string name="playback_section_player">プレーヤーとストリーム選択</string>
-    <string name="playback_section_player_desc">プレーヤー設定、自動再生、ソースフィルター。</string>
+    <string name="playback_section_player">ストリーミングと品質</string>
+    <string name="playback_section_player_desc">画質、自動再生、ソースのフィルタリング。</string>
     <string name="playback_player">プレーヤー</string>
     <string name="playback_player_internal">内部</string>
     <string name="playback_player_external">外部</string>

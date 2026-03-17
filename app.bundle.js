@@ -2223,7 +2223,6 @@
     "settings.playback.groups.subtitles.subtitle": "playback_section_subtitles_desc",
     "settings.playback.groups.subtitles.title": "playback_section_subtitles",
     "settings.playback.preferredAudio.title": "audio_preferred_lang",
-    "settings.playback.preferredPlayer.title": "playback_player",
     "settings.playback.subtitleLanguage.title": "sub_preferred_lang",
     "settings.plugins.addRepository": "plugin_add_repository",
     "settings.plugins.manageFromPhone": "plugin_manage_from_phone_title",
@@ -5657,6 +5656,7 @@
         if (profileChanged) {
           this.hasLoadedOnce = false;
           this.hasAppliedInitialContinueWatchingFocus = false;
+          this.sidebarProfile = null;
         }
         if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
           this.homeLoadToken = (this.homeLoadToken || 0) + 1;
@@ -5686,12 +5686,15 @@
     },
     loadData() {
       return __async(this, null, function* () {
-        var _a, _b, _c;
+        var _a;
         const token = this.homeLoadToken;
         const prefs = LayoutPreferences.get();
         this.layoutPrefs = prefs;
         this.sidebarExpanded = Boolean(((_a = this.layoutPrefs) == null ? void 0 : _a.modernSidebar) && this.sidebarExpanded);
         this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
+        const sidebarProfilePromise = getSidebarProfileState().catch(() => null);
+        const progressAllPromise = watchProgressRepository.getAll().catch(() => []);
+        const recentProgressPromise = watchProgressRepository.getRecent(10).catch(() => []);
         const addons = yield addonRepository.getInstalledAddons();
         const catalogDescriptors = [];
         addons.forEach((addon) => {
@@ -5706,29 +5709,35 @@
             });
           });
         });
-        const initialDescriptors = catalogDescriptors.slice(0, HOME_INITIAL_CATALOG_LOAD);
-        const deferredDescriptors = catalogDescriptors.slice(HOME_INITIAL_CATALOG_LOAD);
+        const initialCatalogLoad = Platform.isWebOS() || Platform.isTizen() ? Math.min(HOME_INITIAL_CATALOG_LOAD, 6) : HOME_INITIAL_CATALOG_LOAD;
+        const initialDescriptors = catalogDescriptors.slice(0, initialCatalogLoad);
+        const deferredDescriptors = catalogDescriptors.slice(initialCatalogLoad);
         const initialRows = yield this.fetchCatalogRows(initialDescriptors, { allowLoading: true });
         if (token !== this.homeLoadToken) {
           return;
         }
         this.rows = this.sortAndFilterRows(initialRows);
-        this.allProgress = yield watchProgressRepository.getAll();
-        this.continueWatching = yield watchProgressRepository.getRecent(10);
-        this.watchedItems = yield watchedItemsRepository.getAll(2e3);
-        this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching).slice(0, CW_MAX_NEXT_UP_LOOKUPS);
-        if (token !== this.homeLoadToken) {
-          return;
-        }
-        this.continueWatchingLoading = Boolean((((_b = this.continueWatching) == null ? void 0 : _b.length) || 0) + (((_c = this.nextUpProgressCandidates) == null ? void 0 : _c.length) || 0));
         this.continueWatchingDisplay = [];
+        this.continueWatchingLoading = true;
+        this.allProgress = [];
+        this.continueWatching = [];
+        this.watchedItems = [];
+        this.nextUpProgressCandidates = [];
         this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
         this.heroIndex = 0;
         this.heroItem = this.pickInitialHero();
         this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
-        this.sidebarProfile = yield getSidebarProfileState();
         this.hasLoadedOnce = true;
         this.render();
+        sidebarProfilePromise.then((profile) => {
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+            return;
+          }
+          if (profile) {
+            this.sidebarProfile = profile;
+            this.render();
+          }
+        });
         if (deferredDescriptors.length) {
           this.fetchCatalogRows(deferredDescriptors, { allowLoading: true }).then((extraRows) => {
             if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
@@ -5759,25 +5768,54 @@
             console.warn("Hero async enrichment failed", error);
           });
         }
-        this.enrichContinueWatching(this.continueWatching, {
-          allProgress: this.allProgress,
-          watchedItems: this.watchedItems,
-          nextUpProgressCandidates: this.nextUpProgressCandidates
-        }).then((enriched) => {
+        (() => __async(this, null, function* () {
+          var _a2, _b;
+          const [allProgress, continueWatching] = yield Promise.all([progressAllPromise, recentProgressPromise]);
           if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
             return;
           }
-          this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
-          this.continueWatchingLoading = false;
-          if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
-            this.heroItem = this.pickInitialHero();
-            if (!this.hasAppliedInitialContinueWatchingFocus) {
-              this.forceInitialContinueWatchingFocus = true;
-            }
+          this.allProgress = Array.isArray(allProgress) ? allProgress : [];
+          this.continueWatching = Array.isArray(continueWatching) ? continueWatching : [];
+          const needsNextUp = this.continueWatching.some((item) => isSeriesTypeForContinueWatching((item == null ? void 0 : item.contentType) || (item == null ? void 0 : item.type))) || this.allProgress.some((item) => isSeriesTypeForContinueWatching((item == null ? void 0 : item.contentType) || (item == null ? void 0 : item.type)));
+          this.watchedItems = needsNextUp ? yield watchedItemsRepository.getAll(2e3).catch(() => []) : [];
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+            return;
           }
+          this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching).slice(0, CW_MAX_NEXT_UP_LOOKUPS);
+          this.continueWatchingLoading = Boolean((((_a2 = this.continueWatching) == null ? void 0 : _a2.length) || 0) + (((_b = this.nextUpProgressCandidates) == null ? void 0 : _b.length) || 0));
+          this.continueWatchingDisplay = [];
           this.render();
-        }).catch((error) => {
-          console.warn("Continue watching async enrichment failed", error);
+          if (!this.continueWatchingLoading) {
+            return;
+          }
+          try {
+            const enriched = yield this.enrichContinueWatching(this.continueWatching, {
+              allProgress: this.allProgress,
+              watchedItems: this.watchedItems,
+              nextUpProgressCandidates: this.nextUpProgressCandidates
+            });
+            if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+              return;
+            }
+            this.continueWatchingDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+            this.continueWatchingLoading = false;
+            if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
+              this.heroItem = this.pickInitialHero();
+              if (!this.hasAppliedInitialContinueWatchingFocus) {
+                this.forceInitialContinueWatchingFocus = true;
+              }
+            }
+            this.render();
+          } catch (error) {
+            console.warn("Continue watching async enrichment failed", error);
+            this.continueWatchingLoading = false;
+            this.render();
+          }
+        }))().catch((error) => {
+          console.warn("Continue watching load failed", error);
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+            return;
+          }
           this.continueWatchingLoading = false;
           this.render();
         });
@@ -5902,7 +5940,7 @@
       const retainedFocusState = this.captureCurrentFocusState() || ((_a = this.savedFocusStates) == null ? void 0 : _a[this.layoutMode]) || null;
       this.cancelFocusedPosterFlow();
       this.expandedPosterNode = null;
-      const shouldHoldHeroForContinueWatching = this.layoutMode === "modern" && Boolean(this.continueWatchingLoading) && !((_b = this.continueWatchingDisplay) == null ? void 0 : _b.length);
+      const shouldHoldHeroForContinueWatching = this.layoutMode === "modern" && Boolean(this.continueWatchingLoading) && !((_b = this.continueWatchingDisplay) == null ? void 0 : _b.length) && !this.heroItem;
       const heroItem = shouldHoldHeroForContinueWatching ? null : normalizeCatalogItem(this.heroItem || ((_c = this.heroCandidates) == null ? void 0 : _c[this.heroIndex]) || this.pickHeroItem(this.rows), "movie");
       const showHeroSection = Boolean((_d = this.layoutPrefs) == null ? void 0 : _d.heroSectionEnabled) && Boolean(heroItem);
       const layoutClass = `home-layout-${this.layoutMode}`;
@@ -5920,6 +5958,7 @@
         ),
         loadingRowItemCount
       );
+      const effectiveContinueWatchingLoadingCount = this.continueWatchingLoading && continueWatchingLoadingCount === 0 ? loadingRowItemCount : continueWatchingLoadingCount;
       this.teardownGridStickyHeader();
       let mainContentMarkup = "";
       let modernLayoutPayload = null;
@@ -5930,7 +5969,7 @@
           heroCandidates: this.heroCandidates,
           continueWatchingItems: this.continueWatchingDisplay || [],
           continueWatchingLoading: Boolean(this.continueWatchingLoading),
-          continueWatchingLoadingCount,
+          continueWatchingLoadingCount: effectiveContinueWatchingLoadingCount,
           rowItemLimit,
           showHeroSection,
           showPosterLabels,
@@ -5952,7 +5991,7 @@
         const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
           rowKey: "continue_watching",
           loading: Boolean(this.continueWatchingLoading),
-          loadingCount: continueWatchingLoadingCount
+          loadingCount: effectiveContinueWatchingLoadingCount
         });
         const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
           layoutMode: this.layoutMode,
@@ -9718,7 +9757,6 @@
     secondarySubtitleLanguage: "off",
     preferredAudioLanguage: "system",
     preferredQuality: "auto",
-    preferredPlayer: "auto",
     trailerAutoplay: false,
     subtitleRenderMode: "native",
     subtitleDelayMs: 0,
@@ -10481,6 +10519,8 @@
         this.controlsHideTimer = null;
         this.tickTimer = null;
         this.videoListeners = [];
+        this.mediaSessionHandlersBound = false;
+        this.mediaSessionActions = [];
         const playerSettings = PlayerSettingsStore.get();
         this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
         this.subtitleStyleSettings = __spreadProps(__spreadValues({}, playerSettings.subtitleStyle), {
@@ -10496,6 +10536,7 @@
         this.renderPlayerUi();
         if (!this.isExternalFrameMode()) {
           this.bindVideoEvents();
+          this.bindMediaSessionHandlers();
           this.applyAudioAmplification();
           this.applySubtitlePresentationSettings();
         }
@@ -11652,6 +11693,7 @@
         this.clearPlaybackStallGuard();
         this.loadingVisible = false;
         this.paused = false;
+        this.updateMediaSessionPlaybackState();
         this.updateLoadingVisibility();
         this.refreshTrackDialogs();
         this.applyAudioAmplification();
@@ -11676,6 +11718,7 @@
         }
         this.clearPlaybackStallGuard();
         this.paused = true;
+        this.updateMediaSessionPlaybackState();
         this.setControlsVisible(true, { focus: false });
         this.updateUiTick();
         this.renderControlButtons();
@@ -12185,7 +12228,7 @@
       }
       this.seekPreviewDirection = direction;
       this.seekRepeatCount += 1;
-      const stepSeconds = this.seekRepeatCount >= 10 ? 30 : this.seekRepeatCount >= 4 ? 20 : 10;
+      const stepSeconds = this.seekRepeatCount >= 18 ? 120 : this.seekRepeatCount >= 12 ? 60 : this.seekRepeatCount >= 7 ? 30 : this.seekRepeatCount >= 3 ? 20 : 10;
       const duration = this.getPlaybackDurationSeconds();
       const base = this.seekPreviewSeconds == null ? currentTime : Number(this.seekPreviewSeconds);
       let next = base + direction * stepSeconds;
@@ -12279,6 +12322,7 @@
       if (this.paused) {
         PlayerController.resume();
         this.paused = false;
+        this.updateMediaSessionPlaybackState();
         this.setControlsVisible(true, { focus: false });
         if (preserveProgressFocus) {
           this.controlFocusZone = "progress";
@@ -12288,11 +12332,156 @@
       }
       PlayerController.pause();
       this.paused = true;
+      this.updateMediaSessionPlaybackState();
       this.setControlsVisible(true, { focus: !preserveProgressFocus });
       if (preserveProgressFocus) {
         this.controlFocusZone = "progress";
       }
       this.renderControlButtons();
+    },
+    resolveMediaAction(event) {
+      const key = String((event == null ? void 0 : event.key) || "");
+      const code = String((event == null ? void 0 : event.code) || "");
+      const keyCode = Number((event == null ? void 0 : event.originalKeyCode) || (event == null ? void 0 : event.keyCode) || 0);
+      const keyMap = {
+        MediaPlayPause: "toggle",
+        MediaPlay: "play",
+        MediaPause: "pause",
+        MediaStop: "stop",
+        MediaFastForward: "fastForward",
+        MediaRewind: "rewind",
+        MediaTrackNext: "next",
+        MediaTrackPrevious: "previous",
+        Play: "play",
+        Pause: "pause"
+      };
+      if (keyMap[key]) {
+        return keyMap[key];
+      }
+      if (keyMap[code]) {
+        return keyMap[code];
+      }
+      const codeMap = {
+        179: "toggle",
+        415: "play",
+        19: "pause",
+        413: "stop",
+        178: "stop",
+        417: "fastForward",
+        412: "rewind",
+        176: "next",
+        177: "previous"
+      };
+      return codeMap[keyCode] || null;
+    },
+    applyMediaAction(action) {
+      if (this.isExternalFrameMode() || !action) {
+        return;
+      }
+      if (action === "play") {
+        if (this.paused) {
+          this.togglePause();
+        }
+        return;
+      }
+      if (action === "pause" || action === "stop") {
+        if (!this.paused) {
+          this.togglePause();
+        }
+        return;
+      }
+      if (action === "toggle") {
+        this.togglePause();
+        return;
+      }
+      if (action === "fastForward") {
+        this.quickSeekBy(30);
+        return;
+      }
+      if (action === "rewind") {
+        this.quickSeekBy(-30);
+      }
+    },
+    quickSeekBy(deltaSeconds) {
+      if (!this.isSeekBarAvailable()) {
+        return false;
+      }
+      const currentTime = this.getPlaybackCurrentSeconds();
+      if (Number.isNaN(currentTime)) {
+        return false;
+      }
+      const duration = this.getPlaybackDurationSeconds();
+      let target = currentTime + Number(deltaSeconds || 0);
+      if (duration > 0) {
+        target = clamp(target, 0, duration);
+      } else {
+        target = Math.max(0, target);
+      }
+      this.seekPreviewSeconds = target;
+      this.seekPreviewDirection = deltaSeconds < 0 ? -1 : 1;
+      this.seekOverlayVisible = !this.controlsVisible;
+      this.renderSeekOverlay();
+      this.seekPlaybackSeconds(target);
+      this.scheduleSeekPreviewCommit();
+      return true;
+    },
+    bindMediaSessionHandlers() {
+      var _a;
+      const mediaSession = (_a = globalThis.navigator) == null ? void 0 : _a.mediaSession;
+      if (!mediaSession || this.mediaSessionHandlersBound) {
+        return;
+      }
+      this.mediaSessionHandlersBound = true;
+      this.mediaSessionActions = [];
+      const safeBind = (action, handler) => {
+        try {
+          mediaSession.setActionHandler(action, handler);
+          this.mediaSessionActions.push(action);
+        } catch (_) {
+        }
+      };
+      safeBind("play", () => this.applyMediaAction("play"));
+      safeBind("pause", () => this.applyMediaAction("pause"));
+      safeBind("stop", () => this.applyMediaAction("stop"));
+      safeBind("seekforward", (details) => {
+        const offset = Number((details == null ? void 0 : details.seekOffset) || 30);
+        this.quickSeekBy(Number.isFinite(offset) ? offset : 30);
+      });
+      safeBind("seekbackward", (details) => {
+        const offset = Number((details == null ? void 0 : details.seekOffset) || 30);
+        this.quickSeekBy(Number.isFinite(offset) ? -offset : -30);
+      });
+      this.updateMediaSessionPlaybackState();
+    },
+    clearMediaSessionHandlers() {
+      var _a;
+      const mediaSession = (_a = globalThis.navigator) == null ? void 0 : _a.mediaSession;
+      if (!mediaSession || !this.mediaSessionHandlersBound) {
+        return;
+      }
+      this.mediaSessionActions.forEach((action) => {
+        try {
+          mediaSession.setActionHandler(action, null);
+        } catch (_) {
+        }
+      });
+      this.mediaSessionActions = [];
+      this.mediaSessionHandlersBound = false;
+      try {
+        mediaSession.playbackState = "none";
+      } catch (_) {
+      }
+    },
+    updateMediaSessionPlaybackState() {
+      var _a;
+      const mediaSession = (_a = globalThis.navigator) == null ? void 0 : _a.mediaSession;
+      if (!mediaSession) {
+        return;
+      }
+      try {
+        mediaSession.playbackState = this.paused ? "paused" : "playing";
+      } catch (_) {
+      }
     },
     playStreamByUrl(_0) {
       return __async(this, arguments, function* (streamUrl, { preservePanel = false, resetSilentAudioState = true, preservePlaybackState = false, forceEngine = null } = {}) {
@@ -14778,10 +14967,18 @@ ${normalized}`;
     },
     onKeyDown(event) {
       return __async(this, null, function* () {
-        var _a;
+        var _a, _b, _c, _d;
         const keyCode = Number((event == null ? void 0 : event.keyCode) || 0);
         if (keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13) {
           (_a = event == null ? void 0 : event.preventDefault) == null ? void 0 : _a.call(event);
+        }
+        const mediaAction = this.resolveMediaAction(event);
+        if (mediaAction) {
+          (_b = event == null ? void 0 : event.preventDefault) == null ? void 0 : _b.call(event);
+          (_c = event == null ? void 0 : event.stopPropagation) == null ? void 0 : _c.call(event);
+          (_d = event == null ? void 0 : event.stopImmediatePropagation) == null ? void 0 : _d.call(event);
+          this.applyMediaAction(mediaAction);
+          return;
         }
         if (this.sourcesPanelVisible) {
           if (yield this.handleSourcesPanelKey(event)) {
@@ -15090,6 +15287,7 @@ ${normalized}`;
         this.subtitleSelectionTimer = null;
       }
       this.unbindVideoEvents();
+      this.clearMediaSessionHandlers();
       PlayerController.stop();
       if (this.container) {
         this.container.style.display = "none";
@@ -26001,13 +26199,6 @@ ${normalized}`;
     if (normalized === "720p") return "720p";
     return t5("common.auto");
   }
-  function playerLabel(value) {
-    const normalized = String(value || "auto").toLowerCase();
-    if (normalized === "native") return t5("common.native");
-    if (normalized === "hls") return "HLS.js";
-    if (normalized === "dash") return "dash.js";
-    return t5("common.auto");
-  }
   function renderModeLabel(value) {
     return String(value || "native").toLowerCase() === "html" ? t5("common.htmlOverlay") : t5("common.native");
   }
@@ -26073,16 +26264,25 @@ ${normalized}`;
     }
     const itemTop = node.offsetTop;
     const itemHeight = node.offsetHeight || 0;
-    const targetCenter = clientHeight * 0.42;
-    const desiredTop = itemTop - (targetCenter - itemHeight / 2);
-    const nextScrollTop = clamp3(desiredTop, 0, maxScroll);
+    const itemBottom = itemTop + itemHeight;
+    const padding = Math.max(12, Math.round(clientHeight * 0.12));
+    const viewTop = rail.scrollTop + padding;
+    const viewBottom = rail.scrollTop + clientHeight - padding;
+    let nextScrollTop = rail.scrollTop;
+    if (itemTop < viewTop) {
+      nextScrollTop = Math.max(0, itemTop - padding);
+    } else if (itemBottom > viewBottom) {
+      nextScrollTop = Math.min(maxScroll, itemBottom - clientHeight + padding);
+    } else {
+      return;
+    }
     if (Math.abs(rail.scrollTop - nextScrollTop) < 1) {
       return;
     }
     if (typeof rail.scrollTo === "function") {
       rail.scrollTo({
         top: nextScrollTop,
-        behavior: "smooth"
+        behavior: "auto"
       });
       return;
     }
@@ -27181,18 +27381,6 @@ ${normalized}`;
           }
         });
       });
-      this.actionMap.set("playback:player", () => {
-        const options = ["auto", "native", "hls", "dash"];
-        this.openOptionDialog({
-          title: t5("settings.dialogs.playerPreference"),
-          options: options.map((option) => ({ id: option, label: playerLabel(option) })),
-          selectedId: String(PlayerSettingsStore.get().preferredPlayer || "auto"),
-          returnFocusKey: "playback:player",
-          onSelect: (option) => {
-            PlayerSettingsStore.set({ preferredPlayer: option.id });
-          }
-        });
-      });
       this.actionMap.set("playback:trailer", () => {
         PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
       });
@@ -27263,12 +27451,6 @@ ${normalized}`;
         title: t5("settings.playback.preferredQuality.title"),
         subtitle: t5("settings.playback.preferredQuality.subtitle"),
         value: qualityLabel(model.player.preferredQuality)
-      })}
-        ${this.renderActionRow({
-        focusKey: "playback:player",
-        title: t5("settings.playback.preferredPlayer.title"),
-        subtitle: t5("settings.playback.preferredPlayer.subtitle"),
-        value: playerLabel(model.player.preferredPlayer)
       })}
       </div>
     `;

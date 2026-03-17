@@ -127,8 +127,8 @@
     <string name="playback_skip_intro">Preskočiť intro</string>
     <string name="playback_skip_intro_sub">Použiť introdb.app na detekciu úvodov a rekapitulácií.</string>
     <string name="playback_auto_frame_rate">Automatická snímková frekvencia</string>
-    <string name="playback_section_player">Prehrávač &amp; výber streamu</string>
-    <string name="playback_section_player_desc">Preferencie prehrávača, automatické prehrávanie a filtrovanie zdrojov.</string>
+    <string name="playback_section_player">Streamovanie a kvalita</string>
+    <string name="playback_section_player_desc">Kvalita, automatické prehrávanie a filtrovanie zdrojov.</string>
     <string name="playback_player">Prehrávač</string>
     <string name="playback_player_internal">Interný</string>
     <string name="playback_player_external">Externý</string>
