@@ -8131,6 +8131,13 @@ button:focus-visible {
   padding: 32px 40px;
   box-sizing: border-box;
   pointer-events: none;
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.detail-trailer-controls-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .detail-trailer-controls-gradient {
@@ -8293,6 +8300,10 @@ button:focus-visible {
   border: 0;
   object-fit: cover;
   overflow: hidden;
+}
+
+.detail-trailer-frame {
+  pointer-events: none;
 }
 
 .detail-trailer-active .series-detail-content {
