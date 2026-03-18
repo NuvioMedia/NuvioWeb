@@ -789,16 +789,26 @@ export const MetaDetailsScreen = {
     if (this.trailerProxyMessageHandler) {
       window.removeEventListener("message", this.trailerProxyMessageHandler);
     }
+    let trustedProxyOrigin = "";
+    try {
+      trustedProxyOrigin = new URL(String(YOUTUBE_PROXY_URL || "").trim(), globalThis?.location?.href || "https://example.com/").origin;
+    } catch (_) {
+      trustedProxyOrigin = "";
+    }
     this.trailerProxyMessageHandler = (event) => {
       const frameWindow = this.trailerUiRefs?.frame?.contentWindow;
-      if (!frameWindow || event?.source !== frameWindow) {
-        return;
-      }
       const data = event?.data;
       if (!data || typeof data !== "object" || data.source !== "nuvio-youtube-proxy") {
         return;
       }
+      const eventOrigin = String(event?.origin || "").trim();
+      const sourceMatchesFrame = Boolean(frameWindow && event?.source === frameWindow);
+      const originMatchesProxy = Boolean(trustedProxyOrigin && eventOrigin === trustedProxyOrigin);
+      if (!sourceMatchesFrame && !originMatchesProxy) {
+        return;
+      }
       if (data.type === "ready") {
+        this.stopTrailerProxyLoadingTimer();
         this.trailerProxyState = {
           currentTime: 0,
           duration: 0,
@@ -813,6 +823,9 @@ export const MetaDetailsScreen = {
       }
       if (data.type === "state") {
         const nextState = data.state && typeof data.state === "object" ? data.state : {};
+        if (nextState.loading === false || Number(nextState.duration || 0) > 0 || Number(nextState.currentTime || 0) > 0) {
+          this.stopTrailerProxyLoadingTimer();
+        }
         this.trailerProxyState = {
           currentTime: Number(nextState.currentTime || 0),
           duration: Number(nextState.duration || 0),
@@ -874,6 +887,9 @@ export const MetaDetailsScreen = {
     this.trailerMediaListeners = [];
     this.trailerUiRefs = null;
     this.trailerProgressTimer = null;
+    this.trailerControlsTimer = null;
+    this.trailerProxyLoadingTimer = null;
+    this.trailerControlsVisible = true;
     this.trailerProxyState = null;
     this.trailerProxyMessageHandler = null;
     this.trailerYoutubeFallbackActive = false;
@@ -2263,6 +2279,7 @@ export const MetaDetailsScreen = {
         return;
       }
       event?.preventDefault?.();
+      this.restartTrailerControlsTimer();
       const control = String(target.dataset.trailerControl || "");
       if (control === "playPause") {
         this.toggleActiveTrailerPlayback();
@@ -2482,6 +2499,72 @@ export const MetaDetailsScreen = {
     }
   },
 
+  stopTrailerControlsTimer() {
+    if (this.trailerControlsTimer) {
+      clearTimeout(this.trailerControlsTimer);
+      this.trailerControlsTimer = null;
+    }
+  },
+
+  stopTrailerProxyLoadingTimer() {
+    if (this.trailerProxyLoadingTimer) {
+      clearTimeout(this.trailerProxyLoadingTimer);
+      this.trailerProxyLoadingTimer = null;
+    }
+  },
+
+  startTrailerProxyLoadingTimer(ytId = "") {
+    this.stopTrailerProxyLoadingTimer();
+    const expectedId = String(ytId || "").trim();
+    if (!expectedId) {
+      return;
+    }
+    this.trailerProxyLoadingTimer = setTimeout(() => {
+      const activeId = String(this.trailerSource?.ytId || "").trim();
+      if (!this.isTrailerPlaying || this.trailerSource?.kind !== "youtube" || activeId !== expectedId) {
+        return;
+      }
+      if (this.trailerProxyState && !this.trailerProxyState.loading) {
+        return;
+      }
+      this.trailerProxyState = {
+        currentTime: Number(this.trailerProxyState?.currentTime || 0),
+        duration: Number(this.trailerProxyState?.duration || 0),
+        paused: false,
+        muted: Boolean(this.trailerMuted),
+        loading: false,
+        controllable: false
+      };
+      this.trailerYoutubeFallbackActive = true;
+      this.updateTrailerOverlay();
+      this.restartTrailerControlsTimer();
+    }, 4500);
+  },
+
+  setTrailerControlsVisible(visible) {
+    this.trailerControlsVisible = Boolean(visible);
+    const overlay = this.trailerUiRefs?.overlay;
+    if (overlay) {
+      overlay.classList.toggle("hidden", !this.trailerControlsVisible);
+    }
+  },
+
+  restartTrailerControlsTimer() {
+    this.stopTrailerControlsTimer();
+    if (!this.isTrailerPlaying || !this.trailerSource) {
+      this.setTrailerControlsVisible(false);
+      return;
+    }
+    this.setTrailerControlsVisible(true);
+    const playback = this.getTrailerPlaybackSnapshot();
+    if (playback.loading || playback.paused) {
+      return;
+    }
+    this.trailerControlsTimer = setTimeout(() => {
+      this.setTrailerControlsVisible(false);
+    }, 3200);
+  },
+
   startTrailerProgressTimer() {
     this.stopTrailerProgressTimer();
     this.updateTrailerOverlay();
@@ -2495,6 +2578,7 @@ export const MetaDetailsScreen = {
     this.trailerUiRefs = layer
       ? {
         layer,
+        overlay: layer.querySelector(".detail-trailer-controls-overlay"),
         media: layer.querySelector("[data-trailer-media]"),
         frame: layer.querySelector(".detail-trailer-frame"),
         video: layer.querySelector(".detail-trailer-video"),
@@ -2612,6 +2696,14 @@ export const MetaDetailsScreen = {
         : t("detail.trailerMute", {}, "Mute"));
       refs.muteButton.disabled = !playback.controllable;
     }
+    if (playback.loading || playback.paused) {
+      this.stopTrailerControlsTimer();
+      this.setTrailerControlsVisible(true);
+      return;
+    }
+    if (this.trailerControlsVisible && !this.trailerControlsTimer) {
+      this.restartTrailerControlsTimer();
+    }
   },
 
   bindTrailerVideoEvents(video) {
@@ -2628,6 +2720,7 @@ export const MetaDetailsScreen = {
   },
 
   destroyYoutubeTrailerPlayer() {
+    this.stopTrailerProxyLoadingTimer();
     this.trailerProxyState = null;
     this.trailerYoutubeFallbackActive = false;
   },
@@ -2647,6 +2740,7 @@ export const MetaDetailsScreen = {
       controllable: true
     };
     this.trailerYoutubeFallbackActive = false;
+    this.startTrailerProxyLoadingTimer(ytId);
     this.updateTrailerOverlay();
     setTimeout(() => {
       if (!this.isTrailerPlaying || this.trailerSource?.kind !== "youtube" || String(this.trailerSource?.ytId || "").trim() !== ytId) {
@@ -2662,6 +2756,7 @@ export const MetaDetailsScreen = {
     if (!this.isTrailerPlaying || !this.trailerSource) {
       return;
     }
+    this.restartTrailerControlsTimer();
     if (this.trailerSource.kind === "video") {
       const video = this.trailerUiRefs?.video;
       if (!video) {
@@ -2759,7 +2854,7 @@ export const MetaDetailsScreen = {
     const title = escapeHtml(this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Trailer");
     const subtitle = escapeHtml(t("detail.trailerLabel", {}, "Trailer"));
     const controlsMarkup = `
-      <div class="detail-trailer-controls-overlay">
+      <div class="detail-trailer-controls-overlay" tabindex="-1">
         <div class="detail-trailer-controls-gradient detail-trailer-controls-gradient-top"></div>
         <div class="detail-trailer-controls-gradient detail-trailer-controls-gradient-bottom"></div>
         <div class="detail-trailer-controls-top">
@@ -2804,11 +2899,14 @@ export const MetaDetailsScreen = {
             referrerpolicy="origin-when-cross-origin"
             allowfullscreen
             scrolling="no"
+            tabindex="-1"
+            aria-hidden="true"
           ></iframe>
         </div>
         ${controlsMarkup}
       `;
       this.cacheTrailerRefs();
+      this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
       this.startTrailerProgressTimer();
       this.initYoutubeTrailerPlayer();
       return;
@@ -2822,6 +2920,7 @@ export const MetaDetailsScreen = {
       ${controlsMarkup}
     `;
     this.cacheTrailerRefs();
+    this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
     this.bindTrailerVideoEvents(this.trailerUiRefs?.video || null);
     const playAttempt = this.trailerUiRefs?.video?.play?.();
     if (playAttempt?.catch) {
@@ -2846,6 +2945,7 @@ export const MetaDetailsScreen = {
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
     this.isTrailerPlaying = true;
     this.syncTrailerDom();
+    this.restartTrailerControlsTimer();
   },
 
   openTrailerInPlayer() {
@@ -2858,6 +2958,8 @@ export const MetaDetailsScreen = {
       this.trailerAutoplayTimer = null;
     }
     this.stopTrailerProgressTimer();
+    this.stopTrailerControlsTimer();
+    this.stopTrailerProxyLoadingTimer();
     this.detachTrailerMediaListeners();
     this.destroyYoutubeTrailerPlayer();
     this.isTrailerPlaying = false;
@@ -2868,6 +2970,7 @@ export const MetaDetailsScreen = {
       }
     }
     this.trailerUiRefs = null;
+    this.trailerControlsVisible = true;
     const shell = this.container?.querySelector(".series-detail-shell");
     if (shell) {
       shell.classList.remove("detail-trailer-active");
@@ -4024,6 +4127,7 @@ export const MetaDetailsScreen = {
     }
 
     if (this.isTrailerPlaying) {
+      this.restartTrailerControlsTimer();
       const direction = getDpadDirection(event);
       if (event.keyCode === 13) {
         event?.preventDefault?.();
