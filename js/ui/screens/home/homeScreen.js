@@ -57,6 +57,9 @@ const HOME_LOADING_ROW_ITEMS_DEFAULT = 10;
 const HOME_LOADING_ROW_ITEMS_CONSTRAINED = 8;
 const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
+const CW_META_TIMEOUT_MS = 1800;
+const CW_META_TIMEOUT_TV_MS = 4200;
+const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -418,6 +421,14 @@ function withTimeout(promise, ms, fallbackValue) {
   });
 }
 
+function getContinueWatchingMetaTimeout(timeoutMs) {
+  const requestedTimeout = Math.max(500, Number(timeoutMs || 0) || CW_META_TIMEOUT_MS);
+  if (Platform.isWebOS() || Platform.isTizen()) {
+    return Math.max(requestedTimeout, CW_META_TIMEOUT_TV_MS);
+  }
+  return requestedTimeout;
+}
+
 function progressFractionForContinueWatching(item = {}) {
   const explicitPercent = Number(item.progressPercent);
   if (Number.isFinite(explicitPercent) && explicitPercent > 0) {
@@ -433,7 +444,7 @@ function progressFractionForContinueWatching(item = {}) {
 
 function isSeriesTypeForContinueWatching(type) {
   const normalized = String(type || "").toLowerCase();
-  return normalized === "series" || normalized === "tv";
+  return normalized === "series";
 }
 
 function isCompletedForContinueWatching(item = {}) {
@@ -3024,7 +3035,10 @@ export const HomeScreen = {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
-        const nextDisplay = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+        const nextDisplayStrict = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+        const nextDisplay = nextDisplayStrict.length
+          ? nextDisplayStrict
+          : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
         const nextSignature = preserveContinueWatching
           ? buildContinueWatchingSignature(nextDisplay)
           : "";
@@ -3488,7 +3502,8 @@ export const HomeScreen = {
     return byEpisode;
   },
 
-  async fetchMetaForContinueWatching(contentType, contentId, timeoutMs = 1800) {
+  async fetchMetaForContinueWatching(contentType, contentId, timeoutMs = CW_META_TIMEOUT_MS) {
+    const effectiveTimeoutMs = getContinueWatchingMetaTimeout(timeoutMs);
     const normalizedType = String(contentType || "").trim().toLowerCase();
     const typeCandidates = [];
     if (normalizedType) {
@@ -3510,7 +3525,7 @@ export const HomeScreen = {
       try {
         const result = await withTimeout(
           metaRepository.getMetaFromAllAddons(normalizedCandidate, contentId),
-          timeoutMs,
+          effectiveTimeoutMs,
           { status: "error", message: "timeout" }
         );
         if (result?.status === "success" && result?.data) {
@@ -3609,7 +3624,7 @@ export const HomeScreen = {
 
       let meta = null;
       try {
-        meta = await this.fetchMetaForContinueWatching(contentType, contentId, 2200);
+        meta = await this.fetchMetaForContinueWatching(contentType, contentId, CW_NEXT_UP_META_TIMEOUT_MS);
       } catch (error) {
         console.warn("Next up meta lookup failed", error);
       }

@@ -528,7 +528,7 @@ function trackListToArray(trackList) {
 
 function normalizeItemType(value) {
   const normalized = String(value || "movie").toLowerCase();
-  return normalized === "tv" ? "series" : normalized;
+  return normalized || "movie";
 }
 
 function escapeHtml(value) {

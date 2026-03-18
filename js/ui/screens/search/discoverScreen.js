@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
 import { renderFilterPicker } from "../../components/filterPicker.js";
 import {
@@ -29,7 +30,7 @@ function toTitleCase(value) {
 function formatAddonTypeLabel(value) {
   const type = String(value || "").trim().toLowerCase();
   if (!type) return "Movie";
-  if (type === "tv") return "Tv";
+  if (type === "tv") return "TV";
   if (type === "series") return "Series";
   if (type === "movie") return "Movie";
   return toTitleCase(type);
@@ -42,6 +43,10 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
 }
 
 function groupNodesByOffsetTop(nodes = []) {
@@ -918,7 +923,7 @@ export const DiscoverScreen = {
                  ` : ""}
                </article>
              `).join("")
-      : `<div class="seeall-empty">No items available.</div>`;
+      : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
 
     this.container.innerHTML = `
       <div class="home-shell search-screen-shell discover-shell">
@@ -943,7 +948,7 @@ export const DiscoverScreen = {
             <section class="seeall-grid discover-grid">
               ${cards}
             </section>
-            ${this.loading ? `<div class="seeall-loading">Loading...</div>` : ""}
+            ${this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : ""}
           </div>
         </main>
       </div>

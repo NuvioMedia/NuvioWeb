@@ -2,32 +2,192 @@
 <html>
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-html,body{margin:0;height:100%}
-#yt{width:100%;height:100%}
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #000;
+}
+
+#yt {
+  width: 100%;
+  height: 100%;
+}
 </style>
 </head>
-
 <body>
-
 <div id="yt"></div>
 
 <script src="https://www.youtube.com/iframe_api"></script>
 <script>
 const params = new URLSearchParams(location.search);
-const video = params.get("v") || "qBg39HCJiTU";
-const muted = params.get("muted") === "1" ? 1 : 0;
+const videoId = params.get("v") || "qBg39HCJiTU";
+const startMuted = params.get("muted") === "1";
+const autoplay = params.get("autoplay") !== "0";
+const loop = params.get("loop") !== "0";
+let player = null;
+let ready = false;
+let lastStatePayload = "";
+let stateTimer = null;
+
+function safeCall(fn, fallback) {
+  try {
+    return fn();
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function getPlayerStatePayload() {
+  const playerState = Number(safeCall(() => player && player.getPlayerState(), -1));
+  return {
+    currentTime: Number(safeCall(() => player && player.getCurrentTime(), 0) || 0),
+    duration: Number(safeCall(() => player && player.getDuration(), 0) || 0),
+    paused: playerState !== 1,
+    muted: Boolean(safeCall(() => player && player.isMuted(), startMuted)),
+    loading: !ready || playerState === -1 || playerState === 3,
+    controllable: true
+  };
+}
+
+function postToParent(type, extra) {
+  const payload = Object.assign({
+    source: "nuvio-youtube-proxy",
+    type
+  }, extra || {});
+  window.parent.postMessage(payload, "*");
+}
+
+function pushState(force) {
+  const state = getPlayerStatePayload();
+  const serialized = JSON.stringify(state);
+  if (!force && serialized === lastStatePayload) {
+    return;
+  }
+  lastStatePayload = serialized;
+  postToParent("state", { state });
+}
+
+function ensureStateTimer() {
+  if (stateTimer) {
+    clearInterval(stateTimer);
+  }
+  stateTimer = setInterval(() => {
+    pushState(false);
+  }, 300);
+}
+
+function handleCommand(data) {
+  if (!ready || !player || !data || data.type !== "command") {
+    return;
+  }
+  const command = String(data.command || "");
+  const payload = data.payload && typeof data.payload === "object" ? data.payload : {};
+  if (command === "play") {
+    player.playVideo();
+  } else if (command === "pause") {
+    player.pauseVideo();
+  } else if (command === "togglePlayPause") {
+    const state = Number(safeCall(() => player.getPlayerState(), -1));
+    if (state === 1) {
+      player.pauseVideo();
+    } else {
+      player.playVideo();
+    }
+  } else if (command === "setMuted") {
+    if (payload.muted) {
+      player.mute();
+    } else {
+      player.unMute();
+    }
+  } else if (command === "seekTo") {
+    const seconds = Math.max(0, Number(payload.seconds || 0));
+    player.seekTo(seconds, true);
+  } else if (command === "seekBy") {
+    const delta = Number(payload.seconds || 0);
+    const currentTime = Number(safeCall(() => player.getCurrentTime(), 0) || 0);
+    player.seekTo(Math.max(0, currentTime + delta), true);
+  } else if (command === "getState") {
+    pushState(true);
+    return;
+  }
+  pushState(true);
+}
+
+window.addEventListener("message", (event) => {
+  if (!event || event.source !== window.parent) {
+    return;
+  }
+  const data = event.data;
+  if (!data || typeof data !== "object" || data.source !== "nuvio-detail-trailer") {
+    return;
+  }
+  handleCommand(data);
+});
+
+window.addEventListener("beforeunload", () => {
+  if (stateTimer) {
+    clearInterval(stateTimer);
+    stateTimer = null;
+  }
+});
 
 function onYouTubeIframeAPIReady() {
-  new YT.Player("yt", {
-    videoId: video,
+  player = new YT.Player("yt", {
+    videoId,
+    host: "https://www.youtube-nocookie.com",
     playerVars: {
-      autoplay: 1,
-      mute: muted
+      autoplay: autoplay ? 1 : 0,
+      controls: 0,
+      disablekb: 1,
+      fs: 0,
+      loop: loop ? 1 : 0,
+      modestbranding: 1,
+      playsinline: 1,
+      playlist: loop ? videoId : undefined,
+      rel: 0
+    },
+    events: {
+      onReady: (event) => {
+        ready = true;
+        if (startMuted) {
+          event.target.mute();
+        } else {
+          event.target.unMute();
+        }
+        if (autoplay) {
+          event.target.playVideo();
+        }
+        postToParent("ready", { videoId });
+        ensureStateTimer();
+        pushState(true);
+      },
+      onStateChange: (event) => {
+        if (Number(event.data) === 0 && loop) {
+          event.target.seekTo(0, true);
+          event.target.playVideo();
+        }
+        pushState(true);
+      },
+      onError: (event) => {
+        postToParent("state", {
+          state: {
+            currentTime: 0,
+            duration: 0,
+            paused: true,
+            muted: startMuted,
+            loading: false,
+            controllable: false,
+            error: Number(event && event.data || 0)
+          }
+        });
+      }
     }
   });
 }
 </script>
-
 </body>
 </html>

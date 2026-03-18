@@ -1082,6 +1082,14 @@
     <string name="detail.play">Play</string>
     <string name="detail.playNextEpisode">Play Next Episode</string>
     <string name="detail.playTrailer">Play trailer</string>
+    <string name="detail.trailerLabel">Trailer</string>
+    <string name="detail.trailerLoading">Loading trailer...</string>
+    <string name="detail.trailerPause">Pause</string>
+    <string name="detail.trailerResume">Resume</string>
+    <string name="detail.trailerMute">Mute</string>
+    <string name="detail.trailerUnmute">Unmute</string>
+    <string name="detail.trailerControlsHint">OK Play/Pause  LEFT/RIGHT Seek  UP/DOWN Audio  BACK Close</string>
+    <string name="detail.trailerFallbackHint">Use back to close the trailer</string>
     <string name="detail.creatorCast">Creator and Cast</string>
     <string name="detail.ratings">Ratings</string>
     <string name="detail.moreLikeThis">More Like This</string>

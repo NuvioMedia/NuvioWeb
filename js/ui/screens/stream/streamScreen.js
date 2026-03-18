@@ -33,7 +33,7 @@ function isBackEvent(event) {
 
 function normalizeType(itemType) {
   const normalized = String(itemType || "movie").toLowerCase();
-  return normalized === "tv" ? "series" : (normalized || "movie");
+  return normalized || "movie";
 }
 
 function supportsStreamResource(addon, type) {
@@ -740,11 +740,11 @@ export const StreamScreen = {
     if (!targetUrl) {
       return;
     }
-    const isSeries = normalizeType(this.params?.itemType) === "series";
+    const itemType = normalizeType(this.params?.itemType);
     Router.navigate("player", {
       streamUrl: targetUrl,
       itemId: this.params?.itemId || null,
-      itemType: isSeries ? "series" : "movie",
+      itemType: itemType || "movie",
       videoId: this.params?.videoId || null,
       resumePositionMs: Number(this.params?.resumePositionMs || 0) || 0,
       episodeLabel: this.params?.season && this.params?.episode

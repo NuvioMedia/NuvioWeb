@@ -25,7 +25,7 @@ function toProgressFraction(item = {}) {
 
 function isSeriesType(type) {
   const normalized = String(type || "").toLowerCase();
-  return normalized === "series" || normalized === "tv";
+  return normalized === "series";
 }
 
 function isInProgress(item = {}) {

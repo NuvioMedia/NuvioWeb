@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
 import {
   activateLegacySidebarAction,
@@ -38,6 +39,17 @@ function toTitleCase(value) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
+function formatTypeLabel(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "Movie";
+  if (normalized === "tv") return "TV";
+  return toTitleCase(normalized) || "Movie";
+}
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
+
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -51,7 +63,7 @@ function escapeSelectorValue(value = "") {
 }
 
 function formatCatalogRowTitle(catalogName, addonName, type) {
-  const typeLabel = toTitleCase(type || "movie") || "Movie";
+  const typeLabel = formatTypeLabel(type);
   let base = String(catalogName || "").trim();
   if (!base) return typeLabel;
   const addon = String(addonName || "").trim();
@@ -314,7 +326,7 @@ export const SearchScreen = {
           pillIconOnly: Boolean(this.pillIconOnly)
         })}
         <main class="home-main search-content search-loading-shell">
-          <div class="search-loading">Loading...</div>
+          <div class="search-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>
         </main>
       </div>
     `;
@@ -341,7 +353,7 @@ export const SearchScreen = {
       addon.catalogs.forEach((catalog) => {
         const requiresSearch = (catalog.extra || []).some((extra) => extra.name === "search");
         if (requiresSearch) return;
-        if (catalog.apiType !== "movie" && catalog.apiType !== "series") return;
+        if (catalog.apiType !== "movie" && catalog.apiType !== "series" && catalog.apiType !== "tv") return;
         sections.push({
           addonBaseUrl: addon.baseUrl,
           addonId: addon.id,
@@ -390,7 +402,7 @@ export const SearchScreen = {
       addon.catalogs.forEach((catalog) => {
         const requiresSearch = (catalog.extra || []).some((extra) => extra.name === "search");
         if (!requiresSearch) return;
-        if (catalog.apiType !== "movie" && catalog.apiType !== "series") return;
+        if (catalog.apiType !== "movie" && catalog.apiType !== "series" && catalog.apiType !== "tv") return;
         searchableCatalogs.push({
           addonBaseUrl: addon.baseUrl,
           addonId: addon.id,
@@ -443,11 +455,13 @@ export const SearchScreen = {
           </div>
         `;
       }
-      return `
+        return `
         <div class="search-empty-state">
           <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
-          <h2>Start Searching</h2>
-          <p>${this.layoutPrefs?.searchDiscoverEnabled ? "Enter at least 2 characters" : "Discover is disabled. Enter at least 2 characters"}</p>
+          <h2>${escapeHtml(t("search_start_title", {}, "Start Searching"))}</h2>
+          <p>${escapeHtml(this.layoutPrefs?.searchDiscoverEnabled
+            ? t("search_start_subtitle", {}, "Enter at least 2 characters")
+            : t("search_start_subtitle_no_discover", {}, "Discover is disabled. Enter at least 2 characters"))}</p>
         </div>
       `;
     }

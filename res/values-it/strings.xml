@@ -1025,6 +1025,14 @@
     <string name="detail.play">Riproduci</string>
     <string name="detail.playNextEpisode">Riproduci episodio successivo</string>
     <string name="detail.playTrailer">Riproduci trailer</string>
+    <string name="detail.trailerLabel">Trailer</string>
+    <string name="detail.trailerLoading">Caricamento trailer...</string>
+    <string name="detail.trailerPause">Pausa</string>
+    <string name="detail.trailerResume">Riprendi</string>
+    <string name="detail.trailerMute">Disattiva audio</string>
+    <string name="detail.trailerUnmute">Attiva audio</string>
+    <string name="detail.trailerControlsHint">OK Play/Pausa  SINISTRA/DESTRA Seek  SU/GIU Audio  INDIETRO Chiudi</string>
+    <string name="detail.trailerFallbackHint">Usa indietro per chiudere il trailer</string>
     <string name="detail.creatorCast">Creatori e cast</string>
     <string name="detail.ratings">Valutazioni</string>
     <string name="detail.moreLikeThis">Altri come questo</string>
