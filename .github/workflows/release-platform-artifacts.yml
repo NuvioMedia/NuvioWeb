@@ -1,4 +1,4 @@
-name: Release Platform Artifacts
+name: Release webOS Artifact
 
 on:
   release:
@@ -11,6 +11,10 @@ on:
       release_id:
         description: Existing GitHub release ID
         required: false
+      rebuild_webos:
+        description: Rebuild webOS wrapper instead of reusing previous IPK
+        required: false
+        default: "false"
 
 jobs:
   resolve-release-payload:
@@ -20,6 +24,7 @@ jobs:
     outputs:
       tag: ${{ steps.payload.outputs.tag }}
       release_id: ${{ steps.payload.outputs.release_id }}
+      rebuild_webos: ${{ steps.payload.outputs.rebuild_webos }}
     steps:
       - name: Resolve release payload
         id: payload
@@ -27,76 +32,20 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
             echo "release_id=${{ github.event.release.id }}" >> "$GITHUB_OUTPUT"
+            RELEASE_BODY=$(cat <<'EOF'
+${{ github.event.release.body }}
+EOF
+)
+            if printf '%s' "$RELEASE_BODY" | grep -qi '\[rebuild-webos-ipk\]'; then
+              echo "rebuild_webos=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "rebuild_webos=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
             echo "release_id=${{ inputs.release_id }}" >> "$GITHUB_OUTPUT"
+            echo "rebuild_webos=${{ inputs.rebuild_webos || 'false' }}" >> "$GITHUB_OUTPUT"
           fi
-
-  sync-tizenbrew:
-    runs-on: ubuntu-latest
-    needs: resolve-release-payload
-    if: ${{ vars.TIZEN_REPO != '' }}
-    permissions:
-      contents: read
-    steps:
-      - name: Check out shared source at release tag
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve-release-payload.outputs.tag }}
-
-      - name: Check out TizenBrew module repo
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.TIZEN_REPO }}
-          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
-          path: tizen-module
-
-      - name: Check out private webOS repo for env source
-        if: ${{ vars.WEBOS_REPO != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.WEBOS_REPO }}
-          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
-          path: webos-private
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Install shared dependencies
-        run: npm ci
-
-      - name: Build shared app
-        run: npm run build
-
-      - name: Sync TizenBrew module from release
-        env:
-          RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
-        run: |
-          VERSION="${RELEASE_TAG#v}"
-          EXTRA_ARGS=""
-          if [ -f "$GITHUB_WORKSPACE/webos-private/nuvio.env.js" ]; then
-            EXTRA_ARGS="--env-source $GITHUB_WORKSPACE/webos-private/nuvio.env.js"
-          fi
-          node ./tizen-module/scripts/prepare-module.mjs --shared "$GITHUB_WORKSPACE" --version "$VERSION" $EXTRA_ARGS
-
-      - name: Commit synced TizenBrew files
-        env:
-          RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
-        run: |
-          cd tizen-module
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app icon.png package.json
-          if git diff --cached --quiet; then
-            echo "No TizenBrew module changes to commit"
-            exit 0
-          fi
-          git commit -m "Update to $RELEASE_TAG based on release"
-          git push origin HEAD:main
 
   dispatch-webos-build:
     runs-on: ubuntu-latest
@@ -111,10 +60,12 @@ jobs:
           TARGET_REPO: ${{ vars.WEBOS_REPO }}
           TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
           RELEASE_ID: ${{ needs.resolve-release-payload.outputs.release_id }}
+          REBUILD_WEBOS: ${{ needs.resolve-release-payload.outputs.rebuild_webos }}
           SOURCE_REPO: ${{ github.repository }}
         run: |
           gh api --method POST "repos/$TARGET_REPO/dispatches" \
             -f event_type=build-release \
             -F client_payload[source_repo]="$SOURCE_REPO" \
             -F client_payload[tag]="$TAG_NAME" \
-            -F client_payload[release_id]="$RELEASE_ID"
+            -F client_payload[release_id]="$RELEASE_ID" \
+            -F client_payload[rebuild_webos]="$REBUILD_WEBOS"

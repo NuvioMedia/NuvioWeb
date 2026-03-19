@@ -7,7 +7,7 @@
   <p>
     A modern <b>web version</b> of Nuvio TV powered by the Stremio addon ecosystem.
     <br />
-    Shared web app • TV wrapper ready • Playback-focused experience
+    Shared web app • Hosted TV wrappers • Playback-focused experience
   </p>
 
   <p>
@@ -18,11 +18,29 @@
 
 ## About
 
-**NuvioTV Web** is the shared web app source for the Nuvio TV experience. It runs in a browser and can also be packaged inside TV wrapper projects such as **LG webOS** and **Samsung Tizen**.
+**NuvioTV Web** is the shared web app source for the Nuvio TV experience. It runs in a browser and also powers lightweight TV wrappers for **Samsung Tizen** and **LG webOS**.
 
 It acts as a client-side interface that can integrate with the **Stremio addon ecosystem** for content discovery and source resolution through user-installed extensions.
 
-> This repository is the shared web codebase, not the wrapper project itself.
+> This repository is the shared web codebase. The Tizen and webOS repos are wrapper layers around the hosted web app.
+
+## Install
+
+### TizenBrew
+
+- Open TizenBrew on your Samsung TV
+- Add the GitHub module `NuvioMedia/NuvioTVTizen`
+- Launch Nuvio TV from your installed modules
+
+### webOS Homebrew
+
+- For direct `.ipk` install: open the latest release in `NuvioMedia/NuvioWeb`, download the attached `.ipk`, enable Developer Mode and Key Server by following `https://www.webosbrew.org/devmode`, then install it with `webOS Dev Manager`
+- For Homebrew Channel repository install: open `Homebrew Channel`, go to `Settings`, choose `Add repository`, enter `https://raw.githubusercontent.com/NuvioMedia/NuvioWebOS/main/webosbrew/apps.json`, return to the apps list, and install Nuvio TV from there
+
+### Wrapper Repositories
+
+- TizenBrew wrapper: `NuvioMedia/NuvioTVTizen`
+- webOS wrapper: `NuvioMedia/NuvioWebOS`
 
 ## Origins / Credits
 
@@ -33,27 +51,20 @@ This project is part of the Nuvio TV ecosystem and has two important roots:
   https://github.com/tapframe/NuvioTV
 
 - **WhiteGiso/NuvioTV-WebOS**  
-  The community webOS codebase that served as the starting inspiration/base for this shared web version.
+  The community webOS codebase that served as the starting inspiration/base for this shared web version.  
   https://github.com/WhiteGiso/NuvioTV-WebOS
 
 This repository expands on that foundation into a shared web app that can be reused across platforms.
 
-## Repository Structure
+## For Developers
+
+### Repository Structure
 
 - `js/` app logic, platform adapters, player code
 - `css/` shared styling
 - `assets/` icons, branding, bundled libs
-- `scripts/` build and sync tooling
+- `scripts/` build and sync tooling for self-packaged wrappers
 - `dist/` generated build output
-
-## Development
-
-### Prerequisites
-
-- Node.js
-- Python 3 for a simple local static server
-- webOS CLI if you want to package/test on LG
-- Tizen Studio if you want to package/test on Samsung
 
 ### Run the Web App Locally
 
@@ -65,7 +76,11 @@ python3 -m http.server 8080 -d dist
 
 Open `http://127.0.0.1:8080`.
 
-## Creating a webOS Wrapper Project
+### Building Wrapper Projects Yourself
+
+The public TizenBrew wrapper and the webOS release wrapper point at the hosted web app. This repo also includes sync tooling for developers who want to build fully packaged custom wrappers.
+
+#### webOS self-packaged wrapper
 
 Create a separate webOS project folder with at least:
 
@@ -76,46 +91,16 @@ YourWebOSProject/
   main.js
 ```
 
-Recommended files:
-
-- `appinfo.json`: webOS app metadata
-- `index.html`: loads the shared app assets
-- `main.js`: optional webOS bootstrap logic
-
-For full webOS platform support, also include LG platform scripts in the wrapper project, especially if you want app exit handling or AVPlay integration.
-
-Minimal packaged `index.html` example:
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Nuvio TV</title>
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/layout.css" />
-  <link rel="stylesheet" href="css/components.css" />
-  <link rel="stylesheet" href="css/themes.css" />
-</head>
-<body>
-  <script>window.__NUVIO_PLATFORM__ = "webos";</script>
-  <script src="js/runtime/env.js"></script>
-  <script src="webOSTVjs-1.2.12/webOSTV.js"></script>
-  <script defer src="app.bundle.js"></script>
-</body>
-</html>
-```
-
-After that, sync the shared web build into the wrapper:
+Then sync the built app into that wrapper:
 
 ```bash
 npm run build
 npm run sync:webos -- /absolute/path/to/YourWebOSProject
 ```
 
-Then package/install that wrapper with your normal webOS CLI workflow.
+Package/install it with your normal webOS CLI workflow.
 
-## Creating a Tizen Wrapper Project
+#### Tizen self-packaged wrapper
 
 Create a separate Tizen project folder with at least:
 
@@ -126,65 +111,16 @@ YourTizenProject/
   main.js
 ```
 
-Recommended files:
-
-- `config.xml`: Tizen app manifest
-- `index.html`: loads wrapper bootstrap and shared assets
-- `main.js`: registers TV keys and loads the bundled app
-
-Minimal `index.html` example:
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8" />
-  <title>Nuvio TV Tizen</title>
-  <link rel="stylesheet" href="css/base.css" />
-  <link rel="stylesheet" href="css/layout.css" />
-  <link rel="stylesheet" href="css/components.css" />
-  <link rel="stylesheet" href="css/themes.css" />
-</head>
-<body>
-  <script src="js/runtime/env.js"></script>
-  <script defer src="main.js"></script>
-</body>
-</html>
-```
-
-Minimal `main.js` example:
-
-```js
-window.__NUVIO_PLATFORM__ = "tizen";
-
-var tvInput = window.tizen && window.tizen.tvinputdevice;
-if (tvInput && typeof tvInput.registerKey === "function") {
-  ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"]
-    .forEach(function registerKey(keyName) {
-      try {
-        tvInput.registerKey(keyName);
-      } catch (_) {}
-    });
-}
-
-var script = document.createElement("script");
-script.src = "./app.bundle.js";
-script.defer = true;
-document.body.appendChild(script);
-```
-
-Then sync the shared web build into the wrapper:
+Then sync the built app into that wrapper:
 
 ```bash
 npm run build
 npm run sync:tizen -- /absolute/path/to/YourTizenProject
 ```
 
-Then package/install that wrapper with Tizen Studio or your normal Samsung TV workflow.
+Package/install it with Tizen Studio or your normal Samsung TV workflow.
 
-## Sync Command
-
-The universal sync command copies the built web app into a wrapper project:
+### Sync Commands
 
 ```bash
 npm run sync:webos -- /absolute/path/to/project
@@ -198,25 +134,11 @@ npm run sync -- --webos --path /absolute/path/to/project
 npm run sync -- --tizen --path /absolute/path/to/project
 ```
 
-It syncs:
+### Hosted vs Packaged
 
-- `assets/`
-- `css/`
-- `js/`
-- `res/`
-- `app.bundle.js`
-
-It also updates wrapper metadata:
-
-- `appinfo.json` for webOS: sets the title to `Nuvio TV`, points `icon` to `icon.png`, and points `largeIcon` to `largeIcon.png`
-- `config.xml` for Tizen: sets `<name>` to `Nuvio TV` and `<icon src="icon.png"/>`
-- copies `icon.png` into both wrapper roots and `largeIcon.png` into the webOS wrapper root
-
-## Hosted vs Packaged
-
-- This repo can be hosted as a normal website.
-- TV wrappers can either package the synced build locally or redirect to a hosted URL.
-- The sync command is for packaged-wrapper workflows.
+- The shared app can be hosted as a normal website
+- The maintained Tizen and webOS wrapper repos are hosted-app launchers
+- The sync commands are for developers who want fully packaged custom wrappers
 
 ## Legal & Disclaimer
 
