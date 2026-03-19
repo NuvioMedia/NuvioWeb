@@ -6208,7 +6208,7 @@ button:focus-visible {
 #videoPlayer::cue {
   color: var(--player-subtitle-color);
   font-size: var(--player-subtitle-font-size);
-  font-weight: var(--player-subtitle-font-weight);
+  font-weight: var(--player-subtitle-font-weight) !important;
   text-shadow: var(--player-subtitle-shadow);
   background: transparent;
 }
@@ -6918,6 +6918,18 @@ button:focus-visible {
   scroll-margin-block: 10px;
 }
 
+.player-dialog-style-item {
+  grid-template-columns: 58px 1fr 58px;
+  align-items: center;
+  column-gap: 14px;
+}
+
+.player-dialog-item-center {
+  min-width: 0;
+  grid-column: 2 / 3;
+  grid-row: 1 / 3;
+}
+
 .player-dialog-item.focused {
   border-color: transparent;
   background: var(--player-secondary);
@@ -6959,6 +6971,41 @@ button:focus-visible {
 
 .player-dialog-item.selected.focused .player-dialog-item-check {
   color: var(--player-on-secondary);
+}
+
+.player-dialog-step {
+  width: 58px;
+  min-width: 58px;
+  height: 58px;
+  padding: 0;
+  border: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--player-text-primary);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  grid-row: 1 / 3;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.player-dialog-step.focused {
+  background: #ffffff;
+  color: #111111;
+}
+
+.player-dialog-step-minus {
+  grid-column: 1 / 2;
+}
+
+.player-dialog-step-plus {
+  grid-column: 3 / 4;
 }
 
 .player-dialog-item-sub {
