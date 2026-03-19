@@ -2534,6 +2534,20 @@ export const HomeScreen = {
       }
     }
 
+    if (this.layoutMode === "modern") {
+      const trackRect = track.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
+      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+      this.animateScroll(
+        track,
+        "x",
+        Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPadding)),
+        140
+      );
+      return;
+    }
+
     const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
     const targetLeft = target.offsetLeft;
     const targetRight = targetLeft + target.offsetWidth;
@@ -2541,21 +2555,11 @@ export const HomeScreen = {
     const visibleRight = track.scrollLeft + track.clientWidth - safeRightPadding;
 
     if (targetLeft < visibleLeft) {
-      this.animateScroll(
-        track,
-        "x",
-        targetLeft - leftPadding,
-        this.getScrollDuration(this.layoutMode === "modern" ? 140 : 160)
-      );
+      this.animateScroll(track, "x", targetLeft - leftPadding, this.getScrollDuration(160));
       return;
     }
     if (targetRight > visibleRight) {
-      this.animateScroll(
-        track,
-        "x",
-        targetRight - track.clientWidth + safeRightPadding,
-        this.getScrollDuration(this.layoutMode === "modern" ? 140 : 160)
-      );
+      this.animateScroll(track, "x", targetRight - track.clientWidth + safeRightPadding, this.getScrollDuration(160));
       return;
     }
     if (this.layoutMode !== "modern" && !direction) {
