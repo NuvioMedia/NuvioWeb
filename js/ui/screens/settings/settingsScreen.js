@@ -38,7 +38,7 @@ import {
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
 const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
-const SETTINGS_VERSION_LABEL = "0.1.5-web";
+const SETTINGS_VERSION_LABEL = "0.1.1-web";
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
