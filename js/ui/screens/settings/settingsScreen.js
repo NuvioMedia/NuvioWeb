@@ -38,7 +38,7 @@ import {
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
 const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
-const SETTINGS_VERSION_LABEL = "0.1.0-web";
+const SETTINGS_VERSION_LABEL = "0.1.5-web";
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
@@ -752,7 +752,7 @@ export const SettingsScreen = {
     return `
       <button class="settings-action-row settings-content-focusable focusable${classes ? ` ${classes}` : ""}${inert ? " is-disabled" : ""}${planned ? " is-planned" : ""}"
               data-zone="content"
-              ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}
+              ${this.registerAction(focusKey, inert ? () => { } : this.actionMap.get(focusKey))}
               data-role="action">
         <span class="settings-row-copy">
           <span class="settings-row-title">${escapeHtml(title)}</span>
@@ -768,7 +768,7 @@ export const SettingsScreen = {
     return `
       <button class="settings-action-row settings-toggle-row settings-content-focusable focusable${inert ? " is-disabled" : ""}${planned ? " is-planned" : ""}"
               data-zone="content"
-              ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}
+              ${this.registerAction(focusKey, inert ? () => { } : this.actionMap.get(focusKey))}
               data-role="toggle">
         <span class="settings-row-copy">
           <span class="settings-row-title">${escapeHtml(title)}</span>
@@ -820,7 +820,7 @@ export const SettingsScreen = {
               data-zone="content"
               aria-label="${escapeHtml(label)}"
               title="${escapeHtml(label)}"
-              ${this.registerAction(focusKey, inert ? () => {} : this.actionMap.get(focusKey))}>
+              ${this.registerAction(focusKey, inert ? () => { } : this.actionMap.get(focusKey))}>
         ${planned ? `<span class="settings-plugin-icon-badge">${escapeHtml(t("common.soon"))}</span>` : iconSvg(ROW_ICONS[icon], "settings-plugin-icon-symbol")}
       </button>
     `;
@@ -836,24 +836,24 @@ export const SettingsScreen = {
           <div class="settings-plugin-repo-title">${escapeHtml(addon.displayName || addon.name || t("common.repository"))}</div>
           <div class="settings-plugin-repo-meta">
             ${escapeHtml(t(
-              streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
-              { count: streamResourceCount, version: addon.version || "0.0.0" }
-            ))}
+      streamResourceCount === 1 ? "settings.plugins.repoMetaSingular" : "settings.plugins.repoMetaPlural",
+      { count: streamResourceCount, version: addon.version || "0.0.0" }
+    ))}
           </div>
           <div class="settings-plugin-repo-url">${escapeHtml(addon.baseUrl || addon.description || addonKindsLabel(addon))}</div>
         </div>
         <div class="settings-plugin-repo-actions">
           ${this.renderPluginIconButton({
-            focusKey: `plugins:refresh:${index}`,
-            icon: "refresh",
-            label: t("settings.plugins.refreshRepository")
-          })}
+      focusKey: `plugins:refresh:${index}`,
+      icon: "refresh",
+      label: t("settings.plugins.refreshRepository")
+    })}
           ${this.renderPluginIconButton({
-            focusKey: `plugins:remove:${index}`,
-            icon: "trash",
-            label: t("settings.plugins.removeRepository"),
-            destructive: true
-          })}
+      focusKey: `plugins:remove:${index}`,
+      icon: "trash",
+      label: t("settings.plugins.removeRepository"),
+      destructive: true
+    })}
         </div>
       </article>
     `;
@@ -902,18 +902,18 @@ export const SettingsScreen = {
                       data-dialog-index="${index}"
                       data-dialog-option-id="${escapeHtml(option.id)}">
                 ${useLanguageRenderer
-                  ? `<span class="settings-language-option-copy">
+        ? `<span class="settings-language-option-copy">
                       <span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>
                     </span>
                     <span class="settings-language-option-meta">
                       ${subtitleLanguageOptionCode(option)
-                        ? `<span class="settings-language-option-code">${escapeHtml(subtitleLanguageOptionCode(option))}</span>`
-                        : ""}
+          ? `<span class="settings-language-option-code">${escapeHtml(subtitleLanguageOptionCode(option))}</span>`
+          : ""}
                       ${String(option.id) === String(this.optionDialog.selectedId)
-                        ? `<span class="settings-language-option-check" aria-hidden="true">&#10003;</span>`
-                        : ""}
+          ? `<span class="settings-language-option-check" aria-hidden="true">&#10003;</span>`
+          : ""}
                     </span>`
-                  : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`}
+        : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`}
               </button>
             `).join("")}
           </div>
@@ -969,21 +969,21 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${signedIn
-            ? `<div class="settings-account-status">
+        ? `<div class="settings-account-status">
                 <span class="settings-account-status-label">${t("settings.status.signedIn")}</span>
                 <strong class="settings-account-status-value">${escapeHtml(model.accountEmail || t("settings.status.linkedFallback"))}</strong>
               </div>`
-            : `<p class="settings-account-note">${t("settings.account.syncNote")}</p>
+        : `<p class="settings-account-note">${t("settings.account.syncNote")}</p>
               ${this.renderActionRow({
-              focusKey: "account:signin",
-              title: t("settings.account.signInWithQr"),
-              subtitle: t("settings.account.signInWithQrSubtitle")
-            })}`}
+          focusKey: "account:signin",
+          title: t("settings.account.signInWithQr"),
+          subtitle: t("settings.account.signInWithQrSubtitle")
+        })}`}
           ${signedIn ? this.renderActionRow({
-            focusKey: "account:signout",
-            title: t("settings.account.signOut"),
-            subtitle: t("settings.account.signOutSubtitle")
-          }) : ""}
+          focusKey: "account:signout",
+          title: t("settings.account.signOut"),
+          subtitle: t("settings.account.signOutSubtitle")
+        }) : ""}
         </div>
       </div>
     `;
@@ -1000,12 +1000,12 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderActionRow({
-            focusKey: "profiles:manage",
-            title: t("settings.profiles.manageProfiles"),
-            subtitle: "",
-            icon: null,
-            classes: "settings-profile-manage-row"
-          })}
+      focusKey: "profiles:manage",
+      title: t("settings.profiles.manageProfiles"),
+      subtitle: "",
+      icon: null,
+      classes: "settings-profile-manage-row"
+    })}
         </div>
       </div>
     `;
@@ -1052,30 +1052,30 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-theme-grid-card">
         <div class="settings-theme-grid">
           ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
-            theme,
-            String(model.theme.themeName).toUpperCase() === theme.id,
-            `appearance:theme:${theme.id}`
-          )).join("")}
+      theme,
+      String(model.theme.themeName).toUpperCase() === theme.id,
+      `appearance:theme:${theme.id}`
+    )).join("")}
         </div>
       </div>
       <div class="settings-group-card">
         <div class="settings-stack">
           ${this.renderActionRow({
-            focusKey: "appearance:font",
-            title: t("settings.appearance.appFont"),
-            subtitle: t("settings.appearance.appFontSubtitle"),
-            value: labelForFont(model.theme.fontFamily)
-          })}
+      focusKey: "appearance:font",
+      title: t("settings.appearance.appFont"),
+      subtitle: t("settings.appearance.appFontSubtitle"),
+      value: labelForFont(model.theme.fontFamily)
+    })}
         </div>
       </div>
       <div class="settings-group-card">
         <div class="settings-stack">
           ${this.renderActionRow({
-            focusKey: "appearance:language",
-            title: t("settings.appearance.appLanguage"),
-            subtitle: t("settings.appearance.appLanguageSubtitle"),
-            value: labelForLanguage(model.theme.language)
-          })}
+      focusKey: "appearance:language",
+      title: t("settings.appearance.appLanguage"),
+      subtitle: t("settings.appearance.appLanguageSubtitle"),
+      value: labelForLanguage(model.theme.language)
+    })}
         </div>
       </div>
     `;
@@ -1186,142 +1186,142 @@ export const SettingsScreen = {
       <div class="settings-stack">
         <div class="settings-layout-grid">
           ${HOME_LAYOUT_OPTIONS.map((option) => this.renderLayoutCard(
-            option,
-            selectedLayout === option.id,
-            `layout:layout:${option.id}`
-          )).join("")}
+      option,
+      selectedLayout === option.id,
+      `layout:layout:${option.id}`
+    )).join("")}
         </div>
         ${isModernLayout ? this.renderToggleRow({
-          focusKey: "layout:modernLandscapePosters",
-          title: t("settings.layout.landscapePosters.title"),
-          subtitle: t("settings.layout.landscapePosters.subtitle"),
-          checked: Boolean(model.layout.modernLandscapePostersEnabled)
-        }) : ""}
+      focusKey: "layout:modernLandscapePosters",
+      title: t("settings.layout.landscapePosters.title"),
+      subtitle: t("settings.layout.landscapePosters.subtitle"),
+      checked: Boolean(model.layout.modernLandscapePostersEnabled)
+    }) : ""}
       </div>
     `;
 
     const homeContentBody = `
       <div class="settings-stack">
         ${!model.layout.modernSidebar ? this.renderToggleRow({
-          focusKey: "layout:collapseSidebar",
-          title: t("settings.layout.collapseSidebar.title"),
-          subtitle: t("settings.layout.collapseSidebar.subtitle"),
-          checked: Boolean(model.layout.collapseSidebar)
-        }) : ""}
+      focusKey: "layout:collapseSidebar",
+      title: t("settings.layout.collapseSidebar.title"),
+      subtitle: t("settings.layout.collapseSidebar.subtitle"),
+      checked: Boolean(model.layout.collapseSidebar)
+    }) : ""}
         ${this.renderToggleRow({
-          focusKey: "layout:modernSidebar",
-          title: t("settings.layout.modernSidebar.title"),
-          subtitle: t("settings.layout.modernSidebar.subtitle"),
-          checked: Boolean(model.layout.modernSidebar)
-        })}
+      focusKey: "layout:modernSidebar",
+      title: t("settings.layout.modernSidebar.title"),
+      subtitle: t("settings.layout.modernSidebar.subtitle"),
+      checked: Boolean(model.layout.modernSidebar)
+    })}
         ${model.layout.modernSidebar ? this.renderToggleRow({
-          focusKey: "layout:modernSidebarBlur",
-          title: t("settings.layout.modernSidebarBlur.title"),
-          subtitle: t("settings.layout.modernSidebarBlur.subtitle"),
-          checked: Boolean(model.layout.modernSidebarBlur)
-        }) : ""}
+      focusKey: "layout:modernSidebarBlur",
+      title: t("settings.layout.modernSidebarBlur.title"),
+      subtitle: t("settings.layout.modernSidebarBlur.subtitle"),
+      checked: Boolean(model.layout.modernSidebarBlur)
+    }) : ""}
         ${this.renderToggleRow({
-          focusKey: "layout:heroSection",
-          title: t("settings.layout.heroSection.title"),
-          subtitle: t("settings.layout.heroSection.subtitle"),
-          checked: Boolean(model.layout.heroSectionEnabled)
-        })}
+      focusKey: "layout:heroSection",
+      title: t("settings.layout.heroSection.title"),
+      subtitle: t("settings.layout.heroSection.subtitle"),
+      checked: Boolean(model.layout.heroSectionEnabled)
+    })}
         ${this.renderToggleRow({
-          focusKey: "layout:searchDiscover",
-          title: t("settings.layout.searchDiscover.title"),
-          subtitle: t("settings.layout.searchDiscover.subtitle"),
-          checked: Boolean(model.layout.searchDiscoverEnabled)
-        })}
+      focusKey: "layout:searchDiscover",
+      title: t("settings.layout.searchDiscover.title"),
+      subtitle: t("settings.layout.searchDiscover.subtitle"),
+      checked: Boolean(model.layout.searchDiscoverEnabled)
+    })}
         ${!isModernLayout ? this.renderToggleRow({
-          focusKey: "layout:posterLabels",
-          title: t("settings.layout.posterLabels.title"),
-          subtitle: t("settings.layout.posterLabels.subtitle"),
-          checked: Boolean(model.layout.posterLabelsEnabled)
-        }) : ""}
+      focusKey: "layout:posterLabels",
+      title: t("settings.layout.posterLabels.title"),
+      subtitle: t("settings.layout.posterLabels.subtitle"),
+      checked: Boolean(model.layout.posterLabelsEnabled)
+    }) : ""}
         ${!isModernLayout ? this.renderToggleRow({
-          focusKey: "layout:addonName",
-          title: t("settings.layout.addonName.title"),
-          subtitle: t("settings.layout.addonName.subtitle"),
-          checked: Boolean(model.layout.catalogAddonNameEnabled)
-        }) : ""}
+      focusKey: "layout:addonName",
+      title: t("settings.layout.addonName.title"),
+      subtitle: t("settings.layout.addonName.subtitle"),
+      checked: Boolean(model.layout.catalogAddonNameEnabled)
+    }) : ""}
         ${this.renderToggleRow({
-          focusKey: "layout:catalogType",
-          title: t("settings.layout.catalogType.title"),
-          subtitle: t("settings.layout.catalogType.subtitle"),
-          checked: Boolean(model.layout.catalogTypeSuffixEnabled)
-        })}
+      focusKey: "layout:catalogType",
+      title: t("settings.layout.catalogType.title"),
+      subtitle: t("settings.layout.catalogType.subtitle"),
+      checked: Boolean(model.layout.catalogTypeSuffixEnabled)
+    })}
         ${this.renderToggleRow({
-          focusKey: "layout:hideUnreleased",
-          title: t("settings.layout.hideUnreleased.title"),
-          subtitle: t("settings.layout.hideUnreleased.subtitle"),
-          checked: Boolean(model.layout.hideUnreleasedContent)
-        })}
+      focusKey: "layout:hideUnreleased",
+      title: t("settings.layout.hideUnreleased.title"),
+      subtitle: t("settings.layout.hideUnreleased.subtitle"),
+      checked: Boolean(model.layout.hideUnreleasedContent)
+    })}
       </div>
     `;
 
     const detailPageBody = `
       <div class="settings-stack">
         ${this.renderToggleRow({
-          focusKey: "layout:detail:blurUnwatched",
-          title: t("settings.layout.blurUnwatched.title"),
-          subtitle: t("settings.layout.blurUnwatched.subtitle"),
-          checked: false,
-          disabled: true
-        })}
+      focusKey: "layout:detail:blurUnwatched",
+      title: t("settings.layout.blurUnwatched.title"),
+      subtitle: t("settings.layout.blurUnwatched.subtitle"),
+      checked: false,
+      disabled: true
+    })}
         ${this.renderToggleRow({
-          focusKey: "layout:detail:trailerButton",
-          title: t("settings.layout.showTrailerButton.title"),
-          subtitle: t("settings.layout.showTrailerButton.subtitle"),
-          checked: Boolean(model.layout.detailPageTrailerButtonEnabled)
-        })}
+      focusKey: "layout:detail:trailerButton",
+      title: t("settings.layout.showTrailerButton.title"),
+      subtitle: t("settings.layout.showTrailerButton.subtitle"),
+      checked: Boolean(model.layout.detailPageTrailerButtonEnabled)
+    })}
         ${this.renderToggleRow({
-          focusKey: "layout:detail:preferExternalMeta",
-          title: t("settings.layout.preferExternalMeta.title"),
-          subtitle: t("settings.layout.preferExternalMeta.subtitle"),
-          checked: false,
-          disabled: true
-        })}
+      focusKey: "layout:detail:preferExternalMeta",
+      title: t("settings.layout.preferExternalMeta.title"),
+      subtitle: t("settings.layout.preferExternalMeta.subtitle"),
+      checked: false,
+      disabled: true
+    })}
       </div>
     `;
 
     const focusedPosterBody = `
       <div class="settings-stack">
         ${!isModernLandscape ? this.renderToggleRow({
-          focusKey: "layout:focusedPosterExpand",
-          title: t("settings.layout.focusedPosterExpand.title"),
-          subtitle: t("settings.layout.focusedPosterExpand.subtitle"),
-          checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
-        }) : ""}
+      focusKey: "layout:focusedPosterExpand",
+      title: t("settings.layout.focusedPosterExpand.title"),
+      subtitle: t("settings.layout.focusedPosterExpand.subtitle"),
+      checked: Boolean(model.layout.focusedPosterBackdropExpandEnabled)
+    }) : ""}
         ${!isModernLandscape && Boolean(model.layout.focusedPosterBackdropExpandEnabled) ? this.renderActionRow({
-          focusKey: "layout:focusedPosterExpandDelay",
-          title: t("settings.layout.focusedPosterExpandDelay.title"),
-          subtitle: t("settings.layout.focusedPosterExpandDelay.subtitle"),
-          value: `${Number(model.layout.focusedPosterBackdropExpandDelaySeconds ?? 3)}s`
-        }) : ""}
+      focusKey: "layout:focusedPosterExpandDelay",
+      title: t("settings.layout.focusedPosterExpandDelay.title"),
+      subtitle: t("settings.layout.focusedPosterExpandDelay.subtitle"),
+      value: `${Number(model.layout.focusedPosterBackdropExpandDelaySeconds ?? 3)}s`
+    }) : ""}
         ${showAutoplayRow ? this.renderToggleRow({
-          focusKey: "layout:focusedPosterTrailer",
-          title: isModernLayout ? t("settings.layout.autoplayTrailer.title") : t("settings.layout.autoplayTrailerExpandedCard.title"),
-          subtitle: isModernLayout
-            ? t("settings.layout.autoplayTrailer.subtitle")
-            : t("settings.layout.autoplayTrailerExpandedCard.subtitle"),
-          checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
-        }) : ""}
+      focusKey: "layout:focusedPosterTrailer",
+      title: isModernLayout ? t("settings.layout.autoplayTrailer.title") : t("settings.layout.autoplayTrailerExpandedCard.title"),
+      subtitle: isModernLayout
+        ? t("settings.layout.autoplayTrailer.subtitle")
+        : t("settings.layout.autoplayTrailerExpandedCard.subtitle"),
+      checked: Boolean(model.layout.focusedPosterBackdropTrailerEnabled)
+    }) : ""}
         ${showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderToggleRow({
-          focusKey: "layout:focusedPosterTrailerMuted",
-          title: isModernLayout ? t("settings.layout.trailerMuted.title") : t("settings.layout.trailerMutedExpandedCard.title"),
-          subtitle: isModernLayout
-            ? t("settings.layout.trailerMuted.subtitle")
-            : t("settings.layout.trailerMutedExpandedCard.subtitle"),
-          checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
-        }) : ""}
+      focusKey: "layout:focusedPosterTrailerMuted",
+      title: isModernLayout ? t("settings.layout.trailerMuted.title") : t("settings.layout.trailerMutedExpandedCard.title"),
+      subtitle: isModernLayout
+        ? t("settings.layout.trailerMuted.subtitle")
+        : t("settings.layout.trailerMutedExpandedCard.subtitle"),
+      checked: Boolean(model.layout.focusedPosterBackdropTrailerMuted)
+    }) : ""}
         ${isModernLayout && showAutoplayRow && Boolean(model.layout.focusedPosterBackdropTrailerEnabled) ? this.renderActionRow({
-          focusKey: "layout:focusedPosterTrailerTarget",
-          title: t("settings.layout.trailerTarget.title"),
-          subtitle: t("settings.layout.trailerTarget.subtitle"),
-          value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card"
-            ? t("settings.layout.trailerTargets.expandedCard")
-            : t("settings.layout.trailerTargets.heroMedia")
-        }) : ""}
+      focusKey: "layout:focusedPosterTrailerTarget",
+      title: t("settings.layout.trailerTarget.title"),
+      subtitle: t("settings.layout.trailerTarget.subtitle"),
+      value: String(model.layout.focusedPosterBackdropTrailerPlaybackTarget || "hero_media") === "expanded_card"
+        ? t("settings.layout.trailerTargets.expandedCard")
+        : t("settings.layout.trailerTargets.heroMedia")
+    }) : ""}
       </div>
     `;
 
@@ -1330,33 +1330,33 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
-            focusKey: "layout:toggle:homeLayout",
-            title: t("settings.layout.groups.homeLayout.title"),
-            subtitle: t("settings.layout.groups.homeLayout.subtitle"),
-            expanded: Boolean(expanded.homeLayout),
-            bodyHtml: homeLayoutBody
-          })}
+      focusKey: "layout:toggle:homeLayout",
+      title: t("settings.layout.groups.homeLayout.title"),
+      subtitle: t("settings.layout.groups.homeLayout.subtitle"),
+      expanded: Boolean(expanded.homeLayout),
+      bodyHtml: homeLayoutBody
+    })}
           ${this.renderCollapsibleRow({
-            focusKey: "layout:toggle:homeContent",
-            title: t("settings.layout.groups.homeContent.title"),
-            subtitle: t("settings.layout.groups.homeContent.subtitle"),
-            expanded: Boolean(expanded.homeContent),
-            bodyHtml: homeContentBody
-          })}
+      focusKey: "layout:toggle:homeContent",
+      title: t("settings.layout.groups.homeContent.title"),
+      subtitle: t("settings.layout.groups.homeContent.subtitle"),
+      expanded: Boolean(expanded.homeContent),
+      bodyHtml: homeContentBody
+    })}
           ${this.renderCollapsibleRow({
-            focusKey: "layout:toggle:detailPage",
-            title: t("settings.layout.groups.detailPage.title"),
-            subtitle: t("settings.layout.groups.detailPage.subtitle"),
-            expanded: Boolean(expanded.detailPage),
-            bodyHtml: detailPageBody
-          })}
+      focusKey: "layout:toggle:detailPage",
+      title: t("settings.layout.groups.detailPage.title"),
+      subtitle: t("settings.layout.groups.detailPage.subtitle"),
+      expanded: Boolean(expanded.detailPage),
+      bodyHtml: detailPageBody
+    })}
           ${this.renderCollapsibleRow({
-            focusKey: "layout:toggle:focusedPoster",
-            title: t("settings.layout.groups.focusedPoster.title"),
-            subtitle: t("settings.layout.groups.focusedPoster.subtitle"),
-            expanded: Boolean(expanded.focusedPoster),
-            bodyHtml: focusedPosterBody
-          })}
+      focusKey: "layout:toggle:focusedPoster",
+      title: t("settings.layout.groups.focusedPoster.title"),
+      subtitle: t("settings.layout.groups.focusedPoster.subtitle"),
+      expanded: Boolean(expanded.focusedPoster),
+      bodyHtml: focusedPosterBody
+    })}
         </div>
       </div>
     `;
@@ -1379,7 +1379,7 @@ export const SettingsScreen = {
       this.pluginDraft = "";
     });
 
-    this.actionMap.set("plugins:phone", () => {});
+    this.actionMap.set("plugins:phone", () => { });
     model.addons.forEach((addon, index) => {
       this.actionMap.set(`plugins:refresh:${index}`, async () => {
         await addonRepository.refreshAddon(addon.baseUrl || "");
@@ -1415,19 +1415,19 @@ export const SettingsScreen = {
         </div>
 
         ${this.renderActionRow({
-          focusKey: "plugins:phone",
-          title: t("settings.plugins.manageFromPhone"),
-          subtitle: plannedSubtitle(t("settings.plugins.manageFromPhoneSubtitle")),
-          classes: "settings-plugins-phone",
-          icon: "phone",
-          planned: true
-        })}
+      focusKey: "plugins:phone",
+      title: t("settings.plugins.manageFromPhone"),
+      subtitle: plannedSubtitle(t("settings.plugins.manageFromPhoneSubtitle")),
+      classes: "settings-plugins-phone",
+      icon: "phone",
+      planned: true
+    })}
 
         <div class="settings-repository-heading">${t("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
 
         ${model.addons.length
-          ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>`
-          : `<div class="settings-empty-state">
+        ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>`
+        : `<div class="settings-empty-state">
               <p>${t("settings.plugins.noRepositoriesTitle")}</p>
               <p>${t("settings.plugins.noRepositoriesSubtitle")}</p>
             </div>`}
@@ -1436,17 +1436,17 @@ export const SettingsScreen = {
           <div class="settings-repository-heading settings-plugin-provider-heading">${t("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
           <div class="settings-stack">
             ${model.pluginSources.map((source) => this.renderToggleRow({
-              focusKey: `plugins:provider:${source.id}`,
-              title: source.name || t("common.provider"),
-              subtitle: source.urlTemplate || t("settings.plugins.customProviderTemplate"),
-              checked: Boolean(source.enabled)
-            })).join("")}
+          focusKey: `plugins:provider:${source.id}`,
+          title: source.name || t("common.provider"),
+          subtitle: source.urlTemplate || t("settings.plugins.customProviderTemplate"),
+          checked: Boolean(source.enabled)
+        })).join("")}
             ${this.renderActionRow({
-              focusKey: "plugins:provider:test",
-              title: t("settings.plugins.providerTesting"),
-              subtitle: plannedSubtitle(t("settings.plugins.providerTestingSubtitle")),
-              planned: true
-            })}
+          focusKey: "plugins:provider:test",
+          title: t("settings.plugins.providerTesting"),
+          subtitle: plannedSubtitle(t("settings.plugins.providerTestingSubtitle")),
+          planned: true
+        })}
           </div>
         ` : ""}
       </div>
@@ -1467,25 +1467,25 @@ export const SettingsScreen = {
       this.contentFocusKey = "integration:back";
     });
 
-      return `
+    return `
         ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "integration"))}
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
-              focusKey: "integration:hub:tmdb",
-              title: t("settings.integration.tmdb.label"),
-              subtitle: t("settings.integration.tmdb.subtitle")
-            })}
+      focusKey: "integration:hub:tmdb",
+      title: t("settings.integration.tmdb.label"),
+      subtitle: t("settings.integration.tmdb.subtitle")
+    })}
             ${this.renderActionRow({
-              focusKey: "integration:hub:mdblist",
-              title: t("settings.integration.mdblist.label"),
-              subtitle: t("settings.integration.mdblist.subtitle")
-            })}
+      focusKey: "integration:hub:mdblist",
+      title: t("settings.integration.mdblist.label"),
+      subtitle: t("settings.integration.mdblist.subtitle")
+    })}
             ${this.renderActionRow({
-              focusKey: "integration:hub:animeskip",
-              title: t("settings.integration.animeskip.label"),
-              subtitle: t("settings.integration.animeskip.subtitle")
-            })}
+      focusKey: "integration:hub:animeskip",
+      title: t("settings.integration.animeskip.label"),
+      subtitle: t("settings.integration.animeskip.subtitle")
+    })}
           </div>
         </div>
     `;
@@ -1533,50 +1533,50 @@ export const SettingsScreen = {
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
-              focusKey: "integration:back",
-              title: t("settings.integration.backToIntegrations.title"),
-              subtitle: t("settings.integration.backToIntegrations.subtitle"),
-              icon: "back"
-            })}
+        focusKey: "integration:back",
+        title: t("settings.integration.backToIntegrations.title"),
+        subtitle: t("settings.integration.backToIntegrations.subtitle"),
+        icon: "back"
+      })}
             ${this.renderToggleRow({
-              focusKey: "integration:tmdb:enabled",
-              title: t("settings.integration.tmdb.enable.title"),
-              subtitle: t("settings.integration.tmdb.enable.subtitle"),
-              checked: Boolean(model.tmdb.enabled)
-            })}
+        focusKey: "integration:tmdb:enabled",
+        title: t("settings.integration.tmdb.enable.title"),
+        subtitle: t("settings.integration.tmdb.enable.subtitle"),
+        checked: Boolean(model.tmdb.enabled)
+      })}
             ${this.renderToggleRow({
-              focusKey: "integration:tmdb:artwork",
-              title: t("settings.integration.tmdb.artwork.title"),
-              subtitle: t("settings.integration.tmdb.artwork.subtitle"),
-              checked: Boolean(model.tmdb.useArtwork),
-              disabled: !model.tmdb.enabled
-            })}
+        focusKey: "integration:tmdb:artwork",
+        title: t("settings.integration.tmdb.artwork.title"),
+        subtitle: t("settings.integration.tmdb.artwork.subtitle"),
+        checked: Boolean(model.tmdb.useArtwork),
+        disabled: !model.tmdb.enabled
+      })}
             ${this.renderToggleRow({
-              focusKey: "integration:tmdb:basic",
-              title: t("settings.integration.tmdb.basicInfo.title"),
-              subtitle: t("settings.integration.tmdb.basicInfo.subtitle"),
-              checked: Boolean(model.tmdb.useBasicInfo),
-              disabled: !model.tmdb.enabled
-            })}
+        focusKey: "integration:tmdb:basic",
+        title: t("settings.integration.tmdb.basicInfo.title"),
+        subtitle: t("settings.integration.tmdb.basicInfo.subtitle"),
+        checked: Boolean(model.tmdb.useBasicInfo),
+        disabled: !model.tmdb.enabled
+      })}
             ${this.renderToggleRow({
-              focusKey: "integration:tmdb:details",
-              title: t("settings.integration.tmdb.details.title"),
-              subtitle: t("settings.integration.tmdb.details.subtitle"),
-              checked: Boolean(model.tmdb.useDetails),
-              disabled: !model.tmdb.enabled
-            })}
+        focusKey: "integration:tmdb:details",
+        title: t("settings.integration.tmdb.details.title"),
+        subtitle: t("settings.integration.tmdb.details.subtitle"),
+        checked: Boolean(model.tmdb.useDetails),
+        disabled: !model.tmdb.enabled
+      })}
             ${this.renderActionRow({
-              focusKey: "integration:tmdb:language",
-              title: t("settings.integration.tmdb.language.title"),
-              subtitle: t("settings.integration.tmdb.language.subtitle"),
-              value: labelForTmdbLanguage(model.tmdb.language)
-            })}
+        focusKey: "integration:tmdb:language",
+        title: t("settings.integration.tmdb.language.title"),
+        subtitle: t("settings.integration.tmdb.language.subtitle"),
+        value: labelForTmdbLanguage(model.tmdb.language)
+      })}
             ${this.renderActionRow({
-              focusKey: "integration:tmdb:api",
-              title: t("settings.integration.tmdb.apiKey.title"),
-              subtitle: t("settings.integration.tmdb.apiKey.subtitle"),
-              value: maskValue(model.tmdb.apiKey, t("common.notSet"))
-            })}
+        focusKey: "integration:tmdb:api",
+        title: t("settings.integration.tmdb.apiKey.title"),
+        subtitle: t("settings.integration.tmdb.apiKey.subtitle"),
+        value: maskValue(model.tmdb.apiKey, t("common.notSet"))
+      })}
           </div>
         </div>
       `;
@@ -1598,26 +1598,26 @@ export const SettingsScreen = {
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
-              focusKey: "integration:back",
-              title: t("settings.integration.backToIntegrations.title"),
-              subtitle: t("settings.integration.backToIntegrations.subtitle"),
-              icon: "back"
-            })}
+        focusKey: "integration:back",
+        title: t("settings.integration.backToIntegrations.title"),
+        subtitle: t("settings.integration.backToIntegrations.subtitle"),
+        icon: "back"
+      })}
             ${this.renderToggleRow({
-              focusKey: "integration:mdblist:enabled",
-              title: t("settings.integration.mdblist.enable.title"),
-              subtitle: plannedSubtitle(t("settings.integration.mdblist.enable.subtitle")),
-              checked: Boolean(model.mdbList.enabled),
-              planned: true
-            })}
+        focusKey: "integration:mdblist:enabled",
+        title: t("settings.integration.mdblist.enable.title"),
+        subtitle: plannedSubtitle(t("settings.integration.mdblist.enable.subtitle")),
+        checked: Boolean(model.mdbList.enabled),
+        planned: true
+      })}
             ${this.renderActionRow({
-              focusKey: "integration:mdblist:key",
-              title: t("settings.integration.mdblist.apiKey.title"),
-              subtitle: plannedSubtitle(t("settings.integration.mdblist.apiKey.subtitle")),
-              value: maskValue(model.mdbList.apiKey, t("common.notSet")),
-              disabled: !model.mdbList.enabled,
-              planned: true
-            })}
+        focusKey: "integration:mdblist:key",
+        title: t("settings.integration.mdblist.apiKey.title"),
+        subtitle: plannedSubtitle(t("settings.integration.mdblist.apiKey.subtitle")),
+        value: maskValue(model.mdbList.apiKey, t("common.notSet")),
+        disabled: !model.mdbList.enabled,
+        planned: true
+      })}
           </div>
         </div>
       `;
@@ -1638,26 +1638,26 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderActionRow({
-            focusKey: "integration:back",
-            title: t("settings.integration.backToIntegrations.title"),
-            subtitle: t("settings.integration.backToIntegrations.subtitle"),
-            icon: "back"
-          })}
+      focusKey: "integration:back",
+      title: t("settings.integration.backToIntegrations.title"),
+      subtitle: t("settings.integration.backToIntegrations.subtitle"),
+      icon: "back"
+    })}
           ${this.renderToggleRow({
-            focusKey: "integration:animeskip:enabled",
-            title: t("settings.integration.animeskip.enable.title"),
-            subtitle: plannedSubtitle(t("settings.integration.animeskip.enable.subtitle")),
-            checked: Boolean(model.animeSkip.enabled),
-            planned: true
-          })}
+      focusKey: "integration:animeskip:enabled",
+      title: t("settings.integration.animeskip.enable.title"),
+      subtitle: plannedSubtitle(t("settings.integration.animeskip.enable.subtitle")),
+      checked: Boolean(model.animeSkip.enabled),
+      planned: true
+    })}
           ${this.renderActionRow({
-            focusKey: "integration:animeskip:id",
-            title: t("settings.integration.animeskip.clientId.title"),
-            subtitle: plannedSubtitle(t("settings.integration.animeskip.clientId.subtitle")),
-            value: maskValue(model.animeSkip.clientId, t("common.notSet")),
-            disabled: !model.animeSkip.enabled,
-            planned: true
-          })}
+      focusKey: "integration:animeskip:id",
+      title: t("settings.integration.animeskip.clientId.title"),
+      subtitle: plannedSubtitle(t("settings.integration.animeskip.clientId.subtitle")),
+      value: maskValue(model.animeSkip.clientId, t("common.notSet")),
+      disabled: !model.animeSkip.enabled,
+      planned: true
+    })}
         </div>
       </div>
     `;
@@ -1759,62 +1759,62 @@ export const SettingsScreen = {
     const generalBody = `
       <div class="settings-stack">
         ${this.renderToggleRow({
-          focusKey: "playback:autoplay",
-          title: t("settings.playback.autoplayNextEpisode.title"),
-          subtitle: t("settings.playback.autoplayNextEpisode.subtitle"),
-          checked: Boolean(model.player.autoplayNextEpisode)
-        })}
+      focusKey: "playback:autoplay",
+      title: t("settings.playback.autoplayNextEpisode.title"),
+      subtitle: t("settings.playback.autoplayNextEpisode.subtitle"),
+      checked: Boolean(model.player.autoplayNextEpisode)
+    })}
       </div>
     `;
 
     const streamBody = `
       <div class="settings-stack">
         ${this.renderActionRow({
-          focusKey: "playback:quality",
-          title: t("settings.playback.preferredQuality.title"),
-          subtitle: t("settings.playback.preferredQuality.subtitle"),
-          value: qualityLabel(model.player.preferredQuality)
-        })}
+      focusKey: "playback:quality",
+      title: t("settings.playback.preferredQuality.title"),
+      subtitle: t("settings.playback.preferredQuality.subtitle"),
+      value: qualityLabel(model.player.preferredQuality)
+    })}
       </div>
     `;
 
     const audioBody = `
       <div class="settings-stack">
         ${this.renderToggleRow({
-          focusKey: "playback:trailer",
-          title: t("settings.playback.autoplayTrailer.title"),
-          subtitle: t("settings.playback.autoplayTrailer.subtitle"),
-          checked: Boolean(model.player.trailerAutoplay)
-        })}
+      focusKey: "playback:trailer",
+      title: t("settings.playback.autoplayTrailer.title"),
+      subtitle: t("settings.playback.autoplayTrailer.subtitle"),
+      checked: Boolean(model.player.trailerAutoplay)
+    })}
         ${this.renderActionRow({
-          focusKey: "playback:audioLanguage",
-          title: t("settings.playback.preferredAudio.title"),
-          subtitle: t("settings.playback.preferredAudio.subtitle"),
-          value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
-        })}
+      focusKey: "playback:audioLanguage",
+      title: t("settings.playback.preferredAudio.title"),
+      subtitle: t("settings.playback.preferredAudio.subtitle"),
+      value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
+    })}
       </div>
     `;
 
     const subtitleBody = `
       <div class="settings-stack">
         ${this.renderToggleRow({
-          focusKey: "playback:subtitlesEnabled",
-          title: t("settings.playback.enableSubtitles.title"),
-          subtitle: t("settings.playback.enableSubtitles.subtitle"),
-          checked: Boolean(model.player.subtitlesEnabled)
-        })}
+      focusKey: "playback:subtitlesEnabled",
+      title: t("settings.playback.enableSubtitles.title"),
+      subtitle: t("settings.playback.enableSubtitles.subtitle"),
+      checked: Boolean(model.player.subtitlesEnabled)
+    })}
         ${this.renderActionRow({
-          focusKey: "playback:subtitleLanguage",
-          title: t("settings.playback.subtitleLanguage.title"),
-          subtitle: t("settings.playback.subtitleLanguage.subtitle"),
-          value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
-        })}
+      focusKey: "playback:subtitleLanguage",
+      title: t("settings.playback.subtitleLanguage.title"),
+      subtitle: t("settings.playback.subtitleLanguage.subtitle"),
+      value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
+    })}
         ${this.renderActionRow({
-          focusKey: "playback:renderMode",
-          title: t("settings.playback.renderMode.title"),
-          subtitle: t("settings.playback.renderMode.subtitle"),
-          value: renderModeLabel(model.player.subtitleRenderMode)
-        })}
+      focusKey: "playback:renderMode",
+      title: t("settings.playback.renderMode.title"),
+      subtitle: t("settings.playback.renderMode.subtitle"),
+      value: renderModeLabel(model.player.subtitleRenderMode)
+    })}
       </div>
     `;
 
@@ -1823,33 +1823,33 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderCollapsibleRow({
-            focusKey: "playback:toggle:general",
-            title: t("settings.playback.groups.general.title"),
-            subtitle: t("settings.playback.groups.general.subtitle"),
-            expanded: Boolean(expanded.general),
-            bodyHtml: generalBody
-          })}
+      focusKey: "playback:toggle:general",
+      title: t("settings.playback.groups.general.title"),
+      subtitle: t("settings.playback.groups.general.subtitle"),
+      expanded: Boolean(expanded.general),
+      bodyHtml: generalBody
+    })}
           ${this.renderCollapsibleRow({
-            focusKey: "playback:toggle:stream",
-            title: t("settings.playback.groups.stream.title"),
-            subtitle: t("settings.playback.groups.stream.subtitle"),
-            expanded: Boolean(expanded.stream),
-            bodyHtml: streamBody
-          })}
+      focusKey: "playback:toggle:stream",
+      title: t("settings.playback.groups.stream.title"),
+      subtitle: t("settings.playback.groups.stream.subtitle"),
+      expanded: Boolean(expanded.stream),
+      bodyHtml: streamBody
+    })}
           ${this.renderCollapsibleRow({
-            focusKey: "playback:toggle:audio",
-            title: t("settings.playback.groups.audio.title"),
-            subtitle: t("settings.playback.groups.audio.subtitle"),
-            expanded: Boolean(expanded.audio),
-            bodyHtml: audioBody
-          })}
+      focusKey: "playback:toggle:audio",
+      title: t("settings.playback.groups.audio.title"),
+      subtitle: t("settings.playback.groups.audio.subtitle"),
+      expanded: Boolean(expanded.audio),
+      bodyHtml: audioBody
+    })}
           ${this.renderCollapsibleRow({
-            focusKey: "playback:toggle:subtitles",
-            title: t("settings.playback.groups.subtitles.title"),
-            subtitle: t("settings.playback.groups.subtitles.subtitle"),
-            expanded: Boolean(expanded.subtitles),
-            bodyHtml: subtitleBody
-          })}
+      focusKey: "playback:toggle:subtitles",
+      title: t("settings.playback.groups.subtitles.title"),
+      subtitle: t("settings.playback.groups.subtitles.subtitle"),
+      expanded: Boolean(expanded.subtitles),
+      bodyHtml: subtitleBody
+    })}
         </div>
       </div>
     `;
@@ -1863,11 +1863,11 @@ export const SettingsScreen = {
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderActionRow({
-            focusKey: "trakt:open",
-            title: t("settings.trakt.openSettings"),
-            subtitle: plannedSubtitle(t("settings.trakt.openSettingsSubtitle")),
-            planned: true
-          })}
+      focusKey: "trakt:open",
+      title: t("settings.trakt.openSettings"),
+      subtitle: plannedSubtitle(t("settings.trakt.openSettingsSubtitle")),
+      planned: true
+    })}
         </div>
       </div>
     `;
@@ -1892,16 +1892,16 @@ export const SettingsScreen = {
         </div>
         <div class="settings-stack">
           ${this.renderActionRow({
-            focusKey: "about:privacy",
-            title: t("settings.about.privacyPolicy.title"),
-            subtitle: t("settings.about.privacyPolicy.subtitle"),
-            external: true
-          })}
+      focusKey: "about:privacy",
+      title: t("settings.about.privacyPolicy.title"),
+      subtitle: t("settings.about.privacyPolicy.subtitle"),
+      external: true
+    })}
           ${this.renderActionRow({
-            focusKey: "about:supporters",
-            title: t("settings.about.supporters.title"),
-            subtitle: t("settings.about.supporters.subtitle")
-          })}
+      focusKey: "about:supporters",
+      title: t("settings.about.supporters.title"),
+      subtitle: t("settings.about.supporters.subtitle")
+    })}
         </div>
       </div>
     `;
