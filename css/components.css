@@ -4839,15 +4839,19 @@ button:focus-visible {
   width: 92px;
   height: 48px;
   border-radius: 999px;
-  background: #505050;
+  background: linear-gradient(135deg, rgba(82, 88, 102, 0.95) 0%, rgba(61, 66, 79, 0.96) 100%);
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   padding: 4px;
+  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.08), inset 0 -3px 10px rgba(0, 0, 0, 0.28);
+  transition: background 160ms ease, box-shadow 160ms ease;
 }
 
 .settings-toggle-pill.is-checked {
   justify-content: flex-end;
+  background: linear-gradient(135deg, #ff6e72 0%, #ff875f 48%, #ffb168 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26), 0 0 18px rgba(255, 128, 96, 0.28);
 }
 
 .settings-toggle-thumb {
@@ -4855,6 +4859,12 @@ button:focus-visible {
   height: 40px;
   border-radius: 50%;
   background: #fff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
+  transition: box-shadow 160ms ease;
+}
+
+.settings-toggle-pill.is-checked .settings-toggle-thumb {
+  box-shadow: 0 4px 12px rgba(124, 39, 21, 0.28), 0 0 10px rgba(255, 245, 220, 0.3);
 }
 
 .settings-theme-grid-card {
