@@ -40,6 +40,8 @@ const ROOT_SIDEBAR_ITEMS = [
   }
 ];
 
+let sidebarAvatarCatalogPromise = null;
+
 function profileInitial(name) {
   const raw = String(name || "").trim();
   return raw ? raw.charAt(0).toUpperCase() : "P";
@@ -76,10 +78,22 @@ function getItemForAction(action = "") {
   return ROOT_SIDEBAR_ITEMS.find((item) => item.action === String(action || "")) || null;
 }
 
+function getSidebarAvatarCatalog() {
+  if (!sidebarAvatarCatalogPromise) {
+    sidebarAvatarCatalogPromise = AvatarRepository.getAvatarCatalog().catch(() => {
+      sidebarAvatarCatalogPromise = null;
+      return [];
+    });
+  }
+  return sidebarAvatarCatalogPromise;
+}
+
 export async function getSidebarProfileState() {
   const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
-  const profiles = await ProfileManager.getProfiles();
-  const avatarCatalog = await AvatarRepository.getAvatarCatalog().catch(() => []);
+  const [profiles, avatarCatalog] = await Promise.all([
+    ProfileManager.getProfiles(),
+    getSidebarAvatarCatalog()
+  ]);
   const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId)
     || profiles[0]
     || null;

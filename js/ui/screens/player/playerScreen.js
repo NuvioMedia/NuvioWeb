@@ -801,6 +801,7 @@ export const PlayerScreen = {
     this.sourceFilter = "all";
     this.sourcesFocus = { zone: "filter", index: 0 };
     this.sourceLoadToken = 0;
+    this.streamCandidatesByVideoId = new Map();
 
     this.aspectModeIndex = 0;
     this.aspectToastTimer = null;
@@ -2029,6 +2030,29 @@ export const PlayerScreen = {
     );
   },
 
+  async getPlayableStreamsForVideo(videoId, itemType) {
+    const normalizedVideoId = String(videoId || "").trim();
+    const normalizedType = normalizeItemType(itemType || this.params?.itemType || "movie");
+    if (!normalizedVideoId) {
+      return [];
+    }
+    const cacheKey = `${normalizedType}:${normalizedVideoId}`;
+    const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
+    if (cache.has(cacheKey)) {
+      const cached = cache.get(cacheKey);
+      return Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [];
+    }
+
+    const streamResult = await streamRepository.getStreamsFromAllAddons(normalizedType, normalizedVideoId);
+    const streamItems = (streamResult?.status === "success")
+      ? flattenStreamGroups(streamResult)
+      : [];
+    if (streamItems.length) {
+      cache.set(cacheKey, streamItems.map((stream) => ({ ...stream })));
+    }
+    return streamItems;
+  },
+
   async playNextEpisode() {
     const nextEpisode = this.resolveNextEpisodeInfo();
     const itemType = normalizeItemType(this.params?.itemType || "movie");
@@ -2043,10 +2067,7 @@ export const PlayerScreen = {
     this.renderNextEpisodeCard();
 
     try {
-      const streamResult = await streamRepository.getStreamsFromAllAddons(itemType, nextEpisode.videoId);
-      const streamItems = (streamResult?.status === "success")
-        ? flattenStreamGroups(streamResult)
-        : [];
+      const streamItems = await this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType);
       if (!streamItems.length) {
         return;
       }
@@ -5873,10 +5894,7 @@ export const PlayerScreen = {
     this.switchingEpisode = true;
     try {
       const itemType = this.params?.itemType || "series";
-      const streamResult = await streamRepository.getStreamsFromAllAddons(normalizeItemType(itemType), selected.id);
-      const streamItems = (streamResult?.status === "success")
-        ? flattenStreamGroups(streamResult)
-        : [];
+      const streamItems = await this.getPlayableStreamsForVideo(selected.id, itemType);
       if (!streamItems.length) {
         return;
       }
@@ -6434,10 +6452,7 @@ export const PlayerScreen = {
     }
 
     try {
-      const streamResult = await streamRepository.getStreamsFromAllAddons(itemType, nextEpisode.videoId);
-      const streamItems = (streamResult?.status === "success")
-        ? flattenStreamGroups(streamResult)
-        : [];
+      const streamItems = await this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType);
       if (!streamItems.length) {
         return;
       }
@@ -6467,6 +6482,7 @@ export const PlayerScreen = {
 
   cleanup() {
     this.cancelSeekPreview({ commit: false });
+    this.streamCandidatesByVideoId?.clear?.();
     this.subtitleLoadToken = (this.subtitleLoadToken || 0) + 1;
     this.manifestLoadToken = (this.manifestLoadToken || 0) + 1;
     this.trackDiscoveryToken = (this.trackDiscoveryToken || 0) + 1;

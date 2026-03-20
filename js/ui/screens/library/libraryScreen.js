@@ -110,10 +110,33 @@ function findNearestNodeByCenterX(referenceNode, nodes = []) {
 
 export const LibraryScreen = {
 
+  cancelScheduledRender() {
+    if (this.renderFrame) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
+  },
+
+  requestRender() {
+    if (!this.container || Router.getCurrent() !== "library") {
+      return;
+    }
+    if (this.renderFrame) {
+      return;
+    }
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      if (!this.container || Router.getCurrent() !== "library") {
+        return;
+      }
+      this.render();
+    });
+  },
+
   async mount() {
     this.container = document.getElementById("library");
     ScreenUtils.show(this.container);
-    this.controller = new LibraryController(() => this.render());
+    this.controller = new LibraryController(() => this.requestRender());
     this.libraryRouteEnterPending = true;
     this.sidebarProfile = await getSidebarProfileState();
     this.layoutPrefs = LayoutPreferences.get();
@@ -404,6 +427,7 @@ export const LibraryScreen = {
   },
 
   render() {
+    this.cancelScheduledRender();
     this.layoutPrefs = LayoutPreferences.get();
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     const state = this.controller.getState();
@@ -1027,6 +1051,7 @@ export const LibraryScreen = {
   },
 
   cleanup() {
+    this.cancelScheduledRender();
     this.controller?.dispose?.();
     this.controller = null;
     ScreenUtils.hide(this.container);

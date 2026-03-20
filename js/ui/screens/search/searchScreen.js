@@ -251,6 +251,29 @@ export const SearchScreen = {
     } : null;
   },
 
+  cancelScheduledRender() {
+    if (this.renderFrame) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
+  },
+
+  requestRender() {
+    if (!this.container || Router.getCurrent() !== "search") {
+      return;
+    }
+    if (this.renderFrame) {
+      return;
+    }
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      if (!this.container || Router.getCurrent() !== "search") {
+        return;
+      }
+      this.render();
+    });
+  },
+
   captureLiveViewState() {
     const content = this.container?.querySelector(".search-content");
     if (content) {
@@ -343,7 +366,7 @@ export const SearchScreen = {
       this.rows = [];
     }
     if (token !== this.loadToken) return;
-    this.render();
+    this.requestRender();
   },
 
   async loadDiscoverRows() {
@@ -511,6 +534,7 @@ export const SearchScreen = {
   },
 
   render() {
+    this.cancelScheduledRender();
     const queryText = this.query || "";
     this.container.innerHTML = `
       <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
@@ -1233,6 +1257,7 @@ export const SearchScreen = {
   },
 
   cleanup() {
+    this.cancelScheduledRender();
     if (this.searchToastTimer) {
       clearTimeout(this.searchToastTimer);
       this.searchToastTimer = null;

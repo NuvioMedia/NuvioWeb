@@ -379,10 +379,6 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
   if (!source) {
     return null;
   }
-  const isTvYoutubeEmbed = (Platform.isWebOS() || Platform.isTizen()) && source.kind === "youtube";
-  if (isTvYoutubeEmbed) {
-    return null;
-  }
   const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
   if (source.kind === "youtube") {
     const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted });
@@ -416,6 +412,42 @@ function withTimeout(promise, ms, fallbackValue) {
       clearTimeout(timer);
     }
   });
+}
+
+async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie") {
+  const directSource = resolveTrailerSource(meta);
+  if (directSource) {
+    return directSource;
+  }
+  const settings = TmdbSettingsStore.get();
+  if (!settings.enabled || !settings.apiKey) {
+    return null;
+  }
+  try {
+    const tmdbId = await withTimeout(TmdbService.ensureTmdbId(meta?.id, itemType), 1800, null);
+    if (!tmdbId) {
+      return null;
+    }
+    const enrichment = await withTimeout(TmdbMetadataService.fetchEnrichment({
+      tmdbId,
+      contentType: itemType,
+      language: settings.language
+    }), 2200, null);
+    if (!enrichment) {
+      return null;
+    }
+    return resolveTrailerSource({
+      ...meta,
+      trailers: Array.isArray(meta?.trailers) && meta.trailers.length
+        ? meta.trailers
+        : (Array.isArray(enrichment?.trailers) ? enrichment.trailers : []),
+      trailerYtIds: Array.isArray(meta?.trailerYtIds) && meta.trailerYtIds.length
+        ? meta.trailerYtIds
+        : (Array.isArray(enrichment?.trailerYtIds) ? enrichment.trailerYtIds : [])
+    });
+  } catch (_) {
+    return null;
+  }
 }
 
 function getContinueWatchingMetaTimeout(timeoutMs) {
@@ -1006,8 +1038,7 @@ function continueWatchingStreamParams(item, options = {}) {
     landscapePoster: firstNonEmpty(normalized.landscapePoster, normalized.backdrop, normalized.background, normalized.poster),
     poster: firstNonEmpty(normalized.poster, normalized.backdrop, normalized.background),
     logo: firstNonEmpty(normalized.logo),
-    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0),
-    continueWatchingBackHome: true
+    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0)
   };
 }
 
@@ -1495,6 +1526,29 @@ export const HomeScreen = {
     return baseline + 40;
   },
 
+  cancelScheduledRender() {
+    if (this.homeRenderFrame) {
+      cancelAnimationFrame(this.homeRenderFrame);
+      this.homeRenderFrame = null;
+    }
+  },
+
+  requestRender() {
+    if (!this.container || Router.getCurrent() !== "home") {
+      return;
+    }
+    if (this.homeRenderFrame) {
+      return;
+    }
+    this.homeRenderFrame = requestAnimationFrame(() => {
+      this.homeRenderFrame = null;
+      if (!this.container || Router.getCurrent() !== "home") {
+        return;
+      }
+      this.render();
+    });
+  },
+
   stopHeroRotation() {
     if (this.heroRotateTimer) {
       clearInterval(this.heroRotateTimer);
@@ -1515,7 +1569,7 @@ export const HomeScreen = {
 
   startHeroRotation() {
     this.stopHeroRotation();
-    if (this.layoutMode === "modern") {
+    if (this.layoutMode === "modern" || this.isPerformanceConstrained()) {
       return;
     }
     if (!Array.isArray(this.heroCandidates) || this.heroCandidates.length <= 1) {
@@ -1702,7 +1756,10 @@ export const HomeScreen = {
     return rowNodes[Math.max(0, Math.min(rowNodes.length - 1, preferredIndex))] || rowNodes[0];
   },
 
-  focusWithoutAutoScroll(target) {
+  focusWithoutAutoScroll(target, { suppressDelegatedFocus = false } = {}) {
+    if (suppressDelegatedFocus && target) {
+      this.pendingDelegatedFocusTarget = target;
+    }
     focusWithoutAutoScroll(target);
   },
 
@@ -1909,22 +1966,17 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingEnter();
     this.continueWatchingMenu = null;
 
-    if (isSeriesTypeForContinueWatching(normalized?.type)) {
-      Router.navigate("detail", {
-        itemId: normalized.contentId,
-        itemType: normalized.type || "series",
-        fallbackTitle: normalized.title || normalized.contentId || "Untitled",
-        autoOpenContinueWatching: true,
-        resumeProgressMs: Number(params.resumePositionMs || 0) || 0,
-        resumeVideoId: normalized.videoId || null,
-        resumeSeason: normalized.season ?? null,
-        resumeEpisode: normalized.episode ?? null,
-        continueWatchingBackHome: true
-      });
-      return true;
-    }
-
-    Router.navigate("stream", params);
+    Router.navigate("detail", {
+      itemId: normalized.contentId,
+      itemType: normalized.type || (isSeriesTypeForContinueWatching(normalized?.type) ? "series" : "movie"),
+      fallbackTitle: normalized.title || normalized.contentId || "Untitled",
+      autoOpenContinueWatching: true,
+      returnHomeOnBack: true,
+      resumeProgressMs: Number(params.resumePositionMs || 0) || 0,
+      resumeVideoId: normalized.videoId || null,
+      resumeSeason: normalized.season ?? null,
+      resumeEpisode: normalized.episode ?? null
+    });
     return true;
   },
 
@@ -2244,7 +2296,12 @@ export const HomeScreen = {
         2200,
         { status: "error", message: "timeout" }
       );
-      const source = result?.status === "success" ? resolveTrailerSource(result?.data || {}) : null;
+      const source = result?.status === "success"
+        ? await resolveTrailerMetaWithTmdbFallback(
+          { ...(result?.data || {}), id: itemId, type: itemType },
+          itemType
+        )
+        : null;
       cache.set(cacheKey, source || null);
       return source || null;
     } catch (error) {
@@ -2306,8 +2363,38 @@ export const HomeScreen = {
     }
   },
 
+  clearFocusedPosterFlowState() {
+    this.focusedPosterFlowState = null;
+  },
+
+  getFocusedPosterFlowKey(node) {
+    const itemId = String(
+      node?.dataset?.itemId
+      || node?.dataset?.contentId
+      || this.getNodeHeroSource(node)?.id
+      || ""
+    ).trim();
+    const itemType = String(
+      node?.dataset?.itemType
+      || this.getNodeHeroSource(node)?.type
+      || ""
+    ).trim().toLowerCase();
+    if (!itemId) {
+      return "";
+    }
+    return `${itemType}:${itemId}`;
+  },
+
   scheduleHomeTruncationUpdate({ scope = null } = {}) {
     if (!this.container) {
+      return;
+    }
+    if (this.isPerformanceConstrained()) {
+      this.homeTruncationScope = null;
+      if (this.homeTruncationFrame) {
+        cancelAnimationFrame(this.homeTruncationFrame);
+        this.homeTruncationFrame = null;
+      }
       return;
     }
     this.homeTruncationScope = scope || null;
@@ -2321,7 +2408,7 @@ export const HomeScreen = {
   },
 
   applyHomeTruncationState() {
-    if (!this.container) {
+    if (!this.container || this.isPerformanceConstrained()) {
       return;
     }
     const root = this.homeTruncationScope || this.container;
@@ -2370,7 +2457,7 @@ export const HomeScreen = {
   },
 
   ensureHomeTruncationObservers() {
-    if (this.homeTruncationObserversBound) {
+    if (this.homeTruncationObserversBound || this.isPerformanceConstrained()) {
       return;
     }
     this.homeTruncationObserversBound = true;
@@ -2395,18 +2482,39 @@ export const HomeScreen = {
     const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled);
     const shouldRun = Boolean(shouldExpand || prefs.focusedPosterBackdropTrailerEnabled);
     if (!shouldRun) {
+      this.clearFocusedPosterFlowState();
       this.collapseFocusedPoster();
       return;
     }
     if (!this.isModernPosterNode(node)) {
+      this.clearFocusedPosterFlowState();
       this.collapseFocusedPoster();
       return;
     }
     if (this.expandedPosterNode && this.expandedPosterNode !== node) {
       this.collapseFocusedPoster(this.expandedPosterNode);
     }
-    const delayMs = Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
+    const flowKey = this.getFocusedPosterFlowKey(node);
+    const defaultDelayMs = Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
+    const existingState = this.focusedPosterFlowState;
+    const canReuseExistingState = Boolean(flowKey && existingState?.key === flowKey);
+    const now = Date.now();
+    const delayMs = canReuseExistingState
+      ? Math.max(0, Number(existingState.activated ? 0 : ((existingState.activateAt || now) - now)))
+      : defaultDelayMs;
+    this.focusedPosterFlowState = {
+      key: flowKey,
+      activateAt: now + delayMs,
+      activated: Boolean(canReuseExistingState && existingState.activated)
+    };
     this.focusedPosterTimer = setTimeout(() => {
+      if (this.focusedPosterFlowState?.key === flowKey) {
+        this.focusedPosterFlowState = {
+          key: flowKey,
+          activateAt: Date.now(),
+          activated: true
+        };
+      }
       this.activateFocusedPosterFlow(node).catch((error) => {
         console.warn("Focused poster flow failed", error);
       });
@@ -2418,6 +2526,7 @@ export const HomeScreen = {
       return;
     }
     this.cancelFocusedPosterFlow();
+    this.clearFocusedPosterFlowState();
     if (this.isModernPosterNode(node)) {
       this.collapseFocusedPoster(node);
       this.scheduleFocusedPosterFlow(node);
@@ -2468,15 +2577,23 @@ export const HomeScreen = {
     return this.focusNode(current, target, "right") || true;
   },
 
-  ensureMainVerticalVisibility(target) {
+  getMainFocusAnchor(node) {
+    if (!node) {
+      return null;
+    }
+    return node.closest(".home-row, .home-grid-section")
+      || node.closest(".home-hero")
+      || node;
+  },
+
+  ensureMainVerticalVisibility(target, direction = null, current = null) {
     const main = this.layoutMode === "modern"
       ? this.container?.querySelector(".home-modern-rows-viewport")
       : this.container?.querySelector(".home-main");
     if (!main || !target || !this.container?.contains(target)) {
       return;
     }
-    const row = target.closest(".home-row, .home-grid-section");
-    const anchor = row || target.closest(".home-hero") || target;
+    const anchor = this.getMainFocusAnchor(target);
     const mainRect = main.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
     const inset = this.getRowFocusInset();
@@ -2486,7 +2603,17 @@ export const HomeScreen = {
     const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop;
 
     if (this.layoutMode === "modern") {
+      const currentAnchor = this.getMainFocusAnchor(current);
+      const sameAnchor = Boolean(currentAnchor && currentAnchor === anchor);
+      const isHorizontalMove = direction === "left" || direction === "right";
+      const anchorFullyVisible = anchorRect.top >= visibleTop && anchorRect.bottom <= visibleBottom;
+      if (isHorizontalMove && sameAnchor && anchorFullyVisible) {
+        return;
+      }
       const centeredScrollTop = anchorTop - Math.max(0, (main.clientHeight - anchor.offsetHeight) / 2);
+      if (Math.abs(Number(main.scrollTop || 0) - centeredScrollTop) <= 1) {
+        return;
+      }
       this.animateScroll(main, "y", centeredScrollTop, this.getScrollDuration(150));
       return;
     }
@@ -2531,20 +2658,6 @@ export const HomeScreen = {
       }
     }
 
-    if (this.layoutMode === "modern") {
-      const trackRect = track.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
-      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
-      this.animateScroll(
-        track,
-        "x",
-        Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPadding)),
-        140
-      );
-      return;
-    }
-
     const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
     const targetLeft = target.offsetLeft;
     const targetRight = targetLeft + target.offsetWidth;
@@ -2572,18 +2685,19 @@ export const HomeScreen = {
     }
     current.classList.remove("focused");
     target.classList.add("focused");
-    this.focusWithoutAutoScroll(target);
+    this.focusWithoutAutoScroll(target, { suppressDelegatedFocus: true });
     this.setSidebarExpanded(this.isSidebarNode(target));
     if (this.isMainNode(target)) {
       this.lastMainFocus = target;
       this.rememberMainRowFocus(target);
       this.ensureTrackHorizontalVisibility(target, direction);
-      this.ensureMainVerticalVisibility(target);
+      this.ensureMainVerticalVisibility(target, direction, current);
       this.scheduleModernHeroUpdate(target);
       this.scheduleFocusedPosterFlow(target);
     } else {
       this.cancelPendingHeroFocus();
       this.cancelFocusedPosterFlow();
+      this.clearFocusedPosterFlowState();
       this.collapseFocusedPoster();
     }
     return true;
@@ -2741,16 +2855,6 @@ export const HomeScreen = {
       if (!targetRowNodes || !targetRowNodes.length) {
         return true;
       }
-      const currentRowKey = this.getNodeRowKey(current);
-      const targetRowKey = this.getNodeRowKey(targetRowNodes[0]);
-      if (
-        direction === "down"
-        && this.continueWatchingLoading
-        && currentRowKey === "continue_watching"
-        && targetRowKey !== "continue_watching"
-      ) {
-        return true;
-      }
       const target = this.resolvePreferredNodeForRow(targetRowNodes, col);
       return this.focusNode(current, target, direction) || true;
     }
@@ -2767,6 +2871,13 @@ export const HomeScreen = {
         const target = event?.target?.closest?.(".focusable");
         if (!target || !this.container?.contains(target)) {
           return;
+        }
+        if (this.pendingDelegatedFocusTarget) {
+          const isSuppressedProgrammaticFocus = this.pendingDelegatedFocusTarget === target;
+          this.pendingDelegatedFocusTarget = null;
+          if (isSuppressedProgrammaticFocus) {
+            return;
+          }
         }
         if (target.closest(".home-sidebar .focusable, .modern-sidebar-panel .focusable")) {
           this.setSidebarExpanded(true);
@@ -2951,7 +3062,7 @@ export const HomeScreen = {
       }
       if (profile) {
         this.sidebarProfile = profile;
-        this.render();
+        this.requestRender();
       }
     });
 
@@ -2969,7 +3080,7 @@ export const HomeScreen = {
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
-        this.render();
+        this.requestRender();
         this.retryPendingCatalogRows();
       }).catch((error) => {
         console.warn("Deferred home rows load failed", error);
@@ -3006,7 +3117,7 @@ export const HomeScreen = {
       if (!suppressContinueWatchingLoading) {
         this.continueWatchingLoading = shouldShowLoading;
         this.continueWatchingDisplay = [];
-        this.render();
+        this.requestRender();
       }
 
       if (!shouldShowLoading) {
@@ -3023,7 +3134,7 @@ export const HomeScreen = {
         }
         this.continueWatchingLoading = false;
         this.continueWatchingDisplay = [];
-        this.render();
+        this.requestRender();
         return;
       }
 
@@ -3055,12 +3166,12 @@ export const HomeScreen = {
             this.forceInitialContinueWatchingFocus = true;
           }
         }
-        this.render();
+        this.requestRender();
       } catch (error) {
         console.warn("Continue watching async enrichment failed", error);
         this.continueWatchingLoading = false;
         if (!suppressContinueWatchingLoading) {
-          this.render();
+          this.requestRender();
         }
       }
     })().catch((error) => {
@@ -3070,7 +3181,7 @@ export const HomeScreen = {
       }
       this.continueWatchingLoading = false;
       if (!suppressContinueWatchingLoading) {
-        this.render();
+        this.requestRender();
       }
     });
 
@@ -3180,7 +3291,7 @@ export const HomeScreen = {
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
-        this.render();
+        this.requestRender();
       } catch (error) {
         console.warn("Retry catalog row load failed", error);
       }
@@ -3193,6 +3304,7 @@ export const HomeScreen = {
   },
 
   render() {
+    this.cancelScheduledRender();
     const retainedFocusState = this.captureCurrentFocusState() || this.savedFocusStates?.[this.layoutMode] || null;
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
@@ -3359,6 +3471,9 @@ export const HomeScreen = {
         this.scheduleFocusedPosterFlow(current);
       }
       this.isRestoringFocusFromBack = false;
+    }
+    if (!this.container?.querySelector(".home-poster-card.focused")) {
+      this.clearFocusedPosterFlowState();
     }
     if (!this.layoutPrefs?.modernSidebar) {
       this.setSidebarExpanded(false);
@@ -3959,11 +4074,18 @@ export const HomeScreen = {
     this.continueWatchingMenu = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+    this.cancelScheduledRender();
     this.stopHeroRotation();
     this.cancelPendingHeroFocus();
     this.cancelFocusedPosterFlow();
+    this.clearFocusedPosterFlowState();
     this.collapseFocusedPoster();
     this.teardownGridStickyHeader();
+    if (this.homeTruncationFrame) {
+      cancelAnimationFrame(this.homeTruncationFrame);
+      this.homeTruncationFrame = null;
+    }
+    this.homeTruncationScope = null;
     ScreenUtils.hide(this.container);
   }
 };

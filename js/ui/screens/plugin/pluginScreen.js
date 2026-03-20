@@ -161,7 +161,6 @@ export const PluginScreen = {
     this.container = document.getElementById("plugin");
     ScreenUtils.show(this.container);
     this.pluginRouteEnterPending = true;
-    this.sidebarProfile = await getSidebarProfileState();
     this.layoutPrefs = LayoutPreferences.get();
     this.focusZone = "content";
     this.sidebarFocusIndex = Number.isFinite(this.sidebarFocusIndex) ? this.sidebarFocusIndex : 0;
@@ -170,7 +169,13 @@ export const PluginScreen = {
     this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
     this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
     this.qrOverlayOpen = false;
-    await this.render();
+    const [sidebarProfile, model] = await Promise.all([
+      getSidebarProfileState(),
+      this.collectModel()
+    ]);
+    this.sidebarProfile = sidebarProfile;
+    this.model = model;
+    await this.render({ refreshModel: false });
   },
 
   async collectModel() {
@@ -239,7 +244,7 @@ export const PluginScreen = {
 
   async openQrOverlay() {
     this.qrOverlayOpen = true;
-    await this.render();
+    await this.render({ refreshModel: false });
   },
 
   async closeQrOverlay() {
@@ -247,7 +252,7 @@ export const PluginScreen = {
       return false;
     }
     this.qrOverlayOpen = false;
-    await this.render();
+    await this.render({ refreshModel: false });
     return true;
   },
 
@@ -267,8 +272,10 @@ export const PluginScreen = {
     });
   },
 
-  async render() {
-    this.model = await this.collectModel();
+  async render({ refreshModel = true } = {}) {
+    if (refreshModel || !this.model) {
+      this.model = await this.collectModel();
+    }
     this.rowColumns = new Map();
     this.actionMap = new Map();
     this.setRowColumns(0, [0]);

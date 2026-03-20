@@ -588,7 +588,6 @@ function scoreTrailerStream(entry = {}) {
 }
 
 function resolveTrailerSource(meta = {}) {
-  const allowYoutubeTrailer = !Environment.isWebOS() && !Environment.isTizen();
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
   const directVideo = trailerStreams
     .filter((entry) => {
@@ -607,32 +606,26 @@ function resolveTrailerSource(meta = {}) {
     ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
     ...(Array.isArray(meta?.videos) ? meta.videos : [])
   ];
-  if (allowYoutubeTrailer) {
-    for (const entry of trailerCandidates) {
-      const ytId = resolveYoutubeId(
-        entry?.ytId
-        || entry?.youtubeId
-        || entry?.source
-        || entry?.url
-        || entry?.link
-        || ""
-      );
-      if (ytId) {
-        const embedUrl = buildYoutubeEmbedUrl(ytId);
-        if (!embedUrl) {
-          continue;
-        }
-        return {
-          kind: "youtube",
-          ytId,
-          embedUrl
-        };
+  for (const entry of trailerCandidates) {
+    const ytId = resolveYoutubeId(
+      entry?.ytId
+      || entry?.youtubeId
+      || entry?.source
+      || entry?.url
+      || entry?.link
+      || ""
+    );
+    if (ytId) {
+      const embedUrl = buildYoutubeEmbedUrl(ytId);
+      if (!embedUrl) {
+        continue;
       }
+      return {
+        kind: "youtube",
+        ytId,
+        embedUrl
+      };
     }
-  }
-
-  if (!allowYoutubeTrailer) {
-    return null;
   }
 
   const ytId = resolveYoutubeId(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds[0] : "");
@@ -955,22 +948,35 @@ export const MetaDetailsScreen = {
       return;
     }
 
-    const metaResult = await withTimeout(
+    const metaPromise = withTimeout(
       metaRepository.getMetaFromAllAddons(itemType, itemId),
       4500,
       { status: "error", message: "timeout" }
     );
+    const isSavedPromise = savedLibraryRepository.isSaved(itemId);
+    const progressPromise = watchProgressRepository.getProgressByContentId(itemId);
+    const watchedItemPromise = watchedItemsRepository.isWatched(itemId);
+    const allProgressPromise = watchProgressRepository.getAll();
+    const allWatchedPromise = watchedItemsRepository.getAll();
+
+    const [
+      metaResult,
+      isSaved,
+      progress,
+      watchedItem,
+      allProgressItems,
+      allWatchedItems
+    ] = await Promise.all([
+      metaPromise,
+      isSavedPromise,
+      progressPromise,
+      watchedItemPromise,
+      allProgressPromise,
+      allWatchedPromise
+    ]);
     const meta = metaResult.status === "success"
       ? metaResult.data
       : { id: itemId, type: itemType, name: fallbackTitle, description: "" };
-
-    const [isSaved, progress, watchedItem, allProgressItems, allWatchedItems] = await Promise.all([
-      savedLibraryRepository.isSaved(itemId),
-      watchProgressRepository.getProgressByContentId(itemId),
-      watchedItemsRepository.isWatched(itemId),
-      watchProgressRepository.getAll(),
-      watchedItemsRepository.getAll()
-    ]);
     if (token !== this.detailLoadToken) {
       return;
     }
@@ -1226,6 +1232,17 @@ export const MetaDetailsScreen = {
       }
     }
     this.navigateToStreamScreenForMovie(extraParams);
+  },
+
+  navigateBackFromDetail() {
+    if (this.params?.returnHomeOnBack) {
+      Router.navigate("home", {}, {
+        skipStackPush: true,
+        replaceHistory: true
+      });
+      return true;
+    }
+    return false;
   },
 
   async enrichMeta(meta) {
@@ -3184,6 +3201,9 @@ export const MetaDetailsScreen = {
       Router.navigate("home");
       return true;
     }
+    if (this.navigateBackFromDetail()) {
+      return true;
+    }
     return false;
   },
 
@@ -4213,6 +4233,9 @@ export const MetaDetailsScreen = {
 
     const action = current.dataset.action;
     if (action === "goBack") {
+      if (this.navigateBackFromDetail()) {
+        return;
+      }
       Router.back();
       return;
     }

@@ -38,7 +38,7 @@ import {
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
 const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
-const SETTINGS_VERSION_LABEL = "0.1.1-web";
+const SETTINGS_VERSION_LABEL = "0.1.2-web";
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
@@ -617,7 +617,6 @@ export const SettingsScreen = {
     this.container = document.getElementById("settings");
     ScreenUtils.show(this.container);
     this.settingsRouteEnterPending = true;
-    this.sidebarProfile = await getSidebarProfileState();
     const persistedUiState = readSettingsUiState();
     this.activeSection = persistedUiState.activeSection || this.activeSection || null;
     this.focusZone = "nav";
@@ -633,7 +632,13 @@ export const SettingsScreen = {
     this.dialogFocusIndex = Number.isFinite(this.dialogFocusIndex) ? this.dialogFocusIndex : 0;
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
-    await this.render();
+    const [sidebarProfile, initialModel] = await Promise.all([
+      getSidebarProfileState(),
+      this.collectModel()
+    ]);
+    this.sidebarProfile = sidebarProfile;
+    this.model = initialModel;
+    await this.render({ refreshModel: false });
   },
 
   ensureExpandedState(sectionId) {
@@ -678,8 +683,10 @@ export const SettingsScreen = {
   },
 
   async collectModel() {
-    const addons = await addonRepository.getInstalledAddons();
-    const profiles = await ProfileManager.getProfiles();
+    const [addons, profiles] = await Promise.all([
+      addonRepository.getInstalledAddons(),
+      ProfileManager.getProfiles()
+    ]);
     const activeProfileId = ProfileManager.getActiveProfileId();
     const pluginSources = PluginManager.listPluginSources();
 
@@ -1919,8 +1926,10 @@ export const SettingsScreen = {
     return this.renderAboutSection(model);
   },
 
-  async render() {
-    this.model = await this.collectModel();
+  async render({ refreshModel = true } = {}) {
+    if (refreshModel || !this.model) {
+      this.model = await this.collectModel();
+    }
     this.layoutPrefs = this.model.layout;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.visibleSections = getVisibleSections(this.model);
@@ -2093,7 +2102,7 @@ export const SettingsScreen = {
     this.setActiveSection(section.id);
     this.integrationView = "hub";
     this.contentFocusKey = null;
-    await this.render();
+    await this.render({ refreshModel: false });
   },
 
   syncNavFocusToActive() {
@@ -2181,7 +2190,7 @@ export const SettingsScreen = {
       event?.preventDefault?.();
       if (this.optionDialog) {
         this.closeOptionDialog();
-        await this.render();
+        await this.render({ refreshModel: false });
         return;
       }
       if (this.focusZone === "sidebar") {
@@ -2297,7 +2306,7 @@ export const SettingsScreen = {
       return false;
     }
     this.closeOptionDialog();
-    this.render();
+    void this.render({ refreshModel: false });
     return true;
   },
 

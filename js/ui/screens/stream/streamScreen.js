@@ -322,6 +322,29 @@ function getOrderedFilterNames(sourceChips = [], streams = []) {
 
 export const StreamScreen = {
 
+  cancelScheduledRender() {
+    if (this.renderFrame) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
+  },
+
+  requestRender() {
+    if (!this.container || Router.getCurrent() !== "stream") {
+      return;
+    }
+    if (this.renderFrame) {
+      return;
+    }
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      if (!this.container || Router.getCurrent() !== "stream") {
+        return;
+      }
+      this.render();
+    });
+  },
+
   getBackdropUrl() {
     return this.params?.backdrop || this.params?.landscapePoster || this.params?.poster || "";
   },
@@ -337,14 +360,27 @@ export const StreamScreen = {
   },
 
   navigateBackFromStream() {
-    if (this.params?.continueWatchingBackHome) {
-      Router.navigate("home", {}, {
+    if (this.params?.returnToDetail || this.params?.continueWatchingBackHome) {
+      const itemId = String(this.params?.itemId || "").trim();
+      if (!itemId) {
+        return false;
+      }
+      void Router.navigate("detail", {
+        itemId,
+        itemType: normalizeType(this.params?.itemType),
+        fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
+        returnHomeOnBack: true
+      }, {
         skipStackPush: true,
         replaceHistory: true
       });
       return true;
     }
     return false;
+  },
+
+  consumeBackRequest() {
+    return this.navigateBackFromStream();
   },
 
   captureRouteState() {
@@ -418,7 +454,7 @@ export const StreamScreen = {
       this.sourceChips = addons
         .filter((addon) => supportsStreamResource(addon, itemType))
         .map((addon) => ({ name: addon.displayName, status: "loading" }));
-      this.render();
+      this.requestRender();
     } catch (error) {
       console.warn("Failed to resolve stream addons", error);
     }
@@ -451,14 +487,14 @@ export const StreamScreen = {
         markSuccessfulSources(groups.map((group) => group?.addonName || ""));
         const chunkItems = flattenStreams(chunkResult);
         if (!chunkItems.length) {
-          this.render();
+          this.requestRender();
           return;
         }
         this.streams = mergeStreamItems(this.streams, chunkItems);
         if (this.focusState.zone !== "card") {
           this.focusState = { zone: "card", index: 0 };
         }
-        this.render();
+        this.requestRender();
       }
     };
 
@@ -478,7 +514,7 @@ export const StreamScreen = {
       } else {
         this.focusState = { zone: "filter", index: 0 };
       }
-      this.render();
+      this.requestRender();
       this.scheduleErrorChipCleanup();
     } catch (error) {
       if (token !== this.loadToken) {
@@ -489,7 +525,7 @@ export const StreamScreen = {
       this.sourceChips = this.sourceChips.map((chip) => (
         chip.status === "loading" ? { ...chip, status: "error" } : chip
       ));
-      this.render();
+      this.requestRender();
       this.scheduleErrorChipCleanup();
     }
   },
@@ -504,7 +540,7 @@ export const StreamScreen = {
     }
     this.errorChipTimer = setTimeout(() => {
       this.sourceChips = this.sourceChips.filter((chip) => chip.status !== "error");
-      this.render();
+      this.requestRender();
     }, 1600);
   },
 
@@ -517,6 +553,16 @@ export const StreamScreen = {
       return this.streams;
     }
     return this.streams.filter((stream) => stream.addonName === filter);
+  },
+
+  hasPendingSourceLoads(filter = this.addonFilter) {
+    if (!Array.isArray(this.sourceChips) || !this.sourceChips.length) {
+      return Boolean(this.loading);
+    }
+    if (filter === "all") {
+      return this.sourceChips.some((chip) => chip.status === "loading");
+    }
+    return this.sourceChips.some((chip) => chip.name === filter && chip.status === "loading");
   },
 
   setAddonFilter(nextFilter, preferredZone = "filter", preferredIndex = 0) {
@@ -663,8 +709,9 @@ export const StreamScreen = {
     `;
   },
 
-  renderLoadingCards() {
-    return Array.from({ length: 3 }).map(() => `
+  renderLoadingCards(count = 3) {
+    const safeCount = Math.max(1, Number(count || 0));
+    return Array.from({ length: safeCount }).map(() => `
       <div class="stream-route-card skeleton">
         <div class="stream-route-skeleton-line wide"></div>
         <div class="stream-route-skeleton-line short"></div>
@@ -675,6 +722,7 @@ export const StreamScreen = {
   },
 
   render() {
+    this.cancelScheduledRender();
     const { isSeries, title, subtitle, episodeLabel, detailLine } = this.getHeaderMeta();
     const backdrop = this.getBackdropUrl();
     const logo = this.params?.logo || "";
@@ -687,16 +735,21 @@ export const StreamScreen = {
       })
     ].join("");
     const filtered = this.getFilteredStreams();
+    const hasPendingForFilter = this.hasPendingSourceLoads();
+    const hasAnyStreams = this.streams.length > 0;
 
     let body = "";
-    if (this.loading) {
+    if (filtered.length) {
+      body = filtered.map((stream, index) => this.renderStreamCard(stream, index)).join("");
+      if (hasPendingForFilter) {
+        body += this.renderLoadingCards(1);
+      }
+    } else if ((this.loading && !hasAnyStreams) || hasPendingForFilter) {
       body = this.renderLoadingCards();
     } else if (this.error) {
       body = `<div class="stream-route-empty">${escapeHtml(this.error)}</div>`;
     } else if (!filtered.length) {
       body = `<div class="stream-route-empty">No sources found for this filter.</div>`;
-    } else {
-      body = filtered.map((stream, index) => this.renderStreamCard(stream, index)).join("");
     }
 
     this.container.innerHTML = `
@@ -867,6 +920,7 @@ export const StreamScreen = {
 
   cleanup() {
     this.loadToken = (this.loadToken || 0) + 1;
+    this.cancelScheduledRender();
     if (this.errorChipTimer) {
       clearTimeout(this.errorChipTimer);
       this.errorChipTimer = null;

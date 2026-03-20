@@ -12,15 +12,25 @@ export const ScreenUtils = {
     if (!container) {
       return;
     }
-    container.style.display = "block";
+    if (container.style.display !== "block") {
+      container.style.display = "block";
+    }
   },
 
   hide(container) {
     if (!container) {
       return;
     }
-    container.style.display = "none";
-    container.innerHTML = "";
+    if (container.style.display !== "none") {
+      container.style.display = "none";
+    }
+    if (container.childNodes?.length) {
+      if (typeof container.replaceChildren === "function") {
+        container.replaceChildren();
+      } else {
+        container.innerHTML = "";
+      }
+    }
   },
 
   setInitialFocus(container, selector = ".focusable") {
@@ -204,8 +214,13 @@ export const ScreenUtils = {
   indexFocusables(container, selector = ".focusable") {
     const list = Array.from(container?.querySelectorAll(selector) || []);
     list.forEach((node, index) => {
-      node.dataset.index = String(index);
-      node.tabIndex = 0;
+      const indexValue = String(index);
+      if (node.dataset.index !== indexValue) {
+        node.dataset.index = indexValue;
+      }
+      if (node.tabIndex !== 0) {
+        node.tabIndex = 0;
+      }
     });
   }
 

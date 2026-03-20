@@ -9552,7 +9552,8 @@ button:focus-visible {
 .performance-constrained .home-route-content-enter,
 .performance-constrained .addons-route-enter,
 .performance-constrained .search-route-enter,
-.performance-constrained .library-route-enter {
+.performance-constrained .library-route-enter,
+.performance-constrained .settings-route-enter {
   animation: none !important;
 }
 
@@ -9591,6 +9592,29 @@ button:focus-visible {
 
 .performance-constrained .home-screen-shell .home-hero-backdrop {
   filter: none !important;
+}
+
+.performance-constrained .home-screen-shell .home-poster-title,
+.performance-constrained .home-screen-shell .home-poster-subtitle,
+.performance-constrained .home-screen-shell .home-poster-expanded-meta {
+  text-overflow: ellipsis;
+}
+
+.performance-constrained .home-screen-shell .home-hero-description {
+  display: -webkit-box !important;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.performance-constrained .home-screen-shell.home-layout-classic .home-hero-description,
+.performance-constrained .home-screen-shell.home-layout-grid .home-hero-description {
+  max-height: none;
+  -webkit-line-clamp: 2;
+}
+
+.performance-constrained .home-screen-shell.home-layout-modern .home-hero-description {
+  max-height: none;
+  -webkit-line-clamp: 4;
 }
 
 .performance-constrained .home-content-card.focused,

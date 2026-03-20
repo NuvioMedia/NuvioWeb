@@ -141,6 +141,7 @@ export const Router = {
     const fromHistory = Boolean(options?.fromHistory);
     const skipStackPush = Boolean(options?.skipStackPush);
     const replaceHistory = Boolean(options?.replaceHistory);
+    const targetParams = params || {};
 
     const Screen = this.routes[routeName];
 
@@ -167,10 +168,16 @@ export const Router = {
     }
 
     this.current = routeName;
-    this.currentParams = params || {};
+    this.currentParams = targetParams;
     const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
 
     await Screen.mount(this.currentParams, navigationContext);
+
+    // If another navigation happened while this screen was mounting, this
+    // navigation is stale and must not write an extra history entry.
+    if (this.current !== routeName || this.currentParams !== targetParams) {
+      return;
+    }
 
     if (window?.history && typeof window.history.pushState === "function") {
       const state = { route: this.current, params: this.currentParams };

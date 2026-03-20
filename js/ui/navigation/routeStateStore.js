@@ -22,11 +22,11 @@ export const RouteStateStore = {
 
   clearByPrefix(prefix) {
     if (!prefix) return;
-    Array.from(stateMap.keys()).forEach((key) => {
+    for (const key of stateMap.keys()) {
       if (String(key).startsWith(prefix)) {
         stateMap.delete(key);
       }
-    });
+    }
   },
 
   clearAll() {
