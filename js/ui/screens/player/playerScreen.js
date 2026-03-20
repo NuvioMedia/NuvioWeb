@@ -589,6 +589,10 @@ function dbToGain(db = 0) {
   return Math.pow(10, Number(db || 0) / 20);
 }
 
+function supportsTvWebAudioAmplification() {
+  return !Environment.isWebOS() && !Environment.isTizen();
+}
+
 function flattenStreamGroups(streamResult) {
   if (!streamResult || streamResult.status !== "success") {
     return [];
@@ -877,7 +881,8 @@ export const PlayerScreen = {
     };
     this.audioAmplificationDb = clamp(Number(playerSettings.audioAmplificationDb || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
     this.persistAudioAmplification = Boolean(playerSettings.persistAudioAmplification);
-    this.audioAmplificationAvailable = !Environment.isWebOS() && typeof (globalThis.AudioContext || globalThis.webkitAudioContext) === "function";
+    this.audioAmplificationAvailable = supportsTvWebAudioAmplification()
+      && typeof (globalThis.AudioContext || globalThis.webkitAudioContext) === "function";
     this.audioContext = null;
     this.audioGainNode = null;
     this.audioMediaSource = null;
@@ -2086,7 +2091,7 @@ export const PlayerScreen = {
 
   ensureAudioAmplificationGraph() {
     const video = PlayerController.video;
-    if (Environment.isWebOS()) {
+    if (!supportsTvWebAudioAmplification()) {
       this.audioAmplificationAvailable = false;
       return false;
     }
@@ -2113,7 +2118,7 @@ export const PlayerScreen = {
 
   applyAudioAmplification() {
     if (Number(this.audioAmplificationDb || 0) <= 0) {
-      this.audioAmplificationAvailable = !Environment.isWebOS()
+      this.audioAmplificationAvailable = supportsTvWebAudioAmplification()
         && typeof (globalThis.AudioContext || globalThis.webkitAudioContext) === "function";
       if (this.audioGainNode) {
         try {
@@ -3530,8 +3535,20 @@ export const PlayerScreen = {
     this.lastPlaybackProgressAt = Date.now();
   },
 
+  getPlaybackStallTimeoutMs() {
+    const playbackEngine = String(PlayerController.playbackEngine || "");
+    if (Environment.isTizen()) {
+      return playbackEngine.endsWith("avplay") ? 22000 : 16000;
+    }
+    if (Environment.isWebOS()) {
+      return playbackEngine.endsWith("avplay") ? 16000 : 12000;
+    }
+    return 9000;
+  },
+
   schedulePlaybackStallGuard() {
     this.clearPlaybackStallGuard();
+    const stallTimeoutMs = this.getPlaybackStallTimeoutMs();
     this.playbackStallTimer = setTimeout(() => {
       const video = PlayerController.video;
       const ended = typeof PlayerController.isPlaybackEnded === "function"
@@ -3547,7 +3564,7 @@ export const PlayerScreen = {
       const currentTime = this.getPlaybackCurrentSeconds();
       const elapsedFromProgress = Date.now() - Number(this.lastPlaybackProgressAt || 0);
       const stalledAtStart = currentTime < 0.5 && readyState < 2;
-      const stalledWhilePlaying = elapsedFromProgress >= 9000 && readyState < 3;
+      const stalledWhilePlaying = elapsedFromProgress >= stallTimeoutMs && readyState < 3;
       if (!stalledAtStart && !stalledWhilePlaying) {
         return;
       }
@@ -3566,7 +3583,7 @@ export const PlayerScreen = {
       } else {
         this.renderSourcesPanel();
       }
-    }, 9000);
+    }, stallTimeoutMs);
   },
 
   getSubtitleTabs() {

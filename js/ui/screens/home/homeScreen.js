@@ -379,11 +379,8 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
   if (!source) {
     return null;
   }
-  const webOsMajorVersion = typeof Platform.getWebOsMajorVersion === "function"
-    ? Number(Platform.getWebOsMajorVersion() || 0)
-    : 0;
-  const isLegacyWebOsYoutube = Platform.isWebOS() && webOsMajorVersion > 0 && webOsMajorVersion < 22;
-  if (isLegacyWebOsYoutube && source.kind === "youtube") {
+  const isTvYoutubeEmbed = (Platform.isWebOS() || Platform.isTizen()) && source.kind === "youtube";
+  if (isTvYoutubeEmbed) {
     return null;
   }
   const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);

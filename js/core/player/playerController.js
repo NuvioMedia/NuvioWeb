@@ -1,4 +1,5 @@
 import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
+import { watchedItemsRepository } from "../../data/repository/watchedItemsRepository.js";
 import { Platform } from "../../platform/index.js";
 import { WatchProgressSyncService } from "../profile/watchProgressSyncService.js";
 import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
@@ -46,6 +47,7 @@ export const PlayerController = {
   nativeMediaIdLookupToken: 0,
   webosDeviceInfoPromise: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
+  viewportSyncHandler: null,
 
   isExpectedPlayInterruption(error) {
     const message = String(error?.message || "").toLowerCase();
@@ -692,8 +694,12 @@ export const PlayerController = {
     if (!avplay) {
       return;
     }
-    const width = Math.max(1, Math.round(Number(window.innerWidth || 1920)));
-    const height = Math.max(1, Math.round(Number(window.innerHeight || 1080)));
+    const documentWidth = Number(document.documentElement?.clientWidth || 0);
+    const documentHeight = Number(document.documentElement?.clientHeight || 0);
+    const screenWidth = Number(globalThis.screen?.width || 0);
+    const screenHeight = Number(globalThis.screen?.height || 0);
+    const width = Math.max(1, Math.round(Math.max(Number(window.innerWidth || 0), documentWidth, screenWidth, 1920)));
+    const height = Math.max(1, Math.round(Math.max(Number(window.innerHeight || 0), documentHeight, screenHeight, 1080)));
     try {
       avplay.setDisplayRect?.(0, 0, width, height);
     } catch (_) {
@@ -1035,6 +1041,9 @@ export const PlayerController = {
 
     if (this.isLikelyHlsMimeType(normalizedSourceType)) {
       const candidates = [];
+      if (Platform.isTizen() && this.canUseAvPlay()) {
+        pushCandidate(candidates, avplayEngine);
+      }
       if (this.canPlayNatively("application/vnd.apple.mpegurl")) {
         pushCandidate(candidates, "native-hls");
       }
@@ -1049,6 +1058,9 @@ export const PlayerController = {
 
     if (this.isLikelyDashMimeType(normalizedSourceType)) {
       const candidates = [];
+      if (Platform.isTizen() && this.canUseAvPlay()) {
+        pushCandidate(candidates, avplayEngine);
+      }
       if (Platform.isWebOS() && this.canPlayNatively("application/dash+xml")) {
         pushCandidate(candidates, "native-dash");
       }
@@ -1747,11 +1759,23 @@ export const PlayerController = {
     this.video.defaultMuted = false;
     this.video.volume = 1;
     this.refreshWebOsDeviceInfo();
+    if (!this.viewportSyncHandler) {
+      this.viewportSyncHandler = () => {
+        if (this.isUsingAvPlay()) {
+          this.setAvPlayDisplayRect();
+        }
+      };
+      window.addEventListener("resize", this.viewportSyncHandler);
+    }
 
     this.video.addEventListener("ended", () => {
       this.isPlaying = false;
       const context = this.createProgressContext();
-      this.flushProgress(0, 0, true, context);
+      const durationMs = Math.floor(this.getDurationSeconds() * 1000);
+      const completedMs = durationMs > 0
+        ? durationMs
+        : Math.floor(this.getCurrentTimeSeconds() * 1000);
+      this.flushProgress(completedMs, durationMs > 0 ? durationMs : completedMs, false, context);
     });
 
     this.video.addEventListener("error", (e) => {
@@ -2117,8 +2141,20 @@ export const PlayerController = {
     const safePosition = Number(positionMs || 0);
     const safeDuration = Number(durationMs || 0);
     const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
+    const isCompleted = hasFiniteDuration && safePosition / safeDuration > 0.95;
 
-    if (clear || (hasFiniteDuration && safePosition / safeDuration > 0.95)) {
+    if (isCompleted) {
+      await watchedItemsRepository.mark({
+        contentId: active.itemId,
+        contentType: active.itemType || "movie",
+        title: active.episodeTitle || active.title || active.itemId,
+        season: active.season,
+        episode: active.episode,
+        watchedAt: Date.now()
+      });
+    }
+
+    if (clear || isCompleted) {
       await watchProgressRepository.removeProgress(active.itemId, active.videoId || null);
       this.pushProgressIfDue(true);
       return;

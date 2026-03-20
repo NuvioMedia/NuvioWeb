@@ -11,9 +11,15 @@ class WatchedItemsRepository {
     return WatchedItemsStore.listForProfile(activeProfileId()).slice(0, limit);
   }
 
-  async isWatched(contentId) {
+  async isWatched(contentId, options = {}) {
+    const allowEpisodeEntries = Boolean(options?.allowEpisodeEntries);
     const all = WatchedItemsStore.listForProfile(activeProfileId());
-    return all.some((item) => item.contentId === String(contentId || ""));
+    return all.some((item) => {
+      if (item.contentId !== String(contentId || "")) {
+        return false;
+      }
+      return allowEpisodeEntries || (item.season == null && item.episode == null);
+    });
   }
 
   async mark(item) {
@@ -26,8 +32,8 @@ class WatchedItemsRepository {
     }, activeProfileId());
   }
 
-  async unmark(contentId) {
-    WatchedItemsStore.remove(contentId, activeProfileId());
+  async unmark(contentId, options = null) {
+    WatchedItemsStore.remove(contentId, activeProfileId(), options);
   }
 
   async replaceAll(items) {

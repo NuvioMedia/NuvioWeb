@@ -588,6 +588,7 @@ function scoreTrailerStream(entry = {}) {
 }
 
 function resolveTrailerSource(meta = {}) {
+  const allowYoutubeTrailer = !Environment.isWebOS() && !Environment.isTizen();
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
   const directVideo = trailerStreams
     .filter((entry) => {
@@ -606,26 +607,32 @@ function resolveTrailerSource(meta = {}) {
     ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
     ...(Array.isArray(meta?.videos) ? meta.videos : [])
   ];
-  for (const entry of trailerCandidates) {
-    const ytId = resolveYoutubeId(
-      entry?.ytId
-      || entry?.youtubeId
-      || entry?.source
-      || entry?.url
-      || entry?.link
-      || ""
-    );
-    if (ytId) {
-      const embedUrl = buildYoutubeEmbedUrl(ytId);
-      if (!embedUrl) {
-        continue;
+  if (allowYoutubeTrailer) {
+    for (const entry of trailerCandidates) {
+      const ytId = resolveYoutubeId(
+        entry?.ytId
+        || entry?.youtubeId
+        || entry?.source
+        || entry?.url
+        || entry?.link
+        || ""
+      );
+      if (ytId) {
+        const embedUrl = buildYoutubeEmbedUrl(ytId);
+        if (!embedUrl) {
+          continue;
+        }
+        return {
+          kind: "youtube",
+          ytId,
+          embedUrl
+        };
       }
-      return {
-        kind: "youtube",
-        ytId,
-        embedUrl
-      };
     }
+  }
+
+  if (!allowYoutubeTrailer) {
+    return null;
   }
 
   const ytId = resolveYoutubeId(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds[0] : "");
@@ -2093,6 +2100,14 @@ export const MetaDetailsScreen = {
       return false;
     }
     if (watched) {
+      await watchedItemsRepository.mark({
+        contentId: this.params?.itemId,
+        contentType: "series",
+        title: this.meta?.name || this.params?.fallbackTitle || episode.title || "Untitled",
+        season: episode.season,
+        episode: episode.episode,
+        watchedAt: Date.now()
+      });
       await watchProgressRepository.saveProgress({
         contentId: this.params?.itemId,
         contentType: "series",
@@ -2104,6 +2119,10 @@ export const MetaDetailsScreen = {
         updatedAt: Date.now()
       });
     } else {
+      await watchedItemsRepository.unmark(this.params?.itemId, {
+        season: episode.season,
+        episode: episode.episode
+      });
       await watchProgressRepository.removeProgress(this.params?.itemId, episode.id);
     }
     await this.refreshEpisodePlaybackState();

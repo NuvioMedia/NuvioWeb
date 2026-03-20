@@ -12,7 +12,40 @@ function getAvplayApi() {
 export const tizenAdapter = {
   name: "tizen",
 
-  init() {},
+  init() {
+    const tvInputDevice = globalThis.tizen?.tvinputdevice || null;
+    if (!tvInputDevice) {
+      return;
+    }
+
+    const mediaKeys = [
+      "MediaPlayPause",
+      "MediaPlay",
+      "MediaPause",
+      "MediaStop",
+      "MediaFastForward",
+      "MediaRewind",
+      "MediaTrackPrevious",
+      "MediaTrackNext"
+    ];
+
+    if (typeof tvInputDevice.registerKeyBatch === "function") {
+      try {
+        tvInputDevice.registerKeyBatch(mediaKeys);
+        return;
+      } catch (_) {
+        // Fall through to per-key registration.
+      }
+    }
+
+    mediaKeys.forEach((keyName) => {
+      try {
+        tvInputDevice.registerKey?.(keyName);
+      } catch (_) {
+        // Ignore missing media-key support on older firmware.
+      }
+    });
+  },
 
   exitApp() {
     try {
