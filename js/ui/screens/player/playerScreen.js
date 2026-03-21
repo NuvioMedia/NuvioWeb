@@ -1,6 +1,8 @@
 import { PlayerController } from "../../../core/player/playerController.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { parentalGuideRepository } from "../../../data/repository/parentalGuideRepository.js";
+import { skipIntroRepository } from "../../../data/repository/skipIntroRepository.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
@@ -67,7 +69,7 @@ const SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C
 const SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
 const SUBTITLE_DELAY_STEP_MS = 250;
 const SUBTITLE_FONT_STEP = 10;
-const SUBTITLE_VERTICAL_OFFSET_STEP = 2;
+const SUBTITLE_VERTICAL_OFFSET_STEP = 0.01;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -562,6 +564,30 @@ function formatSubtitleDelay(delayMs = 0) {
   return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(3)}s`;
 }
 
+function normalizeSubtitleVerticalOffset(value = 0) {
+  const parsed = Number(value || 0);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  const normalized = Number(clamp(parsed, -12, 12).toFixed(2));
+  return Object.is(normalized, -0) ? 0 : normalized;
+}
+
+function splitSubtitleVerticalOffset(value = 0) {
+  const normalized = normalizeSubtitleVerticalOffset(value);
+  const lineOffset = normalized < 0 ? Math.ceil(normalized) : Math.floor(normalized);
+  const residualOffset = Number((normalized - lineOffset).toFixed(2));
+  return {
+    value: normalized,
+    lineOffset,
+    residualOffset: Object.is(residualOffset, -0) ? 0 : residualOffset
+  };
+}
+
+function formatSubtitleVerticalOffset(value = 0) {
+  return normalizeSubtitleVerticalOffset(value).toFixed(2);
+}
+
 function normalizeSubtitleLanguageKey(value) {
   const code = normalizeTrackLanguageCode(value);
   if (code) {
@@ -688,6 +714,54 @@ function normalizeParentalWarnings(source) {
       return leftRank - rightRank;
     })
     .slice(0, 5);
+}
+
+function buildLocalizedParentalWarnings(guide = {}) {
+  const labels = {
+    nudity: t("parental_nudity", {}, "Nudity"),
+    violence: t("parental_violence", {}, "Violence"),
+    profanity: t("parental_profanity", {}, "Profanity"),
+    alcohol: t("parental_alcohol", {}, "Alcohol/Drugs"),
+    frightening: t("parental_frightening", {}, "Frightening")
+  };
+  const severityLabels = {
+    severe: t("parental_severity_severe", {}, "Severe"),
+    moderate: t("parental_severity_moderate", {}, "Moderate"),
+    mild: t("parental_severity_mild", {}, "Mild")
+  };
+  const severityRank = {
+    severe: 0,
+    moderate: 1,
+    mild: 2
+  };
+  return Object.entries(labels)
+    .map(([key, label]) => ({
+      label,
+      severityKey: String(guide?.[key] || "").trim().toLowerCase()
+    }))
+    .filter((entry) => entry.severityKey && entry.severityKey !== "none")
+    .sort((left, right) => (severityRank[left.severityKey] ?? 50) - (severityRank[right.severityKey] ?? 50))
+    .map((entry) => ({
+      label: entry.label,
+      severity: severityLabels[entry.severityKey] || entry.severityKey
+    }))
+    .slice(0, 5);
+}
+
+function normalizePlayableImdbId(value = "") {
+  const candidate = String(value || "").trim().split(":")[0];
+  return /^tt\d+$/i.test(candidate) ? candidate : "";
+}
+
+function buildSkipIntervalLabel(interval = {}) {
+  const type = String(interval?.type || "").trim().toLowerCase();
+  if (type === "recap") {
+    return t("skip_recap", {}, "Skip Recap");
+  }
+  if (type === "outro" || type === "ed" || type === "mixed-ed") {
+    return t("skip_outro", {}, "Skip Outro");
+  }
+  return t("skip_intro", {}, "Skip Intro");
 }
 
 function stripQuotes(value) {
@@ -825,6 +899,9 @@ export const PlayerScreen = {
     this.parentalGuideVisible = false;
     this.parentalGuideShown = false;
     this.parentalGuideTimer = null;
+    this.skipIntervals = [];
+    this.activeSkipInterval = null;
+    this.skipIntervalDismissed = false;
     this.subtitleSelectionTimer = null;
     this.subtitleLoadToken = 0;
     this.subtitleLoading = false;
@@ -894,6 +971,8 @@ export const PlayerScreen = {
       this.bindMediaSessionHandlers();
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
+      void this.fetchParentalGuide();
+      void this.fetchSkipIntervals();
     }
     this.renderEpisodePanel();
     this.applyAspectMode({ showToast: false });
@@ -997,6 +1076,122 @@ export const PlayerScreen = {
     }
 
     return { type, id, videoId };
+  },
+
+  buildPlaybackIdentityContext() {
+    const itemType = normalizeItemType(this.params?.itemType || "movie");
+    const rawItemId = String(this.params?.itemId || "").trim();
+    const rawVideoId = String(this.params?.videoId || "").trim();
+    const season = Number(this.params?.season || 0);
+    const episode = Number(this.params?.episode || 0);
+    const imdbId = [
+      normalizePlayableImdbId(rawVideoId),
+      normalizePlayableImdbId(rawItemId)
+    ].find(Boolean) || "";
+    return {
+      itemType,
+      imdbId,
+      season: Number.isFinite(season) && season > 0 ? season : null,
+      episode: Number.isFinite(episode) && episode > 0 ? episode : null
+    };
+  },
+
+  maybeShowParentalGuideOverlay() {
+    if (this.parentalGuideShown || !this.parentalWarnings.length || this.paused) {
+      return;
+    }
+    this.showParentalGuideOverlay();
+  },
+
+  async fetchParentalGuide() {
+    const { itemType, imdbId, season, episode } = this.buildPlaybackIdentityContext();
+    if (!imdbId) {
+      return;
+    }
+    const response = (itemType === "series" || itemType === "tv") && season && episode
+      ? await parentalGuideRepository.getTvGuide(imdbId, season, episode)
+      : await parentalGuideRepository.getMovieGuide(imdbId);
+    const warnings = buildLocalizedParentalWarnings(response?.parentalGuide || {});
+    if (!warnings.length) {
+      return;
+    }
+    if (JSON.stringify(this.parentalWarnings || []) === JSON.stringify(warnings)) {
+      return;
+    }
+    this.parentalWarnings = warnings;
+    this.parentalGuideShown = false;
+    this.renderParentalGuideOverlay();
+    this.maybeShowParentalGuideOverlay();
+  },
+
+  async fetchSkipIntervals() {
+    if (!PlayerSettingsStore.get().skipIntroEnabled) {
+      this.skipIntervals = [];
+      this.activeSkipInterval = null;
+      this.skipIntervalDismissed = false;
+      this.renderSkipIntroButton();
+      return;
+    }
+    const { imdbId, season, episode } = this.buildPlaybackIdentityContext();
+    if (!imdbId || !season || !episode) {
+      this.skipIntervals = [];
+      this.activeSkipInterval = null;
+      this.skipIntervalDismissed = false;
+      this.renderSkipIntroButton();
+      return;
+    }
+    this.skipIntervals = await skipIntroRepository.getSkipIntervals(imdbId, season, episode);
+    this.skipIntervalDismissed = false;
+    this.updateActiveSkipInterval(this.getPlaybackCurrentSeconds());
+  },
+
+  updateActiveSkipInterval(currentTime = this.getPlaybackCurrentSeconds()) {
+    const previous = this.activeSkipInterval;
+    const active = (Array.isArray(this.skipIntervals) ? this.skipIntervals : []).find((interval) => {
+      const start = Number(interval?.startTime);
+      const end = Number(interval?.endTime);
+      return Number.isFinite(start) && Number.isFinite(end) && currentTime >= start && currentTime < end;
+    }) || null;
+    const previousKey = previous ? `${previous.type}:${previous.startTime}:${previous.endTime}` : "";
+    const nextKey = active ? `${active.type}:${active.startTime}:${active.endTime}` : "";
+    if (previousKey !== nextKey) {
+      this.skipIntervalDismissed = false;
+    }
+    this.activeSkipInterval = active;
+    this.renderSkipIntroButton();
+  },
+
+  renderSkipIntroButton() {
+    const button = this.uiRefs?.skipIntro;
+    if (!button) {
+      return;
+    }
+    const activeInterval = this.activeSkipInterval;
+    const shouldShow = Boolean(activeInterval) && !this.skipIntervalDismissed;
+    button.classList.toggle("hidden", !shouldShow);
+    if (!shouldShow) {
+      button.innerHTML = "";
+      return;
+    }
+    const label = buildSkipIntervalLabel(activeInterval);
+    button.classList.toggle("is-raised", Boolean(this.controlsVisible));
+    button.innerHTML = `
+      <button class="player-skip-intro-btn${!this.controlsVisible ? " is-selected" : ""}" type="button" tabindex="-1">
+        <span class="player-skip-intro-label">${escapeHtml(label)}</span>
+      </button>
+    `;
+  },
+
+  skipActiveInterval() {
+    if (!this.activeSkipInterval) {
+      return false;
+    }
+    const targetTime = Number(this.activeSkipInterval.endTime || 0) + 0.25;
+    this.seekPlaybackSeconds(targetTime);
+    this.skipIntervalDismissed = false;
+    this.activeSkipInterval = null;
+    this.renderSkipIntroButton();
+    return true;
   },
 
   normalizeStreamCandidates(streams = []) {
@@ -1758,6 +1953,7 @@ export const PlayerScreen = {
         </div>
 
         <div id="playerParentalGuide" class="player-parental-guide hidden"></div>
+        <div id="playerSkipIntro" class="player-skip-intro hidden"></div>
 
         <div id="playerAspectToast" class="player-aspect-toast hidden"></div>
 
@@ -1819,6 +2015,7 @@ export const PlayerScreen = {
       this.renderSpeedDialog();
       this.renderSourcesPanel();
       this.renderParentalGuideOverlay();
+      this.renderSkipIntroButton();
       this.renderSeekOverlay();
       this.renderNextEpisodeCard();
     }
@@ -1830,6 +2027,7 @@ export const PlayerScreen = {
       root: uiRoot,
       loadingOverlay: uiRoot.querySelector("#playerLoadingOverlay"),
       parentalGuide: uiRoot.querySelector("#playerParentalGuide"),
+      skipIntro: uiRoot.querySelector("#playerSkipIntro"),
       aspectToast: uiRoot.querySelector("#playerAspectToast"),
       seekOverlay: uiRoot.querySelector("#playerSeekOverlay"),
       seekDirection: uiRoot.querySelector("#playerSeekDirection"),
@@ -2172,22 +2370,27 @@ export const PlayerScreen = {
       return;
     }
     const style = this.subtitleStyleSettings || {};
+    const verticalOffset = splitSubtitleVerticalOffset(style.verticalOffset);
     const subtitleColor = String(style.textColor || "#FFFFFF");
     const outlineColor = String(style.outlineColor || "#000000");
-    const boldShadow = style.bold ? `0 0 0.6px ${subtitleColor}, 0 0 1.2px ${subtitleColor}` : "";
+    const subtitleFontWeight = style.bold ? "800" : "500";
+    const boldShadow = style.bold
+      ? `0.45px 0 0 ${subtitleColor}, -0.45px 0 0 ${subtitleColor}, 0 0.45px 0 ${subtitleColor}, 0 -0.45px 0 ${subtitleColor}`
+      : "";
     const outlineShadow = style.outlineEnabled ? `0 0 2px ${outlineColor}, 0 0 4px ${outlineColor}` : "";
     const subtitleShadow = [outlineShadow, boldShadow].filter(Boolean).join(", ") || "none";
     uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
     uiRoot.style.setProperty("--player-subtitle-outline-color", outlineColor);
     uiRoot.style.setProperty("--player-subtitle-font-size", `${clamp(Number(style.fontSize || 100), 70, 180)}%`);
-    uiRoot.style.setProperty("--player-subtitle-font-weight", style.bold ? "bold" : "normal");
+    uiRoot.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
     uiRoot.style.setProperty("--player-subtitle-shadow", subtitleShadow);
-    uiRoot.style.setProperty("--player-subtitle-offset", `${clamp(Number(style.verticalOffset || 0), -12, 12) * -2}vh`);
+    uiRoot.style.setProperty("--player-subtitle-offset", `${(verticalOffset.residualOffset * -2).toFixed(2)}vh`);
     video.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
     video.style.setProperty("--player-subtitle-outline-color", outlineColor);
     video.style.setProperty("--player-subtitle-font-size", `${clamp(Number(style.fontSize || 100), 70, 180)}%`);
-    video.style.setProperty("--player-subtitle-font-weight", style.bold ? "bold" : "normal");
+    video.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
     video.style.setProperty("--player-subtitle-shadow", subtitleShadow);
+    video.style.setProperty("--player-subtitle-offset", `${(verticalOffset.residualOffset * -2).toFixed(2)}vh`);
     this.refreshSubtitleCueStyles();
   },
 
@@ -2290,8 +2493,8 @@ export const PlayerScreen = {
     if (!cue || !snapshot) {
       return;
     }
-    const verticalOffset = clamp(Number(offset || 0), -12, 12);
-    if (verticalOffset === 0) {
+    const { lineOffset } = splitSubtitleVerticalOffset(offset);
+    if (lineOffset === 0) {
       this.restoreSubtitleCueSnapshot(cue, snapshot);
       return;
     }
@@ -2305,7 +2508,7 @@ export const PlayerScreen = {
     }
 
     const baseLine = Number.isFinite(Number(snapshot.line)) ? Number(snapshot.line) : -1;
-    const adjustedLine = clamp(baseLine - verticalOffset, -100, 100);
+    const adjustedLine = clamp(baseLine - lineOffset, -100, 100);
     try {
       cue.line = adjustedLine;
     } catch (_) {
@@ -2319,7 +2522,7 @@ export const PlayerScreen = {
       return;
     }
     const style = this.subtitleStyleSettings || {};
-    const verticalOffset = clamp(Number(style.verticalOffset || 0), -12, 12);
+    const verticalOffset = normalizeSubtitleVerticalOffset(style.verticalOffset);
     const cueCount = Number(cues.length || 0);
     for (let index = 0; index < cueCount; index += 1) {
       const cue = cues[index] || cues.item?.(index) || null;
@@ -2401,9 +2604,7 @@ export const PlayerScreen = {
         this.focusProgressBar();
       }
       this.resetControlsAutoHide();
-      if (!this.parentalGuideShown && this.parentalWarnings.length) {
-        this.showParentalGuideOverlay();
-      }
+      this.maybeShowParentalGuideOverlay();
       setTimeout(() => {
         this.attemptSilentAudioRecovery("playing");
       }, 700);
@@ -2661,6 +2862,7 @@ export const PlayerScreen = {
       return;
     }
     overlay.classList.toggle("hidden", !this.controlsVisible);
+    this.renderSkipIntroButton();
     if (this.controlsVisible) {
       this.renderControlButtons();
       if (focus) {
@@ -2889,6 +3091,7 @@ export const PlayerScreen = {
       return;
     }
     const current = this.getPlaybackCurrentSeconds();
+    this.updateActiveSkipInterval(current);
     const duration = this.getPlaybackDurationSeconds();
     const effectiveProgressSeconds = this.controlsVisible && this.controlFocusZone === "progress" && this.seekPreviewSeconds != null
       ? Number(this.seekPreviewSeconds)
@@ -4522,7 +4725,7 @@ export const PlayerScreen = {
       { id: "textColor", label: t("subtitle_style_text_color", {}, "Text Color"), value: styleChipLabel(style.textColor || "#FFFFFF") },
       { id: "outlineEnabled", label: t("subtitle_style_outline", {}, "Outline"), value: style.outlineEnabled ? t("common.on", {}, "On") : t("common.off", {}, "Off") },
       { id: "outlineColor", label: t("subtitle_style_outline_color", {}, "Outline Color"), value: styleChipLabel(style.outlineColor || "#000000") },
-      { id: "verticalOffset", label: t("subtitle_style_vertical_offset", {}, "Vertical Offset"), value: `${Number(style.verticalOffset || 0)}` },
+      { id: "verticalOffset", label: t("subtitle_style_vertical_offset", {}, "Vertical Offset"), value: formatSubtitleVerticalOffset(style.verticalOffset) },
       { id: "reset", label: t("subtitle_style_defaults", {}, "Reset Defaults"), value: "" }
     ];
   },
@@ -4544,7 +4747,7 @@ export const PlayerScreen = {
       const currentIndex = Math.max(0, SUBTITLE_OUTLINE_COLORS.indexOf(String(style.outlineColor || "#000000").toUpperCase()));
       style.outlineColor = SUBTITLE_OUTLINE_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_OUTLINE_COLORS.length - 1)];
     } else if (controlId === "verticalOffset") {
-      style.verticalOffset = clamp(Number(style.verticalOffset || 0) + (delta * SUBTITLE_VERTICAL_OFFSET_STEP), -12, 12);
+      style.verticalOffset = normalizeSubtitleVerticalOffset(Number(style.verticalOffset || 0) + (delta * SUBTITLE_VERTICAL_OFFSET_STEP));
     } else if (controlId === "reset") {
       const defaults = PlayerSettingsStore.get().subtitleStyle;
       this.subtitleDelayMs = 0;
@@ -6253,6 +6456,14 @@ export const PlayerScreen = {
       if (keyCode === 13) {
         this.playEpisodeFromPanel();
         return;
+      }
+    }
+
+    if (!this.controlsVisible && this.activeSkipInterval && !this.skipIntervalDismissed) {
+      if (keyCode === 13) {
+        if (this.skipActiveInterval()) {
+          return;
+        }
       }
     }
 

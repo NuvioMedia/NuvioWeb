@@ -9,6 +9,34 @@ function activeProfileId() {
   return String(ProfileManager.getActiveProfileId() || "1");
 }
 
+let watchProgressSyncTimer = null;
+let watchProgressSyncInFlight = null;
+
+function queueWatchProgressCloudSync(delayMs = 250) {
+  if (watchProgressSyncTimer) {
+    clearTimeout(watchProgressSyncTimer);
+  }
+  watchProgressSyncTimer = setTimeout(() => {
+    watchProgressSyncTimer = null;
+    const runPush = async () => {
+      if (watchProgressSyncInFlight) {
+        await watchProgressSyncInFlight.catch(() => false);
+      }
+      watchProgressSyncInFlight = import("../../core/profile/watchProgressSyncService.js")
+        .then(({ WatchProgressSyncService }) => WatchProgressSyncService.push())
+        .catch((error) => {
+          console.warn("Watch progress cloud sync enqueue failed", error);
+          return false;
+        })
+        .finally(() => {
+          watchProgressSyncInFlight = null;
+        });
+      await watchProgressSyncInFlight;
+    };
+    void runPush();
+  }, delayMs);
+}
+
 function toProgressFraction(item = {}) {
   const explicitPercent = Number(item.progressPercent);
   if (Number.isFinite(explicitPercent) && explicitPercent > 0) {
@@ -89,6 +117,7 @@ class WatchProgressRepository {
       ...progress,
       updatedAt: progress.updatedAt || Date.now()
     }, activeProfileId());
+    queueWatchProgressCloudSync();
   }
 
   async getProgressByContentId(contentId) {
@@ -97,6 +126,7 @@ class WatchProgressRepository {
 
   async removeProgress(contentId, videoId = null) {
     WatchProgressStore.remove(contentId, videoId, activeProfileId());
+    queueWatchProgressCloudSync();
   }
 
   async getRecent(limit = 30) {

@@ -1,4 +1,4 @@
-import { SUPABASE_URL } from "../../../config.js";
+import { AVATAR_PUBLIC_BASE_URL, SUPABASE_URL } from "../../../config.js";
 import { SupabaseApi } from "./supabaseApi.js";
 
 const AVATAR_BUCKET = "avatars";
@@ -9,6 +9,10 @@ function avatarImageUrl(storagePath = "") {
   const normalizedPath = String(storagePath || "").trim().replace(/^\/+/, "");
   if (!normalizedPath) {
     return null;
+  }
+  const configuredBaseUrl = String(AVATAR_PUBLIC_BASE_URL || "").trim().replace(/\/+$/, "");
+  if (configuredBaseUrl) {
+    return `${configuredBaseUrl}/${normalizedPath}`;
   }
   return `${String(SUPABASE_URL || "").replace(/\/+$/, "")}/storage/v1/object/public/${AVATAR_BUCKET}/${normalizedPath}`;
 }

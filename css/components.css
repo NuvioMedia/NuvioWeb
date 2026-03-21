@@ -6223,6 +6223,13 @@ button:focus-visible {
   background: transparent;
 }
 
+#videoPlayer::-webkit-media-text-track-display,
+#videoPlayer::-webkit-media-text-track-container {
+  font-weight: var(--player-subtitle-font-weight);
+  text-shadow: var(--player-subtitle-shadow);
+  transform: translateY(var(--player-subtitle-offset));
+}
+
 .player-loading-overlay {
   position: absolute;
   inset: 0;
@@ -6604,6 +6611,49 @@ button:focus-visible {
   transition: width 120ms linear;
 }
 
+.player-skip-intro {
+  position: absolute;
+  left: 26px;
+  bottom: 30px;
+  z-index: 29;
+  opacity: 1;
+  transition: bottom 180ms ease, opacity 180ms ease;
+}
+
+.player-skip-intro.is-raised {
+  bottom: 122px;
+}
+
+.player-skip-intro.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-skip-intro-btn {
+  min-width: 180px;
+  min-height: 52px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(18, 18, 18, 0.88);
+  color: rgba(248, 251, 255, 0.96);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.26);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-skip-intro-btn.is-selected {
+  border-color: var(--secondary-color);
+  box-shadow: 0 0 0 2px rgba(30, 136, 229, 0.22), 0 14px 32px rgba(0, 0, 0, 0.26);
+}
+
+.player-skip-intro-label {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .player-next-episode-card {
   position: absolute;
   right: 26px;
@@ -6956,6 +7006,21 @@ button:focus-visible {
   border-color: transparent;
 }
 
+.player-subtitle-modal .player-dialog-item.focused {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(226, 232, 240, 0.16);
+}
+
+.player-subtitle-modal .player-dialog-item.selected {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.player-subtitle-modal .player-dialog-item.selected.focused {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(226, 232, 240, 0.18);
+}
+
 .player-dialog-item.disabled {
   opacity: 0.58;
 }
@@ -6973,6 +7038,15 @@ button:focus-visible {
 .player-dialog-item.focused .player-dialog-item-sub,
 .player-dialog-item.focused .player-dialog-item-check {
   color: #111111;
+}
+
+.player-subtitle-modal .player-dialog-item.focused .player-dialog-item-main,
+.player-subtitle-modal .player-dialog-item.focused .player-dialog-item-sub,
+.player-subtitle-modal .player-dialog-item.focused .player-dialog-item-check,
+.player-subtitle-modal .player-dialog-item.selected.focused .player-dialog-item-main,
+.player-subtitle-modal .player-dialog-item.selected.focused .player-dialog-item-sub,
+.player-subtitle-modal .player-dialog-item.selected.focused .player-dialog-item-check {
+  color: rgba(248, 251, 255, 0.96);
 }
 
 .player-dialog-item.selected .player-dialog-item-check {
@@ -7008,6 +7082,18 @@ button:focus-visible {
 .player-dialog-step.focused {
   background: #ffffff;
   color: #111111;
+}
+
+.player-subtitle-modal .player-dialog-step {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-subtitle-modal .player-dialog-step.focused {
+  background: rgba(226, 232, 240, 0.22);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: rgba(248, 251, 255, 0.96);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
 .player-dialog-step-minus {
@@ -8524,6 +8610,16 @@ button:focus-visible {
   justify-content: center;
 }
 
+.series-circle-btn.is-selected {
+  background: rgba(45, 129, 255, 0.24);
+  border-color: rgba(111, 179, 255, 0.72);
+  color: #f7fbff;
+}
+
+.series-circle-btn.is-selected .series-btn-svg {
+  filter: brightness(0) invert(1);
+}
+
 .series-primary-btn.focused,
 .series-circle-btn.focused,
 .series-season-btn.focused,
@@ -8586,6 +8682,16 @@ button:focus-visible {
 
 .series-circle-btn.focused .series-btn-svg {
   filter: none;
+}
+
+.series-circle-btn.is-selected.focused {
+  background: #2d81ff;
+  color: #ffffff;
+  border-color: #9ed3ff;
+}
+
+.series-circle-btn.is-selected.focused .series-btn-svg {
+  filter: brightness(0) invert(1);
 }
 
 .detail-morelike-card.focused {
