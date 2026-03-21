@@ -93,7 +93,7 @@ export const PlayerController = {
       if (formatHint === "mpd" || formatHint === "dash") {
         return "application/dash+xml";
       }
-      if (path.includes("/playlist") && search && (search.has("type") || search.has("rendition"))) {
+      if (path.includes("/playlist")) {
         return "application/vnd.apple.mpegurl";
       }
       const extensionMatch = path.match(/\.(mp4|m4v|mov|webm|mkv|avi|wmv|ts|m2ts|mpg|mpeg|3gp|mp3|aac|flac)(?=($|[/?#&]))/i);
