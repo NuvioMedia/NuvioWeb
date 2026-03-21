@@ -5,6 +5,7 @@
   "version": "0.1.2",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "build:on-commit": "node ./scripts/commit-build-poller.mjs",
     "serve": "node ./scripts/serve.mjs",
     "sync": "node ./scripts/sync-wrapper.mjs",
     "sync:tizen": "node ./scripts/sync-wrapper.mjs --tizen",
