@@ -49,29 +49,8 @@ export const PlaybackSettings = {
                 : "auto";
           PlayerSettingsStore.set({ preferredQuality: next });
         }
-      },
-      {
-        id: "playback_engine_cycle",
-        label: `Player: ${this.getEngineLabel(settings.preferredPlaybackEngine)}`,
-        description: "Cycle Auto -> Native (AVPlay) -> Web (HLS.js/DASH.js)",
-        action: () => {
-          const current = String(PlayerSettingsStore.get().preferredPlaybackEngine || "auto");
-          const next = current === "auto" ? "native" : current === "native" ? "web" : "auto";
-          PlayerSettingsStore.set({ preferredPlaybackEngine: next });
-        }
       }
     ];
-  },
-
-  getEngineLabel(engine) {
-    switch (engine) {
-      case "native":
-        return "Native (AVPlay)";
-      case "web":
-        return "Web (HLS.js/DASH.js)";
-      default:
-        return "Auto";
-    }
   }
 
 };

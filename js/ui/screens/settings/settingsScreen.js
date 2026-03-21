@@ -438,11 +438,11 @@ function renderModeLabel(value) {
 function labelForPlaybackEngine(engine) {
   switch (engine) {
     case "native":
-      return "Native (AVPlay)";
+      return t("settings.playback.engines.native");
     case "web":
-      return "Web (HLS.js/DASH.js)";
+      return t("settings.playback.engines.web");
     default:
-      return "Auto";
+      return t("settings.playback.engines.auto");
   }
 }
 
