@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <style>
 html, body {
   margin: 0;
@@ -21,9 +24,9 @@ html, body {
 <body>
 <div id="yt"></div>
 
-<script src="https://www.youtube.com/iframe_api"></script>
 <script>
 const params = new URLSearchParams(location.search);
+const cacheBuster = params.get("_cb") || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const videoId = params.get("v") || "qBg39HCJiTU";
 const startMuted = params.get("muted") === "1";
 const autoplay = params.get("autoplay") !== "0";
@@ -134,6 +137,10 @@ window.addEventListener("beforeunload", () => {
     stateTimer = null;
   }
 });
+
+const apiScript = document.createElement("script");
+apiScript.src = `https://www.youtube.com/iframe_api?_cb=${encodeURIComponent(cacheBuster)}`;
+document.head.appendChild(apiScript);
 
 function onYouTubeIframeAPIReady() {
   player = new YT.Player("yt", {

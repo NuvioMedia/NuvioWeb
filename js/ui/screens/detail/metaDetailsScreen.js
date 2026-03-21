@@ -9,7 +9,6 @@ import { savedLibraryRepository } from "../../../data/repository/savedLibraryRep
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
-import { TrailerService } from "../../../core/trailer/trailerService.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { imdbEpisodeRatingsRepository } from "../../../data/repository/imdbEpisodeRatingsRepository.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
@@ -431,50 +430,6 @@ function extractPreviewYear(value = "") {
   return match ? match[0] : "";
 }
 
-function scoreTrailerStream(entry = {}) {
-  const text = [
-    entry?.quality,
-    entry?.label,
-    entry?.name,
-    entry?.title,
-    entry?.description,
-    entry?.resolution
-  ].map((value) => String(value || "")).join(" ").toLowerCase();
-  const width = Number(entry?.width || 0);
-  const height = Number(entry?.height || entry?.resolutionHeight || 0);
-  const bitrate = Number(entry?.bitrate || 0);
-  let score = 0;
-
-  if (width >= 3840 || height >= 2160 || /2160|4k|uhd/.test(text)) score += 120;
-  else if (width >= 2560 || height >= 1440 || /1440|2k|qhd/.test(text)) score += 90;
-  else if (width >= 1920 || height >= 1080 || /1080|full\s*hd|fhd/.test(text)) score += 70;
-  else if (width >= 1280 || height >= 720 || /720|hd\b/.test(text)) score += 45;
-  else if (width > 0 || height > 0) score += 20;
-
-  score += Math.max(0, Math.min(20, Math.round(bitrate / 500000)));
-
-  if (/hdr|dolby/.test(text)) score += 8;
-  if (/hevc|h265|av1/.test(text)) score += 6;
-
-  return score;
-}
-
-function extractTrailerReleaseYear(meta = {}) {
-  const candidates = [
-    meta?.releaseInfo,
-    meta?.year,
-    meta?.released,
-    meta?.firstAired
-  ];
-  for (const candidate of candidates) {
-    const match = String(candidate || "").match(/\b(19|20)\d{2}\b/);
-    if (match?.[0]) {
-      return match[0];
-    }
-  }
-  return "";
-}
-
 function resolveYoutubeId(value = "") {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -515,6 +470,7 @@ function buildYoutubeEmbedUrl(ytId = "") {
       proxyUrl.searchParams.set("playlist", cleanId);
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
+      proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
       return "";
@@ -558,6 +514,7 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
       proxyUrl.searchParams.set("playlist", cleanId);
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
+      proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
       return "";
@@ -582,19 +539,6 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
 }
 
 function resolveTrailerSource(meta = {}) {
-  const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
-  const directVideo = trailerStreams
-    .filter((entry) => {
-      const url = String(entry?.url || entry?.videoUrl || entry?.stream || "").trim();
-      return /^https?:\/\//i.test(url);
-    })
-    .sort((left, right) => scoreTrailerStream(right) - scoreTrailerStream(left))[0];
-  if (directVideo) {
-    return {
-      kind: "video",
-      url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
-    };
-  }
   const trailerCandidates = [
     ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
     ...(Array.isArray(meta?.videos) ? meta.videos : [])
@@ -1382,15 +1326,7 @@ export const MetaDetailsScreen = {
     if (!meta) {
       return null;
     }
-    const fallbackSource = resolveTrailerSource(meta);
-    if (fallbackSource) {
-      return fallbackSource;
-    }
-    const directSource = await withTimeout(TrailerService.getPlaybackSource(meta, {
-      title: meta?.name || meta?.title || "",
-      year: extractTrailerReleaseYear(meta)
-    }), 2600, null);
-    return directSource;
+    return resolveTrailerSource(meta);
   },
 
   async refreshTrailerSource(meta = this.meta, token = this.detailLoadToken) {
@@ -1557,7 +1493,7 @@ export const MetaDetailsScreen = {
       : `<h1 class="series-detail-title">${escapeHtml(meta.name || "Untitled")}</h1>`;
     const externalRatings = this.renderExternalRatingsRow(meta);
     const trailerSource = this.trailerSource || resolveTrailerSource(meta);
-    const hasTrailerCandidate = Boolean(trailerSource || TrailerService.hasTrailerHints(meta));
+    const hasTrailerCandidate = Boolean(trailerSource);
     if (!this.trailerSource && trailerSource) {
       this.trailerSource = trailerSource;
     }
@@ -3053,6 +2989,17 @@ export const MetaDetailsScreen = {
     if (!keepDom) {
       const layer = this.container?.querySelector(".detail-trailer-layer");
       if (layer) {
+        const activeFrame = layer.querySelector("iframe");
+        if (activeFrame) {
+          try {
+            activeFrame.src = "about:blank";
+          } catch (_) {
+          }
+          try {
+            activeFrame.removeAttribute("src");
+          } catch (_) {
+          }
+        }
         layer.innerHTML = "";
       }
     }

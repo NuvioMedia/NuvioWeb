@@ -17,7 +17,6 @@ export const PUBLIC_APP_URL = String(runtimeEnv.PUBLIC_APP_URL || "").trim();
 export const YOUTUBE_PROXY_URL = String(runtimeEnv.YOUTUBE_PROXY_URL || "").trim();
 export const PARENTAL_GUIDE_API_URL = String(runtimeEnv.PARENTAL_GUIDE_API_URL || "").trim();
 export const INTRODB_API_URL = String(runtimeEnv.INTRODB_API_URL || "").trim();
-export const TRAILER_API_URL = String(runtimeEnv.TRAILER_API_URL || "").trim();
 export const IMDB_RATINGS_API_BASE_URL = String(runtimeEnv.IMDB_RATINGS_API_BASE_URL || "").trim();
 export const AVATAR_PUBLIC_BASE_URL = String(runtimeEnv.AVATAR_PUBLIC_BASE_URL || "").trim();
 export const ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();

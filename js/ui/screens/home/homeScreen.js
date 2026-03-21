@@ -8,7 +8,6 @@ import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
-import { TrailerService } from "../../../core/trailer/trailerService.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
@@ -286,70 +285,14 @@ function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
     proxyUrl.searchParams.set("playlist", cleanId);
     proxyUrl.searchParams.set("playsinline", "1");
     proxyUrl.searchParams.set("rel", "0");
+    proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
     return proxyUrl.toString();
   } catch (_) {
     return "";
   }
 }
 
-function scoreTrailerStream(entry = {}) {
-  const text = [
-    entry?.quality,
-    entry?.label,
-    entry?.name,
-    entry?.title,
-    entry?.description,
-    entry?.resolution
-  ].map((value) => String(value || "")).join(" ").toLowerCase();
-  const width = Number(entry?.width || 0);
-  const height = Number(entry?.height || entry?.resolutionHeight || 0);
-  const bitrate = Number(entry?.bitrate || 0);
-  let score = 0;
-
-  if (width >= 3840 || height >= 2160 || /2160|4k|uhd/.test(text)) score += 120;
-  else if (width >= 2560 || height >= 1440 || /1440|2k|qhd/.test(text)) score += 90;
-  else if (width >= 1920 || height >= 1080 || /1080|full\s*hd|fhd/.test(text)) score += 70;
-  else if (width >= 1280 || height >= 720 || /720|hd\b/.test(text)) score += 45;
-  else if (width > 0 || height > 0) score += 20;
-
-  score += Math.max(0, Math.min(20, Math.round(bitrate / 500000)));
-
-  if (/hdr|dolby/.test(text)) score += 8;
-  if (/hevc|h265|av1/.test(text)) score += 6;
-
-  return score;
-}
-
-function extractTrailerReleaseYear(meta = {}) {
-  const candidates = [
-    meta?.releaseInfo,
-    meta?.year,
-    meta?.released,
-    meta?.firstAired
-  ];
-  for (const candidate of candidates) {
-    const match = String(candidate || "").match(/\b(19|20)\d{2}\b/);
-    if (match?.[0]) {
-      return match[0];
-    }
-  }
-  return "";
-}
-
 function resolveTrailerSource(meta = {}) {
-  const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
-  const directVideo = trailerStreams
-    .filter((entry) => {
-      const url = String(entry?.url || entry?.videoUrl || entry?.stream || "").trim();
-      return /^https?:\/\//i.test(url);
-    })
-    .sort((left, right) => scoreTrailerStream(right) - scoreTrailerStream(left))[0];
-  if (directVideo) {
-    return {
-      kind: "video",
-      url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
-    };
-  }
   const trailerCandidates = [
     ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
     ...(Array.isArray(meta?.videos) ? meta.videos : [])
@@ -434,13 +377,6 @@ async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie")
   if (fallbackSource) {
     return fallbackSource;
   }
-  const directSource = await withTimeout(TrailerService.getPlaybackSource(meta, {
-    title: meta?.name || meta?.title || "",
-    year: extractTrailerReleaseYear(meta)
-  }), 2600, null);
-  if (directSource) {
-    return directSource;
-  }
   const settings = TmdbSettingsStore.get();
   if (!settings.enabled || !settings.apiKey) {
     return fallbackSource;
@@ -468,14 +404,7 @@ async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie")
         : (Array.isArray(enrichment?.trailerYtIds) ? enrichment.trailerYtIds : [])
     };
     const enrichedFallbackSource = resolveTrailerSource(mergedMeta);
-    if (enrichedFallbackSource) {
-      return enrichedFallbackSource;
-    }
-    const enrichedDirectSource = await withTimeout(TrailerService.getPlaybackSource(mergedMeta, {
-      title: mergedMeta?.name || mergedMeta?.title || "",
-      year: extractTrailerReleaseYear(mergedMeta)
-    }), 2600, null);
-    return enrichedDirectSource || fallbackSource;
+    return enrichedFallbackSource || fallbackSource;
   } catch (_) {
     return fallbackSource;
   }
@@ -2215,6 +2144,17 @@ export const HomeScreen = {
     if (!container) {
       return;
     }
+    const activeFrame = container.querySelector("iframe");
+    if (activeFrame) {
+      try {
+        activeFrame.src = "about:blank";
+      } catch (_) {
+      }
+      try {
+        activeFrame.removeAttribute("src");
+      } catch (_) {
+      }
+    }
     const activeVideo = container.querySelector("video");
     if (activeVideo) {
       try {
@@ -2316,11 +2256,6 @@ export const HomeScreen = {
     if (!itemId) {
       return null;
     }
-    const cache = this.trailerPreviewCache || (this.trailerPreviewCache = new Map());
-    const cacheKey = `${itemType}:${itemId}`;
-    if (cache.has(cacheKey)) {
-      return cache.get(cacheKey) || null;
-    }
     try {
       const inlineSource = await withTimeout(
         resolveTrailerMetaWithTmdbFallback(
@@ -2331,7 +2266,6 @@ export const HomeScreen = {
         null
       );
       if (inlineSource) {
-        cache.set(cacheKey, inlineSource);
         return inlineSource;
       }
 
@@ -2346,11 +2280,9 @@ export const HomeScreen = {
           itemType
         )
         : null;
-      cache.set(cacheKey, source || null);
       return source || null;
     } catch (error) {
       console.warn("Home trailer preview lookup failed", error);
-      cache.set(cacheKey, null);
       return null;
     }
   },
@@ -2708,15 +2640,6 @@ export const HomeScreen = {
         rightPadding = paddingRight;
         track.dataset.trackPadRight = String(paddingRight);
       }
-    }
-
-    if (this.layoutMode === "modern") {
-      const trackRect = track.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
-      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
-      this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPadding)), 140);
-      return;
     }
 
     const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
