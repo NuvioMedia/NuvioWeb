@@ -21,6 +21,7 @@
     SUPABASE_ANON_KEY: typeof existing.SUPABASE_ANON_KEY === "undefined" ? "" : existing.SUPABASE_ANON_KEY,
     TV_LOGIN_REDIRECT_BASE_URL: typeof existing.TV_LOGIN_REDIRECT_BASE_URL === "undefined" ? "" : existing.TV_LOGIN_REDIRECT_BASE_URL,
     PUBLIC_APP_URL: typeof existing.PUBLIC_APP_URL === "undefined" ? "" : existing.PUBLIC_APP_URL,
+    YOUTUBE_PROXY_URL: typeof existing.YOUTUBE_PROXY_URL === "undefined" ? "" : existing.YOUTUBE_PROXY_URL,
     PARENTAL_GUIDE_API_URL: typeof existing.PARENTAL_GUIDE_API_URL === "undefined" ? "" : existing.PARENTAL_GUIDE_API_URL,
     INTRODB_API_URL: typeof existing.INTRODB_API_URL === "undefined" ? "" : existing.INTRODB_API_URL,
     TRAILER_API_URL: typeof existing.TRAILER_API_URL === "undefined" ? "" : existing.TRAILER_API_URL,

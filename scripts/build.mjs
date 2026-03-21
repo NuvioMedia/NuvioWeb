@@ -14,7 +14,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     SUPABASE_URL: "",
     SUPABASE_ANON_KEY: "",
     TV_LOGIN_REDIRECT_BASE_URL: "",
-    YOUTUBE_PROXY_URL: "",
+    YOUTUBE_PROXY_URL: "youtube-proxy.html",
     ADDON_REMOTE_BASE_URL: "",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
@@ -82,6 +82,7 @@ await mkdir(distDir, { recursive: true });
 await Promise.all([
   copyEntry("assets"),
   copyEntry("css"),
+  cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html")),
   copyEntry("js"),
   copyEntry("res")
 ]);
