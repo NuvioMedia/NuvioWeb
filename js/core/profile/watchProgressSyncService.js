@@ -7,6 +7,7 @@ const TABLE = "tv_watch_progress";
 const FALLBACK_TABLE = "watch_progress";
 const PULL_RPC = "sync_pull_watch_progress";
 const PUSH_RPC = "sync_push_watch_progress";
+const SYNTHETIC_EPISODE_VIDEO_PREFIX = "__nuvio_episode__:";
 
 function progressKey(item = {}) {
   const contentId = String(item.contentId || "").trim();
@@ -83,6 +84,7 @@ function mapProgressRow(row = {}) {
   const episodeRaw = row.episode ?? row.episode_number ?? null;
   const seasonNum = Number(seasonRaw);
   const episodeNum = Number(episodeRaw);
+  const rawVideoId = row.video_id || row.videoId || null;
   const toMs = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) {
@@ -96,7 +98,9 @@ function mapProgressRow(row = {}) {
   return {
     contentId,
     contentType,
-    videoId: row.video_id || row.videoId || null,
+    videoId: typeof rawVideoId === "string" && rawVideoId.startsWith(SYNTHETIC_EPISODE_VIDEO_PREFIX)
+      ? null
+      : rawVideoId,
     season: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : null,
     episode: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : null,
     positionMs: toMs(positionMsRaw),
@@ -121,6 +125,31 @@ function toSeconds(valueMs) {
   return Math.max(0, Math.trunc(n / 1000));
 }
 
+function toPositiveIntegerOrNull(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return null;
+  }
+  return Math.trunc(n);
+}
+
+function toRemoteVideoId(item = {}) {
+  const explicitVideoId = String(item.videoId || "").trim();
+  if (explicitVideoId) {
+    return explicitVideoId;
+  }
+  const season = toPositiveIntegerOrNull(item.season);
+  const episode = toPositiveIntegerOrNull(item.episode);
+  if (season != null || episode != null) {
+    return `${SYNTHETIC_EPISODE_VIDEO_PREFIX}${season || 0}:${episode || 0}`;
+  }
+  const contentId = String(item.contentId || "").trim();
+  if (contentId) {
+    return contentId;
+  }
+  return "main";
+}
+
 function hasNoConflictConstraint(error) {
   if (!error) {
     return false;
@@ -134,10 +163,45 @@ function hasNoConflictConstraint(error) {
 
 function toProgressKey(item = {}) {
   const contentId = String(item.contentId || "").trim();
-  const videoId = String(item.videoId || "main").trim();
+  const videoId = toRemoteVideoId(item);
   const season = item.season == null ? "" : String(Number(item.season));
   const episode = item.episode == null ? "" : String(Number(item.episode));
   return `${contentId}:${videoId}:${season}:${episode}`;
+}
+
+function dedupeSyncItems(items = []) {
+  const byKey = new Map();
+  (Array.isArray(items) ? items : []).forEach((item) => {
+    const contentId = String(item?.contentId || "").trim();
+    if (!contentId) {
+      return;
+    }
+    const key = toProgressKey(item);
+    const existing = byKey.get(key);
+    if (!existing || Number(item?.updatedAt || 0) > Number(existing?.updatedAt || 0)) {
+      byKey.set(key, item);
+    }
+  });
+  return Array.from(byKey.values())
+    .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0));
+}
+
+async function upsertWithConflictCandidates(table, rows, conflictCandidates = []) {
+  let lastError = null;
+  for (const onConflict of conflictCandidates) {
+    try {
+      await SupabaseApi.upsert(table, rows, onConflict, true);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!hasNoConflictConstraint(error)) {
+        throw error;
+      }
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
 }
 
 export const WatchProgressSyncService = {
@@ -201,7 +265,7 @@ export const WatchProgressSyncService = {
       if (!AuthManager.isAuthenticated) {
         return false;
       }
-      const items = await watchProgressRepository.getAll();
+      const items = dedupeSyncItems(await watchProgressRepository.getAll());
       if (!items.length) {
         return true;
       }
@@ -212,7 +276,7 @@ export const WatchProgressSyncService = {
           p_entries: items.map((item) => ({
             content_id: item.contentId,
             content_type: item.contentType || "movie",
-            video_id: item.videoId || item.contentId || null,
+            video_id: toRemoteVideoId(item),
             season: item.season == null ? null : Number(item.season),
             episode: item.episode == null ? null : Number(item.episode),
             position: toSeconds(item.positionMs),
@@ -231,7 +295,7 @@ export const WatchProgressSyncService = {
         owner_id: ownerId,
         content_id: item.contentId,
         content_type: item.contentType,
-        video_id: item.videoId || item.contentId || null,
+        video_id: toRemoteVideoId(item),
         season: item.season == null ? null : Number(item.season),
         episode: item.episode == null ? null : Number(item.episode),
         position_ms: item.positionMs || 0,
@@ -243,7 +307,7 @@ export const WatchProgressSyncService = {
           user_id: ownerId,
           content_id: item.contentId,
           content_type: item.contentType,
-          video_id: item.videoId || item.contentId,
+          video_id: toRemoteVideoId(item),
           season: item.season == null ? null : Number(item.season),
           episode: item.episode == null ? null : Number(item.episode),
           position: Math.max(0, Math.trunc(Number(item.positionMs || 0) / 1000)),
@@ -252,26 +316,20 @@ export const WatchProgressSyncService = {
           progress_key: toProgressKey(item),
           profile_id: profileId
         }));
-        try {
-          await SupabaseApi.upsert(FALLBACK_TABLE, fallbackRows, "user_id,progress_key", true);
-        } catch (conflictError) {
-          if (!hasNoConflictConstraint(conflictError)) {
-            throw conflictError;
-          }
-          await SupabaseApi.upsert(FALLBACK_TABLE, fallbackRows, "user_id,content_id,video_id", true);
-        }
+        await upsertWithConflictCandidates(FALLBACK_TABLE, fallbackRows, [
+          "user_id,profile_id,progress_key",
+          "user_id,progress_key",
+          "user_id,profile_id,content_id,video_id",
+          "user_id,content_id,video_id"
+        ]);
       } catch (primaryError) {
         if (!shouldTryLegacyTable(primaryError)) {
           throw primaryError;
         }
-        try {
-          await SupabaseApi.upsert(TABLE, rows, "owner_id,content_id,video_id", true);
-        } catch (conflictError) {
-          if (!hasNoConflictConstraint(conflictError)) {
-            throw conflictError;
-          }
-          await SupabaseApi.upsert(TABLE, rows, "owner_id,content_id", true);
-        }
+        await upsertWithConflictCandidates(TABLE, rows, [
+          "owner_id,content_id,video_id",
+          "owner_id,content_id"
+        ]);
       }
       return true;
     } catch (error) {
