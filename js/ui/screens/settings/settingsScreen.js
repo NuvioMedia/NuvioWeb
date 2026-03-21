@@ -1802,8 +1802,6 @@ export const SettingsScreen = {
     })}
       </div>
     `;
-
-    const isTizen = typeof window !== "undefined" && window.tizen;
     const streamBody = `
       <div class="settings-stack">
         ${this.renderActionRow({
@@ -1812,7 +1810,7 @@ export const SettingsScreen = {
       subtitle: t("settings.playback.preferredQuality.subtitle"),
       value: qualityLabel(model.player.preferredQuality)
     })}
-        ${isTizen ? this.renderActionRow({
+        ${Platform.isTizen() ? this.renderActionRow({
       focusKey: "playback:engine",
       title: t("settings.playback.playerEngine.title"),
       subtitle: t("settings.playback.playerEngine.subtitle"),
