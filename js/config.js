@@ -14,6 +14,7 @@ export const SUPABASE_URL = String(runtimeEnv.SUPABASE_URL || "").trim();
 export const SUPABASE_ANON_KEY = String(runtimeEnv.SUPABASE_ANON_KEY || "").trim();
 export const TV_LOGIN_REDIRECT_BASE_URL = String(runtimeEnv.TV_LOGIN_REDIRECT_BASE_URL || "").trim();
 export const PUBLIC_APP_URL = String(runtimeEnv.PUBLIC_APP_URL || "").trim();
+export const YOUTUBE_PROXY_URL = String(runtimeEnv.YOUTUBE_PROXY_URL || "").trim();
 export const PARENTAL_GUIDE_API_URL = String(runtimeEnv.PARENTAL_GUIDE_API_URL || "").trim();
 export const INTRODB_API_URL = String(runtimeEnv.INTRODB_API_URL || "").trim();
 export const TRAILER_API_URL = String(runtimeEnv.TRAILER_API_URL || "").trim();

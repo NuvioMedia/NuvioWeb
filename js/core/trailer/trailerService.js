@@ -147,6 +147,13 @@ async function fetchTrailerSourceFromApi(youtubeUrl, title, year, timeoutMs = 50
 
 export const TrailerService = {
 
+  hasTrailerHints(meta = {}) {
+    return Boolean(
+      extractDirectTrailerSource(meta)
+      || extractYoutubeCandidates(meta).length
+    );
+  },
+
   async getPlaybackSource(meta = {}, { title = "", year = "" } = {}) {
     const directSource = extractDirectTrailerSource(meta);
     if (directSource) {

@@ -13,6 +13,7 @@ import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { Platform } from "../../../platform/index.js";
+import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import {
   buildModernNavigationRows,
@@ -244,6 +245,53 @@ function formatEpisodeCode(season, episode) {
   return "";
 }
 
+function resolveYoutubeId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const directMatch = raw.match(/^[A-Za-z0-9_-]{11}$/);
+  if (directMatch) {
+    return directMatch[0];
+  }
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([A-Za-z0-9_-]{11})/i,
+    /(?:youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/i
+  ];
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return "";
+}
+
+function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
+  const cleanId = resolveYoutubeId(videoId);
+  if (!cleanId) {
+    return "";
+  }
+  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  if (!proxyBase) {
+    return "";
+  }
+  try {
+    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+    proxyUrl.searchParams.set("v", cleanId);
+    proxyUrl.searchParams.set("autoplay", "1");
+    proxyUrl.searchParams.set("muted", muted ? "1" : "0");
+    proxyUrl.searchParams.set("controls", "0");
+    proxyUrl.searchParams.set("loop", "1");
+    proxyUrl.searchParams.set("playlist", cleanId);
+    proxyUrl.searchParams.set("playsinline", "1");
+    proxyUrl.searchParams.set("rel", "0");
+    return proxyUrl.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
 function scoreTrailerStream(entry = {}) {
   const text = [
     entry?.quality,
@@ -302,7 +350,44 @@ function resolveTrailerSource(meta = {}) {
       url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
     };
   }
-  return null;
+  const trailerCandidates = [
+    ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
+    ...(Array.isArray(meta?.videos) ? meta.videos : [])
+  ];
+  for (const entry of trailerCandidates) {
+    const ytId = resolveYoutubeId(
+      entry?.ytId
+      || entry?.youtubeId
+      || entry?.source
+      || entry?.url
+      || entry?.link
+      || ""
+    );
+    if (ytId) {
+      const embedUrl = buildYoutubeEmbedUrl(ytId);
+      if (!embedUrl) {
+        continue;
+      }
+      return {
+        kind: "youtube",
+        ytId,
+        embedUrl
+      };
+    }
+  }
+  const fallbackId = resolveYoutubeId(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds[0] : "");
+  if (!fallbackId) {
+    return null;
+  }
+  const fallbackEmbedUrl = buildYoutubeEmbedUrl(fallbackId);
+  if (!fallbackEmbedUrl) {
+    return null;
+  }
+  return {
+    kind: "youtube",
+    ytId: fallbackId,
+    embedUrl: fallbackEmbedUrl
+  };
 }
 
 function applyTrailerAudioPreferences(source, prefs = {}) {
@@ -310,6 +395,17 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
     return null;
   }
   const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
+  if (source.kind === "youtube") {
+    const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted });
+    if (!embedUrl) {
+      return null;
+    }
+    return {
+      ...source,
+      embedUrl,
+      muted
+    };
+  }
   if (source.kind === "video") {
     return {
       ...source,
@@ -334,6 +430,10 @@ function withTimeout(promise, ms, fallbackValue) {
 }
 
 async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie") {
+  const fallbackSource = resolveTrailerSource(meta);
+  if (fallbackSource) {
+    return fallbackSource;
+  }
   const directSource = await withTimeout(TrailerService.getPlaybackSource(meta, {
     title: meta?.name || meta?.title || "",
     year: extractTrailerReleaseYear(meta)
@@ -341,7 +441,6 @@ async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie")
   if (directSource) {
     return directSource;
   }
-  const fallbackSource = resolveTrailerSource(meta);
   const settings = TmdbSettingsStore.get();
   if (!settings.enabled || !settings.apiKey) {
     return fallbackSource;
@@ -368,11 +467,15 @@ async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie")
         ? meta.trailerYtIds
         : (Array.isArray(enrichment?.trailerYtIds) ? enrichment.trailerYtIds : [])
     };
+    const enrichedFallbackSource = resolveTrailerSource(mergedMeta);
+    if (enrichedFallbackSource) {
+      return enrichedFallbackSource;
+    }
     const enrichedDirectSource = await withTimeout(TrailerService.getPlaybackSource(mergedMeta, {
       title: mergedMeta?.name || mergedMeta?.title || "",
       year: extractTrailerReleaseYear(mergedMeta)
     }), 2600, null);
-    return enrichedDirectSource || resolveTrailerSource(mergedMeta) || fallbackSource;
+    return enrichedDirectSource || fallbackSource;
   } catch (_) {
     return fallbackSource;
   }
@@ -2130,6 +2233,21 @@ export const HomeScreen = {
       return;
     }
     this.clearTrailerLayer(container);
+    if (source.kind === "youtube" && source.embedUrl) {
+      const frame = document.createElement("iframe");
+      frame.className = "home-inline-trailer-frame";
+      frame.src = source.embedUrl;
+      frame.title = "Trailer preview";
+      frame.allow = "autoplay; encrypted-media; picture-in-picture";
+      frame.allowFullscreen = true;
+      frame.referrerPolicy = "strict-origin-when-cross-origin";
+      frame.addEventListener("load", () => {
+        container.classList.add("is-active");
+        onReady?.();
+      }, { once: true });
+      container.appendChild(frame);
+      return;
+    }
     if (source.kind === "video" && source.url) {
       const shouldMute = source.muted !== false;
       container.innerHTML = `
@@ -2204,9 +2322,22 @@ export const HomeScreen = {
       return cache.get(cacheKey) || null;
     }
     try {
+      const inlineSource = await withTimeout(
+        resolveTrailerMetaWithTmdbFallback(
+          { ...(item || {}), id: itemId, type: itemType },
+          itemType
+        ),
+        2200,
+        null
+      );
+      if (inlineSource) {
+        cache.set(cacheKey, inlineSource);
+        return inlineSource;
+      }
+
       const result = await withTimeout(
         metaRepository.getMetaFromAllAddons(itemType, itemId),
-        2200,
+        3200,
         { status: "error", message: "timeout" }
       );
       const source = result?.status === "success"
@@ -2224,7 +2355,7 @@ export const HomeScreen = {
     }
   },
 
-  async activateFocusedPosterFlow(node) {
+  async activateFocusedPosterFlow(node, flowToken = Number(this.focusedPosterFlowToken || 0)) {
     if (!this.isModernPosterNode(node) || !node.classList.contains("focused")) {
       return;
     }
@@ -2241,6 +2372,9 @@ export const HomeScreen = {
 
     const sourceItem = this.getNodeHeroSource(node);
     const baseSource = await this.getTrailerSourceForItem(sourceItem);
+    if (Number(this.focusedPosterFlowToken || 0) !== Number(flowToken || 0)) {
+      return;
+    }
     const source = applyTrailerAudioPreferences(baseSource, prefs);
     if (!source || !node.classList.contains("focused")) {
       return;
@@ -2250,7 +2384,7 @@ export const HomeScreen = {
       const trailerLayer = node.querySelector(".home-poster-trailer-layer");
       if (trailerLayer) {
         this.mountTrailerLayer(trailerLayer, source, () => {
-          if (node.classList.contains("focused")) {
+          if (node.classList.contains("focused") && Number(this.focusedPosterFlowToken || 0) === Number(flowToken || 0)) {
             node.classList.add("is-trailer-active");
           }
         });
@@ -2262,7 +2396,7 @@ export const HomeScreen = {
     const heroMedia = this.container?.querySelector(".home-modern-hero-media");
     if (heroLayer && heroMedia) {
       this.mountTrailerLayer(heroLayer, source, () => {
-        if (node.classList.contains("focused")) {
+        if (node.classList.contains("focused") && Number(this.focusedPosterFlowToken || 0) === Number(flowToken || 0)) {
           heroMedia.classList.add("trailer-active");
         }
       });
@@ -2274,6 +2408,7 @@ export const HomeScreen = {
       clearTimeout(this.focusedPosterTimer);
       this.focusedPosterTimer = null;
     }
+    this.focusedPosterFlowToken = Number(this.focusedPosterFlowToken || 0) + 1;
   },
 
   clearFocusedPosterFlowState() {
@@ -2415,20 +2550,24 @@ export const HomeScreen = {
     const delayMs = canReuseExistingState
       ? Math.max(0, Number(existingState.activated ? 0 : ((existingState.activateAt || now) - now)))
       : defaultDelayMs;
+    const flowToken = Number(this.focusedPosterFlowToken || 0) + 1;
+    this.focusedPosterFlowToken = flowToken;
     this.focusedPosterFlowState = {
       key: flowKey,
       activateAt: now + delayMs,
-      activated: Boolean(canReuseExistingState && existingState.activated)
+      activated: Boolean(canReuseExistingState && existingState.activated),
+      token: flowToken
     };
     this.focusedPosterTimer = setTimeout(() => {
-      if (this.focusedPosterFlowState?.key === flowKey) {
+      if (this.focusedPosterFlowState?.key === flowKey && this.focusedPosterFlowState?.token === flowToken) {
         this.focusedPosterFlowState = {
           key: flowKey,
           activateAt: Date.now(),
-          activated: true
+          activated: true,
+          token: flowToken
         };
       }
-      this.activateFocusedPosterFlow(node).catch((error) => {
+      this.activateFocusedPosterFlow(node, flowToken).catch((error) => {
         console.warn("Focused poster flow failed", error);
       });
     }, delayMs);

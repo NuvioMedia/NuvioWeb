@@ -15,6 +15,7 @@ import { imdbEpisodeRatingsRepository } from "../../../data/repository/imdbEpiso
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
+import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
 
@@ -474,6 +475,112 @@ function extractTrailerReleaseYear(meta = {}) {
   return "";
 }
 
+function resolveYoutubeId(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) {
+    return raw;
+  }
+  const watchMatch = raw.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (watchMatch?.[1]) {
+    return watchMatch[1];
+  }
+  const shortMatch = raw.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortMatch?.[1]) {
+    return shortMatch[1];
+  }
+  const embedMatch = raw.match(/embed\/([a-zA-Z0-9_-]{11})/);
+  if (embedMatch?.[1]) {
+    return embedMatch[1];
+  }
+  return "";
+}
+
+function buildYoutubeEmbedUrl(ytId = "") {
+  const cleanId = String(ytId || "").trim();
+  if (!cleanId) {
+    return "";
+  }
+  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  if (proxyBase) {
+    try {
+      const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+      proxyUrl.searchParams.set("v", cleanId);
+      proxyUrl.searchParams.set("autoplay", "1");
+      proxyUrl.searchParams.set("muted", "1");
+      proxyUrl.searchParams.set("controls", "0");
+      proxyUrl.searchParams.set("loop", "1");
+      proxyUrl.searchParams.set("playlist", cleanId);
+      proxyUrl.searchParams.set("playsinline", "1");
+      proxyUrl.searchParams.set("rel", "0");
+      return proxyUrl.toString();
+    } catch (_) {
+      return "";
+    }
+  }
+  if (!Environment.isBrowser()) {
+    return "";
+  }
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: "1",
+    controls: "0",
+    loop: "1",
+    playlist: cleanId,
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1"
+  });
+  const origin = String(globalThis?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) {
+    params.set("origin", origin);
+  }
+  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
+}
+
+function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
+  const cleanId = String(ytId || "").trim();
+  if (!cleanId) {
+    return "";
+  }
+  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  if (proxyBase) {
+    try {
+      const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+      proxyUrl.searchParams.set("v", cleanId);
+      proxyUrl.searchParams.set("autoplay", "1");
+      proxyUrl.searchParams.set("muted", muted ? "1" : "0");
+      proxyUrl.searchParams.set("controls", "0");
+      proxyUrl.searchParams.set("loop", "1");
+      proxyUrl.searchParams.set("playlist", cleanId);
+      proxyUrl.searchParams.set("playsinline", "1");
+      proxyUrl.searchParams.set("rel", "0");
+      return proxyUrl.toString();
+    } catch (_) {
+      return "";
+    }
+  }
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: muted ? "1" : "0",
+    controls: "0",
+    loop: "1",
+    playlist: cleanId,
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1"
+  });
+  const origin = String(globalThis?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) {
+    params.set("origin", origin);
+  }
+  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
+}
+
 function resolveTrailerSource(meta = {}) {
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
   const directVideo = trailerStreams
@@ -488,7 +595,44 @@ function resolveTrailerSource(meta = {}) {
       url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
     };
   }
-  return null;
+  const trailerCandidates = [
+    ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
+    ...(Array.isArray(meta?.videos) ? meta.videos : [])
+  ];
+  for (const entry of trailerCandidates) {
+    const ytId = resolveYoutubeId(
+      entry?.ytId
+      || entry?.youtubeId
+      || entry?.source
+      || entry?.url
+      || entry?.link
+      || ""
+    );
+    if (ytId) {
+      const embedUrl = buildYoutubeEmbedUrl(ytId);
+      if (!embedUrl) {
+        continue;
+      }
+      return {
+        kind: "youtube",
+        ytId,
+        embedUrl
+      };
+    }
+  }
+  const ytId = resolveYoutubeId(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds[0] : "");
+  if (!ytId) {
+    return null;
+  }
+  const embedUrl = buildYoutubeEmbedUrl(ytId);
+  if (!embedUrl) {
+    return null;
+  }
+  return {
+    kind: "youtube",
+    ytId,
+    embedUrl
+  };
 }
 
 function formatCompactDate(value = "") {
@@ -516,6 +660,20 @@ function formatPlaybackTime(value = 0) {
     return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function normalizeTrailerProxyStatePayload(payload, fallbackMuted = false) {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const nestedState = source.state && typeof source.state === "object" ? source.state : null;
+  const candidate = nestedState || source;
+  return {
+    currentTime: Number(candidate.currentTime || 0),
+    duration: Number(candidate.duration || 0),
+    paused: Boolean(candidate.paused),
+    muted: candidate.muted == null ? Boolean(fallbackMuted) : Boolean(candidate.muted),
+    loading: Boolean(candidate.loading),
+    controllable: candidate.controllable !== false
+  };
 }
 
 function captureHorizontalScrollMap(container) {
@@ -587,9 +745,7 @@ export const MetaDetailsScreen = {
     this.collectionName = String(snapshot.collectionName || "");
     this.seriesRatingsBySeason = snapshot.seriesRatingsBySeason ? { ...snapshot.seriesRatingsBySeason } : {};
     this.nextEpisodeToWatch = snapshot.nextEpisodeToWatch ? { ...snapshot.nextEpisodeToWatch } : null;
-    this.trailerSource = snapshot.trailerSource?.kind === "video"
-      ? { ...snapshot.trailerSource }
-      : resolveTrailerSource(this.meta);
+    this.trailerSource = snapshot.trailerSource ? { ...snapshot.trailerSource } : resolveTrailerSource(this.meta);
     this.selectedSeason = Number(snapshot.selectedSeason || this.episodes[0]?.season || 1);
     this.selectedRatingSeason = Number(snapshot.selectedRatingSeason || this.selectedSeason || 1);
     this.seriesInsightTab = String(snapshot.seriesInsightTab || "cast");
@@ -639,7 +795,49 @@ export const MetaDetailsScreen = {
     if (this.trailerProxyMessageHandler) {
       window.removeEventListener("message", this.trailerProxyMessageHandler);
     }
-    this.trailerProxyMessageHandler = null;
+    let trustedProxyOrigin = "";
+    try {
+      trustedProxyOrigin = new URL(String(YOUTUBE_PROXY_URL || "").trim(), globalThis?.location?.href || "https://example.com/").origin;
+    } catch (_) {
+      trustedProxyOrigin = "";
+    }
+    this.trailerProxyMessageHandler = (event) => {
+      const frameWindow = this.trailerUiRefs?.frame?.contentWindow;
+      const data = event?.data;
+      if (!data || typeof data !== "object" || data.source !== "nuvio-youtube-proxy") {
+        return;
+      }
+      const eventOrigin = String(event?.origin || "").trim();
+      const sourceMatchesFrame = Boolean(frameWindow && event?.source === frameWindow);
+      const originMatchesProxy = Boolean(trustedProxyOrigin && eventOrigin === trustedProxyOrigin);
+      if (!sourceMatchesFrame && !originMatchesProxy) {
+        return;
+      }
+      if (data.type === "ready") {
+        this.stopTrailerProxyLoadingTimer();
+        this.trailerProxyState = {
+          currentTime: 0,
+          duration: 0,
+          paused: false,
+          muted: Boolean(this.trailerMuted),
+          loading: true,
+          controllable: true
+        };
+        this.postTrailerProxyCommand("getState");
+        this.updateTrailerOverlay();
+        return;
+      }
+      if (data.type === "state") {
+        const nextState = normalizeTrailerProxyStatePayload(data, this.trailerMuted);
+        if (nextState.loading === false || Number(nextState.duration || 0) > 0 || Number(nextState.currentTime || 0) > 0) {
+          this.stopTrailerProxyLoadingTimer();
+        }
+        this.trailerProxyState = nextState;
+        this.trailerYoutubeFallbackActive = nextState.controllable === false;
+        this.updateTrailerOverlay();
+      }
+    };
+    window.addEventListener("message", this.trailerProxyMessageHandler);
   },
 
   postTrailerProxyCommand(command, payload = {}) {
@@ -1184,11 +1382,15 @@ export const MetaDetailsScreen = {
     if (!meta) {
       return null;
     }
+    const fallbackSource = resolveTrailerSource(meta);
+    if (fallbackSource) {
+      return fallbackSource;
+    }
     const directSource = await withTimeout(TrailerService.getPlaybackSource(meta, {
       title: meta?.name || meta?.title || "",
       year: extractTrailerReleaseYear(meta)
     }), 2600, null);
-    return directSource || resolveTrailerSource(meta);
+    return directSource;
   },
 
   async refreshTrailerSource(meta = this.meta, token = this.detailLoadToken) {
@@ -1355,11 +1557,12 @@ export const MetaDetailsScreen = {
       : `<h1 class="series-detail-title">${escapeHtml(meta.name || "Untitled")}</h1>`;
     const externalRatings = this.renderExternalRatingsRow(meta);
     const trailerSource = this.trailerSource || resolveTrailerSource(meta);
+    const hasTrailerCandidate = Boolean(trailerSource || TrailerService.hasTrailerHints(meta));
     if (!this.trailerSource && trailerSource) {
       this.trailerSource = trailerSource;
     }
     const trailerButtonEnabled = Boolean(LayoutPreferences.get().detailPageTrailerButtonEnabled);
-    const trailerButton = trailerButtonEnabled && trailerSource
+    const trailerButton = trailerButtonEnabled && hasTrailerCandidate
       ? `
           <button class="series-circle-btn focusable" data-action="toggleTrailer" aria-label="${escapeAttribute(t("detail.playTrailer", {}, "Play trailer"))}">
             ${renderTrailerGlyph()}
@@ -2444,6 +2647,9 @@ export const MetaDetailsScreen = {
     this.stopTrailerProgressTimer();
     this.updateTrailerOverlay();
     this.trailerProgressTimer = setInterval(() => {
+      if (this.isTrailerPlaying && this.trailerSource?.kind === "youtube" && !this.trailerYoutubeFallbackActive) {
+        this.postTrailerProxyCommand("getState");
+      }
       this.updateTrailerOverlay();
     }, 250);
   },
@@ -2762,6 +2968,30 @@ export const MetaDetailsScreen = {
         </div>
       </div>
     `;
+    if (this.trailerSource.kind === "youtube") {
+      const youtubeFrameUrl = buildInlineYoutubePlayerUrl(this.trailerSource.ytId, { muted: this.trailerMuted }) || this.trailerSource.embedUrl || "";
+      layer.innerHTML = `
+        <div class="detail-trailer-media detail-trailer-youtube" data-trailer-media>
+          <iframe
+            class="detail-trailer-frame"
+            src="${youtubeFrameUrl}"
+            title="Trailer"
+            allow="autoplay; encrypted-media; picture-in-picture"
+            referrerpolicy="origin-when-cross-origin"
+            allowfullscreen
+            scrolling="no"
+            tabindex="-1"
+            aria-hidden="true"
+          ></iframe>
+        </div>
+        ${controlsMarkup}
+      `;
+      this.cacheTrailerRefs();
+      this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
+      this.startTrailerProgressTimer();
+      this.initYoutubeTrailerPlayer();
+      return;
+    }
     layer.innerHTML = `
       <div class="detail-trailer-media" data-trailer-media>
         <video class="detail-trailer-video" autoplay loop playsinline${this.trailerMuted ? " muted" : ""}>
@@ -2781,7 +3011,7 @@ export const MetaDetailsScreen = {
   },
 
   async playTrailer({ muted = null, restart = false, initiatedByUser = true } = {}) {
-    if (!this.trailerSource) {
+    if (!this.trailerSource || this.trailerSource.kind === "youtube") {
       const preferredSource = await this.resolvePreferredTrailerSource(this.meta);
       if (preferredSource) {
         this.trailerSource = preferredSource;
@@ -2806,7 +3036,7 @@ export const MetaDetailsScreen = {
   },
 
   openTrailerInPlayer() {
-    this.playTrailer({ muted: false, restart: true, initiatedByUser: true });
+    this.playTrailer({ restart: true, initiatedByUser: true });
   },
 
   stopTrailerPlayback({ keepDom = false, restartAutoplay = true } = {}) {
