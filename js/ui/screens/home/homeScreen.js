@@ -2571,6 +2571,15 @@ export const HomeScreen = {
       }
     }
 
+    if (this.layoutMode === "modern") {
+      const trackRect = track.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
+      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+      this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPadding)), 140);
+      return;
+    }
+
     const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
     const targetLeft = target.offsetLeft;
     const targetRight = targetLeft + target.offsetWidth;
