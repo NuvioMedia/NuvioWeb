@@ -2922,6 +2922,8 @@ export const HomeScreen = {
     this.container = document.getElementById("home");
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
+    this.sidebarExpanded = false;
+    this.pillIconOnly = false;
     this.homeRouteEnterPending = true;
     this.continueWatchingMenu = null;
     this.pendingContinueWatchingFocusIndex = null;
@@ -3378,9 +3380,8 @@ export const HomeScreen = {
       `;
     }
 
-    const modernSidebarClass = this.layoutPrefs?.modernSidebar ? " modern-sidebar-enabled" : "";
     this.container.innerHTML = `
-      <div class="home-shell home-screen-shell ${layoutClass}${modernSidebarClass}">
+      <div class="home-shell home-screen-shell ${layoutClass}">
         ${renderRootSidebar({
       selectedRoute: "home",
       profile: this.sidebarProfile,

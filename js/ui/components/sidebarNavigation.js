@@ -78,6 +78,13 @@ function getItemForAction(action = "") {
   return ROOT_SIDEBAR_ITEMS.find((item) => item.action === String(action || "")) || null;
 }
 
+function getModernSidebarPresentation() {
+  return {
+    showPill: true,
+    keepPillExpanded: true
+  };
+}
+
 function getSidebarAvatarCatalog() {
   if (!sidebarAvatarCatalogPromise) {
     sidebarAvatarCatalogPromise = AvatarRepository.getAvatarCatalog().catch(() => {
@@ -104,7 +111,7 @@ export async function getSidebarProfileState() {
     activeProfileInitial: profileInitial(activeProfile?.name || t("sidebar.profileFallback")),
     activeProfileColorHex: String(activeProfile?.avatarColorHex || "#1E88E5"),
     activeProfileAvatarUrl: String(activeProfileAvatarUrl || ""),
-    showProfileSelector: profiles.length > 1
+    showProfileSelector: Boolean(activeProfile)
   };
 }
 
@@ -180,8 +187,7 @@ export function renderModernSidebar({
   const selectedItem = getSelectedItem(selectedRoute);
   const profileState = profile || {};
   const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
-  const showPill = selectedRoute !== "search";
-  const keepPillExpanded = selectedRoute === "settings";
+  const { showPill, keepPillExpanded } = getModernSidebarPresentation();
   const selectedLabel = itemLabel(selectedItem);
   const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
 
@@ -353,8 +359,11 @@ export function isRootSidebarNode(node) {
 }
 
 export function setModernSidebarPillIconOnly(container, iconOnly, keepExpanded = false) {
+  const shell = container?.querySelector(".modern-sidebar-shell");
   const pill = container?.querySelector(".modern-sidebar-pill");
-  if (!pill || keepExpanded) {
+  const shouldKeepExpanded = Boolean(keepExpanded || shell?.classList?.contains("keep-pill-expanded"));
+  if (!pill || shouldKeepExpanded) {
+    pill?.classList.remove("icon-only");
     return;
   }
   pill.classList.toggle("icon-only", Boolean(iconOnly));

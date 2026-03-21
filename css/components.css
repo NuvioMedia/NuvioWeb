@@ -1149,6 +1149,11 @@ button:focus-visible {
   backface-visibility: hidden;
 }
 
+.modern-sidebar-shell,
+.modern-sidebar-shell * {
+  box-sizing: border-box;
+}
+
 .modern-sidebar-shell.expanded {
   width: var(--modern-sidebar-open-width);
 }
@@ -4061,10 +4066,6 @@ button:focus-visible {
   --home-poster-radius: 12px;
   --home-continue-width: 520px;
   --home-continue-height: 293px;
-}
-
-.home-screen-shell.home-layout-modern.modern-sidebar-enabled {
-  --home-content-start: calc(var(--modern-sidebar-collapsed-width) + 16px);
 }
 
 .home-screen-shell.home-layout-modern .home-main {
