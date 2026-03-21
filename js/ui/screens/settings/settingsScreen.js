@@ -533,6 +533,50 @@ function scrollSettingsRailItem(node) {
   rail.scrollTop = nextScrollTop;
 }
 
+function isScrollContainerAtBoundary(node, direction) {
+  if (!node) {
+    return true;
+  }
+
+  const maxScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+  if (maxScrollTop <= 0) {
+    return true;
+  }
+
+  const scrollTop = Number(node.scrollTop || 0);
+  if (direction === "up") {
+    return scrollTop <= 1;
+  }
+  if (direction === "down") {
+    return scrollTop >= maxScrollTop - 1;
+  }
+  return false;
+}
+
+function captureSettingsScrollState(contentNode) {
+  if (!contentNode) {
+    return null;
+  }
+
+  const themeGrid = contentNode.querySelector(".settings-theme-grid");
+  return {
+    contentScrollTop: Number(contentNode.scrollTop || 0),
+    themeGridScrollTop: Number(themeGrid?.scrollTop || 0)
+  };
+}
+
+function restoreSettingsScrollState(contentNode, scrollState) {
+  if (!contentNode || !scrollState) {
+    return;
+  }
+
+  contentNode.scrollTop = Number(scrollState.contentScrollTop || 0);
+  const themeGrid = contentNode.querySelector(".settings-theme-grid");
+  if (themeGrid) {
+    themeGrid.scrollTop = Number(scrollState.themeGridScrollTop || 0);
+  }
+}
+
 function addonKindsLabel(addon) {
   const kinds = Array.isArray(addon?.types) ? addon.types.filter(Boolean) : [];
   if (!kinds.length) {
@@ -590,9 +634,14 @@ function readSettingsUiState() {
     activeSection: typeof state?.activeSection === "string" ? state.activeSection : null,
     navIndex: Number.isFinite(state?.navIndex) ? state.navIndex : null,
     contentFocusKey: typeof state?.contentFocusKey === "string" ? state.contentFocusKey : null,
+    appearanceThemeFocusKey: typeof state?.appearanceThemeFocusKey === "string" ? state.appearanceThemeFocusKey : null,
     integrationView: typeof state?.integrationView === "string" ? state.integrationView : "hub",
     expandedSections: normalizeExpandedSections(state?.expandedSections)
   };
+}
+
+function isAppearanceThemeFocusKey(focusKey) {
+  return String(focusKey || "").startsWith("appearance:theme:");
 }
 
 export const SettingsScreen = {
@@ -616,6 +665,10 @@ export const SettingsScreen = {
   async mount() {
     this.container = document.getElementById("settings");
     ScreenUtils.show(this.container);
+    if (!this.handleWheelBound) {
+      this.handleWheelBound = this.handleWheelEvent.bind(this);
+      this.container.addEventListener("wheel", this.handleWheelBound, { passive: false });
+    }
     this.settingsRouteEnterPending = true;
     const persistedUiState = readSettingsUiState();
     this.activeSection = persistedUiState.activeSection || this.activeSection || null;
@@ -625,6 +678,7 @@ export const SettingsScreen = {
       ? persistedUiState.navIndex
       : (Number.isFinite(this.navIndex) ? this.navIndex : SECTION_META.findIndex((section) => section.id === this.activeSection));
     this.contentFocusKey = persistedUiState.contentFocusKey || this.contentFocusKey || null;
+    this.appearanceThemeFocusKey = persistedUiState.appearanceThemeFocusKey || this.appearanceThemeFocusKey || null;
     this.pluginDraft = this.pluginDraft || "";
     this.integrationView = persistedUiState.integrationView || this.integrationView || "hub";
     this.expandedSections = normalizeExpandedSections(persistedUiState.expandedSections || this.expandedSections);
@@ -650,9 +704,25 @@ export const SettingsScreen = {
       activeSection: this.activeSection || null,
       navIndex: Number.isFinite(this.navIndex) ? this.navIndex : null,
       contentFocusKey: this.contentFocusKey || null,
+      appearanceThemeFocusKey: this.appearanceThemeFocusKey || null,
       integrationView: this.integrationView || "hub",
       expandedSections: normalizeExpandedSections(this.expandedSections)
     });
+  },
+
+  rememberAppearanceThemeFocusKey(focusKey = this.contentFocusKey) {
+    if (!isAppearanceThemeFocusKey(focusKey)) {
+      return;
+    }
+    if (this.appearanceThemeFocusKey === focusKey) {
+      return;
+    }
+    this.appearanceThemeFocusKey = focusKey;
+    this.persistUiState();
+  },
+
+  getAppearanceThemeFocusKey() {
+    return this.appearanceThemeFocusKey || `appearance:theme:${THEME_OPTIONS[0]?.id || "WHITE"}`;
   },
 
   collapseExpandedSection(sectionId) {
@@ -665,9 +735,13 @@ export const SettingsScreen = {
   setActiveSection(sectionId) {
     const nextSectionId = sectionId || null;
     if (this.activeSection && this.activeSection !== nextSectionId) {
+      this.rememberAppearanceThemeFocusKey();
       this.collapseExpandedSection(this.activeSection);
     }
     this.activeSection = sectionId || null;
+    this.contentFocusKey = this.activeSection === "appearance"
+      ? this.getAppearanceThemeFocusKey()
+      : null;
     this.persistUiState();
   },
 
@@ -793,12 +867,13 @@ export const SettingsScreen = {
 
   renderThemeCard(theme, selected, focusKey) {
     const selectedClass = selected ? " is-selected" : "";
+    const swatchClass = theme.id === "WHITE" ? " settings-theme-swatch-light" : "";
     return `
       <button class="settings-theme-card settings-content-focusable focusable${selectedClass}"
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-theme-swatch-wrap">
-          <span class="settings-theme-swatch" style="background:${escapeHtml(theme.color)};">
+          <span class="settings-theme-swatch${swatchClass}" style="background:${escapeHtml(theme.color)};">
             ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
           </span>
         </span>
@@ -1990,9 +2065,13 @@ export const SettingsScreen = {
     }
 
     const sectionChanged = this.renderedSectionId !== section.id;
+    const previousScrollState = !sectionChanged ? captureSettingsScrollState(contentSlot) : null;
     this.renderedSectionId = section.id;
     if (contentSlot) {
       contentSlot.innerHTML = this.renderSection(section, this.model);
+      if (previousScrollState) {
+        restoreSettingsScrollState(contentSlot, previousScrollState);
+      }
       if (sectionChanged) {
         contentSlot.classList.remove("is-section-transitioning");
         void contentSlot.offsetWidth;
@@ -2110,7 +2189,9 @@ export const SettingsScreen = {
     }
     this.setActiveSection(section.id);
     this.integrationView = "hub";
-    this.contentFocusKey = null;
+    this.contentFocusKey = section.id === "appearance"
+      ? this.getAppearanceThemeFocusKey()
+      : null;
     await this.render({ refreshModel: false });
   },
 
@@ -2125,17 +2206,118 @@ export const SettingsScreen = {
     const focused = this.container.querySelector(".settings-content-focusable.focused");
     if (focused) {
       this.contentFocusKey = String(focused.dataset.focusKey || "");
+      this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
     }
   },
 
   moveContent(direction) {
     const before = this.container.querySelector(".settings-content-focusable.focused");
+    const beforeFocusKey = String(before?.dataset?.focusKey || "");
+
+    if (
+      this.activeSection === "appearance"
+      && direction === "up"
+      && beforeFocusKey === "appearance:font"
+    ) {
+      const rememberedTheme = this.container.querySelector(
+        focusKeySelector(".settings-content-focusable", this.getAppearanceThemeFocusKey())
+      ) || this.container.querySelector(".settings-theme-card.settings-content-focusable");
+      if (rememberedTheme) {
+        before?.classList?.remove("focused");
+        rememberedTheme.classList.add("focused");
+        rememberedTheme.focus();
+        this.contentFocusKey = String(rememberedTheme.dataset.focusKey || "");
+        this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
+        scrollIntoNearestView(rememberedTheme);
+        return before !== rememberedTheme;
+      }
+    }
+
+    if (
+      this.activeSection === "appearance"
+      && direction === "down"
+      && isAppearanceThemeFocusKey(beforeFocusKey)
+    ) {
+      const themeCards = Array.from(this.container.querySelectorAll(".settings-theme-card.settings-content-focusable"));
+      const beforeRect = before?.getBoundingClientRect?.();
+      const beforeCenterY = beforeRect ? beforeRect.top + (beforeRect.height / 2) : 0;
+      const beforeCenterX = beforeRect ? beforeRect.left + (beforeRect.width / 2) : 0;
+      const themeBelow = themeCards
+        .filter((card) => card !== before)
+        .map((card) => {
+          const rect = card.getBoundingClientRect();
+          const centerY = rect.top + (rect.height / 2);
+          const centerX = rect.left + (rect.width / 2);
+          return {
+            card,
+            verticalDistance: centerY - beforeCenterY,
+            horizontalDistance: Math.abs(centerX - beforeCenterX)
+          };
+        })
+        .filter((entry) => entry.verticalDistance > 2)
+        .sort((left, right) => {
+          if (left.verticalDistance !== right.verticalDistance) {
+            return left.verticalDistance - right.verticalDistance;
+          }
+          return left.horizontalDistance - right.horizontalDistance;
+        });
+
+      const nextTheme = themeBelow[0]?.card || null;
+      if (nextTheme) {
+        before?.classList?.remove("focused");
+        nextTheme.classList.add("focused");
+        nextTheme.focus();
+        this.contentFocusKey = String(nextTheme.dataset.focusKey || "");
+        this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
+        scrollIntoNearestView(nextTheme);
+        return before !== nextTheme;
+      }
+    }
+
     ScreenUtils.moveFocusDirectional(this.container, direction, ".settings-content-focusable");
     const after = this.container.querySelector(".settings-content-focusable.focused");
     if (after) {
       this.contentFocusKey = String(after.dataset.focusKey || "");
+      if (isAppearanceThemeFocusKey(beforeFocusKey)) {
+        this.rememberAppearanceThemeFocusKey(beforeFocusKey);
+      }
+      this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
+      scrollIntoNearestView(after);
     }
     return before !== after;
+  },
+
+  handleWheelEvent(event) {
+    const themeGrid = event?.target?.closest?.(".settings-theme-grid");
+    if (!themeGrid) {
+      return;
+    }
+
+    const deltaY = Number(event.deltaY || 0);
+    if (!deltaY) {
+      return;
+    }
+
+    const direction = deltaY < 0 ? "up" : "down";
+    if (!isScrollContainerAtBoundary(themeGrid, direction)) {
+      return;
+    }
+
+    const content = themeGrid.closest(".settings-content");
+    if (!content) {
+      return;
+    }
+
+    event.preventDefault();
+    if (typeof content.scrollBy === "function") {
+      content.scrollBy({
+        top: deltaY,
+        behavior: "auto"
+      });
+      return;
+    }
+
+    content.scrollTop += deltaY;
   },
 
   async activateFocused() {
@@ -2172,7 +2354,10 @@ export const SettingsScreen = {
       const firstContent = this.container.querySelector(".settings-content-focusable");
       if (firstContent) {
         this.focusZone = "content";
-        this.contentFocusKey = String(firstContent.dataset.focusKey || "");
+        this.contentFocusKey = this.activeSection === "appearance"
+          ? this.getAppearanceThemeFocusKey()
+          : String(firstContent.dataset.focusKey || "");
+        this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
         this.applyFocus();
       }
       return;
@@ -2185,6 +2370,7 @@ export const SettingsScreen = {
     }
 
     this.contentFocusKey = focusKey;
+    this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
     await action();
 
     if (Router.getCurrent() === "settings") {
@@ -2321,11 +2507,16 @@ export const SettingsScreen = {
 
   cleanup() {
     LocalStore.remove(SETTINGS_UI_STATE_KEY);
+    if (this.container && this.handleWheelBound) {
+      this.container.removeEventListener("wheel", this.handleWheelBound);
+    }
+    this.handleWheelBound = null;
     this.activeSection = null;
     this.focusZone = "nav";
     this.sidebarFocusIndex = 0;
     this.navIndex = -1;
     this.contentFocusKey = null;
+    this.appearanceThemeFocusKey = null;
     this.integrationView = "hub";
     this.expandedSections = {};
     this.optionDialog = null;
