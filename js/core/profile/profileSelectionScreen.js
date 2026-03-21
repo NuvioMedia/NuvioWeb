@@ -4,9 +4,11 @@ import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
+import { Platform } from "../../platform/index.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#1E88E5";
+const PROFILE_HOLD_DELAY_MS = 650;
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -655,6 +657,75 @@ export const ProfileSelectionScreen = {
     this.render();
   },
 
+  canHoldManageProfile(node) {
+    return !this.isManagementMode
+      && Boolean(node?.matches?.(".profile-card.focused, .profile-card"))
+      && String(node?.dataset?.profileId || "") !== "add";
+  },
+
+  cancelPendingProfileHold() {
+    if (this.pendingProfileHoldTimer) {
+      clearTimeout(this.pendingProfileHoldTimer);
+      this.pendingProfileHoldTimer = null;
+    }
+    this.pendingProfileHoldTarget = null;
+  },
+
+  hasPendingProfileHold(node) {
+    const pending = this.pendingProfileHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return String(node.dataset.profileId || "") === String(pending.profileId || "");
+  },
+
+  startPendingProfileHold(node) {
+    const profileId = String(node?.dataset?.profileId || "");
+    if (!profileId || profileId === "add") {
+      return false;
+    }
+    this.cancelPendingProfileHold();
+    this.pendingProfileHoldTarget = {
+      profileId,
+      holdTriggered: false
+    };
+    this.pendingProfileHoldTimer = setTimeout(() => {
+      this.pendingProfileHoldTimer = null;
+      const pending = this.pendingProfileHoldTarget;
+      if (!pending || Router.getCurrent() !== "profileSelection") {
+        return;
+      }
+      const current = this.container?.querySelector(".profile-card.focused") || null;
+      if (!this.hasPendingProfileHold(current)) {
+        return;
+      }
+      const profile = this.getProfileById(pending.profileId);
+      if (!profile) {
+        return;
+      }
+      pending.holdTriggered = true;
+      this.openOptionsDialog(profile);
+    }, PROFILE_HOLD_DELAY_MS);
+    return true;
+  },
+
+  async completePendingProfileHold(node) {
+    const pending = this.pendingProfileHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    this.cancelPendingProfileHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!node) {
+      return false;
+    }
+    await this.activateFocusedNode(node);
+    return true;
+  },
+
   closeOptionsDialog() {
     const profileId = this.optionsProfileId;
     this.optionsProfileId = null;
@@ -838,8 +909,14 @@ export const ProfileSelectionScreen = {
     const overlayRoot = this.container.querySelector("[data-overlay-root='delete']")
       || this.container.querySelector("[data-overlay-root='options']")
       || this.container.querySelector("[data-overlay-root='editor']");
+    const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
+
+    if (!Platform.isTizen() || code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
+      this.cancelPendingProfileHold();
+    }
 
     if (overlayRoot) {
+      this.cancelPendingProfileHold();
       const overlaySelector = overlayRoot.dataset.overlayRoot === "editor"
         ? ".profile-overlay-focusable:not(.is-disabled)"
         : ".profile-dialog-button";
@@ -864,7 +941,7 @@ export const ProfileSelectionScreen = {
       && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
 
     if (wantsManageOptions) {
-      const current = this.container.querySelector(".profile-card.focused");
+      const current = currentProfileCard;
       const profileId = current?.dataset?.profileId;
       if (profileId && profileId !== "add") {
         const profile = this.getProfileById(profileId);
@@ -874,6 +951,14 @@ export const ProfileSelectionScreen = {
           return;
         }
       }
+    }
+
+    if (Platform.isTizen() && code === 13 && this.canHoldManageProfile(currentProfileCard)) {
+      event?.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingProfileHold(currentProfileCard)) {
+        this.startPendingProfileHold(currentProfileCard);
+      }
+      return;
     }
 
     if (ScreenUtils.handleDpadNavigation(event, this.container, ".profile-card")) {
@@ -889,6 +974,19 @@ export const ProfileSelectionScreen = {
       return;
     }
     await this.activateFocusedNode(current);
+  },
+
+  async onKeyUp(event) {
+    if (!Platform.isTizen()) {
+      return;
+    }
+    if (Number(event?.keyCode || 0) !== 13 || this.optionsProfileId || this.deleteProfileId || this.editorState) {
+      return;
+    }
+    const current = this.container?.querySelector(".profile-card.focused") || null;
+    if (await this.completePendingProfileHold(current)) {
+      event?.preventDefault?.();
+    }
   },
 
   consumeBackRequest() {
@@ -908,6 +1006,7 @@ export const ProfileSelectionScreen = {
   },
 
   cleanup() {
+    this.cancelPendingProfileHold();
     const container = document.getElementById("profileSelection");
     if (!container) {
       return;

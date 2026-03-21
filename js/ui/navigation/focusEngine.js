@@ -40,7 +40,9 @@ export const FocusEngine = {
 
   init() {
     this.boundHandleKey = this.handleKey.bind(this);
+    this.boundHandleKeyUp = this.handleKeyUp.bind(this);
     document.addEventListener("keydown", this.boundHandleKey, true);
+    document.addEventListener("keyup", this.boundHandleKeyUp, true);
   },
 
   handleKey(event) {
@@ -81,5 +83,14 @@ export const FocusEngine = {
     const currentScreen = Router.getCurrentScreen();
 
     currentScreen?.onKeyDown?.(normalizedEvent);
+  },
+
+  handleKeyUp(event) {
+    const currentScreen = Router.getCurrentScreen();
+    if (!currentScreen?.onKeyUp) {
+      return;
+    }
+    const normalizedEvent = buildNormalizedEvent(event);
+    currentScreen.onKeyUp(normalizedEvent);
   }
 };

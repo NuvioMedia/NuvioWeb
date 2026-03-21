@@ -19,6 +19,7 @@ import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
+const EPISODE_HOLD_DELAY_MS = 650;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -2036,6 +2037,73 @@ export const MetaDetailsScreen = {
       optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.episodeHoldMenu.optionIndex || 0) + delta))
     };
     return this.applyEpisodeHoldMenuFocus();
+  },
+
+  isEpisodeHoldTarget(node) {
+    return Boolean(node?.matches?.(".series-episode-card.focusable"));
+  },
+
+  cancelPendingEpisodeHold() {
+    if (this.pendingEpisodeHoldTimer) {
+      clearTimeout(this.pendingEpisodeHoldTimer);
+      this.pendingEpisodeHoldTimer = null;
+    }
+    this.pendingEpisodeHoldTarget = null;
+  },
+
+  hasPendingEpisodeHold(node) {
+    const pending = this.pendingEpisodeHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return String(node.dataset.videoId || "") === String(pending.videoId || "");
+  },
+
+  startPendingEpisodeHold(node) {
+    const videoId = String(node?.dataset?.videoId || "");
+    if (!videoId) {
+      return false;
+    }
+    this.cancelPendingEpisodeHold();
+    this.pendingEpisodeHoldTarget = {
+      videoId,
+      holdTriggered: false
+    };
+    this.pendingEpisodeHoldTimer = setTimeout(() => {
+      this.pendingEpisodeHoldTimer = null;
+      const pending = this.pendingEpisodeHoldTarget;
+      if (!pending || Router.getCurrent() !== "detail") {
+        return;
+      }
+      const current = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
+      if (!this.hasPendingEpisodeHold(current)) {
+        return;
+      }
+      pending.holdTriggered = true;
+      this.openEpisodeHoldMenu(current);
+    }, EPISODE_HOLD_DELAY_MS);
+    return true;
+  },
+
+  async completePendingEpisodeHold(node) {
+    const pending = this.pendingEpisodeHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    this.cancelPendingEpisodeHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!this.isEpisodeHoldTarget(node)) {
+      return false;
+    }
+    const selectedEpisode = this.episodes.find((entry) => entry.id === node.dataset.videoId);
+    if (!selectedEpisode) {
+      return false;
+    }
+    await this.openEpisodeStreamChooser(selectedEpisode.id);
+    return true;
   },
 
   openEpisodeHoldMenu(node) {
@@ -4129,6 +4197,11 @@ export const MetaDetailsScreen = {
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
     const currentFocusedNode = this.container.querySelector(".focusable.focused") || null;
 
+    const isTizenHoldTarget = Environment.isTizen() && this.isEpisodeHoldTarget(currentFocusedNode);
+    if (!isTizenHoldTarget || code !== 13) {
+      this.cancelPendingEpisodeHold();
+    }
+
     if (this.episodeHoldMenu) {
       if (isBackEvent(event)) {
         event?.preventDefault?.();
@@ -4200,11 +4273,20 @@ export const MetaDetailsScreen = {
       }
     }
 
-    const wantsEpisodeHoldMenu = currentFocusedNode?.matches?.(".series-episode-card.focusable")
+    const isEpisodeHoldTarget = this.isEpisodeHoldTarget(currentFocusedNode);
+    const wantsEpisodeHoldMenu = isEpisodeHoldTarget
       && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
     if (wantsEpisodeHoldMenu) {
       event?.preventDefault?.();
+      this.cancelPendingEpisodeHold();
       this.openEpisodeHoldMenu(currentFocusedNode);
+      return;
+    }
+    if (Environment.isTizen() && code === 13 && isEpisodeHoldTarget) {
+      event?.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingEpisodeHold(currentFocusedNode)) {
+        this.startPendingEpisodeHold(currentFocusedNode);
+      }
       return;
     }
 
@@ -4414,8 +4496,22 @@ export const MetaDetailsScreen = {
     }
   },
 
+  async onKeyUp(event) {
+    if (!Environment.isTizen()) {
+      return;
+    }
+    if (Number(event?.keyCode || 0) !== 13) {
+      return;
+    }
+    const current = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
+    if (await this.completePendingEpisodeHold(current)) {
+      event?.preventDefault?.();
+    }
+  },
+
   cleanup() {
     this.detailLoadToken = (this.detailLoadToken || 0) + 1;
+    this.cancelPendingEpisodeHold();
     this.episodeHoldMenu = null;
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
     if (this.detailScrollHandler && this.container) {

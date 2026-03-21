@@ -50,6 +50,7 @@ const CW_DAYS_CAP = 60;
 const CW_PROGRESS_START_THRESHOLD = 0.02;
 const CW_PROGRESS_END_THRESHOLD = 0.85;
 const CW_ENTER_DELAY_MS = 320;
+const CW_HOLD_DELAY_MS = 650;
 const HOME_INITIAL_CATALOG_LOAD = 10;
 const HOME_MAX_ITEMS_PER_ROW_DEFAULT = 15;
 const HOME_MAX_ITEMS_PER_ROW_CONSTRAINED = 10;
@@ -1824,6 +1825,11 @@ export const HomeScreen = {
     if (!buttons.length) {
       return false;
     }
+    this.container?.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (!node.classList.contains("hold-menu-button")) {
+        node.classList.remove("focused");
+      }
+    });
     const currentIndex = Math.max(0, Math.min(buttons.length - 1, Number(this.continueWatchingMenu?.optionIndex || 0)));
     buttons.forEach((node, index) => node.classList.toggle("focused", index === currentIndex));
     const target = buttons[currentIndex] || buttons[0] || null;
@@ -1884,6 +1890,76 @@ export const HomeScreen = {
       this.pendingContinueWatchingEnterTimer = null;
     }
     this.pendingContinueWatchingEnterTarget = null;
+  },
+
+  isContinueWatchingHoldTarget(node) {
+    return Boolean(node?.matches?.(".home-continue-card.focusable"));
+  },
+
+  cancelPendingContinueWatchingHold() {
+    if (this.pendingContinueWatchingHoldTimer) {
+      clearTimeout(this.pendingContinueWatchingHoldTimer);
+      this.pendingContinueWatchingHoldTimer = null;
+    }
+    this.pendingContinueWatchingHoldTarget = null;
+  },
+
+  hasPendingContinueWatchingHold(node) {
+    const pending = this.pendingContinueWatchingHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return String(node.dataset.itemId || "") === String(pending.itemId || "")
+      && String(node.dataset.videoId || "") === String(pending.videoId || "");
+  },
+
+  startPendingContinueWatchingHold(node) {
+    const item = this.getContinueWatchingItemFromNode(node);
+    if (!item?.contentId) {
+      return false;
+    }
+    this.cancelPendingContinueWatchingEnter();
+    this.cancelPendingContinueWatchingHold();
+    this.pendingContinueWatchingHoldTarget = {
+      itemId: String(item.contentId || ""),
+      videoId: String(item.videoId || ""),
+      holdTriggered: false
+    };
+    this.pendingContinueWatchingHoldTimer = setTimeout(() => {
+      this.pendingContinueWatchingHoldTimer = null;
+      const pending = this.pendingContinueWatchingHoldTarget;
+      if (!pending || Router.getCurrent() !== "home") {
+        return;
+      }
+      const current = this.container?.querySelector(".home-continue-card.focusable.focused") || null;
+      if (!this.hasPendingContinueWatchingHold(current)) {
+        return;
+      }
+      pending.holdTriggered = true;
+      this.openContinueWatchingMenu(current);
+    }, CW_HOLD_DELAY_MS);
+    return true;
+  },
+
+  completePendingContinueWatchingHold(node) {
+    const pending = this.pendingContinueWatchingHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    this.cancelPendingContinueWatchingHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!this.isContinueWatchingHoldTarget(node)) {
+      return false;
+    }
+    const item = this.getContinueWatchingItemFromNode(node);
+    if (!item?.contentId) {
+      return false;
+    }
+    this.openContinueWatchingFromItem(item);
+    return true;
   },
 
   scheduleContinueWatchingEnter(node) {
@@ -3410,7 +3486,7 @@ export const HomeScreen = {
     const canAttemptRestore = Boolean(retainedFocusState);
     let restoredFocus = false;
     if (this.continueWatchingMenu) {
-      this.applyContinueWatchingMenuFocus();
+      restoredFocus = this.applyContinueWatchingMenuFocus();
     } else if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
       const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
       const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
@@ -3418,6 +3494,7 @@ export const HomeScreen = {
         || null;
       this.pendingContinueWatchingFocusIndex = null;
       if (target) {
+        restoredFocus = true;
         this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
         target.classList.add("focused");
         this.focusWithoutAutoScroll(target);
@@ -3955,8 +4032,10 @@ export const HomeScreen = {
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
     const code = Number(event?.keyCode || 0);
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
-    if (code !== 13 || !currentFocusedNode?.matches?.(".home-continue-card.focusable")) {
+    const isTizenHoldTarget = Platform.isTizen() && this.isContinueWatchingHoldTarget(currentFocusedNode);
+    if (!isTizenHoldTarget || code !== 13) {
       this.cancelPendingContinueWatchingEnter();
+      this.cancelPendingContinueWatchingHold();
     }
     if (this.continueWatchingMenu) {
       if (Platform.isBackEvent(event)) {
@@ -4008,12 +4087,21 @@ export const HomeScreen = {
     if (this.handleHomeDpad(event)) {
       return;
     }
-    const wantsContinueWatchingMenu = currentFocusedNode?.matches?.(".home-continue-card.focusable")
+    const isContinueWatchingHoldTarget = this.isContinueWatchingHoldTarget(currentFocusedNode);
+    const wantsContinueWatchingMenu = isContinueWatchingHoldTarget
       && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
     if (wantsContinueWatchingMenu) {
       event.preventDefault?.();
       this.cancelPendingContinueWatchingEnter();
+      this.cancelPendingContinueWatchingHold();
       this.openContinueWatchingMenu(currentFocusedNode);
+      return;
+    }
+    if (Platform.isTizen() && code === 13 && isContinueWatchingHoldTarget) {
+      event.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingContinueWatchingHold(currentFocusedNode)) {
+        this.startPendingContinueWatchingHold(currentFocusedNode);
+      }
       return;
     }
     if (code === 76) {
@@ -4046,6 +4134,19 @@ export const HomeScreen = {
     }
   },
 
+  onKeyUp(event) {
+    if (!Platform.isTizen()) {
+      return;
+    }
+    if (Number(event?.keyCode || 0) !== 13) {
+      return;
+    }
+    const current = this.container?.querySelector(".home-continue-card.focusable.focused") || null;
+    if (this.completePendingContinueWatchingHold(current)) {
+      event.preventDefault?.();
+    }
+  },
+
   consumeBackRequest() {
     if (this.continueWatchingMenu) {
       this.closeContinueWatchingMenu();
@@ -4056,6 +4157,7 @@ export const HomeScreen = {
 
   cleanup() {
     this.cancelPendingContinueWatchingEnter();
+    this.cancelPendingContinueWatchingHold();
     this.continueWatchingMenu = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
