@@ -253,6 +253,13 @@
     <string name="autoplay_stream_selection">Automatiskt strömval</string>
     <string name="autoplay_next_episode">Spela nästa avsnitt automatiskt</string>
     <string name="autoplay_next_episode_sub">Starta nästa avsnitt automatiskt när prompten visas.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_threshold_pct">Procent</string>
     <string name="autoplay_threshold_min">Minuter före slut</string>
     <string name="autoplay_threshold_mode">Tröskelvärdesläge för nästa avsnitt</string>

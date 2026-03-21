@@ -300,6 +300,13 @@
     <string name="autoplay_stream_selection">Selezione automatica dello stream</string>
     <string name="autoplay_next_episode">Riproduci automaticamente il prossimo episodio</string>
     <string name="autoplay_next_episode_sub">Avvia automaticamente il prossimo episodio quando appare il prompt.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_prefer_binge_group">Continuità sorgente (Prossimo Episodio)</string>
     <string name="autoplay_prefer_binge_group_sub">Usa la stessa sorgente (stesso addon e qualità) prima di applicare le regole standard di riproduzione automatica.</string>
     <string name="autoplay_threshold_pct">Percentuale</string>

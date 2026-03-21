@@ -253,6 +253,13 @@
     <string name="autoplay_stream_selection">ストリームの自動選択</string>
     <string name="autoplay_next_episode">次のエピソードを自動再生</string>
     <string name="autoplay_next_episode_sub">プロンプトが表示されたら自動的に次のエピソードを開始。</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_threshold_pct">パーセンテージ</string>
     <string name="autoplay_threshold_min">終了前の分数</string>
     <string name="autoplay_threshold_mode">次のエピソードのしきい値モード</string>

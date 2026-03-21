@@ -1720,22 +1720,24 @@ export const SettingsScreen = {
         }
       });
     });
-    this.actionMap.set("playback:engine", () => {
-      const options = [
-        { id: "auto", labelKey: "settings.playback.engines.auto", label: "Auto" },
-        { id: "native", labelKey: "settings.playback.engines.native", label: "Native (AVPlay)" },
-        { id: "web", labelKey: "settings.playback.engines.web", label: "Web (HLS.js/DASH.js)" }
-      ];
-      this.openOptionDialog({
-        title: t("settings.dialogs.selectPlayerEngine", "Select Player Engine"),
-        options,
-        selectedId: String(PlayerSettingsStore.get().preferredPlaybackEngine || "auto"),
-        returnFocusKey: "playback:engine",
-        onSelect: (option) => {
-          PlayerSettingsStore.set({ preferredPlaybackEngine: option.id });
-        }
+    if (typeof window !== "undefined" && window.tizen) {
+      this.actionMap.set("playback:engine", () => {
+        const options = [
+          { id: "auto", labelKey: "settings.playback.engines.auto", label: "Auto" },
+          { id: "native", labelKey: "settings.playback.engines.native", label: "Native (AVPlay)" },
+          { id: "web", labelKey: "settings.playback.engines.web", label: "Web (HLS.js/DASH.js)" }
+        ];
+        this.openOptionDialog({
+          title: t("settings.dialogs.selectPlayerEngine"),
+          options,
+          selectedId: String(PlayerSettingsStore.get().preferredPlaybackEngine || "auto"),
+          returnFocusKey: "playback:engine",
+          onSelect: (option) => {
+            PlayerSettingsStore.set({ preferredPlaybackEngine: option.id });
+          }
+        });
       });
-    });
+    }
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
@@ -1801,6 +1803,7 @@ export const SettingsScreen = {
       </div>
     `;
 
+    const isTizen = typeof window !== "undefined" && window.tizen;
     const streamBody = `
       <div class="settings-stack">
         ${this.renderActionRow({
@@ -1809,12 +1812,12 @@ export const SettingsScreen = {
       subtitle: t("settings.playback.preferredQuality.subtitle"),
       value: qualityLabel(model.player.preferredQuality)
     })}
-        ${this.renderActionRow({
+        ${isTizen ? this.renderActionRow({
       focusKey: "playback:engine",
-      title: t("settings.playback.playerEngine.title", "Player Engine"),
-      subtitle: t("settings.playback.playerEngine.subtitle", "Select native or web player"),
+      title: t("settings.playback.playerEngine.title"),
+      subtitle: t("settings.playback.playerEngine.subtitle"),
       value: labelForPlaybackEngine(model.player.preferredPlaybackEngine)
-    })}
+    }) : ""}
       </div>
     `;
 

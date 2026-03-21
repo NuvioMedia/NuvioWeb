@@ -270,6 +270,13 @@
     <string name="autoplay_stream_selection">Tự động chọn luồng</string>
     <string name="autoplay_next_episode">Tự động phát tập tiếp theo</string>
     <string name="autoplay_next_episode_sub">Tự động bắt đầu tập tiếp theo khi xuất hiện thông báo.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_prefer_binge_group">Ưu tiên nhóm xem liên tục</string>
     <string name="autoplay_prefer_binge_group_sub">Thử cùng hồ sơ nguồn (cùng addon/nhóm chất lượng) trước khi áp dụng quy tắc tự động phát thông thường.</string>
     <string name="autoplay_threshold_pct">Theo phần trăm</string>

@@ -291,6 +291,13 @@
     <string name="autoplay_stream_selection">Samodejna izbira prenosa</string>
     <string name="autoplay_next_episode">Samodejno predvajaj naslednjo epizodo</string>
     <string name="autoplay_next_episode_sub">Samodejno zaženi naslednjo epizodo, ko se prikaže obvestilo.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
 	<string name="autoplay_prefer_binge_group">Preferiraj Binge skupino (Naslednja epizoda)</string>
     <string name="autoplay_prefer_binge_group_sub">Najprej poskusi z istim profilom vira (isti dodatek/skupina kakovosti) pred običajnimi pravili samodejnega predvajanja.</string>																					 																																				   
     <string name="autoplay_threshold_pct">Odstotek</string>

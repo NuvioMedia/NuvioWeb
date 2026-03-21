@@ -339,6 +339,13 @@
     <string name="autoplay_stream_selection">ऑटो स्ट्रीम चयन</string>
     <string name="autoplay_next_episode">अगला एपिसोड ऑटो-प्ले</string>
     <string name="autoplay_next_episode_sub">प्रॉम्प्ट दिखाई देने पर अगला एपिसोड अपने आप शुरू करें।</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_prefer_binge_group">बिंज ग्रुप को प्राथमिकता (अगला एपिसोड)</string>
     <string name="autoplay_prefer_binge_group_sub">सामान्य ऑटो-प्ले नियमों से पहले उसी सोर्स प्रोफाइल को आज़माएँ (उसी ऐडऑन/क्वालिटी ग्रुप)।</string>
     <string name="autoplay_threshold_pct">प्रतिशत</string>

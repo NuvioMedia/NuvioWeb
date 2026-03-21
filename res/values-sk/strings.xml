@@ -219,6 +219,13 @@
     <string name="autoplay_stream_selection">Výber streamu</string>
     <string name="autoplay_next_episode">Automaticky prehrať ďalšiu epizódu</string>
     <string name="autoplay_next_episode_sub">Spustiť ďalšiu epizódu automaticky, keď sa zobrazí výzva.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_threshold_pct">Percentá</string>
     <string name="autoplay_threshold_min">Minúty pred koncom</string>
     <string name="autoplay_threshold_mode">Režim prahu pre ďalšiu epizódu</string>

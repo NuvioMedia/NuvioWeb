@@ -270,6 +270,13 @@
     <string name="autoplay_stream_selection">Automatyczny wybór strumienia</string>
     <string name="autoplay_next_episode">Auto-odtwarzaj następny odcinek</string>
     <string name="autoplay_next_episode_sub">Automatycznie rozpocznij następny odcinek gdy pojawi się monit.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_prefer_binge_group">Preferuj grupę Binge (następny odcinek)</string>
     <string name="autoplay_prefer_binge_group_sub">Najpierw spróbuj tego samego profilu źródła przed normalnymi regułami auto-odtwarzania.</string>
     <string name="autoplay_threshold_pct">Procent</string>

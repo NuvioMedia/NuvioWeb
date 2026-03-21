@@ -254,6 +254,13 @@
     <string name="autoplay_stream_selection">Selección automática de transmisión</string>
     <string name="autoplay_next_episode">Reproducción automática siguiente episodio</string>
     <string name="autoplay_next_episode_sub">Inicia automáticamente el siguiente episodio cuando aparezca el mensaje.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_threshold_pct">Porcentaje</string>
     <string name="autoplay_threshold_min">Minutos antes del final</string>
     <string name="autoplay_threshold_mode">Modo de umbral del siguiente episodio</string>

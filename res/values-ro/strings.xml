@@ -254,6 +254,13 @@
     <string name="autoplay_stream_selection">Selecție automată a fluxului</string>
     <string name="autoplay_next_episode">Redare automată a episodului următor</string>
     <string name="autoplay_next_episode_sub">Pornește automat episodul următor când apare promptul.</string>
+
+    <string name="player_engine_title">Player Engine</string>
+    <string name="player_engine_subtitle">Select native or web player</string>
+    <string name="player_engine_auto">Auto</string>
+    <string name="player_engine_native">Native (AVPlay)</string>
+    <string name="player_engine_web">Web (HLS.js/DASH.js)</string>
+    <string name="dialog_select_player_engine">Select Player Engine</string>
     <string name="autoplay_threshold_pct">Procentaj</string>
     <string name="autoplay_threshold_min">Minute înainte de sfârșit</string>
     <string name="autoplay_threshold_mode">Mod prag pentru episodul următor</string>
