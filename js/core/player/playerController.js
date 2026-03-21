@@ -7,6 +7,7 @@ import { hlsJsEngine } from "./engines/hlsJsEngine.js";
 import { dashJsEngine } from "./engines/dashJsEngine.js";
 import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
+import { PlayerSettingsStore } from "../../data/local/playerSettingsStore.js";
 
 export const PlayerController = {
 
@@ -1741,10 +1742,52 @@ export const PlayerController = {
       });
   },
 
+  getNativeEngineNames() {
+    return [
+      this.getPlatformAvplayEngineName(),
+      "native-hls",
+      "native-dash",
+      "native-file"
+    ];
+  },
+
+  getWebEngineNames() {
+    return ["hls.js", "dash.js"];
+  },
+
+  filterCandidatesByPreference(candidates, preference) {
+    if (preference === "native") {
+      const nativeEngines = this.getNativeEngineNames();
+      return candidates.filter((c) => nativeEngines.includes(c));
+    }
+    if (preference === "web") {
+      const webEngines = this.getWebEngineNames();
+      const webCandidates = candidates.filter((c) => webEngines.includes(c));
+      if (webCandidates.length) {
+        return webCandidates;
+      }
+      // No web engines available for this media type (e.g., direct MKV)
+      // Prefer native-file over AVPlay for direct files
+      const nativeFileIndex = candidates.indexOf("native-file");
+      if (nativeFileIndex >= 0) {
+        return ["native-file"];
+      }
+    }
+    return candidates;
+  },
+
   choosePlaybackEngine(url, sourceType) {
+    const settings = PlayerSettingsStore.get();
+    const preference = String(settings.preferredPlaybackEngine || "auto").trim();
     const candidates = this.getPlaybackEngineCandidates(url, sourceType);
-    if (candidates.length) {
-      return candidates[0];
+    console.log("[Player] Engine candidates (before filter):", candidates, "Preference:", preference);
+    const filteredCandidates = this.filterCandidatesByPreference(candidates, preference);
+    console.log("[Player] Engine candidates (after filter):", filteredCandidates);
+    if (filteredCandidates.length) {
+      return filteredCandidates[0];
+    }
+    if (preference === "web") {
+      console.warn("[Player] Web engines not available, falling back to native");
     }
     if (this.canUseAvPlay()) {
       return this.getPlatformAvplayEngineName();
@@ -1893,6 +1936,12 @@ export const PlayerController = {
 
     const sourceType = String(mediaSourceType || this.guessMediaMimeType(url) || "").trim() || null;
     const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType);
+    console.log("[Player] Engine selected:", {
+      platform: Platform.getName(),
+      sourceType,
+      preferredEngine,
+      url: url?.substring(0, 80) + "..."
+    });
     this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
       reset: !forceEngine
     });
@@ -1911,8 +1960,11 @@ export const PlayerController = {
         : "native-file";
 
     if (preferredEngine === this.getPlatformAvplayEngineName()) {
+      console.log("[Player] Using AVPlay engine");
       const avplayStarted = this.playWithAvPlay(url);
+      console.log("[Player] AVPlay start result:", avplayStarted);
       if (!avplayStarted) {
+        console.log("[Player] AVPlay failed, falling back to native:", nativeFallbackEngine);
         this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
         this.attemptVideoPlay({
           warningLabel: "Playback start rejected",
@@ -1931,8 +1983,11 @@ export const PlayerController = {
         });
       }
     } else if (preferredEngine === "hls.js") {
+      console.log("[Player] Using HLS.js engine");
       const hlsStarted = this.playWithHlsJs(url, requestHeaders);
+      console.log("[Player] HLS.js start result:", hlsStarted);
       if (!hlsStarted) {
+        console.log("[Player] HLS.js failed, falling back to native HLS");
         this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
         this.attemptVideoPlay({
           warningLabel: "Playback start rejected",
@@ -1951,6 +2006,7 @@ export const PlayerController = {
         beforePlay: dashStarted ? null : () => this.waitForNativeMediaId()
       });
     } else if (preferredEngine === "native-hls") {
+      console.log("[Player] Using native HLS");
       this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
       this.attemptVideoPlay({
         warningLabel: "Native HLS playback start rejected",
@@ -1985,12 +2041,19 @@ export const PlayerController = {
         }
       });
     } else {
+      console.log("[Player] Using native file playback");
       this.applyNativeSource(url, sourceType || null, "native-file");
       this.attemptVideoPlay({
         warningLabel: "Playback start rejected",
         playToken,
         beforePlay: () => this.waitForNativeMediaId(),
         onRejected: (error) => {
+          const settings = PlayerSettingsStore.get();
+          const preference = String(settings.preferredPlaybackEngine || "auto").trim();
+          if (preference === "web") {
+            console.warn("[Player] Native playback failed but web preference selected, not falling back to AVPlay");
+            return false;
+          }
           if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay() || !this.isLikelyDirectFileUrl(url)) {
             return false;
           }

@@ -435,6 +435,17 @@ function renderModeLabel(value) {
   return String(value || "native").toLowerCase() === "html" ? t("common.htmlOverlay") : t("common.native");
 }
 
+function labelForPlaybackEngine(engine) {
+  switch (engine) {
+    case "native":
+      return "Native (AVPlay)";
+    case "web":
+      return "Web (HLS.js/DASH.js)";
+    default:
+      return "Auto";
+  }
+}
+
 function escapeSelector(value) {
   return String(value ?? "").replace(/["\\]/g, "\\$&");
 }
@@ -1709,6 +1720,22 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("playback:engine", () => {
+      const options = [
+        { id: "auto", labelKey: "settings.playback.engines.auto", label: "Auto" },
+        { id: "native", labelKey: "settings.playback.engines.native", label: "Native (AVPlay)" },
+        { id: "web", labelKey: "settings.playback.engines.web", label: "Web (HLS.js/DASH.js)" }
+      ];
+      this.openOptionDialog({
+        title: t("settings.dialogs.selectPlayerEngine", "Select Player Engine"),
+        options,
+        selectedId: String(PlayerSettingsStore.get().preferredPlaybackEngine || "auto"),
+        returnFocusKey: "playback:engine",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ preferredPlaybackEngine: option.id });
+        }
+      });
+    });
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
@@ -1781,6 +1808,12 @@ export const SettingsScreen = {
       title: t("settings.playback.preferredQuality.title"),
       subtitle: t("settings.playback.preferredQuality.subtitle"),
       value: qualityLabel(model.player.preferredQuality)
+    })}
+        ${this.renderActionRow({
+      focusKey: "playback:engine",
+      title: t("settings.playback.playerEngine.title", "Player Engine"),
+      subtitle: t("settings.playback.playerEngine.subtitle", "Select native or web player"),
+      value: labelForPlaybackEngine(model.player.preferredPlaybackEngine)
     })}
       </div>
     `;

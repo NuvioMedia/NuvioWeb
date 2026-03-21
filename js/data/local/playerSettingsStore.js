@@ -23,7 +23,8 @@ const DEFAULTS = {
     secondaryPreferredLanguage: "off"
   },
   audioAmplificationDb: 0,
-  persistAudioAmplification: false
+  persistAudioAmplification: false,
+  preferredPlaybackEngine: "auto"
 };
 
 function normalizeSelectableSubtitleLanguageCode(language) {
