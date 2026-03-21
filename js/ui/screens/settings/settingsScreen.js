@@ -1712,6 +1712,9 @@ export const SettingsScreen = {
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
+    this.actionMap.set("playback:skipIntro", () => {
+      PlayerSettingsStore.set({ skipIntroEnabled: !PlayerSettingsStore.get().skipIntroEnabled });
+    });
     this.actionMap.set("playback:audioLanguage", () => {
       this.openOptionDialog({
         title: t("settings.dialogs.preferredAudioLanguage"),
@@ -1770,6 +1773,12 @@ export const SettingsScreen = {
       title: t("settings.playback.autoplayNextEpisode.title"),
       subtitle: t("settings.playback.autoplayNextEpisode.subtitle"),
       checked: Boolean(model.player.autoplayNextEpisode)
+    })}
+        ${this.renderToggleRow({
+      focusKey: "playback:skipIntro",
+      title: t("settings.playback.skipIntro.title", {}, "Skip Intro"),
+      subtitle: t("settings.playback.skipIntro.subtitle", {}, "Use IntroDB to detect intro, recap and outro segments when available."),
+      checked: Boolean(model.player.skipIntroEnabled)
     })}
       </div>
     `;

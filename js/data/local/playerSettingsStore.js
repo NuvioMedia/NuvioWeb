@@ -10,6 +10,7 @@ const DEFAULTS = {
   preferredAudioLanguage: "system",
   preferredQuality: "auto",
   trailerAutoplay: false,
+  skipIntroEnabled: true,
   subtitleRenderMode: "native",
   subtitleDelayMs: 0,
   subtitleStyle: {

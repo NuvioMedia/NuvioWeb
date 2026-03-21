@@ -9,11 +9,12 @@ import { savedLibraryRepository } from "../../../data/repository/savedLibraryRep
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
+import { TrailerService } from "../../../core/trailer/trailerService.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { imdbEpisodeRatingsRepository } from "../../../data/repository/imdbEpisodeRatingsRepository.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
-import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
 
@@ -429,136 +430,6 @@ function extractPreviewYear(value = "") {
   return match ? match[0] : "";
 }
 
-function resolveYoutubeId(value = "") {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  if (/^[a-zA-Z0-9_-]{11}$/.test(raw)) {
-    return raw;
-  }
-  const watchMatch = raw.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-  if (watchMatch?.[1]) {
-    return watchMatch[1];
-  }
-  const shortMatch = raw.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-  if (shortMatch?.[1]) {
-    return shortMatch[1];
-  }
-  const embedMatch = raw.match(/embed\/([a-zA-Z0-9_-]{11})/);
-  if (embedMatch?.[1]) {
-    return embedMatch[1];
-  }
-  return "";
-}
-
-function buildYoutubeEmbedUrl(ytId = "") {
-  const cleanId = String(ytId || "").trim();
-  if (!cleanId) {
-    return "";
-  }
-  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-  if (proxyBase) {
-    try {
-      const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
-      proxyUrl.searchParams.set("v", cleanId);
-      proxyUrl.searchParams.set("autoplay", "1");
-      proxyUrl.searchParams.set("muted", "1");
-      proxyUrl.searchParams.set("controls", "0");
-      proxyUrl.searchParams.set("loop", "1");
-      proxyUrl.searchParams.set("playlist", cleanId);
-      proxyUrl.searchParams.set("playsinline", "1");
-      proxyUrl.searchParams.set("rel", "0");
-      return proxyUrl.toString();
-    } catch (_) {
-      return "";
-    }
-  }
-  if (!Environment.isBrowser()) {
-    return "";
-  }
-  const params = new URLSearchParams({
-    autoplay: "1",
-    mute: "1",
-    controls: "0",
-    loop: "1",
-    playlist: cleanId,
-    playsinline: "1",
-    rel: "0",
-    modestbranding: "1",
-    enablejsapi: "1"
-  });
-  const origin = String(globalThis?.location?.origin || "").trim();
-  if (/^https?:\/\//i.test(origin)) {
-    params.set("origin", origin);
-  }
-  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
-}
-
-function buildYoutubeStreamUrl(ytId = "") {
-  const cleanId = String(ytId || "").trim();
-  if (!cleanId) {
-    return "";
-  }
-  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-  if (!proxyBase) {
-    return "";
-  }
-  const templated = proxyBase.replace(/\{(ytId|id)\}/gi, cleanId);
-  if (templated !== proxyBase) {
-    return templated;
-  }
-  try {
-    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
-    proxyUrl.searchParams.set("v", cleanId);
-    proxyUrl.searchParams.set("stream", "1");
-    proxyUrl.searchParams.set("format", "mp4");
-    return proxyUrl.toString();
-  } catch (_) {
-    return "";
-  }
-}
-
-function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
-  const cleanId = String(ytId || "").trim();
-  if (!cleanId) {
-    return "";
-  }
-  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-  if (proxyBase) {
-    try {
-      const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
-      proxyUrl.searchParams.set("v", cleanId);
-      proxyUrl.searchParams.set("autoplay", "1");
-      proxyUrl.searchParams.set("muted", muted ? "1" : "0");
-      proxyUrl.searchParams.set("controls", "0");
-      proxyUrl.searchParams.set("loop", "1");
-      proxyUrl.searchParams.set("playlist", cleanId);
-      proxyUrl.searchParams.set("playsinline", "1");
-      proxyUrl.searchParams.set("rel", "0");
-      return proxyUrl.toString();
-    } catch (_) {
-      return "";
-    }
-  }
-  const params = new URLSearchParams({
-    autoplay: "1",
-    mute: muted ? "1" : "0",
-    controls: "0",
-    loop: "1",
-    playlist: cleanId,
-    playsinline: "1",
-    rel: "0",
-    modestbranding: "1",
-    enablejsapi: "1"
-  });
-  const origin = String(globalThis?.location?.origin || "").trim();
-  if (/^https?:\/\//i.test(origin)) {
-    params.set("origin", origin);
-  }
-  return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
-}
-
 function scoreTrailerStream(entry = {}) {
   const text = [
     entry?.quality,
@@ -587,6 +458,22 @@ function scoreTrailerStream(entry = {}) {
   return score;
 }
 
+function extractTrailerReleaseYear(meta = {}) {
+  const candidates = [
+    meta?.releaseInfo,
+    meta?.year,
+    meta?.released,
+    meta?.firstAired
+  ];
+  for (const candidate of candidates) {
+    const match = String(candidate || "").match(/\b(19|20)\d{2}\b/);
+    if (match?.[0]) {
+      return match[0];
+    }
+  }
+  return "";
+}
+
 function resolveTrailerSource(meta = {}) {
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
   const directVideo = trailerStreams
@@ -601,46 +488,7 @@ function resolveTrailerSource(meta = {}) {
       url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
     };
   }
-
-  const trailerCandidates = [
-    ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
-    ...(Array.isArray(meta?.videos) ? meta.videos : [])
-  ];
-  for (const entry of trailerCandidates) {
-    const ytId = resolveYoutubeId(
-      entry?.ytId
-      || entry?.youtubeId
-      || entry?.source
-      || entry?.url
-      || entry?.link
-      || ""
-    );
-    if (ytId) {
-      const embedUrl = buildYoutubeEmbedUrl(ytId);
-      if (!embedUrl) {
-        continue;
-      }
-      return {
-        kind: "youtube",
-        ytId,
-        embedUrl
-      };
-    }
-  }
-
-  const ytId = resolveYoutubeId(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds[0] : "");
-  if (!ytId) {
-    return null;
-  }
-  const embedUrl = buildYoutubeEmbedUrl(ytId);
-  if (!embedUrl) {
-    return null;
-  }
-  return {
-    kind: "youtube",
-    ytId,
-    embedUrl
-  };
+  return null;
 }
 
 function formatCompactDate(value = "") {
@@ -739,7 +587,9 @@ export const MetaDetailsScreen = {
     this.collectionName = String(snapshot.collectionName || "");
     this.seriesRatingsBySeason = snapshot.seriesRatingsBySeason ? { ...snapshot.seriesRatingsBySeason } : {};
     this.nextEpisodeToWatch = snapshot.nextEpisodeToWatch ? { ...snapshot.nextEpisodeToWatch } : null;
-    this.trailerSource = snapshot.trailerSource ? { ...snapshot.trailerSource } : resolveTrailerSource(this.meta);
+    this.trailerSource = snapshot.trailerSource?.kind === "video"
+      ? { ...snapshot.trailerSource }
+      : resolveTrailerSource(this.meta);
     this.selectedSeason = Number(snapshot.selectedSeason || this.episodes[0]?.season || 1);
     this.selectedRatingSeason = Number(snapshot.selectedRatingSeason || this.selectedSeason || 1);
     this.seriesInsightTab = String(snapshot.seriesInsightTab || "cast");
@@ -789,56 +639,7 @@ export const MetaDetailsScreen = {
     if (this.trailerProxyMessageHandler) {
       window.removeEventListener("message", this.trailerProxyMessageHandler);
     }
-    let trustedProxyOrigin = "";
-    try {
-      trustedProxyOrigin = new URL(String(YOUTUBE_PROXY_URL || "").trim(), globalThis?.location?.href || "https://example.com/").origin;
-    } catch (_) {
-      trustedProxyOrigin = "";
-    }
-    this.trailerProxyMessageHandler = (event) => {
-      const frameWindow = this.trailerUiRefs?.frame?.contentWindow;
-      const data = event?.data;
-      if (!data || typeof data !== "object" || data.source !== "nuvio-youtube-proxy") {
-        return;
-      }
-      const eventOrigin = String(event?.origin || "").trim();
-      const sourceMatchesFrame = Boolean(frameWindow && event?.source === frameWindow);
-      const originMatchesProxy = Boolean(trustedProxyOrigin && eventOrigin === trustedProxyOrigin);
-      if (!sourceMatchesFrame && !originMatchesProxy) {
-        return;
-      }
-      if (data.type === "ready") {
-        this.stopTrailerProxyLoadingTimer();
-        this.trailerProxyState = {
-          currentTime: 0,
-          duration: 0,
-          paused: false,
-          muted: Boolean(this.trailerMuted),
-          loading: true,
-          controllable: true
-        };
-        this.postTrailerProxyCommand("getState");
-        this.updateTrailerOverlay();
-        return;
-      }
-      if (data.type === "state") {
-        const nextState = data.state && typeof data.state === "object" ? data.state : {};
-        if (nextState.loading === false || Number(nextState.duration || 0) > 0 || Number(nextState.currentTime || 0) > 0) {
-          this.stopTrailerProxyLoadingTimer();
-        }
-        this.trailerProxyState = {
-          currentTime: Number(nextState.currentTime || 0),
-          duration: Number(nextState.duration || 0),
-          paused: Boolean(nextState.paused),
-          muted: Boolean(nextState.muted),
-          loading: Boolean(nextState.loading),
-          controllable: nextState.controllable !== false
-        };
-        this.trailerYoutubeFallbackActive = nextState.controllable === false;
-        this.updateTrailerOverlay();
-      }
-    };
-    window.addEventListener("message", this.trailerProxyMessageHandler);
+    this.trailerProxyMessageHandler = null;
   },
 
   postTrailerProxyCommand(command, payload = {}) {
@@ -1007,6 +808,7 @@ export const MetaDetailsScreen = {
     this.render(meta);
     this.isLoadingDetail = false;
     this.maybeAutoOpenContinueWatchingStream();
+    void this.refreshTrailerSource(meta, token);
 
     // Background enrichments: do not block initial screen rendering.
     (async () => {
@@ -1030,6 +832,7 @@ export const MetaDetailsScreen = {
       this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
       this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
       this.updateRenderedDetailSections(this.meta);
+      void this.refreshTrailerSource(this.meta, token);
 
       const tasks = [
         withTimeout(this.fetchMoreLikeThis(this.meta), 5000, [])
@@ -1357,6 +1160,10 @@ export const MetaDetailsScreen = {
       if (!tmdbId) {
         return {};
       }
+      const directRatings = await imdbEpisodeRatingsRepository.getSeasonRatingsByTmdbId(tmdbId);
+      if (Object.keys(directRatings || {}).length) {
+        return directRatings;
+      }
       const seasons = Array.from(new Set(this.episodes.map((episode) => Number(episode.season || 0)).filter((value) => value > 0)));
       const entries = await Promise.all(seasons.map(async (season) => {
         const ratings = await TmdbMetadataService.fetchSeasonRatings({
@@ -1370,6 +1177,33 @@ export const MetaDetailsScreen = {
     } catch (error) {
       console.warn("Series ratings enrichment failed", error);
       return {};
+    }
+  },
+
+  async resolvePreferredTrailerSource(meta = this.meta) {
+    if (!meta) {
+      return null;
+    }
+    const directSource = await withTimeout(TrailerService.getPlaybackSource(meta, {
+      title: meta?.name || meta?.title || "",
+      year: extractTrailerReleaseYear(meta)
+    }), 2600, null);
+    return directSource || resolveTrailerSource(meta);
+  },
+
+  async refreshTrailerSource(meta = this.meta, token = this.detailLoadToken) {
+    const nextSource = await this.resolvePreferredTrailerSource(meta);
+    if (token !== this.detailLoadToken) {
+      return;
+    }
+    const currentKey = JSON.stringify(this.trailerSource || null);
+    const nextKey = JSON.stringify(nextSource || null);
+    if (currentKey === nextKey) {
+      return;
+    }
+    this.trailerSource = nextSource;
+    if (!this.isTrailerPlaying) {
+      this.updateRenderedDetailSections(this.meta || meta);
     }
   },
 
@@ -2103,11 +1937,16 @@ export const MetaDetailsScreen = {
   },
 
   async refreshEpisodePlaybackState() {
-    const [progress, allProgressItems, allWatchedItems] = await Promise.all([
+    const [progress, allProgressItems, allWatchedItems, watchedItem] = await Promise.all([
       watchProgressRepository.getProgressByContentId(this.params?.itemId),
       watchProgressRepository.getAll(),
-      watchedItemsRepository.getAll()
+      watchedItemsRepository.getAll(),
+      watchedItemsRepository.isWatched(this.params?.itemId)
     ]);
+    this.isMarkedWatched = Boolean(
+      watchedItem
+      || (progress && Number(progress.durationMs || 0) > 0 && Number(progress.positionMs || 0) >= Number(progress.durationMs || 0))
+    );
     this.buildEpisodeState(allProgressItems, allWatchedItems);
     this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
   },
@@ -2923,30 +2762,6 @@ export const MetaDetailsScreen = {
         </div>
       </div>
     `;
-    if (this.trailerSource.kind === "youtube") {
-      const youtubeFrameUrl = buildInlineYoutubePlayerUrl(this.trailerSource.ytId, { muted: this.trailerMuted }) || this.trailerSource.embedUrl || "";
-      layer.innerHTML = `
-        <div class="detail-trailer-media detail-trailer-youtube" data-trailer-media>
-          <iframe
-            class="detail-trailer-frame"
-            src="${youtubeFrameUrl}"
-            title="Trailer"
-            allow="autoplay; encrypted-media; picture-in-picture"
-            referrerpolicy="origin-when-cross-origin"
-            allowfullscreen
-            scrolling="no"
-            tabindex="-1"
-            aria-hidden="true"
-          ></iframe>
-        </div>
-        ${controlsMarkup}
-      `;
-      this.cacheTrailerRefs();
-      this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
-      this.startTrailerProgressTimer();
-      this.initYoutubeTrailerPlayer();
-      return;
-    }
     layer.innerHTML = `
       <div class="detail-trailer-media" data-trailer-media>
         <video class="detail-trailer-video" autoplay loop playsinline${this.trailerMuted ? " muted" : ""}>
@@ -2965,7 +2780,13 @@ export const MetaDetailsScreen = {
     this.startTrailerProgressTimer();
   },
 
-  playTrailer({ muted = null, restart = false, initiatedByUser = true } = {}) {
+  async playTrailer({ muted = null, restart = false, initiatedByUser = true } = {}) {
+    if (!this.trailerSource) {
+      const preferredSource = await this.resolvePreferredTrailerSource(this.meta);
+      if (preferredSource) {
+        this.trailerSource = preferredSource;
+      }
+    }
     if (!this.trailerSource) {
       return;
     }
@@ -4364,10 +4185,10 @@ export const MetaDetailsScreen = {
     }
 
     if (action === "toggleWatched") {
+      const focusRestore = this.captureDetailFocus();
       if (this.isMarkedWatched) {
         await watchedItemsRepository.unmark(this.params?.itemId);
         await watchProgressRepository.removeProgress(this.params?.itemId);
-        this.isMarkedWatched = false;
       } else {
         await watchedItemsRepository.mark({
           contentId: this.params?.itemId,
@@ -4383,9 +4204,9 @@ export const MetaDetailsScreen = {
           durationMs: 100,
           updatedAt: Date.now()
         });
-        this.isMarkedWatched = true;
       }
-      this.syncDetailActionButtons();
+      await this.refreshEpisodePlaybackState();
+      this.render(this.meta, focusRestore);
       return;
     }
 

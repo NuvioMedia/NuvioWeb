@@ -5,6 +5,34 @@ function activeProfileId() {
   return String(ProfileManager.getActiveProfileId() || "1");
 }
 
+let watchedItemsSyncTimer = null;
+let watchedItemsSyncInFlight = null;
+
+function queueWatchedItemsCloudSync(delayMs = 250) {
+  if (watchedItemsSyncTimer) {
+    clearTimeout(watchedItemsSyncTimer);
+  }
+  watchedItemsSyncTimer = setTimeout(() => {
+    watchedItemsSyncTimer = null;
+    const runPush = async () => {
+      if (watchedItemsSyncInFlight) {
+        await watchedItemsSyncInFlight.catch(() => false);
+      }
+      watchedItemsSyncInFlight = import("../../core/profile/watchedItemsSyncService.js")
+        .then(({ WatchedItemsSyncService }) => WatchedItemsSyncService.push())
+        .catch((error) => {
+          console.warn("Watched items cloud sync enqueue failed", error);
+          return false;
+        })
+        .finally(() => {
+          watchedItemsSyncInFlight = null;
+        });
+      await watchedItemsSyncInFlight;
+    };
+    void runPush();
+  }, delayMs);
+}
+
 class WatchedItemsRepository {
 
   async getAll(limit = 2000) {
@@ -30,10 +58,12 @@ class WatchedItemsRepository {
       ...item,
       watchedAt: item.watchedAt || Date.now()
     }, activeProfileId());
+    queueWatchedItemsCloudSync();
   }
 
   async unmark(contentId, options = null) {
     WatchedItemsStore.remove(contentId, activeProfileId(), options);
+    queueWatchedItemsCloudSync();
   }
 
   async replaceAll(items) {

@@ -8,11 +8,11 @@ import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
+import { TrailerService } from "../../../core/trailer/trailerService.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { Platform } from "../../../platform/index.js";
-import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import {
   buildModernNavigationRows,
@@ -244,53 +244,6 @@ function formatEpisodeCode(season, episode) {
   return "";
 }
 
-function resolveYoutubeId(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  const directMatch = raw.match(/^[A-Za-z0-9_-]{11}$/);
-  if (directMatch) {
-    return directMatch[0];
-  }
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtube\.com\/embed\/|youtu\.be\/)([A-Za-z0-9_-]{11})/i,
-    /(?:youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/i
-  ];
-  for (const pattern of patterns) {
-    const match = raw.match(pattern);
-    if (match?.[1]) {
-      return match[1];
-    }
-  }
-  return "";
-}
-
-function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
-  const cleanId = resolveYoutubeId(videoId);
-  if (!cleanId) {
-    return "";
-  }
-  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-  if (!proxyBase) {
-    return "";
-  }
-  try {
-    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
-    proxyUrl.searchParams.set("v", cleanId);
-    proxyUrl.searchParams.set("autoplay", "1");
-    proxyUrl.searchParams.set("muted", muted ? "1" : "0");
-    proxyUrl.searchParams.set("controls", "0");
-    proxyUrl.searchParams.set("loop", "1");
-    proxyUrl.searchParams.set("playlist", cleanId);
-    proxyUrl.searchParams.set("playsinline", "1");
-    proxyUrl.searchParams.set("rel", "0");
-    return proxyUrl.toString();
-  } catch (_) {
-    return "";
-  }
-}
-
 function scoreTrailerStream(entry = {}) {
   const text = [
     entry?.quality,
@@ -319,6 +272,22 @@ function scoreTrailerStream(entry = {}) {
   return score;
 }
 
+function extractTrailerReleaseYear(meta = {}) {
+  const candidates = [
+    meta?.releaseInfo,
+    meta?.year,
+    meta?.released,
+    meta?.firstAired
+  ];
+  for (const candidate of candidates) {
+    const match = String(candidate || "").match(/\b(19|20)\d{2}\b/);
+    if (match?.[0]) {
+      return match[0];
+    }
+  }
+  return "";
+}
+
 function resolveTrailerSource(meta = {}) {
   const trailerStreams = Array.isArray(meta?.trailerStreams) ? meta.trailerStreams : [];
   const directVideo = trailerStreams
@@ -333,46 +302,7 @@ function resolveTrailerSource(meta = {}) {
       url: String(directVideo.url || directVideo.videoUrl || directVideo.stream || "").trim()
     };
   }
-
-  const trailerCandidates = [
-    ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
-    ...(Array.isArray(meta?.videos) ? meta.videos : [])
-  ];
-  for (const entry of trailerCandidates) {
-    const ytId = resolveYoutubeId(
-      entry?.ytId
-      || entry?.youtubeId
-      || entry?.source
-      || entry?.url
-      || entry?.link
-      || ""
-    );
-    if (ytId) {
-      const embedUrl = buildYoutubeEmbedUrl(ytId);
-      if (!embedUrl) {
-        continue;
-      }
-      return {
-        kind: "youtube",
-        ytId,
-        embedUrl
-      };
-    }
-  }
-
-  const fallbackId = resolveYoutubeId(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds[0] : "");
-  if (!fallbackId) {
-    return null;
-  }
-  const fallbackEmbedUrl = buildYoutubeEmbedUrl(fallbackId);
-  if (!fallbackEmbedUrl) {
-    return null;
-  }
-  return {
-    kind: "youtube",
-    ytId: fallbackId,
-    embedUrl: fallbackEmbedUrl
-  };
+  return null;
 }
 
 function applyTrailerAudioPreferences(source, prefs = {}) {
@@ -380,17 +310,6 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
     return null;
   }
   const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
-  if (source.kind === "youtube") {
-    const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted });
-    if (!embedUrl) {
-      return null;
-    }
-    return {
-      ...source,
-      embedUrl,
-      muted
-    };
-  }
   if (source.kind === "video") {
     return {
       ...source,
@@ -415,13 +334,17 @@ function withTimeout(promise, ms, fallbackValue) {
 }
 
 async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie") {
-  const directSource = resolveTrailerSource(meta);
+  const directSource = await withTimeout(TrailerService.getPlaybackSource(meta, {
+    title: meta?.name || meta?.title || "",
+    year: extractTrailerReleaseYear(meta)
+  }), 2600, null);
   if (directSource) {
     return directSource;
   }
+  const fallbackSource = resolveTrailerSource(meta);
   const settings = TmdbSettingsStore.get();
   if (!settings.enabled || !settings.apiKey) {
-    return null;
+    return fallbackSource;
   }
   try {
     const tmdbId = await withTimeout(TmdbService.ensureTmdbId(meta?.id, itemType), 1800, null);
@@ -434,9 +357,9 @@ async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie")
       language: settings.language
     }), 2200, null);
     if (!enrichment) {
-      return null;
+      return fallbackSource;
     }
-    return resolveTrailerSource({
+    const mergedMeta = {
       ...meta,
       trailers: Array.isArray(meta?.trailers) && meta.trailers.length
         ? meta.trailers
@@ -444,9 +367,14 @@ async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie")
       trailerYtIds: Array.isArray(meta?.trailerYtIds) && meta.trailerYtIds.length
         ? meta.trailerYtIds
         : (Array.isArray(enrichment?.trailerYtIds) ? enrichment.trailerYtIds : [])
-    });
+    };
+    const enrichedDirectSource = await withTimeout(TrailerService.getPlaybackSource(mergedMeta, {
+      title: mergedMeta?.name || mergedMeta?.title || "",
+      year: extractTrailerReleaseYear(mergedMeta)
+    }), 2600, null);
+    return enrichedDirectSource || resolveTrailerSource(mergedMeta) || fallbackSource;
   } catch (_) {
-    return null;
+    return fallbackSource;
   }
 }
 
@@ -2202,21 +2130,6 @@ export const HomeScreen = {
       return;
     }
     this.clearTrailerLayer(container);
-    if (source.kind === "youtube" && source.embedUrl) {
-      const frame = document.createElement("iframe");
-      frame.className = "home-inline-trailer-frame";
-      frame.src = source.embedUrl;
-      frame.title = "Trailer preview";
-      frame.allow = "autoplay; encrypted-media; picture-in-picture";
-      frame.allowFullscreen = true;
-      frame.referrerPolicy = "strict-origin-when-cross-origin";
-      frame.addEventListener("load", () => {
-        container.classList.add("is-active");
-        onReady?.();
-      }, { once: true });
-      container.appendChild(frame);
-      return;
-    }
     if (source.kind === "video" && source.url) {
       const shouldMute = source.muted !== false;
       container.innerHTML = `

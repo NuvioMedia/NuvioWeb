@@ -15,5 +15,7 @@ dist/
 .pm2/
 logs/
 app.bundle.js
+
+NuvioTV/
 ecosystem.config.cjs
 scripts/commit-build-poller.mjs
