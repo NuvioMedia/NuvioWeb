@@ -108,6 +108,28 @@ function findNearestNodeByCenterX(referenceNode, nodes = []) {
   return bestNode;
 }
 
+function groupNodesByRow(nodes = [], tolerance = 28) {
+  const rows = [];
+  nodes.forEach((node) => {
+    const rect = node.getBoundingClientRect();
+    const top = rect.top;
+    const existingRow = rows.find((row) => Math.abs(row.top - top) <= tolerance);
+    if (existingRow) {
+      existingRow.nodes.push(node);
+      return;
+    }
+    rows.push({
+      top,
+      nodes: [node]
+    });
+  });
+  rows.sort((left, right) => left.top - right.top);
+  rows.forEach((row) => {
+    row.nodes.sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left);
+  });
+  return rows;
+}
+
 export const LibraryScreen = {
 
   cancelScheduledRender() {
@@ -623,6 +645,58 @@ export const LibraryScreen = {
       || null;
   },
 
+  resolveRelativeGridNode(current, direction) {
+    if (!current || !current.matches?.(".library-grid-card.focusable")) {
+      return null;
+    }
+    const cards = Array.from(this.container?.querySelectorAll(".library-grid-card.focusable") || []);
+    if (!cards.length) {
+      return null;
+    }
+    const rows = groupNodesByRow(cards);
+    if (!rows.length) {
+      return null;
+    }
+    const currentRect = current.getBoundingClientRect();
+    const currentCenterX = currentRect.left + (currentRect.width / 2);
+    const rowIndex = rows.findIndex((row) => row.nodes.includes(current));
+    if (rowIndex < 0) {
+      return null;
+    }
+    const currentRow = rows[rowIndex];
+    const columnIndex = Math.max(0, currentRow.nodes.indexOf(current));
+
+    if (direction === "left") {
+      return currentRow.nodes[columnIndex - 1] || current;
+    }
+    if (direction === "right") {
+      return currentRow.nodes[columnIndex + 1] || current;
+    }
+    if (direction === "up") {
+      const previousRow = rows[rowIndex - 1];
+      return previousRow ? findNearestNodeByCenterX(current, previousRow.nodes) : null;
+    }
+    if (direction === "down") {
+      const nextRow = rows[rowIndex + 1];
+      if (!nextRow) {
+        return current;
+      }
+      let bestNode = nextRow.nodes[0] || null;
+      let bestDistance = Number.POSITIVE_INFINITY;
+      nextRow.nodes.forEach((node) => {
+        const rect = node.getBoundingClientRect();
+        const centerX = rect.left + (rect.width / 2);
+        const distance = Math.abs(centerX - currentCenterX);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestNode = node;
+        }
+      });
+      return bestNode;
+    }
+    return null;
+  },
+
   handleActionsRowNavigation(event, current) {
     if (!current || !current.closest?.(".library-actions-row")) {
       return false;
@@ -709,6 +783,43 @@ export const LibraryScreen = {
       return true;
     }
     const target = anchors[nextIndex] || null;
+    if (!target) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.setFocusedNode(target);
+    return true;
+  },
+
+  handleGridNavigation(event, current) {
+    if (!current || !current.matches?.(".library-grid-card.focusable") || !current.closest?.(".library-grid")) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const direction = code === 37
+      ? "left"
+      : code === 39
+        ? "right"
+        : code === 38
+          ? "up"
+          : code === 40
+            ? "down"
+            : "";
+    if (!direction) {
+      return false;
+    }
+    if (direction === "up") {
+      const target = this.controller.getState().sourceMode === "trakt"
+        ? this.resolvePreferredActionsRowNode() || this.resolvePreferredPickerRowNode(current)
+        : this.resolvePreferredPickerRowNode(current);
+      if (!target) {
+        return false;
+      }
+      event?.preventDefault?.();
+      this.setFocusedNode(target);
+      return true;
+    }
+    const target = this.resolveRelativeGridNode(current, direction);
     if (!target) {
       return false;
     }
@@ -1018,6 +1129,10 @@ export const LibraryScreen = {
     }
 
     if (!sidebarLocked && this.handleContentRowMemoryNavigation(event, current)) {
+      return;
+    }
+
+    if (!sidebarLocked && this.handleGridNavigation(event, current)) {
       return;
     }
 
