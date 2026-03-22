@@ -225,6 +225,7 @@ export const ProfileSelectionScreen = {
     this.pinActionMessageTimer = null;
     this.pinTransitionTimer = null;
     this.pinTransitionCallback = null;
+    this.suppressedFocusClick = null;
     this.avatarCatalog = [];
     this.lastKeyboardActivation = null;
 
@@ -832,6 +833,14 @@ export const ProfileSelectionScreen = {
   },
 
   shouldIgnoreKeyboardClick(node) {
+    const suppressedFocusClick = this.suppressedFocusClick;
+    if (suppressedFocusClick && (Date.now() - Number(suppressedFocusClick.at || 0)) <= 400) {
+      if (String(node?.dataset?.focusKey || "") === String(suppressedFocusClick.focusKey || "")) {
+        this.suppressedFocusClick = null;
+        return true;
+      }
+    }
+    this.suppressedFocusClick = null;
     const recentActivation = this.lastKeyboardActivation;
     this.lastKeyboardActivation = null;
     if (!recentActivation) {
@@ -841,6 +850,18 @@ export const ProfileSelectionScreen = {
       return false;
     }
     return String(node?.dataset?.focusKey || "") === String(recentActivation.focusKey || "");
+  },
+
+  suppressNextFocusClick(focusKey) {
+    const normalizedFocusKey = String(focusKey || "");
+    if (!normalizedFocusKey) {
+      this.suppressedFocusClick = null;
+      return;
+    }
+    this.suppressedFocusClick = {
+      focusKey: normalizedFocusKey,
+      at: Date.now()
+    };
   },
 
   getEditorNavigationState() {
@@ -1086,6 +1107,7 @@ export const ProfileSelectionScreen = {
     this.deleteProfileId = null;
     this.optionsProfileId = String(profile.id);
     this.pendingFocusKey = "options:edit";
+    this.suppressNextFocusClick("options:edit");
     this.render();
   },
 
@@ -1685,6 +1707,7 @@ export const ProfileSelectionScreen = {
     if (!current) {
       return;
     }
+    this.rememberKeyboardActivation(current);
     await this.activateFocusedNode(current);
   },
 
@@ -1735,6 +1758,7 @@ export const ProfileSelectionScreen = {
       this.pinTransitionTimer = null;
     }
     this.pinTransitionCallback = null;
+    this.suppressedFocusClick = null;
     const container = document.getElementById("profileSelection");
     if (!container) {
       return;
