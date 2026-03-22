@@ -226,12 +226,11 @@ function renderLayoutPreviewMarkup(layoutId) {
   const normalized = String(layoutId || "classic").toLowerCase();
   if (normalized === "modern") {
     return `
-      <span class="settings-layout-preview-modern-hero"></span>
-      <span class="settings-layout-preview-modern-row">
-        <span class="settings-layout-preview-modern-card is-strong"></span>
-        <span class="settings-layout-preview-modern-card"></span>
-        <span class="settings-layout-preview-modern-card"></span>
-        <span class="settings-layout-preview-modern-card is-strong"></span>
+      <span class="settings-layout-preview-modern-stage">
+        <span class="settings-layout-preview-modern-hero"></span>
+        <span class="settings-layout-preview-modern-row">
+          ${Array.from({ length: 9 }, (_, index) => `<span class="settings-layout-preview-modern-card${index % 3 === 1 ? " is-strong" : ""}"></span>`).join("")}
+        </span>
       </span>
     `;
   }
@@ -239,34 +238,24 @@ function renderLayoutPreviewMarkup(layoutId) {
   if (normalized === "grid") {
     return `
       <span class="settings-layout-preview-grid-canvas">
-        ${Array.from({ length: 20 }, (_, index) => `
-          <span class="settings-layout-preview-grid-cell${index % 3 === 2 ? " is-dim" : ""}"></span>
+        ${Array.from({ length: 35 }, (_, index) => `
+          <span class="settings-layout-preview-grid-cell${Math.floor(index / 5) % 3 === 2 ? " is-dim" : ""}"></span>
         `).join("")}
       </span>
     `;
   }
 
   return `
-    <span class="settings-layout-preview-classic-row is-top">
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-    </span>
-    <span class="settings-layout-preview-classic-row is-featured">
-      <span class="settings-layout-preview-classic-card is-strong"></span>
-      <span class="settings-layout-preview-classic-card is-strong"></span>
-      <span class="settings-layout-preview-classic-card is-strong"></span>
-      <span class="settings-layout-preview-classic-card is-strong"></span>
-      <span class="settings-layout-preview-classic-card is-strong"></span>
-    </span>
-    <span class="settings-layout-preview-classic-row is-bottom">
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
-      <span class="settings-layout-preview-classic-card"></span>
+    <span class="settings-layout-preview-classic-stage">
+      <span class="settings-layout-preview-classic-row is-top">
+        ${Array.from({ length: 7 }, () => '<span class="settings-layout-preview-classic-card"></span>').join("")}
+      </span>
+      <span class="settings-layout-preview-classic-row is-featured">
+        ${Array.from({ length: 7 }, () => '<span class="settings-layout-preview-classic-card is-strong"></span>').join("")}
+      </span>
+      <span class="settings-layout-preview-classic-row is-bottom">
+        ${Array.from({ length: 7 }, () => '<span class="settings-layout-preview-classic-card"></span>').join("")}
+      </span>
     </span>
   `;
 }
@@ -887,6 +876,7 @@ export const SettingsScreen = {
       <button class="settings-layout-card settings-content-focusable focusable${selected ? " is-selected" : ""}"
               data-zone="content"
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
+        <span class="settings-layout-badge">${escapeHtml(t("common.beta", {}, "Beta"))}</span>
         <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}">${renderLayoutPreviewMarkup(option.id)}</span>
         <span class="settings-layout-name">${escapeHtml(translateOptionLabel(option))}</span>
         <span class="settings-layout-caption">${escapeHtml(translateOptionCaption(option))}</span>

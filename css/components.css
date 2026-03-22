@@ -5158,6 +5158,7 @@ button:focus-visible {
 
 .settings-layout-preview-modern-stage,
 .settings-layout-preview-classic-stage {
+  display: block;
   position: relative;
   width: 100%;
   height: 100%;
@@ -5189,7 +5190,7 @@ button:focus-visible {
   width: calc(100% - (var(--settings-layout-modern-side) * 2));
   height: 62%;
   border-radius: 6px;
-  background: rgb(var(--secondary-color-rgb) / 0.38);
+  background: rgb(255 255 255 / 0.38);
 }
 
 .settings-layout-preview-modern-row {
@@ -5206,13 +5207,14 @@ button:focus-visible {
 }
 
 .settings-layout-preview-modern-card {
-  flex: 0 0 var(--settings-layout-modern-card-width);
+  flex: 0 0 auto;
   height: 100%;
-  background: rgb(var(--secondary-color-rgb) / 0.28);
+  aspect-ratio: 1.45 / 1;
+  background: rgb(255 255 255 / 0.28);
 }
 
 .settings-layout-preview-modern-card.is-strong {
-  background: rgb(var(--secondary-color-rgb) / 0.46);
+  background: rgb(255 255 255 / 0.46);
 }
 
 .settings-layout-preview-grid {
@@ -5230,6 +5232,7 @@ button:focus-visible {
   top: var(--settings-layout-grid-gap);
   left: var(--settings-layout-grid-gap);
   width: calc(100% - (var(--settings-layout-grid-gap) * 2));
+  height: calc((var(--settings-layout-grid-card-height) * 7) + (var(--settings-layout-grid-gap) * 6));
   display: grid;
   grid-template-columns: repeat(5, var(--settings-layout-grid-card-width));
   grid-auto-rows: var(--settings-layout-grid-card-height);
@@ -5241,11 +5244,11 @@ button:focus-visible {
 .settings-layout-preview-grid-cell {
   width: 100%;
   height: 100%;
-  background: rgb(var(--secondary-color-rgb) / 0.5);
+  background: rgb(255 255 255 / 0.5);
 }
 
 .settings-layout-preview-grid-cell.is-dim {
-  background: rgb(var(--secondary-color-rgb) / 0.3);
+  background: rgb(255 255 255 / 0.3);
 }
 
 .settings-layout-preview-classic {
@@ -5269,13 +5272,14 @@ button:focus-visible {
 }
 
 .settings-layout-preview-classic-card {
-  flex: 0 0 var(--settings-layout-classic-card-width);
+  flex: 0 0 auto;
   height: 85%;
-  background: rgb(var(--secondary-color-rgb) / 0.3);
+  aspect-ratio: 2.1 / 1;
+  background: rgb(255 255 255 / 0.3);
 }
 
 .settings-layout-preview-classic-card.is-strong {
-  background: rgb(var(--secondary-color-rgb) / 0.6);
+  background: rgb(255 255 255 / 0.6);
 }
 
 .settings-layout-preview-classic-row.is-top,
