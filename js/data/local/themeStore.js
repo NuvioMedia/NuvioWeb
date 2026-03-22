@@ -27,6 +27,16 @@ const THEME_BY_ACCENT = new Map([
   ["#ec407a", "ROSE"]
 ]);
 
+const ACCENT_BY_THEME = {
+  WHITE: "#f5f5f5",
+  CRIMSON: "#e53935",
+  OCEAN: "#1e88e5",
+  VIOLET: "#8e24aa",
+  EMERALD: "#43a047",
+  AMBER: "#fb8c00",
+  ROSE: "#d81b60"
+};
+
 function normalizeTheme(settings = {}) {
   const accent = String(settings?.accentColor || DEFAULT_THEME.accentColor).toLowerCase();
   const themeName = String(
@@ -34,12 +44,13 @@ function normalizeTheme(settings = {}) {
     || THEME_BY_ACCENT.get(accent)
     || DEFAULT_THEME.themeName
   ).toUpperCase();
+  const normalizedAccent = String(ACCENT_BY_THEME[themeName] || accent || DEFAULT_THEME.accentColor).toLowerCase();
 
   return {
     ...DEFAULT_THEME,
     ...settings,
     themeName,
-    accentColor: accent
+    accentColor: normalizedAccent
   };
 }
 

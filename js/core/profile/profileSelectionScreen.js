@@ -7,8 +7,15 @@ import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js
 import { Platform } from "../../platform/index.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
-const DEFAULT_PROFILE_COLOR = "#1E88E5";
+const DEFAULT_PROFILE_COLOR = "#f5f5f5";
 const PROFILE_HOLD_DELAY_MS = 650;
+
+function getDefaultProfileColor() {
+  const value = globalThis?.document
+    ? getComputedStyle(document.documentElement).getPropertyValue("--secondary-color").trim()
+    : "";
+  return value || DEFAULT_PROFILE_COLOR;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -216,7 +223,7 @@ export const ProfileSelectionScreen = {
            data-focus-key="profile:${escapeHtml(profile.id)}"
            tabindex="0">
         <div class="profile-avatar-ring">
-          <div class="profile-avatar" style="background:${escapeHtml(profile.avatarColorHex || DEFAULT_PROFILE_COLOR)}">
+          <div class="profile-avatar" style="background:${escapeHtml(profile.avatarColorHex || getDefaultProfileColor())}">
             ${avatarUrl
               ? `<img class="profile-avatar-image" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(profile.name)}"/>`
               : escapeHtml(getProfileInitial(profile.name))}
@@ -282,7 +289,7 @@ export const ProfileSelectionScreen = {
 
           <div class="profile-editor-body">
             <div class="profile-editor-preview">
-              <div class="profile-editor-preview-avatar" style="background:${escapeHtml(this.editorState.selectedColorHex || DEFAULT_PROFILE_COLOR)}">
+              <div class="profile-editor-preview-avatar" style="background:${escapeHtml(this.editorState.selectedColorHex || getDefaultProfileColor())}">
                 ${previewAvatarUrl
                   ? `<img class="profile-editor-preview-image" src="${escapeHtml(previewAvatarUrl)}" alt="${escapeHtml(previewName)}"/>`
                   : escapeHtml(getProfileInitial(previewName))}
@@ -490,11 +497,11 @@ export const ProfileSelectionScreen = {
       const profile = this.getProfileById(profileId);
       if (profile) {
         this.lastProfileFocusKey = `profile:${profile.id}`;
-        this.updateBackground(profile.avatarColorHex || DEFAULT_PROFILE_COLOR);
+        this.updateBackground(profile.avatarColorHex || getDefaultProfileColor());
       }
     } else if (profileId === "add") {
       this.lastProfileFocusKey = "profile:add";
-      this.updateBackground("#555555");
+      this.updateBackground(getDefaultProfileColor());
     }
 
     if (avatarId && this.editorState) {
@@ -560,7 +567,7 @@ export const ProfileSelectionScreen = {
     const rootStyles = getComputedStyle(document.documentElement);
     const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
     const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
-    const accent = parseHexColor(colorHex, parseHexColor(DEFAULT_PROFILE_COLOR));
+    const accent = parseHexColor(colorHex, parseHexColor(getDefaultProfileColor()));
     const gradientTop = mixColors(elevated, accent, 0.3);
     const gradientMid = mixColors(background, accent, 0.14);
     return `
@@ -609,9 +616,9 @@ export const ProfileSelectionScreen = {
       profileId: null,
       originalName: "",
       name: "",
-      selectedColorHex: DEFAULT_PROFILE_COLOR,
+      selectedColorHex: getDefaultProfileColor(),
       selectedAvatarId: null,
-      baseColorHex: DEFAULT_PROFILE_COLOR,
+      baseColorHex: getDefaultProfileColor(),
       category: "all",
       focusedAvatarName: null
     };
@@ -630,9 +637,9 @@ export const ProfileSelectionScreen = {
       profileId: String(profile.id),
       originalName: String(profile.name || ""),
       name: String(profile.name || ""),
-      selectedColorHex: String(profile.avatarColorHex || DEFAULT_PROFILE_COLOR),
+      selectedColorHex: String(profile.avatarColorHex || getDefaultProfileColor()),
       selectedAvatarId: profile.avatarId || null,
-      baseColorHex: String(profile.avatarColorHex || DEFAULT_PROFILE_COLOR),
+      baseColorHex: String(profile.avatarColorHex || getDefaultProfileColor()),
       category: "all",
       focusedAvatarName: null
     };
@@ -775,13 +782,13 @@ export const ProfileSelectionScreen = {
       success = await ProfileManager.updateProfile({
         ...existing,
         name: trimmedName,
-        avatarColorHex: editorState.selectedColorHex || DEFAULT_PROFILE_COLOR,
+        avatarColorHex: editorState.selectedColorHex || getDefaultProfileColor(),
         avatarId: editorState.selectedAvatarId || null
       });
     } else {
       success = await ProfileManager.createProfile({
         name: trimmedName,
-        avatarColorHex: editorState.selectedColorHex || DEFAULT_PROFILE_COLOR,
+        avatarColorHex: editorState.selectedColorHex || getDefaultProfileColor(),
         avatarId: editorState.selectedAvatarId || null
       });
     }
@@ -848,11 +855,11 @@ export const ProfileSelectionScreen = {
       if (this.editorState.selectedAvatarId === avatar.id) {
         this.editorState.selectedAvatarId = null;
         this.editorState.selectedColorHex = this.editorState.mode === "edit"
-          ? this.editorState.baseColorHex || DEFAULT_PROFILE_COLOR
-          : DEFAULT_PROFILE_COLOR;
+          ? this.editorState.baseColorHex || getDefaultProfileColor()
+          : getDefaultProfileColor();
       } else {
         this.editorState.selectedAvatarId = avatar.id;
-        this.editorState.selectedColorHex = avatar.bgColor || DEFAULT_PROFILE_COLOR;
+        this.editorState.selectedColorHex = avatar.bgColor || getDefaultProfileColor();
       }
       this.editorState.focusedAvatarName = avatar.displayName;
       this.pendingFocusKey = `editor:avatar:${avatar.id}`;

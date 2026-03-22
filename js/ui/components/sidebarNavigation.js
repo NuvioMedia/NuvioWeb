@@ -66,6 +66,13 @@ function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
 
+function getThemeAccentFallback() {
+  const value = globalThis?.document
+    ? getComputedStyle(document.documentElement).getPropertyValue("--secondary-color").trim()
+    : "";
+  return value || "#f5f5f5";
+}
+
 function itemLabel(item) {
   return t(item?.labelKey, {}, String(item?.label || item?.route || ""));
 }
@@ -109,7 +116,7 @@ export async function getSidebarProfileState() {
   return {
     activeProfileName: String(activeProfile?.name || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback"),
     activeProfileInitial: profileInitial(activeProfile?.name || t("sidebar.profileFallback")),
-    activeProfileColorHex: String(activeProfile?.avatarColorHex || "#1E88E5"),
+    activeProfileColorHex: String(activeProfile?.avatarColorHex || getThemeAccentFallback()),
     activeProfileAvatarUrl: String(activeProfileAvatarUrl || ""),
     showProfileSelector: Boolean(activeProfile)
   };
@@ -155,7 +162,7 @@ export function renderLegacySidebar({
         <button class="home-profile-pill focusable"
                 data-action="gotoAccount"
                 aria-label="${t("sidebar.switchProfile")}">
-          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">
+          <span class="home-profile-avatar" style="background:${profileState.activeProfileColorHex || getThemeAccentFallback()}">
             ${profileState.activeProfileAvatarUrl
               ? `<img class="sidebar-profile-avatar-image" src="${profileState.activeProfileAvatarUrl}" alt="${profileState.activeProfileName || t("sidebar.profileFallback")}" />`
               : (profileState.activeProfileInitial || "P")}
@@ -205,7 +212,7 @@ export function renderModernSidebar({
       <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
         ${showProfileSelector ? `
           <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
-            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || "#1E88E5"}">
+            <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || getThemeAccentFallback()}">
               ${profileState.activeProfileAvatarUrl
                 ? `<img class="sidebar-profile-avatar-image" src="${profileState.activeProfileAvatarUrl}" alt="${profileState.activeProfileName || t("sidebar.profileFallback")}" />`
                 : (profileState.activeProfileInitial || "P")}

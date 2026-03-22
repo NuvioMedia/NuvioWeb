@@ -95,3 +95,27 @@ export function renderFilterPicker({
     </div>
   `;
 }
+
+export function renderContentFilterPicker({
+  variant = "library",
+  widthClass = "library-picker-flex",
+  anchorAction,
+  targetOptionClass,
+  ...config
+} = {}) {
+  const isDiscover = variant === "discover";
+  return renderFilterPicker({
+    widthClass,
+    classPrefix: "library-picker",
+    anchorExtraClass: isDiscover ? "library-primary discover-filter" : "library-primary",
+    wrapperExtraClass: isDiscover ? "discover-filter-shell" : "",
+    menuExtraClass: "",
+    optionExtraClass: "",
+    focusedOptionClass: "focused",
+    selectedOptionClass: "selected",
+    targetOptionClass: targetOptionClass || "library-picker-option-target",
+    anchorAction: anchorAction || "togglePicker",
+    optionFocusable: true,
+    ...config
+  });
+}

@@ -794,7 +794,6 @@ export const SettingsScreen = {
           ${renderSectionNavIcon(item.id)}
           <span class="settings-nav-label-wrap">
             <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
-            ${item.id === "appearance" ? '<span class="settings-nav-badge">Beta</span>' : ""}
           </span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
@@ -1096,7 +1095,7 @@ export const SettingsScreen = {
   renderAppearanceSection(model) {
     THEME_OPTIONS.forEach((theme) => {
       this.actionMap.set(`appearance:theme:${theme.id}`, () => {
-        ThemeStore.set({ themeName: theme.id });
+        ThemeStore.set({ themeName: theme.id, accentColor: theme.color });
         ThemeManager.apply();
       });
     });

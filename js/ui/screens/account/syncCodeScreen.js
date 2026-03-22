@@ -16,14 +16,16 @@ export const SyncCodeScreen = {
   render() {
     const value = LocalStore.get(KEY, "");
     this.container.innerHTML = `
-      <div class="row">
-        <h2>${I18n.t("auth.syncCode.title")}</h2>
-        <p>${I18n.t("auth.syncCode.currentCode", { value: value || I18n.t("auth.syncCode.emptyValue") })}</p>
-      </div>
-      <div class="row">
-        <div class="card focusable" data-action="setCode">${I18n.t("auth.syncCode.setCode")}</div>
-        <div class="card focusable" data-action="clearCode">${I18n.t("auth.syncCode.clearCode")}</div>
-        <div class="card focusable" data-action="back">${I18n.t("auth.syncCode.back")}</div>
+      <div class="auth-simple-shell">
+        <div class="auth-simple-hero">
+          <h2 class="auth-simple-title">${I18n.t("auth.syncCode.title")}</h2>
+          <p class="auth-simple-subtitle">${I18n.t("auth.syncCode.currentCode", { value: value || I18n.t("auth.syncCode.emptyValue") })}</p>
+        </div>
+        <div class="auth-simple-actions">
+          <div class="auth-simple-card focusable" data-action="setCode">${I18n.t("auth.syncCode.setCode")}</div>
+          <div class="auth-simple-card focusable" data-action="clearCode">${I18n.t("auth.syncCode.clearCode")}</div>
+          <div class="auth-simple-card focusable" data-action="back">${I18n.t("auth.syncCode.back")}</div>
+        </div>
       </div>
     `;
     ScreenUtils.indexFocusables(this.container);

@@ -15,7 +15,7 @@
 
     if (authState === "signedOut") {
       this.container.innerHTML = `
-        <p class="text-secondary">
+        <p class="account-settings-note">
           Sync your library and preferences across devices.
         </p>
 
@@ -55,12 +55,12 @@
       : `<span class="icon">${icon}</span>`;
 
     return `
-      <div class="card focusable" data-action="${action}">
-        <div class="card-row">
+      <div class="account-settings-card focusable" data-action="${action}">
+        <div class="account-settings-row">
           ${iconHtml}
-          <div class="card-text">
-            <div class="card-title">${title}</div>
-            <div class="card-subtitle">${subtitle}</div>
+          <div class="account-settings-copy">
+            <div class="account-settings-title">${title}</div>
+            <div class="account-settings-subtitle">${subtitle}</div>
           </div>
         </div>
       </div>
@@ -132,10 +132,10 @@
 
   renderSignOut() {
     return `
-      <div class="card focusable danger" data-action="logout">
-        <div class="card-row">
+      <div class="account-settings-card account-settings-card-danger focusable" data-action="logout">
+        <div class="account-settings-row">
           <img class="icon-img" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
-          <div class="card-title">Sign Out</div>
+          <div class="account-settings-title">Sign Out</div>
         </div>
       </div>
     `;

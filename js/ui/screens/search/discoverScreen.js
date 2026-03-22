@@ -5,7 +5,7 @@ import { catalogRepository } from "../../../data/repository/catalogRepository.js
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
-import { renderFilterPicker } from "../../components/filterPicker.js";
+import { renderContentFilterPicker } from "../../components/filterPicker.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -512,7 +512,7 @@ export const DiscoverScreen = {
     if (!this.openPicker) {
       return;
     }
-    const options = Array.from(this.container?.querySelectorAll(".discover-picker-menu .discover-picker-option") || []);
+    const options = Array.from(this.container?.querySelectorAll(".library-picker.open .library-picker-option") || []);
     if (!options.length) {
       this.render();
       return;
@@ -523,7 +523,7 @@ export const DiscoverScreen = {
       const option = pickerOptions[index] || null;
       const isFocused = index === this.pickerOptionIndex;
       const isSelected = option?.value === selectedValue;
-      node.classList.toggle("focused-option", isFocused);
+      node.classList.toggle("focused", isFocused);
       node.classList.toggle("selected", isSelected);
       node.setAttribute("aria-selected", isSelected ? "true" : "false");
     });
@@ -649,8 +649,8 @@ export const DiscoverScreen = {
   },
 
   syncOpenPickerScroll() {
-    const menu = this.container?.querySelector(".discover-picker-menu");
-    const option = menu?.querySelector(".discover-picker-option.focused-option");
+    const menu = this.container?.querySelector(".library-picker.open .library-picker-menu");
+    const option = menu?.querySelector(".library-picker-option.focused");
     if (menu && option) {
       option.scrollIntoView({ block: "nearest" });
     }
@@ -870,7 +870,8 @@ export const DiscoverScreen = {
     const anchorAction = kind === "type"
       ? "discoverFilterType"
       : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
-    return renderFilterPicker({
+    return renderContentFilterPicker({
+      variant: "discover",
       picker: kind,
       title,
       value,
@@ -879,14 +880,6 @@ export const DiscoverScreen = {
       focusIndex: this.pickerOptionIndex,
       selectedIndex,
       widthClass: "library-picker-flex",
-      classPrefix: "library-picker",
-      wrapperExtraClass: "discover-filter-shell",
-      anchorExtraClass: "library-primary discover-filter",
-      menuExtraClass: "discover-picker-menu",
-      optionExtraClass: "discover-picker-option",
-      focusedOptionClass: "focused-option",
-      selectedOptionClass: "selected",
-      optionFocusable: true,
       anchorAction
     });
   },
@@ -1018,7 +1011,7 @@ export const DiscoverScreen = {
     this.container.__discoverPointerBound = true;
 
     this.container.addEventListener("click", (event) => {
-      const optionNode = event.target?.closest?.(".discover-picker-option");
+      const optionNode = event.target?.closest?.(".library-picker-option");
       if (optionNode && this.openPicker) {
         const optionIndex = Number(optionNode.dataset.optionIndex || -1);
         if (optionIndex >= 0) {

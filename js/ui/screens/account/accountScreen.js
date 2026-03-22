@@ -45,18 +45,18 @@ export const AccountScreen = {
     }
 
     if (this.state.authState === "loading") {
-      this.container.innerHTML = `<div class="account-wrapper"><h2>${I18n.t("auth.account.loadingAccount")}</h2></div>`;
+      this.container.innerHTML = `<div class="account-shell"><h2 class="account-title">${I18n.t("auth.account.loadingAccount")}</h2></div>`;
       return;
     }
 
     if (this.state.authState === "signedOut") {
       this.container.innerHTML = `
-        <div class="account-wrapper">
-          <h1>${I18n.t("auth.account.title")}</h1>
-          <p>${I18n.t("auth.account.signInCopy")}</p>
+        <div class="account-shell">
+          <h1 class="account-title">${I18n.t("auth.account.title")}</h1>
+          <p class="account-subtitle">${I18n.t("auth.account.signInCopy")}</p>
           <div class="account-card focusable" data-action="signin">
-            <h3>${I18n.t("auth.account.signIn")}</h3>
-            <p>${I18n.t("auth.account.signInSubtitle")}</p>
+            <h3 class="account-card-title">${I18n.t("auth.account.signIn")}</h3>
+            <p class="account-card-subtitle">${I18n.t("auth.account.signInSubtitle")}</p>
           </div>
         </div>
       `;
@@ -65,13 +65,13 @@ export const AccountScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="account-wrapper">
-        <h1>${I18n.t("auth.account.title")}</h1>
+      <div class="account-shell">
+        <h1 class="account-title">${I18n.t("auth.account.title")}</h1>
         <div class="account-info">
           <span>${I18n.t("auth.account.signedInAs")}</span>
           <strong>${this.state.email || I18n.t("common.unknownUser")}</strong>
         </div>
-        <div class="logout-btn focusable" data-action="logout">${I18n.t("auth.account.signOut")}</div>
+        <div class="account-card account-card-danger focusable" data-action="logout">${I18n.t("auth.account.signOut")}</div>
       </div>
     `;
     this.attachFocus();

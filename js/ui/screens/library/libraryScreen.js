@@ -4,7 +4,7 @@ import { Environment } from "../../../platform/environment.js";
 import { Platform } from "../../../platform/index.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { LibraryController, LIBRARY_PRIVACY_OPTIONS } from "./libraryController.js";
-import { renderFilterPicker } from "../../components/filterPicker.js";
+import { renderContentFilterPicker } from "../../components/filterPicker.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -262,17 +262,20 @@ export const LibraryScreen = {
 
   renderPicker(picker, title, value, options, widthClass = "") {
     const state = this.controller.getState();
-    return renderFilterPicker({
+    const currentValue = picker === "list"
+      ? state.selectedListKey
+      : (picker === "type" ? state.selectedTypeKey : state.selectedSortKey);
+    const selectedIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
+    return renderContentFilterPicker({
+      variant: "library",
       picker,
       title,
       value,
       options,
       open: state.expandedPicker === picker,
       focusIndex: Number(state.pickerFocusIndex || 0),
+      selectedIndex,
       widthClass,
-      classPrefix: "library-picker",
-      anchorExtraClass: "library-primary",
-      optionFocusable: true,
       targetOptionClass: "library-picker-option-target"
     });
   },
