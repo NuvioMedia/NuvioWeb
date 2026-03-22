@@ -399,6 +399,16 @@ button:focus-visible {
 .profile-screen {
   width: 100vw;
   height: 100vh;
+  box-sizing: border-box;
+  background: var(--bg-color);
+  transition: background 0.52s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-main-layer {
+  width: 100%;
+  height: 100%;
   padding: 56px 72px;
   box-sizing: border-box;
   display: flex;
@@ -406,10 +416,23 @@ button:focus-visible {
   align-items: center;
   text-align: center;
   justify-content: flex-start;
-  background: var(--bg-color);
-  transition: background 0.52s ease;
-  position: relative;
-  overflow: hidden;
+  will-change: opacity, transform;
+}
+
+.profile-screen.is-pin-opening .profile-main-layer {
+  animation: profileMainExit 240ms ease forwards;
+}
+
+.profile-screen.is-pin-open .profile-main-layer {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-8.333vw);
+}
+
+.profile-screen.is-pin-closing .profile-main-layer {
+  opacity: 1;
+  pointer-events: none;
+  animation: profileMainEnter 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 .profile-logo {
@@ -605,6 +628,274 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   z-index: 40;
+}
+
+.profile-pin-layer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 56px;
+  box-sizing: border-box;
+  z-index: 42;
+  opacity: 0;
+  transform: translateX(8.333vw);
+  will-change: opacity, transform;
+}
+
+.profile-pin-layer.is-opening {
+  animation: profilePinLayerEnter 320ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.profile-pin-layer.is-open {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.profile-pin-layer.is-closing {
+  pointer-events: none;
+  animation: profilePinLayerExit 240ms ease forwards;
+}
+
+.profile-pin-overlay {
+  width: 100%;
+  outline: none;
+}
+
+.profile-pin-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  text-align: center;
+}
+
+.profile-pin-heading {
+  max-width: 720px;
+  font-size: 42px;
+  line-height: 48px;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.profile-pin-box-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 42px;
+}
+
+.profile-pin-box-row.is-shaking {
+  animation: profilePinShake 260ms ease;
+}
+
+.profile-pin-box {
+  width: 118px;
+  height: 118px;
+  border-radius: 2px;
+  border: 1px solid rgb(255 255 255 / 0.72);
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  transition: border-color 140ms ease, background-color 140ms ease, border-width 140ms ease;
+}
+
+.profile-pin-box.is-filled {
+  border-color: rgb(255 255 255 / 0.92);
+  background: rgb(255 255 255 / 0.07);
+}
+
+.profile-pin-box.is-active {
+  border-width: 2px;
+  border-color: #fff;
+  background: rgb(255 255 255 / 0.04);
+}
+
+.profile-pin-box.is-error {
+  border-width: 2px;
+  border-color: #e35d5d;
+  background: rgb(49 24 24 / 0.76);
+}
+
+.profile-pin-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #fff;
+  opacity: 0;
+  transform: scale(0.72);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.profile-pin-cursor {
+  width: 2px;
+  height: 40px;
+  background: rgb(255 255 255 / 0.9);
+  opacity: 0;
+  transform: scaleY(0.8);
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.profile-pin-box.is-filled .profile-pin-dot {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.profile-pin-box.is-active .profile-pin-cursor {
+  opacity: 1;
+  transform: scaleY(1);
+  animation: profilePinCursorBlink 520ms ease-in-out infinite alternate;
+}
+
+.profile-pin-support,
+.profile-pin-forgot,
+.profile-pin-back-hint {
+  max-width: 720px;
+  font-weight: 500;
+}
+
+.profile-pin-support {
+  margin-top: 26px;
+  font-size: 18px;
+  line-height: 24px;
+  color: var(--text-secondary);
+}
+
+.profile-pin-support.is-error {
+  color: #ff8e8e;
+}
+
+.profile-pin-forgot,
+.profile-pin-back-hint {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--text-tertiary);
+}
+
+.profile-pin-forgot {
+  margin-top: 10px;
+}
+
+.profile-pin-back-hint {
+  margin-top: 14px;
+}
+
+.profile-pin-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  z-index: 44;
+  padding: 14px 24px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 0.14);
+  background: rgb(0 0 0 / 0.78);
+  color: var(--text-color);
+  font-size: 15px;
+  line-height: 1.2;
+  font-weight: 500;
+}
+
+@keyframes profilePinCursorBlink {
+  from {
+    opacity: 0.25;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes profilePinShake {
+  0% { transform: translateX(0); }
+  18% { transform: translateX(-22px); }
+  36% { transform: translateX(18px); }
+  54% { transform: translateX(-14px); }
+  72% { transform: translateX(10px); }
+  88% { transform: translateX(-6px); }
+  100% { transform: translateX(0); }
+}
+
+@keyframes profilePinLayerEnter {
+  0% {
+    opacity: 0;
+    transform: translateX(8.333vw);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes profilePinLayerExit {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(8.333vw);
+  }
+}
+
+@keyframes profileMainExit {
+  0% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-8.333vw);
+  }
+}
+
+@keyframes profileMainEnter {
+  0% {
+    opacity: 0;
+    transform: translateX(-10vw);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@media (max-height: 760px) {
+  .profile-pin-heading {
+    font-size: 28px;
+    line-height: 34px;
+  }
+
+  .profile-pin-box-row {
+    margin-top: 24px;
+    gap: 10px;
+  }
+
+  .profile-pin-box {
+    width: 90px;
+    height: 90px;
+  }
+
+  .profile-pin-cursor {
+    height: 28px;
+  }
+
+  .profile-pin-dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .profile-pin-support {
+    margin-top: 18px;
+    font-size: 16px;
+  }
+
+  .profile-pin-forgot {
+    margin-top: 10px;
+  }
 }
 
 .profile-editor-panel,

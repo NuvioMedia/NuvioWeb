@@ -6,6 +6,11 @@ const TABLE = "tv_profiles";
 const FALLBACK_TABLE = "profiles";
 const PULL_RPC = "sync_pull_profiles";
 const PUSH_RPC = "sync_push_profiles";
+const PULL_LOCKS_RPC = "sync_pull_profile_locks";
+const SET_PROFILE_PIN_RPC = "set_profile_pin";
+const CLEAR_PROFILE_PIN_RPC = "clear_profile_pin";
+const VERIFY_PROFILE_PIN_RPC = "verify_profile_pin";
+const DELETE_PROFILE_DATA_RPC = "sync_delete_profile_data";
 
 function shouldTryLegacyTable(error) {
   if (!error) {
@@ -153,6 +158,99 @@ export const ProfileSyncService = {
       return true;
     } catch (error) {
       console.warn("Profile sync push failed", error);
+      return false;
+    }
+  },
+
+  async pullProfileLockStates() {
+    try {
+      if (!AuthManager.isAuthenticated) {
+        return {};
+      }
+      const rows = await SupabaseApi.rpc(PULL_LOCKS_RPC, {}, true);
+      return (Array.isArray(rows) ? rows : []).reduce((accumulator, row) => {
+        const profileIndex = Number(row?.profile_index ?? row?.profileIndex ?? row?.id ?? 0);
+        if (Number.isFinite(profileIndex) && profileIndex > 0) {
+          accumulator[String(Math.trunc(profileIndex))] = Boolean(row?.pin_enabled ?? row?.pinEnabled);
+        }
+        return accumulator;
+      }, {});
+    } catch (error) {
+      console.warn("Profile lock state pull failed", error);
+      return {};
+    }
+  },
+
+  async setProfilePin(profileId, pin, currentPin = null) {
+    try {
+      if (!AuthManager.isAuthenticated) {
+        return false;
+      }
+      const params = {
+        p_profile_id: Number(profileId),
+        p_pin: String(pin || "")
+      };
+      if (String(currentPin || "").trim()) {
+        params.p_current_pin = String(currentPin).trim();
+      }
+      await SupabaseApi.rpc(SET_PROFILE_PIN_RPC, params, true);
+      return true;
+    } catch (error) {
+      console.warn("Set profile PIN failed", error);
+      return false;
+    }
+  },
+
+  async clearProfilePin(profileId, currentPin = null) {
+    try {
+      if (!AuthManager.isAuthenticated) {
+        return false;
+      }
+      const params = {
+        p_profile_id: Number(profileId)
+      };
+      if (String(currentPin || "").trim()) {
+        params.p_current_pin = String(currentPin).trim();
+      }
+      await SupabaseApi.rpc(CLEAR_PROFILE_PIN_RPC, params, true);
+      return true;
+    } catch (error) {
+      console.warn("Clear profile PIN failed", error);
+      return false;
+    }
+  },
+
+  async verifyProfilePin(profileId, pin) {
+    try {
+      if (!AuthManager.isAuthenticated) {
+        return null;
+      }
+      const response = await SupabaseApi.rpc(VERIFY_PROFILE_PIN_RPC, {
+        p_profile_id: Number(profileId),
+        p_pin: String(pin || "")
+      }, true);
+      const payload = Array.isArray(response) ? (response[0] || {}) : (response || {});
+      return {
+        unlocked: Boolean(payload?.unlocked),
+        retryAfterSeconds: Math.max(0, Number(payload?.retry_after_seconds ?? payload?.retryAfterSeconds ?? 0) || 0)
+      };
+    } catch (error) {
+      console.warn("Verify profile PIN failed", error);
+      return null;
+    }
+  },
+
+  async deleteProfileData(profileId) {
+    try {
+      if (!AuthManager.isAuthenticated) {
+        return false;
+      }
+      await SupabaseApi.rpc(DELETE_PROFILE_DATA_RPC, {
+        p_profile_id: Number(profileId)
+      }, true);
+      return true;
+    } catch (error) {
+      console.warn("Delete remote profile data failed", error);
       return false;
     }
   }

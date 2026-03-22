@@ -9,6 +9,51 @@ import { Platform } from "../../platform/index.js";
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#f5f5f5";
 const PROFILE_HOLD_DELAY_MS = 650;
+const PROFILE_PIN_LENGTH = 4;
+const PROFILE_PIN_OPEN_MS = 320;
+const PROFILE_PIN_CLOSE_MS = 240;
+const PROFILE_PIN_TEXT = {
+  set: "Set PIN",
+  change: "Change PIN",
+  remove: "Remove PIN",
+  headingSet: (name) => `Create a 4-digit PIN for ${name}.`,
+  headingUnlock: (name) => `Enter your PIN to access ${name}.`,
+  headingConfirm: "Confirm your new PIN.",
+  headingVerifyChange: (name) => `Enter current PIN to change PIN for ${name}.`,
+  headingVerifyRemove: (name) => `Enter current PIN to remove lock for ${name}.`,
+  supportSet: "This PIN will be required before opening this profile.",
+  supportUnlock: "Use your remote or keyboard to enter 4 digits.",
+  supportConfirm: "Re-enter the same 4 digits to finish setup.",
+  supportVerifyChange: "Enter the current 4-digit PIN before setting a new one.",
+  supportVerifyRemove: "Enter the current 4-digit PIN to remove this lock.",
+  mismatch: "PINs did not match. Enter a new PIN again.",
+  forgot: "Forgot PIN? Reset it from your Nuvio account on nuvio website.",
+  back: "Press back to cancel",
+  verifying: "Verifying…",
+  saving: "Saving…",
+  saved: (name) => `PIN saved for ${name}.`,
+  removed: (name) => `PIN lock removed for ${name}.`,
+  saveFailed: "Could not save PIN. Try again.",
+  verifyFailed: "Could not verify PIN. Try again.",
+  invalidPin: "Invalid PIN. Try again.",
+  incorrectCurrent: "Current PIN is incorrect.",
+  lockedRetry: (seconds) => `Profile is locked. Try again in ${seconds}s.`
+};
+
+function keyEventToDigit(event) {
+  const key = String(event?.key || "");
+  if (/^\d$/.test(key)) {
+    return key;
+  }
+  const code = Number(event?.keyCode || event?.which || 0);
+  if (code >= 48 && code <= 57) {
+    return String(code - 48);
+  }
+  if (code >= 96 && code <= 105) {
+    return String(code - 96);
+  }
+  return null;
+}
 
 function getDefaultProfileColor() {
   const value = globalThis?.document
@@ -167,13 +212,27 @@ export const ProfileSelectionScreen = {
     this.optionsProfileId = null;
     this.deleteProfileId = null;
     this.editorState = null;
+    this.pinOverlayState = null;
+    this.pinOverlayRenderState = null;
+    this.pinOverlayPhase = "closed";
+    this.pinOverlayError = "";
+    this.pinActionMessage = "";
+    this.pinEntryStage = "create";
+    this.pinValue = "";
+    this.pinDraftValue = "";
+    this.profilePinEnabled = {};
+    this.isPinOperationInProgress = false;
+    this.pinActionMessageTimer = null;
+    this.pinTransitionTimer = null;
+    this.pinTransitionCallback = null;
     this.avatarCatalog = [];
     this.lastKeyboardActivation = null;
 
     await ProfileSyncService.pull();
     this.profiles = await ProfileManager.getProfiles();
+    await this.refreshProfilePinStates();
     this.lastProfileFocusKey = `profile:${this.activeProfileId || "1"}`;
-    if (!this.isManagementMode && this.profiles.length === 1) {
+    if (!this.isManagementMode && this.profiles.length === 1 && !this.isProfilePinEnabled(this.profiles[0]?.id)) {
       await this.activateProfile(this.profiles[0].id);
       return;
     }
@@ -201,6 +260,15 @@ export const ProfileSelectionScreen = {
 
   getVisibleProfiles() {
     return Array.isArray(this.profiles) ? this.profiles : [];
+  },
+
+  async refreshProfilePinStates() {
+    this.profilePinEnabled = await ProfileSyncService.pullProfileLockStates();
+  },
+
+  isProfilePinEnabled(profileId) {
+    const normalizedId = String(profileId || "");
+    return Boolean(this.profilePinEnabled?.[normalizedId] || this.profilePinEnabled?.[Number(normalizedId)]);
   },
 
   getAvatarImageUrl(avatarId) {
@@ -235,27 +303,40 @@ export const ProfileSelectionScreen = {
     const hint = this.isManagementMode
       ? "Select a profile to manage"
       : "Hold to manage profile";
+    const renderedPinState = this.getRenderedPinOverlayState();
+    const isPinActive = Boolean(renderedPinState);
+    const pinScreenPhaseClass = isPinActive ? ` is-pin-${escapeHtml(this.pinOverlayPhase || "open")}` : "";
 
     this.container.innerHTML = `
-      <div class="profile-screen">
-        <img src="assets/brand/app_logo_wordmark.png" class="profile-logo" alt="Nuvio"/>
+      <div class="profile-screen${pinScreenPhaseClass}">
+        <div class="profile-main-layer"${isPinActive ? ' aria-hidden="true"' : ""}>
+          <img src="assets/brand/app_logo_wordmark.png" class="profile-logo" alt="Nuvio"/>
 
-        <h1 class="profile-title">${escapeHtml(title)}</h1>
-        <p class="profile-subtitle">${escapeHtml(subtitle)}</p>
+          <h1 class="profile-title">${escapeHtml(title)}</h1>
+          <p class="profile-subtitle">${escapeHtml(subtitle)}</p>
 
-        <div class="profile-grid" id="profileGrid">
-          ${this.getVisibleProfiles().map((profile) => this.renderProfileCard(profile)).join("")}
-          ${canAddProfile ? this.renderAddProfileCard() : ""}
+          <div class="profile-grid" id="profileGrid">
+            ${this.getVisibleProfiles().map((profile) => this.renderProfileCard(profile)).join("")}
+            ${canAddProfile ? this.renderAddProfileCard() : ""}
+          </div>
+
+          <p class="profile-hint">${escapeHtml(hint)}</p>
         </div>
-
-        <p class="profile-hint">${escapeHtml(hint)}</p>
+        ${this.renderPinOverlay()}
       </div>
       ${this.renderEditorOverlay()}
       ${this.renderOptionsDialog()}
       ${this.renderDeleteDialog()}
+      ${this.renderPinActionToast()}
     `;
 
     this.bindEvents();
+    if (renderedPinState) {
+      const pinProfile = this.getPinOverlayProfile();
+      if (pinProfile?.avatarColorHex) {
+        this.updateBackground(pinProfile.avatarColorHex);
+      }
+    }
     this.restoreFocus();
   },
 
@@ -414,6 +495,7 @@ export const ProfileSelectionScreen = {
     if (!profile) {
       return "";
     }
+    const pinEnabled = this.isProfilePinEnabled(profile.id);
 
     return `
       <div class="profile-dialog-backdrop" data-action="dismiss-options-dialog">
@@ -428,6 +510,24 @@ export const ProfileSelectionScreen = {
                     tabindex="0">
               Edit
             </button>
+            <button class="profile-dialog-button profile-focusable focusable"
+                    type="button"
+                    data-action="open-profile-pin"
+                    data-profile-id="${escapeHtml(profile.id)}"
+                    data-focus-key="options:pin"
+                    tabindex="0">
+              ${pinEnabled ? PROFILE_PIN_TEXT.change : PROFILE_PIN_TEXT.set}
+            </button>
+            ${pinEnabled ? `
+              <button class="profile-dialog-button profile-focusable focusable"
+                      type="button"
+                      data-action="remove-profile-pin"
+                      data-profile-id="${escapeHtml(profile.id)}"
+                      data-focus-key="options:remove-pin"
+                      tabindex="0">
+                ${PROFILE_PIN_TEXT.remove}
+              </button>
+            ` : ""}
             ${profile.isPrimary ? "" : `
               <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
                       type="button"
@@ -440,6 +540,93 @@ export const ProfileSelectionScreen = {
             `}
           </div>
         </div>
+      </div>
+    `;
+  },
+
+  getPinOverlayProfile() {
+    const profileId = this.pinOverlayState?.profileId || this.pinOverlayRenderState?.profileId;
+    return this.getProfileById(profileId);
+  },
+
+  getRenderedPinOverlayState() {
+    return this.pinOverlayRenderState || this.pinOverlayState;
+  },
+
+  renderPinBoxes() {
+    const isError = Boolean(this.pinOverlayError);
+    return Array.from({ length: PROFILE_PIN_LENGTH }, (_, index) => {
+      const isFilled = index < this.pinValue.length;
+      const isActive = index === Math.min(this.pinValue.length, PROFILE_PIN_LENGTH - 1)
+        && this.pinValue.length < PROFILE_PIN_LENGTH
+        && !this.isPinOperationInProgress;
+      return `
+        <span class="profile-pin-box${isFilled ? " is-filled" : ""}${isActive ? " is-active" : ""}${isError ? " is-error" : ""}" aria-hidden="true">
+          <span class="profile-pin-dot"></span>
+          <span class="profile-pin-cursor"></span>
+        </span>
+      `;
+    }).join("");
+  },
+
+  renderPinOverlay() {
+    const state = this.getRenderedPinOverlayState();
+    const profile = this.getPinOverlayProfile();
+    if (!state || !profile) {
+      return "";
+    }
+    const phaseClass = this.pinOverlayPhase === "closing"
+      ? " is-closing"
+      : this.pinOverlayPhase === "opening"
+        ? " is-opening"
+        : " is-open";
+
+    const isSingleEntryMode = state.type !== "set";
+    let heading = PROFILE_PIN_TEXT.headingSet(profile.name);
+    let support = PROFILE_PIN_TEXT.supportSet;
+
+    if (state.type === "unlock") {
+      heading = PROFILE_PIN_TEXT.headingUnlock(profile.name);
+      support = PROFILE_PIN_TEXT.supportUnlock;
+    } else if (state.type === "verify-change") {
+      heading = PROFILE_PIN_TEXT.headingVerifyChange(profile.name);
+      support = PROFILE_PIN_TEXT.supportVerifyChange;
+    } else if (state.type === "verify-remove") {
+      heading = PROFILE_PIN_TEXT.headingVerifyRemove(profile.name);
+      support = PROFILE_PIN_TEXT.supportVerifyRemove;
+    } else if (this.pinEntryStage === "confirm") {
+      heading = PROFILE_PIN_TEXT.headingConfirm;
+      support = PROFILE_PIN_TEXT.supportConfirm;
+    }
+
+    if (this.pinOverlayError) {
+      support = this.pinOverlayError;
+    } else if (this.isPinOperationInProgress) {
+      support = isSingleEntryMode ? PROFILE_PIN_TEXT.verifying : PROFILE_PIN_TEXT.saving;
+    }
+
+    return `
+      <div class="profile-pin-layer${phaseClass}">
+        <div class="profile-pin-overlay profile-focusable focusable" data-overlay-root="pin" data-focus-key="pin:root" tabindex="0">
+          <div class="profile-pin-content">
+            <div class="profile-pin-heading">${escapeHtml(heading)}</div>
+            <div class="profile-pin-box-row" data-role="pin-box-row">${this.renderPinBoxes()}</div>
+            <div class="profile-pin-support${this.pinOverlayError ? " is-error" : ""}">${escapeHtml(support)}</div>
+            ${isSingleEntryMode ? `<div class="profile-pin-forgot">${escapeHtml(PROFILE_PIN_TEXT.forgot)}</div>` : ""}
+            <div class="profile-pin-back-hint">${escapeHtml(PROFILE_PIN_TEXT.back)}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderPinActionToast() {
+    if (!this.pinActionMessage) {
+      return "";
+    }
+    return `
+      <div class="profile-pin-toast" role="status" aria-live="polite">
+        ${escapeHtml(this.pinActionMessage)}
       </div>
     `;
   },
@@ -493,6 +680,15 @@ export const ProfileSelectionScreen = {
       });
     });
 
+    const pinOverlay = this.container.querySelector(".profile-pin-overlay");
+    if (pinOverlay) {
+      pinOverlay.addEventListener("focus", () => this.handleFocusableFocus(pinOverlay));
+      pinOverlay.addEventListener("click", (event) => {
+        event.stopPropagation();
+        pinOverlay.focus();
+      });
+    }
+
     const nameInput = this.container.querySelector("[data-role='editor-name-input']");
     if (nameInput) {
       nameInput.addEventListener("input", (event) => {
@@ -526,10 +722,19 @@ export const ProfileSelectionScreen = {
         }
       });
     });
+
+    const pinBackdrop = this.container.querySelector(".profile-pin-layer");
+    if (pinBackdrop && pinOverlay) {
+      pinBackdrop.addEventListener("click", (event) => {
+        if (event.target === pinBackdrop) {
+          pinOverlay.focus();
+        }
+      });
+    }
   },
 
   handleFocusableFocus(node) {
-    Array.from(this.container.querySelectorAll(".profile-focusable.focused, .profile-overlay-focusable.focused")).forEach((entry) => {
+    Array.from(this.container.querySelectorAll(".profile-focusable.focused, .profile-overlay-focusable.focused, .profile-pin-overlay.focused")).forEach((entry) => {
       if (entry !== node) {
         entry.classList.remove("focused");
       }
@@ -572,7 +777,7 @@ export const ProfileSelectionScreen = {
     const target = this.findFocusableByKey(this.pendingFocusKey || defaultFocusKey || this.focusKey);
     this.pendingFocusKey = "";
     if (!target) {
-      const fallback = this.container.querySelector(".profile-card, .profile-overlay-focusable, .profile-dialog-button");
+      const fallback = this.container.querySelector(".profile-pin-overlay, .profile-card, .profile-overlay-focusable, .profile-dialog-button");
       if (!fallback) {
         return;
       }
@@ -585,6 +790,9 @@ export const ProfileSelectionScreen = {
   },
 
   getDefaultFocusKey() {
+    if (this.pinOverlayState) {
+      return "pin:root";
+    }
     if (this.deleteProfileId) {
       return "delete:confirm";
     }
@@ -957,6 +1165,254 @@ export const ProfileSelectionScreen = {
     this.render();
   },
 
+  openPinOverlay(type, profile, currentPin = null) {
+    if (!profile) {
+      return;
+    }
+    if (this.pinTransitionTimer) {
+      clearTimeout(this.pinTransitionTimer);
+      this.pinTransitionTimer = null;
+    }
+    this.pinTransitionCallback = null;
+    this.editorState = null;
+    this.optionsProfileId = null;
+    this.deleteProfileId = null;
+    this.pinOverlayState = {
+      type,
+      profileId: String(profile.id),
+      currentPin: currentPin ? String(currentPin) : null
+    };
+    this.pinOverlayRenderState = this.pinOverlayState;
+    this.pinOverlayPhase = "opening";
+    this.pinOverlayError = "";
+    this.pinEntryStage = "create";
+    this.pinValue = "";
+    this.pinDraftValue = "";
+    this.pendingFocusKey = "pin:root";
+    this.render();
+    this.pinTransitionTimer = setTimeout(() => {
+      this.pinTransitionTimer = null;
+      if (!this.pinOverlayState) {
+        return;
+      }
+      this.pinOverlayRenderState = this.pinOverlayState;
+      this.pinOverlayPhase = "open";
+      this.render();
+    }, PROFILE_PIN_OPEN_MS);
+  },
+
+  closePinOverlay({ focusKey = "", afterClose = null } = {}) {
+    if (this.pinOverlayPhase === "closing") {
+      return;
+    }
+    const renderState = this.pinOverlayState || this.pinOverlayRenderState;
+    const profileId = renderState?.profileId;
+    if (!renderState) {
+      return;
+    }
+    if (this.pinTransitionTimer) {
+      clearTimeout(this.pinTransitionTimer);
+      this.pinTransitionTimer = null;
+    }
+    this.pinTransitionCallback = typeof afterClose === "function" ? afterClose : null;
+    this.pinOverlayState = null;
+    this.pinOverlayRenderState = renderState;
+    this.pinOverlayPhase = "closing";
+    this.isPinOperationInProgress = false;
+    this.pendingFocusKey = focusKey || (profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1"));
+    this.render();
+    this.pinTransitionTimer = setTimeout(async () => {
+      const callback = this.pinTransitionCallback;
+      this.pinTransitionTimer = null;
+      this.pinTransitionCallback = null;
+      this.pinOverlayRenderState = null;
+      this.pinOverlayPhase = "closed";
+      this.pinOverlayError = "";
+      this.pinEntryStage = "create";
+      this.pinValue = "";
+      this.pinDraftValue = "";
+      this.render();
+      if (callback) {
+        await callback();
+      }
+    }, PROFILE_PIN_CLOSE_MS);
+  },
+
+  setPinActionMessage(message) {
+    if (this.pinActionMessageTimer) {
+      clearTimeout(this.pinActionMessageTimer);
+      this.pinActionMessageTimer = null;
+    }
+    this.pinActionMessage = String(message || "");
+    if (!this.pinActionMessage) {
+      this.render();
+      return;
+    }
+    this.render();
+    this.pinActionMessageTimer = setTimeout(() => {
+      this.pinActionMessageTimer = null;
+      this.pinActionMessage = "";
+      this.render();
+    }, 2600);
+  },
+
+  triggerPinShake() {
+    const row = this.container?.querySelector("[data-role='pin-box-row']");
+    if (!row) {
+      return;
+    }
+    row.classList.remove("is-shaking");
+    void row.offsetWidth;
+    row.classList.add("is-shaking");
+  },
+
+  async submitCompletedPin(pin) {
+    const state = this.pinOverlayState;
+    const profile = this.getPinOverlayProfile();
+    if (!state || !profile || this.isPinOperationInProgress) {
+      return;
+    }
+
+    this.isPinOperationInProgress = true;
+    this.render();
+
+    if (state.type === "set") {
+      const success = await ProfileSyncService.setProfilePin(profile.id, pin, state.currentPin);
+      this.isPinOperationInProgress = false;
+      if (success) {
+        this.profilePinEnabled = {
+          ...this.profilePinEnabled,
+          [String(profile.id)]: true
+        };
+        this.pinOverlayError = "";
+        this.setPinActionMessage(PROFILE_PIN_TEXT.saved(profile.name));
+        this.closePinOverlay({ focusKey: `profile:${profile.id}` });
+        return;
+      }
+      this.pinOverlayError = PROFILE_PIN_TEXT.saveFailed;
+      this.pinValue = "";
+      this.render();
+      this.triggerPinShake();
+      return;
+    }
+
+    if (state.type === "verify-remove") {
+      const success = await ProfileSyncService.clearProfilePin(profile.id, pin);
+      this.isPinOperationInProgress = false;
+      if (success) {
+        this.profilePinEnabled = {
+          ...this.profilePinEnabled,
+          [String(profile.id)]: false
+        };
+        this.pinOverlayError = "";
+        this.setPinActionMessage(PROFILE_PIN_TEXT.removed(profile.name));
+        this.closePinOverlay({ focusKey: `profile:${profile.id}` });
+        return;
+      }
+      this.pinOverlayError = PROFILE_PIN_TEXT.incorrectCurrent;
+      this.pinValue = "";
+      this.render();
+      this.triggerPinShake();
+      return;
+    }
+
+    const verification = await ProfileSyncService.verifyProfilePin(profile.id, pin);
+    this.isPinOperationInProgress = false;
+    if (!verification) {
+      this.pinOverlayError = PROFILE_PIN_TEXT.verifyFailed;
+      this.pinValue = "";
+      this.render();
+      this.triggerPinShake();
+      return;
+    }
+
+    if (verification.unlocked) {
+      if (state.type === "unlock") {
+        this.pinOverlayError = "";
+        this.isPinOperationInProgress = true;
+        this.render();
+        try {
+          await this.activateProfile(profile.id);
+        } finally {
+          this.isPinOperationInProgress = false;
+        }
+        return;
+      }
+      if (state.type === "verify-change") {
+        this.openPinOverlay("set", profile, pin);
+        return;
+      }
+    }
+
+    this.pinOverlayError = verification.retryAfterSeconds > 0
+      ? PROFILE_PIN_TEXT.lockedRetry(verification.retryAfterSeconds)
+      : (state.type === "unlock" ? PROFILE_PIN_TEXT.invalidPin : PROFILE_PIN_TEXT.incorrectCurrent);
+    this.pinValue = "";
+    this.render();
+    this.triggerPinShake();
+  },
+
+  async handleCompletedPinEntry() {
+    if (this.pinValue.length !== PROFILE_PIN_LENGTH || this.isPinOperationInProgress || !this.pinOverlayState) {
+      return;
+    }
+    if (this.pinOverlayState.type !== "set") {
+      await this.submitCompletedPin(this.pinValue);
+      return;
+    }
+    if (this.pinEntryStage === "create") {
+      this.pinDraftValue = this.pinValue;
+      this.pinValue = "";
+      this.pinOverlayError = "";
+      this.pinEntryStage = "confirm";
+      this.render();
+      return;
+    }
+    if (this.pinDraftValue === this.pinValue) {
+      await this.submitCompletedPin(this.pinValue);
+      return;
+    }
+    this.pinValue = "";
+    this.pinDraftValue = "";
+    this.pinEntryStage = "create";
+    this.pinOverlayError = PROFILE_PIN_TEXT.mismatch;
+    this.render();
+    this.triggerPinShake();
+  },
+
+  async handlePinOverlayKeyDown(event) {
+    const code = Number(event?.keyCode || 0);
+    const key = String(event?.key || "");
+    if (code === 8 || code === 46 || key === "Backspace" || key === "Delete") {
+      event?.preventDefault?.();
+      if (!this.isPinOperationInProgress && this.pinValue) {
+        this.pinValue = this.pinValue.slice(0, -1);
+        this.pinOverlayError = "";
+        this.render();
+      }
+      return true;
+    }
+    if (code === 27 || code === 461 || code === 10009 || key === "Escape") {
+      event?.preventDefault?.();
+      this.closePinOverlay();
+      return true;
+    }
+    if ([37, 38, 39, 40, 13].includes(code)) {
+      event?.preventDefault?.();
+      return true;
+    }
+    const digit = keyEventToDigit(event);
+    if (!digit || this.isPinOperationInProgress || this.pinValue.length >= PROFILE_PIN_LENGTH) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.pinValue += digit;
+    this.pinOverlayError = "";
+    this.render();
+    await this.handleCompletedPinEntry();
+    return true;
+  },
+
   openDeleteDialog(profile) {
     if (!profile || profile.isPrimary) {
       return;
@@ -1012,6 +1468,7 @@ export const ProfileSelectionScreen = {
 
     if (success !== false) {
       await ProfileSyncService.push();
+      await this.refreshProfilePinStates();
     }
     await this.reloadProfiles(`profile:${focusProfileId}`);
   },
@@ -1027,7 +1484,9 @@ export const ProfileSelectionScreen = {
 
     const deleted = await ProfileManager.deleteProfile(profile.id);
     if (deleted !== false) {
+      await ProfileSyncService.deleteProfileData(profile.id);
       await ProfileSyncService.push();
+      await this.refreshProfilePinStates();
     }
 
     const remainingProfiles = await ProfileManager.getProfiles();
@@ -1041,6 +1500,7 @@ export const ProfileSelectionScreen = {
 
   async reloadProfiles(focusKey = "") {
     this.profiles = await ProfileManager.getProfiles();
+    await this.refreshProfilePinStates();
     this.activeProfileId = String(ProfileManager.getActiveProfileId() || this.activeProfileId || "1");
     this.pendingFocusKey = focusKey;
     this.render();
@@ -1087,6 +1547,20 @@ export const ProfileSelectionScreen = {
       this.openEditEditor(this.getProfileById(profileId));
       return;
     }
+    if (action === "open-profile-pin") {
+      const profile = this.getProfileById(profileId);
+      if (profile) {
+        this.openPinOverlay(this.isProfilePinEnabled(profile.id) ? "verify-change" : "set", profile);
+      }
+      return;
+    }
+    if (action === "remove-profile-pin") {
+      const profile = this.getProfileById(profileId);
+      if (profile) {
+        this.openPinOverlay("verify-remove", profile);
+      }
+      return;
+    }
     if (action === "confirm-delete-profile") {
       this.openDeleteDialog(this.getProfileById(profileId));
       return;
@@ -1111,6 +1585,11 @@ export const ProfileSelectionScreen = {
       return;
     }
 
+    if (this.isProfilePinEnabled(profile.id)) {
+      this.openPinOverlay("unlock", profile);
+      return;
+    }
+
     await this.activateProfile(profile.id);
   },
 
@@ -1130,7 +1609,8 @@ export const ProfileSelectionScreen = {
 
     const code = Number(event?.keyCode || 0);
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
-    const overlayRoot = this.container.querySelector("[data-overlay-root='delete']")
+    const overlayRoot = this.container.querySelector("[data-overlay-root='pin']")
+      || this.container.querySelector("[data-overlay-root='delete']")
       || this.container.querySelector("[data-overlay-root='options']")
       || this.container.querySelector("[data-overlay-root='editor']");
     const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
@@ -1141,6 +1621,10 @@ export const ProfileSelectionScreen = {
 
     if (overlayRoot) {
       this.cancelPendingProfileHold();
+      if (overlayRoot.dataset.overlayRoot === "pin") {
+        await this.handlePinOverlayKeyDown(event);
+        return;
+      }
       const isEditorOverlay = overlayRoot.dataset.overlayRoot === "editor";
       const overlaySelector = isEditorOverlay
         ? ".profile-overlay-focusable:not(.is-disabled)"
@@ -1208,7 +1692,7 @@ export const ProfileSelectionScreen = {
     if (!Platform.isTizen()) {
       return;
     }
-    if (Number(event?.keyCode || 0) !== 13 || this.optionsProfileId || this.deleteProfileId || this.editorState) {
+    if (Number(event?.keyCode || 0) !== 13 || this.pinOverlayState || this.optionsProfileId || this.deleteProfileId || this.editorState) {
       return;
     }
     const current = this.container?.querySelector(".profile-card.focused") || null;
@@ -1218,6 +1702,10 @@ export const ProfileSelectionScreen = {
   },
 
   consumeBackRequest() {
+    if (this.pinOverlayState) {
+      this.closePinOverlay();
+      return true;
+    }
     if (this.deleteProfileId) {
       this.closeDeleteDialog();
       return true;
@@ -1230,11 +1718,23 @@ export const ProfileSelectionScreen = {
       this.closeEditor();
       return true;
     }
+    if (!this.isManagementMode) {
+      return true;
+    }
     return false;
   },
 
   cleanup() {
     this.cancelPendingProfileHold();
+    if (this.pinActionMessageTimer) {
+      clearTimeout(this.pinActionMessageTimer);
+      this.pinActionMessageTimer = null;
+    }
+    if (this.pinTransitionTimer) {
+      clearTimeout(this.pinTransitionTimer);
+      this.pinTransitionTimer = null;
+    }
+    this.pinTransitionCallback = null;
     const container = document.getElementById("profileSelection");
     if (!container) {
       return;
