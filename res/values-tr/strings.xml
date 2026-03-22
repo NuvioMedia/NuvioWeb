@@ -545,7 +545,7 @@
     <string name="trakt_retry">Tekrar Dene</string>
     <string name="trakt_back">Geri</string>
     <string name="trakt_cw_window_title">İzlemeye Devam Etme Penceresi</string>
-    <string name="trakt_cw_window_subtitle">Trakt aktivitenizin ne kadarının \u0027izlemeye devam ediliyor\u0027 kısmında görüneceğini seçin.</string>
+    <string name="trakt_cw_window_subtitle">Trakt aktivitenizin ne kadarının 'izlemeye devam ediliyor' kısmında görüneceğini seçin.</string>
     <string name="trakt_unaired_dialog_title">Yayınlanmamış Sıradaki Bölümler</string>
     <string name="trakt_unaired_dialog_subtitle">Yaklaşan bölümlerin yayınlanmadan önce "İzlemeye Devam Et" sekmesine dahil edilip edilmeyeceğini seçin.</string>
     <string name="trakt_show_unaired">Yayınlanmamış bölümleri göster</string>
@@ -569,7 +569,7 @@
     <string name="debug_manual_signin_subtitle">E-posta ve parola ile giriş yapın (Supabase yetkilendirmesi)</string>
     <string name="debug_email_placeholder">E-Posta</string>
     <string name="debug_password_placeholder">Şifre</string>
-    <string name="debug_signing_in">Giriş yapılıyor\u2026</string>
+    <string name="debug_signing_in">Giriş yapılıyor…</string>
     <string name="debug_sign_in">Giriş Yap</string>
     <string name="debug_error_dialog_title">Oynatma Hatası</string>
     <string name="debug_error_dialog_subtitle">Oynatma sırasında bir hata oluştu.\n\nHata: Test simülasyon hatası - bu gerçek bir hata değil. Kaynak HTTP 503 döndürdü (Hizmet Kullanılamıyor).</string>
@@ -592,7 +592,7 @@
     <string name="profile_avatar_color">Avatar Rengi</string>
     <string name="profile_use_primary_addons">Birincil profilin eklentilerini kullan</string>
     <string name="profile_use_primary_plugins">Birincil profilin uzantılarını kullan</string>
-    <string name="profile_creating">Oluşturuluyor\u2026</string>
+    <string name="profile_creating">Oluşturuluyor…</string>
     <string name="profile_create_btn">Oluştur</string>
     <string name="profile_confirm">Onayla</string>
     <string name="profile_delete">Sil</string>
@@ -711,7 +711,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Altyazılar</string>
     <string name="subtitle_no_builtin">Dosyaya gömülü altyazı yok</string>
-    <string name="subtitle_loading_addon">Altyazılar eklentilerden yükleniyor\u2026</string>
+    <string name="subtitle_loading_addon">Altyazılar eklentilerden yükleniyor…</string>
     <string name="subtitle_no_addon">Eklentiler aracılığıyla altyazı bulunamadı</string>
     <string name="subtitle_text_color">Metin Rengi</string>
     <string name="subtitle_outline_color">Dış Çizgi Rengi</string>
@@ -778,7 +778,7 @@
     <string name="search_voice_unavailable">Bu cihazda sesli arama kullanılamıyor.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Trakt kütüphanesi senkronize ediliyor\u2026</string>
+    <string name="library_syncing">Trakt kütüphanesi senkronize ediliyor…</string>
     <string name="library_title">Kütüphane</string>
     <string name="library_filter_list">Yalnızca Liste</string>
     <string name="library_filter_type">Kategori</string>
@@ -812,14 +812,14 @@
     <string name="library_empty_trakt_subtitle">İçerikleri izleme listenize eklemek için içerik detaylarındaki + tuşunu kullanın</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Yükleniyor\u2026</string>
+    <string name="account_loading">Yükleniyor…</string>
     <string name="account_sync_description">Kütüphanenizi, görüntüleme ilerlemenizi, eklentilerinizi ve uzantılarınızı cihazlar arasında eşitleyin.</string>
     <string name="account_sync_restart_note">Eşitleme tüm cihazlarda anında gerçekleşmez. Hesabınıza girdikten veya başka bir yerde yaptığınız değişiklikleri görebilmek için cihazı yeniden başlatın.</string>
     <string name="account_signin_qr_title">QR ile Oturum Aç</string>
     <string name="account_signin_qr_subtitle">QR kodunu taratıp e-posta ile girişinizi telefondan tamamlayın</string>
     <string name="account_signed_in_label">Oturum açıldı</string>
     <string name="account_total_label">Toplam</string>
-    <string name="account_loading_sync">Senkronizasyon verileri yükleniyor\u2026</string>
+    <string name="account_loading_sync">Senkronizasyon verileri yükleniyor…</string>
     <string name="account_sign_out">Oturumu Kapat</string>
 
     <!-- AuthSignInScreen -->
@@ -830,7 +830,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">QR Kod ile Oturum Aç</string>
     <string name="auth_qr_account_login">Oturum Aç</string>
-    <string name="auth_qr_finishing">Hesap doğrulanıyor\u2026</string>
+    <string name="auth_qr_finishing">Hesap doğrulanıyor…</string>
     <string name="auth_qr_code_label">Kodunuz: %1$s</string>
     <string name="auth_qr_expires">Geçerlilik süresi doluyor: %1$s</string>
     <string name="auth_qr_phone_hint">E-posta/şifre ile giriş yapmak için telefonunuzu kullanın. Daha hızlı giriş için TV sadece QR ekranında kalır.</string>
@@ -840,9 +840,9 @@
     <string name="auth_qr_continue_without_account">Hesapsız devam et</string>
     <string name="auth_qr_connected">Hesabınız bu TV\'ye bağlandı.</string>
     <string name="auth_qr_synced_data">Senkronize edilmiş verileriniz</string>
-    <string name="auth_qr_generating">QR oluşturuluyor\u2026</string>
+    <string name="auth_qr_generating">QR oluşturuluyor…</string>
     <string name="auth_qr_unavailable">QR kodu kullanılamıyor. Yeniden denemek için yenileyin.</string>
-    <string name="auth_qr_please_wait">Lütfen bekleyin\u2026</string>
+    <string name="auth_qr_please_wait">Lütfen bekleyin…</string>
     <string name="auth_qr_continue">Devam Et</string>
     <string name="auth_qr_back">Geri</string>
 
@@ -899,7 +899,7 @@
     <string name="profile_delete_confirm_title">Bu Profil Silinsin mi?</string>
     <string name="profile_delete_confirm_subtitle">Bu işlem, profili ve o profile ait kişisel kütüphane, izleme geçmişi ve tüm eklenti tercihlerini kalıcı olarak sistemden siler. Bu eylem geri döndürülemez.</string>
     <string name="profile_delete_btn">Profili Tamamen Sil</string>
-    <string name="profile_saving">Kaydediliyor\u2026</string>
+    <string name="profile_saving">Kaydediliyor…</string>
 
     <!-- CastDetailScreen -->
     <string name="cast_detail_error">İçerik çekilirken bilinmeyen bir sorun ile karşılaşıldı.</string>

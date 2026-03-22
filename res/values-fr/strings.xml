@@ -435,7 +435,7 @@
     <string name="debug_manual_signin_subtitle">Se connecter avec un e-mail et un mot de passe (auth Supabase)</string>
     <string name="debug_email_placeholder">E-mail</string>
     <string name="debug_password_placeholder">Mot de passe</string>
-    <string name="debug_signing_in">Connexion en cours\u2026</string>
+    <string name="debug_signing_in">Connexion en cours…</string>
     <string name="debug_sign_in">Se connecter</string>
     <string name="debug_error_dialog_title">Erreur de lecture</string>
     <string name="debug_error_dialog_subtitle">Une erreur est survenue pendant la lecture.\n\nErreur : Erreur simulée de test - ceci n\'est pas une vraie erreur. La source a renvoyé HTTP 503 (Service indisponible).</string>
@@ -455,7 +455,7 @@
     <string name="profile_avatar_color">Couleur de l\'avatar</string>
     <string name="profile_use_primary_addons">Utiliser les addons du profil principal</string>
     <string name="profile_use_primary_plugins">Utiliser les plugins du profil principal</string>
-    <string name="profile_creating">Création en cours\u2026</string>
+    <string name="profile_creating">Création en cours…</string>
     <string name="profile_create_btn">Créer</string>
     <string name="profile_confirm">Confirmer</string>
     <string name="profile_delete">Supprimer</string>
@@ -553,7 +553,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Sous-titres</string>
     <string name="subtitle_no_builtin">Aucun sous-titre intégré disponible</string>
-    <string name="subtitle_loading_addon">Chargement des sous-titres depuis les addons\u2026</string>
+    <string name="subtitle_loading_addon">Chargement des sous-titres depuis les addons…</string>
     <string name="subtitle_no_addon">Aucun sous-titre d\'addon disponible</string>
     <string name="subtitle_text_color">Couleur du texte</string>
     <string name="subtitle_outline_color">Couleur du contour</string>
@@ -591,7 +591,7 @@
     <string name="search_placeholder">Rechercher des films et séries</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Synchronisation de la bibliothèque Trakt\u2026</string>
+    <string name="library_syncing">Synchronisation de la bibliothèque Trakt…</string>
     <string name="library_title">Bibliothèque</string>
     <string name="library_filter_list">Liste</string>
     <string name="library_filter_type">Type</string>
@@ -620,13 +620,13 @@
     <string name="library_empty_trakt_subtitle">Utilisez + dans les détails pour ajouter des éléments à la liste de suivi ou aux listes</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Chargement\u2026</string>
+    <string name="account_loading">Chargement…</string>
     <string name="account_sync_description">Synchronisez votre bibliothèque, votre progression, vos addons et plugins entre vos appareils.</string>
     <string name="account_signin_qr_title">Connexion par QR</string>
     <string name="account_signin_qr_subtitle">Scannez un QR code et complétez la connexion par e-mail sur votre téléphone</string>
     <string name="account_signed_in_label">Connecté</string>
     <string name="account_total_label">Total</string>
-    <string name="account_loading_sync">Chargement des données de synchronisation\u2026</string>
+    <string name="account_loading_sync">Chargement des données de synchronisation…</string>
     <string name="account_sign_out">Déconnexion</string>
 
     <!-- AuthSignInScreen -->
@@ -637,7 +637,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Connexion par QR</string>
     <string name="auth_qr_account_login">Connexion au compte</string>
-    <string name="auth_qr_finishing">Finalisation de la connexion\u2026</string>
+    <string name="auth_qr_finishing">Finalisation de la connexion…</string>
     <string name="auth_qr_code_label">Code : %1$s</string>
     <string name="auth_qr_expires">Expire dans %1$s</string>
 

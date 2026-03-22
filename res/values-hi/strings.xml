@@ -583,7 +583,7 @@
     <string name="debug_manual_signin_subtitle">ईमेल और पासवर्ड से साइन इन करें (Supabase auth)</string>
     <string name="debug_email_placeholder">ईमेल</string>
     <string name="debug_password_placeholder">पासवर्ड</string>
-    <string name="debug_signing_in">साइन इन हो रहा है\u2026</string>
+    <string name="debug_signing_in">साइन इन हो रहा है…</string>
     <string name="debug_sign_in">साइन इन</string>
     <string name="debug_error_dialog_title">प्लेबैक एरर</string>
     <string name="debug_error_dialog_subtitle">प्लेबैक के दौरान एक त्रुटि हुई.\n\nError: टेस्ट सिम्युलेटेड एरर - यह वास्तविक विफलता नहीं है. सोर्स ने HTTP 503 (Service Unavailable) लौटाया.</string>
@@ -606,7 +606,7 @@
     <string name="profile_avatar_color">अवतार रंग</string>
     <string name="profile_use_primary_addons">प्राइमरी प्रोफाइल के ऐडऑन उपयोग करें</string>
     <string name="profile_use_primary_plugins">प्राइमरी प्रोफाइल के प्लगइन उपयोग करें</string>
-    <string name="profile_creating">बनाया जा रहा है\u2026</string>
+    <string name="profile_creating">बनाया जा रहा है…</string>
     <string name="profile_create_btn">बनाएँ</string>
     <string name="profile_confirm">पुष्टि करें</string>
     <string name="profile_delete">हटाएँ</string>
@@ -725,7 +725,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">सबटाइटल</string>
     <string name="subtitle_no_builtin">कोई बिल्ट-इन सबटाइटल उपलब्ध नहीं</string>
-    <string name="subtitle_loading_addon">ऐडऑन से सबटाइटल लोड हो रहे हैं\u2026</string>
+    <string name="subtitle_loading_addon">ऐडऑन से सबटाइटल लोड हो रहे हैं…</string>
     <string name="subtitle_no_addon">कोई ऐडऑन सबटाइटल उपलब्ध नहीं</string>
     <string name="subtitle_text_color">टेक्स्ट रंग</string>
     <string name="subtitle_outline_color">आउटलाइन रंग</string>
@@ -792,7 +792,7 @@
     <string name="search_voice_unavailable">इस डिवाइस पर वॉइस सर्च उपलब्ध नहीं है।</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Trakt लाइब्रेरी सिंक हो रही है\u2026</string>
+    <string name="library_syncing">Trakt लाइब्रेरी सिंक हो रही है…</string>
     <string name="library_title">लाइब्रेरी</string>
     <string name="library_filter_list">लिस्ट</string>
     <string name="library_filter_type">प्रकार</string>
@@ -826,14 +826,14 @@
     <string name="library_empty_trakt_subtitle">वॉचलिस्ट या लिस्ट में आइटम जोड़ने के लिए डिटेल्स में + उपयोग करें</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">लोड हो रहा है\u2026</string>
+    <string name="account_loading">लोड हो रहा है…</string>
     <string name="account_sync_description">अपनी लाइब्रेरी, वॉच प्रोग्रेस, ऐडऑन और प्लगइन को डिवाइसों के बीच सिंक करें।</string>
     <string name="account_sync_restart_note">सिंक सक्रिय डिवाइसों के बीच रियल-टाइम नहीं है। साइन इन करने के बाद या अन्य जगह किए बदलाव लाने के लिए इस डिवाइस को रीस्टार्ट करें।</string>
     <string name="account_signin_qr_title">QR से साइन इन</string>
     <string name="account_signin_qr_subtitle">QR कोड स्कैन करें और अपने फोन पर ईमेल लॉगिन पूरा करें</string>
     <string name="account_signed_in_label">साइन इन</string>
     <string name="account_total_label">कुल</string>
-    <string name="account_loading_sync">सिंक डेटा लोड हो रहा है\u2026</string>
+    <string name="account_loading_sync">सिंक डेटा लोड हो रहा है…</string>
     <string name="account_sign_out">साइन आउट</string>
 
     <!-- AuthSignInScreen -->
@@ -844,7 +844,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">QR से साइन इन</string>
     <string name="auth_qr_account_login">अकाउंट लॉगिन</string>
-    <string name="auth_qr_finishing">साइन इन पूरा किया जा रहा है\u2026</string>
+    <string name="auth_qr_finishing">साइन इन पूरा किया जा रहा है…</string>
     <string name="auth_qr_code_label">कोड: %1$s</string>
     <string name="auth_qr_expires">%1$s में समाप्त</string>
     <string name="auth_qr_phone_hint">ईमेल/पासवर्ड से साइन इन करने के लिए फोन का उपयोग करें। तेज लॉगिन के लिए टीवी QR-केवल रहता है।</string>
@@ -854,9 +854,9 @@
     <string name="auth_qr_continue_without_account">अकाउंट के बिना जारी रखें</string>
     <string name="auth_qr_connected">आपका अकाउंट इस टीवी से जुड़ा है।</string>
     <string name="auth_qr_synced_data">आपका सिंक किया हुआ डेटा</string>
-    <string name="auth_qr_generating">QR बनाया जा रहा है\u2026</string>
+    <string name="auth_qr_generating">QR बनाया जा रहा है…</string>
     <string name="auth_qr_unavailable">QR उपलब्ध नहीं। फिर से कोशिश करने के लिए रीफ्रेश करें।</string>
-    <string name="auth_qr_please_wait">कृपया प्रतीक्षा करें\u2026</string>
+    <string name="auth_qr_please_wait">कृपया प्रतीक्षा करें…</string>
     <string name="auth_qr_continue">जारी रखें</string>
     <string name="auth_qr_back">वापस</string>
 
@@ -913,7 +913,7 @@
     <string name="profile_delete_confirm_title">प्रोफाइल हटाएँ?</string>
     <string name="profile_delete_confirm_subtitle">यह प्रोफाइल और उससे जुड़ा सभी डेटा स्थायी रूप से हटा देगा जिसमें लाइब्रेरी, वॉच हिस्ट्री और ऐडऑन सेटिंग शामिल हैं। इसे वापस नहीं किया जा सकता।</string>
     <string name="profile_delete_btn">प्रोफाइल हटाएँ</string>
-    <string name="profile_saving">सेव हो रहा है\u2026</string>
+    <string name="profile_saving">सेव हो रहा है…</string>
 
     <!-- CastDetailScreen -->
     <string name="cast_detail_error">कुछ गलत हो गया</string>

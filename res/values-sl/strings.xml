@@ -527,7 +527,7 @@
     <string name="debug_manual_signin_subtitle">Prijava z e-pošto in geslom (Supabase auth)</string>
     <string name="debug_email_placeholder">E-pošta</string>
     <string name="debug_password_placeholder">Geslo</string>
-    <string name="debug_signing_in">Prijava\u2026</string>
+    <string name="debug_signing_in">Prijava…</string>
     <string name="debug_sign_in">Prijava</string>
     <string name="debug_error_dialog_title">Napaka pri predvajanju</string>
     <string name="debug_error_dialog_subtitle">Prišlo je do napake med predvajanjem.\n\nNapaka: Testna simulirana napaka - to ni resnična napaka. Vir je vrnil HTTP 503 (Storitev ni na voljo).</string>
@@ -550,7 +550,7 @@
     <string name="profile_avatar_color">Barva avatarja</string>
     <string name="profile_use_primary_addons">Uporabi dodatke glavnega profila</string>
     <string name="profile_use_primary_plugins">Uporabi vtičnike glavnega profila</string>
-    <string name="profile_creating">Ustvarjanje\u2026</string>
+    <string name="profile_creating">Ustvarjanje…</string>
     <string name="profile_create_btn">Ustvari</string>
     <string name="profile_confirm">Potrdi</string>
     <string name="profile_delete">Izbriši</string>
@@ -665,7 +665,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Podnapisi</string>
     <string name="subtitle_no_builtin">Vgrajeni podnapisi niso na voljo</string>
-    <string name="subtitle_loading_addon">Nalaganje podnapisov iz dodatkov\u2026</string>
+    <string name="subtitle_loading_addon">Nalaganje podnapisov iz dodatkov…</string>
     <string name="subtitle_no_addon">Podnapisi iz dodatkov niso na voljo</string>
     <string name="subtitle_text_color">Barva besedila</string>
     <string name="subtitle_outline_color">Barva obrobe</string>
@@ -728,7 +728,7 @@
     <string name="search_voice_failed">Prepoznavanje govora ni uspelo. Poskusite znova.</string>
     <string name="search_voice_unavailable">Glasovno iskanje na tej napravi ni na voljo.</string>														  
 	<!-- LibraryScreen -->
-    <string name="library_syncing">Sinhronizacija knjižnice Trakt\u2026</string>
+    <string name="library_syncing">Sinhronizacija knjižnice Trakt…</string>
     <string name="library_title">Knjižnica</string>
     <string name="library_filter_list">Seznam</string>
     <string name="library_filter_type">Vrsta</string>
@@ -762,13 +762,13 @@
     <string name="library_empty_trakt_subtitle">Uporabite + v podrobnostih, da dodate elemente na seznam za ogled ali sezname</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Nalaganje\u2026</string>
+    <string name="account_loading">Nalaganje…</string>
     <string name="account_sync_description">Sinhronizirajte svojo knjižnico, napredek ogledov, dodatke in vtičnike na več napravah.</string>
     <string name="account_signin_qr_title">Prijava s QR</string>
     <string name="account_signin_qr_subtitle">Skenirajte QR kodo in dokončajte prijavo z e-pošto na telefonu</string>
     <string name="account_signed_in_label">Prijavljeni</string>
     <string name="account_total_label">Skupaj</string>
-    <string name="account_loading_sync">Nalaganje podatkov o sinhronizaciji\u2026</string>
+    <string name="account_loading_sync">Nalaganje podatkov o sinhronizaciji…</string>
     <string name="account_sign_out">Odjava</string>
 
     <!-- AuthSignInScreen -->
@@ -779,7 +779,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Prijava s QR kodo</string>
     <string name="auth_qr_account_login">Prijava v račun</string>
-    <string name="auth_qr_finishing">Dokončanje prijave\u2026</string>
+    <string name="auth_qr_finishing">Dokončanje prijave…</string>
     <string name="auth_qr_code_label">Koda: %1$s</string>
     <string name="auth_qr_expires">Poteče v %1$s</string>
 	<string name="auth_qr_phone_hint">Uporabite telefon za prijavo z e-pošto/geslom. TV ostane na QR-prijavi za hitrejšo prijavo.</string>
@@ -789,9 +789,9 @@
     <string name="auth_qr_continue_without_account">Nadaljuj brez računa</string>
     <string name="auth_qr_connected">Vaš račun je povezan s tem televizorjem.</string>
     <string name="auth_qr_synced_data">Vaši sinhronizirani podatki</string>
-    <string name="auth_qr_generating">Ustvarjanje QR kode\u2026</string>
+    <string name="auth_qr_generating">Ustvarjanje QR kode…</string>
     <string name="auth_qr_unavailable">QR koda ni na voljo. Osvežite za ponovni poskus.</string>
-    <string name="auth_qr_please_wait">Prosimo, počakajte\u2026</string>
+    <string name="auth_qr_please_wait">Prosimo, počakajte…</string>
     <string name="auth_qr_continue">Nadaljuj</string>
     <string name="auth_qr_back">Nazaj</string>																															
 	<!-- SyncCodeGenerateScreen -->
@@ -847,7 +847,7 @@
     <string name="profile_delete_confirm_title">Izbrišem profil?</string>
     <string name="profile_delete_confirm_subtitle">S tem boste trajno izbrisali ta profil in vse njegove podatke, vključno s knjižnico, zgodovino ogledov in nastavitvami dodatkov. Tega dejanja ni mogoče razveljaviti.</string>
     <string name="profile_delete_btn">Izbriši profil</string>
-    <string name="profile_saving">Shranjevanje\u2026</string>																	   
+    <string name="profile_saving">Shranjevanje…</string>																	   
 	<!-- CastDetailScreen -->
     <string name="cast_detail_error">Nekaj je šlo narobe</string>
     <string name="cast_detail_retry">Poskusi znova</string>

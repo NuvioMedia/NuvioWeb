@@ -508,7 +508,7 @@
     <string name="debug_manual_signin_subtitle">Đăng nhập bằng email và mật khẩu (Supabase auth)</string>
     <string name="debug_email_placeholder">Email</string>
     <string name="debug_password_placeholder">Mật khẩu</string>
-    <string name="debug_signing_in">Đang đăng nhập\u2026</string>
+    <string name="debug_signing_in">Đang đăng nhập…</string>
     <string name="debug_sign_in">Đăng nhập</string>
     <string name="debug_error_dialog_title">Lỗi phát</string>
     <string name="debug_error_dialog_subtitle">Đã xảy ra lỗi trong quá trình phát.\n\nLỗi: Lỗi giả lập kiểm tra - đây không phải lỗi thực. Nguồn trả về HTTP 503 (Dịch vụ không khả dụng).</string>
@@ -527,7 +527,7 @@
     <string name="profile_avatar_color">Màu avatar</string>
     <string name="profile_use_primary_addons">Dùng addon của hồ sơ chính</string>
     <string name="profile_use_primary_plugins">Dùng plugin của hồ sơ chính</string>
-    <string name="profile_creating">Đang tạo\u2026</string>
+    <string name="profile_creating">Đang tạo…</string>
     <string name="profile_create_btn">Tạo</string>
     <string name="profile_confirm">Xác nhận</string>
     <string name="profile_delete">Xoá</string>
@@ -632,7 +632,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Phụ đề</string>
     <string name="subtitle_no_builtin">Không có phụ đề tích hợp</string>
-    <string name="subtitle_loading_addon">Đang tải phụ đề từ addon\u2026</string>
+    <string name="subtitle_loading_addon">Đang tải phụ đề từ addon…</string>
     <string name="subtitle_no_addon">Không có phụ đề từ addon</string>
     <string name="subtitle_text_color">Màu chữ</string>
     <string name="subtitle_outline_color">Màu viền</string>
@@ -698,7 +698,7 @@
     <string name="search_voice_unavailable">Tìm kiếm bằng giọng nói không khả dụng trên thiết bị này.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Đang đồng bộ thư viện Trakt\u2026</string>
+    <string name="library_syncing">Đang đồng bộ thư viện Trakt…</string>
     <string name="library_title">Thư viện</string>
     <string name="library_filter_list">Danh sách</string>
     <string name="library_filter_type">Loại</string>
@@ -727,13 +727,13 @@
     <string name="library_empty_trakt_subtitle">Dùng + trong chi tiết để thêm vào danh sách muốn xem hoặc danh sách</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Đang tải\u2026</string>
+    <string name="account_loading">Đang tải…</string>
     <string name="account_sync_description">Đồng bộ thư viện, tiến độ xem, addon và plugin trên các thiết bị.</string>
     <string name="account_signin_qr_title">Đăng nhập bằng QR</string>
     <string name="account_signin_qr_subtitle">Quét mã QR và hoàn tất đăng nhập email trên điện thoại</string>
     <string name="account_signed_in_label">Đã đăng nhập</string>
     <string name="account_total_label">Tổng cộng</string>
-    <string name="account_loading_sync">Đang tải dữ liệu đồng bộ\u2026</string>
+    <string name="account_loading_sync">Đang tải dữ liệu đồng bộ…</string>
     <string name="account_sign_out">Đăng xuất</string>
 
     <!-- AuthSignInScreen -->
@@ -744,7 +744,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Đăng nhập bằng QR</string>
     <string name="auth_qr_account_login">Đăng nhập tài khoản</string>
-    <string name="auth_qr_finishing">Đang hoàn tất đăng nhập\u2026</string>
+    <string name="auth_qr_finishing">Đang hoàn tất đăng nhập…</string>
     <string name="auth_qr_code_label">Mã: %1$s</string>
     <string name="auth_qr_expires">Hết hạn sau %1$s</string>
     <string name="auth_qr_phone_hint">Dùng điện thoại để đăng nhập bằng email/mật khẩu. TV chỉ dùng QR để đăng nhập nhanh hơn.</string>
@@ -754,9 +754,9 @@
     <string name="auth_qr_continue_without_account">Tiếp tục không cần tài khoản</string>
     <string name="auth_qr_connected">Tài khoản của bạn đã được kết nối trên TV này.</string>
     <string name="auth_qr_synced_data">Dữ liệu đã đồng bộ</string>
-    <string name="auth_qr_generating">Đang tạo QR\u2026</string>
+    <string name="auth_qr_generating">Đang tạo QR…</string>
     <string name="auth_qr_unavailable">QR không khả dụng. Làm mới để thử lại.</string>
-    <string name="auth_qr_please_wait">Vui lòng đợi\u2026</string>
+    <string name="auth_qr_please_wait">Vui lòng đợi…</string>
     <string name="auth_qr_continue">Tiếp tục</string>
     <string name="auth_qr_back">Quay lại</string>
 

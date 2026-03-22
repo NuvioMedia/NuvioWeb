@@ -1,4 +1,4 @@
-## Beta 0.1.2
+## Beta 0.1.3
 
 ⚠️ Status: BETA — experimental and may be unstable.
 
@@ -43,4 +43,4 @@
 - For direct `.ipk` install: open the latest release in `NuvioMedia/NuvioWeb`, download the attached `.ipk`, enable Developer Mode and Key Server by following `https://www.webosbrew.org/devmode`, then install it with `webOS Dev Manager`
 - For Homebrew Channel repository install: open `Homebrew Channel`, go to `Settings`, choose `Add repository`, enter `https://raw.githubusercontent.com/NuvioMedia/NuvioWebOS/main/webosbrew/apps.json`, return to the apps list, and install Nuvio TV from there
 
-Build - `0.1.2`
+Build - `0.1.3`

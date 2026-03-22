@@ -121,7 +121,7 @@
     <string name="detail_lists_fallback">Listák</string>
     <string name="detail_lists_subtitle">Válaszd ki, melyik listába kerüljön be ez a tartalom.</string>
     <string name="action_save">Mentés</string>
-    <string name="action_saving">Mentés\u2026</string>
+    <string name="action_saving">Mentés…</string>
 	
     <!-- AppLanguage -->
     <string name="appearance_language">Alkalmazás nyelve</string>
@@ -202,12 +202,12 @@
     <string name="supporters_contributors_back_button">Vissza a részletekhez</string>
     <string name="supporters_tab">Támogatók</string>
     <string name="contributors_tab">Közreműködők</string>
-    <string name="supporters_loading">Támogatók betöltése\u2026</string>
+    <string name="supporters_loading">Támogatók betöltése…</string>
     <string name="supporters_empty">Még nincsenek támogatók.</string>
     <string name="supporters_error_title">A támogatók betöltése sikertelen</string>
     <string name="supporters_no_message">Nem érkezett üzenet.</string>
     <string name="supporters_open_donations">Támogatási oldal megnyitása</string>
-    <string name="contributors_loading">GitHub közreműködők betöltése\u2026</string>
+    <string name="contributors_loading">GitHub közreműködők betöltése…</string>
     <string name="contributors_empty">Még nincsenek közreműködők.</string>
     <string name="contributors_error_title">A közreműködők betöltése sikertelen</string>
     <string name="contributors_total_contributions">Összesen %1$d hozzájárulás</string>
@@ -517,9 +517,9 @@
     <string name="trakt_connected_as">Bejelentkezve mint: %1$s</string>
     <string name="trakt_account_login">Fiókbejelentkezés</string>
     <string name="trakt_awaiting_instruction">Látogass el a trakt.tv/activate oldalra, és írd be ezt a kódot:</string>
-    <string name="trakt_waiting_approval">Várakozás jóváhagyásra\u2026</string>
-    <string name="qr_login_approved">Sikeres jóváhagyás. Bejelentkezés befejezése\u2026</string>
-    <string name="qr_login_pending">Várakozás a telefonos jóváhagyásra\u2026</string>
+    <string name="trakt_waiting_approval">Várakozás jóváhagyásra…</string>
+    <string name="qr_login_approved">Sikeres jóváhagyás. Bejelentkezés befejezése…</string>
+    <string name="qr_login_pending">Várakozás a telefonos jóváhagyásra…</string>
     <string name="qr_login_expired">A QR-kód lejárt. Kérj új kódot.</string>
     <string name="trakt_code_expires">A kód lejár: %1$s múlva</string>
     <string name="trakt_token_refreshes">Trakt token frissítése: %1$s múlva</string>
@@ -569,7 +569,7 @@
     <string name="debug_manual_signin_subtitle">Bejelentkezés e-maillel és jelszóval (Supabase hitelesítés)</string>
     <string name="debug_email_placeholder">E-mail</string>
     <string name="debug_password_placeholder">Jelszó</string>
-    <string name="debug_signing_in">Bejelentkezés\u2026</string>
+    <string name="debug_signing_in">Bejelentkezés…</string>
     <string name="debug_sign_in">Bejelentkezés</string>
     <string name="debug_error_dialog_title">Lejátszási hiba</string>
     <string name="debug_error_dialog_subtitle">Hiba történt a lejátszás során.\n\nHiba: Szimulált teszthiba – ez nem valódi összeomlás. A forrás HTTP 503 (Service Unavailable) kódot küldött.</string>
@@ -592,7 +592,7 @@
     <string name="profile_avatar_color">Avatar színe</string>
     <string name="profile_use_primary_addons">Elsődleges profil bővítményeinek használata</string>
     <string name="profile_use_primary_plugins">Elsődleges profil beépülő moduljainak használata</string>
-    <string name="profile_creating">Létrehozás\u2026</string>
+    <string name="profile_creating">Létrehozás…</string>
     <string name="profile_create_btn">Létrehozás</string>
     <string name="profile_confirm">Megerősítés</string>
     <string name="profile_delete">Törlés</string>
@@ -711,7 +711,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Feliratok</string>
     <string name="subtitle_no_builtin">Nincs elérhető beépített felirat</string>
-    <string name="subtitle_loading_addon">Külső feliratok betöltése a bővítményekből\u2026</string>
+    <string name="subtitle_loading_addon">Külső feliratok betöltése a bővítményekből…</string>
     <string name="subtitle_no_addon">Nincs elérhető felirat a bővítményekből</string>
     <string name="subtitle_text_color">Szövegszín</string>
     <string name="subtitle_outline_color">Körvonal színe</string>
@@ -753,7 +753,7 @@
 	
     <!-- NextEpisodeCardOverlay -->
     <string name="next_episode_label">Következő epizód</string>
-    <string name="next_episode_finding_source">Forrás keresése\u2026</string>
+    <string name="next_episode_finding_source">Forrás keresése…</string>
     <string name="next_episode_playing_via">Lejátszás (%1$s) %2$d mp múlva</string>
     <string name="next_episode_play">Lejátszás</string>
     <string name="next_episode_unaired">Még nem vetített</string>
@@ -778,7 +778,7 @@
     <string name="search_voice_unavailable">A hangalapú keresés nem érhető el ezen az eszközön.</string>
 	
     <!-- LibraryScreen -->
-    <string name="library_syncing">Trakt könyvtár szinkronizálása\u2026</string>
+    <string name="library_syncing">Trakt könyvtár szinkronizálása…</string>
     <string name="library_title">Könyvtár</string>
     <string name="library_filter_list">Lista</string>
     <string name="library_filter_type">Típus</string>
@@ -812,13 +812,13 @@
     <string name="library_empty_trakt_subtitle">Használd a + gombot a részletek oldalon, hogy elemeket adj a várólistádhoz vagy más listákhoz</string>
 	
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Betöltés\u2026</string>
+    <string name="account_loading">Betöltés…</string>
     <string name="account_sync_description">Könyvtár, megtekintési előzmények, bővítmények és beépülő modulok szinkronizálása az eszközök között.</string>
     <string name="account_signin_qr_title">Bejelentkezés QR-kóddal</string>
     <string name="account_signin_qr_subtitle">Olvasd be a QR-kódot, és fejezd be a bejelentkezést e-mailben a telefonodon</string>
     <string name="account_signed_in_label">Bejelentkezve</string>
     <string name="account_total_label">Összesen</string>
-    <string name="account_loading_sync">Szinkronizálási adatok betöltése\u2026</string>
+    <string name="account_loading_sync">Szinkronizálási adatok betöltése…</string>
     <string name="account_sign_out">Kijelentkezés</string>
 	
     <!-- AuthSignInScreen -->
@@ -829,7 +829,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Bejelentkezés QR-kóddal</string>
     <string name="auth_qr_account_login">Fiók bejelentkezés</string>
-    <string name="auth_qr_finishing">Bejelentkezés befejezése\u2026</string>
+    <string name="auth_qr_finishing">Bejelentkezés befejezése…</string>
     <string name="auth_qr_code_label">Kód: %1$s</string>
     <string name="auth_qr_expires">Lejár: %1$s múlva</string>
     <string name="auth_qr_phone_hint">Használd a telefonod az e-mailes bejelentkezéshez. A TV-n a gyorsabb belépés érdekében csak QR-kód használható.</string>
@@ -839,9 +839,9 @@
     <string name="auth_qr_continue_without_account">Folytatás fiók nélkül</string>
     <string name="auth_qr_connected">Fiókod csatlakoztatva van ezen a TV-n.</string>
     <string name="auth_qr_synced_data">Szinkronizált adataid</string>
-    <string name="auth_qr_generating">QR-kód generálása\u2026</string>
+    <string name="auth_qr_generating">QR-kód generálása…</string>
     <string name="auth_qr_unavailable">A QR-kód nem elérhető. Próbáld újra a frissítéssel.</string>
-    <string name="auth_qr_please_wait">Kérjük, várj\u2026</string>
+    <string name="auth_qr_please_wait">Kérjük, várj…</string>
     <string name="auth_qr_continue">Folytatás</string>
     <string name="auth_qr_back">Vissza</string>
 	
@@ -898,7 +898,7 @@
     <string name="profile_delete_confirm_title">Törlöd a profilt?</string>
     <string name="profile_delete_confirm_subtitle">Ez véglegesen törli a profilt és annak minden adatát, beleértve a könyvtárat, az előzményeket és a bővítmény beállításokat. Ez a művelet nem vonható vissza.</string>
     <string name="profile_delete_btn">Profil törlése</string>
-    <string name="profile_saving">Mentés\u2026</string>
+    <string name="profile_saving">Mentés…</string>
 	
     <!-- CastDetailScreen -->
     <string name="cast_detail_error">Valami hiba történt</string>
@@ -929,7 +929,7 @@
     <string name="account_unlink">Leválasztás</string>
 	
     <!-- EpisodeRatingsSection -->
-    <string name="ratings_loading">Epizódértékelések betöltése\u2026</string>
+    <string name="ratings_loading">Epizódértékelések betöltése…</string>
     <string name="ratings_unavailable">Az epizódértékelések nem érhetők el.</string>
     <string name="ratings_load_error">Nem sikerült betölteni az értékeléseket.</string>
     <string name="ratings_season_summary">%1$d. évad – %2$d rész</string>
@@ -937,7 +937,7 @@
     <!-- SearchDiscoverSection -->
     <string name="discover_title">Felfedezés</string>
     <string name="discover_load_more">Továbbiak betöltése</string>
-    <string name="discover_loading">Betöltés\u2026</string>
+    <string name="discover_loading">Betöltés…</string>
     <string name="discover_filter_type">Típus</string>
     <string name="discover_filter_catalog">Katalógus</string>
     <string name="discover_filter_genre">Műfaj</string>
@@ -954,7 +954,7 @@
     <string name="addon_catalogs_types">Katalógusok: %1$d – Típusok: %2$s</string>
 	
     <!-- PluginScreen -->
-    <string name="plugin_and_more">\u2026 és még %1$d</string>
+    <string name="plugin_and_more">… és még %1$d</string>
     <string name="plugin_providers_count">%1$d szolgáltató</string>
     <string name="plugin_enabled">Engedélyezve</string>
     <string name="plugin_disabled">Letiltva</string>

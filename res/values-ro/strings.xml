@@ -474,7 +474,7 @@
     <string name="debug_manual_signin_subtitle">Autentifică-te cu email și parolă (autentificare Supabase)</string>
     <string name="debug_email_placeholder">E-mail</string>
     <string name="debug_password_placeholder">Parolă</string>
-    <string name="debug_signing_in">Se autentifică\u2026</string>
+    <string name="debug_signing_in">Se autentifică…</string>
     <string name="debug_sign_in">Autentificare</string>
     <string name="debug_error_dialog_title">Eroare de redare</string>
     <string name="debug_error_dialog_subtitle">A apărut o eroare în timpul redării.\n\nEroare: Eroare simulată de test - aceasta nu este o defecțiune reală. Sursa a returnat HTTP 503 (Serviciu indisponibil).</string>
@@ -493,7 +493,7 @@
     <string name="profile_avatar_color">Culoare avatar</string>
     <string name="profile_use_primary_addons">Folosește suplimentele profilului principal</string>
     <string name="profile_use_primary_plugins">Folosește plugin-urile profilului principal</string>
-    <string name="profile_creating">Se creează\u2026</string>
+    <string name="profile_creating">Se creează…</string>
     <string name="profile_create_btn">Creează</string>
     <string name="profile_confirm">Confirmă</string>
     <string name="profile_delete">Șterge</string>
@@ -589,7 +589,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Subtitrări</string>
     <string name="subtitle_no_builtin">Nu există subtitrări încorporate disponibile</string>
-    <string name="subtitle_loading_addon">Se încarcă subtitrările din addon-uri\u2026</string>
+    <string name="subtitle_loading_addon">Se încarcă subtitrările din addon-uri…</string>
     <string name="subtitle_no_addon">Nu există subtitrări din addon-uri disponibile</string>
     <string name="subtitle_text_color">Culoare text</string>
     <string name="subtitle_outline_color">Culoare contur</string>
@@ -651,7 +651,7 @@
     <string name="search_start_subtitle_no_discover">Descoperirea este dezactivată. Introdu cel puțin 2 caractere</string>
 
     !-- LibraryScreen -->
-    <string name="library_syncing">Se sincronizează biblioteca Trakt\u2026</string>
+    <string name="library_syncing">Se sincronizează biblioteca Trakt…</string>
     <string name="library_title">Bibliotecă</string>
     <string name="library_filter_list">Listă</string>
     <string name="library_filter_type">Tip</string>
@@ -680,13 +680,13 @@
     <string name="library_empty_trakt_subtitle">Folosiți + în detalii pentru a adăuga elemente la lista de vizionare sau la liste</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Încărcare\u2026</string>
+    <string name="account_loading">Încărcare…</string>
     <string name="account_sync_description">Sincronizați biblioteca, progresul vizionărilor, suplimentele și plugin-urile pe toate dispozitivele.</string>
     <string name="account_signin_qr_title">Autentificare cu QR</string>
     <string name="account_signin_qr_subtitle">Scanați un cod QR și finalizați autentificarea prin e‑mail pe telefon</string>
     <string name="account_signed_in_label">Autentificat</string>
     <string name="account_total_label">Total</string>
-    <string name="account_loading_sync">Încărcare date de sincronizare\u2026</string>
+    <string name="account_loading_sync">Încărcare date de sincronizare…</string>
     <string name="account_sign_out">Deconectare</string>
 
     <!-- AuthSignInScreen -->
@@ -697,7 +697,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Autentificare cu QR</string>
     <string name="auth_qr_account_login">Autentificare Cont</string>
-    <string name="auth_qr_finishing">Se finalizează autentificarea\u2026</string>
+    <string name="auth_qr_finishing">Se finalizează autentificarea…</string>
     <string name="auth_qr_code_label">Cod: %1$s</string>
     <string name="auth_qr_expires">Expiră în %1$s</string>
     <string name="auth_qr_phone_hint">Folosiți telefonul pentru a vă autentifica cu e‑mail/parolă. TV rămâne doar QR pentru o autentificare mai rapidă.</string>
@@ -707,9 +707,9 @@
     <string name="auth_qr_continue_without_account">Continuă fără cont</string>
     <string name="auth_qr_connected">Contul tău este conectat pe acest TV.</string>
     <string name="auth_qr_synced_data">Datele tale sincronizate</string>
-    <string name="auth_qr_generating">Se generează QR\u2026</string>
+    <string name="auth_qr_generating">Se generează QR…</string>
     <string name="auth_qr_unavailable">QR indisponibil. Reîncarcă pentru a reîncerca.</string>
-    <string name="auth_qr_please_wait">Vă rugăm așteptați\u2026</string>
+    <string name="auth_qr_please_wait">Vă rugăm așteptați…</string>
     <string name="auth_qr_continue">Continuă</string>
     <string name="auth_qr_back">Înapoi</string>
 

@@ -540,7 +540,7 @@
     <string name="debug_manual_signin_subtitle">Accedi con email e password (autenticazione Supabase)</string>
     <string name="debug_email_placeholder">Email</string>
     <string name="debug_password_placeholder">Password</string>
-    <string name="debug_signing_in">Accesso in corso\u2026</string>
+    <string name="debug_signing_in">Accesso in corso…</string>
     <string name="debug_sign_in">Accedi</string>
     <string name="debug_error_dialog_title">Errore di riproduzione</string>
     <string name="debug_error_dialog_subtitle">Si è verificato un errore durante la riproduzione.\n\nErrore: Errore simulato di test - questo non è un vero guasto. La sorgente ha restituito HTTP 503 (Servizio non disponibile).</string>
@@ -563,7 +563,7 @@
     <string name="profile_avatar_color">Colore avatar</string>
     <string name="profile_use_primary_addons">Usa gli addon del profilo principale</string>
     <string name="profile_use_primary_plugins">Usa i plugin del profilo principale</string>
-    <string name="profile_creating">Creazione in corso\u2026</string>
+    <string name="profile_creating">Creazione in corso…</string>
     <string name="profile_create_btn">Crea</string>
     <string name="profile_confirm">Conferma</string>
     <string name="profile_delete">Elimina</string>
@@ -682,7 +682,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Sottotitoli</string>
     <string name="subtitle_no_builtin">Nessun sottotitolo integrato disponibile</string>
-    <string name="subtitle_loading_addon">Caricamento sottotitoli dagli addon\u2026</string>
+    <string name="subtitle_loading_addon">Caricamento sottotitoli dagli addon…</string>
     <string name="subtitle_no_addon">Nessun sottotitolo da addon disponibile</string>
     <string name="subtitle_text_color">Colore del testo</string>
     <string name="subtitle_outline_color">Colore del contorno</string>
@@ -749,7 +749,7 @@
     <string name="search_voice_unavailable">La ricerca vocale non è disponibile per questo dispositivo.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Sincronizzazione libreria Trakt\u2026</string>
+    <string name="library_syncing">Sincronizzazione libreria Trakt…</string>
     <string name="library_title">Libreria</string>
     <string name="library_filter_list">Lista</string>
     <string name="library_filter_type">Tipo</string>
@@ -783,13 +783,13 @@
     <string name="library_empty_trakt_subtitle">Usa il tasto + nei dettagli per aggiungere elementi alla lista da guardare o alle tue liste</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Caricamento\u2026</string>
+    <string name="account_loading">Caricamento…</string>
     <string name="account_sync_description">Sincronizza la tua libreria, l\'avanzamento della visione, gli addon e i plugin su tutti i tuoi dispositivi.</string>
     <string name="account_signin_qr_title">Accedi con QR</string>
     <string name="account_signin_qr_subtitle">Scansiona un codice QR e completa l\'accesso via email sul tuo telefono</string>
     <string name="account_signed_in_label">Accesso effettuato</string>
     <string name="account_total_label">Totale</string>
-    <string name="account_loading_sync">Caricamento dati di sincronizzazione\u2026</string>
+    <string name="account_loading_sync">Caricamento dati di sincronizzazione…</string>
     <string name="account_sign_out">Esci</string>
 
     <!-- AuthSignInScreen -->
@@ -800,7 +800,7 @@
     <!-- AuthQrSignInScreen -->
   <string name="auth_qr_title">Accedi con QR Code</string>
     <string name="auth_qr_account_login">Accesso Account</string>
-    <string name="auth_qr_finishing">Completamento accesso\u2026</string>
+    <string name="auth_qr_finishing">Completamento accesso…</string>
     <string name="auth_qr_code_label">Codice: %1$s</string>
     <string name="auth_qr_expires">Scade in %1$s</string>    
     <string name="auth_qr_phone_hint">Usa il telefono per accedere con email e password. Il login sulla TV rimane solo con il QR Code per un accesso più rapido.</string>
@@ -810,9 +810,9 @@
     <string name="auth_qr_continue_without_account">Continua senza account</string>
     <string name="auth_qr_connected">Il tuo account è ora connesso a questa TV.</string>
     <string name="auth_qr_synced_data">I tuoi dati sincronizzati</string>
-    <string name="auth_qr_generating">Generando QR Code\u2026</string>
+    <string name="auth_qr_generating">Generando QR Code…</string>
     <string name="auth_qr_unavailable">QR Code non disponibile. Aggiorna per riprovare.</string>
-    <string name="auth_qr_please_wait">Attendi\u2026</string>
+    <string name="auth_qr_please_wait">Attendi…</string>
     <string name="auth_qr_continue">Continua</string>
     <string name="auth_qr_back">Indietro</string>
 
@@ -869,7 +869,7 @@
     <string name="profile_delete_confirm_title">Cancellare Profilo?</string>
     <string name="profile_delete_confirm_subtitle">Questo cancellerà permanentemente questo profilo e i dati ad esso associati, inclusi libreria, storico e impostazioni. L\'operazione non si può annullare.</string>
     <string name="profile_delete_btn">Cancella Profilo</string>
-    <string name="profile_saving">Salvataggio…\u2026</string>
+    <string name="profile_saving">Salvataggio…</string>
     
     <!-- CastDetailScreen -->
    <string name="cast_detail_error">Qualcosa è andato storto</string>
@@ -908,7 +908,7 @@
     <!-- SearchDiscoverSection -->
     <string name="discover_title">Scopri</string>
     <string name="discover_load_more">Carica altri</string>
-    <string name="discover_loading">Caricamento\u2026</string>
+    <string name="discover_loading">Caricamento…</string>
     <string name="discover_filter_type">Tipo</string>
     <string name="discover_filter_catalog">Catalogo</string>
     <string name="discover_filter_genre">Genere</string>

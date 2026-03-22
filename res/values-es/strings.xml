@@ -474,7 +474,7 @@
     <string name="debug_manual_signin_subtitle">Inicia sesión con correo electrónico y contraseña (autenticación Supabase)</string>
     <string name="debug_email_placeholder">Correo electrónico</string>
     <string name="debug_password_placeholder">Contraseña</string>
-    <string name="debug_signing_in">Iniciando sesión\u2026</string>
+    <string name="debug_signing_in">Iniciando sesión…</string>
     <string name="debug_sign_in">Iniciar sesión</string>
     <string name="debug_error_dialog_title">Error de reproducción</string>
     <string name="debug_error_dialog_subtitle">Un error ocurrió durante la reproducción.\n\nError: Error simulado de prueba - esto no es una falla real. La fuente devolvió HTTP 503 (Servicio no disponible).</string>
@@ -493,7 +493,7 @@
     <string name="profile_avatar_color">Color del avatar</string>
     <string name="profile_use_primary_addons">Usar complementos del perfil principal</string>
     <string name="profile_use_primary_plugins">Usar complementos del perfil principal</string>
-    <string name="profile_creating">Creando\u2026</string>
+    <string name="profile_creating">Creando…</string>
     <string name="profile_create_btn">Crear</string>
     <string name="profile_confirm">Confirmar</string>
     <string name="profile_delete">Eliminar</string>
@@ -589,7 +589,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Subtítulos</string>
     <string name="subtitle_no_builtin">No hay subtítulos incorporados disponibles</string>
-    <string name="subtitle_loading_addon">Cargando subtítulos de complementos\u2026</string>
+    <string name="subtitle_loading_addon">Cargando subtítulos de complementos…</string>
     <string name="subtitle_no_addon">No hay subtítulos de complemento disponibles</string>
     <string name="subtitle_text_color">Color del texto</string>
     <string name="subtitle_outline_color">Color del contorno</string>
@@ -651,7 +651,7 @@
     <string name="search_start_subtitle_no_discover">El descubrimiento está desactivado. Introduce al menos 2 caracteres</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Sincronizando biblioteca de Trakt\u2026</string>
+    <string name="library_syncing">Sincronizando biblioteca de Trakt…</string>
     <string name="library_title">Biblioteca</string>
     <string name="library_filter_list">Lista</string>
     <string name="library_filter_type">Tipo</string>
@@ -680,13 +680,13 @@
     <string name="library_empty_trakt_subtitle">Usa + en detalles para añadir elementos a lista de deseos o listas</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Cargando\u2026</string>
+    <string name="account_loading">Cargando…</string>
     <string name="account_sync_description">Sincroniza tu biblioteca, progreso de visualización, complementos y complementos en dispositivos.</string>
     <string name="account_signin_qr_title">Iniciar sesión con QR</string>
     <string name="account_signin_qr_subtitle">Escanea un código QR y completa el inicio de sesión de correo electrónico en tu teléfono</string>
     <string name="account_signed_in_label">Conectado</string>
     <string name="account_total_label">Total</string>
-    <string name="account_loading_sync">Cargando datos de sincronización\u2026</string>
+    <string name="account_loading_sync">Cargando datos de sincronización…</string>
     <string name="account_sign_out">Cerrar sesión</string>
 
     <!-- AuthSignInScreen -->
@@ -697,7 +697,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Iniciar sesión con QR</string>
     <string name="auth_qr_account_login">Inicio de sesión de cuenta</string>
-    <string name="auth_qr_finishing">Finalizando inicio de sesión\u2026</string>
+    <string name="auth_qr_finishing">Finalizando inicio de sesión…</string>
     <string name="auth_qr_code_label">Código: %1$s</string>
     <string name="auth_qr_expires">Caduca en %1$s</string>
     <string name="auth_qr_phone_hint">Usa tu teléfono para iniciar sesión con correo/contraseña. La TV se queda solo con QR para un inicio más rápido.</string>

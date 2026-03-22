@@ -470,7 +470,7 @@
     <string name="debug_manual_signin_subtitle">メールとパスワードでサインイン（Supabase認証）</string>
     <string name="debug_email_placeholder">メール</string>
     <string name="debug_password_placeholder">パスワード</string>
-    <string name="debug_signing_in">サインイン中\u2026</string>
+    <string name="debug_signing_in">サインイン中…</string>
     <string name="debug_sign_in">サインイン</string>
     <string name="debug_error_dialog_title">再生エラー</string>
     <string name="debug_error_dialog_subtitle">再生中にエラーが発生しました。\n\nエラー: テストシミュレーションエラー - 実際の障害ではありません。ソースがHTTP 503（サービス利用不可）を返しました。</string>
@@ -489,7 +489,7 @@
     <string name="profile_avatar_color">アバターカラー</string>
     <string name="profile_use_primary_addons">プライマリプロフィールのアドオンを使用</string>
     <string name="profile_use_primary_plugins">プライマリプロフィールのプラグインを使用</string>
-    <string name="profile_creating">作成中\u2026</string>
+    <string name="profile_creating">作成中…</string>
     <string name="profile_create_btn">作成</string>
     <string name="profile_confirm">確認</string>
     <string name="profile_delete">削除</string>
@@ -583,7 +583,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">字幕</string>
     <string name="subtitle_no_builtin">内蔵字幕はありません</string>
-    <string name="subtitle_loading_addon">アドオンから字幕を読み込み中\u2026</string>
+    <string name="subtitle_loading_addon">アドオンから字幕を読み込み中…</string>
     <string name="subtitle_no_addon">アドオン字幕はありません</string>
     <string name="subtitle_text_color">文字色</string>
     <string name="subtitle_outline_color">アウトラインの色</string>
@@ -644,7 +644,7 @@
     <string name="search_start_subtitle_no_discover">ディスカバーは無効です。2文字以上入力してください</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Traktライブラリを同期中\u2026</string>
+    <string name="library_syncing">Traktライブラリを同期中…</string>
     <string name="library_title">ライブラリ</string>
     <string name="library_filter_list">リスト</string>
     <string name="library_filter_type">タイプ</string>
@@ -673,13 +673,13 @@
     <string name="library_empty_trakt_subtitle">詳細の+を使ってウォッチリストやリストにアイテムを追加</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">読み込み中\u2026</string>
+    <string name="account_loading">読み込み中…</string>
     <string name="account_sync_description">デバイス間でライブラリ、視聴進行状況、アドオン、プラグインを同期。</string>
     <string name="account_signin_qr_title">QRでサインイン</string>
     <string name="account_signin_qr_subtitle">QRコードをスキャンしてスマートフォンでメールログインを完了</string>
     <string name="account_signed_in_label">サインイン済み</string>
     <string name="account_total_label">合計</string>
-    <string name="account_loading_sync">同期データを読み込み中\u2026</string>
+    <string name="account_loading_sync">同期データを読み込み中…</string>
     <string name="account_sign_out">サインアウト</string>
 
     <!-- AuthSignInScreen -->
@@ -690,7 +690,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">QRでサインイン</string>
     <string name="auth_qr_account_login">アカウントログイン</string>
-    <string name="auth_qr_finishing">サインインを完了中\u2026</string>
+    <string name="auth_qr_finishing">サインインを完了中…</string>
     <string name="auth_qr_code_label">コード: %1$s</string>
     <string name="auth_qr_expires">有効期限: %1$s</string>
     <string name="auth_qr_phone_hint">スマートフォンを使ってメール/パスワードでサインイン。TVはより速いログインのためQRのみ。</string>
@@ -700,9 +700,9 @@
     <string name="auth_qr_continue_without_account">アカウントなしで続ける</string>
     <string name="auth_qr_connected">このTVにアカウントが接続されています。</string>
     <string name="auth_qr_synced_data">同期されたデータ</string>
-    <string name="auth_qr_generating">QRを生成中\u2026</string>
+    <string name="auth_qr_generating">QRを生成中…</string>
     <string name="auth_qr_unavailable">QRが利用できません。更新して再試行してください。</string>
-    <string name="auth_qr_please_wait">お待ちください\u2026</string>
+    <string name="auth_qr_please_wait">お待ちください…</string>
     <string name="auth_qr_continue">続ける</string>
     <string name="auth_qr_back">戻る</string>
 

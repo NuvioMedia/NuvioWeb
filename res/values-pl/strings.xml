@@ -514,7 +514,7 @@
     <string name="debug_manual_signin_subtitle">Zaloguj się e-mailem i hasłem (uwierzytelnianie Supabase)</string>
     <string name="debug_email_placeholder">E-mail</string>
     <string name="debug_password_placeholder">Hasło</string>
-    <string name="debug_signing_in">Logowanie\u2026</string>
+    <string name="debug_signing_in">Logowanie…</string>
     <string name="debug_sign_in">Zaloguj się</string>
     <string name="debug_error_dialog_title">Błąd odtwarzania</string>
     <string name="debug_error_dialog_subtitle">Wystąpił błąd podczas odtwarzania.\n\nBłąd: Symulowany błąd testowy - to nie jest prawdziwa awaria. Źródło zwróciło HTTP 503 (Service Unavailable).</string>
@@ -533,7 +533,7 @@
     <string name="profile_avatar_color">Kolor awatara</string>
     <string name="profile_use_primary_addons">Używaj dodatków profilu głównego</string>
     <string name="profile_use_primary_plugins">Używaj wtyczek profilu głównego</string>
-    <string name="profile_creating">Tworzenie\u2026</string>
+    <string name="profile_creating">Tworzenie…</string>
     <string name="profile_create_btn">Utwórz</string>
     <string name="profile_confirm">Potwierdź</string>
     <string name="profile_delete">Usuń</string>
@@ -661,7 +661,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Napisy</string>
     <string name="subtitle_no_builtin">Brak wbudowanych napisów</string>
-    <string name="subtitle_loading_addon">Ładowanie napisów z dodatków\u2026</string>
+    <string name="subtitle_loading_addon">Ładowanie napisów z dodatków…</string>
     <string name="subtitle_no_addon">Brak napisów z dodatków</string>
     <string name="subtitle_text_color">Kolor tekstu</string>
     <string name="subtitle_outline_color">Kolor obrysu</string>
@@ -728,7 +728,7 @@
     <string name="search_voice_unavailable">Wyszukiwanie głosowe jest niedostępne na tym urządzeniu.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Synchronizowanie biblioteki Trakt\u2026</string>
+    <string name="library_syncing">Synchronizowanie biblioteki Trakt…</string>
     <string name="library_title">Biblioteka</string>
     <string name="library_filter_list">Lista</string>
     <string name="library_filter_type">Typ</string>
@@ -763,13 +763,13 @@
     <string name="library_empty_trakt_subtitle">Użyj + w szczegółach, aby dodać elementy do listy obserwowanych lub list</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Ładowanie\u2026</string>
+    <string name="account_loading">Ładowanie…</string>
     <string name="account_sync_description">Synchronizuj bibliotekę, postęp oglądania, dodatki i wtyczki między urządzeniami.</string>
     <string name="account_signin_qr_title">Zaloguj przez QR</string>
     <string name="account_signin_qr_subtitle">Zeskanuj kod QR i dokończ logowanie e-mailem na telefonie</string>
     <string name="account_signed_in_label">Zalogowano</string>
     <string name="account_total_label">Łącznie</string>
-    <string name="account_loading_sync">Ładowanie danych synchronizacji\u2026</string>
+    <string name="account_loading_sync">Ładowanie danych synchronizacji…</string>
     <string name="account_sign_out">Wyloguj się</string>
 
     <!-- AuthSignInScreen -->
@@ -780,7 +780,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Zaloguj przez QR</string>
     <string name="auth_qr_account_login">Logowanie do konta</string>
-    <string name="auth_qr_finishing">Kończenie logowania\u2026</string>
+    <string name="auth_qr_finishing">Kończenie logowania…</string>
     <string name="auth_qr_code_label">Kod: %1$s</string>
     <string name="auth_qr_expires">Wygasa za %1$s</string>
     <string name="auth_qr_phone_hint">Użyj telefonu, aby zalogować się e-mailem i hasłem. TV obsługuje tylko QR dla szybszego logowania.</string>
@@ -790,9 +790,9 @@
     <string name="auth_qr_continue_without_account">Kontynuuj bez konta</string>
     <string name="auth_qr_connected">Twoje konto jest połączone z tym TV.</string>
     <string name="auth_qr_synced_data">Zsynchronizowane dane</string>
-    <string name="auth_qr_generating">Generowanie QR\u2026</string>
+    <string name="auth_qr_generating">Generowanie QR…</string>
     <string name="auth_qr_unavailable">QR niedostępny. Odśwież, aby spróbować ponownie.</string>
-    <string name="auth_qr_please_wait">Proszę czekać\u2026</string>
+    <string name="auth_qr_please_wait">Proszę czekać…</string>
     <string name="auth_qr_continue">Kontynuuj</string>
     <string name="auth_qr_back">Wstecz</string>
 

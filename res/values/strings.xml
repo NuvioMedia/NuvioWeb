@@ -591,7 +591,7 @@
     <string name="debug_manual_signin_subtitle">Sign in with email and password (Supabase auth)</string>
     <string name="debug_email_placeholder">Email</string>
     <string name="debug_password_placeholder">Password</string>
-    <string name="debug_signing_in">Signing in\u2026</string>
+    <string name="debug_signing_in">Signing in…</string>
     <string name="debug_sign_in">Sign In</string>
     <string name="debug_error_dialog_title">Playback Error</string>
     <string name="debug_error_dialog_subtitle">An error occurred during playback.\n\nError: Test simulated error - this is not a real failure. Source returned HTTP 503 (Service Unavailable).</string>
@@ -614,7 +614,7 @@
     <string name="profile_avatar_color">Avatar Color</string>
     <string name="profile_use_primary_addons">Use primary profile\'s addons</string>
     <string name="profile_use_primary_plugins">Use primary profile\'s plugins</string>
-    <string name="profile_creating">Creating\u2026</string>
+    <string name="profile_creating">Creating…</string>
     <string name="profile_create_btn">Create</string>
     <string name="profile_confirm">Confirm</string>
     <string name="profile_delete">Delete</string>
@@ -733,7 +733,7 @@
     <!-- SubtitleDialog / SubtitleStyleSidePanel -->
     <string name="subtitle_dialog_title">Subtitles</string>
     <string name="subtitle_no_builtin">No built-in subtitles available</string>
-    <string name="subtitle_loading_addon">Loading subtitles from addons\u2026</string>
+    <string name="subtitle_loading_addon">Loading subtitles from addons…</string>
     <string name="subtitle_no_addon">No addon subtitles available</string>
     <string name="subtitle_text_color">Text Color</string>
     <string name="subtitle_outline_color">Outline Color</string>
@@ -801,7 +801,7 @@
     <string name="search_voice_unavailable">Voice search is unavailable on this device.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Syncing Trakt library\u2026</string>
+    <string name="library_syncing">Syncing Trakt library…</string>
     <string name="library_title">Library</string>
     <string name="library_filter_list">List</string>
     <string name="library_filter_type">Type</string>
@@ -835,14 +835,14 @@
     <string name="library_empty_trakt_subtitle">Use + in details to add items to watchlist or lists</string>
 
     <!-- AccountSettingsContent -->
-    <string name="account_loading">Loading\u2026</string>
+    <string name="account_loading">Loading…</string>
     <string name="account_sync_description">Sync your library, watch progress, addons, and plugins across devices.</string>
     <string name="account_sync_restart_note">Sync is not real-time across active devices. Restart this device after signing in or to pick up changes made elsewhere.</string>
     <string name="account_signin_qr_title">Sign In with QR</string>
     <string name="account_signin_qr_subtitle">Scan a QR code and complete email login on your phone</string>
     <string name="account_signed_in_label">Signed in</string>
     <string name="account_total_label">Total</string>
-    <string name="account_loading_sync">Loading sync data\u2026</string>
+    <string name="account_loading_sync">Loading sync data…</string>
     <string name="account_sign_out">Sign Out</string>
 
     <!-- AuthSignInScreen -->
@@ -853,7 +853,7 @@
     <!-- AuthQrSignInScreen -->
     <string name="auth_qr_title">Sign In With QR</string>
     <string name="auth_qr_account_login">Account Login</string>
-    <string name="auth_qr_finishing">Finishing sign in\u2026</string>
+    <string name="auth_qr_finishing">Finishing sign in…</string>
     <string name="auth_qr_code_label">Code: %1$s</string>
     <string name="auth_qr_expires">Expires in %1$s</string>
     <string name="auth_qr_phone_hint">Use your phone to sign in with email/password. TV stays QR-only for faster login.</string>
@@ -863,9 +863,9 @@
     <string name="auth_qr_continue_without_account">Continue without account</string>
     <string name="auth_qr_connected">Your account is connected on this TV.</string>
     <string name="auth_qr_synced_data">Your synced data</string>
-    <string name="auth_qr_generating">Generating QR\u2026</string>
+    <string name="auth_qr_generating">Generating QR…</string>
     <string name="auth_qr_unavailable">QR unavailable. Refresh to retry.</string>
-    <string name="auth_qr_please_wait">Please wait\u2026</string>
+    <string name="auth_qr_please_wait">Please wait…</string>
     <string name="auth_qr_continue">Continue</string>
     <string name="auth_qr_back">Back</string>
 
@@ -922,7 +922,7 @@
     <string name="profile_delete_confirm_title">Delete Profile?</string>
     <string name="profile_delete_confirm_subtitle">This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone.</string>
     <string name="profile_delete_btn">Delete Profile</string>
-    <string name="profile_saving">Saving\u2026</string>
+    <string name="profile_saving">Saving…</string>
 
     <!-- CastDetailScreen -->
     <string name="cast_detail_error">Something went wrong</string>
