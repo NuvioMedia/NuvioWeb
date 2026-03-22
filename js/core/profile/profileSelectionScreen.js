@@ -104,6 +104,49 @@ function isTextInput(node) {
   return tagName === "input" || tagName === "textarea";
 }
 
+function getNodeHorizontalCenter(node) {
+  const rect = node?.getBoundingClientRect?.();
+  if (!rect) {
+    return 0;
+  }
+  return rect.left + (rect.width / 2);
+}
+
+function findNearestByHorizontalCenter(referenceNode, candidates) {
+  const nodes = (Array.isArray(candidates) ? candidates : []).filter(Boolean);
+  if (!referenceNode || !nodes.length) {
+    return null;
+  }
+  const referenceCenter = getNodeHorizontalCenter(referenceNode);
+  return nodes
+    .map((node) => ({
+      node,
+      distance: Math.abs(getNodeHorizontalCenter(node) - referenceCenter)
+    }))
+    .sort((left, right) => left.distance - right.distance)[0]?.node || null;
+}
+
+function buildVisualRows(nodes, tolerance = 18) {
+  const rows = [];
+  (Array.isArray(nodes) ? nodes : []).filter(Boolean).forEach((node) => {
+    const rect = node.getBoundingClientRect();
+    const existingRow = rows.find((entry) => Math.abs(entry.top - rect.top) <= tolerance);
+    if (existingRow) {
+      existingRow.nodes.push(node);
+      return;
+    }
+    rows.push({
+      top: rect.top,
+      nodes: [node]
+    });
+  });
+  rows.sort((left, right) => left.top - right.top);
+  rows.forEach((row) => {
+    row.nodes.sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left);
+  });
+  return rows;
+}
+
 export const ProfileSelectionScreen = {
 
   async mount(params = {}) {
@@ -125,6 +168,7 @@ export const ProfileSelectionScreen = {
     this.deleteProfileId = null;
     this.editorState = null;
     this.avatarCatalog = [];
+    this.lastKeyboardActivation = null;
 
     await ProfileSyncService.pull();
     this.profiles = await ProfileManager.getProfiles();
@@ -441,6 +485,10 @@ export const ProfileSelectionScreen = {
       node.addEventListener("focus", () => this.handleFocusableFocus(node));
       node.addEventListener("click", async (event) => {
         event.stopPropagation();
+        if (this.shouldIgnoreKeyboardClick(node)) {
+          event.preventDefault();
+          return;
+        }
         await this.activateFocusedNode(node);
       });
     });
@@ -561,6 +609,175 @@ export const ProfileSelectionScreen = {
     }
     return Array.from(this.container.querySelectorAll("[data-focus-key]"))
       .find((node) => String(node.dataset.focusKey || "") === String(focusKey)) || null;
+  },
+
+  rememberKeyboardActivation(node) {
+    const focusKey = String(node?.dataset?.focusKey || "");
+    if (!focusKey) {
+      this.lastKeyboardActivation = null;
+      return;
+    }
+    this.lastKeyboardActivation = {
+      focusKey,
+      at: Date.now()
+    };
+  },
+
+  shouldIgnoreKeyboardClick(node) {
+    const recentActivation = this.lastKeyboardActivation;
+    this.lastKeyboardActivation = null;
+    if (!recentActivation) {
+      return false;
+    }
+    if ((Date.now() - Number(recentActivation.at || 0)) > 300) {
+      return false;
+    }
+    return String(node?.dataset?.focusKey || "") === String(recentActivation.focusKey || "");
+  },
+
+  getEditorNavigationState() {
+    const overlayRoot = this.container?.querySelector("[data-overlay-root='editor']");
+    if (!overlayRoot) {
+      return null;
+    }
+    return {
+      overlayRoot,
+      submitButton: overlayRoot.querySelector("[data-focus-key='editor:submit']"),
+      nameInput: overlayRoot.querySelector("[data-focus-key='editor:name']"),
+      cancelButton: overlayRoot.querySelector("[data-focus-key='editor:cancel']"),
+      categoryButtons: Array.from(overlayRoot.querySelectorAll("[data-action='select-avatar-category']")),
+      avatarButtons: Array.from(overlayRoot.querySelectorAll("[data-action='select-avatar']"))
+    };
+  },
+
+  getPreferredEditorCategoryButton(navigationState) {
+    return navigationState?.categoryButtons.find((node) => node.classList.contains("is-selected"))
+      || navigationState?.categoryButtons[0]
+      || null;
+  },
+
+  getEditorCategoryButtonForAvatar(navigationState, avatarId) {
+    const avatar = this.avatarCatalog.find((entry) => entry.id === avatarId) || null;
+    const avatarCategory = String(avatar?.category || "").trim().toLowerCase();
+    if (!avatarCategory) {
+      return null;
+    }
+    return navigationState?.categoryButtons.find((node) => String(node.dataset.category || "") === avatarCategory) || null;
+  },
+
+  getPreferredEditorAvatarButton(navigationState, referenceNode = null) {
+    const avatarButtons = navigationState?.avatarButtons || [];
+    if (!avatarButtons.length) {
+      return null;
+    }
+    return avatarButtons.find((node) => node.classList.contains("is-selected"))
+      || findNearestByHorizontalCenter(referenceNode, avatarButtons)
+      || avatarButtons[0]
+      || null;
+  },
+
+  getAvatarGridPosition(navigationState, node) {
+    const rows = buildVisualRows(navigationState?.avatarButtons || []);
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      const columnIndex = rows[rowIndex].nodes.indexOf(node);
+      if (columnIndex !== -1) {
+        return {
+          rows,
+          rowIndex,
+          columnIndex,
+          rowNodes: rows[rowIndex].nodes
+        };
+      }
+    }
+    return null;
+  },
+
+  moveEditorFocus(event, overlayRoot) {
+    const code = Number(event?.keyCode || 0);
+    const direction = code === 38 ? "up"
+      : code === 40 ? "down"
+        : code === 37 ? "left"
+          : code === 39 ? "right"
+            : null;
+    if (!direction) {
+      return false;
+    }
+
+    const navigationState = this.getEditorNavigationState();
+    if (!navigationState) {
+      return false;
+    }
+
+    const current = overlayRoot.querySelector(".profile-overlay-focusable.focused") || document.activeElement;
+    if (!current) {
+      return false;
+    }
+
+    const preferredCategoryButton = this.getPreferredEditorCategoryButton(navigationState);
+    let target = null;
+
+    if (current === navigationState.submitButton) {
+      if (direction === "left") {
+        target = navigationState.nameInput;
+      } else if (direction === "down" || direction === "right") {
+        target = preferredCategoryButton;
+      }
+    } else if (current === navigationState.nameInput) {
+      if (direction === "up") {
+        target = navigationState.submitButton;
+      } else if (direction === "down") {
+        target = navigationState.cancelButton || preferredCategoryButton;
+      } else if (direction === "right") {
+        target = preferredCategoryButton;
+      }
+    } else if (current === navigationState.cancelButton) {
+      if (direction === "up") {
+        target = navigationState.nameInput;
+      } else if (direction === "right" || direction === "down") {
+        target = preferredCategoryButton;
+      } else if (direction === "left") {
+        target = navigationState.nameInput;
+      }
+    } else if (current.matches?.("[data-action='select-avatar-category']")) {
+      const index = navigationState.categoryButtons.indexOf(current);
+      if (direction === "left") {
+        target = index > 0 ? navigationState.categoryButtons[index - 1] : navigationState.cancelButton;
+      } else if (direction === "right") {
+        target = navigationState.categoryButtons[index + 1] || null;
+      } else if (direction === "up") {
+        target = navigationState.submitButton;
+      } else if (direction === "down") {
+        target = this.getPreferredEditorAvatarButton(navigationState, current);
+      }
+    } else if (current.matches?.("[data-action='select-avatar']")) {
+      const position = this.getAvatarGridPosition(navigationState, current);
+      if (!position) {
+        return false;
+      }
+      if (direction === "left") {
+        target = position.rowNodes[position.columnIndex - 1] || navigationState.cancelButton;
+      } else if (direction === "right") {
+        target = position.rowNodes[position.columnIndex + 1] || null;
+      } else if (direction === "up") {
+        const previousRow = position.rows[position.rowIndex - 1];
+        target = previousRow
+          ? findNearestByHorizontalCenter(current, previousRow.nodes)
+          : preferredCategoryButton
+            || this.getEditorCategoryButtonForAvatar(navigationState, current.dataset.avatarId)
+            || findNearestByHorizontalCenter(current, navigationState.categoryButtons);
+      } else if (direction === "down") {
+        const nextRow = position.rows[position.rowIndex + 1];
+        target = nextRow ? findNearestByHorizontalCenter(current, nextRow.nodes) : null;
+      }
+    }
+
+    if (!target) {
+      return false;
+    }
+
+    event?.preventDefault?.();
+    target.focus();
+    return true;
   },
 
   buildBackgroundStyle(colorHex) {
@@ -924,11 +1141,13 @@ export const ProfileSelectionScreen = {
 
     if (overlayRoot) {
       this.cancelPendingProfileHold();
-      const overlaySelector = overlayRoot.dataset.overlayRoot === "editor"
+      const isEditorOverlay = overlayRoot.dataset.overlayRoot === "editor";
+      const overlaySelector = isEditorOverlay
         ? ".profile-overlay-focusable:not(.is-disabled)"
         : ".profile-dialog-button";
 
-      if (ScreenUtils.handleDpadNavigation(event, overlayRoot, overlaySelector)) {
+      if ((isEditorOverlay && this.moveEditorFocus(event, overlayRoot))
+        || (!isEditorOverlay && ScreenUtils.handleDpadNavigation(event, overlayRoot, overlaySelector))) {
         return;
       }
 
@@ -940,6 +1159,8 @@ export const ProfileSelectionScreen = {
       if (!focused || (isTextInput(focused) && overlayRoot.dataset.overlayRoot === "editor")) {
         return;
       }
+      event?.preventDefault?.();
+      this.rememberKeyboardActivation(focused);
       await this.activateFocusedNode(focused);
       return;
     }
