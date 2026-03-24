@@ -542,6 +542,7 @@ function normalizeCatalogItem(item, fallbackType = "movie") {
     type: String(item.type || item.apiType || fallbackType || "movie").trim() || "movie",
     apiType: String(item.apiType || item.type || fallbackType || "movie").trim() || "movie",
     name: firstNonEmpty(item.name, item.title, prettyId(item.id)),
+    landscapePoster: firstNonEmpty(item.landscapePoster, item.backdrop, item.backdropUrl, item.background),
     poster: firstNonEmpty(item.poster, item.backdrop, item.backdropUrl, item.thumbnail),
     background: firstNonEmpty(item.background, item.backdrop, item.backdropUrl, item.poster, item.thumbnail),
     logo: firstNonEmpty(item.logo),
@@ -1131,15 +1132,36 @@ function groupNodesByOffsetTop(nodes = []) {
   return grouped.map((entry) => entry.nodes);
 }
 
-function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic", isExpanded = false) {
+function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic", isExpanded = false, preferLandscapePoster = false) {
   const isLoading = Boolean(item?.isLoading);
   const normalized = normalizeCatalogItem(item, itemType);
   const subtitle = buildPosterSubtitle(normalized, layoutMode);
   const expandedMeta = buildExpandedPosterMeta(normalized);
-  const backdropSrc = firstNonEmpty(normalized.background, normalized.backdrop, normalized.backdropUrl, normalized.poster);
-  const posterSrc = firstNonEmpty(normalized.poster, normalized.thumbnail, normalized.backdrop, normalized.backdropUrl);
+  const preferredLandscapePosterSrc = firstNonEmpty(normalized.landscapePoster);
+  const useLandscapePoster = layoutMode === "modern" && preferLandscapePoster;
+  const landscapeVisualSrc = firstNonEmpty(
+    preferredLandscapePosterSrc,
+    normalized.background,
+    normalized.backdrop,
+    normalized.backdropUrl,
+    normalized.poster,
+    normalized.thumbnail
+  );
+  const backdropSrc = useLandscapePoster
+    ? landscapeVisualSrc
+    : firstNonEmpty(
+      preferredLandscapePosterSrc,
+      normalized.background,
+      normalized.backdrop,
+      normalized.backdropUrl,
+      normalized.poster
+    );
+  const posterSrc = useLandscapePoster
+    ? landscapeVisualSrc
+    : firstNonEmpty(normalized.poster, normalized.thumbnail, preferredLandscapePosterSrc, normalized.backdrop, normalized.backdropUrl);
   const expandedVisualSrc = firstNonEmpty(backdropSrc, posterSrc);
   const expandedClass = isExpanded ? " is-expanded" : "";
+  const landscapeClass = useLandscapePoster ? " is-landscape" : "";
   const focusableClass = isLoading ? "" : " focusable";
   const loadingClass = isLoading ? " home-poster-card-loading" : "";
   const shouldShowLabels = showLabels && !isLoading;
@@ -1149,7 +1171,7 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
   const titleWidth = titleWidths[safeIndex % titleWidths.length];
   const subtitleWidth = subtitleWidths[safeIndex % subtitleWidths.length];
   return `
-    <article class="home-content-card home-poster-card${focusableClass}${expandedClass}${loadingClass}"
+    <article class="home-content-card home-poster-card${focusableClass}${expandedClass}${landscapeClass}${loadingClass}"
              ${isLoading ? 'aria-disabled="true"' : `data-action="openDetail"
              data-row-index="${rowIndex}"
              data-item-index="${itemIndex}"
@@ -1173,6 +1195,14 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
       ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" loading="lazy" alt="${escapeAttribute(normalized.name || "content")}" />`
       : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
         </div>
+        ${(!isLoading && useLandscapePoster) ? `
+          <div class="home-poster-landscape-copy" aria-hidden="true">
+            ${normalized.logo
+      ? `<img class="home-poster-landscape-logo" src="${escapeAttribute(normalized.logo)}" decoding="async" loading="lazy" alt="" />`
+      : `<div class="home-poster-landscape-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
+            ${subtitle ? `<div class="home-poster-landscape-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+          </div>
+        ` : ""}
       </div>
       <div class="home-poster-expanded-copy">
         ${(!isLoading && expandedMeta) ? `<div class="home-poster-expanded-meta">${escapeHtml(expandedMeta)}</div>` : ""}
@@ -2370,7 +2400,7 @@ export const HomeScreen = {
       return;
     }
     const prefs = this.layoutPrefs || {};
-    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled);
+    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
     const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled);
     const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
     if (shouldExpand) {
@@ -2537,7 +2567,7 @@ export const HomeScreen = {
     }
     this.cancelFocusedPosterFlow();
     const prefs = this.layoutPrefs || {};
-    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled);
+    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
     const shouldRun = Boolean(shouldExpand || prefs.focusedPosterBackdropTrailerEnabled);
     if (!shouldRun) {
       this.clearFocusedPosterFlowState();
@@ -2553,6 +2583,9 @@ export const HomeScreen = {
       this.collapseFocusedPoster(this.expandedPosterNode);
     }
     const flowKey = this.getFocusedPosterFlowKey(node);
+    if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
+      this.collapseFocusedPoster();
+    }
     const defaultDelayMs = Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
     const existingState = this.focusedPosterFlowState;
     const canReuseExistingState = Boolean(flowKey && existingState?.key === flowKey);
@@ -3384,11 +3417,13 @@ export const HomeScreen = {
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
     const showCatalogTypeSuffix = this.layoutPrefs?.catalogTypeSuffixEnabled !== false;
+    const modernLandscapePostersEnabled = this.layoutMode === "modern"
+      && Boolean(this.layoutPrefs?.modernLandscapePostersEnabled);
     const focusState = retainedFocusState && retainedFocusState.focusKind === "item"
       ? retainedFocusState
       : null;
     const expandFocusedPoster = this.layoutMode === "modern"
-      && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled)
+      && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled || modernLandscapePostersEnabled)
       && Number(this.layoutPrefs?.focusedPosterBackdropExpandDelaySeconds ?? 3) <= 0
       && Boolean(focusState);
     const rowItemLimit = this.getRowItemLimit();
@@ -3420,6 +3455,7 @@ export const HomeScreen = {
         showHeroSection,
         showPosterLabels,
         showCatalogTypeSuffix,
+        preferLandscapePosters: modernLandscapePostersEnabled,
         focusedRowKey: focusState?.rowKey || "",
         focusedItemIndex: Number.isFinite(focusState?.itemIndex) ? focusState.itemIndex : -1,
         expandFocusedPoster,
