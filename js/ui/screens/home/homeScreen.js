@@ -2398,7 +2398,7 @@ export const HomeScreen = {
       return;
     }
     const prefs = this.layoutPrefs || {};
-    const shouldExpand = !prefs.modernLandscapePostersEnabled && Boolean(prefs.focusedPosterBackdropExpandEnabled);
+    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
     const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled);
     const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
     if (shouldExpand) {
@@ -2565,7 +2565,7 @@ export const HomeScreen = {
     }
     this.cancelFocusedPosterFlow();
     const prefs = this.layoutPrefs || {};
-    const shouldExpand = !prefs.modernLandscapePostersEnabled && Boolean(prefs.focusedPosterBackdropExpandEnabled);
+    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
     const shouldRun = Boolean(shouldExpand || prefs.focusedPosterBackdropTrailerEnabled);
     if (!shouldRun) {
       this.clearFocusedPosterFlowState();
@@ -2581,6 +2581,9 @@ export const HomeScreen = {
       this.collapseFocusedPoster(this.expandedPosterNode);
     }
     const flowKey = this.getFocusedPosterFlowKey(node);
+    if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
+      this.collapseFocusedPoster();
+    }
     const defaultDelayMs = Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
     const existingState = this.focusedPosterFlowState;
     const canReuseExistingState = Boolean(flowKey && existingState?.key === flowKey);
@@ -3418,8 +3421,7 @@ export const HomeScreen = {
       ? retainedFocusState
       : null;
     const expandFocusedPoster = this.layoutMode === "modern"
-      && !modernLandscapePostersEnabled
-      && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled)
+      && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled || modernLandscapePostersEnabled)
       && Number(this.layoutPrefs?.focusedPosterBackdropExpandDelaySeconds ?? 3) <= 0
       && Boolean(focusState);
     const rowItemLimit = this.getRowItemLimit();

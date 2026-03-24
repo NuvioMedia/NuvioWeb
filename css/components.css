@@ -4764,7 +4764,7 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-track {
   padding-right: 52px;
   padding-bottom: 0;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .home-screen-shell.home-layout-modern .home-row-continue {
@@ -4809,8 +4809,26 @@ button:focus-visible {
   display: none;
 }
 
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape:not(.is-expanded) {
+  margin-bottom: var(--home-poster-copy-height);
+}
+
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-landscape-copy {
   display: none;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded {
+  flex-basis: var(--home-poster-expanded-width);
+  min-width: var(--home-poster-expanded-width);
+  max-width: var(--home-poster-expanded-width);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-frame {
+  height: var(--home-poster-height);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-expanded-gradient {
+  height: 40%;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-expanded {
