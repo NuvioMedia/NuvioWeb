@@ -991,7 +991,9 @@ function continueWatchingStreamParams(item, options = {}) {
     playerTitle: normalized.title || normalized.contentId || "Untitled",
     playerEpisodeTitle: isSeries ? (normalized.episodeTitle || "") : "",
     playerReleaseYear: isSeries ? "" : (String(normalized.releaseInfo || "").match(/\b(19|20)\d{2}\b/)?.[0] || ""),
-    videoId: normalized.videoId || normalized.contentId,
+    // Do not turn contentId into a synthetic videoId; the player and sync layer should keep
+    // progress identity stable across entry points.
+    videoId: normalized.videoId || null,
     season: isSeries ? normalized.season : null,
     episode: isSeries ? normalized.episode : null,
     episodeTitle: isSeries ? (normalized.episodeTitle || "") : "",

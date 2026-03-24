@@ -85,6 +85,7 @@ function mapProgressRow(row = {}) {
   const seasonNum = Number(seasonRaw);
   const episodeNum = Number(episodeRaw);
   const rawVideoId = row.video_id || row.videoId || null;
+  const normalizedVideoId = typeof rawVideoId === "string" && rawVideoId.trim() === contentId ? null : rawVideoId;
   const toMs = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) {
@@ -98,9 +99,9 @@ function mapProgressRow(row = {}) {
   return {
     contentId,
     contentType,
-    videoId: typeof rawVideoId === "string" && rawVideoId.startsWith(SYNTHETIC_EPISODE_VIDEO_PREFIX)
+    videoId: typeof normalizedVideoId === "string" && normalizedVideoId.startsWith(SYNTHETIC_EPISODE_VIDEO_PREFIX)
       ? null
-      : rawVideoId,
+      : normalizedVideoId,
     season: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : null,
     episode: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : null,
     positionMs: toMs(positionMsRaw),

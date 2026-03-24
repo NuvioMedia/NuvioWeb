@@ -7,12 +7,14 @@ function normalizeProgress(progress = {}, profileId = 1) {
   const season = progress.season == null ? null : Number(progress.season);
   const episode = progress.episode == null ? null : Number(progress.episode);
   const normalizedProfileId = String(progress.profileId || profileId || "1");
+  const contentId = String(progress.contentId || "").trim();
+  const rawVideoId = progress.videoId == null ? null : String(progress.videoId).trim();
   return {
     ...progress,
     profileId: normalizedProfileId,
-    contentId: String(progress.contentId || "").trim(),
+    contentId,
     contentType: String(progress.contentType || "movie").trim() || "movie",
-    videoId: progress.videoId == null ? null : String(progress.videoId),
+    videoId: rawVideoId && rawVideoId !== contentId ? rawVideoId : null,
     season: Number.isFinite(season) ? season : null,
     episode: Number.isFinite(episode) ? episode : null,
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()

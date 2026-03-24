@@ -884,7 +884,13 @@ export const PlayerScreen = {
 
     this.episodes = Array.isArray(params.episodes) ? params.episodes : [];
     this.episodePanelVisible = false;
-    this.episodePanelIndex = Math.max(0, this.episodes.findIndex((entry) => entry.id === params.videoId));
+    const explicitEpisodeIndex = this.episodes.findIndex((entry) => entry.id === params.videoId);
+    const fallbackEpisodeIndex = this.episodes.findIndex((entry) => {
+      const seasonMatch = params.season == null || Number(entry?.season) === Number(params.season);
+      const episodeMatch = params.episode == null || Number(entry?.episode) === Number(params.episode);
+      return seasonMatch && episodeMatch;
+    });
+    this.episodePanelIndex = Math.max(0, explicitEpisodeIndex >= 0 ? explicitEpisodeIndex : fallbackEpisodeIndex);
     this.switchingEpisode = false;
 
     this.seekOverlayVisible = false;
