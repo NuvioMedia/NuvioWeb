@@ -18,6 +18,7 @@ export function renderModernHomeLayout({
   showHeroSection = false,
   showPosterLabels = true,
   showCatalogTypeSuffix = true,
+  preferLandscapePosters = false,
   focusedRowKey = "",
   focusedItemIndex = -1,
   expandFocusedPoster = false,
@@ -65,7 +66,8 @@ export function renderModernHomeLayout({
       rowData.type,
       showPosterLabels,
       "modern",
-      expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex
+      expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex,
+      preferLandscapePosters
     )).join("");
 
     sectionsMarkup.push(`

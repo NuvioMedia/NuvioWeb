@@ -3720,6 +3720,43 @@ button:focus-visible {
   object-position: left center;
 }
 
+.home-screen-shell .home-poster-landscape-copy {
+  display: none;
+}
+
+.home-screen-shell .home-poster-landscape-logo {
+  display: block;
+  width: 100%;
+  max-width: 68%;
+  max-height: 56px;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.48));
+}
+
+.home-screen-shell .home-poster-landscape-title {
+  color: #fff;
+  font-size: 18px;
+  line-height: 1.2;
+  font-weight: 600;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.home-screen-shell .home-poster-landscape-subtitle {
+  margin-top: 4px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.58);
+}
+
 .home-screen-shell .home-poster-expanded-title {
   color: #fff;
   font-size: 18px;
@@ -4448,6 +4485,8 @@ button:focus-visible {
   --modern-trailer-overscan-zoom: 1.35;
   --home-poster-width: 224px;
   --home-poster-height: calc(var(--home-poster-width) * 1.5);
+  --home-landscape-poster-width: calc(var(--home-poster-width) * 1.5);
+  --home-landscape-poster-height: calc(var(--home-landscape-poster-width) * 0.5625);
   --home-poster-expanded-width: calc(var(--home-poster-width) * 2.66);
   --home-poster-copy-height: 74px;
   --home-poster-radius: 12px;
@@ -4725,7 +4764,7 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-track {
   padding-right: 52px;
   padding-bottom: 0;
-  align-items: flex-start;
+  align-items: flex-end;
 }
 
 .home-screen-shell.home-layout-modern .home-row-continue {
@@ -4738,6 +4777,58 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-poster-card {
   transition: flex-basis 180ms ease-out, min-width 180ms ease-out, max-width 180ms ease-out;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape {
+  flex-basis: var(--home-landscape-poster-width);
+  min-width: var(--home-landscape-poster-width);
+  max-width: var(--home-landscape-poster-width);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-frame {
+  height: var(--home-landscape-poster-height);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-expanded-gradient {
+  display: block;
+  height: 54%;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-landscape-copy {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 12px;
+  z-index: 2;
+  display: block;
+  max-width: 76%;
+  pointer-events: none;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-copy {
+  display: none;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape:not(.is-expanded) {
+  margin-bottom: var(--home-poster-copy-height);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-landscape-copy {
+  display: none;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded {
+  flex-basis: var(--home-poster-expanded-width);
+  min-width: var(--home-poster-expanded-width);
+  max-width: var(--home-poster-expanded-width);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-frame {
+  height: var(--home-poster-height);
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-expanded-gradient {
+  height: 40%;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-expanded {
