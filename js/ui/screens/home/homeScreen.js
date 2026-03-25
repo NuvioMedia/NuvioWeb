@@ -3124,6 +3124,16 @@ export const HomeScreen = {
     if (!track) {
       return;
     }
+    if (this.layoutMode === "modern") {
+      const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(track) : null;
+      const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
+      const trackRect = track.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
+      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+      this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), 140);
+      return;
+    }
     const metrics = this.getTrackViewportMetrics(track);
     const targetLeft = target.offsetLeft;
     const targetRight = targetLeft + target.offsetWidth;
