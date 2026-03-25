@@ -2446,6 +2446,7 @@ export const HomeScreen = {
   collapseFocusedPoster(node = this.expandedPosterNode) {
     const target = node || null;
     if (target) {
+      target.closest(".home-track")?.classList.remove("has-expanded-landscape");
       target.classList.remove("is-expanded", "is-trailer-active");
       this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
     }
@@ -2463,6 +2464,9 @@ export const HomeScreen = {
     }
     if (this.expandedPosterNode && this.expandedPosterNode !== node) {
       this.collapseFocusedPoster(this.expandedPosterNode);
+    }
+    if (node.classList.contains("is-landscape")) {
+      node.closest(".home-track")?.classList.add("has-expanded-landscape");
     }
     node.classList.add("is-expanded");
     this.hydrateFocusedPosterAssets(node, { defer: true });
@@ -2972,8 +2976,37 @@ export const HomeScreen = {
       const currentAnchor = this.getMainFocusAnchor(current);
       const sameAnchor = Boolean(currentAnchor && currentAnchor === anchor);
       const isHorizontalMove = direction === "left" || direction === "right";
-      const anchorFullyVisible = anchorRect.top >= visibleTop && anchorRect.bottom <= visibleBottom;
-      if (isHorizontalMove && sameAnchor && anchorFullyVisible) {
+      const isVerticalMove = direction === "up" || direction === "down";
+      const verticalScrollOffset = isVerticalMove
+        ? Math.max(
+          10,
+          Math.min(
+            24,
+            Math.round(Math.max(
+              Number(anchor?.offsetHeight || 0) * 0.08,
+              Number(main?.clientHeight || 0) * 0.025
+            ))
+          )
+        )
+        : 0;
+      if (isHorizontalMove && sameAnchor) {
+        return;
+      }
+      if (isVerticalMove) {
+        const targetScrollTop = anchorTop - inset + verticalScrollOffset;
+        if (Math.abs(Number(main.scrollTop || 0) - targetScrollTop) <= 1) {
+          return;
+        }
+        this.animateScroll(main, "y", targetScrollTop, this.getScrollDuration(220));
+        return;
+      }
+      if (anchorRect.top < visibleTop) {
+        this.animateScroll(main, "y", anchorTop - inset, this.getScrollDuration(180));
+        return;
+      }
+      if (anchorRect.bottom > visibleBottom) {
+        const targetScrollTop = anchorBottom - main.clientHeight + 24;
+        this.animateScroll(main, "y", targetScrollTop, this.getScrollDuration(180));
         return;
       }
       const centeredScrollTop = anchorTop - Math.max(0, (main.clientHeight - anchor.offsetHeight) / 2);
@@ -3758,12 +3791,15 @@ export const HomeScreen = {
       ? null
       : normalizeCatalogItem(this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows), "movie");
     const showHeroSection = Boolean(this.layoutPrefs?.heroSectionEnabled) && Boolean(heroItem);
-    const layoutClass = `home-layout-${this.layoutMode}`;
+    const modernLandscapePostersEnabled = this.layoutMode === "modern"
+      && Boolean(this.layoutPrefs?.modernLandscapePostersEnabled);
+    const modernLandscapeLayoutClass = modernLandscapePostersEnabled
+      ? " home-modern-landscape-posters"
+      : "";
+    const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}`;
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
     const showCatalogTypeSuffix = this.layoutPrefs?.catalogTypeSuffixEnabled !== false;
-    const modernLandscapePostersEnabled = this.layoutMode === "modern"
-      && Boolean(this.layoutPrefs?.modernLandscapePostersEnabled);
     const focusState = retainedFocusState && retainedFocusState.focusKind === "item"
       ? retainedFocusState
       : null;
