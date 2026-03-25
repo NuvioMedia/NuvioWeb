@@ -1134,4 +1134,5 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
 
+    <string name="common_all">सभी</string>
 </resources>

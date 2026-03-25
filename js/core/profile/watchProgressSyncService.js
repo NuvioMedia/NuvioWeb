@@ -6,8 +6,13 @@ import { ProfileManager } from "./profileManager.js";
 const TABLE = "tv_watch_progress";
 const FALLBACK_TABLE = "watch_progress";
 const PULL_RPC = "sync_pull_watch_progress";
-const PUSH_RPC = "sync_push_watch_progress";
 const SYNTHETIC_EPISODE_VIDEO_PREFIX = "__nuvio_episode__:";
+const PUSH_RETRY_BACKOFF_MS = 120000;
+
+let activePushPromise = null;
+let lastSuccessfulPushSignature = "";
+let lastFailedPushSignature = "";
+let lastFailedPushAt = 0;
 
 function progressKey(item = {}) {
   const contentId = String(item.contentId || "").trim();
@@ -136,7 +141,8 @@ function toPositiveIntegerOrNull(value) {
 
 function toRemoteVideoId(item = {}) {
   const explicitVideoId = String(item.videoId || "").trim();
-  if (explicitVideoId) {
+  const contentId = String(item.contentId || "").trim();
+  if (explicitVideoId && explicitVideoId !== "main" && explicitVideoId !== contentId) {
     return explicitVideoId;
   }
   const season = toPositiveIntegerOrNull(item.season);
@@ -144,7 +150,6 @@ function toRemoteVideoId(item = {}) {
   if (season != null || episode != null) {
     return `${SYNTHETIC_EPISODE_VIDEO_PREFIX}${season || 0}:${episode || 0}`;
   }
-  const contentId = String(item.contentId || "").trim();
   if (contentId) {
     return contentId;
   }
@@ -253,6 +258,77 @@ function dedupeRowsForConflict(rows = [], onConflict = "") {
   return Array.from(byKey.values());
 }
 
+function dedupeRemoteProgressEntries(rows = []) {
+  return dedupeRowsForConflict(
+    dedupeRowsForConflict(rows, "progress_key"),
+    "content_id,video_id,season,episode"
+  );
+}
+
+function buildRemoteProgressEntries(items = []) {
+  return dedupeRemoteProgressEntries(items.map((item) => ({
+    content_id: item.contentId,
+    content_type: item.contentType || "movie",
+    video_id: toRemoteVideoId(item),
+    season: item.season == null ? null : Number(item.season),
+    episode: item.episode == null ? null : Number(item.episode),
+    position: toSeconds(item.positionMs),
+    duration: toSeconds(item.durationMs),
+    last_watched: Number(item.updatedAt || Date.now()),
+    progress_key: toProgressKey(item)
+  })));
+}
+
+function buildLegacyFallbackRows(items = [], ownerId, profileId) {
+  return buildRemoteProgressEntries(items).map((row) => ({
+    user_id: ownerId,
+    content_id: row.content_id,
+    content_type: row.content_type,
+    video_id: row.video_id,
+    season: row.season,
+    episode: row.episode,
+    position: row.position,
+    duration: row.duration,
+    last_watched: row.last_watched,
+    progress_key: row.progress_key,
+    profile_id: profileId
+  }));
+}
+
+function buildPrimaryRows(items = [], ownerId) {
+  return dedupeRowsForConflict(items.map((item) => ({
+    owner_id: ownerId,
+    content_id: item.contentId,
+    content_type: item.contentType,
+    video_id: toRemoteVideoId(item),
+    season: item.season == null ? null : Number(item.season),
+    episode: item.episode == null ? null : Number(item.episode),
+    position_ms: item.positionMs || 0,
+    duration_ms: item.durationMs || 0,
+    updated_at: new Date(item.updatedAt || Date.now()).toISOString()
+  })), "owner_id,content_id,video_id,season,episode");
+}
+
+function buildPushSignature(rows = []) {
+  return JSON.stringify(
+    (Array.isArray(rows) ? rows : []).map((row) => [
+      String(row.progress_key || ""),
+      String(row.video_id || ""),
+      Number(row.season || 0),
+      Number(row.episode || 0),
+      Number(row.position || 0),
+      Number(row.duration || 0),
+      Number(row.last_watched || 0)
+    ])
+  );
+}
+
+async function upsertRowsIndividually(table, rows, conflictCandidates = []) {
+  for (const row of Array.isArray(rows) ? rows : []) {
+    await upsertWithConflictCandidates(table, [row], conflictCandidates);
+  }
+}
+
 async function upsertWithConflictCandidates(table, rows, conflictCandidates = []) {
   let lastError = null;
   for (const onConflict of conflictCandidates) {
@@ -329,81 +405,66 @@ export const WatchProgressSyncService = {
   },
 
   async push() {
-    try {
-      if (!AuthManager.isAuthenticated) {
+    if (activePushPromise) {
+      return activePushPromise;
+    }
+    activePushPromise = (async () => {
+      let pushSignature = "";
+      try {
+        if (!AuthManager.isAuthenticated) {
+          return false;
+        }
+        const items = coalesceSyncItems(await watchProgressRepository.getAll());
+        if (!items.length) {
+          return true;
+        }
+        const profileId = resolveProfileId();
+        const ownerId = await AuthManager.getEffectiveUserId();
+        const fallbackRows = buildLegacyFallbackRows(items, ownerId, profileId);
+        pushSignature = buildPushSignature(fallbackRows);
+        if (pushSignature && pushSignature === lastSuccessfulPushSignature) {
+          return true;
+        }
+        if (
+          pushSignature
+          && pushSignature === lastFailedPushSignature
+          && (Date.now() - Number(lastFailedPushAt || 0)) < PUSH_RETRY_BACKOFF_MS
+        ) {
+          return false;
+        }
+        const rows = buildPrimaryRows(items, ownerId);
+        try {
+          await upsertRowsIndividually(FALLBACK_TABLE, fallbackRows, [
+            "user_id,profile_id,progress_key",
+            "user_id,progress_key",
+            "user_id,profile_id,content_id,video_id",
+            "user_id,content_id,video_id"
+          ]);
+        } catch (primaryError) {
+          if (!shouldTryLegacyTable(primaryError)) {
+            throw primaryError;
+          }
+          await upsertRowsIndividually(TABLE, rows, [
+            "owner_id,content_id,video_id",
+            "owner_id,content_id"
+          ]);
+        }
+        lastSuccessfulPushSignature = pushSignature;
+        lastFailedPushSignature = "";
+        lastFailedPushAt = 0;
+        return true;
+      } catch (error) {
+        if (typeof pushSignature === "string" && pushSignature) {
+          lastFailedPushSignature = pushSignature;
+        }
+        lastFailedPushAt = Date.now();
+        console.warn("Watch progress sync push failed", error);
         return false;
       }
-      const items = coalesceSyncItems(await watchProgressRepository.getAll());
-      if (!items.length) {
-        return true;
-      }
-      const profileId = resolveProfileId();
-      try {
-        await SupabaseApi.rpc(PUSH_RPC, {
-          p_profile_id: profileId,
-          p_entries: items.map((item) => ({
-            content_id: item.contentId,
-            content_type: item.contentType || "movie",
-            video_id: toRemoteVideoId(item),
-            season: item.season == null ? null : Number(item.season),
-            episode: item.episode == null ? null : Number(item.episode),
-            position: toSeconds(item.positionMs),
-            duration: toSeconds(item.durationMs),
-            last_watched: Number(item.updatedAt || Date.now()),
-            progress_key: toProgressKey(item)
-          }))
-        }, true);
-        return true;
-      } catch (rpcError) {
-        console.warn("Watch progress sync push RPC failed, falling back to table sync", rpcError);
-      }
-
-      const ownerId = await AuthManager.getEffectiveUserId();
-      const rows = items.map((item) => ({
-        owner_id: ownerId,
-        content_id: item.contentId,
-        content_type: item.contentType,
-        video_id: toRemoteVideoId(item),
-        season: item.season == null ? null : Number(item.season),
-        episode: item.episode == null ? null : Number(item.episode),
-        position_ms: item.positionMs || 0,
-        duration_ms: item.durationMs || 0,
-        updated_at: new Date(item.updatedAt || Date.now()).toISOString()
-      }));
-      try {
-        const fallbackRows = items.map((item) => ({
-          user_id: ownerId,
-          content_id: item.contentId,
-          content_type: item.contentType,
-          video_id: toRemoteVideoId(item),
-          season: item.season == null ? null : Number(item.season),
-          episode: item.episode == null ? null : Number(item.episode),
-          position: Math.max(0, Math.trunc(Number(item.positionMs || 0) / 1000)),
-          duration: Math.max(0, Math.trunc(Number(item.durationMs || 0) / 1000)),
-          last_watched: Number(item.updatedAt || Date.now()),
-          progress_key: toProgressKey(item),
-          profile_id: profileId
-        }));
-        await upsertWithConflictCandidates(FALLBACK_TABLE, fallbackRows, [
-          "user_id,profile_id,progress_key",
-          "user_id,progress_key",
-          "user_id,profile_id,content_id,video_id",
-          "user_id,content_id,video_id"
-        ]);
-      } catch (primaryError) {
-        if (!shouldTryLegacyTable(primaryError)) {
-          throw primaryError;
-        }
-        await upsertWithConflictCandidates(TABLE, rows, [
-          "owner_id,content_id,video_id",
-          "owner_id,content_id"
-        ]);
-      }
-      return true;
-    } catch (error) {
-      console.warn("Watch progress sync push failed", error);
-      return false;
-    }
+    })().finally(() => {
+      activePushPromise = null;
+    });
+    return activePushPromise;
   }
 
 };

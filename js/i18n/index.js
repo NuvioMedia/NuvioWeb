@@ -198,6 +198,7 @@ const KEY_ALIASES = {
   "auth.qr.scanAndSignIn": "auth_qr_scan_instruction",
   "auth.qr.title": "auth_qr_title",
   "auth.qr.unavailable": "auth_qr_unavailable",
+  "common.all": "common_all",
   "common.beta": "common_beta",
   "auth.signIn.back": "auth_qr_back",
   "auth.signIn.description": "auth_signin_tv_disabled",

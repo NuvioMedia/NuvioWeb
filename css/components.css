@@ -4849,12 +4849,16 @@ button:focus-visible {
   transform: none;
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded .content-poster,
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded .content-poster.placeholder {
+.home-screen-shell.home-layout-modern .home-poster-card.is-expanded.is-expanded-backdrop-ready .content-poster,
+.home-screen-shell.home-layout-modern .home-poster-card.is-expanded.is-expanded-backdrop-ready .content-poster.placeholder {
   opacity: 0;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-expanded .home-poster-expanded-backdrop {
+  opacity: 0;
+}
+
+.home-screen-shell.home-layout-modern .home-poster-card.is-expanded.is-expanded-backdrop-ready .home-poster-expanded-backdrop {
   opacity: 1;
 }
 
@@ -10315,6 +10319,17 @@ button:focus-visible {
 .performance-constrained .series-episode-card.focused,
 .performance-constrained .series-season-btn.focused {
   box-shadow: none !important;
+}
+
+.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card,
+.performance-constrained .home-screen-shell.home-layout-modern .home-poster-frame,
+.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card .content-poster,
+.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card .home-poster-expanded-backdrop {
+  transition: none !important;
+}
+
+.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card.focused .home-poster-frame {
+  background-color: transparent !important;
 }
 
 .stream-route-card.focused {

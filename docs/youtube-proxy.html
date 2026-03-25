@@ -35,6 +35,7 @@ let player = null;
 let ready = false;
 let lastStatePayload = "";
 let stateTimer = null;
+const pageOrigin = String(location.origin || "").trim();
 
 function safeCall(fn, fallback) {
   try {
@@ -80,7 +81,7 @@ function ensureStateTimer() {
   }
   stateTimer = setInterval(() => {
     pushState(false);
-  }, 300);
+  }, 1000);
 }
 
 function handleCommand(data) {
@@ -150,12 +151,15 @@ function onYouTubeIframeAPIReady() {
       autoplay: autoplay ? 1 : 0,
       controls: 0,
       disablekb: 1,
+      enablejsapi: 1,
       fs: 0,
       loop: loop ? 1 : 0,
       modestbranding: 1,
+      origin: /^https?:\/\//i.test(pageOrigin) ? pageOrigin : undefined,
       playsinline: 1,
       playlist: loop ? videoId : undefined,
-      rel: 0
+      rel: 0,
+      widget_referrer: location.href
     },
     events: {
       onReady: (event) => {

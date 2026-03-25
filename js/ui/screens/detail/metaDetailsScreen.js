@@ -2531,7 +2531,7 @@ export const MetaDetailsScreen = {
   },
 
   shouldSuppressTrailerAutoplay() {
-    return this.isLegacyTvRuntime();
+    return this.isLegacyTvRuntime() || this.isPerformanceConstrained();
   },
 
   animateScroll(container, axis, targetValue, duration = 150) {

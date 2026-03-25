@@ -12,7 +12,11 @@ function activeProfileId() {
 let watchProgressSyncTimer = null;
 let watchProgressSyncInFlight = null;
 
-function queueWatchProgressCloudSync(delayMs = 250) {
+function getWatchProgressSyncDebounceMs() {
+  return globalThis.document?.body?.classList?.contains("performance-constrained") ? 15000 : 1500;
+}
+
+function queueWatchProgressCloudSync(delayMs = getWatchProgressSyncDebounceMs()) {
   if (watchProgressSyncTimer) {
     clearTimeout(watchProgressSyncTimer);
   }

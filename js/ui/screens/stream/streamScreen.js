@@ -3,6 +3,13 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { Environment } from "../../../platform/environment.js";
+import { I18n } from "../../../i18n/index.js";
+
+const failedAddonLogoUrls = new Set();
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -232,6 +239,17 @@ function getAddonBadgeLabel(name = "") {
     .join("")
     .slice(0, 2);
   return letters || cleaned.charAt(0).toUpperCase();
+}
+
+function normalizeAddonLogoUrl(value = "") {
+  return String(value || "").trim();
+}
+
+function rememberFailedAddonLogo(url = "") {
+  const normalized = normalizeAddonLogoUrl(url);
+  if (normalized) {
+    failedAddonLogoUrls.add(normalized);
+  }
 }
 
 function getStreamHeadline(stream = {}) {
@@ -687,7 +705,7 @@ export const StreamScreen = {
     return `
       <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml(name)}">
         ${spinner}
-        <span>${escapeHtml(name === "all" ? "All" : name)}</span>
+        <span>${escapeHtml(name === "all" ? t("common.all", {}, "All") : name)}</span>
       </button>
     `;
   },
@@ -696,14 +714,16 @@ export const StreamScreen = {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
     const descriptionLines = getStreamDescriptionLines(stream);
+    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo);
+    const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
     const meta = [
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
       renderMetaItem("source", extractIndexerName(stream))
     ].filter(Boolean).join("");
-    const addonBadge = stream.addonLogo
-      ? `<img src="${stream.addonLogo}" alt="${escapeHtml(stream.addonName || "Addon")}" />`
-      : `<span>${escapeHtml(getAddonBadgeLabel(stream.addonName || ""))}</span>`;
+    const addonBadge = addonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)
+      ? `<img src="${escapeHtml(addonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" /><span hidden>${addonBadgeLabel}</span>`
+      : `<span>${addonBadgeLabel}</span>`;
 
     return `
       <article class="stream-route-card focusable${this.focusState.zone === "card" && this.focusState.index === index ? " focused" : ""}"
@@ -795,9 +815,31 @@ export const StreamScreen = {
       </div>
     `;
 
+    this.bindAddonLogoFallbacks();
     ScreenUtils.indexFocusables(this.container);
     this.restoreScrollPosition();
     this.applyFocus();
+  },
+
+  bindAddonLogoFallbacks() {
+    this.container?.querySelectorAll(".stream-route-addon-badge img[data-addon-logo]").forEach((node) => {
+      if (!(node instanceof HTMLImageElement) || node.dataset.fallbackBound === "true") {
+        return;
+      }
+      node.dataset.fallbackBound = "true";
+      const fallback = node.nextElementSibling;
+      const applyFallback = () => {
+        rememberFailedAddonLogo(node.dataset.addonLogo || node.getAttribute("src") || "");
+        node.hidden = true;
+        if (fallback instanceof HTMLElement) {
+          fallback.hidden = false;
+        }
+      };
+      node.addEventListener("error", applyFallback, { once: true });
+      if (node.complete && Number(node.naturalWidth || 0) <= 0) {
+        applyFallback();
+      }
+    });
   },
 
   playStream(streamId) {

@@ -842,4 +842,5 @@
     <string name="update_open_settings">Deschide Setările</string>
     <string name="update_install">Instalează</string>
     <string name="update_ignore">Ignoră</string>
+    <string name="common_all">Toate</string>
   </resources>

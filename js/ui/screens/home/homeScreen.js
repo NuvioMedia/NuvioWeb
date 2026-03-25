@@ -1519,6 +1519,16 @@ export const HomeScreen = {
     return this.isLegacyTvRuntime();
   },
 
+  getFocusedPosterTrailerDelayMs() {
+    if (this.isLegacyTvRuntime()) {
+      return 0;
+    }
+    if (this.isPerformanceConstrained()) {
+      return 1400;
+    }
+    return 0;
+  },
+
   isPerformanceConstrained() {
     return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
   },
@@ -2330,13 +2340,45 @@ export const HomeScreen = {
       return;
     }
     const hydrate = () => {
-      const backdrop = node.querySelector(".home-poster-expanded-backdrop[data-src]");
-      if (backdrop) {
-        const src = String(backdrop.dataset.src || "").trim();
+      const backdrop = node.querySelector(".home-poster-expanded-backdrop");
+      if (backdrop?.tagName === "IMG") {
+        const src = String(backdrop.dataset.src || backdrop.getAttribute("src") || "").trim();
+        const markBackdropReady = () => {
+          if (node.isConnected) {
+            node.classList.add("is-expanded-backdrop-ready");
+          }
+          backdrop.dataset.loadState = "ready";
+        };
+        const markBackdropPending = () => {
+          node.classList.remove("is-expanded-backdrop-ready");
+          backdrop.dataset.loadState = src ? "pending" : "";
+        };
         if (src && !backdrop.getAttribute("src")) {
           backdrop.setAttribute("src", src);
         }
+        if (backdrop.complete && Number(backdrop.naturalWidth || 0) > 0) {
+          markBackdropReady();
+        } else if (src) {
+          markBackdropPending();
+          if (backdrop.dataset.loadBound !== "true") {
+            backdrop.dataset.loadBound = "true";
+            backdrop.addEventListener("load", () => {
+              markBackdropReady();
+            }, { once: true });
+            backdrop.addEventListener("error", () => {
+              if (node.isConnected) {
+                node.classList.remove("is-expanded-backdrop-ready");
+              }
+              backdrop.dataset.loadState = "error";
+              backdrop.dataset.loadBound = "false";
+            }, { once: true });
+          }
+        } else {
+          markBackdropPending();
+        }
         backdrop.removeAttribute("data-src");
+      } else {
+        node.classList.remove("is-expanded-backdrop-ready");
       }
       const logo = node.querySelector(".home-poster-expanded-logo[data-src]");
       if (logo) {
@@ -2362,6 +2404,40 @@ export const HomeScreen = {
     } else {
       setTimeout(run, 0);
     }
+  },
+
+  promotePosterCardAssets(node, { includeNeighbors = false } = {}) {
+    const promoteCard = (card, isPrimary = false) => {
+      if (!this.isModernPosterNode(card)) {
+        return;
+      }
+      const poster = card.querySelector(".content-poster");
+      if (poster instanceof HTMLImageElement) {
+        poster.loading = "eager";
+        poster.decoding = "async";
+        if (isPrimary) {
+          try {
+            poster.fetchPriority = "high";
+          } catch (_) {
+          }
+        }
+      }
+      if (isPrimary) {
+        this.hydrateFocusedPosterAssets(card);
+      }
+    };
+
+    promoteCard(node, true);
+    if (!includeNeighbors) {
+      return;
+    }
+    const siblings = Array.from(node?.closest(".home-track")?.querySelectorAll(".home-poster-card") || []);
+    const index = siblings.indexOf(node);
+    [siblings[index - 1], siblings[index + 1]].forEach((sibling) => {
+      if (sibling) {
+        promoteCard(sibling, false);
+      }
+    });
   },
 
   clearTrailerLayer(container) {
@@ -2469,7 +2545,7 @@ export const HomeScreen = {
       node.closest(".home-track")?.classList.add("has-expanded-landscape");
     }
     node.classList.add("is-expanded");
-    this.hydrateFocusedPosterAssets(node, { defer: true });
+    this.hydrateFocusedPosterAssets(node);
     this.expandedPosterNode = node;
     requestAnimationFrame(() => {
       if (node.classList.contains("focused")) {
@@ -2528,6 +2604,18 @@ export const HomeScreen = {
     }
     if (!shouldPreviewTrailer) {
       return;
+    }
+    const trailerDelayMs = this.getFocusedPosterTrailerDelayMs();
+    if (trailerDelayMs > 0) {
+      await new Promise((resolve) => {
+        setTimeout(resolve, trailerDelayMs);
+      });
+      if (
+        Number(this.focusedPosterFlowToken || 0) !== Number(flowToken || 0)
+        || !node.classList.contains("focused")
+      ) {
+        return;
+      }
     }
 
     const sourceItem = this.getNodeHeroSource(node);
@@ -2706,7 +2794,10 @@ export const HomeScreen = {
     if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
       this.collapseFocusedPoster();
     }
-    const defaultDelayMs = Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
+    this.promotePosterCardAssets(node, { includeNeighbors: this.isPerformanceConstrained() });
+    const defaultDelayMs = this.isPerformanceConstrained()
+      ? 0
+      : Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
     const existingState = this.focusedPosterFlowState;
     const canReuseExistingState = Boolean(flowKey && existingState?.key === flowKey);
     const now = Date.now();
@@ -3058,6 +3149,9 @@ export const HomeScreen = {
     if (!current || !target || current === target) {
       return false;
     }
+    if (this.layoutMode === "modern" && this.isPerformanceConstrained() && this.expandedPosterNode && this.expandedPosterNode !== target) {
+      this.collapseFocusedPoster(this.expandedPosterNode);
+    }
     current.classList.remove("focused");
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target, { suppressDelegatedFocus: true });
@@ -3068,6 +3162,9 @@ export const HomeScreen = {
       this.ensureTrackHorizontalVisibility(target, direction);
       this.ensureMainVerticalVisibility(target, direction, current);
       this.scheduleModernHeroUpdate(target);
+      if (this.isPerformanceConstrained()) {
+        this.promotePosterCardAssets(target, { includeNeighbors: true });
+      }
       this.scheduleFocusedPosterFlow(target);
     } else {
       this.cancelPendingHeroFocus();

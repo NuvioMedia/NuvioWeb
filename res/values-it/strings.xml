@@ -1097,4 +1097,5 @@
     <string name="auth.syncCode.prompt">Inserisci codice sync</string>
     <string name="auth.syncCode.setCode">Imposta codice</string>
 
+    <string name="common_all">Tutti</string>
 </resources>

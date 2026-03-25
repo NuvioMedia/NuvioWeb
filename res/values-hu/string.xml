@@ -981,5 +981,6 @@
     <string name="update_open_settings">Beállítások megnyitása</string>
     <string name="update_install">Telepítés</string>
     <string name="update_ignore">Mellőzés</string>
+    <string name="common_all">Összes</string>
 </resources>
 	

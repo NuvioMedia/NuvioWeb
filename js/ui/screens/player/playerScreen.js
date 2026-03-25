@@ -1123,6 +1123,9 @@ export const PlayerScreen = {
   },
 
   async fetchParentalGuide() {
+    if (globalThis.document?.body?.classList?.contains("performance-constrained")) {
+      return;
+    }
     const { itemType, imdbId, season, episode } = this.buildPlaybackIdentityContext();
     if (!imdbId) {
       return;
