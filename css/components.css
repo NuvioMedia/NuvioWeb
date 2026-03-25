@@ -6860,7 +6860,7 @@ button:focus-visible {
 
 .player-loading-subtitle {
   margin-top: 10px;
-  font-size: 22px;
+  font-size: clamp(24px, 1.5vw, 30px);
   color: rgba(242, 247, 254, 0.9);
 }
 
@@ -6871,7 +6871,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 32px;
+  padding: var(--tv-safe-gutter);
   opacity: 1;
   transition: opacity 200ms ease;
 }
@@ -6916,24 +6916,24 @@ button:focus-visible {
 }
 
 .player-clock {
-  font-size: 26px;
+  font-size: clamp(32px, 2.1vw, 40px);
   font-weight: 600;
   line-height: 1;
 }
 
 .player-ends-at {
   margin-top: 2px;
-  font-size: 14px;
+  font-size: var(--tv-caption-text);
   color: rgba(231, 238, 246, 0.82);
 }
 
 .player-controls-bottom {
   position: relative;
   z-index: 1;
-  padding-top: 56px;
+  padding-top: clamp(68px, 7vh, 96px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: var(--tv-card-gap);
 }
 
 .player-meta {
@@ -6942,20 +6942,20 @@ button:focus-visible {
 }
 
 .player-title {
-  font-size: 34px;
+  font-size: clamp(40px, 2.8vw, 56px);
   font-weight: 700;
   line-height: 1.1;
 }
 
 .player-subtitle {
   margin-top: 4px;
-  font-size: 20px;
+  font-size: var(--tv-subtitle-text);
   color: rgba(239, 245, 251, 0.9);
 }
 
 .player-meta-tertiary {
   margin-top: 6px;
-  font-size: 16px;
+  font-size: var(--tv-secondary-text);
   color: rgba(255, 255, 255, 0.68);
 }
 
@@ -6974,7 +6974,7 @@ button:focus-visible {
 
 .player-progress-track {
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.3);
   overflow: hidden;
@@ -6982,7 +6982,7 @@ button:focus-visible {
 }
 
 .player-progress-shell.focused .player-progress-track {
-  height: 10px;
+  height: 14px;
   background: rgba(255, 255, 255, 0.45);
 }
 
@@ -6995,29 +6995,29 @@ button:focus-visible {
 }
 
 .player-controls-row {
-  margin-top: 16px;
+  margin-top: clamp(18px, 1.4vw, 28px);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: clamp(24px, 1.8vw, 36px);
 }
 
 .player-control-buttons {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: clamp(12px, 1vw, 18px);
 }
 
 .player-control-btn {
-  width: 48px;
-  min-width: 48px;
-  height: 48px;
+  width: var(--tv-control-size);
+  min-width: var(--tv-control-size);
+  height: var(--tv-control-size);
   padding: 0;
   border-radius: 999px;
   border: none;
   background: transparent;
   color: #f4f8fd;
-  font-size: 16px;
+  font-size: var(--tv-secondary-text);
   font-weight: 700;
   pointer-events: auto;
   display: inline-flex;
@@ -7026,8 +7026,8 @@ button:focus-visible {
 }
 
 .player-control-icon {
-  width: 24px;
-  height: 24px;
+  width: var(--tv-control-icon-size);
+  height: var(--tv-control-icon-size);
   display: block;
   filter: invert(1) brightness(1.15);
 }
@@ -7044,7 +7044,7 @@ button:focus-visible {
 }
 
 .player-control-label {
-  font-size: 13px;
+  font-size: clamp(15px, 0.95vw, 18px);
   font-weight: 700;
 }
 
@@ -7078,7 +7078,7 @@ button:focus-visible {
 
 .player-time-label {
   margin-left: auto;
-  font-size: 18px;
+  font-size: clamp(20px, 1.3vw, 26px);
   font-weight: 500;
   color: rgba(244, 248, 253, 0.96);
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
@@ -7088,18 +7088,18 @@ button:focus-visible {
   position: absolute;
   right: 0;
   top: 0;
-  width: 520px;
+  width: clamp(560px, 36vw, 760px);
   height: 100%;
   overflow-y: auto;
   z-index: 35;
-  border-radius: 16px 0 0 16px;
-  padding: 24px;
+  border-radius: var(--tv-card-radius) 0 0 var(--tv-card-radius);
+  padding: clamp(28px, 2.2vw, 40px);
   background: var(--player-background-elevated);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .player-episode-panel-title {
-  font-size: 28px;
+  font-size: clamp(32px, 2vw, 40px);
   font-weight: 700;
 }
 
@@ -7107,12 +7107,13 @@ button:focus-visible {
   margin-top: 4px;
   margin-bottom: 12px;
   color: rgba(232, 239, 246, 0.72);
+  font-size: var(--tv-secondary-text);
 }
 
 .player-episode-item {
-  border-radius: 12px;
-  padding: 12px;
-  margin-bottom: 8px;
+  border-radius: var(--tv-card-radius);
+  padding: clamp(14px, 1vw, 20px);
+  margin-bottom: 10px;
   background: transparent;
   border: 1px solid transparent;
 }
@@ -7124,19 +7125,20 @@ button:focus-visible {
 
 .player-episode-item-title {
   font-weight: 700;
+  font-size: var(--tv-body-text);
 }
 
 .player-episode-item-subtitle {
   margin-top: 3px;
   color: rgba(232, 239, 246, 0.72);
-  font-size: 14px;
+  font-size: var(--tv-caption-text);
 }
 
 .player-seek-overlay {
   position: absolute;
-  left: 32px;
-  right: 32px;
-  bottom: 26px;
+  left: var(--tv-safe-gutter);
+  right: var(--tv-safe-gutter);
+  bottom: clamp(32px, 3vh, 48px);
   z-index: 33;
   padding: 0;
   opacity: 1;
@@ -7150,7 +7152,7 @@ button:focus-visible {
 
 .player-seek-overlay-track {
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.3);
   overflow: hidden;
@@ -7160,20 +7162,20 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
+  gap: clamp(12px, 1vw, 18px);
+  margin-top: 14px;
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.65);
 }
 
 .player-seek-direction {
-  font-size: 16px;
+  font-size: var(--tv-secondary-text);
   font-weight: 700;
   color: rgba(246, 250, 255, 0.96);
   letter-spacing: 0.2px;
 }
 
 .player-seek-preview {
-  font-size: 16px;
+  font-size: var(--tv-secondary-text);
   font-weight: 600;
   color: rgba(246, 250, 255, 0.96);
 }
@@ -7188,15 +7190,15 @@ button:focus-visible {
 
 .player-skip-intro {
   position: absolute;
-  left: 26px;
-  bottom: 30px;
+  left: var(--tv-safe-gutter);
+  bottom: clamp(32px, 3vh, 46px);
   z-index: 29;
   opacity: 1;
   transition: bottom 180ms ease, opacity 180ms ease;
 }
 
 .player-skip-intro.is-raised {
-  bottom: 122px;
+  bottom: clamp(138px, 15vh, 176px);
 }
 
 .player-skip-intro.hidden {
@@ -7205,9 +7207,9 @@ button:focus-visible {
 }
 
 .player-skip-intro-btn {
-  min-width: 180px;
-  min-height: 52px;
-  padding: 0 18px;
+  min-width: clamp(220px, 14vw, 300px);
+  min-height: clamp(60px, 4vw, 76px);
+  padding: 0 clamp(20px, 1.5vw, 28px);
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(18, 18, 18, 0.88);
@@ -7224,23 +7226,23 @@ button:focus-visible {
 }
 
 .player-skip-intro-label {
-  font-size: 18px;
+  font-size: clamp(20px, 1.25vw, 26px);
   font-weight: 700;
   line-height: 1;
 }
 
 .player-next-episode-card {
   position: absolute;
-  right: 26px;
-  bottom: 30px;
+  right: var(--tv-safe-gutter);
+  bottom: clamp(32px, 3vh, 46px);
   z-index: 29;
-  width: 420px;
+  width: clamp(470px, 34vw, 640px);
   pointer-events: none;
   transition: bottom 180ms ease, opacity 180ms ease;
 }
 
 .player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
-  bottom: 122px;
+  bottom: clamp(138px, 15vh, 176px);
 }
 
 .player-next-episode-card.hidden {
@@ -7251,9 +7253,9 @@ button:focus-visible {
 .player-next-episode-card-inner {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 14px;
+  gap: clamp(14px, 1vw, 20px);
+  padding: clamp(12px, 1vw, 18px);
+  border-radius: clamp(18px, 1.2vw, 24px);
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(25, 25, 25, 0.89);
   box-shadow: 0 18px 36px rgba(0, 0, 0, 0.28);
@@ -7266,10 +7268,10 @@ button:focus-visible {
 
 .player-next-episode-thumb-wrap {
   position: relative;
-  width: 112px;
-  min-width: 112px;
-  height: 64px;
-  border-radius: 9px;
+  width: clamp(140px, 10vw, 180px);
+  min-width: clamp(140px, 10vw, 180px);
+  height: clamp(80px, 5.8vw, 102px);
+  border-radius: clamp(12px, 0.8vw, 16px);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
 }
@@ -7294,14 +7296,14 @@ button:focus-visible {
 
 .player-next-episode-kicker {
   color: rgba(255, 255, 255, 0.8);
-  font-size: 11px;
+  font-size: clamp(14px, 0.85vw, 17px);
   font-weight: 500;
 }
 
 .player-next-episode-title {
   margin-top: 2px;
   color: #ffffff;
-  font-size: 14px;
+  font-size: clamp(18px, 1.2vw, 24px);
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -7311,8 +7313,8 @@ button:focus-visible {
 .player-next-episode-pill {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  padding: 6px 10px;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   color: rgba(255, 255, 255, 0.72);
@@ -7329,22 +7331,22 @@ button:focus-visible {
 }
 
 .player-next-episode-pill-icon {
-  font-size: 12px;
+  font-size: clamp(14px, 0.95vw, 18px);
   line-height: 1;
 }
 
 .player-next-episode-pill-text {
-  font-size: 12px;
+  font-size: clamp(14px, 0.95vw, 18px);
 }
 
 .player-aspect-toast {
   position: absolute;
   left: 50%;
-  top: 28px;
+  top: clamp(28px, 2.2vh, 40px);
   transform: translateX(-50%);
   z-index: 35;
-  min-height: 44px;
-  padding: 0 20px;
+  min-height: clamp(50px, 3.5vw, 64px);
+  padding: 0 clamp(22px, 1.8vw, 34px);
   border-radius: 999px;
   background: rgba(9, 13, 20, 0.88);
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -7352,7 +7354,7 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 24px;
+  font-size: clamp(26px, 1.7vw, 34px);
   font-weight: 700;
   opacity: 1;
   transition: opacity 160ms ease;
@@ -8889,18 +8891,18 @@ button:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 20px;
+  gap: clamp(20px, 1.4vw, 30px);
 }
 
 .detail-trailer-badge {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 14px;
+  min-height: clamp(38px, 2.8vw, 50px);
+  padding: 0 clamp(16px, 1.2vw, 24px);
   border-radius: 999px;
   background: rgb(var(--focus-color-rgb) / 0.16);
   color: var(--text-color);
-  font-size: 13px;
+  font-size: var(--tv-caption-text);
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -8911,7 +8913,7 @@ button:focus-visible {
   max-width: min(72vw, 860px);
   text-align: right;
   color: rgba(241, 246, 252, 0.9);
-  font-size: 14px;
+  font-size: var(--tv-caption-text);
   line-height: 1.4;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.65);
 }
@@ -8919,8 +8921,8 @@ button:focus-visible {
 .detail-trailer-controls-bottom {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding-top: 52px;
+  gap: clamp(18px, 1.3vw, 28px);
+  padding-top: clamp(64px, 6vh, 92px);
 }
 
 .detail-trailer-meta {
@@ -8929,7 +8931,7 @@ button:focus-visible {
 }
 
 .detail-trailer-title {
-  font-size: clamp(30px, 4vw, 44px);
+  font-size: clamp(36px, 4vw, 52px);
   font-weight: 700;
   line-height: 1.08;
 }
@@ -8937,7 +8939,7 @@ button:focus-visible {
 .detail-trailer-subtitle {
   margin-top: 6px;
   color: var(--text-color);
-  font-size: 18px;
+  font-size: var(--tv-subtitle-text);
   line-height: 1.3;
 }
 
@@ -8947,7 +8949,7 @@ button:focus-visible {
 
 .detail-trailer-progress-track {
   width: 100%;
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
   background: rgb(var(--focus-color-rgb) / 0.3);
   overflow: hidden;
@@ -8965,20 +8967,20 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: clamp(18px, 1.3vw, 28px);
 }
 
 .detail-trailer-buttons {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: clamp(12px, 1vw, 18px);
 }
 
 .detail-trailer-control-btn {
   width: auto;
   min-width: 0;
-  height: 50px;
-  padding: 0 18px;
+  height: clamp(58px, 4vw, 74px);
+  padding: 0 clamp(20px, 1.6vw, 30px);
   border-radius: 999px;
   gap: 10px;
   background: rgb(var(--focus-color-rgb) / 0.12);
@@ -8997,7 +8999,7 @@ button:focus-visible {
 }
 
 .detail-trailer-control-text {
-  font-size: 14px;
+  font-size: var(--tv-secondary-text);
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -9006,7 +9008,7 @@ button:focus-visible {
 .detail-trailer-time {
   margin-left: auto;
   color: var(--text-color);
-  font-size: 18px;
+  font-size: var(--tv-secondary-text);
   font-weight: 600;
   white-space: nowrap;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
@@ -9063,7 +9065,7 @@ button:focus-visible {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 0 96px;
+  padding: 0 0 clamp(116px, 12vh, 168px);
   box-sizing: border-box;
   scrollbar-width: none;
 }
@@ -9073,41 +9075,41 @@ button:focus-visible {
 }
 
 .detail-hero-section {
-  min-height: 540px;
+  min-height: clamp(620px, 60vh, 780px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 0 48px 16px;
+  padding: 0 var(--tv-safe-gutter-wide) clamp(20px, 2.2vh, 32px);
   box-sizing: border-box;
 }
 
 .detail-hero-brand {
-  min-height: 124px;
+  min-height: clamp(148px, 14vh, 200px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
 }
 
 .series-detail-logo {
-  max-width: min(40vw, 540px);
-  max-height: 100px;
+  max-width: min(44vw, 620px);
+  max-height: clamp(112px, 9vh, 144px);
   object-fit: contain;
   display: block;
-  margin-bottom: 16px;
+  margin-bottom: clamp(18px, 1.4vw, 26px);
   transform-origin: left bottom;
   transition: max-width 600ms ease, max-height 600ms ease, margin-bottom 600ms ease;
 }
 
 .detail-trailer-active .series-detail-logo {
-  max-width: min(25vw, 320px);
-  max-height: 60px;
+  max-width: min(28vw, 380px);
+  max-height: clamp(72px, 6vh, 96px);
   margin-bottom: 24px;
 }
 
 .series-detail-title {
   margin: 0 0 12px;
-  font-size: 36px;
-  line-height: 44px;
+  font-size: var(--tv-title-text);
+  line-height: 1.1;
   font-weight: 700;
   letter-spacing: 0;
   transition: opacity 400ms ease;
@@ -9119,7 +9121,7 @@ button:focus-visible {
 
 .detail-trailer-hint {
   margin: 0 0 8px;
-  font-size: 16px;
+  font-size: var(--tv-secondary-text);
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.72);
   opacity: 0;
@@ -9133,8 +9135,8 @@ button:focus-visible {
 .series-detail-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: clamp(14px, 1vw, 20px);
+  margin-bottom: clamp(18px, 1.4vw, 26px);
   transition: opacity 400ms ease, transform 400ms ease;
 }
 
@@ -9159,28 +9161,28 @@ button:focus-visible {
 }
 
 .series-primary-btn {
-  min-height: 48px;
-  padding: 14px 24px;
-  border-radius: 32px;
+  min-height: var(--tv-button-height);
+  padding: 0 var(--tv-button-padding-x);
+  border-radius: 999px;
   background: rgb(var(--card-bg-rgb) / 0.92);
   color: var(--detail-text-primary);
   border: 2px solid rgb(var(--focus-color-rgb) / 0.08);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--tv-secondary-text);
+  line-height: 1;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .series-circle-btn {
-  width: 48px;
-  height: 48px;
+  width: var(--tv-control-size);
+  height: var(--tv-control-size);
   border-radius: 999px;
   background: var(--detail-bg-card);
   color: var(--detail-text-primary);
   border: 2px solid transparent;
-  font-size: 22px;
+  font-size: clamp(24px, 1.7vw, 32px);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -9222,14 +9224,14 @@ button:focus-visible {
 }
 
 .series-btn-svg {
-  width: 22px;
-  height: 22px;
+  width: clamp(24px, 1.65vw, 30px);
+  height: clamp(24px, 1.65vw, 30px);
   display: block;
 }
 
 .series-primary-btn .series-btn-svg {
-  width: 18px;
-  height: 18px;
+  width: clamp(20px, 1.3vw, 24px);
+  height: clamp(20px, 1.3vw, 24px);
   filter: brightness(0) invert(1);
 }
 
@@ -9282,9 +9284,9 @@ button:focus-visible {
 
 .series-detail-support {
   margin: 0 0 12px;
-  max-width: 60%;
-  font-size: 15px;
-  line-height: 22px;
+  max-width: min(70vw, 980px);
+  font-size: var(--tv-secondary-text);
+  line-height: 1.45;
   color: var(--detail-text-secondary);
   transition: opacity 400ms ease, transform 400ms ease;
 }
@@ -9292,8 +9294,8 @@ button:focus-visible {
 .detail-ratings-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 14px;
+  gap: clamp(14px, 1vw, 20px);
+  margin-bottom: clamp(16px, 1.2vw, 22px);
   flex-wrap: wrap;
   transition: opacity 400ms ease, transform 400ms ease;
 }
@@ -9301,24 +9303,24 @@ button:focus-visible {
 .detail-rating-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   color: var(--detail-text-secondary);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
   font-weight: 500;
 }
 
 .detail-rating-item img {
-  width: 24px;
-  height: 24px;
+  width: 28px;
+  height: 28px;
   object-fit: contain;
 }
 
 .series-detail-description {
   margin: 0 0 12px;
-  max-width: 60%;
-  font-size: 16px;
-  line-height: 22px;
+  max-width: min(70vw, 980px);
+  font-size: var(--tv-body-text);
+  line-height: 1.5;
   color: var(--detail-text-primary);
   transition: opacity 400ms ease, transform 400ms ease;
 }
@@ -9326,29 +9328,29 @@ button:focus-visible {
 .detail-meta-stack {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   transition: opacity 400ms ease, transform 400ms ease;
 }
 
 .detail-meta-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   flex-wrap: wrap;
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--tv-secondary-text);
+  line-height: 1.4;
   color: var(--detail-text-secondary);
 }
 
 .detail-meta-row.secondary {
   color: var(--detail-text-primary);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
 }
 
 .detail-meta-dot {
   width: 1px;
-  height: 12px;
+  height: 14px;
   background: rgba(179, 179, 179, 0.55);
 }
 
@@ -9357,21 +9359,21 @@ button:focus-visible {
   padding: 0;
   background: transparent;
   gap: 4px;
-  font-size: 14px;
+  font-size: var(--tv-secondary-text);
   color: var(--detail-text-secondary);
 }
 
 .detail-meta-row .series-imdb-badge img {
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
 }
 
 .detail-meta-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
   border: 1px solid rgba(179, 179, 179, 0.55);
   color: var(--detail-text-secondary);
 }
@@ -9402,17 +9404,17 @@ button:focus-visible {
 .detail-company-track,
 .detail-morelike-track,
 .series-episode-ratings-grid {
-  padding-left: 48px;
-  padding-right: 48px;
+  padding-left: var(--tv-safe-gutter-wide);
+  padding-right: var(--tv-safe-gutter-wide);
   box-sizing: border-box;
 }
 
 .series-season-row {
   margin-bottom: 0;
-  gap: 12px;
+  gap: clamp(12px, 1vw, 18px);
   overflow-x: auto;
-  padding-top: 24px;
-  padding-bottom: 8px;
+  padding-top: clamp(26px, 2vw, 36px);
+  padding-bottom: 10px;
 }
 
 .series-season-row::-webkit-scrollbar,
@@ -9428,14 +9430,14 @@ button:focus-visible {
 }
 
 .series-season-btn {
-  min-height: 28px;
-  padding: 6px 16px;
-  border-radius: 20px;
+  min-height: clamp(42px, 3vw, 54px);
+  padding: 0 clamp(18px, 1.5vw, 26px);
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   background: var(--detail-bg-card);
   color: var(--detail-text-secondary);
-  font-size: 15px;
-  line-height: 18px;
+  font-size: var(--tv-secondary-text);
+  line-height: 1;
   font-weight: 500;
   display: inline-flex;
   align-items: center;
@@ -9455,14 +9457,14 @@ button:focus-visible {
 }
 
 .series-episode-track {
-  gap: 20px;
-  padding: 18px 56px;
+  gap: clamp(24px, 1.6vw, 34px);
+  padding: clamp(22px, 1.8vw, 32px) var(--tv-safe-gutter-wide);
 }
 
 .series-episode-card {
-  flex: 0 0 400px;
-  width: 400px;
-  border-radius: 20px;
+  flex: 0 0 clamp(440px, 29vw, 540px);
+  width: clamp(440px, 29vw, 540px);
+  border-radius: clamp(20px, 1.3vw, 26px);
   background: transparent;
   border: 0;
   padding: 0;
@@ -9472,9 +9474,9 @@ button:focus-visible {
 
 .series-episode-thumb {
   position: relative;
-  height: 263px;
+  height: clamp(286px, 19vw, 360px);
   border: 0;
-  border-radius: 20px;
+  border-radius: clamp(20px, 1.3vw, 26px);
   background: var(--detail-bg-card) center center / cover no-repeat;
   overflow: hidden;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
@@ -9513,30 +9515,30 @@ button:focus-visible {
 .series-episode-copy {
   position: absolute;
   inset: auto 0 0;
-  padding: 20px 20px 24px;
+  padding: clamp(22px, 1.5vw, 30px) clamp(22px, 1.5vw, 30px) clamp(26px, 1.8vw, 34px);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .series-episode-badge {
   position: static;
   display: inline-flex;
   align-self: flex-start;
-  padding: 4px 9px;
-  border-radius: 7px;
+  padding: 5px 10px;
+  border-radius: 9px;
   background: rgba(0, 0, 0, 0.42);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: clamp(11px, 0.75vw, 14px);
+  line-height: 1.35;
   letter-spacing: 0.09em;
   font-weight: 600;
   text-transform: uppercase;
 }
 
 .series-episode-title {
-  min-height: 56px;
-  font-size: 16px;
-  line-height: 28px;
+  min-height: 68px;
+  font-size: var(--tv-body-text);
+  line-height: 1.45;
   font-weight: 800;
   color: var(--detail-text-primary);
 }
@@ -9544,8 +9546,8 @@ button:focus-visible {
 .series-episode-overview {
   margin-top: 0;
   max-height: none;
-  font-size: 14px;
-  line-height: 22px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.5;
   color: rgba(255, 255, 255, 0.9);
   -webkit-line-clamp: 4;
   line-clamp: 4;
@@ -9554,10 +9556,10 @@ button:focus-visible {
 .series-episode-meta {
   display: flex;
   align-items: center;
-  gap: 12px;
-  min-height: 16px;
-  font-size: 10px;
-  line-height: 16px;
+  gap: 14px;
+  min-height: 20px;
+  font-size: clamp(12px, 0.82vw, 15px);
+  line-height: 1.4;
   color: var(--detail-text-secondary);
 }
 
@@ -9565,20 +9567,20 @@ button:focus-visible {
   height: auto;
   padding: 0;
   background: transparent;
-  font-size: 10px;
+  font-size: clamp(12px, 0.82vw, 15px);
   gap: 4px;
   color: #f5c518;
 }
 
 .series-episode-meta .series-imdb-badge img {
-  width: 24px;
-  height: 12px;
+  width: 28px;
+  height: 14px;
 }
 
 .series-episode-progress {
   margin-top: 2px;
   width: 100%;
-  height: 4px;
+  height: 6px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.45);
   overflow: hidden;
@@ -9593,10 +9595,10 @@ button:focus-visible {
 
 .series-episode-status {
   position: absolute;
-  top: 22px;
-  left: 22px;
-  width: 32px;
-  height: 32px;
+  top: 24px;
+  left: 24px;
+  width: 40px;
+  height: 40px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
@@ -9606,7 +9608,7 @@ button:focus-visible {
 .series-episode-status.complete {
   background: var(--secondary-color);
   color: var(--on-secondary);
-  font-size: 20px;
+  font-size: 24px;
 }
 
 .series-episode-status.idle {
@@ -9623,7 +9625,7 @@ button:focus-visible {
   align-items: center;
   gap: 0;
   margin-bottom: 0;
-  padding-top: 20px;
+  padding-top: 24px;
   overflow-x: auto;
 }
 
@@ -9631,10 +9633,10 @@ button:focus-visible {
   border: 0;
   background: transparent;
   color: var(--detail-text-tertiary);
-  font-size: 20px;
-  line-height: 28px;
+  font-size: clamp(24px, 1.6vw, 32px);
+  line-height: 1.35;
   font-weight: 500;
-  padding: 2px;
+  padding: 4px;
   transform-origin: center;
   transition: transform 160ms ease, color 160ms ease;
 }
@@ -9653,8 +9655,8 @@ button:focus-visible {
 .series-insight-divider {
   margin: 0 10px;
   color: var(--detail-text-tertiary);
-  font-size: 20px;
-  line-height: 28px;
+  font-size: clamp(24px, 1.6vw, 32px);
+  line-height: 1.35;
 }
 
 .movie-cast-section {
@@ -9663,14 +9665,14 @@ button:focus-visible {
 
 .movie-cast-track,
 .series-cast-track {
-  gap: 8px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  gap: 12px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .movie-cast-card {
-  flex: 0 0 150px;
-  width: 150px;
+  flex: 0 0 180px;
+  width: 180px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -9678,14 +9680,14 @@ button:focus-visible {
 }
 
 .series-cast-card {
-  width: 150px;
-  flex-basis: 150px;
+  width: 180px;
+  flex-basis: 180px;
 }
 
 .movie-cast-avatar {
-  width: 100px;
-  height: 100px;
-  margin-bottom: 10px;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 12px;
   border-radius: 999px;
   background-color: var(--detail-bg-card);
 }
@@ -9701,34 +9703,34 @@ button:focus-visible {
 }
 
 .movie-cast-name {
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
   font-weight: 500;
   color: var(--detail-text-secondary);
 }
 
 .movie-cast-role {
-  font-size: 10px;
-  line-height: 14px;
+  font-size: clamp(12px, 0.8vw, 15px);
+  line-height: 1.35;
   color: var(--detail-text-tertiary);
 }
 
 .series-rating-seasons {
-  gap: 6px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  gap: 8px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .series-rating-season {
   min-width: 0;
   height: auto;
-  padding: 6px 11px;
-  border-radius: 14px;
+  padding: 8px 14px;
+  border-radius: 16px;
   border: 0;
   background: var(--detail-bg-card);
   color: var(--detail-text-primary);
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
   font-weight: 500;
   transition: transform 160ms ease, background 160ms ease;
 }
@@ -9738,41 +9740,41 @@ button:focus-visible {
 }
 
 .series-rating-summary {
-  padding: 2px 48px 0;
-  font-size: 10px;
-  line-height: 14px;
+  padding: 4px var(--tv-safe-gutter-wide) 0;
+  font-size: clamp(12px, 0.82vw, 15px);
+  line-height: 1.35;
   color: var(--text-tertiary);
 }
 
 .series-episode-ratings-grid {
-  gap: 6px;
-  padding-top: 6px;
-  padding-bottom: 8px;
+  gap: 8px;
+  padding-top: 8px;
+  padding-bottom: 10px;
 }
 
 .series-episode-rating-chip {
-  min-width: 72px;
-  width: 72px;
-  height: 46px;
-  padding: 6px 8px;
-  border-radius: 14px;
+  min-width: 88px;
+  width: 88px;
+  height: 56px;
+  padding: 8px 10px;
+  border-radius: 16px;
   transition: transform 160ms ease;
 }
 
 .series-episode-rating-ep {
-  font-size: 10px;
-  line-height: 14px;
+  font-size: clamp(12px, 0.82vw, 15px);
+  line-height: 1.35;
 }
 
 .series-episode-rating-val {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
 }
 
 .movie-ratings-row {
   display: flex;
   gap: 16px;
-  padding: 14px 48px 8px;
+  padding: 16px var(--tv-safe-gutter-wide) 10px;
 }
 
 .movie-rating-card {
@@ -9784,57 +9786,57 @@ button:focus-visible {
 }
 
 .detail-company-section {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .detail-company-title {
   margin: 0;
-  padding: 0 48px;
-  font-size: 20px;
-  line-height: 28px;
+  padding: 0 var(--tv-safe-gutter-wide);
+  font-size: clamp(24px, 1.6vw, 32px);
+  line-height: 1.35;
   font-weight: 500;
   color: #fff;
 }
 
 .detail-company-track {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   overflow-x: auto;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .detail-company-card {
-  flex: 0 0 140px;
-  width: 140px;
-  height: 56px;
-  border-radius: 12px;
+  flex: 0 0 176px;
+  width: 176px;
+  height: 68px;
+  border-radius: 16px;
   background: #fff;
   border: 0;
   transition: transform 180ms ease;
 }
 
 .detail-company-card img {
-  max-width: calc(100% - 28px);
-  max-height: 36px;
+  max-width: calc(100% - 32px);
+  max-height: 42px;
 }
 
 .detail-company-card span {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
   color: #808080;
 }
 
 .detail-morelike-track {
-  gap: 20px;
+  gap: clamp(22px, 1.5vw, 32px);
   overflow-x: auto;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .detail-morelike-card {
-  flex: 0 0 260px;
-  width: 260px;
+  flex: 0 0 clamp(300px, 20vw, 360px);
+  width: clamp(300px, 20vw, 360px);
   padding: 0;
   background: transparent;
   border: 0;
@@ -9844,9 +9846,9 @@ button:focus-visible {
 
 .detail-morelike-poster-wrap {
   width: 100%;
-  height: 146px;
+  height: clamp(170px, 11vw, 210px);
   border: 2px solid transparent;
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: visible;
   background-color: transparent;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
@@ -9854,7 +9856,7 @@ button:focus-visible {
 
 .detail-morelike-poster {
   height: 100%;
-  border-radius: 12px;
+  border-radius: 16px;
   background-color: #242424;
   background-position: center center;
   background-size: cover;
@@ -9866,14 +9868,14 @@ button:focus-visible {
   width: 100%;
   height: 100%;
   display: block;
-  border-radius: 12px;
+  border-radius: 16px;
   object-fit: cover;
 }
 
 .detail-morelike-name {
-  margin-top: 8px;
-  font-size: 16px;
-  line-height: 24px;
+  margin-top: 10px;
+  font-size: var(--tv-body-text);
+  line-height: 1.45;
   font-weight: 500;
   color: var(--detail-text-primary);
   display: -webkit-box;
@@ -9885,8 +9887,8 @@ button:focus-visible {
 
 .detail-morelike-type {
   margin-top: 2px;
-  font-size: 12px;
-  line-height: 16px;
+  font-size: var(--tv-caption-text);
+  line-height: 1.35;
   color: var(--detail-text-secondary);
 }
 
@@ -10059,37 +10061,37 @@ button:focus-visible {
 
 .stream-route-logo {
   width: 100%;
-  max-height: 120px;
+  max-height: 140px;
   object-fit: contain;
-  margin-bottom: 18px;
+  margin-bottom: 22px;
 }
 
 .stream-route-title {
   margin: 0 0 16px;
-  font-size: 52px;
+  font-size: clamp(56px, 4vw, 72px);
   line-height: 1.08;
   font-weight: 700;
 }
 
 .stream-route-episode-code {
-  font-size: 28px;
-  line-height: 36px;
+  font-size: clamp(30px, 2vw, 38px);
+  line-height: 1.35;
   font-weight: 500;
   color: var(--text-secondary);
 }
 
 .stream-route-subtitle {
   margin-top: 6px;
-  font-size: 24px;
-  line-height: 32px;
+  font-size: var(--tv-subtitle-text);
+  line-height: 1.35;
   font-weight: 500;
   color: var(--text-color);
 }
 
 .stream-route-detail-line {
   margin-top: 6px;
-  font-size: 18px;
-  line-height: 24px;
+  font-size: var(--tv-secondary-text);
+  line-height: 1.4;
   color: var(--text-secondary);
 }
 
@@ -10101,17 +10103,17 @@ button:focus-visible {
 }
 
 .stream-route-chip-wrap {
-  height: 56px;
-  margin-bottom: 16px;
+  height: clamp(64px, 4.2vw, 78px);
+  margin-bottom: 20px;
 }
 
 .stream-route-chip-track {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 18px;
   height: 100%;
   overflow-x: auto;
-  padding: 4px 8px;
+  padding: 6px 8px;
   box-sizing: border-box;
   scrollbar-width: none;
 }
@@ -10121,14 +10123,14 @@ button:focus-visible {
 }
 
 .stream-route-chip {
-  min-height: 48px;
-  padding: 0 34px;
-  border-radius: 24px;
+  min-height: clamp(56px, 3.8vw, 70px);
+  padding: 0 clamp(30px, 2vw, 40px);
+  border-radius: 999px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
   color: var(--text-secondary);
-  font-size: 17px;
-  line-height: 24px;
+  font-size: var(--tv-secondary-text);
+  line-height: 1.35;
   font-weight: 500;
   display: inline-flex;
   align-items: center;

@@ -24,7 +24,13 @@ class SubtitleRepository {
       this.fetchSubtitlesFromAddon(addon, normalizedType, idCandidates, videoId)
     ));
 
-    return allResults.flat();
+    const mergedResults = [];
+    allResults.forEach((items) => {
+      if (Array.isArray(items) && items.length) {
+        mergedResults.push(...items);
+      }
+    });
+    return mergedResults;
   }
 
   async fetchSubtitlesFromAddon(addon, type, idCandidates = [], videoId) {

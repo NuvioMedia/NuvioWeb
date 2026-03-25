@@ -132,3 +132,53 @@ if (!String.prototype.replaceAll) {
     writable: true
   });
 }
+
+if (!String.prototype.trimStart) {
+  Object.defineProperty(String.prototype, "trimStart", {
+    value: function trimStartPolyfill() {
+      return String(this).replace(/^\s+/, "");
+    },
+    configurable: true,
+    writable: true
+  });
+}
+
+if (!String.prototype.trimEnd) {
+  Object.defineProperty(String.prototype, "trimEnd", {
+    value: function trimEndPolyfill() {
+      return String(this).replace(/\s+$/, "");
+    },
+    configurable: true,
+    writable: true
+  });
+}
+
+function installElementScrollToPolyfill(target) {
+  if (!target || typeof target.scrollTo === "function") {
+    return;
+  }
+  Object.defineProperty(target, "scrollTo", {
+    value: function scrollToPolyfill(leftOrOptions, top) {
+      if (leftOrOptions && typeof leftOrOptions === "object") {
+        if (Object.prototype.hasOwnProperty.call(leftOrOptions, "left")) {
+          this.scrollLeft = Number(leftOrOptions.left || 0);
+        }
+        if (Object.prototype.hasOwnProperty.call(leftOrOptions, "top")) {
+          this.scrollTop = Number(leftOrOptions.top || 0);
+        }
+        return;
+      }
+      if (typeof leftOrOptions === "number") {
+        this.scrollLeft = leftOrOptions;
+      }
+      if (typeof top === "number") {
+        this.scrollTop = top;
+      }
+    },
+    configurable: true,
+    writable: true
+  });
+}
+
+installElementScrollToPolyfill(globalThis.Element && globalThis.Element.prototype);
+installElementScrollToPolyfill(globalThis.HTMLElement && globalThis.HTMLElement.prototype);

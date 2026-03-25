@@ -166,6 +166,7 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
 <body>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
   <script src="nuvio.env.js"></script>
+  <script src="js/runtime/polyfills.js"></script>
   <script src="js/runtime/env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
 ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
@@ -214,6 +215,7 @@ function loadScript(src) {
 }
 
 loadScript("nuvio.env.js");
+loadScript("js/runtime/polyfills.js");
 loadScript("js/runtime/env.js");
 loadScript("assets/libs/qrcode-generator.js");
 loadScript("app.bundle.js");

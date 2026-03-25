@@ -86,27 +86,34 @@ function flattenStreams(streamResult) {
   if (!streamResult || streamResult.status !== "success") {
     return [];
   }
-  return (streamResult.data || []).flatMap((group) => {
+  const flattened = [];
+  (streamResult.data || []).forEach((group) => {
     const groupName = group.addonName || "Addon";
-    return (group.streams || []).map((stream, index) => ({
-      id: stream.id || `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
-      name: stream.name || null,
-      title: stream.title || null,
-      description: stream.description || null,
-      url: stream.url || null,
-      ytId: stream.ytId || null,
-      infoHash: stream.infoHash || null,
-      fileIdx: stream.fileIdx || null,
-      externalUrl: stream.externalUrl || null,
-      behaviorHints: stream.behaviorHints || null,
-      sources: Array.isArray(stream.sources) ? stream.sources : [],
-      subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
-      addonName: stream.addonName || groupName,
-      addonLogo: stream.addonLogo || group.addonLogo || null,
-      sourceType: stream.type || stream.source || "",
-      raw: stream
-    })).filter((entry) => Boolean(entry.url || entry.externalUrl || entry.ytId));
+    (group.streams || []).forEach((stream, index) => {
+      const entry = {
+        id: stream.id || `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
+        name: stream.name || null,
+        title: stream.title || null,
+        description: stream.description || null,
+        url: stream.url || null,
+        ytId: stream.ytId || null,
+        infoHash: stream.infoHash || null,
+        fileIdx: stream.fileIdx || null,
+        externalUrl: stream.externalUrl || null,
+        behaviorHints: stream.behaviorHints || null,
+        sources: Array.isArray(stream.sources) ? stream.sources : [],
+        subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
+        addonName: stream.addonName || groupName,
+        addonLogo: stream.addonLogo || group.addonLogo || null,
+        sourceType: stream.type || stream.source || "",
+        raw: stream
+      };
+      if (entry.url || entry.externalUrl || entry.ytId) {
+        flattened.push(entry);
+      }
+    });
   });
+  return flattened;
 }
 
 function mergeStreamItems(existing = [], incoming = []) {
@@ -241,14 +248,16 @@ function getStreamHeadline(stream = {}) {
 }
 
 function getStreamQuality(stream = {}) {
-  const qualityCandidate = [
-    stream.name,
-    stream.title,
-    stream.description
-  ]
-    .map((value) => String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
-    .flat()
-    .find((line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line));
+  const qualityLines = [];
+  [stream.name, stream.title, stream.description].forEach((value) => {
+    String(value || "").split(/\r?\n/).forEach((line) => {
+      const normalized = String(line || "").trim();
+      if (normalized) {
+        qualityLines.push(normalized);
+      }
+    });
+  });
+  const qualityCandidate = qualityLines.find((line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line));
   if (qualityCandidate) {
     return qualityCandidate;
   }
@@ -284,10 +293,15 @@ function getStreamDescriptionLines(stream = {}) {
     stream.description,
     stream.title,
     stream.behaviorHints?.filename
-  ]
-    .flatMap((value) => String(value || "").split(/\r?\n/))
-    .map((value) => String(value || "").trim())
-    .filter(Boolean);
+  ].reduce((items, value) => {
+    String(value || "").split(/\r?\n/).forEach((line) => {
+      const normalized = String(line || "").trim();
+      if (normalized) {
+        items.push(normalized);
+      }
+    });
+    return items;
+  }, []);
   const unique = [];
   candidates.forEach((value) => {
     if (!unique.some((entry) => entry.toLowerCase() === value.toLowerCase())) {

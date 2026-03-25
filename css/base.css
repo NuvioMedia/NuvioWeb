@@ -22,6 +22,19 @@
     --focus-bg: #303030;
     --border-color: #333333;
     --app-font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    --tv-safe-gutter: clamp(28px, 3vw, 56px);
+    --tv-safe-gutter-wide: clamp(32px, 3.6vw, 72px);
+    --tv-card-radius: clamp(14px, 1.1vw, 22px);
+    --tv-card-gap: clamp(12px, 1vw, 18px);
+    --tv-button-height: clamp(54px, 3.7vw, 68px);
+    --tv-button-padding-x: clamp(22px, 2vw, 34px);
+    --tv-control-size: clamp(58px, 4vw, 74px);
+    --tv-control-icon-size: clamp(28px, 2vw, 36px);
+    --tv-caption-text: clamp(14px, 0.95vw, 18px);
+    --tv-secondary-text: clamp(16px, 1.08vw, 21px);
+    --tv-body-text: clamp(18px, 1.18vw, 24px);
+    --tv-subtitle-text: clamp(24px, 1.7vw, 32px);
+    --tv-title-text: clamp(42px, 2.9vw, 60px);
 }
 
 html,

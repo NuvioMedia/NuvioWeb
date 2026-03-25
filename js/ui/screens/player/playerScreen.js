@@ -74,6 +74,7 @@ const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const NEXT_EPISODE_THRESHOLD_PERCENT = 0.97;
+const SKIP_INTERVAL_CHECK_MS = 250;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -623,19 +624,26 @@ function flattenStreamGroups(streamResult) {
   if (!streamResult || streamResult.status !== "success") {
     return [];
   }
-  return (streamResult.data || []).flatMap((group) => {
+  const flattened = [];
+  (streamResult.data || []).forEach((group) => {
     const addonName = group.addonName || "Addon";
-    return (group.streams || []).map((stream, index) => ({
-      id: `${addonName}-${index}-${stream.url || ""}`,
-      label: stream.title || stream.name || `${addonName} stream`,
-      description: stream.description || stream.name || "",
-      addonName,
-      addonLogo: group.addonLogo || stream.addonLogo || null,
-      sourceType: stream.type || stream.source || "",
-      url: stream.url,
-      raw: stream
-    })).filter((entry) => Boolean(entry.url));
+    (group.streams || []).forEach((stream, index) => {
+      const entry = {
+        id: `${addonName}-${index}-${stream.url || ""}`,
+        label: stream.title || stream.name || `${addonName} stream`,
+        description: stream.description || stream.name || "",
+        addonName,
+        addonLogo: group.addonLogo || stream.addonLogo || null,
+        sourceType: stream.type || stream.source || "",
+        url: stream.url,
+        raw: stream
+      };
+      if (entry.url) {
+        flattened.push(entry);
+      }
+    });
   });
+  return flattened;
 }
 
 function mergeStreamItems(existing = [], incoming = []) {
@@ -900,6 +908,8 @@ export const PlayerScreen = {
     this.seekCommitTimer = null;
     this.seekOverlayTimer = null;
     this.nextEpisodeLaunching = false;
+    this.nextEpisodeCardDismissed = false;
+    this.nextEpisodeBackExitArmed = false;
 
     this.parentalWarnings = normalizeParentalWarnings(params.parentalWarnings || params.parentalGuide);
     this.parentalGuideVisible = false;
@@ -952,6 +962,8 @@ export const PlayerScreen = {
     this.controlFocusIndex = 0;
     this.controlsHideTimer = null;
     this.tickTimer = null;
+    this.skipIntervalCheckTimer = null;
+    this.skipIntervalsRequestToken = Number(this.skipIntervalsRequestToken || 0);
     this.videoListeners = [];
     this.mediaSessionHandlersBound = false;
     this.mediaSessionActions = [];
@@ -998,6 +1010,7 @@ export const PlayerScreen = {
       this.loadSubtitles();
       this.syncTrackState();
       this.tickTimer = setInterval(() => this.updateUiTick(), 1000);
+      this.startSkipIntervalCheckTimer();
       this.endedHandler = () => {
         this.handlePlaybackEnded();
       };
@@ -1131,6 +1144,8 @@ export const PlayerScreen = {
   },
 
   async fetchSkipIntervals() {
+    const requestToken = (this.skipIntervalsRequestToken || 0) + 1;
+    this.skipIntervalsRequestToken = requestToken;
     if (!PlayerSettingsStore.get().skipIntroEnabled) {
       this.skipIntervals = [];
       this.activeSkipInterval = null;
@@ -1146,7 +1161,11 @@ export const PlayerScreen = {
       this.renderSkipIntroButton();
       return;
     }
-    this.skipIntervals = await skipIntroRepository.getSkipIntervals(imdbId, season, episode);
+    const intervals = await skipIntroRepository.getSkipIntervals(imdbId, season, episode);
+    if (this.skipIntervalsRequestToken !== requestToken) {
+      return;
+    }
+    this.skipIntervals = Array.isArray(intervals) ? intervals : [];
     this.skipIntervalDismissed = false;
     this.updateActiveSkipInterval(this.getPlaybackCurrentSeconds());
   },
@@ -1186,6 +1205,29 @@ export const PlayerScreen = {
         <span class="player-skip-intro-label">${escapeHtml(label)}</span>
       </button>
     `;
+  },
+
+  startSkipIntervalCheckTimer() {
+    this.stopSkipIntervalCheckTimer();
+    this.skipIntervalCheckTimer = setInterval(() => {
+      if (this.isExternalFrameMode()) {
+        return;
+      }
+      if (!PlayerSettingsStore.get().skipIntroEnabled) {
+        return;
+      }
+      if (!Array.isArray(this.skipIntervals) || !this.skipIntervals.length) {
+        return;
+      }
+      this.updateActiveSkipInterval(this.getPlaybackCurrentSeconds());
+    }, SKIP_INTERVAL_CHECK_MS);
+  },
+
+  stopSkipIntervalCheckTimer() {
+    if (this.skipIntervalCheckTimer) {
+      clearInterval(this.skipIntervalCheckTimer);
+      this.skipIntervalCheckTimer = null;
+    }
   },
 
   skipActiveInterval() {
@@ -1356,7 +1398,13 @@ export const PlayerScreen = {
       return current;
     }
 
-    return this.streamCandidates.flatMap((candidate) => mapSubtitles(candidate));
+    return this.streamCandidates.reduce((items, candidate) => {
+      const mapped = mapSubtitles(candidate);
+      if (mapped.length) {
+        items.push(...mapped);
+      }
+      return items;
+    }, []);
   },
 
   mergeSubtitleCandidates(primary = [], secondary = []) {
@@ -2218,11 +2266,31 @@ export const PlayerScreen = {
     return (currentSeconds / durationSeconds) >= NEXT_EPISODE_THRESHOLD_PERCENT;
   },
 
+  dismissNextEpisodeCard({ revealControls = false, armExitOnNextBack = false } = {}) {
+    this.nextEpisodeCardDismissed = true;
+    this.nextEpisodeBackExitArmed = Boolean(armExitOnNextBack);
+    if (revealControls) {
+      this.setControlsVisible(true, { focus: true });
+      return;
+    }
+    this.renderNextEpisodeCard();
+  },
+
+  resetNextEpisodeCardDismissal() {
+    if (!this.nextEpisodeCardDismissed && !this.nextEpisodeBackExitArmed) {
+      return;
+    }
+    this.nextEpisodeCardDismissed = false;
+    this.nextEpisodeBackExitArmed = false;
+    this.renderNextEpisodeCard();
+  },
+
   isNextEpisodeCardVisible() {
     const nextEpisode = this.resolveNextEpisodeInfo();
     return Boolean(
       nextEpisode
       && this.shouldShowNextEpisodeCard()
+      && !this.nextEpisodeCardDismissed
       && !this.loadingVisible
       && !this.subtitleDialogVisible
       && !this.audioDialogVisible
@@ -3096,6 +3164,9 @@ export const PlayerScreen = {
     if (this.isExternalFrameMode()) {
       return;
     }
+    if (!this.shouldShowNextEpisodeCard()) {
+      this.resetNextEpisodeCardDismissal();
+    }
     const current = this.getPlaybackCurrentSeconds();
     this.updateActiveSkipInterval(current);
     const duration = this.getPlaybackDurationSeconds();
@@ -3366,6 +3437,7 @@ export const PlayerScreen = {
 
     const codeMap = {
       179: "toggle",
+      10252: "toggle",
       415: "play",
       19: "pause",
       413: "stop",
@@ -6331,6 +6403,7 @@ export const PlayerScreen = {
     }
 
     if (!this.controlsVisible && this.isNextEpisodeCardVisible()) {
+      this.dismissNextEpisodeCard({ revealControls: true, armExitOnNextBack: true });
       return true;
     }
 
@@ -6366,6 +6439,11 @@ export const PlayerScreen = {
       return true;
     }
 
+    if (this.controlsVisible && this.nextEpisodeBackExitArmed) {
+      this.nextEpisodeBackExitArmed = false;
+      return false;
+    }
+
     if (this.controlsVisible) {
       this.setControlsVisible(false);
       return true;
@@ -6376,6 +6454,9 @@ export const PlayerScreen = {
 
   async onKeyDown(event) {
     const keyCode = Number(event?.keyCode || 0);
+    if (this.nextEpisodeBackExitArmed) {
+      this.nextEpisodeBackExitArmed = false;
+    }
     if (keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13) {
       event?.preventDefault?.();
     }
@@ -6700,6 +6781,7 @@ export const PlayerScreen = {
   cleanup() {
     this.cancelSeekPreview({ commit: false });
     this.streamCandidatesByVideoId?.clear?.();
+    this.skipIntervalsRequestToken = Number(this.skipIntervalsRequestToken || 0) + 1;
     this.subtitleLoadToken = (this.subtitleLoadToken || 0) + 1;
     this.manifestLoadToken = (this.manifestLoadToken || 0) + 1;
     this.trackDiscoveryToken = (this.trackDiscoveryToken || 0) + 1;
@@ -6720,6 +6802,8 @@ export const PlayerScreen = {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
     }
+
+    this.stopSkipIntervalCheckTimer();
 
     if (this.aspectToastTimer) {
       clearTimeout(this.aspectToastTimer);

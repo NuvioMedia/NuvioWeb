@@ -6,7 +6,7 @@ const KEY = "tmdbSettings";
 const DEFAULTS = {
   enabled: true,
   apiKey: TMDB_API_KEY,
-  language: "it-IT",
+  language: "en-US",
   useArtwork: true,
   useBasicInfo: true,
   useDetails: true

@@ -46,6 +46,14 @@ function formatTypeLabel(value) {
   return toTitleCase(normalized) || "Movie";
 }
 
+function trimLeadingWhitespace(value) {
+  const text = String(value || "");
+  if (typeof text.trimStart === "function") {
+    return text.trimStart();
+  }
+  return text.replace(/^\s+/, "");
+}
+
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
@@ -1001,7 +1009,7 @@ export const SearchScreen = {
     input.__boundSearchListeners = true;
 
     input.addEventListener("input", (event) => {
-      this.query = String(event.target?.value || "").trimStart();
+      this.query = trimLeadingWhitespace(event.target?.value || "");
       if (this.query.length === 0 && this.mode !== "idle") {
         this.mode = "idle";
         this.loadToken = (this.loadToken || 0) + 1;

@@ -14,6 +14,7 @@ import { imdbEpisodeRatingsRepository } from "../../../data/repository/imdbEpiso
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
+import { Platform } from "../../../platform/index.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
@@ -1051,7 +1052,12 @@ export const MetaDetailsScreen = {
         return result?.status === "success" ? (result.data?.items || []) : [];
       }));
 
-      const flat = responses.flat();
+      const flat = [];
+      responses.forEach((items) => {
+        if (Array.isArray(items) && items.length) {
+          flat.push(...items);
+        }
+      });
       const unique = [];
       const seen = new Set();
       flat.forEach((item) => {
@@ -1265,7 +1271,7 @@ export const MetaDetailsScreen = {
     const yearParam = releaseYear
       ? (type === "tv" ? `&first_air_date_year=${encodeURIComponent(releaseYear)}` : `&year=${encodeURIComponent(releaseYear)}`)
       : "";
-    const url = `${TMDB_BASE_URL}/search/${type}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(settings.language || "it-IT")}&query=${encodeURIComponent(name)}${yearParam}`;
+    const url = `${TMDB_BASE_URL}/search/${type}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(settings.language || "en-US")}&query=${encodeURIComponent(name)}${yearParam}`;
     const response = await fetch(url);
     if (!response.ok) {
       return null;
@@ -1351,19 +1357,26 @@ export const MetaDetailsScreen = {
       return [];
     }
 
-    return (streamResult.data || []).flatMap((group) => {
+    const flattened = [];
+    (streamResult.data || []).forEach((group) => {
       const groupName = group.addonName || "Addon";
-      return (group.streams || []).map((stream, index) => ({
-        id: `${groupName}-${index}-${stream.url || ""}`,
-        label: stream.title || stream.name || `${groupName} stream`,
-        description: stream.description || stream.name || "",
-        addonName: groupName,
-        addonLogo: group.addonLogo || stream.addonLogo || null,
-        sourceType: stream.type || stream.source || "",
-        url: stream.url,
-        raw: stream
-      })).filter((stream) => Boolean(stream.url));
+      (group.streams || []).forEach((stream, index) => {
+        const entry = {
+          id: `${groupName}-${index}-${stream.url || ""}`,
+          label: stream.title || stream.name || `${groupName} stream`,
+          description: stream.description || stream.name || "",
+          addonName: groupName,
+          addonLogo: group.addonLogo || stream.addonLogo || null,
+          sourceType: stream.type || stream.source || "",
+          url: stream.url,
+          raw: stream
+        };
+        if (entry.url) {
+          flattened.push(entry);
+        }
+      });
     });
+    return flattened;
   },
 
   mergeStreamItems(existing = [], incoming = []) {
@@ -2502,6 +2515,25 @@ export const MetaDetailsScreen = {
     return this.focusInList([target], 0, { animated: false });
   },
 
+  isPerformanceConstrained() {
+    return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
+  },
+
+  isLegacyTvRuntime() {
+    if (Environment.isTizen()) {
+      return true;
+    }
+    if (!Environment.isWebOS()) {
+      return false;
+    }
+    const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
+    return webOsMajor > 0 && webOsMajor <= 5;
+  },
+
+  shouldSuppressTrailerAutoplay() {
+    return this.isLegacyTvRuntime();
+  },
+
   animateScroll(container, axis, targetValue, duration = 150) {
     if (!container) {
       return;
@@ -2518,7 +2550,10 @@ export const MetaDetailsScreen = {
     }
 
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    if (prefersReducedMotion) {
+    const effectiveDuration = this.isLegacyTvRuntime()
+      ? 0
+      : (this.isPerformanceConstrained() ? Math.min(Number(duration || 150), 90) : Number(duration || 150));
+    if (prefersReducedMotion || effectiveDuration <= 0) {
       container[property] = nextValue;
       return;
     }
@@ -2533,7 +2568,7 @@ export const MetaDetailsScreen = {
 
     const startTime = performance.now();
     const tick = (now) => {
-      const progress = Math.min(1, (now - startTime) / duration);
+      const progress = Math.min(1, (now - startTime) / effectiveDuration);
       container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
       if (progress < 1) {
         existing[key] = requestAnimationFrame(tick);
@@ -2558,6 +2593,7 @@ export const MetaDetailsScreen = {
       || this.isTrailerPlaying
       || this.pendingEpisodeSelection
       || this.pendingMovieSelection
+      || this.shouldSuppressTrailerAutoplay()
       || !PlayerSettingsStore.get().trailerAutoplay
     ) {
       return;

@@ -189,6 +189,7 @@ window.__NUVIO_TIZEN_BOOTSTRAP_APP__ = function bootstrapApp() {
   }
 
   window.__NUVIO_TIZEN_APP_BOOTSTRAPPED__ = true;
+  loadScript("js/runtime/polyfills.js");
   loadScript("js/runtime/env.js");
   loadScript("assets/libs/qrcode-generator.js");
   loadScript("app.bundle.js");

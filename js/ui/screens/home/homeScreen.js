@@ -58,6 +58,8 @@ const HOME_LOADING_ROW_ITEMS_DEFAULT = 10;
 const HOME_LOADING_ROW_ITEMS_CONSTRAINED = 8;
 const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
+const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
+const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
 const CW_META_TIMEOUT_MS = 1800;
 const CW_META_TIMEOUT_TV_MS = 4200;
 const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
@@ -1315,7 +1317,7 @@ export const HomeScreen = {
       return false;
     }
 
-    const viewport = this.container?.querySelector(".home-modern-rows-viewport");
+    const viewport = this.getHomeViewport();
     if (!viewport) {
       return false;
     }
@@ -1331,10 +1333,7 @@ export const HomeScreen = {
       ? this.container.querySelector(`[data-row-key="${focusState.rowKey}"]`)
       : null;
     const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
-    const desiredScrollTop = rowSection
-      ? rowSection.offsetTop
-      : Number(focusState.mainScrollTop || 0);
-    viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, desiredScrollTop));
+    viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, Number(focusState.mainScrollTop || 0)));
 
     const targetTrack = rowSection?.querySelector?.(".home-track") || null;
     const targetNodes = Array.from(targetTrack?.querySelectorAll(".home-content-card.focusable") || []);
@@ -1348,7 +1347,10 @@ export const HomeScreen = {
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target);
     this.lastMainFocus = target;
-    this.ensureMainVerticalVisibility(target);
+    this.rememberMainRowFocus(target);
+    if (!this.isNodeWithinMainViewport(target)) {
+      this.ensureMainVerticalVisibility(target);
+    }
     this.scheduleModernHeroUpdate(target);
     this.scheduleFocusedPosterFlow(target);
     return true;
@@ -1445,7 +1447,8 @@ export const HomeScreen = {
     }
 
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-    if (prefersReducedMotion) {
+    const effectiveDuration = Math.max(0, Number(duration || 0));
+    if (prefersReducedMotion || effectiveDuration <= 0) {
       container[property] = nextValue;
       return;
     }
@@ -1460,7 +1463,7 @@ export const HomeScreen = {
 
     const startTime = performance.now();
     const tick = (now) => {
-      const progress = Math.min(1, (now - startTime) / duration);
+      const progress = Math.min(1, (now - startTime) / effectiveDuration);
       container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
       if (progress < 1) {
         existing[key] = requestAnimationFrame(tick);
@@ -1495,6 +1498,27 @@ export const HomeScreen = {
     return 48;
   },
 
+  getHomeViewport() {
+    return this.layoutMode === "modern"
+      ? this.container?.querySelector(".home-modern-rows-viewport")
+      : this.container?.querySelector(".home-main");
+  },
+
+  isLegacyTvRuntime() {
+    if (Platform.isTizen()) {
+      return true;
+    }
+    if (!Platform.isWebOS()) {
+      return false;
+    }
+    const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
+    return webOsMajor > 0 && webOsMajor <= 5;
+  },
+
+  shouldSuppressAutomaticTrailerPlayback() {
+    return this.isLegacyTvRuntime();
+  },
+
   isPerformanceConstrained() {
     return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
   },
@@ -1511,24 +1535,113 @@ export const HomeScreen = {
       : HOME_LOADING_ROW_ITEMS_DEFAULT;
   },
 
+  getInitialCatalogLoadCount() {
+    if (this.isPerformanceConstrained()) {
+      if (this.isLegacyTvRuntime()) {
+        return 4;
+      }
+      return 5;
+    }
+    if (Platform.isWebOS()) {
+      const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
+      if (webOsMajor > 0 && webOsMajor <= 5) {
+        return 4;
+      }
+      return Math.min(HOME_INITIAL_CATALOG_LOAD, 6);
+    }
+    if (Platform.isTizen()) {
+      return Math.min(HOME_INITIAL_CATALOG_LOAD, 6);
+    }
+    return HOME_INITIAL_CATALOG_LOAD;
+  },
+
+  getDeferredCatalogBatchSize() {
+    if (this.isPerformanceConstrained()) {
+      return 4;
+    }
+    if (Platform.isWebOS()) {
+      const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
+      if (webOsMajor > 0 && webOsMajor <= 5) {
+        return 4;
+      }
+      return 8;
+    }
+    if (Platform.isTizen()) {
+      return 8;
+    }
+    return 0;
+  },
+
   getScrollDuration(base) {
     const baseline = Number.isFinite(base) ? base : 150;
+    if (this.isLegacyTvRuntime()) {
+      return 0;
+    }
     if (this.isPerformanceConstrained()) {
-      return Math.min(baseline, 120);
+      return Math.min(baseline, 90);
     }
     return baseline + 40;
   },
 
+  getBackgroundRenderDelay() {
+    if (this.isLegacyTvRuntime()) {
+      return HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS;
+    }
+    if (this.isPerformanceConstrained()) {
+      return HOME_BACKGROUND_RENDER_DELAY_MS;
+    }
+    return 0;
+  },
+
+  getDirectionalRepeatThrottleMs() {
+    if (this.isLegacyTvRuntime()) {
+      return Math.max(MODERN_HOME_CONSTANTS.keyRepeatThrottleMs, 120);
+    }
+    if (this.isPerformanceConstrained()) {
+      return Math.max(MODERN_HOME_CONSTANTS.keyRepeatThrottleMs, 100);
+    }
+    return MODERN_HOME_CONSTANTS.keyRepeatThrottleMs;
+  },
+
+  getHeroFocusDelay({ rapid = false } = {}) {
+    if (this.isLegacyTvRuntime()) {
+      return rapid ? 260 : 150;
+    }
+    if (this.isPerformanceConstrained()) {
+      return rapid ? 220 : 120;
+    }
+    return rapid ? MODERN_HOME_CONSTANTS.heroRapidSettleMs : MODERN_HOME_CONSTANTS.heroFocusDelayMs;
+  },
+
   cancelScheduledRender() {
+    if (this.homeRenderTimer) {
+      clearTimeout(this.homeRenderTimer);
+      this.homeRenderTimer = null;
+    }
     if (this.homeRenderFrame) {
       cancelAnimationFrame(this.homeRenderFrame);
       this.homeRenderFrame = null;
     }
   },
 
-  requestRender() {
+  requestRender(options = {}) {
     if (!this.container || Router.getCurrent() !== "home") {
       return;
+    }
+    const delayMs = Math.max(0, Number(options?.delayMs || 0));
+    if (delayMs > 0) {
+      if (this.homeRenderFrame || this.homeRenderTimer) {
+        return;
+      }
+      this.homeRenderTimer = setTimeout(() => {
+        this.homeRenderTimer = null;
+        this.requestRender();
+      }, delayMs);
+      return;
+    }
+    if (this.homeRenderTimer) {
+      clearTimeout(this.homeRenderTimer);
+      this.homeRenderTimer = null;
     }
     if (this.homeRenderFrame) {
       return;
@@ -1540,6 +1653,10 @@ export const HomeScreen = {
       }
       this.render();
     });
+  },
+
+  requestBackgroundRender() {
+    this.requestRender({ delayMs: this.getBackgroundRenderDelay() });
   },
 
   stopHeroRotation() {
@@ -2191,9 +2308,8 @@ export const HomeScreen = {
     this.cancelPendingHeroFocus();
     const now = Date.now();
     const previous = Number(this.lastModernHeroNavAt || 0);
-    const delay = previous > 0 && (now - previous) < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs
-      ? MODERN_HOME_CONSTANTS.heroRapidSettleMs
-      : MODERN_HOME_CONSTANTS.heroFocusDelayMs;
+    const isRapidNav = previous > 0 && (now - previous) < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs;
+    const delay = this.getHeroFocusDelay({ rapid: isRapidNav });
     this.lastModernHeroNavAt = now;
     this.heroFocusDelayTimer = setTimeout(() => {
       this.heroItem = hero;
@@ -2401,7 +2517,7 @@ export const HomeScreen = {
     }
     const prefs = this.layoutPrefs || {};
     const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
-    const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled);
+    const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled) && !this.shouldSuppressAutomaticTrailerPlayback();
     const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
     if (shouldExpand) {
       this.expandFocusedPoster(node);
@@ -2681,6 +2797,161 @@ export const HomeScreen = {
       || node;
   },
 
+  getTrackViewportMetrics(track) {
+    let leftPadding = this.getTrackEdgePadding();
+    let rightPadding = leftPadding;
+    const cachedLeft = Number.parseFloat(track?.dataset?.trackPadLeft || "");
+    const cachedRight = Number.parseFloat(track?.dataset?.trackPadRight || "");
+    if (Number.isFinite(cachedLeft) && cachedLeft >= 0) {
+      leftPadding = cachedLeft;
+    }
+    if (Number.isFinite(cachedRight) && cachedRight >= 0) {
+      rightPadding = cachedRight;
+    }
+    if ((!Number.isFinite(cachedLeft) || !Number.isFinite(cachedRight)) && typeof window !== "undefined" && window.getComputedStyle) {
+      const computed = window.getComputedStyle(track);
+      const paddingLeft = Number.parseFloat(computed?.paddingLeft || "");
+      const paddingRight = Number.parseFloat(computed?.paddingRight || "");
+      if (Number.isFinite(paddingLeft) && paddingLeft >= 0) {
+        leftPadding = paddingLeft;
+        track.dataset.trackPadLeft = String(paddingLeft);
+      }
+      if (Number.isFinite(paddingRight) && paddingRight >= 0) {
+        rightPadding = paddingRight;
+        track.dataset.trackPadRight = String(paddingRight);
+      }
+    }
+    const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
+    const visibleLeft = track.scrollLeft + leftPadding;
+    const visibleRight = track.scrollLeft + track.clientWidth - safeRightPadding;
+    return {
+      leftPadding,
+      safeRightPadding,
+      visibleLeft,
+      visibleRight,
+      visibleCenter: visibleLeft + Math.max(0, (visibleRight - visibleLeft) / 2)
+    };
+  },
+
+  isNodeWithinMainViewport(node) {
+    const main = this.getHomeViewport();
+    if (!main || !node || !this.container?.contains(node)) {
+      return false;
+    }
+    const anchor = this.getMainFocusAnchor(node);
+    const mainRect = main.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    const inset = this.getRowFocusInset();
+    const visibleTop = mainRect.top + inset;
+    const visibleBottom = mainRect.bottom - 24;
+    return anchorRect.bottom > visibleTop && anchorRect.top < visibleBottom;
+  },
+
+  resolveBestVisibleNodeForRow(rowNodes = []) {
+    if (!Array.isArray(rowNodes) || !rowNodes.length) {
+      return null;
+    }
+    const preferred = this.resolvePreferredNodeForRow(rowNodes);
+    const track = rowNodes[0]?.closest?.(".home-track, .home-grid-track");
+    if (!track) {
+      return preferred || rowNodes[0] || null;
+    }
+    const metrics = this.getTrackViewportMetrics(track);
+    const visibleNodes = rowNodes
+      .map((node) => {
+        const left = Number(node.offsetLeft || 0);
+        const right = left + Number(node.offsetWidth || 0);
+        return {
+          node,
+          overlap: Math.min(right, metrics.visibleRight) - Math.max(left, metrics.visibleLeft),
+          distance: Math.abs(((left + right) / 2) - metrics.visibleCenter)
+        };
+      })
+      .filter((entry) => entry.overlap > 0)
+      .sort((left, right) => {
+        if (right.overlap !== left.overlap) {
+          return right.overlap - left.overlap;
+        }
+        return left.distance - right.distance;
+      });
+    if (preferred && visibleNodes.some((entry) => entry.node === preferred)) {
+      return preferred;
+    }
+    return visibleNodes[0]?.node || preferred || rowNodes[0] || null;
+  },
+
+  syncMainFocusToViewport({ suppressFlows = false } = {}) {
+    if (!this.container || !this.navModel?.rows?.length) {
+      return null;
+    }
+    const current = this.container.querySelector(".home-main .focusable.focused");
+    if (current && this.isMainNode(current) && this.isNodeWithinMainViewport(current)) {
+      return current;
+    }
+    const main = this.getHomeViewport();
+    if (!main) {
+      return current || null;
+    }
+    const mainRect = main.getBoundingClientRect();
+    const inset = this.getRowFocusInset();
+    const visibleTop = mainRect.top + inset;
+    const visibleBottom = mainRect.bottom - 24;
+    const visibleCenter = visibleTop + Math.max(0, (visibleBottom - visibleTop) / 2);
+    const bestRow = this.navModel.rows
+      .map((rowNodes) => {
+        const anchor = this.getMainFocusAnchor(rowNodes[0]);
+        if (!anchor) {
+          return null;
+        }
+        const rect = anchor.getBoundingClientRect();
+        const overlap = Math.min(rect.bottom, visibleBottom) - Math.max(rect.top, visibleTop);
+        if (overlap <= 0) {
+          return null;
+        }
+        return {
+          rowNodes,
+          overlap,
+          distance: Math.abs((((rect.top + rect.bottom) / 2) - visibleCenter))
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        if (right.overlap !== left.overlap) {
+          return right.overlap - left.overlap;
+        }
+        return left.distance - right.distance;
+      })[0];
+    const target = this.resolveBestVisibleNodeForRow(bestRow?.rowNodes || []);
+    if (!(target instanceof HTMLElement)) {
+      return current || null;
+    }
+    if (current !== target) {
+      this.container.querySelectorAll(".home-main .focusable.focused").forEach((node) => node.classList.remove("focused"));
+      target.classList.add("focused");
+      this.focusWithoutAutoScroll(target, { suppressDelegatedFocus: true });
+    }
+    this.lastMainFocus = target;
+    this.rememberMainRowFocus(target);
+    if (!suppressFlows) {
+      this.scheduleModernHeroUpdate(target);
+      this.scheduleFocusedPosterFlow(target);
+    }
+    return target;
+  },
+
+  scheduleHomeViewportFocusSync() {
+    if (this.homeViewportFocusSyncTimer) {
+      clearTimeout(this.homeViewportFocusSyncTimer);
+    }
+    this.homeViewportFocusSyncTimer = setTimeout(() => {
+      this.homeViewportFocusSyncTimer = null;
+      if (Router.getCurrent() !== "home") {
+        return;
+      }
+      this.syncMainFocusToViewport({ suppressFlows: true });
+    }, 120);
+  },
+
   ensureMainVerticalVisibility(target, direction = null, current = null) {
     const main = this.layoutMode === "modern"
       ? this.container?.querySelector(".home-modern-rows-viewport")
@@ -2729,42 +3000,18 @@ export const HomeScreen = {
     if (!track) {
       return;
     }
-    let leftPadding = this.getTrackEdgePadding();
-    let rightPadding = leftPadding;
-    const cachedLeft = Number.parseFloat(track.dataset.trackPadLeft || "");
-    const cachedRight = Number.parseFloat(track.dataset.trackPadRight || "");
-    if (Number.isFinite(cachedLeft) && cachedLeft >= 0) {
-      leftPadding = cachedLeft;
-    }
-    if (Number.isFinite(cachedRight) && cachedRight >= 0) {
-      rightPadding = cachedRight;
-    }
-    if ((!Number.isFinite(cachedLeft) || !Number.isFinite(cachedRight)) && typeof window !== "undefined" && window.getComputedStyle) {
-      const computed = window.getComputedStyle(track);
-      const paddingLeft = Number.parseFloat(computed?.paddingLeft || "");
-      const paddingRight = Number.parseFloat(computed?.paddingRight || "");
-      if (Number.isFinite(paddingLeft) && paddingLeft >= 0) {
-        leftPadding = paddingLeft;
-        track.dataset.trackPadLeft = String(paddingLeft);
-      }
-      if (Number.isFinite(paddingRight) && paddingRight >= 0) {
-        rightPadding = paddingRight;
-        track.dataset.trackPadRight = String(paddingRight);
-      }
-    }
-
-    const safeRightPadding = Math.min(rightPadding, Math.max(24, leftPadding));
+    const metrics = this.getTrackViewportMetrics(track);
     const targetLeft = target.offsetLeft;
     const targetRight = targetLeft + target.offsetWidth;
-    const visibleLeft = track.scrollLeft + leftPadding;
-    const visibleRight = track.scrollLeft + track.clientWidth - safeRightPadding;
+    const visibleLeft = metrics.visibleLeft;
+    const visibleRight = metrics.visibleRight;
 
     if (targetLeft < visibleLeft) {
-      this.animateScroll(track, "x", targetLeft - leftPadding, this.getScrollDuration(160));
+      this.animateScroll(track, "x", targetLeft - metrics.leftPadding, this.getScrollDuration(160));
       return;
     }
     if (targetRight > visibleRight) {
-      this.animateScroll(track, "x", targetRight - track.clientWidth + safeRightPadding, this.getScrollDuration(160));
+      this.animateScroll(track, "x", targetRight - track.clientWidth + metrics.safeRightPadding, this.getScrollDuration(160));
       return;
     }
     if (this.layoutMode !== "modern" && !direction) {
@@ -2855,7 +3102,9 @@ export const HomeScreen = {
     });
 
     this.navModel = { sidebar, rows };
-    this.lastMainFocus = rows[0]?.[0] || null;
+    if (!this.lastMainFocus || !this.container?.contains(this.lastMainFocus) || !this.isMainNode(this.lastMainFocus)) {
+      this.lastMainFocus = rows[0]?.[0] || null;
+    }
   },
 
   handleHomeDpad(event) {
@@ -2873,11 +3122,14 @@ export const HomeScreen = {
     if (!nav) {
       return false;
     }
-    const current = this.container.querySelector(".focusable.focused")
+    let current = this.container.querySelector(".focusable.focused")
       || this.container?.querySelector(".focusable")
       || null;
     if (!current) {
       return false;
+    }
+    if (this.isMainNode(current) && !this.isNodeWithinMainViewport(current)) {
+      current = this.syncMainFocusToViewport({ suppressFlows: true }) || current;
     }
     const isSidebar = this.isSidebarNode(current);
 
@@ -2887,8 +3139,9 @@ export const HomeScreen = {
 
     if (event?.repeat) {
       const now = Date.now();
+      const repeatThrottleMs = this.getDirectionalRepeatThrottleMs();
       if (Number(this.lastDirectionalKeyAt || 0) > 0 &&
-        (now - Number(this.lastDirectionalKeyAt || 0)) < MODERN_HOME_CONSTANTS.keyRepeatThrottleMs
+        (now - Number(this.lastDirectionalKeyAt || 0)) < repeatThrottleMs
       ) {
         return true;
       }
@@ -3017,16 +3270,54 @@ export const HomeScreen = {
         }
       };
     }
+    if (!this.boundHomeWheelHandler) {
+      this.boundHomeWheelHandler = (event) => {
+        const main = this.getHomeViewport();
+        const target = event?.target;
+        if (!(target instanceof HTMLElement) || !main?.contains(target)) {
+          return;
+        }
+        this.cancelPendingHeroFocus();
+        this.cancelFocusedPosterFlow();
+        this.scheduleHomeViewportFocusSync();
+      };
+    }
     if (this.boundHomeEventContainer === this.container) {
       return;
     }
     if (this.boundHomeEventContainer) {
       this.boundHomeEventContainer.removeEventListener("focusin", this.boundHomeFocusInHandler);
       this.boundHomeEventContainer.removeEventListener("click", this.boundHomeClickHandler);
+      this.boundHomeEventContainer.removeEventListener("wheel", this.boundHomeWheelHandler);
     }
     this.container.addEventListener("focusin", this.boundHomeFocusInHandler);
     this.container.addEventListener("click", this.boundHomeClickHandler);
+    this.container.addEventListener("wheel", this.boundHomeWheelHandler, { passive: true });
     this.boundHomeEventContainer = this.container;
+  },
+
+  bindHomeViewportEvents() {
+    const viewport = this.getHomeViewport();
+    if (this.boundHomeViewport === viewport) {
+      return;
+    }
+    if (this.boundHomeViewport && this.boundHomeViewportScrollHandler) {
+      this.boundHomeViewport.removeEventListener("scroll", this.boundHomeViewportScrollHandler);
+    }
+    this.boundHomeViewport = viewport || null;
+    if (!viewport) {
+      return;
+    }
+    if (!this.boundHomeViewportScrollHandler) {
+      this.boundHomeViewportScrollHandler = () => {
+        const current = this.container?.querySelector(".home-main .focusable.focused") || null;
+        if (current && this.isMainNode(current) && this.isNodeWithinMainViewport(current)) {
+          return;
+        }
+        this.scheduleHomeViewportFocusSync();
+      };
+    }
+    viewport.addEventListener("scroll", this.boundHomeViewportScrollHandler, { passive: true });
   },
 
   async mount(params = {}, navigationContext = {}) {
@@ -3126,9 +3417,7 @@ export const HomeScreen = {
         });
     });
 
-    const initialCatalogLoad = (Platform.isWebOS() || Platform.isTizen())
-      ? Math.min(HOME_INITIAL_CATALOG_LOAD, 6)
-      : HOME_INITIAL_CATALOG_LOAD;
+    const initialCatalogLoad = this.getInitialCatalogLoadCount();
     const initialDescriptors = catalogDescriptors.slice(0, initialCatalogLoad);
     const deferredDescriptors = catalogDescriptors.slice(initialCatalogLoad);
 
@@ -3159,12 +3448,30 @@ export const HomeScreen = {
       }
       if (profile) {
         this.sidebarProfile = profile;
-        this.requestRender();
+        this.requestBackgroundRender();
       }
     });
 
     if (deferredDescriptors.length) {
-      this.fetchCatalogRows(deferredDescriptors, { allowLoading: true }).then((extraRows) => {
+      this.fetchCatalogRows(deferredDescriptors, {
+        allowLoading: true,
+        batchSize: this.getDeferredCatalogBatchSize(),
+        onBatch: (batchRows) => {
+          if (token !== this.homeLoadToken || Router.getCurrent() !== "home" || !Array.isArray(batchRows) || !batchRows.length) {
+            return;
+          }
+          const combinedByKey = new Map((this.rows || []).map((row) => [row.homeCatalogKey, row]));
+          batchRows.forEach((row) => {
+            combinedByKey.set(row.homeCatalogKey, row);
+          });
+          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
+          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+          if (!this.heroItem) {
+            this.heroItem = this.pickInitialHero();
+          }
+          this.requestBackgroundRender();
+        }
+      }).then((extraRows) => {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
@@ -3177,7 +3484,7 @@ export const HomeScreen = {
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
-        this.requestRender();
+        this.requestBackgroundRender();
         this.retryPendingCatalogRows();
       }).catch((error) => {
         console.warn("Deferred home rows load failed", error);
@@ -3214,7 +3521,7 @@ export const HomeScreen = {
       if (!suppressContinueWatchingLoading) {
         this.continueWatchingLoading = shouldShowLoading;
         this.continueWatchingDisplay = [];
-        this.requestRender();
+        this.requestBackgroundRender();
       }
 
       if (!shouldShowLoading) {
@@ -3231,7 +3538,7 @@ export const HomeScreen = {
         }
         this.continueWatchingLoading = false;
         this.continueWatchingDisplay = [];
-        this.requestRender();
+        this.requestBackgroundRender();
         return;
       }
 
@@ -3263,12 +3570,12 @@ export const HomeScreen = {
             this.forceInitialContinueWatchingFocus = true;
           }
         }
-        this.requestRender();
+        this.requestBackgroundRender();
       } catch (error) {
         console.warn("Continue watching async enrichment failed", error);
         this.continueWatchingLoading = false;
         if (!suppressContinueWatchingLoading) {
-          this.requestRender();
+          this.requestBackgroundRender();
         }
       }
     })().catch((error) => {
@@ -3278,7 +3585,7 @@ export const HomeScreen = {
       }
       this.continueWatchingLoading = false;
       if (!suppressContinueWatchingLoading) {
-        this.requestRender();
+        this.requestBackgroundRender();
       }
     });
 
@@ -3302,38 +3609,62 @@ export const HomeScreen = {
     const allowLoading = Boolean(options?.allowLoading);
     const timeoutMs = Number(options?.timeoutMs || HOME_ROW_TIMEOUT_MS);
     const loadingCount = this.getLoadingRowItemCount();
-    const rowResults = await Promise.all((descriptors || []).map(async (catalog) => {
-      const result = await withTimeout(catalogRepository.getCatalog({
-        addonBaseUrl: catalog.addonBaseUrl,
-        addonId: catalog.addonId,
-        addonName: catalog.addonName,
-        catalogId: catalog.catalogId,
-        catalogName: catalog.catalogName,
-        type: catalog.type,
-        skip: 0,
-        supportsSkip: true
-      }), timeoutMs, { status: "error", message: "timeout" });
-      const rowKey = buildModernRowKey(catalog);
-      return {
-        ...catalog,
-        result: result?.status === "success" ? result : (allowLoading ? { status: "loading" } : result),
-        loadingItems: allowLoading && result?.status !== "success"
-          ? buildCatalogLoadingItems(rowKey, loadingCount)
-          : null
-      };
-    }));
-    return rowResults
-      .filter((row) => row.result?.status === "success" || allowLoading)
-      .map((row) => ({
-        ...row,
-        homeCatalogKey: buildCatalogOrderKey(row.addonId, row.type, row.catalogId),
-        homeCatalogDisableKey: buildCatalogDisableKey(
-          row.addonBaseUrl,
-          row.type,
-          row.catalogId,
-          row.catalogName
-        )
+    const batchSize = Math.max(0, Number(options?.batchSize || 0));
+    const onBatch = typeof options?.onBatch === "function" ? options.onBatch : null;
+    const fetchedRows = [];
+    const normalizedDescriptors = Array.isArray(descriptors) ? descriptors : [];
+
+    const fetchBatch = async (batchDescriptors = []) => {
+      const rowResults = await Promise.all(batchDescriptors.map(async (catalog) => {
+        const result = await withTimeout(catalogRepository.getCatalog({
+          addonBaseUrl: catalog.addonBaseUrl,
+          addonId: catalog.addonId,
+          addonName: catalog.addonName,
+          catalogId: catalog.catalogId,
+          catalogName: catalog.catalogName,
+          type: catalog.type,
+          skip: 0,
+          supportsSkip: true
+        }), timeoutMs, { status: "error", message: "timeout" });
+        const rowKey = buildModernRowKey(catalog);
+        return {
+          ...catalog,
+          result: result?.status === "success" ? result : (allowLoading ? { status: "loading" } : result),
+          loadingItems: allowLoading && result?.status !== "success"
+            ? buildCatalogLoadingItems(rowKey, loadingCount)
+            : null
+        };
       }));
+      const mappedRows = rowResults
+        .filter((row) => row.result?.status === "success" || allowLoading)
+        .map((row) => ({
+          ...row,
+          homeCatalogKey: buildCatalogOrderKey(row.addonId, row.type, row.catalogId),
+          homeCatalogDisableKey: buildCatalogDisableKey(
+            row.addonBaseUrl,
+            row.type,
+            row.catalogId,
+            row.catalogName
+          )
+        }));
+      fetchedRows.push(...mappedRows);
+      if (onBatch && mappedRows.length) {
+        onBatch(mappedRows);
+      }
+    };
+
+    if (batchSize > 0 && normalizedDescriptors.length > batchSize) {
+      for (let index = 0; index < normalizedDescriptors.length; index += batchSize) {
+        await fetchBatch(normalizedDescriptors.slice(index, index + batchSize));
+        if ((index + batchSize) < normalizedDescriptors.length) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+      return fetchedRows;
+    }
+
+    await fetchBatch(normalizedDescriptors);
+    return fetchedRows;
   },
 
   sortAndFilterRows(rows = []) {
@@ -3359,41 +3690,55 @@ export const HomeScreen = {
     }
     const token = this.homeLoadToken;
     this.catalogRetryInFlight = true;
-    const attempts = pendingRows.map(async (row) => {
-      try {
-        const result = await withTimeout(catalogRepository.getCatalog({
-          addonBaseUrl: row.addonBaseUrl,
-          addonId: row.addonId,
-          addonName: row.addonName,
-          catalogId: row.catalogId,
-          catalogName: row.catalogName,
-          type: row.type,
-          skip: 0,
-          supportsSkip: true
-        }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
+    const retryBatchSize = Math.max(1, Number(this.getDeferredCatalogBatchSize() || pendingRows.length || 1));
+    (async () => {
+      for (let index = 0; index < pendingRows.length; index += retryBatchSize) {
+        const batch = pendingRows.slice(index, index + retryBatchSize);
+        const settled = await Promise.allSettled(batch.map(async (row) => {
+          const result = await withTimeout(catalogRepository.getCatalog({
+            addonBaseUrl: row.addonBaseUrl,
+            addonId: row.addonId,
+            addonName: row.addonName,
+            catalogId: row.catalogId,
+            catalogName: row.catalogName,
+            type: row.type,
+            skip: 0,
+            supportsSkip: true
+          }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
+          if (result?.status !== "success") {
+            return null;
+          }
+          return {
+            ...row,
+            result
+          };
+        }));
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
-        if (result?.status !== "success") {
-          return;
+        const updatedRows = settled
+          .filter((entry) => entry?.status === "fulfilled" && entry.value)
+          .map((entry) => entry.value);
+        settled
+          .filter((entry) => entry?.status === "rejected")
+          .forEach((entry) => console.warn("Retry catalog row load failed", entry.reason));
+        if (updatedRows.length) {
+          const combinedByKey = new Map((this.rows || []).map((entry) => [entry.homeCatalogKey, entry]));
+          updatedRows.forEach((row) => {
+            combinedByKey.set(row.homeCatalogKey, row);
+          });
+          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
+          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+          if (!this.heroItem) {
+            this.heroItem = this.pickInitialHero();
+          }
+          this.requestBackgroundRender();
         }
-        const updatedRow = {
-          ...row,
-          result
-        };
-        const combinedByKey = new Map((this.rows || []).map((entry) => [entry.homeCatalogKey, entry]));
-        combinedByKey.set(updatedRow.homeCatalogKey, updatedRow);
-        this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
-        this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
-        if (!this.heroItem) {
-          this.heroItem = this.pickInitialHero();
+        if ((index + retryBatchSize) < pendingRows.length) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
         }
-        this.requestRender();
-      } catch (error) {
-        console.warn("Retry catalog row load failed", error);
       }
-    });
-    Promise.allSettled(attempts).finally(() => {
+    })().finally(() => {
       if (token === this.homeLoadToken) {
         this.catalogRetryInFlight = false;
       }
@@ -3521,6 +3866,7 @@ export const HomeScreen = {
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
+    this.bindHomeViewportEvents();
     const canAttemptRestore = Boolean(retainedFocusState);
     let restoredFocus = false;
     if (this.continueWatchingMenu) {
@@ -4206,6 +4552,14 @@ export const HomeScreen = {
     this.clearFocusedPosterFlowState();
     this.collapseFocusedPoster();
     this.teardownGridStickyHeader();
+    if (this.homeViewportFocusSyncTimer) {
+      clearTimeout(this.homeViewportFocusSyncTimer);
+      this.homeViewportFocusSyncTimer = null;
+    }
+    if (this.boundHomeViewport && this.boundHomeViewportScrollHandler) {
+      this.boundHomeViewport.removeEventListener("scroll", this.boundHomeViewportScrollHandler);
+    }
+    this.boundHomeViewport = null;
     if (this.homeTruncationFrame) {
       cancelAnimationFrame(this.homeTruncationFrame);
       this.homeTruncationFrame = null;

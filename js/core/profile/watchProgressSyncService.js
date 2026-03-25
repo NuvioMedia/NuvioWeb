@@ -170,6 +170,16 @@ function toProgressKey(item = {}) {
   return `${contentId}:${videoId}:${season}:${episode}`;
 }
 
+function syncIdentityKey(item = {}) {
+  const contentId = String(item.contentId || "").trim();
+  const season = toPositiveIntegerOrNull(item.season);
+  const episode = toPositiveIntegerOrNull(item.episode);
+  if (contentId && season != null && episode != null) {
+    return `${contentId}:episode:${season}:${episode}`;
+  }
+  return `${contentId}:video:${toRemoteVideoId(item)}`;
+}
+
 function dedupeSyncItems(items = []) {
   const byKey = new Map();
   (Array.isArray(items) ? items : []).forEach((item) => {
@@ -187,11 +197,68 @@ function dedupeSyncItems(items = []) {
     .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0));
 }
 
+function coalesceSyncItems(items = []) {
+  const byIdentity = new Map();
+  dedupeSyncItems(items).forEach((item) => {
+    const key = syncIdentityKey(item);
+    const existing = byIdentity.get(key);
+    if (!existing || Number(item?.updatedAt || 0) > Number(existing?.updatedAt || 0)) {
+      byIdentity.set(key, item);
+    }
+  });
+  return Array.from(byIdentity.values())
+    .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0));
+}
+
+function rowFreshness(row = {}) {
+  const candidates = [
+    row?.updated_at,
+    row?.last_watched,
+    row?.updatedAt
+  ];
+  for (const value of candidates) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric)) {
+      return numeric;
+    }
+    const parsed = Date.parse(String(value || ""));
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return 0;
+}
+
+function dedupeRowsForConflict(rows = [], onConflict = "") {
+  const columns = String(onConflict || "")
+    .split(",")
+    .map((column) => String(column || "").trim())
+    .filter(Boolean);
+  if (!columns.length) {
+    return Array.isArray(rows) ? rows : [];
+  }
+  const byKey = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const key = columns
+      .map((column) => {
+        const value = row?.[column];
+        return value == null ? "" : String(value);
+      })
+      .join("::");
+    const existing = byKey.get(key);
+    if (!existing || rowFreshness(row) >= rowFreshness(existing)) {
+      byKey.set(key, row);
+    }
+  });
+  return Array.from(byKey.values());
+}
+
 async function upsertWithConflictCandidates(table, rows, conflictCandidates = []) {
   let lastError = null;
   for (const onConflict of conflictCandidates) {
     try {
-      await SupabaseApi.upsert(table, rows, onConflict, true);
+      const dedupedRows = dedupeRowsForConflict(rows, onConflict);
+      await SupabaseApi.upsert(table, dedupedRows, onConflict, true);
       return;
     } catch (error) {
       lastError = error;
@@ -266,7 +333,7 @@ export const WatchProgressSyncService = {
       if (!AuthManager.isAuthenticated) {
         return false;
       }
-      const items = dedupeSyncItems(await watchProgressRepository.getAll());
+      const items = coalesceSyncItems(await watchProgressRepository.getAll());
       if (!items.length) {
         return true;
       }

@@ -199,6 +199,7 @@
     <string name="action_cancel">Cancel</string>
     <string name="action_none">None</string>
     <string name="action_close">Close</string>
+    <string name="common_beta">Beta</string>
 
     <!-- SupportersContributorsScreen -->
     <string name="supporters_contributors_title">Supporters &amp; Contributors</string>

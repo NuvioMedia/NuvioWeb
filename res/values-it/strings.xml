@@ -160,6 +160,7 @@
     <string name="action_cancel">Annulla</string>
     <string name="action_none">Nessuno</string>
     <string name="action_close">Chiudi</string>
+    <string name="common_beta">Beta</string>
 
     <!-- SupportersContributorsScreen -->
     <string name="supporters_contributors_title">Sostenitori &amp; Collaboratori</string>

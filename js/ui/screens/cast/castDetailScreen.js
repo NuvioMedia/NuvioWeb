@@ -52,7 +52,7 @@ export const CastDetailScreen = {
     if (!apiKey || !name) {
       return null;
     }
-    const language = settings.language || "it-IT";
+    const language = settings.language || "en-US";
     const url = `${TMDB_BASE_URL}/search/person?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(language)}&query=${encodeURIComponent(name)}`;
     const response = await fetch(url);
     if (!response.ok) {
@@ -81,7 +81,7 @@ export const CastDetailScreen = {
         return;
       }
 
-      const language = settings.language || "it-IT";
+      const language = settings.language || "en-US";
       const url = `${TMDB_BASE_URL}/person/${encodeURIComponent(personId)}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(language)}&append_to_response=combined_credits,images`;
       const response = await fetch(url);
       if (!response.ok) {

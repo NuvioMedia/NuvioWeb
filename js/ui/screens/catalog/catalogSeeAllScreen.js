@@ -98,10 +98,7 @@ function scrollNodeIntoContainerView(node, container, { center = false, padding 
     return resolvedTop;
   }
   if (behavior === "smooth") {
-    container.scrollTo({
-      top: resolvedTop,
-      behavior: "smooth"
-    });
+    setContainerScrollTop(container, resolvedTop, "smooth");
   } else {
     setContainerScrollTop(container, resolvedTop, "auto");
   }
