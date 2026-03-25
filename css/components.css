@@ -4494,24 +4494,9 @@ button:focus-visible {
   --home-continue-height: 293px;
 }
 
-.home-screen-shell.home-layout-modern .home-main {
-  position: relative;
-  height: 100%;
-  overflow: hidden;
-  background: #000;
-}
-
-.home-screen-shell.home-layout-modern .home-route-content {
-  height: 100%;
-}
-
-.home-screen-shell.home-layout-modern .home-modern-stage {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-height: 100%;
-  background: #000;
-  isolation: isolate;
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters {
+  --home-row-gap: 8px;
+  --modern-rows-viewport-height: 46%;
 }
 
 .home-screen-shell.home-layout-modern .home-hero,
@@ -4714,7 +4699,7 @@ button:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
-  scroll-snap-type: y mandatory;
+  scroll-padding-top: 24px;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-rows-viewport::-webkit-scrollbar {
@@ -4723,27 +4708,37 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-modern-rows-scroll {
   min-height: 100%;
-  padding-bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 24px 0 48px;
+}
+
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-rows-scroll {
+  gap: 0;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-catalogs {
   display: flex;
   flex-direction: column;
+  gap: 28px;
+}
+
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-catalogs {
+  gap: 0;
 }
 
 .home-screen-shell.home-layout-modern .home-row {
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  height: var(--modern-rows-page-height);
-  min-height: var(--modern-rows-page-height);
+  justify-content: flex-start;
+  height: auto;
+  min-height: 0;
   position: relative;
   z-index: 2;
   margin-bottom: 0;
   padding-top: 0;
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
 }
 
 .home-screen-shell.home-layout-modern .home-row-head,
@@ -4767,8 +4762,16 @@ button:focus-visible {
   align-items: flex-end;
 }
 
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-row .home-track {
+  align-items: flex-start;
+}
+
 .home-screen-shell.home-layout-modern .home-row-continue {
   margin-top: 0;
+}
+
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-row-continue {
+  margin-bottom: 18px;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-indicators {
@@ -4810,7 +4813,11 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape:not(.is-expanded) {
-  margin-bottom: var(--home-poster-copy-height);
+  margin-bottom: 18px;
+}
+
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-row .home-track.has-expanded-landscape .home-poster-card.is-landscape:not(.is-expanded) {
+  margin-top: calc(var(--home-poster-height) - var(--home-landscape-poster-height));
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-landscape-copy {

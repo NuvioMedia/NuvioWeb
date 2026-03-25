@@ -101,7 +101,9 @@ export function renderModernHomeLayout({
               loading: continueWatchingLoading,
               loadingCount: continueWatchingLoadingCount
             })}
-            ${sectionsMarkup.join("")}
+            <div class="home-modern-catalogs">
+              ${sectionsMarkup.join("")}
+            </div>
           </div>
         </div>
       </section>
