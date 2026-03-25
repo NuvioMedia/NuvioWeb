@@ -16,8 +16,8 @@ This repo stays the source of truth for the shared web app. On each published re
 - Add the repository name to the `WEBOS_REPO` GitHub Actions variable in this repo, for example `your-org/NuvioWebOS`.
 - Add a `REPO_DISPATCH_TOKEN` secret in this repo with permission to trigger workflows in that private repository.
 - When a release is published here, `.github/workflows/release-platform-artifacts.yml` dispatches a `build-release` event to the private repository.
-- By default the private repository reuses the previously packaged webOS `.ipk` and re-attaches it to the new release.
-- If a release body contains `[rebuild-webos-ipk]`, the workflow updates the wrapper version from the release tag, packages the hosted-site launcher with `ares-package`, uploads the generated `.ipk`, and refreshes the Homebrew repository metadata.
+- By default the private repository rebuilds the webOS wrapper so the packaged `.ipk`, app version, and Homebrew metadata stay aligned with each release.
+- If a release body contains `[reuse-webos-ipk]`, the workflow reuses the previous packaged `.ipk` instead of rebuilding it.
 
 ## Private Repository Secrets
 

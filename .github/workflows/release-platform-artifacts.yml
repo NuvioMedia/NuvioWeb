@@ -14,7 +14,7 @@ on:
       rebuild_webos:
         description: Rebuild webOS wrapper instead of reusing previous IPK
         required: false
-        default: "false"
+        default: "true"
 
 jobs:
   resolve-release-payload:
@@ -34,15 +34,15 @@ jobs:
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
             echo "release_id=${{ github.event.release.id }}" >> "$GITHUB_OUTPUT"
-            if printf '%s' "$RELEASE_BODY" | grep -qi '\[rebuild-webos-ipk\]'; then
-              echo "rebuild_webos=true" >> "$GITHUB_OUTPUT"
-            else
+            if printf '%s' "$RELEASE_BODY" | grep -qi '\[reuse-webos-ipk\]'; then
               echo "rebuild_webos=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "rebuild_webos=true" >> "$GITHUB_OUTPUT"
             fi
           else
             echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
             echo "release_id=${{ inputs.release_id }}" >> "$GITHUB_OUTPUT"
-            echo "rebuild_webos=${{ inputs.rebuild_webos || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "rebuild_webos=${{ inputs.rebuild_webos || 'true' }}" >> "$GITHUB_OUTPUT"
           fi
 
   dispatch-webos-build:
