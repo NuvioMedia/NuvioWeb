@@ -13,7 +13,6 @@ import { MdbListSettingsStore } from "../../../data/local/mdbListSettingsStore.j
 import { AnimeSkipSettingsStore } from "../../../data/local/animeSkipSettingsStore.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../../core/profile/profileSyncService.js";
-import { PluginSyncService } from "../../../core/profile/pluginSyncService.js";
 import { LibrarySyncService } from "../../../core/profile/librarySyncService.js";
 import { SavedLibrarySyncService } from "../../../core/profile/savedLibrarySyncService.js";
 import { WatchedItemsSyncService } from "../../../core/profile/watchedItemsSyncService.js";
@@ -203,7 +202,8 @@ const ROW_ICONS = {
   back: '<path d="m15 6-6 6 6 6"></path>',
   check: '<path d="m5 13 4 4L19 7"></path>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.9-3M4 4v4h4"></path><path d="M4 13a8 8 0 0 0 14.9 3M20 20v-4h-4"></path>',
-  trash: '<path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12h10l1-12"></path><path d="M9 7V4h6v3"></path>'
+  trash: '<path d="M4 7h16"></path><path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M6 7l1 12h10l1-12"></path><path d="M9 7V4h6v3"></path>',
+  plugins: '<path d="m11 17-5-5.28 1.4-1.42 3.6 3.8L17.6 7.5 19 8.92 11 17zM12 22q-2.075 0-3.9-.788t-3.175-2.137Q3.6 17.725 2.8 15.9T2 12q0-2.075.788-3.9t2.137-3.175Q6.275 3.6 8.1 2.8T12 2q2.075 0 3.9.788t3.175 2.137Q20.4 6.275 21.2 8.1T22 12q0 2.075-.788 3.9t-2.137 3.175Q17.725 20.4 15.9 21.2T12 22z"></path>'
 };
 
 function clamp(value, min, max) {
@@ -783,6 +783,7 @@ export const SettingsScreen = {
           ${renderSectionNavIcon(item.id)}
           <span class="settings-nav-label-wrap">
             <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
+            ${item.id === "plugins" ? `<span class="settings-nav-badge">${escapeHtml(t("common.soon", {}, "Soon"))}</span>` : ""}
           </span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
@@ -1434,92 +1435,12 @@ export const SettingsScreen = {
   },
 
   renderPluginsSection(model) {
-    this.actionMap.set("plugins:editDraft", () => {
-      const value = window.prompt(t("settings.plugins.addRepositoryPrompt"), this.pluginDraft || "https://example.com/manifest.json");
-      if (value === null) {
-        return;
-      }
-      this.pluginDraft = String(value).trim();
-    });
-
-    this.actionMap.set("plugins:addDraft", async () => {
-      if (!String(this.pluginDraft || "").trim()) {
-        return;
-      }
-      await addonRepository.addAddon(this.pluginDraft);
-      this.pluginDraft = "";
-    });
-
-    this.actionMap.set("plugins:phone", () => { });
-    model.addons.forEach((addon, index) => {
-      this.actionMap.set(`plugins:refresh:${index}`, async () => {
-        await addonRepository.refreshAddon(addon.baseUrl || "");
-      });
-      this.actionMap.set(`plugins:remove:${index}`, async () => {
-        await addonRepository.removeAddon(addon.baseUrl || "");
-      });
-    });
-    model.pluginSources.forEach((source) => {
-      this.actionMap.set(`plugins:provider:${source.id}`, () => {
-        PluginManager.setPluginSourceEnabled(source.id, !source.enabled);
-      });
-    });
-
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-plugin-builder">
-          <div class="settings-plugin-builder-title">${t("settings.plugins.addRepository")}</div>
-          <div class="settings-plugin-builder-row">
-            <button class="settings-plugin-input settings-content-focusable focusable"
-                    data-zone="content"
-                    ${this.registerAction("plugins:editDraft", this.actionMap.get("plugins:editDraft"))}>
-              ${escapeHtml(this.pluginDraft || "https://example.com/manifest.json")}
-            </button>
-            <button class="settings-plugin-add settings-content-focusable focusable${this.pluginDraft ? "" : " is-disabled"}"
-                    data-zone="content"
-                    ${this.registerAction("plugins:addDraft", this.actionMap.get("plugins:addDraft"))}>
-              ${iconSvg(ROW_ICONS.plus, "settings-plugin-add-icon")}
-              <span>${t("common.add")}</span>
-            </button>
-          </div>
+        <div class="settings-empty-state settings-empty-state-plugins">
+          <p class="settings-plugin-soon-text">Plugin support is coming soon.</p>
         </div>
-
-        ${this.renderActionRow({
-      focusKey: "plugins:phone",
-      title: t("settings.plugins.manageFromPhone"),
-      subtitle: plannedSubtitle(t("settings.plugins.manageFromPhoneSubtitle")),
-      classes: "settings-plugins-phone",
-      icon: "phone",
-      planned: true
-    })}
-
-        <div class="settings-repository-heading">${t("settings.plugins.repositoriesHeading", { count: model.addons.length })}</div>
-
-        ${model.addons.length
-        ? `<div class="settings-plugin-repo-list">${model.addons.map((addon, index) => this.renderPluginRepositoryCard(addon, index)).join("")}</div>`
-        : `<div class="settings-empty-state">
-              <p>${t("settings.plugins.noRepositoriesTitle")}</p>
-              <p>${t("settings.plugins.noRepositoriesSubtitle")}</p>
-            </div>`}
-
-        ${model.pluginSources.length ? `
-          <div class="settings-repository-heading settings-plugin-provider-heading">${t("settings.plugins.providersHeading", { count: model.pluginSources.length })}</div>
-          <div class="settings-stack">
-            ${model.pluginSources.map((source) => this.renderToggleRow({
-          focusKey: `plugins:provider:${source.id}`,
-          title: source.name || t("common.provider"),
-          subtitle: source.urlTemplate || t("settings.plugins.customProviderTemplate"),
-          checked: Boolean(source.enabled)
-        })).join("")}
-            ${this.renderActionRow({
-          focusKey: "plugins:provider:test",
-          title: t("settings.plugins.providerTesting"),
-          subtitle: plannedSubtitle(t("settings.plugins.providerTestingSubtitle")),
-          planned: true
-        })}
-          </div>
-        ` : ""}
       </div>
     `;
   },

@@ -6103,6 +6103,15 @@ button:focus-visible {
   margin: 0;
 }
 
+.settings-empty-state-plugins {
+  gap: 14px;
+}
+
+.settings-plugin-soon-text {
+  max-width: 560px;
+  text-align: center;
+}
+
 .settings-about-brand {
   padding: 10px 0 18px;
   display: flex;
