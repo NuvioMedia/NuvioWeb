@@ -1,4 +1,4 @@
-import { LocalStore } from "../../core/storage/localStore.js";
+import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "playerSettings";
 
@@ -72,16 +72,11 @@ function normalizePlayerSettings(settings = {}) {
   };
 }
 
-export const PlayerSettingsStore = {
-
-  get() {
-    const stored = LocalStore.get(KEY, {}) || {};
-    return normalizePlayerSettings(stored);
-  },
-
-  set(partial) {
-    const current = this.get();
-    const next = {
+const store = createProfileScopedStore({
+  key: KEY,
+  normalize: normalizePlayerSettings,
+  merge(current, partial) {
+    return {
       ...current,
       ...(partial || {}),
       subtitleStyle: {
@@ -89,7 +84,29 @@ export const PlayerSettingsStore = {
         ...((partial || {}).subtitleStyle || {})
       }
     };
-    LocalStore.set(KEY, normalizePlayerSettings(next));
+  }
+});
+
+export const PlayerSettingsStore = {
+
+  getForProfile(profileId) {
+    return store.getForProfile(profileId);
+  },
+
+  get() {
+    return store.get();
+  },
+
+  replaceForProfile(profileId, nextValue, options = {}) {
+    return store.replaceForProfile(profileId, nextValue, options);
+  },
+
+  setForProfile(profileId, partial, options = {}) {
+    return store.setForProfile(profileId, partial, options);
+  },
+
+  set(partial, options = {}) {
+    return store.set(partial, options);
   }
 
 };

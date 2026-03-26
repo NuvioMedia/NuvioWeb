@@ -4,6 +4,7 @@ import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { parentalGuideRepository } from "../../../data/repository/parentalGuideRepository.js";
 import { skipIntroRepository } from "../../../data/repository/skipIntroRepository.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
 import { Router } from "../../navigation/router.js";
@@ -75,6 +76,8 @@ const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const NEXT_EPISODE_THRESHOLD_PERCENT = 0.97;
 const SKIP_INTERVAL_CHECK_MS = 250;
+const PAUSE_OVERLAY_DELAY_MS = 5000;
+const MAX_PAUSE_OVERLAY_CAST = 8;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -98,10 +101,55 @@ function cleanDisplayText(value) {
     .trim();
 }
 
+function extractReleaseYear(value) {
+  return String(value ?? "").match(/\b(19|20)\d{2}\b/)?.[0] || "";
+}
+
 function normalizeComparableText(value) {
   return cleanDisplayText(value)
     .toLowerCase()
     .replace(/[_-]+/g, " ");
+}
+
+function extractPauseOverlayCast(data = {}) {
+  const result = [];
+  const seen = new Set();
+  const collections = [
+    data?.castItems,
+    data?.castMembers,
+    data?.cast,
+    data?.credits?.cast
+  ];
+
+  const pushEntry = (entry) => {
+    if (!entry) {
+      return;
+    }
+    const name = typeof entry === "string"
+      ? cleanDisplayText(entry)
+      : cleanDisplayText(entry?.name || entry?.fullName || entry?.actor || "");
+    if (!name) {
+      return;
+    }
+    const character = typeof entry === "string"
+      ? ""
+      : cleanDisplayText(entry?.character || entry?.role || "");
+    const key = normalizeComparableText(`${name}|${character}`);
+    if (seen.has(key)) {
+      return;
+    }
+    seen.add(key);
+    result.push({ name, character });
+  };
+
+  collections.forEach((collection) => {
+    if (!Array.isArray(collection)) {
+      return;
+    }
+    collection.forEach(pushEntry);
+  });
+
+  return result.slice(0, MAX_PAUSE_OVERLAY_CAST);
 }
 
 function pushUniqueText(target, value) {
@@ -907,6 +955,11 @@ export const PlayerScreen = {
     this.seekRepeatCount = 0;
     this.seekCommitTimer = null;
     this.seekOverlayTimer = null;
+    this.pauseOverlayVisible = false;
+    this.pauseOverlayTimer = null;
+    this.pauseOverlayDelayMs = PAUSE_OVERLAY_DELAY_MS;
+    this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0);
+    this.pauseOverlayMeta = null;
     this.nextEpisodeLaunching = false;
     this.nextEpisodeCardDismissed = false;
     this.nextEpisodeBackExitArmed = false;
@@ -984,6 +1037,7 @@ export const PlayerScreen = {
     this.audioMediaSource = null;
 
     this.renderPlayerUi();
+    this.pauseOverlayMeta = this.buildPauseOverlayMeta();
     if (!this.isExternalFrameMode()) {
       this.bindVideoEvents();
       this.bindMediaSessionHandlers();
@@ -991,6 +1045,7 @@ export const PlayerScreen = {
       this.applySubtitlePresentationSettings();
       void this.fetchParentalGuide();
       void this.fetchSkipIntervals();
+      void this.hydratePauseOverlayMeta();
     }
     this.renderEpisodePanel();
     this.applyAspectMode({ showToast: false });
@@ -1036,6 +1091,7 @@ export const PlayerScreen = {
     }
     this.externalFrameFallbackUsed = true;
     this.externalFrameUrl = this.fallbackExternalFrameUrl;
+    this.dismissPauseOverlay();
     this.clearPlaybackStallGuard();
     this.unbindVideoEvents();
     if (this.endedHandler && PlayerController.video) {
@@ -2022,6 +2078,8 @@ export const PlayerScreen = {
           </div>
         </div>
 
+        <div id="playerPauseOverlay" class="player-pause-overlay hidden"></div>
+
         <div id="playerNextEpisodeCard" class="player-next-episode-card hidden"></div>
 
         <div id="playerModalBackdrop" class="player-modal-backdrop hidden"></div>
@@ -2074,6 +2132,7 @@ export const PlayerScreen = {
       this.renderParentalGuideOverlay();
       this.renderSkipIntroButton();
       this.renderSeekOverlay();
+      this.renderPauseOverlay();
       this.renderNextEpisodeCard();
     }
   },
@@ -2090,6 +2149,7 @@ export const PlayerScreen = {
       seekDirection: uiRoot.querySelector("#playerSeekDirection"),
       seekPreview: uiRoot.querySelector("#playerSeekPreview"),
       seekFill: uiRoot.querySelector("#playerSeekFill"),
+      pauseOverlay: uiRoot.querySelector("#playerPauseOverlay"),
       nextEpisodeCard: uiRoot.querySelector("#playerNextEpisodeCard"),
       modalBackdrop: uiRoot.querySelector("#playerModalBackdrop"),
       subtitleDialog: uiRoot.querySelector("#playerSubtitleDialog"),
@@ -2143,6 +2203,7 @@ export const PlayerScreen = {
       audioAmplificationDb: Number(this.audioAmplificationDb || 0),
       isAudioAmplificationAvailable: Boolean(this.audioAmplificationAvailable),
       persistAudioAmplification: Boolean(this.persistAudioAmplification),
+      showPauseOverlay: Boolean(this.pauseOverlayVisible),
       showEpisodesPanel: Boolean(this.episodePanelVisible),
       episodesAll: Array.isArray(this.episodes) ? this.episodes : [],
       showSourcesPanel: Boolean(this.sourcesPanelVisible),
@@ -2153,6 +2214,223 @@ export const PlayerScreen = {
       sourceFilteredStreams: this.getFilteredSources(),
       sourceAvailableAddons: this.getSourceFilters().filter((entry) => entry !== "all")
     };
+  },
+
+  resolvePauseOverlayEpisodeEntry(entries = []) {
+    if (!Array.isArray(entries) || !entries.length) {
+      return null;
+    }
+    const explicitVideoId = String(this.params?.videoId || "").trim();
+    if (explicitVideoId) {
+      const byId = entries.find((entry) => String(entry?.id || "").trim() === explicitVideoId);
+      if (byId) {
+        return byId;
+      }
+    }
+
+    const season = Number(this.params?.season || 0);
+    const episode = Number(this.params?.episode || 0);
+    if (Number.isFinite(season) && season > 0 && Number.isFinite(episode) && episode > 0) {
+      return entries.find((entry) => (
+        Number(entry?.season || 0) === season
+        && Number(entry?.episode || 0) === episode
+      )) || null;
+    }
+
+    return null;
+  },
+
+  buildPauseOverlayMeta(meta = null) {
+    const resolvedMeta = meta && typeof meta === "object" ? meta : {};
+    const episodeEntry = this.resolvePauseOverlayEpisodeEntry(this.episodes);
+    const metaEpisodeEntry = this.resolvePauseOverlayEpisodeEntry(resolvedMeta?.videos);
+    const title = cleanDisplayText(
+      this.params?.playerTitle
+      || this.params?.itemTitle
+      || resolvedMeta?.name
+      || this.params?.itemId
+      || "Untitled"
+    ) || "Untitled";
+    const releaseYear = cleanDisplayText(
+      this.params?.playerReleaseYear
+      || this.params?.releaseYear
+      || this.params?.year
+      || extractReleaseYear(resolvedMeta?.releaseInfo)
+    );
+    const season = Number(this.params?.season ?? episodeEntry?.season ?? metaEpisodeEntry?.season ?? 0);
+    const episode = Number(this.params?.episode ?? episodeEntry?.episode ?? metaEpisodeEntry?.episode ?? 0);
+    const hasEpisodeContext = Number.isFinite(season) && season > 0 && Number.isFinite(episode) && episode > 0;
+    const episodeCode = hasEpisodeContext ? `S${season}E${episode}` : "";
+    const episodeTitle = cleanDisplayText(
+      this.getDisplayEpisodeTitle()
+      || this.params?.playerEpisodeTitle
+      || episodeEntry?.title
+      || metaEpisodeEntry?.title
+      || metaEpisodeEntry?.name
+      || ""
+    );
+    const description = cleanDisplayText(
+      this.params?.playerDescription
+      || this.params?.description
+      || this.params?.overview
+      || episodeEntry?.overview
+      || episodeEntry?.description
+      || metaEpisodeEntry?.overview
+      || metaEpisodeEntry?.description
+      || resolvedMeta?.description
+      || resolvedMeta?.overview
+      || ""
+    );
+    const backdropUrl = cleanDisplayText(
+      this.params?.playerBackdropUrl
+      || this.params?.backdrop
+      || resolvedMeta?.background
+      || resolvedMeta?.poster
+      || this.params?.poster
+      || ""
+    );
+    const logoUrl = cleanDisplayText(
+      this.params?.playerLogoUrl
+      || resolvedMeta?.logo
+      || this.params?.logo
+      || ""
+    );
+
+    return {
+      title,
+      releaseYear,
+      episodeCode,
+      episodeTitle,
+      description,
+      backdropUrl,
+      logoUrl,
+      cast: extractPauseOverlayCast({
+        castItems: this.params?.castItems,
+        castMembers: this.params?.castMembers || resolvedMeta?.castMembers,
+        cast: this.params?.cast || resolvedMeta?.cast,
+        credits: this.params?.credits || resolvedMeta?.credits
+      })
+    };
+  },
+
+  async hydratePauseOverlayMeta() {
+    const itemId = String(this.params?.itemId || "").trim();
+    const itemType = normalizeItemType(this.params?.itemType || "movie");
+    if (!itemId || this.isExternalFrameMode()) {
+      return;
+    }
+
+    const requestToken = Number(this.pauseOverlayMetaRequestToken || 0) + 1;
+    this.pauseOverlayMetaRequestToken = requestToken;
+
+    try {
+      const result = await metaRepository.getMetaFromAllAddons(itemType, itemId);
+      if (requestToken !== this.pauseOverlayMetaRequestToken || result?.status !== "success" || !result?.data) {
+        return;
+      }
+      this.pauseOverlayMeta = this.buildPauseOverlayMeta(result.data);
+      this.renderPauseOverlay();
+    } catch (error) {
+      if (requestToken === this.pauseOverlayMetaRequestToken) {
+        console.warn("Pause overlay metadata fetch failed", error);
+      }
+    }
+  },
+
+  clearPauseOverlayTimer() {
+    if (this.pauseOverlayTimer) {
+      clearTimeout(this.pauseOverlayTimer);
+      this.pauseOverlayTimer = null;
+    }
+  },
+
+  canShowPauseOverlay() {
+    return !this.isExternalFrameMode()
+      && this.paused
+      && !this.loadingVisible
+      && !this.seekOverlayVisible
+      && this.seekPreviewSeconds == null
+      && !this.isDialogOpen()
+      && !this.parentalGuideVisible
+      && !this.moreActionsVisible
+      && !this.isNextEpisodeCardVisible();
+  },
+
+  dismissPauseOverlay({ revealControls = false, focus = false } = {}) {
+    this.clearPauseOverlayTimer();
+    if (!this.pauseOverlayVisible && !revealControls) {
+      return;
+    }
+    this.pauseOverlayVisible = false;
+    this.renderPauseOverlay();
+    if (revealControls && !this.loadingVisible) {
+      this.setControlsVisible(true, { focus });
+    }
+  },
+
+  schedulePauseOverlay() {
+    this.clearPauseOverlayTimer();
+    if (!this.canShowPauseOverlay()) {
+      this.pauseOverlayVisible = false;
+      this.renderPauseOverlay();
+      return;
+    }
+    this.pauseOverlayVisible = false;
+    this.renderPauseOverlay();
+    this.pauseOverlayTimer = setTimeout(() => {
+      this.pauseOverlayTimer = null;
+      if (!this.canShowPauseOverlay()) {
+        return;
+      }
+      this.pauseOverlayVisible = true;
+      this.renderPauseOverlay();
+    }, this.pauseOverlayDelayMs);
+  },
+
+  syncPauseOverlayState() {
+    if (this.pauseOverlayVisible && !this.canShowPauseOverlay()) {
+      this.dismissPauseOverlay();
+      return;
+    }
+    if (!this.pauseOverlayVisible && this.pauseOverlayTimer && !this.canShowPauseOverlay()) {
+      this.clearPauseOverlayTimer();
+    }
+  },
+
+  renderPauseOverlay() {
+    const overlay = this.uiRefs?.pauseOverlay;
+    const controlsOverlay = this.uiRefs?.controlsOverlay;
+    if (!overlay) {
+      return;
+    }
+    const hidden = !this.pauseOverlayVisible || this.loadingVisible;
+    overlay.classList.toggle("hidden", hidden);
+    controlsOverlay?.classList.toggle("pause-overlay-active", !hidden);
+    if (hidden) {
+      return;
+    }
+
+    const meta = this.pauseOverlayMeta || this.buildPauseOverlayMeta();
+    const clockText = String(this.lastUiTickState?.clockText || this.uiRefs?.clock?.textContent || "--:--").trim() || "--:--";
+    const endsAtText = String(
+      this.lastUiTickState?.endsAtText
+      || this.uiRefs?.endsAt?.textContent
+      || t("player_ends_at", ["--:--"], "Ends at %1$s")
+    ).trim() || t("player_ends_at", ["--:--"], "Ends at %1$s");
+    overlay.innerHTML = `
+      <div class="player-pause-overlay-top">
+        <div class="player-pause-overlay-clock">${escapeHtml(clockText)}</div>
+        <div class="player-pause-overlay-ends-at">${escapeHtml(endsAtText)}</div>
+      </div>
+      <div class="player-pause-overlay-shade"></div>
+      <div class="player-pause-overlay-content">
+        <div class="player-pause-kicker">${escapeHtml(t("pause_you_are_watching", {}, "You're watching"))}</div>
+        ${meta.logoUrl ? `<img class="player-pause-logo" src="${escapeAttribute(meta.logoUrl)}" alt="${escapeAttribute(meta.title)}" />` : `<div class="player-pause-title">${escapeHtml(meta.title)}</div>`}
+        ${meta.releaseYear || meta.episodeCode ? `<div class="player-pause-meta-line">${escapeHtml([meta.releaseYear, meta.episodeCode].filter(Boolean).join(" • "))}</div>` : ""}
+        ${meta.episodeTitle ? `<div class="player-pause-episode-title">${escapeHtml(meta.episodeTitle)}</div>` : ""}
+        ${meta.description ? `<div class="player-pause-description">${escapeHtml(meta.description)}</div>` : ""}
+      </div>
+    `;
   },
 
   getDisplayEpisodeTitle() {
@@ -2654,6 +2932,7 @@ export const PlayerScreen = {
     }
 
     const onWaiting = () => {
+      this.dismissPauseOverlay();
       this.loadingVisible = true;
       this.updateLoadingVisibility();
       if (!this.sourcesPanelVisible) {
@@ -2670,6 +2949,7 @@ export const PlayerScreen = {
       this.clearPlaybackStallGuard();
       this.loadingVisible = false;
       this.paused = false;
+      this.dismissPauseOverlay();
       this.updateMediaSessionPlaybackState();
       this.updateLoadingVisibility();
       this.refreshTrackDialogs();
@@ -2700,6 +2980,7 @@ export const PlayerScreen = {
       this.setControlsVisible(true, { focus: false });
       this.updateUiTick();
       this.renderControlButtons();
+      this.schedulePauseOverlay();
     };
 
     const onTimeUpdate = () => {
@@ -2719,6 +3000,9 @@ export const PlayerScreen = {
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
       this.ensureTrackDataWarmup();
+      if (this.paused) {
+        this.schedulePauseOverlay();
+      }
       this.startTrackDiscoveryWindow({ durationMs: 5000, intervalMs: 300 });
       setTimeout(() => {
         this.attemptSilentAudioRecovery("metadata");
@@ -2763,6 +3047,7 @@ export const PlayerScreen = {
       this.clearPlaybackStallGuard();
       this.loadingVisible = false;
       this.paused = true;
+      this.dismissPauseOverlay();
       this.updateLoadingVisibility();
       this.setControlsVisible(true, { focus: false });
       this.sourcesError = `${this.mediaErrorMessage(mediaErrorCode)}. Try another source.`;
@@ -3111,6 +3396,7 @@ export const PlayerScreen = {
     }
     overlay.classList.toggle("hidden", !this.loadingVisible);
     if (this.loadingVisible) {
+      this.dismissPauseOverlay();
       if (this.seekOverlayVisible || this.seekPreviewSeconds != null) {
         this.cancelSeekPreview({ commit: false });
       }
@@ -3120,6 +3406,8 @@ export const PlayerScreen = {
         this.controlFocusZone = "buttons";
       }
       this.renderControlButtons();
+    } else if (this.paused) {
+      this.schedulePauseOverlay();
     }
     this.renderNextEpisodeCard();
   },
@@ -3212,6 +3500,17 @@ export const PlayerScreen = {
       }
     }
 
+    if (this.pauseOverlayVisible) {
+      const overlayClock = this.uiRefs?.pauseOverlay?.querySelector(".player-pause-overlay-clock");
+      if (overlayClock && overlayClock.textContent !== uiState.clockText) {
+        overlayClock.textContent = uiState.clockText || "--:--";
+      }
+      const overlayEndsAt = this.uiRefs?.pauseOverlay?.querySelector(".player-pause-overlay-ends-at");
+      if (overlayEndsAt && overlayEndsAt.textContent !== uiState.endsAtText) {
+        overlayEndsAt.textContent = uiState.endsAtText || t("player_ends_at", ["--:--"], "Ends at %1$s");
+      }
+    }
+
     const timeLabel = uiRefs.timeLabel;
     if (timeLabel) {
       const nextTimeLabel = `${formatTime(effectiveProgressSeconds)} / ${formatTime(duration)}`;
@@ -3221,6 +3520,7 @@ export const PlayerScreen = {
       }
     }
 
+    this.syncPauseOverlayState();
     this.renderNextEpisodeCard();
 
     if (this.seekOverlayVisible && this.seekPreviewSeconds == null) {
@@ -3392,6 +3692,7 @@ export const PlayerScreen = {
       return;
     }
     if (this.paused) {
+      this.dismissPauseOverlay();
       PlayerController.resume();
       this.paused = false;
       this.updateMediaSessionPlaybackState();
@@ -3411,6 +3712,7 @@ export const PlayerScreen = {
       this.controlFocusZone = "progress";
     }
     this.renderControlButtons();
+    this.schedulePauseOverlay();
   },
 
   resolveMediaAction(event) {
@@ -6400,6 +6702,14 @@ export const PlayerScreen = {
   },
 
   consumeBackRequest() {
+    if (this.pauseOverlayVisible) {
+      this.dismissPauseOverlay({ revealControls: true, focus: false });
+      if (this.paused) {
+        this.schedulePauseOverlay();
+      }
+      return true;
+    }
+
     if (this.seekOverlayVisible || this.seekPreviewSeconds != null) {
       this.cancelSeekPreview({ commit: false });
       return true;
@@ -6464,6 +6774,25 @@ export const PlayerScreen = {
       event?.preventDefault?.();
     }
     const mediaAction = this.resolveMediaAction(event);
+    if (this.pauseOverlayVisible) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
+      if (mediaAction === "play" || mediaAction === "toggle" || keyCode === 13) {
+        this.dismissPauseOverlay();
+        this.togglePause();
+        this.renderControlButtons();
+        return;
+      }
+      this.dismissPauseOverlay({ revealControls: true, focus: false });
+      if (this.paused) {
+        this.schedulePauseOverlay();
+      }
+      return;
+    }
+    if (this.paused) {
+      this.schedulePauseOverlay();
+    }
     if (mediaAction) {
       event?.preventDefault?.();
       event?.stopPropagation?.();
@@ -6783,6 +7112,8 @@ export const PlayerScreen = {
 
   cleanup() {
     this.cancelSeekPreview({ commit: false });
+    this.dismissPauseOverlay();
+    this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0) + 1;
     this.streamCandidatesByVideoId?.clear?.();
     this.skipIntervalsRequestToken = Number(this.skipIntervalsRequestToken || 0) + 1;
     this.subtitleLoadToken = (this.subtitleLoadToken || 0) + 1;

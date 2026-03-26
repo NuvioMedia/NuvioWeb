@@ -1,4 +1,4 @@
-import { LocalStore } from "../../core/storage/localStore.js";
+import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "animeSkipSettings";
 
@@ -7,17 +7,38 @@ const DEFAULTS = {
   clientId: ""
 };
 
+function normalizeAnimeSkipSettings(value = {}) {
+  return {
+    ...DEFAULTS,
+    ...(value || {})
+  };
+}
+
+const store = createProfileScopedStore({
+  key: KEY,
+  normalize: normalizeAnimeSkipSettings
+});
+
 export const AnimeSkipSettingsStore = {
 
-  get() {
-    return {
-      ...DEFAULTS,
-      ...(LocalStore.get(KEY, {}) || {})
-    };
+  getForProfile(profileId) {
+    return store.getForProfile(profileId);
   },
 
-  set(partial) {
-    LocalStore.set(KEY, { ...this.get(), ...(partial || {}) });
+  get() {
+    return store.get();
+  },
+
+  replaceForProfile(profileId, nextValue, options = {}) {
+    return store.replaceForProfile(profileId, nextValue, options);
+  },
+
+  setForProfile(profileId, partial, options = {}) {
+    return store.setForProfile(profileId, partial, options);
+  },
+
+  set(partial, options = {}) {
+    return store.set(partial, options);
   }
 
 };

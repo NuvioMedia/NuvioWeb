@@ -685,6 +685,32 @@ function buildContinueWatchingSignature(items = []) {
     .join("::");
 }
 
+function buildSidebarProfileSignature(profile = null) {
+  if (!profile || typeof profile !== "object") {
+    return "";
+  }
+  return [
+    profile.id || "",
+    profile.name || "",
+    profile.avatarColorHex || "",
+    profile.avatarId || "",
+    profile.imageUrl || ""
+  ].join("|");
+}
+
+function buildHeroIdentity(item = null) {
+  const normalized = normalizeCatalogItem(item || null, "movie");
+  if (!normalized) {
+    return "";
+  }
+  return [
+    normalized.id || normalized.videoId || normalized.contentId || normalized.title || normalized.name || "",
+    normalized.type || normalized.apiType || "",
+    normalized.season ?? "",
+    normalized.episode ?? ""
+  ].join("|");
+}
+
 function buildHeroDisplayModel(hero, layoutMode) {
   const year = extractYear(hero);
   const imdb = resolveImdbRating(hero);
@@ -1735,6 +1761,10 @@ export const HomeScreen = {
       return HOME_BACKGROUND_RENDER_DELAY_MS;
     }
     return 0;
+  },
+
+  shouldProgressivelyRenderDeferredRows() {
+    return !this.isPerformanceConstrained();
   },
 
   getDirectionalRepeatThrottleMs() {
@@ -3789,35 +3819,39 @@ export const HomeScreen = {
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
     this.hasLoadedOnce = true;
     this.render();
+    const previousSidebarProfileSignature = buildSidebarProfileSignature(this.sidebarProfile);
     sidebarProfilePromise.then((profile) => {
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
       }
-      if (profile) {
+      if (profile && buildSidebarProfileSignature(profile) !== previousSidebarProfileSignature) {
         this.sidebarProfile = profile;
         this.requestBackgroundRender();
       }
     });
 
     if (deferredDescriptors.length) {
+      const progressiveDeferredRows = this.shouldProgressivelyRenderDeferredRows();
       this.fetchCatalogRows(deferredDescriptors, {
         allowLoading: true,
         batchSize: this.getDeferredCatalogBatchSize(),
-        onBatch: (batchRows) => {
-          if (token !== this.homeLoadToken || Router.getCurrent() !== "home" || !Array.isArray(batchRows) || !batchRows.length) {
-            return;
+        onBatch: progressiveDeferredRows
+          ? (batchRows) => {
+            if (token !== this.homeLoadToken || Router.getCurrent() !== "home" || !Array.isArray(batchRows) || !batchRows.length) {
+              return;
+            }
+            const combinedByKey = new Map((this.rows || []).map((row) => [row.homeCatalogKey, row]));
+            batchRows.forEach((row) => {
+              combinedByKey.set(row.homeCatalogKey, row);
+            });
+            this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
+            this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+            if (!this.heroItem) {
+              this.heroItem = this.pickInitialHero();
+            }
+            this.requestBackgroundRender();
           }
-          const combinedByKey = new Map((this.rows || []).map((row) => [row.homeCatalogKey, row]));
-          batchRows.forEach((row) => {
-            combinedByKey.set(row.homeCatalogKey, row);
-          });
-          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
-          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
-          if (!this.heroItem) {
-            this.heroItem = this.pickInitialHero();
-          }
-          this.requestBackgroundRender();
-        }
+          : null
       }).then((extraRows) => {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
@@ -3865,10 +3899,15 @@ export const HomeScreen = {
       this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
         .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
       const shouldShowLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
+      const previousDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
+      const previousHeroIdentity = buildHeroIdentity(this.heroItem);
+      const previousLoadingState = Boolean(this.continueWatchingLoading);
       if (!suppressContinueWatchingLoading) {
         this.continueWatchingLoading = shouldShowLoading;
         this.continueWatchingDisplay = [];
-        this.requestBackgroundRender();
+        if (previousLoadingState !== this.continueWatchingLoading || previousDisplaySignature) {
+          this.requestBackgroundRender();
+        }
       }
 
       if (!shouldShowLoading) {
@@ -3885,7 +3924,9 @@ export const HomeScreen = {
         }
         this.continueWatchingLoading = false;
         this.continueWatchingDisplay = [];
-        this.requestBackgroundRender();
+        if (previousLoadingState || previousDisplaySignature) {
+          this.requestBackgroundRender();
+        }
         return;
       }
 
@@ -3917,11 +3958,17 @@ export const HomeScreen = {
             this.forceInitialContinueWatchingFocus = true;
           }
         }
-        this.requestBackgroundRender();
+        const nextDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
+        const nextHeroIdentity = buildHeroIdentity(this.heroItem);
+        if (previousLoadingState !== this.continueWatchingLoading
+          || previousDisplaySignature !== nextDisplaySignature
+          || previousHeroIdentity !== nextHeroIdentity) {
+          this.requestBackgroundRender();
+        }
       } catch (error) {
         console.warn("Continue watching async enrichment failed", error);
         this.continueWatchingLoading = false;
-        if (!suppressContinueWatchingLoading) {
+        if (!suppressContinueWatchingLoading && previousLoadingState) {
           this.requestBackgroundRender();
         }
       }
@@ -4038,6 +4085,8 @@ export const HomeScreen = {
     const token = this.homeLoadToken;
     this.catalogRetryInFlight = true;
     const retryBatchSize = Math.max(1, Number(this.getDeferredCatalogBatchSize() || pendingRows.length || 1));
+    const progressiveRetryRendering = this.shouldProgressivelyRenderDeferredRows();
+    let hasBufferedUpdates = false;
     (async () => {
       for (let index = 0; index < pendingRows.length; index += retryBatchSize) {
         const batch = pendingRows.slice(index, index + retryBatchSize);
@@ -4079,11 +4128,18 @@ export const HomeScreen = {
           if (!this.heroItem) {
             this.heroItem = this.pickInitialHero();
           }
-          this.requestBackgroundRender();
+          if (progressiveRetryRendering) {
+            this.requestBackgroundRender();
+          } else {
+            hasBufferedUpdates = true;
+          }
         }
         if ((index + retryBatchSize) < pendingRows.length) {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
+      }
+      if (hasBufferedUpdates && token === this.homeLoadToken && Router.getCurrent() === "home") {
+        this.requestBackgroundRender();
       }
     })().finally(() => {
       if (token === this.homeLoadToken) {

@@ -5,6 +5,8 @@ import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
 import { Platform } from "../../platform/index.js";
+import { ThemeManager } from "../../ui/theme/themeManager.js";
+import { I18n } from "../../i18n/index.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#f5f5f5";
@@ -1621,6 +1623,9 @@ export const ProfileSelectionScreen = {
     }
     await ProfileManager.setActiveProfile(profileId);
     await StartupSyncService.syncPull();
+    await I18n.init();
+    ThemeManager.apply();
+    I18n.apply();
     Router.navigate("home");
   },
 

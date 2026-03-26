@@ -6,6 +6,9 @@ import { WatchProgressSyncService } from "./watchProgressSyncService.js";
 import { SavedLibrarySyncService } from "./savedLibrarySyncService.js";
 import { WatchedItemsSyncService } from "./watchedItemsSyncService.js";
 import { PluginSyncService } from "./pluginSyncService.js";
+import { ProfileSettingsSyncService } from "./profileSettingsSyncService.js";
+import { ThemeManager } from "../../ui/theme/themeManager.js";
+import { I18n } from "../../i18n/index.js";
 
 const SYNC_INTERVAL_MS = 120000;
 const ADDON_PUSH_DEBOUNCE_MS = 1000;
@@ -59,17 +62,24 @@ export const StartupSyncService = {
 
   async syncPull() {
     if (!AuthManager.isAuthenticated) {
-      return;
+      return false;
     }
+    let didApplyProfileSettings = false;
     for (let attempt = 1; attempt <= MAX_PULL_ATTEMPTS; attempt += 1) {
       try {
         await ProfileSyncService.pull();
+        didApplyProfileSettings = await ProfileSettingsSyncService.pull();
+        if (didApplyProfileSettings) {
+          await I18n.init();
+          ThemeManager.apply();
+          I18n.apply();
+        }
         await PluginSyncService.pull();
         await LibrarySyncService.pull();
         await SavedLibrarySyncService.pull();
         await WatchedItemsSyncService.pull();
         await WatchProgressSyncService.pull();
-        return;
+        return didApplyProfileSettings;
       } catch (error) {
         console.warn(`Startup sync pull failed (attempt ${attempt}/${MAX_PULL_ATTEMPTS})`, error);
         if (attempt < MAX_PULL_ATTEMPTS) {
@@ -77,6 +87,7 @@ export const StartupSyncService = {
         }
       }
     }
+    return didApplyProfileSettings;
   },
 
   async syncPush() {
@@ -85,6 +96,7 @@ export const StartupSyncService = {
     }
     try {
       await ProfileSyncService.push();
+      await ProfileSettingsSyncService.push();
       await PluginSyncService.push();
       await LibrarySyncService.push();
       await SavedLibrarySyncService.push();

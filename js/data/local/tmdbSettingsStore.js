@@ -1,5 +1,5 @@
-import { LocalStore } from "../../core/storage/localStore.js";
 import { TMDB_API_KEY } from "../../config.js";
+import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "tmdbSettings";
 
@@ -12,17 +12,38 @@ const DEFAULTS = {
   useDetails: true
 };
 
+function normalizeTmdbSettings(value = {}) {
+  return {
+    ...DEFAULTS,
+    ...(value || {})
+  };
+}
+
+const store = createProfileScopedStore({
+  key: KEY,
+  normalize: normalizeTmdbSettings
+});
+
 export const TmdbSettingsStore = {
 
-  get() {
-    return {
-      ...DEFAULTS,
-      ...(LocalStore.get(KEY, {}) || {})
-    };
+  getForProfile(profileId) {
+    return store.getForProfile(profileId);
   },
 
-  set(partial) {
-    LocalStore.set(KEY, { ...this.get(), ...(partial || {}) });
+  get() {
+    return store.get();
+  },
+
+  replaceForProfile(profileId, nextValue, options = {}) {
+    return store.replaceForProfile(profileId, nextValue, options);
+  },
+
+  setForProfile(profileId, partial, options = {}) {
+    return store.setForProfile(profileId, partial, options);
+  },
+
+  set(partial, options = {}) {
+    return store.set(partial, options);
   }
 
 };

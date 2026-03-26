@@ -1,8 +1,6 @@
-import { LocalStore } from "../../core/storage/localStore.js";
+import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "themeSettings";
-const ACCENT_MIGRATION_FLAG_KEY = "themeAccentMigratedToWhite";
-const LEGACY_DEFAULT_ACCENT = "#ff3d00";
 
 const DEFAULT_THEME = {
   mode: "dark",
@@ -54,24 +52,31 @@ function normalizeTheme(settings = {}) {
   };
 }
 
+const store = createProfileScopedStore({
+  key: KEY,
+  normalize: normalizeTheme
+});
+
 export const ThemeStore = {
 
-  get() {
-    const stored = (LocalStore.get(KEY, {}) || {});
-    if (
-      String(stored?.accentColor || "").toLowerCase() === LEGACY_DEFAULT_ACCENT
-      && !LocalStore.get(ACCENT_MIGRATION_FLAG_KEY, false)
-    ) {
-      const migrated = { ...stored, accentColor: DEFAULT_THEME.accentColor };
-      LocalStore.set(KEY, migrated);
-      LocalStore.set(ACCENT_MIGRATION_FLAG_KEY, true);
-      return normalizeTheme(migrated);
-    }
-    return normalizeTheme(stored);
+  getForProfile(profileId) {
+    return store.getForProfile(profileId);
   },
 
-  set(partial) {
-    LocalStore.set(KEY, normalizeTheme({ ...this.get(), ...(partial || {}) }));
+  get() {
+    return store.get();
+  },
+
+  replaceForProfile(profileId, nextValue, options = {}) {
+    return store.replaceForProfile(profileId, nextValue, options);
+  },
+
+  setForProfile(profileId, partial, options = {}) {
+    return store.setForProfile(profileId, partial, options);
+  },
+
+  set(partial, options = {}) {
+    return store.set(partial, options);
   }
 
 };

@@ -7033,6 +7033,10 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.player-controls-overlay.pause-overlay-active .player-controls-top {
+  opacity: 0;
+}
+
 .player-controls-top {
   align-self: flex-end;
   text-align: right;
@@ -7040,6 +7044,7 @@ button:focus-visible {
   z-index: 1;
   color: rgba(245, 249, 255, 0.9);
   text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+  transition: opacity 160ms ease;
 }
 
 .player-clock {
@@ -7313,6 +7318,113 @@ button:focus-visible {
   border-radius: 3px;
   background: var(--player-secondary);
   transition: width 120ms linear;
+}
+
+.player-pause-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 31;
+  opacity: 1;
+  transition: opacity 180ms ease;
+  overflow: hidden;
+}
+
+.player-pause-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.player-pause-overlay-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(3, 8, 14, 0.2) 0%, rgba(3, 8, 14, 0.48) 48%, rgba(3, 8, 14, 0.68) 100%),
+    linear-gradient(90deg, rgba(4, 10, 16, 0.78) 0%, rgba(4, 10, 16, 0.62) 34%, rgba(4, 10, 16, 0.26) 62%, rgba(4, 10, 16, 0.08) 100%);
+  backdrop-filter: blur(8px) saturate(1.02);
+}
+
+.player-pause-overlay-top {
+  position: absolute;
+  top: var(--tv-safe-gutter);
+  right: var(--tv-safe-gutter);
+  text-align: right;
+  z-index: 1;
+  color: rgba(244, 248, 253, 0.9);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+}
+
+.player-pause-overlay-clock {
+  font-size: clamp(32px, 2.1vw, 40px);
+  font-weight: 560;
+  line-height: 1;
+}
+
+.player-pause-overlay-ends-at {
+  margin-top: 2px;
+  font-size: var(--tv-caption-text);
+  color: rgba(231, 238, 246, 0.74);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+}
+
+.player-pause-overlay-content {
+  position: absolute;
+  left: var(--tv-safe-gutter);
+  top: 50%;
+  transform: translateY(-50%);
+  right: min(28vw, 460px);
+  max-width: min(48vw, 820px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 14px;
+  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.62);
+}
+
+.player-pause-kicker {
+  font-size: var(--tv-caption-text);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(222, 231, 241, 0.72);
+}
+
+.player-pause-logo {
+  max-width: min(38vw, 520px);
+  max-height: 120px;
+  object-fit: contain;
+  object-position: left center;
+  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.48));
+}
+
+.player-pause-title {
+  font-size: clamp(44px, 3vw, 62px);
+  font-weight: 740;
+  line-height: 1.05;
+  color: #f8fbff;
+}
+
+.player-pause-meta-line {
+  font-size: var(--tv-secondary-text);
+  font-weight: 600;
+  color: rgba(232, 239, 246, 0.74);
+}
+
+.player-pause-episode-title {
+  font-size: clamp(28px, 1.9vw, 38px);
+  font-weight: 650;
+  line-height: 1.12;
+  color: rgba(248, 251, 255, 0.96);
+}
+
+.player-pause-description {
+  max-width: min(46vw, 760px);
+  font-size: clamp(20px, 1.3vw, 26px);
+  line-height: 1.42;
+  color: rgba(226, 235, 244, 0.84);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 
 .player-skip-intro {
