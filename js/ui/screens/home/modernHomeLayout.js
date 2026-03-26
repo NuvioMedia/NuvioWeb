@@ -3,6 +3,10 @@ export const MODERN_HOME_CONSTANTS = {
   heroRapidNavThresholdMs: 130,
   heroRapidSettleMs: 170,
   keyRepeatThrottleMs: 80,
+  cameraFollowDelayMs: 140,
+  cameraFollowDurationXMs: 440,
+  cameraFollowDurationYMs: 440,
+  cameraSafetyDurationMs: 180,
   rowFocusInset: 40,
   trackEdgePadding: 52
 };
