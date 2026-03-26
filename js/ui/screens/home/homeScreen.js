@@ -122,6 +122,26 @@ function firstNonEmpty(...values) {
   return "";
 }
 
+function limitTextToWordCount(value, maxWords = 0) {
+  const text = String(value || "").trim();
+  if (!text || !Number.isFinite(maxWords) || maxWords <= 0) {
+    return { text, truncated: false };
+  }
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) {
+    return { text, truncated: false };
+  }
+  return {
+    text: words.slice(0, maxWords).join(" "),
+    truncated: true
+  };
+}
+
+function parseCssPx(value, fallback = 0) {
+  const parsed = parseFloat(String(value || "").trim());
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 function uniqueById(items = []) {
   const seen = new Set();
   return items.filter((item) => {
@@ -785,9 +805,11 @@ function renderModernHeroPrimary(display) {
       </span>
     `);
   }
+  const hasRight = rightTokens.length > 0;
   return `
-    <div class="home-modern-hero-meta-group">${left}</div>
-    <div class="home-modern-hero-meta-group">${rightTokens.join('<span class="home-hero-dot">•</span>')}</div>
+    <div class="home-modern-hero-meta-group home-modern-hero-meta-group-leading">${left}</div>
+    ${left && hasRight ? '<span class="home-hero-dot">•</span>' : ""}
+    <div class="home-modern-hero-meta-group home-modern-hero-meta-group-trailing">${rightTokens.join('<span class="home-hero-dot">•</span>')}</div>
   `;
 }
 
@@ -1496,6 +1518,118 @@ export const HomeScreen = {
       return 24;
     }
     return 48;
+  },
+
+  getCachedModernLandscapePosterMetrics(shell = null) {
+    if (this.cachedModernLandscapePosterMetrics) {
+      return this.cachedModernLandscapePosterMetrics;
+    }
+    const targetShell = shell instanceof HTMLElement
+      ? shell
+      : this.container?.querySelector(".home-screen-shell.home-modern-landscape-posters");
+    if (!(targetShell instanceof HTMLElement)) {
+      return null;
+    }
+    const main = targetShell.querySelector(".home-main");
+    const shellStyles = getComputedStyle(targetShell);
+    const contentStart = parseCssPx(shellStyles.getPropertyValue("--home-content-start"), 52);
+    const trackEnd = parseCssPx(shellStyles.getPropertyValue("--home-track-end"), 52);
+    const rowGap = parseCssPx(shellStyles.getPropertyValue("--home-row-gap"), 16);
+    const visibleLandscapeCards = 4.25;
+    const gapCount = 4;
+    const shellWidth = main instanceof HTMLElement
+      ? main.clientWidth
+      : targetShell.clientWidth;
+    const fallbackWidth = Math.max(
+      Number(globalThis.innerWidth || 0),
+      Number(globalThis.document?.documentElement?.clientWidth || 0),
+      Number(shellWidth || 0)
+    );
+    const availableWidth = Math.max(
+      0,
+      Number(shellWidth || fallbackWidth) - contentStart - trackEnd - (rowGap * gapCount)
+    );
+    const fittedWidth = availableWidth > 0
+      ? Math.floor(availableWidth / visibleLandscapeCards)
+      : 336;
+    const posterWidth = Math.max(272, Math.min(420, fittedWidth || 336));
+    this.cachedModernLandscapePosterMetrics = {
+      width: posterWidth,
+      height: Math.round(posterWidth * 0.5625)
+    };
+    return this.cachedModernLandscapePosterMetrics;
+  },
+
+  applyCachedModernLandscapePosterMetrics(shell = null) {
+    const targetShell = shell instanceof HTMLElement
+      ? shell
+      : this.container?.querySelector(".home-screen-shell.home-modern-landscape-posters");
+    if (!(targetShell instanceof HTMLElement)) {
+      return;
+    }
+    const metrics = this.getCachedModernLandscapePosterMetrics(targetShell);
+    if (!metrics) {
+      return;
+    }
+    targetShell.style.setProperty("--home-landscape-poster-width", `${metrics.width}px`);
+    targetShell.style.setProperty("--home-landscape-poster-height", `${metrics.height}px`);
+  },
+
+  getCachedModernPortraitPosterMetrics(shell = null) {
+    if (this.cachedModernPortraitPosterMetrics) {
+      return this.cachedModernPortraitPosterMetrics;
+    }
+    const targetShell = shell instanceof HTMLElement
+      ? shell
+      : this.container?.querySelector(".home-screen-shell.home-layout-modern:not(.home-modern-landscape-posters)");
+    if (!(targetShell instanceof HTMLElement)) {
+      return null;
+    }
+    const main = targetShell.querySelector(".home-main");
+    const shellStyles = getComputedStyle(targetShell);
+    const contentStart = parseCssPx(shellStyles.getPropertyValue("--home-content-start"), 52);
+    const trackEnd = parseCssPx(shellStyles.getPropertyValue("--home-track-end"), 52);
+    const rowGap = parseCssPx(shellStyles.getPropertyValue("--home-row-gap"), 12);
+    const visiblePortraitCards = 7.25;
+    const gapCount = 7;
+    const shellWidth = main instanceof HTMLElement
+      ? main.clientWidth
+      : targetShell.clientWidth;
+    const fallbackWidth = Math.max(
+      Number(globalThis.innerWidth || 0),
+      Number(globalThis.document?.documentElement?.clientWidth || 0),
+      Number(shellWidth || 0)
+    );
+    const availableWidth = Math.max(
+      0,
+      Number(shellWidth || fallbackWidth) - contentStart - trackEnd - (rowGap * gapCount)
+    );
+    const fittedWidth = availableWidth > 0
+      ? Math.floor(availableWidth / visiblePortraitCards)
+      : 224;
+    const posterWidth = Math.max(208, Math.min(280, fittedWidth || 224));
+    this.cachedModernPortraitPosterMetrics = {
+      width: posterWidth,
+      height: Math.round(posterWidth * 1.5),
+      expandedWidth: Math.round(posterWidth * 2.66)
+    };
+    return this.cachedModernPortraitPosterMetrics;
+  },
+
+  applyCachedModernPortraitPosterMetrics(shell = null) {
+    const targetShell = shell instanceof HTMLElement
+      ? shell
+      : this.container?.querySelector(".home-screen-shell.home-layout-modern:not(.home-modern-landscape-posters)");
+    if (!(targetShell instanceof HTMLElement)) {
+      return;
+    }
+    const metrics = this.getCachedModernPortraitPosterMetrics(targetShell);
+    if (!metrics) {
+      return;
+    }
+    targetShell.style.setProperty("--home-modern-portrait-poster-width", `${metrics.width}px`);
+    targetShell.style.setProperty("--home-modern-portrait-poster-height", `${metrics.height}px`);
+    targetShell.style.setProperty("--home-modern-portrait-expanded-width", `${metrics.expandedWidth}px`);
   },
 
   getHomeViewport() {
@@ -2519,12 +2653,33 @@ export const HomeScreen = {
     }
   },
 
-  collapseFocusedPoster(node = this.expandedPosterNode) {
+  collapseFocusedPoster(node = this.expandedPosterNode, options = {}) {
     const target = node || null;
+    const instant = Boolean(options?.instant);
+    const frame = target?.querySelector?.(".home-poster-frame") || null;
+    const previousCardTransition = instant && target instanceof HTMLElement ? target.style.transition : "";
+    const previousFrameTransition = instant && frame instanceof HTMLElement ? frame.style.transition : "";
     if (target) {
+      if (instant && target instanceof HTMLElement) {
+        target.style.transition = "none";
+      }
+      if (instant && frame instanceof HTMLElement) {
+        frame.style.transition = "none";
+      }
       target.closest(".home-track")?.classList.remove("has-expanded-landscape");
       target.classList.remove("is-expanded", "is-trailer-active");
       this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
+      if (instant && target instanceof HTMLElement) {
+        void target.offsetWidth;
+        requestAnimationFrame(() => {
+          if (target.isConnected) {
+            target.style.transition = previousCardTransition;
+          }
+          if (frame instanceof HTMLElement && frame.isConnected) {
+            frame.style.transition = previousFrameTransition;
+          }
+        });
+      }
     }
     const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
     this.clearTrailerLayer(heroLayer);
@@ -2707,8 +2862,10 @@ export const HomeScreen = {
     if (!this.container || this.isPerformanceConstrained()) {
       return;
     }
+    const modernHeroDescriptionWordLimit = 40;
     const root = this.homeTruncationScope || this.container;
     this.homeTruncationScope = null;
+    this.applyModernHeroDescriptionBounds(root);
     const nodes = root.querySelectorAll(
       ".home-hero-description, .home-poster-title, .home-poster-subtitle, .home-poster-expanded-meta, .home-poster-expanded-description"
     );
@@ -2719,16 +2876,21 @@ export const HomeScreen = {
       const currentText = node.textContent ?? "";
       const storedText = node.dataset.fullText || "";
       const shouldRefresh = !storedText || (currentText && currentText !== storedText && !currentText.trim().endsWith("..."));
-      const fullText = shouldRefresh ? currentText : storedText;
+      const sourceText = shouldRefresh ? currentText : storedText;
+      const isModernHeroDescription = node.classList.contains("home-hero-description")
+        && Boolean(node.closest(".home-modern-hero-copy"));
+      const { text: fullText, truncated: wordTrimmed } = isModernHeroDescription
+        ? limitTextToWordCount(sourceText, modernHeroDescriptionWordLimit)
+        : { text: sourceText, truncated: false };
       if (!fullText) {
         return;
       }
       node.dataset.fullText = fullText;
-      node.textContent = fullText;
+      node.textContent = wordTrimmed ? `${fullText}...` : fullText;
       const fits = node.scrollWidth <= (node.clientWidth + 1)
         && node.scrollHeight <= (node.clientHeight + 1);
       if (fits) {
-        node.classList.remove("is-truncated");
+        node.classList.toggle("is-truncated", wordTrimmed);
         return;
       }
 
@@ -2749,6 +2911,51 @@ export const HomeScreen = {
       const finalText = `${fullText.slice(0, Math.max(0, low)).trimEnd()}${ellipsis}`;
       node.textContent = finalText;
       node.classList.add("is-truncated");
+    });
+  },
+
+  applyModernHeroDescriptionBounds(root = null) {
+    if (!this.container || this.layoutMode !== "modern") {
+      return;
+    }
+    const modernHeroDescriptionMaxLines = 5;
+    const scope = root instanceof HTMLElement ? root : this.container;
+    const heroNodes = scope.classList?.contains("home-hero-card")
+      ? [scope]
+      : Array.from(scope.querySelectorAll(".home-hero-card"));
+    heroNodes.forEach((heroNode) => {
+      const copy = heroNode.querySelector(".home-modern-hero-copy");
+      const description = heroNode.querySelector(".home-hero-description");
+      if (!(copy instanceof HTMLElement) || !(description instanceof HTMLElement)) {
+        return;
+      }
+
+      description.style.maxHeight = "";
+      if (description.classList.contains("is-empty")) {
+        return;
+      }
+
+      const visibleSiblings = Array.from(copy.children).filter((node) => {
+        if (!(node instanceof HTMLElement) || node === description) {
+          return false;
+        }
+        return node.offsetHeight > 0 || node.offsetWidth > 0;
+      });
+      const gapValue = parseFloat(getComputedStyle(copy).rowGap || getComputedStyle(copy).gap || "0") || 0;
+      const reservedHeight = visibleSiblings.reduce((total, node) => total + node.offsetHeight, 0);
+      const visibleCount = visibleSiblings.length + 1;
+      const gapCount = Math.max(0, visibleCount - 1);
+      const availableHeight = Math.floor(copy.clientHeight - reservedHeight - (gapCount * gapValue));
+      const lineHeight = parseFloat(getComputedStyle(description).lineHeight || "0") || 0;
+      if (availableHeight <= 0) {
+        description.style.maxHeight = lineHeight > 0 ? `${lineHeight}px` : "0px";
+        return;
+      }
+      const maxDescriptionHeight = lineHeight > 0
+        ? (lineHeight * modernHeroDescriptionMaxLines)
+        : availableHeight;
+      const constrainedHeight = Math.min(availableHeight, maxDescriptionHeight);
+      description.style.maxHeight = `${Math.max(lineHeight, constrainedHeight)}px`;
     });
   },
 
@@ -3159,8 +3366,8 @@ export const HomeScreen = {
     if (!current || !target || current === target) {
       return false;
     }
-    if (this.layoutMode === "modern" && this.isPerformanceConstrained() && this.expandedPosterNode && this.expandedPosterNode !== target) {
-      this.collapseFocusedPoster(this.expandedPosterNode);
+    if (this.layoutMode === "modern" && this.expandedPosterNode && this.expandedPosterNode !== target) {
+      this.collapseFocusedPoster(this.expandedPosterNode, { instant: true });
     }
     current.classList.remove("focused");
     target.classList.add("focused");
@@ -4001,6 +4208,12 @@ export const HomeScreen = {
       ${this.renderContinueWatchingMenu()}
     `;
 
+    if (modernLandscapePostersEnabled) {
+      this.applyCachedModernLandscapePosterMetrics(this.container.querySelector(".home-screen-shell.home-modern-landscape-posters"));
+    } else if (this.layoutMode === "modern") {
+      this.applyCachedModernPortraitPosterMetrics(this.container.querySelector(".home-screen-shell.home-layout-modern:not(.home-modern-landscape-posters)"));
+    }
+
     bindRootSidebarEvents(this.container, {
       currentRoute: "home",
       onSelectedAction: () => this.closeSidebarToContent(),
@@ -4708,6 +4921,8 @@ export const HomeScreen = {
       this.homeTruncationFrame = null;
     }
     this.homeTruncationScope = null;
+    this.cachedModernPortraitPosterMetrics = null;
+    this.cachedModernLandscapePosterMetrics = null;
     ScreenUtils.hide(this.container);
   }
 };
