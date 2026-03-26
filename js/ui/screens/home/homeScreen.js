@@ -1714,6 +1714,9 @@ export const HomeScreen = {
     if (this.layoutMode !== "modern" || !this.isMainNode(target) || !direction) {
       return false;
     }
+    if (direction === "left" || direction === "right") {
+      return false;
+    }
     return !Boolean(globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
   },
 
@@ -2869,6 +2872,41 @@ export const HomeScreen = {
     container.classList.remove("is-active");
   },
 
+  restorePersistentHeroTrailer(node, options = {}) {
+    if (!this.isModernPosterNode(node)) {
+      return false;
+    }
+    const shouldExpand = Boolean(options?.shouldExpand);
+    const shouldPreviewTrailer = Boolean(options?.shouldPreviewTrailer);
+    const trailerTarget = String(options?.trailerTarget || "hero_media").toLowerCase();
+    const flowKey = String(options?.flowKey || this.getFocusedPosterFlowKey(node) || "");
+    if (shouldExpand) {
+      this.expandFocusedPoster(node);
+    }
+    if (!shouldPreviewTrailer || trailerTarget !== "hero_media" || !flowKey) {
+      return false;
+    }
+    const cachedState = this.heroTrailerPlaybackState;
+    if (!cachedState?.source || String(cachedState.key || "") !== flowKey) {
+      return false;
+    }
+    const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
+    const heroMedia = this.container?.querySelector(".home-modern-hero-media");
+    if (!heroLayer || !heroMedia) {
+      return false;
+    }
+    heroMedia.classList.add("trailer-active");
+    this.mountTrailerLayer(heroLayer, cachedState.source, () => {
+      if (
+        node.classList.contains("focused")
+        && String(this.getFocusedPosterFlowKey(node) || "") === flowKey
+      ) {
+        heroMedia.classList.add("trailer-active");
+      }
+    });
+    return true;
+  },
+
   mountTrailerLayer(container, source, onReady = null) {
     if (!container || !source) {
       return;
@@ -2921,12 +2959,22 @@ export const HomeScreen = {
   },
 
   collapseFocusedPoster(node = this.expandedPosterNode, options = {}) {
-    const target = node || null;
     const instant = Boolean(options?.instant);
-    const frame = target?.querySelector?.(".home-poster-frame") || null;
-    const previousCardTransition = instant && target instanceof HTMLElement ? target.style.transition : "";
-    const previousFrameTransition = instant && frame instanceof HTMLElement ? frame.style.transition : "";
-    if (target) {
+    const excludeNode = options?.excludeNode instanceof HTMLElement ? options.excludeNode : null;
+    const targets = new Set();
+    if (node instanceof HTMLElement && node !== excludeNode) {
+      targets.add(node);
+    }
+    Array.from(this.container?.querySelectorAll(".home-main .home-poster-card.is-expanded, .home-main .home-poster-card.is-trailer-active") || [])
+      .forEach((card) => {
+        if (card !== excludeNode) {
+          targets.add(card);
+        }
+      });
+    targets.forEach((target) => {
+      const frame = target?.querySelector?.(".home-poster-frame") || null;
+      const previousCardTransition = instant && target instanceof HTMLElement ? target.style.transition : "";
+      const previousFrameTransition = instant && frame instanceof HTMLElement ? frame.style.transition : "";
       if (instant && target instanceof HTMLElement) {
         target.style.transition = "none";
       }
@@ -2934,7 +2982,7 @@ export const HomeScreen = {
         frame.style.transition = "none";
       }
       target.closest(".home-track")?.classList.remove("has-expanded-landscape");
-      target.classList.remove("is-expanded", "is-trailer-active");
+      target.classList.remove("is-expanded", "is-trailer-active", "is-expanded-backdrop-ready");
       this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
       if (instant && target instanceof HTMLElement) {
         void target.offsetWidth;
@@ -2947,11 +2995,12 @@ export const HomeScreen = {
           }
         });
       }
-    }
+    });
     const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
     this.clearTrailerLayer(heroLayer);
     this.container?.querySelector(".home-modern-hero-media")?.classList.remove("trailer-active");
-    if (this.expandedPosterNode === target) {
+    this.heroTrailerPlaybackState = null;
+    if (!this.expandedPosterNode?.isConnected || !this.expandedPosterNode?.classList?.contains("is-expanded")) {
       this.expandedPosterNode = null;
     }
   },
@@ -2960,8 +3009,11 @@ export const HomeScreen = {
     if (!this.isModernPosterNode(node)) {
       return;
     }
-    if (this.expandedPosterNode && this.expandedPosterNode !== node) {
-      this.collapseFocusedPoster(this.expandedPosterNode);
+    const hasOtherExpandedPosters = Array.from(
+      this.container?.querySelectorAll(".home-main .home-poster-card.is-expanded, .home-main .home-poster-card.is-trailer-active") || []
+    ).some((card) => card !== node);
+    if ((this.expandedPosterNode && this.expandedPosterNode !== node) || hasOtherExpandedPosters) {
+      this.collapseFocusedPoster(this.expandedPosterNode, { excludeNode: node });
     }
     if (node.classList.contains("is-landscape")) {
       node.closest(".home-track")?.classList.add("has-expanded-landscape");
@@ -3049,8 +3101,10 @@ export const HomeScreen = {
     if (!source || !node.classList.contains("focused")) {
       return;
     }
+    const flowKey = this.getFocusedPosterFlowKey(node);
 
     if (trailerTarget === "expanded_card" && shouldExpand) {
+      this.heroTrailerPlaybackState = null;
       const trailerLayer = node.querySelector(".home-poster-trailer-layer");
       if (trailerLayer) {
         this.mountTrailerLayer(trailerLayer, source, () => {
@@ -3065,6 +3119,10 @@ export const HomeScreen = {
     const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
     const heroMedia = this.container?.querySelector(".home-modern-hero-media");
     if (heroLayer && heroMedia) {
+      this.heroTrailerPlaybackState = {
+        key: flowKey,
+        source
+      };
       this.mountTrailerLayer(heroLayer, source, () => {
         if (node.classList.contains("focused") && Number(this.focusedPosterFlowToken || 0) === Number(flowToken || 0)) {
           heroMedia.classList.add("trailer-active");
@@ -3250,7 +3308,10 @@ export const HomeScreen = {
     this.cancelFocusedPosterFlow();
     const prefs = this.layoutPrefs || {};
     const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
-    const shouldRun = Boolean(shouldExpand || prefs.focusedPosterBackdropTrailerEnabled);
+    const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled)
+      && !this.shouldSuppressAutomaticTrailerPlayback();
+    const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
+    const shouldRun = Boolean(shouldExpand || shouldPreviewTrailer);
     if (!shouldRun) {
       this.clearFocusedPosterFlowState();
       this.collapseFocusedPoster();
@@ -3286,6 +3347,18 @@ export const HomeScreen = {
       activated: Boolean(canReuseExistingState && existingState.activated),
       token: flowToken
     };
+    if (
+      canReuseExistingState
+      && existingState.activated
+      && this.restorePersistentHeroTrailer(node, {
+        shouldExpand,
+        shouldPreviewTrailer,
+        trailerTarget,
+        flowKey
+      })
+    ) {
+      return;
+    }
     this.focusedPosterTimer = setTimeout(() => {
       if (this.focusedPosterFlowState?.key === flowKey && this.focusedPosterFlowState?.token === flowToken) {
         this.focusedPosterFlowState = {
@@ -3414,30 +3487,15 @@ export const HomeScreen = {
     const shellStyles = getComputedStyle(targetShell);
     const expandedFrame = expanded.querySelector(".home-poster-frame");
     const isLandscape = expanded.classList.contains("is-landscape");
-    const collapsedWidth = isLandscape
-      ? parseCssPx(shellStyles.getPropertyValue("--home-landscape-poster-width"), expanded.offsetWidth)
-      : parseCssPx(shellStyles.getPropertyValue("--home-modern-portrait-poster-width"), expanded.offsetWidth);
     const collapsedHeight = isLandscape
       ? parseCssPx(shellStyles.getPropertyValue("--home-landscape-poster-height"), expandedFrame?.offsetHeight || 0)
       : parseCssPx(shellStyles.getPropertyValue("--home-modern-portrait-poster-height"), expandedFrame?.offsetHeight || 0);
-
-    let horizontal = 0;
-    const expandedTrack = expanded.closest(".home-track, .home-grid-track");
-    const targetTrack = target?.closest?.(".home-track, .home-grid-track") || null;
-    if (
-      direction === "right"
-      && expandedTrack
-      && expandedTrack === targetTrack
-      && Number(expanded.offsetLeft || 0) < Number(target?.offsetLeft || 0)
-    ) {
-      horizontal = Math.max(0, Number(expanded.offsetWidth || 0) - collapsedWidth);
-    }
 
     const vertical = direction === "down" && isLandscape
       ? Math.max(0, Number(expandedFrame?.offsetHeight || 0) - collapsedHeight)
       : 0;
 
-    return { horizontal, vertical };
+    return { horizontal: 0, vertical };
   },
 
   getModernVerticalScrollOffset(main) {
@@ -3825,8 +3883,12 @@ export const HomeScreen = {
       return false;
     }
     const scrollAdjustments = this.getExpandedPosterScrollAdjustments(current, target, direction);
+    const shouldInstantCollapseExpandedPoster = this.layoutMode === "modern"
+      && (direction === "left" || direction === "right");
     if (this.layoutMode === "modern" && this.expandedPosterNode && this.expandedPosterNode !== target) {
-      this.collapseFocusedPoster(this.expandedPosterNode);
+      this.collapseFocusedPoster(this.expandedPosterNode, {
+        instant: shouldInstantCollapseExpandedPoster
+      });
     }
     current.classList.remove("focused");
     target.classList.add("focused");
