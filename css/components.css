@@ -4867,7 +4867,12 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card {
-  transition: flex-basis 180ms ease-out, min-width 180ms ease-out, max-width 180ms ease-out;
+  transition:
+    flex-basis 180ms ease-out,
+    min-width 180ms ease-out,
+    max-width 180ms ease-out,
+    margin-top 180ms ease-out,
+    margin-bottom 180ms ease-out;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card:not(.is-landscape),
@@ -4885,13 +4890,14 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-frame {
-  height: auto;
+  height: var(--home-landscape-poster-height);
   aspect-ratio: 16 / 9;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-expanded-gradient {
   display: block;
   height: 54%;
+  transition: height 180ms ease-out;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-landscape-copy {
@@ -4903,6 +4909,9 @@ button:focus-visible {
   display: block;
   max-width: 76%;
   pointer-events: none;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-copy {
@@ -4918,7 +4927,8 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-landscape-copy {
-  display: none;
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded {
@@ -5040,7 +5050,7 @@ button:focus-visible {
   height: var(--home-poster-height);
   aspect-ratio: auto;
   border-radius: 12px;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition: height 180ms ease-out, border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.focused .home-poster-frame {
