@@ -175,6 +175,7 @@ function renderModernHeroMarkup({
       </span>
     `);
   }
+  const hasPrimaryRight = primaryRightParts.length > 0;
   const secondaryParts = [];
   if (display.secondaryHighlightText) {
     secondaryParts.push(`<span class="home-modern-hero-highlight">${escapeHtml(display.secondaryHighlightText)}</span>`);
@@ -213,10 +214,11 @@ function renderModernHeroMarkup({
             <h1 class="home-hero-title-text${display.logo ? " is-hidden" : ""}">${escapeHtml(display.title)}</h1>
           </div>
           <div class="home-modern-hero-meta-line${display.leadingMeta.length || display.trailingMeta.length || display.showImdbPrimary ? "" : " is-empty"}">
-            <div class="home-modern-hero-meta-group">
+            <div class="home-modern-hero-meta-group home-modern-hero-meta-group-leading">
               ${primaryLeft}
             </div>
-            <div class="home-modern-hero-meta-group">
+            ${primaryLeft && hasPrimaryRight ? '<span class="home-hero-dot">•</span>' : ""}
+            <div class="home-modern-hero-meta-group home-modern-hero-meta-group-trailing">
               ${primaryRightParts.join('<span class="home-hero-dot">•</span>')}
             </div>
           </div>
