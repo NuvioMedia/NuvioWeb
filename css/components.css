@@ -10565,19 +10565,12 @@ button:focus-visible {
 .performance-constrained .modern-sidebar-pill-chip,
 .performance-constrained .series-episode-card,
 .performance-constrained .series-stream-panel,
-.performance-constrained .stream-route-panel-shell,
-.performance-constrained .player-pause-overlay-shade {
+.performance-constrained .stream-route-panel-shell {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
 .performance-constrained .home-screen-shell .home-hero-backdrop {
-  filter: none !important;
-}
-
-.performance-constrained .player-loading-backdrop,
-.performance-constrained .player-loading-logo,
-.performance-constrained .player-pause-logo {
   filter: none !important;
 }
 
