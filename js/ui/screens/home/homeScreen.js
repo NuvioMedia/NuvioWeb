@@ -142,6 +142,90 @@ function parseCssPx(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function createCubicBezierEasing(x1, y1, x2, y2) {
+  const newtonIterations = 4;
+  const newtonMinSlope = 0.001;
+  const subdivisionPrecision = 0.0000001;
+  const subdivisionMaxIterations = 10;
+  const splineTableSize = 11;
+  const sampleStepSize = 1 / (splineTableSize - 1);
+
+  const calcBezier = (t, a1, a2) => (((1 - (3 * a2) + (3 * a1)) * t + ((3 * a2) - (6 * a1))) * t + (3 * a1)) * t;
+  const getSlope = (t, a1, a2) => (3 * (1 - (3 * a2) + (3 * a1)) * t * t) + (2 * ((3 * a2) - (6 * a1)) * t) + (3 * a1);
+  const sampleValues = new Float32Array(splineTableSize);
+
+  for (let index = 0; index < splineTableSize; index += 1) {
+    sampleValues[index] = calcBezier(index * sampleStepSize, x1, x2);
+  }
+
+  const binarySubdivide = (x, lower, upper) => {
+    let current = 0;
+    let currentX = 0;
+    let iteration = 0;
+    do {
+      current = lower + ((upper - lower) / 2);
+      currentX = calcBezier(current, x1, x2) - x;
+      if (currentX > 0) {
+        upper = current;
+      } else {
+        lower = current;
+      }
+      iteration += 1;
+    } while (Math.abs(currentX) > subdivisionPrecision && iteration < subdivisionMaxIterations);
+    return current;
+  };
+
+  const newtonRaphsonIterate = (x, guess) => {
+    let currentGuess = guess;
+    for (let index = 0; index < newtonIterations; index += 1) {
+      const currentSlope = getSlope(currentGuess, x1, x2);
+      if (currentSlope === 0) {
+        return currentGuess;
+      }
+      const currentX = calcBezier(currentGuess, x1, x2) - x;
+      currentGuess -= currentX / currentSlope;
+    }
+    return currentGuess;
+  };
+
+  const getTForX = (x) => {
+    let intervalStart = 0;
+    let currentSample = 1;
+    const lastSample = splineTableSize - 1;
+
+    while (currentSample !== lastSample && sampleValues[currentSample] <= x) {
+      intervalStart += sampleStepSize;
+      currentSample += 1;
+    }
+    currentSample -= 1;
+
+    const denominator = sampleValues[currentSample + 1] - sampleValues[currentSample];
+    const dist = denominator === 0 ? 0 : (x - sampleValues[currentSample]) / denominator;
+    const guess = intervalStart + (dist * sampleStepSize);
+    const initialSlope = getSlope(guess, x1, x2);
+
+    if (initialSlope >= newtonMinSlope) {
+      return newtonRaphsonIterate(x, guess);
+    }
+    if (initialSlope === 0) {
+      return guess;
+    }
+    return binarySubdivide(x, intervalStart, intervalStart + sampleStepSize);
+  };
+
+  return (x) => {
+    if (x <= 0) {
+      return 0;
+    }
+    if (x >= 1) {
+      return 1;
+    }
+    return calcBezier(getTForX(x), y1, y2);
+  };
+}
+
+const MODERN_CAMERA_PAN_EASING = createCubicBezierEasing(0.43, 0.70, 0.45, 1.00);
+
 function uniqueById(items = []) {
   const seen = new Set();
   return items.filter((item) => {
@@ -1477,10 +1561,21 @@ export const HomeScreen = {
       cancelAnimationFrame(state[key]);
       state[key] = null;
     }
+    const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
+    const springState = springMap.get(container);
+    if (springState?.[key]?.raf) {
+      cancelAnimationFrame(springState[key].raf);
+      springState[key] = null;
+      springMap.set(container, springState);
+    }
   },
 
-  animateScroll(container, axis, targetValue, duration = 150) {
+  animateScroll(container, axis, targetValue, duration = 150, options = {}) {
     if (!container) {
+      return;
+    }
+    if (options?.mode === "spring") {
+      this.animateSpringScroll(container, axis, targetValue, options?.spring || {});
       return;
     }
     const property = axis === "y" ? "scrollTop" : "scrollLeft";
@@ -1496,14 +1591,24 @@ export const HomeScreen = {
 
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     const effectiveDuration = Math.max(0, Number(duration || 0));
+    const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
+    const springState = springMap.get(container);
+    const key = axis === "y" ? "y" : "x";
+    if (springState?.[key]?.raf) {
+      cancelAnimationFrame(springState[key].raf);
+      springState[key] = null;
+      springMap.set(container, springState);
+    }
     if (prefersReducedMotion || effectiveDuration <= 0) {
       container[property] = nextValue;
       return;
     }
 
     const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const easing = typeof options?.easing === "function"
+      ? options.easing
+      : easeOutCubic;
     const map = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
-    const key = axis === "y" ? "y" : "x";
     const existing = map.get(container) || {};
     if (existing[key]) {
       cancelAnimationFrame(existing[key]);
@@ -1512,7 +1617,7 @@ export const HomeScreen = {
     const startTime = performance.now();
     const tick = (now) => {
       const progress = Math.min(1, (now - startTime) / effectiveDuration);
-      container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
+      container[property] = Math.round(startValue + ((nextValue - startValue) * easing(progress)));
       if (progress < 1) {
         existing[key] = requestAnimationFrame(tick);
         map.set(container, existing);
@@ -1524,6 +1629,138 @@ export const HomeScreen = {
 
     existing[key] = requestAnimationFrame(tick);
     map.set(container, existing);
+  },
+
+  animateSpringScroll(container, axis, targetValue, options = {}) {
+    if (!container) {
+      return;
+    }
+    const property = axis === "y" ? "scrollTop" : "scrollLeft";
+    const max = axis === "y"
+      ? Math.max(0, container.scrollHeight - container.clientHeight)
+      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (prefersReducedMotion) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const tweenMap = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
+    const tweenState = tweenMap.get(container);
+    const key = axis === "y" ? "y" : "x";
+    if (tweenState?.[key]) {
+      cancelAnimationFrame(tweenState[key]);
+      tweenState[key] = null;
+      tweenMap.set(container, tweenState);
+    }
+
+    const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
+    const existing = springMap.get(container) || {};
+    const active = existing[key];
+    if (active) {
+      active.target = nextValue;
+      active.stiffness = Number(options?.stiffness ?? active.stiffness ?? 0.12);
+      active.damping = Number(options?.damping ?? active.damping ?? 0.8);
+      active.precision = Number(options?.precision ?? active.precision ?? 0.75);
+      active.velocityEpsilon = Number(options?.velocityEpsilon ?? active.velocityEpsilon ?? 0.35);
+      springMap.set(container, existing);
+      return;
+    }
+
+    const state = {
+      target: nextValue,
+      velocity: 0,
+      raf: null,
+      lastTime: performance.now(),
+      stiffness: Number(options?.stiffness ?? 0.12),
+      damping: Number(options?.damping ?? 0.8),
+      precision: Number(options?.precision ?? 0.75),
+      velocityEpsilon: Number(options?.velocityEpsilon ?? 0.35)
+    };
+
+    const tick = (now) => {
+      const current = Number(container[property] || 0);
+      const delta = Number(state.target || 0) - current;
+      const frameScale = Math.min(2.2, Math.max(0.85, (now - state.lastTime) / 16.6667));
+      state.lastTime = now;
+      state.velocity = (state.velocity + (delta * state.stiffness * frameScale)) * Math.pow(state.damping, frameScale);
+      const next = current + state.velocity;
+      container[property] = Math.round(next);
+
+      const remaining = Number(state.target || 0) - Number(container[property] || 0);
+      if (Math.abs(remaining) <= state.precision && Math.abs(state.velocity) <= state.velocityEpsilon) {
+        container[property] = Math.round(state.target);
+        existing[key] = null;
+        springMap.set(container, existing);
+        return;
+      }
+
+      state.raf = requestAnimationFrame(tick);
+      existing[key] = state;
+      springMap.set(container, existing);
+    };
+
+    state.raf = requestAnimationFrame(tick);
+    existing[key] = state;
+    springMap.set(container, existing);
+  },
+
+  getModernCameraPanEasing() {
+    return MODERN_CAMERA_PAN_EASING;
+  },
+
+  shouldUseDelayedModernCameraFollow(target, direction = null) {
+    if (this.layoutMode !== "modern" || !this.isMainNode(target) || !direction) {
+      return false;
+    }
+    return !Boolean(globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+  },
+
+  cancelModernCameraFollow({ stopAnimations = false } = {}) {
+    if (this.modernCameraFollowTimer) {
+      clearTimeout(this.modernCameraFollowTimer);
+      this.modernCameraFollowTimer = null;
+    }
+    const state = this.modernCameraFollowState || null;
+    if (stopAnimations) {
+      const horizontalContainers = [state?.horizontal?.container, this.modernCameraFollowLastHorizontalContainer];
+      const verticalContainers = [state?.vertical?.container, this.modernCameraFollowLastVerticalContainer];
+      horizontalContainers.forEach((container) => {
+        if (container) {
+          this.cancelScrollAnimation(container, "x");
+        }
+      });
+      verticalContainers.forEach((container) => {
+        if (container) {
+          this.cancelScrollAnimation(container, "y");
+        }
+      });
+    }
+    this.modernCameraFollowState = null;
+    this.modernCameraFollowLastHorizontalContainer = null;
+    this.modernCameraFollowLastVerticalContainer = null;
+  },
+
+  isScrollAnimationActive(container, axis = "x") {
+    if (!container) {
+      return false;
+    }
+    const map = this.scrollAnimations || null;
+    const state = map?.get?.(container) || null;
+    const key = axis === "y" ? "y" : "x";
+    return Boolean(state?.[key]);
+  },
+
+  shouldSuspendModernViewportFocusSync() {
+    if (this.layoutMode !== "modern") {
+      return false;
+    }
+    if (this.modernCameraFollowTimer) {
+      return true;
+    }
+    return this.isScrollAnimationActive(this.modernCameraFollowLastVerticalContainer, "y")
+      || this.isScrollAnimationActive(this.modernCameraFollowLastHorizontalContainer, "x");
   },
 
   getRowFocusInset() {
@@ -3165,6 +3402,224 @@ export const HomeScreen = {
     };
   },
 
+  getExpandedPosterScrollAdjustments(current, target, direction = null) {
+    const expanded = this.layoutMode === "modern" ? this.expandedPosterNode : null;
+    if (!expanded || expanded !== current || expanded === target || !expanded.classList.contains("is-expanded")) {
+      return { horizontal: 0, vertical: 0 };
+    }
+    const targetShell = this.container?.querySelector(".home-screen-shell");
+    if (!(targetShell instanceof HTMLElement)) {
+      return { horizontal: 0, vertical: 0 };
+    }
+    const shellStyles = getComputedStyle(targetShell);
+    const expandedFrame = expanded.querySelector(".home-poster-frame");
+    const isLandscape = expanded.classList.contains("is-landscape");
+    const collapsedWidth = isLandscape
+      ? parseCssPx(shellStyles.getPropertyValue("--home-landscape-poster-width"), expanded.offsetWidth)
+      : parseCssPx(shellStyles.getPropertyValue("--home-modern-portrait-poster-width"), expanded.offsetWidth);
+    const collapsedHeight = isLandscape
+      ? parseCssPx(shellStyles.getPropertyValue("--home-landscape-poster-height"), expandedFrame?.offsetHeight || 0)
+      : parseCssPx(shellStyles.getPropertyValue("--home-modern-portrait-poster-height"), expandedFrame?.offsetHeight || 0);
+
+    let horizontal = 0;
+    const expandedTrack = expanded.closest(".home-track, .home-grid-track");
+    const targetTrack = target?.closest?.(".home-track, .home-grid-track") || null;
+    if (
+      direction === "right"
+      && expandedTrack
+      && expandedTrack === targetTrack
+      && Number(expanded.offsetLeft || 0) < Number(target?.offsetLeft || 0)
+    ) {
+      horizontal = Math.max(0, Number(expanded.offsetWidth || 0) - collapsedWidth);
+    }
+
+    const vertical = direction === "down" && isLandscape
+      ? Math.max(0, Number(expandedFrame?.offsetHeight || 0) - collapsedHeight)
+      : 0;
+
+    return { horizontal, vertical };
+  },
+
+  getModernVerticalScrollOffset(main) {
+    return Math.max(
+      10,
+      Math.min(
+        18,
+        Math.round(Number(main?.clientHeight || 0) * 0.025)
+      )
+    );
+  },
+
+  getModernTrackAlignedScrollTarget(target, layoutAdjustment = 0) {
+    const track = target?.closest?.(".home-track, .home-grid-track");
+    if (!track) {
+      return null;
+    }
+    const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(track) : null;
+    const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
+    const trackRect = track.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const targetLeft = ((targetRect.left - trackRect.left) + Number(track.scrollLeft || 0)) - Number(layoutAdjustment || 0);
+    const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+    return {
+      container: track,
+      value: Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad))
+    };
+  },
+
+  getModernMainAlignedScrollTarget(target, direction = null, current = null, layoutAdjustment = 0) {
+    const main = this.container?.querySelector(".home-modern-rows-viewport");
+    if (!main || !target || !this.container?.contains(target)) {
+      return null;
+    }
+    const anchor = this.getMainFocusAnchor(target);
+    const mainRect = main.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    const inset = this.getRowFocusInset();
+    const visibleTop = mainRect.top + inset;
+    const visibleBottom = mainRect.bottom - 24;
+    const anchorTop = anchorRect.top - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
+    const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
+    const adjustedTop = mainRect.top + anchorTop - main.scrollTop;
+    const adjustedBottom = mainRect.top + anchorBottom - main.scrollTop;
+    const currentAnchor = this.getMainFocusAnchor(current);
+    const sameAnchor = Boolean(currentAnchor && currentAnchor === anchor);
+    const isHorizontalMove = direction === "left" || direction === "right";
+    const isVerticalMove = direction === "up" || direction === "down";
+
+    if (isHorizontalMove && sameAnchor) {
+      return null;
+    }
+
+    let nextValue = null;
+    if (isVerticalMove) {
+      nextValue = anchorTop - inset + this.getModernVerticalScrollOffset(main);
+    } else if (adjustedTop < visibleTop) {
+      nextValue = anchorTop - inset;
+    } else if (adjustedBottom > visibleBottom) {
+      nextValue = anchorBottom - main.clientHeight + 24;
+    } else {
+      nextValue = anchorTop - Math.max(0, (main.clientHeight - anchor.offsetHeight) / 2);
+    }
+
+    const maxScrollTop = Math.max(0, Number(main.scrollHeight || 0) - Number(main.clientHeight || 0));
+    return {
+      container: main,
+      value: Math.max(0, Math.min(maxScrollTop, nextValue))
+    };
+  },
+
+  getModernMainSafetyScrollTarget(target, layoutAdjustment = 0) {
+    const main = this.container?.querySelector(".home-modern-rows-viewport");
+    if (!main || !target || !this.container?.contains(target)) {
+      return null;
+    }
+    const anchor = this.getMainFocusAnchor(target);
+    const mainRect = main.getBoundingClientRect();
+    const anchorRect = anchor.getBoundingClientRect();
+    const inset = this.getRowFocusInset();
+    const visibleTop = mainRect.top + inset;
+    const visibleBottom = mainRect.bottom - 24;
+    const anchorTop = anchorRect.top - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
+    const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
+    const adjustedTop = mainRect.top + anchorTop - main.scrollTop;
+    const adjustedBottom = mainRect.top + anchorBottom - main.scrollTop;
+    const minVisible = Math.max(
+      32,
+      Math.min(
+        72,
+        Math.round(Number(anchor.offsetHeight || 0) * 0.22)
+      )
+    );
+    let nextValue = null;
+    if (adjustedBottom <= visibleTop + minVisible) {
+      nextValue = anchorBottom - inset - minVisible;
+    } else if (adjustedTop >= visibleBottom - minVisible) {
+      nextValue = anchorTop - main.clientHeight + 24 + minVisible;
+    }
+    if (!Number.isFinite(nextValue)) {
+      return null;
+    }
+    const maxScrollTop = Math.max(0, Number(main.scrollHeight || 0) - Number(main.clientHeight || 0));
+    return {
+      container: main,
+      value: Math.max(0, Math.min(maxScrollTop, nextValue))
+    };
+  },
+
+  applyModernCameraFollowTargets(horizontal = null, vertical = null) {
+    const easing = this.getModernCameraPanEasing();
+    if (horizontal?.container?.isConnected) {
+      if (Math.abs(Number(horizontal.container.scrollLeft || 0) - Number(horizontal.value || 0)) > 1) {
+        this.animateScroll(
+          horizontal.container,
+          "x",
+          horizontal.value,
+          MODERN_HOME_CONSTANTS.cameraFollowDurationXMs,
+          { easing }
+        );
+      }
+      this.modernCameraFollowLastHorizontalContainer = horizontal.container;
+    }
+    if (vertical?.container?.isConnected) {
+      if (Math.abs(Number(vertical.container.scrollTop || 0) - Number(vertical.value || 0)) > 1) {
+        this.animateScroll(
+          vertical.container,
+          "y",
+          vertical.value,
+          MODERN_HOME_CONSTANTS.cameraFollowDurationYMs,
+          { easing }
+        );
+      }
+      this.modernCameraFollowLastVerticalContainer = vertical.container;
+    }
+  },
+
+  flushModernCameraFollow() {
+    const state = this.modernCameraFollowState || null;
+    this.modernCameraFollowTimer = null;
+    this.modernCameraFollowState = null;
+    if (!state || Router.getCurrent() !== "home" || this.layoutMode !== "modern") {
+      return;
+    }
+    this.applyModernCameraFollowTargets(state.horizontal, state.vertical);
+  },
+
+  scheduleModernCameraFollow(target, direction = null, current = null, layoutAdjustment = {}, inputMeta = {}) {
+    if (!this.shouldUseDelayedModernCameraFollow(target, direction)) {
+      return false;
+    }
+    this.cancelModernCameraFollow({ stopAnimations: true });
+    const isVerticalMove = direction === "up" || direction === "down";
+    const shouldFollowVerticalHoldImmediately = isVerticalMove && Boolean(inputMeta?.repeat);
+    const horizontalAdjustment = Number(layoutAdjustment?.horizontal || 0);
+    const verticalAdjustment = Number(layoutAdjustment?.vertical || 0);
+    const horizontal = this.getModernTrackAlignedScrollTarget(target, horizontalAdjustment);
+    const vertical = this.getModernMainAlignedScrollTarget(target, direction, current, verticalAdjustment);
+    const hasHorizontal = Boolean(horizontal?.container && Math.abs(Number(horizontal.container.scrollLeft || 0) - Number(horizontal.value || 0)) > 1);
+    const hasVertical = Boolean(vertical?.container && Math.abs(Number(vertical.container.scrollTop || 0) - Number(vertical.value || 0)) > 1);
+
+    if (!hasHorizontal && !hasVertical) {
+      this.modernCameraFollowLastHorizontalContainer = horizontal?.container || this.modernCameraFollowLastHorizontalContainer;
+      this.modernCameraFollowLastVerticalContainer = vertical?.container || this.modernCameraFollowLastVerticalContainer;
+      return true;
+    }
+
+    if (shouldFollowVerticalHoldImmediately) {
+      this.applyModernCameraFollowTargets(horizontal, vertical);
+      return true;
+    }
+
+    this.modernCameraFollowState = {
+      horizontal: hasHorizontal ? horizontal : null,
+      vertical: hasVertical ? vertical : null
+    };
+    this.modernCameraFollowTimer = setTimeout(() => {
+      this.flushModernCameraFollow();
+    }, MODERN_HOME_CONSTANTS.cameraFollowDelayMs);
+    return true;
+  },
+
   isNodeWithinMainViewport(node) {
     const main = this.getHomeViewport();
     if (!main || !node || !this.container?.contains(node)) {
@@ -3284,7 +3739,23 @@ export const HomeScreen = {
     }, 120);
   },
 
-  ensureMainVerticalVisibility(target, direction = null, current = null) {
+  ensureMainVerticalVisibility(target, direction = null, current = null, layoutAdjustment = 0) {
+    if (this.layoutMode === "modern") {
+      const next = this.getModernMainAlignedScrollTarget(target, direction, current, layoutAdjustment);
+      if (!next?.container) {
+        return;
+      }
+      const delta = Math.abs(Number(next.container.scrollTop || 0) - Number(next.value || 0));
+      if (delta <= 1) {
+        return;
+      }
+      const duration = direction === "up" || direction === "down"
+        ? this.getScrollDuration(220)
+        : this.getScrollDuration(180);
+      this.animateScroll(next.container, "y", next.value, duration);
+      return;
+    }
+
     const main = this.layoutMode === "modern"
       ? this.container?.querySelector(".home-modern-rows-viewport")
       : this.container?.querySelector(".home-main");
@@ -3297,53 +3768,8 @@ export const HomeScreen = {
     const inset = this.getRowFocusInset();
     const visibleTop = mainRect.top + inset;
     const visibleBottom = mainRect.bottom - 24;
-    const anchorTop = anchorRect.top - mainRect.top + main.scrollTop;
-    const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop;
-
-    if (this.layoutMode === "modern") {
-      const currentAnchor = this.getMainFocusAnchor(current);
-      const sameAnchor = Boolean(currentAnchor && currentAnchor === anchor);
-      const isHorizontalMove = direction === "left" || direction === "right";
-      const isVerticalMove = direction === "up" || direction === "down";
-      const verticalScrollOffset = isVerticalMove
-        ? Math.max(
-          10,
-          Math.min(
-            24,
-            Math.round(Math.max(
-              Number(anchor?.offsetHeight || 0) * 0.08,
-              Number(main?.clientHeight || 0) * 0.025
-            ))
-          )
-        )
-        : 0;
-      if (isHorizontalMove && sameAnchor) {
-        return;
-      }
-      if (isVerticalMove) {
-        const targetScrollTop = anchorTop - inset + verticalScrollOffset;
-        if (Math.abs(Number(main.scrollTop || 0) - targetScrollTop) <= 1) {
-          return;
-        }
-        this.animateScroll(main, "y", targetScrollTop, this.getScrollDuration(220));
-        return;
-      }
-      if (anchorRect.top < visibleTop) {
-        this.animateScroll(main, "y", anchorTop - inset, this.getScrollDuration(180));
-        return;
-      }
-      if (anchorRect.bottom > visibleBottom) {
-        const targetScrollTop = anchorBottom - main.clientHeight + 24;
-        this.animateScroll(main, "y", targetScrollTop, this.getScrollDuration(180));
-        return;
-      }
-      const centeredScrollTop = anchorTop - Math.max(0, (main.clientHeight - anchor.offsetHeight) / 2);
-      if (Math.abs(Number(main.scrollTop || 0) - centeredScrollTop) <= 1) {
-        return;
-      }
-      this.animateScroll(main, "y", centeredScrollTop, this.getScrollDuration(150));
-      return;
-    }
+    const anchorTop = anchorRect.top - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
+    const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
 
     if (anchorRect.top < visibleTop) {
       this.animateScroll(main, "y", anchorTop - inset, this.getScrollDuration(150));
@@ -3356,19 +3782,21 @@ export const HomeScreen = {
     }
   },
 
-  ensureTrackHorizontalVisibility(target, direction = null) {
-    const track = target?.closest?.(".home-track, .home-grid-track");
-    if (!track) {
+  ensureTrackHorizontalVisibility(target, direction = null, layoutAdjustment = 0) {
+    if (this.layoutMode === "modern") {
+      const next = this.getModernTrackAlignedScrollTarget(target, layoutAdjustment);
+      if (!next?.container) {
+        return;
+      }
+      if (Math.abs(Number(next.container.scrollLeft || 0) - Number(next.value || 0)) <= 1) {
+        return;
+      }
+      this.animateScroll(next.container, "x", next.value, 140);
       return;
     }
-    if (this.layoutMode === "modern") {
-      const styles = globalThis.getComputedStyle ? globalThis.getComputedStyle(track) : null;
-      const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
-      const trackRect = track.getBoundingClientRect();
-      const targetRect = target.getBoundingClientRect();
-      const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
-      const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
-      this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), 140);
+
+    const track = target?.closest?.(".home-track, .home-grid-track");
+    if (!track) {
       return;
     }
     const metrics = this.getTrackViewportMetrics(track);
@@ -3392,12 +3820,13 @@ export const HomeScreen = {
     }
   },
 
-  focusNode(current, target, direction = null) {
+  focusNode(current, target, direction = null, inputMeta = null) {
     if (!current || !target || current === target) {
       return false;
     }
+    const scrollAdjustments = this.getExpandedPosterScrollAdjustments(current, target, direction);
     if (this.layoutMode === "modern" && this.expandedPosterNode && this.expandedPosterNode !== target) {
-      this.collapseFocusedPoster(this.expandedPosterNode, { instant: true });
+      this.collapseFocusedPoster(this.expandedPosterNode);
     }
     current.classList.remove("focused");
     target.classList.add("focused");
@@ -3406,14 +3835,18 @@ export const HomeScreen = {
     if (this.isMainNode(target)) {
       this.lastMainFocus = target;
       this.rememberMainRowFocus(target);
-      this.ensureTrackHorizontalVisibility(target, direction);
-      this.ensureMainVerticalVisibility(target, direction, current);
+      const usingDelayedCameraFollow = this.scheduleModernCameraFollow(target, direction, current, scrollAdjustments, inputMeta);
+      if (!usingDelayedCameraFollow) {
+        this.ensureTrackHorizontalVisibility(target, direction, scrollAdjustments.horizontal);
+        this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
+      }
       this.scheduleModernHeroUpdate(target);
       if (this.isPerformanceConstrained()) {
         this.promotePosterCardAssets(target, { includeNeighbors: true });
       }
       this.scheduleFocusedPosterFlow(target);
     } else {
+      this.cancelModernCameraFollow({ stopAnimations: true });
       this.cancelPendingHeroFocus();
       this.cancelFocusedPosterFlow();
       this.clearFocusedPosterFlowState();
@@ -3505,7 +3938,11 @@ export const HomeScreen = {
     if (!current) {
       return false;
     }
-    if (this.isMainNode(current) && !this.isNodeWithinMainViewport(current)) {
+    if (
+      this.isMainNode(current)
+      && !this.isNodeWithinMainViewport(current)
+      && !this.shouldSuspendModernViewportFocusSync()
+    ) {
       current = this.syncMainFocusToViewport({ suppressFlows: true }) || current;
     }
     const isSidebar = this.isSidebarNode(current);
@@ -3513,6 +3950,10 @@ export const HomeScreen = {
     if (typeof event?.preventDefault === "function") {
       event.preventDefault();
     }
+
+    const inputMeta = {
+      repeat: Boolean(event?.repeat)
+    };
 
     if (event?.repeat) {
       const now = Date.now();
@@ -3536,11 +3977,11 @@ export const HomeScreen = {
       const sidebarIndex = Number(current.dataset.navIndex || 0);
       if (direction === "up") {
         const target = nav.sidebar[Math.max(0, sidebarIndex - 1)] || current;
-        return this.focusNode(current, target, direction) || true;
+        return this.focusNode(current, target, direction, inputMeta) || true;
       }
       if (direction === "down") {
         const target = nav.sidebar[Math.min(nav.sidebar.length - 1, sidebarIndex + 1)] || current;
-        return this.focusNode(current, target, direction) || true;
+        return this.focusNode(current, target, direction, inputMeta) || true;
       }
       if (direction === "right") {
         return this.closeSidebarToContent() || true;
@@ -3554,7 +3995,7 @@ export const HomeScreen = {
 
     if (direction === "left") {
       const targetInRow = rowNodes[col - 1] || null;
-      if (this.focusNode(current, targetInRow, direction)) {
+      if (this.focusNode(current, targetInRow, direction, inputMeta)) {
         return true;
       }
       const sidebarFallback = getLegacySidebarSelectedNode(this.container)
@@ -3565,12 +4006,12 @@ export const HomeScreen = {
         this.lastMainFocus = current;
         return this.openSidebar();
       }
-      return this.focusNode(current, sidebarFallback, direction) || true;
+      return this.focusNode(current, sidebarFallback, direction, inputMeta) || true;
     }
 
     if (direction === "right") {
       const target = rowNodes[col + 1] || null;
-      return this.focusNode(current, target, direction) || true;
+      return this.focusNode(current, target, direction, inputMeta) || true;
     }
 
     if (direction === "up" || direction === "down") {
@@ -3581,7 +4022,7 @@ export const HomeScreen = {
         return true;
       }
       const target = this.resolvePreferredNodeForRow(targetRowNodes, col);
-      return this.focusNode(current, target, direction) || true;
+      return this.focusNode(current, target, direction, inputMeta) || true;
     }
 
     return false;
@@ -3687,6 +4128,9 @@ export const HomeScreen = {
     }
     if (!this.boundHomeViewportScrollHandler) {
       this.boundHomeViewportScrollHandler = () => {
+        if (this.shouldSuspendModernViewportFocusSync()) {
+          return;
+        }
         const current = this.container?.querySelector(".home-main .focusable.focused") || null;
         if (current && this.isMainNode(current) && this.isNodeWithinMainViewport(current)) {
           return;
@@ -4150,6 +4594,7 @@ export const HomeScreen = {
 
   render() {
     this.cancelScheduledRender();
+    this.cancelModernCameraFollow({ stopAnimations: true });
     const retainedFocusState = this.captureCurrentFocusState() || this.savedFocusStates?.[this.layoutMode] || null;
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
@@ -4958,6 +5403,7 @@ export const HomeScreen = {
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.cancelScheduledRender();
+    this.cancelModernCameraFollow({ stopAnimations: true });
     this.stopHeroRotation();
     this.cancelPendingHeroFocus();
     this.cancelFocusedPosterFlow();
