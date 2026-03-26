@@ -7,6 +7,7 @@ import { hlsJsEngine } from "./engines/hlsJsEngine.js";
 import { dashJsEngine } from "./engines/dashJsEngine.js";
 import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
+import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 
 export const PlayerController = {
 
@@ -1031,10 +1032,19 @@ export const PlayerController = {
     this.playbackEngineAttempts.delete(normalizedUrl);
   },
 
-  getPlaybackEngineCandidates(url, sourceType = null) {
+  isLivePlaybackItemType(itemType = this.currentItemType) {
+    const normalized = String(itemType || "").trim().toLowerCase();
+    return normalized === "channel"
+      || normalized === "live"
+      || normalized === "tvchannel"
+      || normalized === "stream";
+  },
+
+  getPlaybackEngineCandidates(url, sourceType = null, itemType = this.currentItemType) {
     const normalizedSourceType = String(sourceType || this.guessMediaMimeType(url) || "").trim();
     const avplayEngine = this.getPlatformAvplayEngineName();
     const isTizenRuntime = Platform.isTizen();
+    const isLivePlayback = this.isLivePlaybackItemType(itemType);
     const pushCandidate = (target, candidate) => {
       const normalized = String(candidate || "").trim();
       if (!normalized || target.includes(normalized)) {
@@ -1045,6 +1055,9 @@ export const PlayerController = {
 
     if (this.isLikelyHlsMimeType(normalizedSourceType)) {
       const candidates = [];
+      if (isLivePlayback && this.canUseHlsJs()) {
+        pushCandidate(candidates, "hls.js");
+      }
       if (isTizenRuntime && this.canUseHlsJs()) {
         pushCandidate(candidates, "hls.js");
       }
@@ -1062,6 +1075,9 @@ export const PlayerController = {
 
     if (this.isLikelyDashMimeType(normalizedSourceType)) {
       const candidates = [];
+      if (isLivePlayback && this.canUseDashJs()) {
+        pushCandidate(candidates, "dash.js");
+      }
       if (isTizenRuntime && this.canUseDashJs()) {
         pushCandidate(candidates, "dash.js");
       }
@@ -1105,14 +1121,14 @@ export const PlayerController = {
     return candidates;
   },
 
-  getAlternativePlaybackEngine(url = this.currentPlaybackUrl, sourceType = this.currentPlaybackMediaSourceType) {
+  getAlternativePlaybackEngine(url = this.currentPlaybackUrl, sourceType = this.currentPlaybackMediaSourceType, itemType = this.currentItemType) {
     const normalizedUrl = String(url || "").trim();
     if (!normalizedUrl) {
       return null;
     }
     const attemptedEngines = this.getAttemptedPlaybackEngines(normalizedUrl);
     const currentEngine = String(this.playbackEngine || "").trim();
-    const candidates = this.getPlaybackEngineCandidates(normalizedUrl, sourceType);
+    const candidates = this.getPlaybackEngineCandidates(normalizedUrl, sourceType, itemType);
     return candidates.find((candidate) => candidate !== currentEngine && !attemptedEngines.has(candidate)) || null;
   },
 
@@ -1754,8 +1770,8 @@ export const PlayerController = {
       });
   },
 
-  choosePlaybackEngine(url, sourceType) {
-    const candidates = this.getPlaybackEngineCandidates(url, sourceType);
+  choosePlaybackEngine(url, sourceType, itemType = this.currentItemType) {
+    const candidates = this.getPlaybackEngineCandidates(url, sourceType, itemType);
     if (candidates.length) {
       return candidates[0];
     }
@@ -1763,6 +1779,16 @@ export const PlayerController = {
       return this.getPlatformAvplayEngineName();
     }
     return "native-file";
+  },
+
+  async ensureAdaptiveLibrariesForSource(sourceType) {
+    const normalizedSourceType = String(sourceType || "").trim();
+    if (!normalizedSourceType) {
+      return;
+    }
+    if (this.isLikelyHlsMimeType(normalizedSourceType) || this.isLikelyDashMimeType(normalizedSourceType)) {
+      await loadStreamingLibs();
+    }
   },
 
   init() {
@@ -1877,7 +1903,7 @@ export const PlayerController = {
     }
   },
 
-  play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
+  async play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
     if (!this.video) return;
 
     try {
@@ -1907,7 +1933,11 @@ export const PlayerController = {
     this.playRequestToken = playToken;
 
     const sourceType = String(mediaSourceType || this.guessMediaMimeType(url) || "").trim() || null;
-    const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType);
+    await this.ensureAdaptiveLibrariesForSource(sourceType);
+    if (Number(this.playRequestToken || 0) !== playToken || String(this.currentPlaybackUrl || "") !== String(url || "").trim()) {
+      return;
+    }
+    const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType, itemType);
     this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
       reset: !forceEngine
     });

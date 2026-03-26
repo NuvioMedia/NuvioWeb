@@ -6964,6 +6964,21 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.player-loading-overlay.logo-only .player-loading-backdrop,
+.player-loading-overlay.logo-only .player-loading-gradient,
+.player-loading-overlay.logo-only .player-loading-title,
+.player-loading-overlay.logo-only .player-loading-subtitle {
+  display: none;
+}
+
+.player-loading-overlay.logo-only .player-loading-center {
+  width: auto;
+}
+
+.player-loading-overlay.logo-only .player-loading-logo {
+  margin-bottom: 0;
+}
+
 .player-loading-backdrop {
   position: absolute;
   inset: 0;
@@ -7054,6 +7069,27 @@ button:focus-visible {
 
 .player-controls-overlay.pause-overlay-active .player-controls-top {
   opacity: 0;
+}
+
+.player-controls-overlay.pause-overlay-active .player-controls-gradient-top,
+.player-controls-overlay.pause-overlay-active .player-controls-gradient-bottom {
+  opacity: 0;
+}
+
+.player-controls-overlay.pause-overlay-active .player-controls-bottom {
+  opacity: 0.24;
+}
+
+.player-controls-overlay.pause-overlay-active .player-meta,
+.player-controls-overlay.pause-overlay-active .player-time-label,
+.player-controls-overlay.pause-overlay-active .player-seek-overlay-bottom,
+.player-controls-overlay.pause-overlay-active .player-control-label {
+  text-shadow: none;
+}
+
+.player-controls-overlay.pause-overlay-active .player-control-btn,
+.player-controls-overlay.pause-overlay-active .player-progress-track {
+  box-shadow: none;
 }
 
 .player-controls-top {
@@ -7357,9 +7393,10 @@ button:focus-visible {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(3, 8, 14, 0.2) 0%, rgba(3, 8, 14, 0.48) 48%, rgba(3, 8, 14, 0.68) 100%),
-    linear-gradient(90deg, rgba(4, 10, 16, 0.78) 0%, rgba(4, 10, 16, 0.62) 34%, rgba(4, 10, 16, 0.26) 62%, rgba(4, 10, 16, 0.08) 100%);
-  backdrop-filter: blur(8px) saturate(1.02);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.56) 46%, rgba(0, 0, 0, 0.82) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.72) 34%, rgba(0, 0, 0, 0.36) 62%, rgba(0, 0, 0, 0.12) 100%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .player-pause-overlay-top {
@@ -7368,8 +7405,8 @@ button:focus-visible {
   right: var(--tv-safe-gutter);
   text-align: right;
   z-index: 1;
-  color: rgba(244, 248, 253, 0.9);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.38);
 }
 
 .player-pause-overlay-clock {
@@ -7381,8 +7418,8 @@ button:focus-visible {
 .player-pause-overlay-ends-at {
   margin-top: 2px;
   font-size: var(--tv-caption-text);
-  color: rgba(231, 238, 246, 0.74);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.24);
+  color: rgba(255, 255, 255, 0.68);
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
 }
 
 .player-pause-overlay-content {
@@ -7404,7 +7441,7 @@ button:focus-visible {
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(222, 231, 241, 0.72);
+  color: rgba(255, 255, 255, 0.64);
 }
 
 .player-pause-logo {
@@ -7412,34 +7449,34 @@ button:focus-visible {
   max-height: 120px;
   object-fit: contain;
   object-position: left center;
-  filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.48));
+  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.58));
 }
 
 .player-pause-title {
   font-size: clamp(44px, 3vw, 62px);
   font-weight: 740;
   line-height: 1.05;
-  color: #f8fbff;
+  color: #ffffff;
 }
 
 .player-pause-meta-line {
   font-size: var(--tv-secondary-text);
   font-weight: 600;
-  color: rgba(232, 239, 246, 0.74);
+  color: rgba(255, 255, 255, 0.72);
 }
 
 .player-pause-episode-title {
   font-size: clamp(28px, 1.9vw, 38px);
   font-weight: 650;
   line-height: 1.12;
-  color: rgba(248, 251, 255, 0.96);
+  color: rgba(255, 255, 255, 0.94);
 }
 
 .player-pause-description {
   max-width: min(46vw, 760px);
   font-size: clamp(20px, 1.3vw, 26px);
   line-height: 1.42;
-  color: rgba(226, 235, 244, 0.84);
+  color: rgba(255, 255, 255, 0.8);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -10528,12 +10565,19 @@ button:focus-visible {
 .performance-constrained .modern-sidebar-pill-chip,
 .performance-constrained .series-episode-card,
 .performance-constrained .series-stream-panel,
-.performance-constrained .stream-route-panel-shell {
+.performance-constrained .stream-route-panel-shell,
+.performance-constrained .player-pause-overlay-shade {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
 .performance-constrained .home-screen-shell .home-hero-backdrop {
+  filter: none !important;
+}
+
+.performance-constrained .player-loading-backdrop,
+.performance-constrained .player-loading-logo,
+.performance-constrained .player-pause-logo {
   filter: none !important;
 }
 

@@ -8,7 +8,7 @@ import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
-import { loadStreamingLibs } from "./runtime/loadStreamingLibs.js";
+import { warmStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
@@ -71,7 +71,7 @@ async function bootstrapApp() {
   FocusEngine.init();
   ThemeManager.apply();
   I18n.apply();
-  void loadStreamingLibs();
+  warmStreamingLibs({ delayMs: 1400 });
 
   AuthManager.subscribe((state) => {
     if (state === AuthState.LOADING) {

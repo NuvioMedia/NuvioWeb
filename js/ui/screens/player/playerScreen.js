@@ -1004,6 +1004,7 @@ export const PlayerScreen = {
     this.lastPlaybackErrorAt = 0;
     this.playbackStallTimer = null;
     this.lastPlaybackProgressAt = Date.now();
+    this.hasPresentedPlaybackFrame = false;
 
     this.paused = false;
     this.controlsVisible = true;
@@ -2024,6 +2025,7 @@ export const PlayerScreen = {
     const currentStreamCandidate = this.getCurrentStreamCandidate();
     PlayerController.play(targetUrl, this.buildPlaybackContext(currentStreamCandidate));
     this.paused = false;
+    this.hasPresentedPlaybackFrame = false;
     this.loadingVisible = true;
     this.updateLoadingVisibility();
     this.setControlsVisible(true, { focus: false });
@@ -2945,6 +2947,7 @@ export const PlayerScreen = {
       this.failedStreamUrls.clear();
       this.lastPlaybackErrorAt = 0;
       this.sourcesError = "";
+      this.hasPresentedPlaybackFrame = true;
       this.markPlaybackProgress();
       this.clearPlaybackStallGuard();
       this.loadingVisible = false;
@@ -3394,7 +3397,13 @@ export const PlayerScreen = {
     if (!overlay) {
       return;
     }
+    const showLogoOnly = Boolean(
+      this.loadingVisible
+      && this.hasPresentedPlaybackFrame
+      && this.params?.playerLogoUrl
+    );
     overlay.classList.toggle("hidden", !this.loadingVisible);
+    overlay.classList.toggle("logo-only", showLogoOnly);
     if (this.loadingVisible) {
       this.dismissPauseOverlay();
       if (this.seekOverlayVisible || this.seekPreviewSeconds != null) {
@@ -3891,6 +3900,7 @@ export const PlayerScreen = {
       this.currentStreamIndex = selectedIndex;
     }
 
+    this.hasPresentedPlaybackFrame = false;
     this.loadingVisible = true;
     this.updateLoadingVisibility();
     this.cancelSeekPreview({ commit: false });
