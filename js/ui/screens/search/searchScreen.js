@@ -575,7 +575,7 @@ export const SearchScreen = {
               autocomplete="off"
               autocapitalize="off"
               spellcheck="false"
-              placeholder="Search movies & series"
+              placeholder="${escapeHtml(t("search_placeholder", {}, "Search movies & series"))}"
               value="${escapeHtml(queryText)}"
             />
           </section>

@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -58,6 +59,7 @@ async function copyOptionalRootFile(fileName, { fallback = null, defaultContents
 }
 
 async function buildBundle() {
+  const { version } = await readAppMetadata();
   await build({
     entryPoints: [path.join(rootDir, "js/app.js")],
     outfile: rootBundlePath,
@@ -65,6 +67,9 @@ async function buildBundle() {
     format: "iife",
     platform: "browser",
     target: ["es2015"],
+    define: {
+      __NUVIO_APP_VERSION__: JSON.stringify(version)
+    },
     logLevel: "silent"
   });
 
@@ -78,6 +83,7 @@ async function writeDistIndex() {
 
 await rm(distDir, { recursive: true, force: true });
 await mkdir(distDir, { recursive: true });
+await syncVersionFiles();
 
 await Promise.all([
   copyEntry("assets"),

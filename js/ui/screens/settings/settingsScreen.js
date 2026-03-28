@@ -37,7 +37,9 @@ import {
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
 const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
-const SETTINGS_VERSION_LABEL = "0.1.3";
+const SETTINGS_VERSION_LABEL = typeof __NUVIO_APP_VERSION__ !== "undefined"
+  ? __NUVIO_APP_VERSION__
+  : "0.0.0";
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
@@ -57,10 +59,40 @@ const FONT_OPTIONS = [
   { id: "OPEN_SANS", label: "Open Sans" }
 ];
 
+const APP_LANGUAGE_NATIVE_LABELS = {
+  en: "English",
+  es: "Espanol",
+  fr: "Francais",
+  hi: "Hindi",
+  hu: "Magyar",
+  it: "Italiano",
+  ja: "Japanese",
+  nl: "Nederlands",
+  pl: "Polski",
+  ro: "Romana",
+  se: "Svenska",
+  sk: "Slovencina",
+  sl: "Slovenscina",
+  tr: "Turkce",
+  vi: "Tieng Viet"
+};
+
+function appLanguageOptionLabel(localeId) {
+  const normalized = String(localeId || "").trim().toLowerCase();
+  if (!normalized) {
+    return "System Default";
+  }
+  return APP_LANGUAGE_NATIVE_LABELS[normalized] || normalized.toUpperCase();
+}
+
 const LANGUAGE_OPTIONS = [
   { id: null, labelKey: "common.systemDefault" },
-  { id: "en", labelKey: "common.english" },
-  { id: "it", labelKey: "common.italian" }
+  ...I18n.getSupportedLocales()
+    .map((localeId) => ({
+      id: localeId,
+      label: appLanguageOptionLabel(localeId)
+    }))
+    .sort((left, right) => String(left.label || "").localeCompare(String(right.label || "")))
 ];
 
 const TMDB_LANGUAGE_OPTIONS = [

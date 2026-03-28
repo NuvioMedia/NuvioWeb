@@ -42,6 +42,10 @@ const PROFILE_PIN_TEXT = {
   lockedRetry: (seconds) => `Profile is locked. Try again in ${seconds}s.`
 };
 
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
+
 function keyEventToDigit(event) {
   const key = String(event?.key || "");
   if (/^\d$/.test(key)) {
@@ -299,13 +303,15 @@ export const ProfileSelectionScreen = {
 
   render() {
     const canAddProfile = this.isManagementMode && this.getVisibleProfiles().length < 4;
-    const title = this.isManagementMode ? "Manage Profiles" : "Who's watching?";
+    const title = this.isManagementMode
+      ? t("profile_manage_title", {}, "Manage Profiles")
+      : t("profile_selection_title", {}, "Who's watching?");
     const subtitle = this.isManagementMode
-      ? "Select a profile to edit, switch, or create a new one"
-      : "Select a profile to continue";
+      ? t("profile_manage_subtitle", {}, "Select a profile to edit, switch, or create a new one")
+      : t("profile_selection_subtitle", {}, "Select a profile to continue");
     const hint = this.isManagementMode
-      ? "Select a profile to manage"
-      : "Hold to manage profile";
+      ? t("profile_manage_hint", {}, "Select a profile to manage")
+      : t("profile_selection_hint", {}, "Hold to manage profile");
     const renderedPinState = this.getRenderedPinOverlayState();
     const isPinActive = Boolean(renderedPinState);
     const pinScreenPhaseClass = isPinActive ? ` is-pin-${escapeHtml(this.pinOverlayPhase || "open")}` : "";
@@ -359,7 +365,7 @@ export const ProfileSelectionScreen = {
           ${profile.isPrimary ? `<span class="profile-primary-dot" aria-hidden="true">&#9733;</span>` : ""}
         </div>
         <div class="profile-name">${escapeHtml(profile.name)}</div>
-        ${profile.isPrimary ? `<div class="profile-badge">PRIMARY</div>` : `<div class="profile-badge-slot" aria-hidden="true"></div>`}
+        ${profile.isPrimary ? `<div class="profile-badge">${escapeHtml(t("profile_selection_primary_badge", {}, "PRIMARY"))}</div>` : `<div class="profile-badge-slot" aria-hidden="true"></div>`}
       </div>
     `;
   },
@@ -373,7 +379,7 @@ export const ProfileSelectionScreen = {
         <div class="profile-avatar-ring">
           <div class="profile-avatar profile-avatar-add" aria-hidden="true"></div>
         </div>
-        <div class="profile-name">Add Profile</div>
+        <div class="profile-name">${escapeHtml(t("profile_add_new", {}, "Add Profile"))}</div>
         <div class="profile-badge-slot" aria-hidden="true"></div>
       </div>
     `;
@@ -384,9 +390,13 @@ export const ProfileSelectionScreen = {
       return "";
     }
 
-    const editorTitle = this.editorState.mode === "edit" ? "Edit Profile" : "Create Profile";
-    const editorButtonLabel = this.editorState.mode === "edit" ? "Save" : "Create";
-    const previewName = String(this.editorState.name || "").trim() || "Profile name";
+    const editorTitle = this.editorState.mode === "edit"
+      ? t("profile_edit_label", {}, "Edit")
+      : t("profile_create_title", {}, "Create Profile");
+    const editorButtonLabel = this.editorState.mode === "edit"
+      ? t("profile_save", {}, "Save")
+      : t("profile_create_btn", {}, "Create");
+    const previewName = String(this.editorState.name || "").trim() || t("profile_name_placeholder", {}, "Profile name");
     const selectedAvatar = this.getEditorSelectedAvatar();
     const previewAvatarUrl = selectedAvatar?.imageUrl || this.getAvatarImageUrl(this.editorState.selectedAvatarId) || null;
     const overlayHeading = this.editorState.mode === "edit"
@@ -426,12 +436,12 @@ export const ProfileSelectionScreen = {
               <div class="profile-editor-preview-name${String(this.editorState.name || "").trim() ? "" : " is-placeholder"}" data-role="editor-preview-name">${escapeHtml(previewName)}</div>
 
               <label class="profile-editor-field-shell">
-                <span class="sr-only">Profile name</span>
+                <span class="sr-only">${escapeHtml(t("profile_name_placeholder", {}, "Profile name"))}</span>
                 <input class="profile-editor-name-input profile-overlay-focusable"
                        type="text"
                        maxlength="20"
                        value="${escapeHtml(this.editorState.name || "")}"
-                       placeholder="Profile name"
+                       placeholder="${escapeHtml(t("profile_name_placeholder", {}, "Profile name"))}"
                        data-role="editor-name-input"
                        data-focus-key="editor:name"
                        tabindex="0"/>
@@ -442,14 +452,14 @@ export const ProfileSelectionScreen = {
                       data-action="cancel-editor"
                       data-focus-key="editor:cancel"
                       tabindex="0">
-                Cancel
+                ${escapeHtml(t("profile_cancel", {}, "Cancel"))}
               </button>
             </div>
 
             <div class="profile-editor-divider" aria-hidden="true"></div>
 
             <div class="profile-editor-avatar-pane">
-              <div class="profile-editor-avatar-title">Choose Avatar</div>
+              <div class="profile-editor-avatar-title">${escapeHtml(t("profile_choose_avatar", {}, "Choose Avatar"))}</div>
 
               <div class="profile-editor-category-row">
                 ${categories.map((category) => `
@@ -479,12 +489,12 @@ export const ProfileSelectionScreen = {
                 </div>
               ` : `
                 <div class="profile-editor-avatar-empty">
-                  Choose Avatar
+                  ${escapeHtml(t("profile_choose_avatar", {}, "Choose Avatar"))}
                 </div>
               `}
 
               <div class="profile-editor-avatar-hint" data-role="editor-avatar-hint">
-                ${escapeHtml(this.editorState.focusedAvatarName || "Focus an avatar to view its name")}
+                ${escapeHtml(this.editorState.focusedAvatarName || t("profile_avatar_focus_hint", {}, "Focus an avatar to view its name"))}
               </div>
             </div>
           </div>
@@ -503,7 +513,7 @@ export const ProfileSelectionScreen = {
     return `
       <div class="profile-dialog-backdrop" data-action="dismiss-options-dialog">
         <div class="profile-dialog profile-dialog-small" data-overlay-root="options">
-          <div class="profile-dialog-title">Profile Options</div>
+          <div class="profile-dialog-title">${escapeHtml(t("profile_selection_options_title", {}, "Profile Options"))}</div>
           <div class="profile-dialog-actions">
             <button class="profile-dialog-button profile-focusable focusable"
                     type="button"
@@ -511,7 +521,7 @@ export const ProfileSelectionScreen = {
                     data-profile-id="${escapeHtml(profile.id)}"
                     data-focus-key="options:edit"
                     tabindex="0">
-              Edit
+              ${escapeHtml(t("profile_edit_label", {}, "Edit"))}
             </button>
             <button class="profile-dialog-button profile-focusable focusable"
                     type="button"
@@ -538,7 +548,7 @@ export const ProfileSelectionScreen = {
                       data-profile-id="${escapeHtml(profile.id)}"
                       data-focus-key="options:delete"
                       tabindex="0">
-                Delete
+                ${escapeHtml(t("profile_delete", {}, "Delete"))}
               </button>
             `}
           </div>
@@ -643,9 +653,9 @@ export const ProfileSelectionScreen = {
     return `
       <div class="profile-dialog-backdrop" data-action="dismiss-delete-dialog">
         <div class="profile-dialog profile-dialog-medium" data-overlay-root="delete">
-          <div class="profile-dialog-title">Delete Profile?</div>
+          <div class="profile-dialog-title">${escapeHtml(t("profile_delete_confirm_title", {}, "Delete Profile?"))}</div>
           <p class="profile-dialog-subtitle">
-            This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone.
+            ${escapeHtml(t("profile_delete_confirm_subtitle", {}, "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."))}
           </p>
           <div class="profile-dialog-actions">
             <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
@@ -654,7 +664,7 @@ export const ProfileSelectionScreen = {
                     data-profile-id="${escapeHtml(profile.id)}"
                     data-focus-key="delete:confirm"
                     tabindex="0">
-              Delete Profile
+              ${escapeHtml(t("profile_delete_btn", {}, "Delete Profile"))}
             </button>
           </div>
         </div>
