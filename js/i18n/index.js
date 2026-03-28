@@ -303,6 +303,14 @@ async function loadXmlFile(relativePath) {
     `dist/res/${relativePath}`
   ];
 
+  if (relativePath.endsWith("/strings.xml")) {
+    const singularRelativePath = relativePath.replace(/\/strings\.xml$/, "/string.xml");
+    candidates.push(
+      `res/${singularRelativePath}`,
+      `dist/res/${singularRelativePath}`
+    );
+  }
+
   for (const candidate of candidates) {
     try {
       return await loadXmlFileXhr(candidate);

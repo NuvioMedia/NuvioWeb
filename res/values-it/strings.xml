@@ -684,6 +684,7 @@
     <string name="subtitle_dialog_title">Sottotitoli</string>
     <string name="subtitle_no_builtin">Nessun sottotitolo integrato disponibile</string>
     <string name="subtitle_loading_addon">Caricamento sottotitoli dagli addon…</string>
+    <string name="subtitle_loading_builtin">Caricamento tracce sottotitoli…</string>
     <string name="subtitle_no_addon">Nessun sottotitolo da addon disponibile</string>
     <string name="subtitle_text_color">Colore del testo</string>
     <string name="subtitle_outline_color">Colore del contorno</string>
@@ -710,6 +711,7 @@
     <string name="subtitle_style_bold">Grassetto</string>
     <string name="subtitle_style_text_color">Colore Testo</string>
     <string name="subtitle_style_outline">Bordo</string>
+    <string name="subtitle_style_outline_color">Colore Bordo</string>
     <string name="subtitle_style_bottom_offset">Offset Inferiore</string>
     <string name="subtitle_style_defaults">Default</string>
     <string name="subtitle_style_on">Attivo</string>

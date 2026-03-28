@@ -1,0 +1,6 @@
+{
+  "name": "com.nuvio.tizen.service",
+  "version": "0.1.4",
+  "private": true,
+  "main": "src/index.js"
+}

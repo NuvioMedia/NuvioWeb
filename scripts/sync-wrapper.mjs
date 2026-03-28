@@ -2,11 +2,17 @@ import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/pro
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
+import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
+const webOsServiceId = "com.nuvio.lg.service";
+const webOsServiceDirName = "com.nuvio.lg.service";
+const tizenServiceDirName = "com.nuvio.tizen.service";
+const tizenServiceIdSuffix = ".NuvioMediaService";
+const tizenServiceEntryPath = `services/${tizenServiceDirName}/src/service.js`;
 const defaultEnvFileContents = `(function defineNuvioEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
   root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
@@ -115,6 +121,23 @@ async function syncFolder(targetDir, folderName) {
   await cp(path.join(distDir, folderName), path.join(targetDir, folderName), { recursive: true });
 }
 
+async function syncRootFolder(targetDir, folderName) {
+  await rm(path.join(targetDir, folderName), { recursive: true, force: true });
+  await cp(path.join(rootDir, folderName), path.join(targetDir, folderName), { recursive: true });
+}
+
+async function syncServiceFolder(targetDir, serviceDirName) {
+  const targetServicesDir = path.join(targetDir, "services");
+  await mkdir(targetServicesDir, { recursive: true });
+  await rm(path.join(targetServicesDir, webOsServiceDirName), { recursive: true, force: true });
+  await rm(path.join(targetServicesDir, tizenServiceDirName), { recursive: true, force: true });
+  await cp(
+    path.join(rootDir, "services", serviceDirName),
+    path.join(targetServicesDir, serviceDirName),
+    { recursive: true }
+  );
+}
+
 async function syncBuild(targetDir) {
   await mkdir(targetDir, { recursive: true });
   await Promise.all([
@@ -189,14 +212,16 @@ function buildTizenIndexHtml() {
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
-  <script defer src="main.js"></script>
+  <script type="module" defer src="main.js"></script>
 </body>
 </html>
 `;
 }
 
 function buildTizenMainJs() {
-  return `window.__NUVIO_PLATFORM__ = "tizen";
+  return `import * as wrtService from "wrt:service";
+
+window.__NUVIO_PLATFORM__ = "tizen";
 
 var tvInput = window.tizen && window.tizen.tvinputdevice;
 if (tvInput && typeof tvInput.registerKey === "function") {
@@ -207,12 +232,62 @@ if (tvInput && typeof tvInput.registerKey === "function") {
   });
 }
 
+function getTizenPackageId() {
+  try {
+    return String(window.tizen?.application?.getCurrentApplication?.().appInfo?.packageId || "").trim();
+  } catch (_) {
+    return "";
+  }
+}
+
+function startLocalMediaService() {
+  var packageId = getTizenPackageId();
+  if (!packageId || typeof wrtService.startService !== "function") {
+    return Promise.resolve(false);
+  }
+
+  var serviceId = packageId + "${tizenServiceIdSuffix}";
+  return new Promise(function(resolve) {
+    var settled = false;
+
+    function finish(value) {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(Boolean(value));
+    }
+
+    try {
+      wrtService.startService(
+        serviceId,
+        function() {
+          finish(true);
+        },
+        function(error) {
+          console.warn("[tizen-service] Failed to start local media service", serviceId, error);
+          finish(false);
+        }
+      );
+    } catch (error) {
+      console.warn("[tizen-service] Failed to request local media service", serviceId, error);
+      finish(false);
+    }
+
+    setTimeout(function() {
+      finish(false);
+    }, 2500);
+  });
+}
+
 function loadScript(src) {
   var script = document.createElement("script");
   script.src = src;
   script.defer = false;
   document.body.appendChild(script);
 }
+
+window.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = startLocalMediaService();
 
 loadScript("nuvio.env.js");
 loadScript("js/runtime/polyfills.js");
@@ -261,6 +336,7 @@ async function resolveWebOsScriptPath(targetDir) {
 }
 
 async function updateWebOsMetadata(targetDir) {
+  const { version: appVersion } = await readAppMetadata();
   const appInfoPath = path.join(targetDir, "appinfo.json");
   const appInfoRaw = await readTextFile(
     appInfoPath,
@@ -269,14 +345,20 @@ async function updateWebOsMetadata(targetDir) {
   const appInfo = JSON.parse(appInfoRaw);
 
   appInfo.title = appName;
+  appInfo.version = appVersion;
   appInfo.icon = wrapperIconFiles.webosIcon.target;
   appInfo.largeIcon = wrapperIconFiles.webosLargeIcon.target;
+  appInfo.services = [webOsServiceId];
 
   await writeTextFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`);
   await syncWrapperIcons(targetDir, { includeLargeIcon: true });
 
   const webOsScriptPath = await resolveWebOsScriptPath(targetDir);
   await writeTextFile(path.join(targetDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }));
+}
+
+async function syncWebOsCompanionFiles(targetDir) {
+  await syncServiceFolder(targetDir, webOsServiceDirName);
 }
 
 function upsertXmlTag(xml, tagName, innerText) {
@@ -313,29 +395,88 @@ function insertIntoWidget(xml, snippet) {
   return xml.replace(widgetOpenTagPattern, (match) => `${match}\n    ${snippet}`);
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function upsertTizenFeature(xml, featureName) {
+  const escapedFeatureName = escapeRegExp(featureName);
+  const featurePattern = new RegExp(`<feature\\b[^>]*name="${escapedFeatureName}"[^>]*/>`);
+  if (featurePattern.test(xml)) {
+    return xml;
+  }
+  return insertIntoWidget(xml, `<feature name="${featureName}"/>`);
+}
+
+function extractTizenPackageId(xml) {
+  const match = xml.match(/<tizen:application\b[^>]*package="([^"]+)"/);
+  return String(match?.[1] || "").trim();
+}
+
+function upsertTizenWidgetVersion(xml, version) {
+  const widgetPattern = /<widget\b([^>]*?)\bversion="[^"]*"([^>]*)>/;
+  if (widgetPattern.test(xml)) {
+    return xml.replace(widgetPattern, `<widget$1version="${version}"$2>`);
+  }
+  return xml;
+}
+
+function upsertTizenService(xml, { serviceId, contentSrc, name, description }) {
+  const contentPattern = escapeRegExp(contentSrc);
+  const servicePattern = new RegExp(
+    `\\s*<tizen:service\\b[^>]*>[\\s\\S]*?<tizen:content\\s+src="${contentPattern}"\\s*/>[\\s\\S]*?<\\/tizen:service>`,
+    "m"
+  );
+  const snippet = `<tizen:service id="${serviceId}" type="ui">
+      <tizen:content src="${contentSrc}"/>
+      <tizen:name>${name}</tizen:name>
+      <tizen:description>${description}</tizen:description>
+    </tizen:service>`;
+  if (servicePattern.test(xml)) {
+    return xml.replace(servicePattern, `\n    ${snippet}`);
+  }
+  return insertIntoWidget(xml, snippet);
+}
+
 async function updateTizenMetadata(targetDir) {
+  const { version: appVersion } = await readAppMetadata();
   const configPath = path.join(targetDir, "config.xml");
   const configRaw = await readTextFile(
     configPath,
     `Tizen wrapper metadata not found at ${configPath}. Expected config.xml in the wrapper root.`
   );
   let configXml = configRaw;
+  const packageId = extractTizenPackageId(configXml);
+  if (!packageId) {
+    throw new Error(`Unable to resolve Tizen package ID from ${configPath}.`);
+  }
 
   configXml = upsertTizenIcon(configXml, wrapperIconFiles.tizenIcon.target);
   configXml = upsertXmlTag(configXml, "name", appName);
+  configXml = upsertTizenWidgetVersion(configXml, appVersion);
+  configXml = upsertTizenFeature(configXml, "http://tizen.org/feature/web.service");
+  configXml = upsertTizenService(configXml, {
+    serviceId: `${packageId}${tizenServiceIdSuffix}`,
+    contentSrc: tizenServiceEntryPath,
+    name: `${appName} Media Service`,
+    description: "Local media helper service for Tizen playback"
+  });
 
   await writeTextFile(configPath, configXml);
   await syncTizenIcon(targetDir);
+  await syncServiceFolder(targetDir, tizenServiceDirName);
   await writeTextFile(path.join(targetDir, "index.html"), buildTizenIndexHtml());
   await writeTextFile(path.join(targetDir, "main.js"), buildTizenMainJs());
 }
 
 const { platform, targetDir } = parseArgs(process.argv.slice(2));
+await syncVersionFiles();
 await assertDistExists();
 await syncBuild(targetDir);
 
 if (platform === "webos") {
   await updateWebOsMetadata(targetDir);
+  await syncWebOsCompanionFiles(targetDir);
 }
 
 if (platform === "tizen") {

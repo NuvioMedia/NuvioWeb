@@ -1,0 +1,27 @@
+{
+  "id": "com.nuvio.lg.service",
+  "description": "Local media helper service for webOS playback",
+  "services": [
+    {
+      "name": "com.nuvio.lg.service",
+      "description": "Boots the local media runtime and exposes health checks",
+      "commands": [
+        {
+          "name": "ping",
+          "description": "Boot the local runtime and report service health",
+          "public": true
+        },
+        {
+          "name": "status",
+          "description": "Report the local HTTP endpoint status",
+          "public": true
+        },
+        {
+          "name": "tracks",
+          "description": "Resolve embedded track metadata for a media URL",
+          "public": true
+        }
+      ]
+    }
+  ]
+}

@@ -32,6 +32,7 @@ export const PlayerController = {
   avplaySubtitleTracks: [],
   selectedAvPlayAudioTrackIndex: -1,
   selectedAvPlaySubtitleTrackIndex: -1,
+  pendingAvPlayAudioTrackIndex: -1,
   avplayTickTimer: null,
   avplayReady: false,
   avplayEnded: false,
@@ -46,6 +47,8 @@ export const PlayerController = {
   playRequestToken: 0,
   nativeMediaId: "",
   nativeMediaIdLookupToken: 0,
+  selectedWebOsEmbeddedAudioTrackIndex: -1,
+  selectedWebOsEmbeddedSubtitleTrackIndex: -1,
   webosDeviceInfoPromise: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
   viewportSyncHandler: null,
@@ -177,6 +180,21 @@ export const PlayerController = {
     return this.getPlatformAvplayEngine().getApi();
   },
 
+  getAvPlayState() {
+    if (!this.isUsingAvPlay()) {
+      return "";
+    }
+    const avplay = this.getAvPlay();
+    if (!avplay) {
+      return "";
+    }
+    try {
+      return String(avplay.getState?.() || "").trim().toUpperCase();
+    } catch (_) {
+      return "";
+    }
+  },
+
   canUseAvPlay() {
     return this.getPlatformAvplayEngine().isSupported();
   },
@@ -296,6 +314,8 @@ export const PlayerController = {
   resetNativeMediaState() {
     this.nativeMediaId = "";
     this.nativeMediaIdLookupToken = Number(this.nativeMediaIdLookupToken || 0) + 1;
+    this.selectedWebOsEmbeddedAudioTrackIndex = -1;
+    this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
   },
 
   syncNativeMediaId() {
@@ -542,6 +562,9 @@ export const PlayerController = {
 
     if (Number.isFinite(selectedAudioIndex)) {
       this.selectedAvPlayAudioTrackIndex = selectedAudioIndex;
+      this.pendingAvPlayAudioTrackIndex = -1;
+    } else if (Number.isFinite(this.pendingAvPlayAudioTrackIndex) && this.pendingAvPlayAudioTrackIndex >= 0) {
+      this.selectedAvPlayAudioTrackIndex = this.pendingAvPlayAudioTrackIndex;
     } else if (this.avplayAudioTracks.length && this.selectedAvPlayAudioTrackIndex < 0) {
       this.selectedAvPlayAudioTrackIndex = this.avplayAudioTracks[0].avplayTrackIndex;
     } else if (!this.avplayAudioTracks.length) {
@@ -571,6 +594,18 @@ export const PlayerController = {
     return Number.isFinite(this.selectedAvPlaySubtitleTrackIndex) ? this.selectedAvPlaySubtitleTrackIndex : -1;
   },
 
+  getSelectedWebOsEmbeddedAudioTrackIndex() {
+    return Number.isFinite(this.selectedWebOsEmbeddedAudioTrackIndex)
+      ? this.selectedWebOsEmbeddedAudioTrackIndex
+      : -1;
+  },
+
+  getSelectedWebOsEmbeddedSubtitleTrackIndex() {
+    return Number.isFinite(this.selectedWebOsEmbeddedSubtitleTrackIndex)
+      ? this.selectedWebOsEmbeddedSubtitleTrackIndex
+      : -1;
+  },
+
   setAvPlayAudioTrack(trackIndex) {
     if (!this.isUsingAvPlay()) {
       return false;
@@ -590,8 +625,17 @@ export const PlayerController = {
       return false;
     }
 
+    const avplayState = this.getAvPlayState();
+    if (avplayState === "PAUSED") {
+      this.pendingAvPlayAudioTrackIndex = targetIndex;
+      this.selectedAvPlayAudioTrackIndex = targetIndex;
+      this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
+      return true;
+    }
+
     try {
       avplay.setSelectTrack("AUDIO", targetIndex);
+      this.pendingAvPlayAudioTrackIndex = -1;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
       this.syncAvPlayTrackInfo();
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -602,6 +646,29 @@ export const PlayerController = {
         this.syncAvPlayTrackInfo();
         this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       }, 400);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  applyPendingAvPlayAudioTrackSelection() {
+    const targetIndex = Number(this.pendingAvPlayAudioTrackIndex);
+    if (!this.isUsingAvPlay() || !Number.isFinite(targetIndex) || targetIndex < 0) {
+      return false;
+    }
+
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.setSelectTrack !== "function") {
+      return false;
+    }
+
+    try {
+      avplay.setSelectTrack("AUDIO", targetIndex);
+      this.pendingAvPlayAudioTrackIndex = -1;
+      this.selectedAvPlayAudioTrackIndex = targetIndex;
+      this.syncAvPlayTrackInfo();
+      this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     } catch (_) {
       return false;
@@ -626,6 +693,7 @@ export const PlayerController = {
         // Ignore subtitle mute failures.
       }
       this.selectedAvPlaySubtitleTrackIndex = -1;
+      this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     }
@@ -652,6 +720,7 @@ export const PlayerController = {
     }
 
     this.selectedAvPlaySubtitleTrackIndex = targetIndex;
+    this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
     this.syncAvPlayTrackInfo();
     this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
     return true;
@@ -676,6 +745,7 @@ export const PlayerController = {
         // Ignore subtitle mute/unmute failures.
       }
       this.selectedAvPlaySubtitleTrackIndex = -1;
+      this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     } catch (_) {
@@ -751,6 +821,7 @@ export const PlayerController = {
     this.avplaySubtitleTracks = [];
     this.selectedAvPlayAudioTrackIndex = -1;
     this.selectedAvPlaySubtitleTrackIndex = -1;
+    this.pendingAvPlayAudioTrackIndex = -1;
     this.avplayReady = false;
     this.avplayEnded = false;
     this.avplayCurrentTimeMs = 0;
@@ -852,9 +923,13 @@ export const PlayerController = {
         this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
         setTimeout(() => {
+          this.applyPendingAvPlayAudioTrackSelection();
+        }, 0);
+        setTimeout(() => {
           if (!this.isUsingAvPlay()) {
             return;
           }
+          this.applyPendingAvPlayAudioTrackSelection();
           this.syncAvPlayTrackInfo();
           this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
         }, 500);
@@ -1111,10 +1186,10 @@ export const PlayerController = {
     if (isTizenRuntime) {
       pushCandidate(candidates, "native-file");
     }
+    pushCandidate(candidates, "native-file");
     if (!isTizenRuntime && this.canUseAvPlay()) {
       pushCandidate(candidates, avplayEngine);
     }
-    pushCandidate(candidates, "native-file");
     if (isTizenRuntime && this.canUseAvPlay()) {
       pushCandidate(candidates, avplayEngine);
     }
@@ -1629,6 +1704,8 @@ export const PlayerController = {
       return false;
     }
 
+    this.selectedWebOsEmbeddedAudioTrackIndex = -1;
+
     const mediaId = this.syncNativeMediaId();
     if (mediaId) {
       this.requestWebOsMediaCommand("selectTrack", {
@@ -1660,6 +1737,87 @@ export const PlayerController = {
     return true;
   },
 
+  setWebOsEmbeddedAudioTrack(trackIndex) {
+    if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
+      return false;
+    }
+
+    const targetIndex = Number(trackIndex);
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+      this.selectedWebOsEmbeddedAudioTrackIndex = -1;
+      return false;
+    }
+
+    const applySelection = (mediaId) => {
+      if (!mediaId) {
+        return;
+      }
+
+      this.requestWebOsMediaCommand("selectTrack", {
+        type: "audio",
+        mediaId,
+        index: targetIndex
+      }).catch(() => {
+        // Ignore Luna audio track selection failures.
+      });
+
+      const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks || null;
+      if (!audioTrackList) {
+        return;
+      }
+
+      let tracks = [];
+      try {
+        tracks = Array.from(audioTrackList).filter(Boolean);
+      } catch (_) {
+        const trackCount = Number(audioTrackList.length || 0);
+        for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
+          const track = audioTrackList[trackIndex] || audioTrackList.item?.(trackIndex) || null;
+          if (track) {
+            tracks.push(track);
+          }
+        }
+      }
+
+      tracks.forEach((track, trackListIndex) => {
+        const selected = trackListIndex === targetIndex;
+        try {
+          if ("enabled" in track) {
+            track.enabled = selected;
+          }
+        } catch (_) {
+          // Best effort.
+        }
+        try {
+          if ("selected" in track) {
+            track.selected = selected;
+          }
+        } catch (_) {
+          // Best effort.
+        }
+      });
+    };
+
+    this.selectedWebOsEmbeddedAudioTrackIndex = targetIndex;
+
+    const mediaId = this.syncNativeMediaId();
+    if (mediaId) {
+      applySelection(mediaId);
+      return true;
+    }
+
+    this.waitForNativeMediaId().then((resolvedMediaId) => {
+      if (Number(this.selectedWebOsEmbeddedAudioTrackIndex) !== targetIndex) {
+        return;
+      }
+      applySelection(resolvedMediaId);
+    }).catch(() => {
+      // Ignore media-id lookup failures.
+    });
+
+    return true;
+  },
+
   setNativeTextTrack(index) {
     if (!this.video) {
       return false;
@@ -1683,6 +1841,8 @@ export const PlayerController = {
     if (!Number.isFinite(targetIndex) || targetIndex < -1 || targetIndex >= tracks.length) {
       return false;
     }
+
+    this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
 
     const mediaId = this.syncNativeMediaId();
     if (mediaId && Platform.isWebOS()) {
@@ -1721,6 +1881,75 @@ export const PlayerController = {
       } catch (_) {
         // Best effort.
       }
+    });
+
+    return true;
+  },
+
+  setWebOsEmbeddedSubtitleTrack(trackIndex) {
+    if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
+      return false;
+    }
+
+    const targetIndex = Number(trackIndex);
+    if (!Number.isFinite(targetIndex) || targetIndex < -1) {
+      return false;
+    }
+
+    const applySelection = (mediaId) => {
+      if (!mediaId) {
+        return;
+      }
+
+      if (targetIndex < 0) {
+        this.requestWebOsMediaCommand("setSubtitleEnable", {
+          mediaId,
+          enable: false
+        }).catch(() => {
+          // Ignore Luna subtitle disable failures.
+        });
+        return;
+      }
+
+      this.requestWebOsMediaCommand("setSubtitleEnable", {
+        mediaId,
+        enable: true
+      }).catch(() => {
+        // Ignore Luna subtitle enable failures.
+      });
+
+      setTimeout(() => {
+        if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== targetIndex) {
+          return;
+        }
+        if (this.nativeMediaId && mediaId !== this.nativeMediaId) {
+          return;
+        }
+        this.requestWebOsMediaCommand("selectTrack", {
+          type: "text",
+          mediaId,
+          index: targetIndex
+        }).catch(() => {
+          // Ignore Luna subtitle track selection failures.
+        });
+      }, 350);
+    };
+
+    this.selectedWebOsEmbeddedSubtitleTrackIndex = targetIndex;
+
+    const mediaId = this.syncNativeMediaId();
+    if (mediaId) {
+      applySelection(mediaId);
+      return true;
+    }
+
+    this.waitForNativeMediaId().then((resolvedMediaId) => {
+      if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== targetIndex) {
+        return;
+      }
+      applySelection(resolvedMediaId);
+    }).catch(() => {
+      // Ignore media-id lookup failures.
     });
 
     return true;
@@ -2100,6 +2329,12 @@ export const PlayerController = {
         this.isPlaying = true;
         this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
+        setTimeout(() => {
+          this.applyPendingAvPlayAudioTrackSelection();
+        }, 0);
+        setTimeout(() => {
+          this.applyPendingAvPlayAudioTrackSelection();
+        }, 300);
       } catch (error) {
         this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
         console.warn("Playback resume rejected", error);

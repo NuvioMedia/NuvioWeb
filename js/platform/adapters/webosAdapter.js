@@ -1,5 +1,6 @@
 import { normalizeKeyEvent, isBackEvent } from "../sharedKeys.js";
 import { WebOSPlayerExtensions } from "../webos/webosPlayerExtensions.js";
+import { WebOsLunaService } from "../webos/webosLunaService.js";
 
 function getAvplayApi() {
   const webapis = globalThis.webapis;
@@ -13,7 +14,18 @@ function getAvplayApi() {
 export const webosAdapter = {
   name: "webos",
 
-  init() {},
+  init() {
+    if (!WebOsLunaService.isAvailable()) {
+      return;
+    }
+
+    WebOsLunaService.request("luna://com.nuvio.lg.service", {
+      method: "ping",
+      parameters: {}
+    }).catch((error) => {
+      console.warn("webOS companion service ping failed:", error);
+    });
+  },
 
   exitApp() {
     if (globalThis.webOSSystem && typeof globalThis.webOSSystem.close === "function") {
