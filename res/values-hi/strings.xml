@@ -736,6 +736,7 @@
     <string name="subtitle_tab_style">स्टाइल</string>
     <string name="subtitle_tab_delay">देरी</string>
     <string name="subtitle_none">कोई नहीं</string>
+    <string name="subtitle_none_forced_only">कोई नहीं (सिर्फ फोर्स्ड)</string>
     <string name="subtitle_all">सभी</string>
     <string name="subtitle_section_core">कोर</string>
     <string name="subtitle_section_advanced">एडवांस्ड</string>

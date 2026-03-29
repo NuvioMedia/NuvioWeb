@@ -627,6 +627,7 @@
 <string name="subtitle_tab_style">Stijl</string>
 <string name="subtitle_tab_delay">Vertraging</string>
 <string name="subtitle_none">Geen</string>
+<string name="subtitle_none_forced_only">Geen (alleen geforceerd)</string>
 <string name="subtitle_all">Alles</string>
 <string name="subtitle_section_core">Basis</string>
 <string name="subtitle_section_advanced">Geavanceerd</string>

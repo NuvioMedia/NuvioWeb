@@ -481,8 +481,8 @@ export const SearchScreen = {
         return `
           <div class="search-empty-state search-empty-state-results">
             <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
-            <h2>No Results</h2>
-            <p>Try searching with different keywords</p>
+            <h2>${escapeHtml(t("search_no_results_title", {}, "No Results"))}</h2>
+            <p>${escapeHtml(t("search_no_results_subtitle", {}, "Try searching with different keywords"))}</p>
           </div>
         `;
       }
@@ -1032,6 +1032,14 @@ export const SearchScreen = {
     });
   },
 
+  isSearchInputEditingActive() {
+    const input = this.container?.querySelector("#searchInput");
+    if (!input) {
+      return false;
+    }
+    return document.activeElement === input;
+  },
+
   bindActionEvents() {
     this.container?.querySelectorAll("[data-action]").forEach((node) => {
       if (node.__boundActionListeners) return;
@@ -1195,6 +1203,11 @@ export const SearchScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
+    if (this.isSearchInputEditingActive()) {
+      if (code === 37 || code === 39 || code === 35 || code === 36) {
+        return;
+      }
+    }
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;

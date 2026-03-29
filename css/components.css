@@ -409,7 +409,7 @@ button:focus-visible {
 .profile-main-layer {
   width: 100%;
   height: 100%;
-  padding: 56px 72px;
+  padding: 64px 72px 72px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -436,16 +436,16 @@ button:focus-visible {
 }
 
 .profile-logo {
-  width: 224px;
-  height: 52px;
-  margin: 0 auto 34px;
+  width: 252px;
+  height: 60px;
+  margin: 0 auto 42px;
   display: block;
   object-fit: contain;
 }
 
 .profile-title {
   margin: 0;
-  font-size: 56px;
+  font-size: clamp(60px, 4vw, 72px);
   line-height: 1.05;
   font-weight: 700;
   letter-spacing: -0.5px;
@@ -453,8 +453,8 @@ button:focus-visible {
 }
 
 .profile-subtitle {
-  margin: 14px 0 68px;
-  font-size: 22px;
+  margin: 18px 0 76px;
+  font-size: clamp(24px, 1.8vw, 30px);
   line-height: 1.3;
   font-weight: 500;
   color: var(--text-secondary);
@@ -464,14 +464,15 @@ button:focus-visible {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  gap: 36px;
-  min-height: 332px;
+  gap: 44px;
+  min-height: 392px;
   margin-top: auto;
   margin-bottom: auto;
+  flex-wrap: wrap;
 }
 
 .profile-card {
-  width: 180px;
+  width: 220px;
   cursor: pointer;
   outline: none;
   border: none;
@@ -481,14 +482,14 @@ button:focus-visible {
 }
 
 .profile-card.focused {
-  transform: scale(1.04);
+  transform: scale(1.05);
   border: none !important;
   box-shadow: none !important;
 }
 
 .profile-avatar-ring {
-  width: 156px;
-  height: 156px;
+  width: 188px;
+  height: 188px;
   border-radius: 999px;
   border: 1px solid var(--border-color);
   display: flex;
@@ -500,20 +501,20 @@ button:focus-visible {
 }
 
 .profile-card.focused .profile-avatar-ring {
-  width: 152px;
-  height: 152px;
+  width: 194px;
+  height: 194px;
   border-width: 3px;
   border-color: var(--focus-color);
 }
 
 .profile-avatar {
-  width: 124px;
-  height: 124px;
+  width: 152px;
+  height: 152px;
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 60px;
+  font-size: 72px;
   font-weight: 700;
   color: var(--text-color);
   overflow: hidden;
@@ -521,8 +522,8 @@ button:focus-visible {
 }
 
 .profile-card.focused .profile-avatar {
-  width: 130px;
-  height: 130px;
+  width: 160px;
+  height: 160px;
 }
 
 .profile-avatar-image,
@@ -557,66 +558,102 @@ button:focus-visible {
 }
 
 .profile-avatar-add::before {
-  width: 54px;
-  height: 4px;
+  width: 66px;
+  height: 5px;
 }
 
 .profile-avatar-add::after {
-  width: 4px;
-  height: 54px;
+  width: 5px;
+  height: 66px;
 }
 
 .profile-name {
-  margin-top: 12px;
-  font-size: 21px;
+  margin-top: 16px;
+  font-size: clamp(24px, 1.65vw, 30px);
   line-height: 1.2;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-secondary);
   text-align: center;
 }
 
 .profile-card.focused .profile-name {
   color: var(--text-color);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .profile-badge {
-  margin-top: 8px;
-  min-height: 18px;
-  font-size: 12px;
+  margin-top: 10px;
+  min-height: 22px;
+  font-size: 14px;
   line-height: 1.1;
   font-weight: 600;
   color: var(--secondary-color);
-  letter-spacing: 0.8px;
+  letter-spacing: 0.9px;
 }
 
 .profile-badge-slot {
-  min-height: 18px;
-  margin-top: 8px;
+  min-height: 22px;
+  margin-top: 10px;
 }
 
 .profile-primary-dot {
   position: absolute;
-  right: 7px;
-  bottom: 5px;
-  width: 28px;
-  height: 28px;
+  right: 9px;
+  bottom: 7px;
+  width: 34px;
+  height: 34px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   background: var(--secondary-color);
   color: var(--on-secondary);
-  font-size: 16px;
+  font-size: 18px;
   border: 2px solid var(--bg-color);
 }
 
 .profile-hint {
   margin: auto 0 0;
-  font-size: 17px;
+  font-size: clamp(19px, 1.4vw, 24px);
   line-height: 1.35;
   font-weight: 500;
   color: var(--text-tertiary);
+}
+
+@media (max-width: 1280px), (max-height: 820px) {
+  .profile-grid {
+    gap: 32px;
+    min-height: 332px;
+  }
+
+  .profile-card {
+    width: 190px;
+  }
+
+  .profile-avatar-ring {
+    width: 164px;
+    height: 164px;
+  }
+
+  .profile-card.focused .profile-avatar-ring {
+    width: 170px;
+    height: 170px;
+  }
+
+  .profile-avatar {
+    width: 132px;
+    height: 132px;
+    font-size: 62px;
+  }
+
+  .profile-card.focused .profile-avatar {
+    width: 140px;
+    height: 140px;
+  }
+
+  .profile-name {
+    font-size: 22px;
+  }
 }
 
 .profile-editor-backdrop,

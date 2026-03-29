@@ -876,4 +876,5 @@
     <string name="auth.syncCode.setCode">Set Code</string>
 
     <string name="common_all">Všetko</string>
+    <string name="subtitle_none_forced_only">Žiadne (len vynútené)</string>
 </resources>

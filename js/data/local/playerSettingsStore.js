@@ -45,7 +45,7 @@ function normalizeSelectableSubtitleLanguageCode(language) {
     case "forced":
     case "force":
     case "forc":
-      return "forced";
+      return "off";
     case "none":
     case "off":
       return "off";

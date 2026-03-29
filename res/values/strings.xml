@@ -746,6 +746,7 @@
     <string name="subtitle_tab_style">Style</string>
     <string name="subtitle_tab_delay">Delay</string>
     <string name="subtitle_none">None</string>
+    <string name="subtitle_none_forced_only">None (forced only)</string>
     <string name="subtitle_all">All</string>
     <string name="subtitle_section_core">Core</string>
     <string name="subtitle_section_advanced">Advanced</string>
@@ -795,6 +796,8 @@
     <!-- SearchScreen -->
     <string name="search_keyboard_hint">Press Done on the keyboard to search</string>
     <string name="search_placeholder">Search movies &amp; series</string>
+    <string name="search_no_results_title">No Results</string>
+    <string name="search_no_results_subtitle">Try searching with different keywords</string>
     <string name="search_start_title">Start Searching</string>
     <string name="search_start_subtitle">Enter at least 2 characters</string>
     <string name="search_start_subtitle_no_discover">Discover is disabled. Enter at least 2 characters</string>

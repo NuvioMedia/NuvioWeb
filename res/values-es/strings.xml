@@ -600,6 +600,7 @@
     <string name="subtitle_tab_style">Estilo</string>
     <string name="subtitle_tab_delay">Retraso</string>
     <string name="subtitle_none">Ninguno</string>
+    <string name="subtitle_none_forced_only">Ninguno (solo forzados)</string>
     <string name="subtitle_all">Todos</string>
     <string name="subtitle_section_core">Principal</string>
     <string name="subtitle_section_advanced">Avanzado</string>

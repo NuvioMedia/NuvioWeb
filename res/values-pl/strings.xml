@@ -672,6 +672,7 @@
     <string name="subtitle_tab_style">Styl</string>
     <string name="subtitle_tab_delay">Opóźnienie</string>
     <string name="subtitle_none">Brak</string>
+    <string name="subtitle_none_forced_only">Brak (tylko wymuszone)</string>
     <string name="subtitle_all">Wszystkie</string>
     <string name="subtitle_section_core">Podstawowe</string>
     <string name="subtitle_section_advanced">Zaawansowane</string>

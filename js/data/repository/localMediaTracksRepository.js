@@ -3,8 +3,11 @@ import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 
 const LOCAL_MEDIA_SERVER_PORT_CANDIDATES = [2710, 2711, 2712, 2713, 2714];
 const REQUEST_TIMEOUT_MS = 4000;
+const TRACK_CACHE_TTL_MS = 30000;
 
 let cachedLocalMediaServerPort = LOCAL_MEDIA_SERVER_PORT_CANDIDATES[0];
+const tracksCache = new Map();
+const inFlightTrackRequests = new Map();
 
 function getCandidatePorts() {
   const ordered = [cachedLocalMediaServerPort, ...LOCAL_MEDIA_SERVER_PORT_CANDIDATES];
@@ -76,29 +79,64 @@ export const localMediaTracksRepository = {
       return [];
     }
 
-    if (Platform.isWebOS() && WebOsLunaService.isAvailable()) {
-      try {
-        return await requestTracksViaLuna(targetUrl);
-      } catch (_) {
-        // Fall back to direct localhost probing below.
+    const cachedEntry = tracksCache.get(targetUrl);
+    if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+      return Array.isArray(cachedEntry.tracks) ? cachedEntry.tracks.slice() : [];
+    }
+
+    const inFlightRequest = inFlightTrackRequests.get(targetUrl);
+    if (inFlightRequest) {
+      const sharedTracks = await inFlightRequest;
+      return Array.isArray(sharedTracks) ? sharedTracks.slice() : [];
+    }
+
+    const requestPromise = (async () => {
+      if (Platform.isWebOS() && WebOsLunaService.isAvailable()) {
+        try {
+          const lunaTracks = await requestTracksViaLuna(targetUrl);
+          tracksCache.set(targetUrl, {
+            tracks: Array.isArray(lunaTracks) ? lunaTracks : [],
+            expiresAt: Date.now() + TRACK_CACHE_TTL_MS
+          });
+          return Array.isArray(lunaTracks) ? lunaTracks : [];
+        } catch (_) {
+          // Fall back to direct localhost probing below.
+        }
       }
-    }
 
-    if (Platform.isTizen()) {
-      await waitForTizenMediaService();
-    }
-
-    for (const port of getCandidatePorts()) {
-      try {
-        const payload = await fetchJson(buildTracksUrl(port, targetUrl));
-        cachedLocalMediaServerPort = port;
-        return Array.isArray(payload) ? payload : [];
-      } catch (_) {
-        // Try the next local media server port.
+      if (Platform.isTizen()) {
+        await waitForTizenMediaService();
       }
-    }
 
-    return [];
+      for (const port of getCandidatePorts()) {
+        try {
+          const payload = await fetchJson(buildTracksUrl(port, targetUrl));
+          const tracks = Array.isArray(payload) ? payload : [];
+          cachedLocalMediaServerPort = port;
+          tracksCache.set(targetUrl, {
+            tracks,
+            expiresAt: Date.now() + TRACK_CACHE_TTL_MS
+          });
+          return tracks;
+        } catch (_) {
+          // Try the next local media server port.
+        }
+      }
+
+      tracksCache.set(targetUrl, {
+        tracks: [],
+        expiresAt: Date.now() + Math.min(TRACK_CACHE_TTL_MS, 5000)
+      });
+      return [];
+    })();
+
+    inFlightTrackRequests.set(targetUrl, requestPromise);
+    try {
+      const resolvedTracks = await requestPromise;
+      return Array.isArray(resolvedTracks) ? resolvedTracks.slice() : [];
+    } finally {
+      inFlightTrackRequests.delete(targetUrl);
+    }
   }
 
 };

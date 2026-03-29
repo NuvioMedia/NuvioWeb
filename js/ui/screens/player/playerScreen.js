@@ -666,6 +666,19 @@ function styleChipLabel(value = "") {
   return String(value || "").replace(/^#/, "").toUpperCase();
 }
 
+function createTrackDialogCache() {
+  return {
+    subtitleOptions: null,
+    subtitleLanguageRail: null,
+    subtitleOptionsByLanguage: new Map(),
+    audioEntries: null,
+    embeddedAudioByNativeIndex: null,
+    embeddedAudioByEmbeddedIndex: null,
+    embeddedSubtitleByNativeIndex: null,
+    embeddedSubtitleByEmbeddedIndex: null
+  };
+}
+
 function dbToGain(db = 0) {
   return Math.pow(10, Number(db || 0) / 20);
 }
@@ -921,6 +934,10 @@ export const PlayerScreen = {
     this.selectedAddonSubtitleId = null;
     this.startupSubtitlePreferenceApplied = false;
     this.startupSubtitlePreferenceApplying = false;
+    this.startupAudioPreferenceApplied = false;
+    this.startupAudioPreferenceApplying = false;
+    this.startupTrackPreferenceReady = false;
+    this.trackDialogCache = createTrackDialogCache();
     this.builtInSubtitleCount = 0;
     this.externalTrackNodes = [];
     this.externalSubtitleObjectUrls = [];
@@ -987,6 +1004,10 @@ export const PlayerScreen = {
     this.embeddedSubtitleLoadToken = 0;
     this.embeddedSubtitleLoading = false;
     this.embeddedAudioLoading = false;
+    this.initialEmbeddedTrackBootstrapPromise = null;
+    this.embeddedTrackRequestPromise = null;
+    this.embeddedTrackRequestUrl = "";
+    this.lastEmbeddedTrackProbeUrl = "";
     this.manifestLoadToken = 0;
     this.manifestLoading = false;
     this.manifestAudioTracks = [];
@@ -3063,6 +3084,7 @@ export const PlayerScreen = {
       this.clearPlaybackStallGuard();
       this.loadingVisible = false;
       this.paused = false;
+      this.startupTrackPreferenceReady = true;
       this.dismissPauseOverlay();
       this.updateMediaSessionPlaybackState();
       this.updateLoadingVisibility();
@@ -3106,6 +3128,7 @@ export const PlayerScreen = {
     const onLoadedMetadata = () => {
       this.attemptPendingPlaybackRestore({ force: true });
 
+      this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
       this.updateUiTick();
       this.loadingVisible = false;
@@ -3125,6 +3148,7 @@ export const PlayerScreen = {
 
     const onPlayable = () => {
       this.attemptPendingPlaybackRestore();
+      this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
       this.applySubtitlePresentationSettings();
       this.updateUiTick();
@@ -4051,6 +4075,9 @@ export const PlayerScreen = {
     this.selectedManifestSubtitleTrackId = null;
     this.startupSubtitlePreferenceApplied = false;
     this.startupSubtitlePreferenceApplying = false;
+    this.startupAudioPreferenceApplied = false;
+    this.startupAudioPreferenceApplying = false;
+    this.startupTrackPreferenceReady = false;
     this.builtInSubtitleCount = 0;
     this.embeddedSubtitleTracks = [];
     this.clearSubtitleCueStyleBindings();
@@ -4059,8 +4086,18 @@ export const PlayerScreen = {
     this.clearTrackDiscoveryTimer();
     const sourceCandidate = this.getStreamCandidateByUrl(streamUrl) || this.getCurrentStreamCandidate();
     this.activePlaybackUrl = streamUrl;
+    this.embeddedTrackRequestPromise = null;
+    this.embeddedTrackRequestUrl = "";
+    this.lastEmbeddedTrackProbeUrl = "";
+    this.lastTrackWarmupAt = Date.now();
     const embeddedSubtitleWarmupPromise = this.loadEmbeddedSubtitleTracks();
-    void embeddedSubtitleWarmupPromise;
+    this.initialEmbeddedTrackBootstrapPromise = embeddedSubtitleWarmupPromise;
+    embeddedSubtitleWarmupPromise.finally(() => {
+      if (this.initialEmbeddedTrackBootstrapPromise === embeddedSubtitleWarmupPromise) {
+        this.initialEmbeddedTrackBootstrapPromise = null;
+      }
+    });
+    await this.waitForInitialEmbeddedTrackBootstrap();
     this.updateModalBackdrop();
     this.renderSubtitleDialog();
     this.renderAudioDialog();
@@ -4073,7 +4110,7 @@ export const PlayerScreen = {
     this.loadSubtitles();
     this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
     this.startTrackDiscoveryWindow();
-    this.syncTrackState();
+    this.refreshTrackDialogs();
     this.updateUiTick();
     this.setControlsVisible(true, { focus: false });
     this.schedulePlaybackStallGuard();
@@ -4328,7 +4365,10 @@ export const PlayerScreen = {
 
   refreshTrackDialogs() {
     this.syncTrackState();
-    this.applyStartupSubtitlePreference();
+    if (this.startupTrackPreferenceReady) {
+      this.applyStartupAudioPreference();
+      this.applyStartupSubtitlePreference();
+    }
     this.refreshSubtitleCueStyles();
     this.renderControlButtons();
     if (this.subtitleDialogVisible) {
@@ -4337,6 +4377,10 @@ export const PlayerScreen = {
     if (this.audioDialogVisible) {
       this.renderAudioDialog();
     }
+  },
+
+  invalidateTrackDialogCaches() {
+    this.trackDialogCache = createTrackDialogCache();
   },
 
   hasAudioTracksAvailable() {
@@ -4472,29 +4516,62 @@ export const PlayerScreen = {
     this.startTrackDiscoveryWindow();
   },
 
+  async waitForInitialEmbeddedTrackBootstrap(timeoutMs = 900) {
+    const pending = this.initialEmbeddedTrackBootstrapPromise;
+    if (!pending || typeof pending.then !== "function") {
+      return;
+    }
+    try {
+      await Promise.race([
+        pending,
+        new Promise((resolve) => setTimeout(resolve, Math.max(150, Number(timeoutMs || 0))))
+      ]);
+    } catch (_) {
+      // Ignore bootstrap probe failures and continue playback startup.
+    }
+  },
+
   async loadEmbeddedSubtitleTracks() {
+    const probeUrl = this.getTrackProbeUrl();
+    if (
+      probeUrl
+      && this.embeddedTrackRequestPromise
+      && this.embeddedTrackRequestUrl === probeUrl
+      && this.embeddedSubtitleLoading
+    ) {
+      return this.embeddedTrackRequestPromise;
+    }
+
     const requestToken = (this.embeddedSubtitleLoadToken || 0) + 1;
+    const preserveExistingTracks = Boolean(
+      probeUrl
+      && probeUrl === this.lastEmbeddedTrackProbeUrl
+      && (this.embeddedSubtitleTracks.length > 0 || this.embeddedAudioTracks.length > 0)
+    );
     this.embeddedSubtitleLoadToken = requestToken;
     this.embeddedSubtitleLoading = true;
     this.embeddedAudioLoading = true;
-    this.embeddedSubtitleTracks = [];
-    this.embeddedAudioTracks = [];
-    this.selectedEmbeddedSubtitleTrackIndex = -1;
-    this.selectedEmbeddedAudioTrackIndex = -1;
+    if (!preserveExistingTracks) {
+      this.embeddedSubtitleTracks = [];
+      this.embeddedAudioTracks = [];
+      this.selectedEmbeddedSubtitleTrackIndex = -1;
+      this.selectedEmbeddedAudioTrackIndex = -1;
+    }
     this.refreshTrackDialogs();
 
-    try {
+    const requestPromise = (async () => {
       const canLoadSubtitleTracks = this.canDiscoverEmbeddedSubtitleTracks();
       const canLoadAudioTracks = this.canDiscoverEmbeddedAudioTracks();
       if (!canLoadSubtitleTracks && !canLoadAudioTracks) {
         return;
       }
 
-      const tracks = await localMediaTracksRepository.getTracks(this.getTrackProbeUrl());
+      const tracks = await localMediaTracksRepository.getTracks(probeUrl);
       if (requestToken !== this.embeddedSubtitleLoadToken) {
         return;
       }
 
+      this.lastEmbeddedTrackProbeUrl = probeUrl;
       this.embeddedSubtitleTracks = canLoadSubtitleTracks ? this.normalizeEmbeddedSubtitleTracks(tracks) : [];
       this.embeddedAudioTracks = canLoadAudioTracks ? this.normalizeEmbeddedAudioTracks(tracks) : [];
       const selectedEmbeddedSubtitleTrack = typeof PlayerController.getSelectedWebOsEmbeddedSubtitleTrackIndex === "function"
@@ -4510,23 +4587,33 @@ export const PlayerScreen = {
         ? selectedEmbeddedAudioTrack
         : -1;
       this.refreshTrackDialogs();
-    } catch (error) {
+    })().catch((error) => {
       console.warn("Embedded subtitle discovery failed", error);
       if (requestToken !== this.embeddedSubtitleLoadToken) {
         return;
       }
-      this.embeddedSubtitleTracks = [];
-      this.embeddedAudioTracks = [];
-      this.selectedEmbeddedSubtitleTrackIndex = -1;
-      this.selectedEmbeddedAudioTrackIndex = -1;
+      if (!preserveExistingTracks) {
+        this.embeddedSubtitleTracks = [];
+        this.embeddedAudioTracks = [];
+        this.selectedEmbeddedSubtitleTrackIndex = -1;
+        this.selectedEmbeddedAudioTrackIndex = -1;
+      }
       this.refreshTrackDialogs();
-    } finally {
+    }).finally(() => {
       if (requestToken === this.embeddedSubtitleLoadToken) {
         this.embeddedSubtitleLoading = false;
         this.embeddedAudioLoading = false;
         this.refreshTrackDialogs();
       }
-    }
+      if (this.embeddedTrackRequestPromise === requestPromise) {
+        this.embeddedTrackRequestPromise = null;
+        this.embeddedTrackRequestUrl = "";
+      }
+    });
+
+    this.embeddedTrackRequestPromise = requestPromise;
+    this.embeddedTrackRequestUrl = probeUrl;
+    return requestPromise;
   },
 
   disableEmbeddedSubtitleSelection() {
@@ -4571,12 +4658,69 @@ export const PlayerScreen = {
     return this.embeddedAudioTracks[targetIndex] || null;
   },
 
+  ensureEmbeddedTrackLookupCache() {
+    const cache = this.trackDialogCache || (this.trackDialogCache = createTrackDialogCache());
+    if (
+      cache.embeddedAudioByNativeIndex
+      && cache.embeddedAudioByEmbeddedIndex
+      && cache.embeddedSubtitleByNativeIndex
+      && cache.embeddedSubtitleByEmbeddedIndex
+    ) {
+      return cache;
+    }
+
+    const embeddedAudioByNativeIndex = new Map();
+    const embeddedAudioByEmbeddedIndex = new Map();
+    const embeddedSubtitleByNativeIndex = new Map();
+    const embeddedSubtitleByEmbeddedIndex = new Map();
+
+    (this.embeddedAudioTracks || []).forEach((track, index) => {
+      const nativeTrackIndex = Number(track?.nativeTrackIndex);
+      const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
+      if (Number.isFinite(nativeTrackIndex) && nativeTrackIndex >= 0) {
+        embeddedAudioByNativeIndex.set(nativeTrackIndex, track);
+      }
+      if (Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0) {
+        embeddedAudioByEmbeddedIndex.set(embeddedTrackIndex, track);
+      } else {
+        embeddedAudioByEmbeddedIndex.set(index, track);
+      }
+    });
+
+    (this.embeddedSubtitleTracks || []).forEach((track, index) => {
+      const nativeTrackIndex = Number(track?.nativeTrackIndex);
+      const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
+      if (Number.isFinite(nativeTrackIndex) && nativeTrackIndex >= 0) {
+        embeddedSubtitleByNativeIndex.set(nativeTrackIndex, track);
+      }
+      if (Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0) {
+        embeddedSubtitleByEmbeddedIndex.set(embeddedTrackIndex, track);
+      } else {
+        embeddedSubtitleByEmbeddedIndex.set(index, track);
+      }
+    });
+
+    cache.embeddedAudioByNativeIndex = embeddedAudioByNativeIndex;
+    cache.embeddedAudioByEmbeddedIndex = embeddedAudioByEmbeddedIndex;
+    cache.embeddedSubtitleByNativeIndex = embeddedSubtitleByNativeIndex;
+    cache.embeddedSubtitleByEmbeddedIndex = embeddedSubtitleByEmbeddedIndex;
+    return cache;
+  },
+
   getEmbeddedAudioTrackByNativeIndex(index) {
     const targetIndex = Number(index);
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return null;
     }
-    return this.embeddedAudioTracks.find((track) => Number(track?.nativeTrackIndex) === targetIndex) || null;
+    return this.ensureEmbeddedTrackLookupCache().embeddedAudioByNativeIndex.get(targetIndex) || null;
+  },
+
+  getEmbeddedAudioTrackByEmbeddedIndex(index) {
+    const targetIndex = Number(index);
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+      return null;
+    }
+    return this.ensureEmbeddedTrackLookupCache().embeddedAudioByEmbeddedIndex.get(targetIndex) || null;
   },
 
   getEmbeddedSubtitleTrackByNativeIndex(index) {
@@ -4584,7 +4728,15 @@ export const PlayerScreen = {
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return null;
     }
-    return this.embeddedSubtitleTracks.find((track) => Number(track?.nativeTrackIndex) === targetIndex) || null;
+    return this.ensureEmbeddedTrackLookupCache().embeddedSubtitleByNativeIndex.get(targetIndex) || null;
+  },
+
+  getEmbeddedSubtitleTrackByEmbeddedIndex(index) {
+    const targetIndex = Number(index);
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+      return null;
+    }
+    return this.ensureEmbeddedTrackLookupCache().embeddedSubtitleByEmbeddedIndex.get(targetIndex) || null;
   },
 
   buildSubtitleTrackSignature(track = {}, fallbackIndex = -1) {
@@ -4877,6 +5029,7 @@ export const PlayerScreen = {
       this.selectedAudioTrackIndex = selectedAvPlayAudioTrack >= 0
         ? selectedAvPlayAudioTrack
         : (Number.isFinite(fallbackTrackIndex) ? fallbackTrackIndex : 0);
+      this.invalidateTrackDialogCaches();
       return;
     }
 
@@ -4885,6 +5038,7 @@ export const PlayerScreen = {
         ? PlayerController.getSelectedDashAudioTrackIndex()
         : -1;
       this.selectedAudioTrackIndex = selectedDashAudioTrack >= 0 ? selectedDashAudioTrack : 0;
+      this.invalidateTrackDialogCaches();
       return;
     }
 
@@ -4896,10 +5050,12 @@ export const PlayerScreen = {
       this.selectedAudioTrackIndex = selectedHlsAudioTrack >= 0
         ? selectedHlsAudioTrack
         : (defaultHlsAudioTrack >= 0 ? defaultHlsAudioTrack : 0);
+      this.invalidateTrackDialogCaches();
       return;
     }
 
     this.selectedAudioTrackIndex = audioTracks.findIndex((track) => Boolean(track?.enabled || track?.selected));
+    this.invalidateTrackDialogCaches();
   },
 
   getSubtitleEntries(tab = this.subtitleDialogTab) {
@@ -5107,6 +5263,10 @@ export const PlayerScreen = {
   },
 
   collectSubtitleOptionItems() {
+    const cachedOptions = this.trackDialogCache?.subtitleOptions;
+    if (cachedOptions) {
+      return cachedOptions;
+    }
     const builtInEntries = this.getSubtitleEntries("builtIn").filter((entry) => !entry?.disabled || entry?.id === "subtitle-off");
     const addonEntries = this.getSubtitleEntries("addons").filter((entry) => !entry?.disabled);
     const options = [];
@@ -5167,6 +5327,7 @@ export const PlayerScreen = {
       });
     });
 
+    this.trackDialogCache.subtitleOptions = options;
     return options;
   },
 
@@ -5176,6 +5337,10 @@ export const PlayerScreen = {
   },
 
   getSubtitleLanguageRailItems() {
+    const cachedLanguageRail = this.trackDialogCache?.subtitleLanguageRail;
+    if (cachedLanguageRail) {
+      return cachedLanguageRail;
+    }
     const options = this.collectSubtitleOptionItems();
     const selectedLanguageKey = this.getSelectedSubtitleLanguageKey();
     const groups = new Map();
@@ -5206,6 +5371,7 @@ export const PlayerScreen = {
       const [offEntry] = values.splice(offIndex, 1);
       values.unshift(offEntry);
     }
+    this.trackDialogCache.subtitleLanguageRail = values;
     return values;
   },
 
@@ -5285,7 +5451,39 @@ export const PlayerScreen = {
   },
 
   getSubtitleOptionsForLanguage(languageKey = this.getSelectedSubtitleLanguageKey()) {
-    return this.collectSubtitleOptionItems().filter((entry) => entry.languageKey === languageKey && entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
+    const normalizedLanguageKey = languageKey || SUBTITLE_LANGUAGE_OFF_KEY;
+    const optionsByLanguage = this.trackDialogCache?.subtitleOptionsByLanguage;
+    if (optionsByLanguage?.has(normalizedLanguageKey)) {
+      return optionsByLanguage.get(normalizedLanguageKey);
+    }
+    const filteredOptions = this.collectSubtitleOptionItems().filter((entry) => entry.languageKey === normalizedLanguageKey && entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
+    optionsByLanguage?.set(normalizedLanguageKey, filteredOptions);
+    return filteredOptions;
+  },
+
+  isTrackDiscoveryWindowPending() {
+    return Number(this.trackDiscoveryDeadline || 0) > Date.now();
+  },
+
+  isAudioPreferenceDiscoveryPending() {
+    return Boolean(
+      this.embeddedAudioLoading
+      || this.manifestLoading
+      || this.trackDiscoveryInProgress
+      || (!this.getAudioEntries().length && this.isTrackDiscoveryWindowPending())
+    );
+  },
+
+  isSubtitlePreferenceDiscoveryPending() {
+    const hasSubtitleOptions = this.collectSubtitleOptionItems()
+      .some((entry) => entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
+    return Boolean(
+      this.subtitleLoading
+      || this.embeddedSubtitleLoading
+      || this.manifestLoading
+      || this.trackDiscoveryInProgress
+      || (!hasSubtitleOptions && this.isTrackDiscoveryWindowPending())
+    );
   },
 
   getStartupPreferredSubtitleLanguageKey() {
@@ -5295,7 +5493,7 @@ export const PlayerScreen = {
     }
 
     const configured = String(settings.subtitleStyle?.preferredLanguage || settings.subtitleLanguage || "off").trim().toLowerCase();
-    if (!configured || configured === "off" || configured === "none") {
+    if (!configured || configured === "off" || configured === "none" || configured === "forced") {
       return SUBTITLE_LANGUAGE_OFF_KEY;
     }
 
@@ -5324,7 +5522,7 @@ export const PlayerScreen = {
     const targets = values
       .map((value) => {
         const configured = String(value || "off").trim().toLowerCase();
-        if (!configured || configured === "off" || configured === "none") {
+        if (!configured || configured === "off" || configured === "none" || configured === "forced") {
           return "";
         }
         if (configured === "system") {
@@ -5340,7 +5538,143 @@ export const PlayerScreen = {
     return Array.from(new Set(targets));
   },
 
-  findStartupPreferredSubtitleOption(targets = this.getStartupPreferredSubtitleLanguageTargets()) {
+  getStartupForcedSubtitleLanguageTargets() {
+    const targets = [
+      ...this.getStartupPreferredAudioLanguageTargets()
+    ];
+    const selectedAudioOption = this.collectAudioOptionItems().find((entry) => entry.selected && entry.languageKey);
+    if (selectedAudioOption?.languageKey) {
+      targets.push(selectedAudioOption.languageKey);
+    }
+    return Array.from(new Set(targets.filter(Boolean)));
+  },
+
+  getStartupSubtitlePreferenceMode() {
+    const settings = PlayerSettingsStore.get();
+    const explicitTargets = this.getStartupPreferredSubtitleLanguageTargets();
+    if (explicitTargets.length) {
+      return settings.subtitlesEnabled ? "language" : "off";
+    }
+    return "audio-forced";
+  },
+
+  getStartupPreferredAudioLanguageTargets() {
+    const settings = PlayerSettingsStore.get();
+    const configured = String(settings.preferredAudioLanguage || "system").trim().toLowerCase();
+    if (!configured || configured === "off" || configured === "none") {
+      return [];
+    }
+
+    if (configured === "system") {
+      const locale = typeof I18n.getLocale === "function"
+        ? I18n.getLocale()
+        : (globalThis.navigator?.language || "");
+      const systemLanguage = normalizeTrackLanguageCode(locale);
+      return systemLanguage ? [systemLanguage] : [];
+    }
+
+    const normalized = normalizeTrackLanguageCode(configured);
+    return normalized ? [normalized] : [];
+  },
+
+  collectAudioOptionItems() {
+    return this.getAudioEntries().map((entry, index) => {
+      const track = entry?.track || {};
+      const languageKey = normalizeTrackLanguageCode(
+        getTrackLanguageValue(track)
+        || track?.label
+        || track?.name
+        || ""
+      );
+      return {
+        id: entry?.id || `audio-option-${index}`,
+        label: cleanDisplayText(entry?.label || ""),
+        secondary: cleanDisplayText(entry?.secondary || ""),
+        selected: Boolean(entry?.selected),
+        languageKey,
+        languageLabel: getTrackLanguageLabel(track),
+        entry,
+        entryIndex: index
+      };
+    });
+  },
+
+  matchesStartupAudioTarget(option, target) {
+    if (!option || !target) {
+      return false;
+    }
+    if (option.languageKey === target) {
+      return true;
+    }
+    const targetBase = String(target).split("-")[0];
+    const optionBase = String(option.languageKey || "").split("-")[0];
+    if (targetBase && optionBase && targetBase === optionBase) {
+      return true;
+    }
+    const targetLabel = normalizeComparableText(getTrackLanguageLabel({ language: target }) || "");
+    if (!targetLabel) {
+      return false;
+    }
+    return [option.languageLabel, option.label, option.secondary]
+      .map((value) => normalizeComparableText(value))
+      .some((value) => value === targetLabel);
+  },
+
+  findStartupPreferredAudioOption(targets = this.getStartupPreferredAudioLanguageTargets()) {
+    const normalizedTargets = Array.isArray(targets) ? targets.filter(Boolean) : [];
+    if (!normalizedTargets.length) {
+      return null;
+    }
+    const options = this.collectAudioOptionItems();
+    for (const target of normalizedTargets) {
+      const matchingOption = options.find((entry) => this.matchesStartupAudioTarget(entry, target));
+      if (matchingOption) {
+        return matchingOption;
+      }
+    }
+    return null;
+  },
+
+  applyStartupAudioPreference() {
+    if (this.startupAudioPreferenceApplied || this.startupAudioPreferenceApplying) {
+      return false;
+    }
+
+    const preferredTargets = this.getStartupPreferredAudioLanguageTargets();
+    if (!preferredTargets.length) {
+      this.startupAudioPreferenceApplied = true;
+      return true;
+    }
+
+    const isStillLoading = this.isAudioPreferenceDiscoveryPending();
+    const selectedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
+    if (selectedOption && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))) {
+      this.startupAudioPreferenceApplied = true;
+      return true;
+    }
+
+    const preferredOption = this.findStartupPreferredAudioOption(preferredTargets);
+    if (!preferredOption?.entry || !Number.isFinite(preferredOption.entryIndex)) {
+      if (!isStillLoading) {
+        this.startupAudioPreferenceApplied = true;
+      }
+      return false;
+    }
+
+    this.startupAudioPreferenceApplying = true;
+    try {
+      this.applyAudioTrack(preferredOption.entryIndex);
+    } finally {
+      this.startupAudioPreferenceApplying = false;
+    }
+
+    const appliedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
+    const applied = Boolean(appliedOption && preferredTargets.some((target) => this.matchesStartupAudioTarget(appliedOption, target)));
+    this.startupAudioPreferenceApplied = applied;
+    return applied;
+  },
+
+  findStartupPreferredSubtitleOption(targets = this.getStartupPreferredSubtitleLanguageTargets(), mode = "language") {
     const normalizedTargets = Array.isArray(targets) ? targets.filter(Boolean) : [];
     if (!normalizedTargets.length) {
       return null;
@@ -5348,25 +5682,36 @@ export const PlayerScreen = {
 
     const options = this.collectSubtitleOptionItems().filter((entry) => entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
     const matchTarget = (entry, target) => this.matchesStartupSubtitleTarget(entry, target);
-    const findMatch = (target, { sourceType = null, forcedOnly = false } = {}) => options.find((entry) => {
+    const findMatch = (target, { sourceType = null, forced = null } = {}) => options.find((entry) => {
       if (sourceType && entry.sourceType !== sourceType) {
         return false;
       }
-      if (forcedOnly && !entry.isForced) {
+      if (forced === true && !entry.isForced) {
+        return false;
+      }
+      if (forced === false && entry.isForced) {
         return false;
       }
       return matchTarget(entry, target);
     });
 
     for (const target of normalizedTargets) {
-      const forcedInternal = findMatch(target, { sourceType: "internal", forcedOnly: true });
-      if (forcedInternal) return forcedInternal;
-      const forcedAddon = findMatch(target, { sourceType: "addon", forcedOnly: true });
-      if (forcedAddon) return forcedAddon;
-      const internalMatch = findMatch(target, { sourceType: "internal" });
+      if (mode === "audio-forced") {
+        const forcedInternal = findMatch(target, { sourceType: "internal", forced: true });
+        if (forcedInternal) return forcedInternal;
+        const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
+        if (forcedAddon) return forcedAddon;
+        continue;
+      }
+
+      const internalMatch = findMatch(target, { sourceType: "internal", forced: false });
       if (internalMatch) return internalMatch;
-      const addonMatch = findMatch(target, { sourceType: "addon" });
+      const addonMatch = findMatch(target, { sourceType: "addon", forced: false });
       if (addonMatch) return addonMatch;
+      const forcedInternal = findMatch(target, { sourceType: "internal", forced: true });
+      if (forcedInternal) return forcedInternal;
+      const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
+      if (forcedAddon) return forcedAddon;
     }
 
     return null;
@@ -5398,11 +5743,13 @@ export const PlayerScreen = {
       return false;
     }
 
-    const preferredTargets = this.getStartupPreferredSubtitleLanguageTargets();
-    const isStillLoading = Boolean(this.subtitleLoading || this.embeddedSubtitleLoading || this.trackDiscoveryInProgress || this.manifestLoading);
+    const preferenceMode = this.getStartupSubtitlePreferenceMode();
+    const preferredTargets = preferenceMode === "audio-forced"
+      ? this.getStartupForcedSubtitleLanguageTargets()
+      : this.getStartupPreferredSubtitleLanguageTargets();
+    const isStillLoading = this.isSubtitlePreferenceDiscoveryPending();
 
-    if (!preferredTargets.length) {
-      this.startupSubtitlePreferenceApplied = true;
+    if (preferenceMode === "off") {
       if (this.selectedSubtitleTrackIndex >= 0 || this.selectedEmbeddedSubtitleTrackIndex >= 0 || this.selectedAddonSubtitleId || this.selectedManifestSubtitleTrackId) {
         const offEntry = this.getSubtitleEntries("builtIn").find((entry) => entry.id === "subtitle-off") || { trackIndex: -1 };
         this.startupSubtitlePreferenceApplying = true;
@@ -5411,20 +5758,36 @@ export const PlayerScreen = {
         } finally {
           this.startupSubtitlePreferenceApplying = false;
         }
+        this.startupSubtitlePreferenceApplied = true;
+        return true;
       }
-      return true;
+      if (!isStillLoading) {
+        this.startupSubtitlePreferenceApplied = true;
+        return true;
+      }
+      return false;
     }
 
     const selectedOption = this.collectSubtitleOptionItems().find((entry) => entry.selected && entry.languageKey !== SUBTITLE_LANGUAGE_OFF_KEY);
-    if (selectedOption && preferredTargets.some((target) => this.matchesStartupSubtitleTarget(selectedOption, target))) {
+    const preferredOption = this.findStartupPreferredSubtitleOption(preferredTargets, preferenceMode);
+    if (selectedOption && preferredOption?.id === selectedOption.id) {
       this.startupSubtitlePreferenceApplied = true;
       return true;
     }
 
-    const preferredOption = this.findStartupPreferredSubtitleOption(preferredTargets);
     if (!preferredOption?.entry) {
       if (!isStillLoading) {
+        if (selectedOption) {
+          const offEntry = this.getSubtitleEntries("builtIn").find((entry) => entry.id === "subtitle-off") || { trackIndex: -1 };
+          this.startupSubtitlePreferenceApplying = true;
+          try {
+            this.applySubtitleEntry(offEntry);
+          } finally {
+            this.startupSubtitlePreferenceApplying = false;
+          }
+        }
         this.startupSubtitlePreferenceApplied = true;
+        return true;
       }
       return false;
     }
@@ -5550,7 +5913,7 @@ export const PlayerScreen = {
         this.clearMountedExternalSubtitleTracks();
       }
       const targetTrackIndex = Number(entry.embeddedSubtitleTrackIndex);
-      const embeddedTrack = this.embeddedSubtitleTracks.find((track) => Number(track?.embeddedTrackIndex) === targetTrackIndex) || null;
+      const embeddedTrack = this.getEmbeddedSubtitleTrackByEmbeddedIndex(targetTrackIndex);
       let applied = false;
       if (Environment.isTizen() && typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay()) {
         const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
@@ -5569,6 +5932,7 @@ export const PlayerScreen = {
       this.selectedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
       this.selectedManifestSubtitleTrackId = null;
+      this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
       this.renderSubtitleDialog();
@@ -5591,6 +5955,7 @@ export const PlayerScreen = {
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
       this.selectedManifestSubtitleTrackId = null;
+      this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
       this.renderSubtitleDialog();
@@ -5609,6 +5974,7 @@ export const PlayerScreen = {
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
       this.selectedManifestSubtitleTrackId = null;
+      this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
       this.renderSubtitleDialog();
@@ -5620,6 +5986,7 @@ export const PlayerScreen = {
       this.selectedSubtitleTrackIndex = -1;
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
+      this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
       this.renderSubtitleDialog();
@@ -5652,6 +6019,7 @@ export const PlayerScreen = {
       this.selectedAddonSubtitleId = null;
       this.selectedSubtitleTrackIndex = targetIndex;
       this.selectedEmbeddedSubtitleTrackIndex = -1;
+      this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
       this.renderSubtitleDialog();
@@ -5679,6 +6047,7 @@ export const PlayerScreen = {
     this.selectedAddonSubtitleId = null;
     this.selectedSubtitleTrackIndex = targetIndex;
     this.selectedEmbeddedSubtitleTrackIndex = -1;
+    this.invalidateTrackDialogCaches();
     this.refreshSubtitleCueStyles();
     this.renderControlButtons();
     this.renderSubtitleDialog();
@@ -5967,14 +6336,19 @@ export const PlayerScreen = {
   },
 
   getAudioEntries() {
+    const cachedEntries = this.trackDialogCache?.audioEntries;
+    if (cachedEntries) {
+      return cachedEntries;
+    }
     const avplayAudioTracks = typeof PlayerController.getAvPlayAudioTracks === "function"
       ? PlayerController.getAvPlayAudioTracks()
       : [];
+    let entries = [];
 	    if (avplayAudioTracks.length) {
       const selectedAvPlayAudioTrack = typeof PlayerController.getSelectedAvPlayAudioTrackIndex === "function"
         ? PlayerController.getSelectedAvPlayAudioTrackIndex()
         : -1;
-      return avplayAudioTracks.map((track, index) => {
+      entries = avplayAudioTracks.map((track, index) => {
         const mergedTrack = this.mergeAvPlayAudioTrackMetadata(track, index);
         const avplayTrackIndex = Number(track?.avplayTrackIndex);
         const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
@@ -5985,96 +6359,97 @@ export const PlayerScreen = {
           secondary: display.secondary,
           selected: normalizedTrackIndex === selectedAvPlayAudioTrack
             || (selectedAvPlayAudioTrack < 0 && normalizedTrackIndex === this.selectedAudioTrackIndex),
-          avplayAudioTrackIndex: normalizedTrackIndex
+          avplayAudioTrackIndex: normalizedTrackIndex,
+          track: mergedTrack
         };
       });
-    }
-
-    const dashAudioTracks = typeof PlayerController.getDashAudioTracks === "function"
-      ? PlayerController.getDashAudioTracks()
-      : [];
-    if (dashAudioTracks.length) {
+    } else {
+      const dashAudioTracks = typeof PlayerController.getDashAudioTracks === "function"
+        ? PlayerController.getDashAudioTracks()
+        : [];
+      if (dashAudioTracks.length) {
       const selectedDashAudioTrack = typeof PlayerController.getSelectedDashAudioTrackIndex === "function"
         ? PlayerController.getSelectedDashAudioTrackIndex()
         : -1;
-      return dashAudioTracks.map((track, index) => {
+      entries = dashAudioTracks.map((track, index) => {
         const display = formatAudioTrackDisplay(track, index);
         return {
           id: `audio-dash-${index}-${track?.id ?? ""}`,
           label: display.label,
           secondary: display.secondary,
           selected: index === selectedDashAudioTrack || (selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex),
-          dashAudioTrackIndex: index
+          dashAudioTrackIndex: index,
+          track
         };
       });
-    }
-
-    const hlsAudioTracks = typeof PlayerController.getHlsAudioTracks === "function"
-      ? PlayerController.getHlsAudioTracks()
-      : [];
-    if (hlsAudioTracks.length) {
+      } else {
+        const hlsAudioTracks = typeof PlayerController.getHlsAudioTracks === "function"
+          ? PlayerController.getHlsAudioTracks()
+          : [];
+        if (hlsAudioTracks.length) {
       const selectedHlsAudioTrack = typeof PlayerController.getSelectedHlsAudioTrackIndex === "function"
         ? PlayerController.getSelectedHlsAudioTrackIndex()
         : -1;
-      return hlsAudioTracks.map((track, index) => {
+      entries = hlsAudioTracks.map((track, index) => {
         const display = formatAudioTrackDisplay(track, index);
         return {
           id: `audio-hls-${index}-${track?.id ?? track?.name ?? track?.lang ?? ""}`,
           label: display.label,
           secondary: display.secondary,
           selected: index === selectedHlsAudioTrack || (selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex),
-          hlsAudioTrackIndex: index
+          hlsAudioTrackIndex: index,
+          track
         };
       });
+        } else {
+          const audioTracks = this.getAudioTracks();
+          if (audioTracks.length) {
+            entries = audioTracks.map((track, index) => {
+              const mergedTrack = this.mergeEmbeddedAudioTrackMetadata(track, index);
+              const display = formatAudioTrackDisplay(mergedTrack, index);
+              return {
+                id: `audio-track-${index}`,
+                label: display.label,
+                secondary: display.secondary,
+                selected: index === this.selectedAudioTrackIndex,
+                audioTrackIndex: index,
+                track: mergedTrack
+              };
+            });
+          } else if (this.embeddedAudioTracks.length) {
+            entries = this.embeddedAudioTracks.map((track, index) => {
+              const display = formatAudioTrackDisplay(track, index);
+              return {
+                id: `audio-embedded-${track?.embeddedTrackIndex ?? index}`,
+                label: display.label,
+                secondary: display.secondary,
+                selected: Number(track?.embeddedTrackIndex) === this.selectedEmbeddedAudioTrackIndex,
+                embeddedAudioTrackIndex: Number(track?.embeddedTrackIndex),
+                track
+              };
+            });
+          } else if (this.manifestAudioTracks.length) {
+            entries = this.manifestAudioTracks.map((track, index) => {
+              const display = formatAudioTrackDisplay(track, index);
+              return {
+                id: `audio-manifest-${track.id}`,
+                label: display.label,
+                secondary: display.secondary,
+                selected: this.selectedManifestAudioTrackId === track.id,
+                manifestAudioTrackId: track.id,
+                track
+              };
+            });
+          } else {
+            const implicitEntry = this.getImplicitAudioEntry();
+            entries = implicitEntry ? [implicitEntry] : [];
+          }
+        }
+      }
     }
 
-    const audioTracks = this.getAudioTracks();
-    if (audioTracks.length) {
-      return audioTracks.map((track, index) => {
-        const mergedTrack = this.mergeEmbeddedAudioTrackMetadata(track, index);
-        const display = formatAudioTrackDisplay(mergedTrack, index);
-        return {
-          id: `audio-track-${index}`,
-          label: display.label,
-          secondary: display.secondary,
-          selected: index === this.selectedAudioTrackIndex,
-          audioTrackIndex: index
-        };
-      });
-    }
-
-    if (this.embeddedAudioTracks.length) {
-      return this.embeddedAudioTracks.map((track, index) => {
-        const display = formatAudioTrackDisplay(track, index);
-        return {
-          id: `audio-embedded-${track?.embeddedTrackIndex ?? index}`,
-          label: display.label,
-          secondary: display.secondary,
-          selected: Number(track?.embeddedTrackIndex) === this.selectedEmbeddedAudioTrackIndex,
-          embeddedAudioTrackIndex: Number(track?.embeddedTrackIndex)
-        };
-      });
-    }
-
-    if (this.manifestAudioTracks.length) {
-      return this.manifestAudioTracks.map((track, index) => {
-        const display = formatAudioTrackDisplay(track, index);
-        return {
-          id: `audio-manifest-${track.id}`,
-          label: display.label,
-          secondary: display.secondary,
-          selected: this.selectedManifestAudioTrackId === track.id,
-          manifestAudioTrackId: track.id
-        };
-      });
-    }
-
-    const implicitEntry = this.getImplicitAudioEntry();
-    if (implicitEntry) {
-      return [implicitEntry];
-    }
-
-    return [];
+    this.trackDialogCache.audioEntries = entries;
+    return entries;
   },
 
   getImplicitAudioEntry() {
@@ -6101,7 +6476,8 @@ export const PlayerScreen = {
       secondary: display.secondary,
       selected: true,
       implicitAudioTrack: true,
-      audioTrackIndex: 0
+      audioTrackIndex: 0,
+      track
     };
   },
 
@@ -6162,6 +6538,7 @@ export const PlayerScreen = {
         : false;
       if (applied) {
         this.selectedAudioTrackIndex = selectedEntry.avplayAudioTrackIndex;
+        this.invalidateTrackDialogCaches();
         this.refreshTrackDialogs();
       }
       return;
@@ -6173,6 +6550,7 @@ export const PlayerScreen = {
         : false;
       if (applied) {
         this.selectedAudioTrackIndex = selectedEntry.dashAudioTrackIndex;
+        this.invalidateTrackDialogCaches();
         this.refreshTrackDialogs();
       }
       return;
@@ -6184,6 +6562,7 @@ export const PlayerScreen = {
         : false;
       if (applied) {
         this.selectedAudioTrackIndex = selectedEntry.hlsAudioTrackIndex;
+        this.invalidateTrackDialogCaches();
         this.refreshTrackDialogs();
       }
       return;
@@ -6191,6 +6570,7 @@ export const PlayerScreen = {
 
     if (selectedEntry.manifestAudioTrackId) {
       this.applyManifestTrackSelection({ audioTrackId: selectedEntry.manifestAudioTrackId });
+      this.invalidateTrackDialogCaches();
       this.renderControlButtons();
       this.renderAudioDialog();
       return;
@@ -6199,15 +6579,14 @@ export const PlayerScreen = {
     if (selectedEntry.implicitAudioTrack) {
       this.selectedAudioTrackIndex = 0;
       this.selectedEmbeddedAudioTrackIndex = -1;
+      this.invalidateTrackDialogCaches();
       this.renderControlButtons();
       this.renderAudioDialog();
       return;
     }
 
 	    if (Number.isFinite(selectedEntry.embeddedAudioTrackIndex)) {
-	      const embeddedTrack = this.embeddedAudioTracks.find(
-	        (track) => Number(track?.embeddedTrackIndex) === selectedEntry.embeddedAudioTrackIndex
-	      ) || null;
+	      const embeddedTrack = this.getEmbeddedAudioTrackByEmbeddedIndex(selectedEntry.embeddedAudioTrackIndex);
 	      let applied = false;
 	      if (Environment.isTizen() && typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay()) {
 	        const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
@@ -6219,12 +6598,13 @@ export const PlayerScreen = {
 	          ? PlayerController.setWebOsEmbeddedAudioTrack(selectedEntry.embeddedAudioTrackIndex)
 	          : false;
 	      }
-	      if (applied) {
-	        this.selectedEmbeddedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
-	        this.selectedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
-        this.renderControlButtons();
-        this.renderAudioDialog();
-      }
+		      if (applied) {
+		        this.selectedEmbeddedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
+		        this.selectedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
+	        this.invalidateTrackDialogCaches();
+	        this.renderControlButtons();
+	        this.renderAudioDialog();
+	      }
       return;
     }
 
@@ -6240,6 +6620,7 @@ export const PlayerScreen = {
     if (appliedByController) {
       this.selectedAudioTrackIndex = nativeTrackIndex;
       this.selectedEmbeddedAudioTrackIndex = -1;
+      this.invalidateTrackDialogCaches();
       this.renderControlButtons();
       this.renderAudioDialog();
       return;
@@ -6264,6 +6645,7 @@ export const PlayerScreen = {
     });
     this.selectedAudioTrackIndex = nativeTrackIndex;
     this.selectedEmbeddedAudioTrackIndex = -1;
+    this.invalidateTrackDialogCaches();
     this.renderControlButtons();
     this.renderAudioDialog();
   },

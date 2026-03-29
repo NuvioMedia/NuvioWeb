@@ -722,6 +722,7 @@
     <string name="subtitle_tab_style">Stil</string>
     <string name="subtitle_tab_delay">Gecikme</string>
     <string name="subtitle_none">Hiçbiri</string>
+    <string name="subtitle_none_forced_only">Hiçbiri (sadece zorunlu)</string>
     <string name="subtitle_all">Tümü</string>
     <string name="subtitle_section_core">Temel</string>
     <string name="subtitle_section_advanced">Gelişmiş</string>

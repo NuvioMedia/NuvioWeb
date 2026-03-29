@@ -695,6 +695,7 @@
     <string name="subtitle_tab_style">Stile</string>
     <string name="subtitle_tab_delay">Ritardo</string>
     <string name="subtitle_none">Nessuno</string>
+    <string name="subtitle_none_forced_only">Nessuno (solo forzati)</string>
     <string name="subtitle_all">Tutti</string>
     <string name="subtitle_section_core">Nucleo</string>
     <string name="subtitle_section_advanced">Avanzato</string>
@@ -743,6 +744,8 @@
     <!-- SearchScreen -->
    <string name="search_keyboard_hint">Premi Invio sulla tastiera per cercare</string>
     <string name="search_placeholder">Cerca film &amp; serie</string>
+    <string name="search_no_results_title">Nessun risultato</string>
+    <string name="search_no_results_subtitle">Prova a cercare con parole chiave diverse</string>
     <string name="search_start_title">Inizia Ricerca</string>
     <string name="search_start_subtitle">Inserisci almeno 2 caratteri</string>
     <string name="search_start_subtitle_no_discover">Scopri disabilitato. Inserisci almeno 2 caratteri</string>

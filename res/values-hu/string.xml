@@ -722,6 +722,7 @@
     <string name="subtitle_tab_style">Stílus</string>
     <string name="subtitle_tab_delay">Késleltetés</string>
     <string name="subtitle_none">Nincs</string>
+    <string name="subtitle_none_forced_only">Nincs (csak kényszerített)</string>
     <string name="subtitle_all">Mind</string>
     <string name="subtitle_section_core">Alapvető</string>
     <string name="subtitle_section_advanced">Haladó</string>

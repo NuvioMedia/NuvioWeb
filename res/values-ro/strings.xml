@@ -600,6 +600,7 @@
     <string name="subtitle_tab_style">Stil</string>
     <string name="subtitle_tab_delay">Întârziere</string>
     <string name="subtitle_none">Nimic</string>
+    <string name="subtitle_none_forced_only">Nimic (doar forțate)</string>
     <string name="subtitle_all">Toate</string>
     <string name="subtitle_section_core">Nucleu</string>
     <string name="subtitle_section_advanced">Avansat</string>

@@ -38,6 +38,7 @@ export const PlayerController = {
   avplayEnded: false,
   avplayCurrentTimeMs: 0,
   avplayDurationMs: 0,
+  avplayTrackSyncAt: 0,
   lastPlaybackErrorCode: 0,
   currentPlaybackUrl: "",
   currentPlaybackHeaders: {},
@@ -471,12 +472,13 @@ export const PlayerController = {
     return "";
   },
 
-  syncAvPlayTrackInfo() {
+  syncAvPlayTrackInfo(options = {}) {
     if (!this.isUsingAvPlay()) {
       this.avplayAudioTracks = [];
       this.avplaySubtitleTracks = [];
       this.selectedAvPlayAudioTrackIndex = -1;
       this.selectedAvPlaySubtitleTrackIndex = -1;
+      this.avplayTrackSyncAt = 0;
       return;
     }
 
@@ -484,6 +486,13 @@ export const PlayerController = {
     if (!avplay) {
       return;
     }
+
+    const force = Boolean(options?.force);
+    const now = Date.now();
+    if (!force && (now - Number(this.avplayTrackSyncAt || 0)) < 220) {
+      return;
+    }
+    this.avplayTrackSyncAt = now;
 
     const totalTracks = (() => {
       try {
@@ -637,13 +646,13 @@ export const PlayerController = {
       avplay.setSelectTrack("AUDIO", targetIndex);
       this.pendingAvPlayAudioTrackIndex = -1;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
-      this.syncAvPlayTrackInfo();
+      this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       setTimeout(() => {
         if (!this.isUsingAvPlay()) {
           return;
         }
-        this.syncAvPlayTrackInfo();
+        this.syncAvPlayTrackInfo({ force: true });
         this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       }, 400);
       return true;
@@ -667,7 +676,7 @@ export const PlayerController = {
       avplay.setSelectTrack("AUDIO", targetIndex);
       this.pendingAvPlayAudioTrackIndex = -1;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
-      this.syncAvPlayTrackInfo();
+      this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     } catch (_) {
@@ -721,7 +730,7 @@ export const PlayerController = {
 
     this.selectedAvPlaySubtitleTrackIndex = targetIndex;
     this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
-    this.syncAvPlayTrackInfo();
+    this.syncAvPlayTrackInfo({ force: true });
     this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
     return true;
   },
@@ -912,7 +921,7 @@ export const PlayerController = {
       this.avplayReady = true;
       this.avplayEnded = false;
       this.refreshAvPlayTimeline();
-      this.syncAvPlayTrackInfo();
+      this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("loadedmetadata", { playbackEngine: this.playbackEngine });
       this.emitVideoEvent("loadeddata", { playbackEngine: this.playbackEngine });
       this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
@@ -930,7 +939,7 @@ export const PlayerController = {
             return;
           }
           this.applyPendingAvPlayAudioTrackSelection();
-          this.syncAvPlayTrackInfo();
+          this.syncAvPlayTrackInfo({ force: true });
           this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
         }, 500);
       } catch (error) {
@@ -1120,6 +1129,12 @@ export const PlayerController = {
     const avplayEngine = this.getPlatformAvplayEngineName();
     const isTizenRuntime = Platform.isTizen();
     const isLivePlayback = this.isLivePlaybackItemType(itemType);
+    const canUseAvPlay = this.canUseAvPlay();
+    const canUseHlsJs = this.canUseHlsJs();
+    const canUseDashJs = this.canUseDashJs();
+    const canPlayNativeHls = this.canPlayNatively("application/vnd.apple.mpegurl");
+    const canPlayNativeDash = this.canPlayNatively("application/dash+xml");
+    const canPlayNativeSmooth = this.canPlayNatively("application/vnd.ms-sstr+xml");
     const pushCandidate = (target, candidate) => {
       const normalized = String(candidate || "").trim();
       if (!normalized || target.includes(normalized)) {
@@ -1130,19 +1145,19 @@ export const PlayerController = {
 
     if (this.isLikelyHlsMimeType(normalizedSourceType)) {
       const candidates = [];
-      if (isLivePlayback && this.canUseHlsJs()) {
+      if (isLivePlayback && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
       }
-      if (isTizenRuntime && this.canUseHlsJs()) {
+      if (isTizenRuntime && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
       }
-      if (this.canPlayNatively("application/vnd.apple.mpegurl")) {
+      if (canPlayNativeHls) {
         pushCandidate(candidates, "native-hls");
       }
-      if (!isTizenRuntime && this.canUseHlsJs()) {
+      if (!isTizenRuntime && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
       }
-      if (this.canUseAvPlay()) {
+      if (canUseAvPlay) {
         pushCandidate(candidates, avplayEngine);
       }
       return candidates;
@@ -1150,22 +1165,22 @@ export const PlayerController = {
 
     if (this.isLikelyDashMimeType(normalizedSourceType)) {
       const candidates = [];
-      if (isLivePlayback && this.canUseDashJs()) {
+      if (isLivePlayback && canUseDashJs) {
         pushCandidate(candidates, "dash.js");
       }
-      if (isTizenRuntime && this.canUseDashJs()) {
+      if (isTizenRuntime && canUseDashJs) {
         pushCandidate(candidates, "dash.js");
       }
-      if (Platform.isWebOS() && this.canPlayNatively("application/dash+xml")) {
+      if (Platform.isWebOS() && canPlayNativeDash) {
         pushCandidate(candidates, "native-dash");
       }
-      if (!isTizenRuntime && this.canUseDashJs()) {
+      if (!isTizenRuntime && canUseDashJs) {
         pushCandidate(candidates, "dash.js");
       }
-      if (this.canPlayNatively("application/dash+xml")) {
+      if (canPlayNativeDash) {
         pushCandidate(candidates, "native-dash");
       }
-      if (this.canUseAvPlay()) {
+      if (canUseAvPlay) {
         pushCandidate(candidates, avplayEngine);
       }
       return candidates;
@@ -1173,10 +1188,10 @@ export const PlayerController = {
 
     if (this.isLikelySmoothStreamingMimeType(normalizedSourceType)) {
       const candidates = [];
-      if (this.canPlayNatively("application/vnd.ms-sstr+xml")) {
+      if (canPlayNativeSmooth) {
         pushCandidate(candidates, "native-file");
       }
-      if (this.canUseAvPlay()) {
+      if (canUseAvPlay) {
         pushCandidate(candidates, avplayEngine);
       }
       return candidates;
@@ -1187,10 +1202,10 @@ export const PlayerController = {
       pushCandidate(candidates, "native-file");
     }
     pushCandidate(candidates, "native-file");
-    if (!isTizenRuntime && this.canUseAvPlay()) {
+    if (!isTizenRuntime && canUseAvPlay) {
       pushCandidate(candidates, avplayEngine);
     }
-    if (isTizenRuntime && this.canUseAvPlay()) {
+    if (isTizenRuntime && canUseAvPlay) {
       pushCandidate(candidates, avplayEngine);
     }
     return candidates;

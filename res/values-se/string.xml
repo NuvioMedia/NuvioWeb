@@ -597,6 +597,7 @@
     <string name="subtitle_tab_style">Stil</string>
     <string name="subtitle_tab_delay">Fördröjning</string>
     <string name="subtitle_none">Ingen</string>
+    <string name="subtitle_none_forced_only">Ingen (endast tvingade)</string>
     <string name="subtitle_all">Alla</string>
     <string name="subtitle_section_core">Grundläggande</string>
     <string name="subtitle_section_advanced">Avancerat</string>

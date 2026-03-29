@@ -676,6 +676,7 @@
     <string name="subtitle_tab_style">Slog</string>
     <string name="subtitle_tab_delay">Zakasnitev</string>
     <string name="subtitle_none">Brez</string>
+    <string name="subtitle_none_forced_only">Brez (samo vsiljeni)</string>
     <string name="subtitle_all">Vsi</string>
     <string name="subtitle_section_core">Osnovno</string>
     <string name="subtitle_section_advanced">Napredno</string>

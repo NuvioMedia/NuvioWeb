@@ -594,6 +594,7 @@
     <string name="subtitle_tab_style">スタイル</string>
     <string name="subtitle_tab_delay">遅延</string>
     <string name="subtitle_none">なし</string>
+    <string name="subtitle_none_forced_only">なし（強制のみ）</string>
     <string name="subtitle_all">すべて</string>
     <string name="subtitle_section_core">基本</string>
     <string name="subtitle_section_advanced">高度</string>

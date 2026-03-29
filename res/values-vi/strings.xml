@@ -643,6 +643,7 @@
     <string name="subtitle_tab_style">Kiểu</string>
     <string name="subtitle_tab_delay">Độ trễ</string>
     <string name="subtitle_none">Không có</string>
+    <string name="subtitle_none_forced_only">Không có (chỉ bắt buộc)</string>
     <string name="subtitle_all">Tất cả</string>
     <string name="subtitle_section_core">Cơ bản</string>
     <string name="subtitle_section_advanced">Nâng cao</string>
