@@ -1,4 +1,19 @@
 import "./runtime/polyfills.js";
+import "intersection-observer";  
+import "whatwg-fetch";
+
+(function applyLegacyPatches() {
+  const originalGetElementById = document.getElementById;
+  document.getElementById = function(id) {
+    if (id === undefined || id === null || id === "") return null;
+    return originalGetElementById.call(document, id);
+  };
+
+  if (typeof Node === "undefined") {
+    globalThis.Node = { ELEMENT_NODE: 1 };
+  }
+})();
+
 import { Router } from "./ui/navigation/router.js";
 import { FocusEngine } from "./ui/navigation/focusEngine.js";
 import { PlayerController } from "./core/player/playerController.js";
@@ -68,7 +83,9 @@ async function bootstrapApp() {
 
   Router.init();
   PlayerController.init();
-  FocusEngine.init();
+  
+  FocusEngine.init(); 
+  
   ThemeManager.apply();
   I18n.apply();
   warmStreamingLibs({ delayMs: 1400 });
