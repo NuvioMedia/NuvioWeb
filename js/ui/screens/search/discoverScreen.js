@@ -221,7 +221,12 @@ export const DiscoverScreen = {
   async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("discover");
     ScreenUtils.show(this.container);
-    this.sidebarProfile = await getSidebarProfileState();
+    try {
+      this.sidebarProfile = await getSidebarProfileState();
+    } catch (err) {
+      console.warn("debug: fail on load", err);
+      this.sidebarProfile = null;
+    }
     this.layoutPrefs = LayoutPreferences.get();
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.focusZone = this.focusZone || "content";

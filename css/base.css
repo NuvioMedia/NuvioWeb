@@ -22,18 +22,31 @@
     --focus-bg: #303030;
     --border-color: #333333;
     --app-font-family: "Inter", "Segoe UI", Arial, sans-serif;
+    --tv-safe-gutter: 32px; 
     --tv-safe-gutter: clamp(28px, 3vw, 56px);
+    --tv-safe-gutter-wide: 40px;
     --tv-safe-gutter-wide: clamp(32px, 3.6vw, 72px);
+    --tv-card-radius: 16px;
     --tv-card-radius: clamp(14px, 1.1vw, 22px);
+    --tv-card-gap: 14px;
     --tv-card-gap: clamp(12px, 1vw, 18px);
+    --tv-button-height: 60px;
     --tv-button-height: clamp(54px, 3.7vw, 68px);
+    --tv-button-padding-x: 28px;
     --tv-button-padding-x: clamp(22px, 2vw, 34px);
+    --tv-control-size: 64px;
     --tv-control-size: clamp(58px, 4vw, 74px);
+    --tv-control-icon-size: 32px;
     --tv-control-icon-size: clamp(28px, 2vw, 36px);
+    --tv-caption-text: 16px;
     --tv-caption-text: clamp(14px, 0.95vw, 18px);
+    --tv-secondary-text: 18px;
     --tv-secondary-text: clamp(16px, 1.08vw, 21px);
+    --tv-body-text: 20px;
     --tv-body-text: clamp(18px, 1.18vw, 24px);
+    --tv-subtitle-text: 28px;
     --tv-subtitle-text: clamp(24px, 1.7vw, 32px);
+    --tv-title-text: 48px;
     --tv-title-text: clamp(42px, 2.9vw, 60px);
 }
 
@@ -42,10 +55,22 @@ body {
     width: 100%;
     height: 100%;
     margin: 0;
+    background: #0e0f12; 
     background: var(--bg-color);
+    font-size: 20px;
+    font-size: var(--tv-body-text);
     color: var(--text-color);
     font-family: var(--app-font-family);
     overflow: hidden;
+}
+
+ /*fix for chrome 38+ to prevent font-size inflation on tvs*/
+    * {
+    -webkit-box-sizing: border-box;
+    min-width: 0;
+    min-height: 0;
+    box-sizing: border-box;
+
 }
 
 #app {
@@ -72,12 +97,17 @@ body {
     background: #222;
     border-radius: 8px;
     overflow: hidden;
+    -webkit-transition: -webkit-transform 0.2s, box-shadow 0.2s;
     transition: transform 0.2s, box-shadow 0.2s;
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
 }
 
 .card.focused {
+    -webkit-transform: scale(1.1);
     transform: scale(1.1);
     box-shadow: 0 0 0 2px rgba(245, 249, 255, 0.9);
+    z-index: 10;
 }
 
 *:focus {

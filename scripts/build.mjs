@@ -1,7 +1,12 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
+import { transformAsync } from "@babel/core";
+import postcssGlobalData from '@csstools/postcss-global-data';
+import postcss from 'postcss';
+import autoprefixer from 'autoprefixer';
+import postcssCustomProperties from 'postcss-custom-properties';
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -9,9 +14,10 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const bundleFileName = "app.bundle.js";
 const rootBundlePath = path.join(rootDir, bundleFileName);
+
 const defaultEnvFileContents = `(function defineNuvioEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
+  root.__NUVIO_ENV__ = {
     SUPABASE_URL: "",
     SUPABASE_ANON_KEY: "",
     TV_LOGIN_REDIRECT_BASE_URL: "",
@@ -20,7 +26,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""
-  });
+  };
 }());
 `;
 
@@ -60,6 +66,10 @@ async function copyOptionalRootFile(fileName, { fallback = null, defaultContents
 
 async function buildBundle() {
   const { version } = await readAppMetadata();
+
+  console.log("starting bundle build...");
+
+  // create a temporary bundle for babel to process
   await build({
     entryPoints: [path.join(rootDir, "js/app.js")],
     outfile: rootBundlePath,
@@ -68,42 +78,157 @@ async function buildBundle() {
     platform: "browser",
     target: ["es2015"],
     define: {
-      __NUVIO_APP_VERSION__: JSON.stringify(version)
+      __NUVIO_APP_VERSION__: JSON.stringify(version),
     },
-    logLevel: "silent"
   });
 
-  await cp(rootBundlePath, path.join(distDir, bundleFileName));
-}
+  console.log("transpiling with babel...");
+  const bundledCode = await readFile(rootBundlePath, "utf8");
+  const babelResult = await transformAsync(bundledCode, {
+    presets: [
+      [
+        "@babel/preset-env",
+        {
+          targets: "chrome 38",
+          useBuiltIns: "usage", // don't touch
+          corejs: 3,
+          modules: "commonjs",
+        },
+      ],
+    ],
+    plugins: [
+      // babel plugins
+      "@babel/plugin-transform-optional-chaining",
+      "@babel/plugin-transform-nullish-coalescing-operator",
 
+      // just one instance of transform-runtime to handle regenerator and helpers
+      [
+        "@babel/plugin-transform-runtime",
+        {
+          regenerator: true,
+          corejs: false, // IMPORTANT: we don't want babel to polyfill core-js features, just the regenerator and helper functions. the core-js imports are handled by the preset-env with useBuiltIns: "usage"
+        },
+      ],
+    ],
+    minified: true,
+    sourceMaps: false,
+    compact: true,
+  });
+
+  // save result back to the temporary bundle file (which will be the input for esbuild)
+  await writeFile(rootBundlePath, babelResult.code, "utf8");
+
+  // flattening
+  // babel introduces some helper functions that are not tree-shakeable, so we need to bundle again with esbuild to flatten everything into a single file and remove any remaining unused code
+  console.log("finalizing bundle with esbuild...");
+  await build({
+    entryPoints: [rootBundlePath],
+    outfile: path.join(distDir, bundleFileName),
+    bundle: true,
+    allowOverwrite: true,
+    format: "iife",
+    target: ["es5"],
+    minify: true,
+    supported: {
+      arrow: false,
+      "const-and-let": false,
+      "template-literal": false,
+    },
+  });
+
+  try {
+    await rm(rootBundlePath);
+  } catch (e) {
+  }
+
+  console.log("bundle build complete");
+}
 async function writeDistIndex() {
   const sourceIndex = await readFile(path.join(rootDir, "index.html"), "utf8");
   await writeFile(path.join(distDir, "index.html"), sourceIndex, "utf8");
 }
 
-await rm(distDir, { recursive: true, force: true });
-await mkdir(distDir, { recursive: true });
-await syncVersionFiles();
+async function processAllLegacyCSS() {
+  const cssDistDir = path.join(distDir, "css");
+  const baseCssPath = path.join(rootDir, "css", "base.css");
 
-await Promise.all([
-  copyEntry("assets"),
-  copyEntry("css"),
-  cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html")),
-  copyEntry("js"),
-  copyEntry("res")
-]);
+  try {
+    const files = await readdir(cssDistDir);
+    const cssFiles = files.filter((f) => f.endsWith(".css"));
 
-await buildBundle();
-await writeDistIndex();
+    for (const file of cssFiles) {
+      const filePath = path.join(cssDistDir, file);
+      const css = await readFile(filePath, "utf8");
 
-const copiedEnvSource = await copyOptionalRootFile("nuvio.env.js", {
-  fallback: "nuvio.env.example.js"
-});
+      const result = await postcss([
+        postcssGlobalData({
+          files: [baseCssPath],
+        }),
+        postcssCustomProperties({
+          preserve: true,
+        }),
+        autoprefixer({
+          overrideBrowserslist: [
+            "Chrome >= 38",
+            "Samsung >= 4",
+            "last 2 versions",
+            "not dead",
+          ],
+          flexbox: "no-2009",
+        }),
+      ]).process(css, { from: filePath, to: filePath });
 
-if (copiedEnvSource === "nuvio.env.example.js") {
-  console.warn("Using nuvio.env.example.js as dist/nuvio.env.js because no local nuvio.env.js was found.");
-} else if (copiedEnvSource === "generated-default") {
-  console.warn("Generated a default dist/nuvio.env.js because no local nuvio.env.js or nuvio.env.example.js was found.");
+      await writeFile(filePath, result.css);
+    }
+    console.log(
+      `successfully processed ${cssFiles.length} CSS files for legacy compatibility.`,
+    );
+  } catch (e) {
+    console.warn("legacy CSS processing failed:", e.message);
+  }
 }
 
-console.log(`Built shared app into ${distDir}`);
+async function runBuild() {
+  try {
+    console.log("cleaning dist directory...");
+    await rm(distDir, { recursive: true, force: true });
+    await mkdir(distDir, { recursive: true });
+    
+    console.log("syncing version files...");
+    await syncVersionFiles();
+
+    console.log("copying static assets...");
+    await Promise.all([
+      copyEntry("assets"),
+      copyEntry("css"), 
+      cp(path.join(rootDir, "appinfo.json"), path.join(distDir, "appinfo.json")),
+      cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html")),
+      copyEntry("res")
+    ]);
+
+    // js bundle processing (final step to ensure all transformations are applied correctly and we end up with a single, minified bundle file)
+    await buildBundle();
+
+    await writeDistIndex();
+    await processAllLegacyCSS();
+
+    console.log("configuring nuvio.env.js...");
+    const copiedEnvSource = await copyOptionalRootFile("nuvio.env.js", {
+      fallback: "nuvio.env.example.js"
+    });
+
+    if (copiedEnvSource === "nuvio.env.example.js") {
+      console.warn("WARNING: using nuvio.env.example.js as fallback.");
+    } else if (copiedEnvSource === "generated-default") {
+      console.warn("WARNING: generated default nuvio.env.js (unconfigured).");
+    }
+
+    console.log(`\nbuild finished successfully in: ${distDir}`);
+  } catch (error) {
+    console.error("\nbuild failed:");
+    console.error(error);
+    process.exit(1); 
+  }
+}
+
+runBuild();
