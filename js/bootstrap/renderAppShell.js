@@ -15,6 +15,7 @@ const APP_SHELL = `
     <div id="catalogOrder" class="screen"></div>
     <div id="player" class="screen">
       <video id="videoPlayer" autoplay playsinline webkit-playsinline preload="auto" style="width:100vw;height:100vh;background:black"></video>
+      <object id="avplayPlayer" type="application/avplayer" style="position:absolute;left:0;top:0;width:100vw;height:100vh;display:none;"></object>
     </div>
   </div>
 `;
