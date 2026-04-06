@@ -1,0 +1,61 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+      issues: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Preinstall OpenCode plugins
+        run: |
+          mkdir -p ~/.cache/opencode
+          cat <<'EOF' > ~/.cache/opencode/package.json
+          {
+            "name": "opencode-plugin-cache",
+            "private": true,
+            "dependencies": {
+              "opencode-openai-codex-auth": "latest"
+            }
+          }
+          EOF
+          bun install --cwd ~/.cache/opencode
+
+      - name: Configure OpenCode
+        run: |
+          mkdir -p ~/.local/share/opencode
+          cat <<'EOF' > ~/.local/share/opencode/auth.json
+          ${{ secrets.OPENCODE_AUTH_JSON }}
+          EOF
+          chmod 600 ~/.local/share/opencode/auth.json
+          echo "XDG_CONFIG_HOME=$HOME/.config" >> "$GITHUB_ENV"
+          echo "OPENCODE_CONFIG=$GITHUB_WORKSPACE/.github/opencode.github.json" >> "$GITHUB_ENV"
+          delim="OPENCODE_CONFIG_EOF_$(date +%s%N)"
+          {
+            echo "OPENCODE_CONFIG_CONTENT<<$delim"
+            cat "$GITHUB_WORKSPACE/.github/opencode.github.json"
+            echo "$delim"
+          } >> "$GITHUB_ENV"
+
+      - name: Run opencode review
+        uses: anomalyco/opencode/github@latest
+        env:
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          OPENCODE_CONFIG: ${{ env.OPENCODE_CONFIG }}
+          OPENCODE_CONFIG_CONTENT: ${{ env.OPENCODE_CONFIG_CONTENT }}
+        with:
+          model: openai/gpt-5.4-mini
