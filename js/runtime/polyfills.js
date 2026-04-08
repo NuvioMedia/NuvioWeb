@@ -1,25 +1,43 @@
-if (typeof globalThis === "undefined") {
-  Object.defineProperty(Object.prototype, "__nuvio_global__", {
-    get: function getGlobal() {
-      return this;
-    },
+(function() {
+  if (typeof globalThis === "object") return;
+  Object.defineProperty(Object.prototype, "__magic__", {
+    get: function() { return this; },
     configurable: true
   });
-  __nuvio_global__.globalThis = __nuvio_global__;
-  delete Object.prototype.__nuvio_global__;
+  __magic__.globalThis = __magic__;
+  delete Object.prototype.__magic__;
+}());
+
+// polyfills for older browsers
+if (!Element.prototype.matches) {
+  Element.prototype.matches =
+    Element.prototype.msMatchesSelector ||
+    Element.prototype.webkitMatchesSelector;
 }
 
+if (!Element.prototype.closest) {
+  Element.prototype.closest = function (s) {
+    var el = this;
+    do {
+      if (Element.prototype.matches.call(el, s)) return el;
+      el = el.parentElement || el.parentNode;
+    } while (el !== null && el.nodeType === 1);
+    return null;
+  };
+}
+
+// polyfill for Object.fromEntries
 if (!Object.fromEntries) {
   Object.fromEntries = function fromEntries(entries) {
     var result = {};
-    if (!entries || typeof entries[Symbol.iterator] !== "function") {
-      return result;
-    }
-    for (const entry of entries) {
-      if (!entry || entry.length < 2) {
-        continue;
+    if (!entries) return result;
+    
+    var arr = Array.isArray(entries) ? entries : Array.from(entries);
+    for (var i = 0; i < arr.length; i++) {
+      var entry = arr[i];
+      if (entry && entry.length >= 2) {
+        result[entry[0]] = entry[1];
       }
-      result[entry[0]] = entry[1];
     }
     return result;
   };
