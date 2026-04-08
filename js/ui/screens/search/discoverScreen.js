@@ -259,7 +259,14 @@ export const DiscoverScreen = {
     }
 
     this.render();
-    await this.loadCatalogsAndContent();
+    try {
+      await this.loadCatalogsAndContent();
+    } catch (err) {
+      console.error("discoverScreen: Failed to load content", err);
+      this.loading = false;
+      this.items = [];
+      this.render();
+    }
   },
 
   async loadCatalogsAndContent() {

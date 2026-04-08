@@ -348,7 +348,13 @@ export const SearchScreen = {
       return;
     }
     this.renderLoading();
-    await this.reloadRows();
+    try {
+      await this.reloadRows();
+    } catch (err) {
+      console.error("searchScreen: Failed to load rows", err);
+      this.rows = [];
+      this.render(); 
+    }
   },
 
   renderLoading() {
@@ -1073,10 +1079,7 @@ export const SearchScreen = {
 
   isSearchInputEditingActive() {
     const input = this.container?.querySelector("#searchInput");
-    if (!input) {
-      return false;
-    }
-    return document.activeElement === input;
+    return !!input && document.activeElement === input;
   },
 
   bindActionEvents() {
@@ -1243,7 +1246,9 @@ export const SearchScreen = {
 
     const code = Number(event?.keyCode || 0);
     if (this.isSearchInputEditingActive()) {
-      if (code === 37 || code === 39 || code === 35 || code === 36) {
+      const navigationKeys = [35, 36, 37, 39];
+      if (navigationKeys.indexOf(code) !== -1) {
+        event.stopPropagation?.();
         return;
       }
     }
