@@ -1399,11 +1399,13 @@ export const HomeScreen = {
     if (!focused) {
       return null;
     }
-    const trackStates = Object.fromEntries(
-      Array.from(this.container.querySelectorAll("[data-track-row-key]"))
-        .map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft])
-        .filter(([key]) => key)
-    );
+    const trackStates = Array.from(
+      this.container.querySelectorAll("[data-track-row-key]"),
+    ).reduce((acc, track) => {
+      const key = String(track.dataset.trackRowKey || "");
+      if (key) acc[key] = track.scrollLeft;
+      return acc;
+    }, {});
     const section = focused?.closest?.("[data-row-key]") || null;
     const rowKey = String(section?.dataset?.rowKey || "");
     let itemIndex = -1;
@@ -4709,24 +4711,30 @@ export const HomeScreen = {
     (async () => {
       for (let index = 0; index < pendingRows.length; index += retryBatchSize) {
         const batch = pendingRows.slice(index, index + retryBatchSize);
-        const settled = await Promise.allSettled(batch.map(async (row) => {
-          const result = await withTimeout(catalogRepository.getCatalog({
-            addonBaseUrl: row.addonBaseUrl,
-            addonId: row.addonId,
-            addonName: row.addonName,
-            catalogId: row.catalogId,
-            catalogName: row.catalogName,
-            type: row.type,
-            skip: 0,
-            supportsSkip: true
-          }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
-          if (result?.status !== "success") {
-            return null;
+        const settled = await Promise.all(batch.map(async (row) => {
+          try {
+            const result = await withTimeout(catalogRepository.getCatalog({
+              addonBaseUrl: row.addonBaseUrl,
+              addonId: row.addonId,
+              addonName: row.addonName,
+              catalogId: row.catalogId,
+              catalogName: row.catalogName,
+              type: row.type,
+              skip: 0,
+              supportsSkip: true
+            }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
+
+            if (result?.status !== "success") {
+              throw new Error(result?.message || "Catalog status error");
+            }
+            
+            return { 
+              status: "fulfilled", 
+              value: { ...row, result } 
+            };
+          } catch (err) {
+            return { status: "rejected", reason: err };
           }
-          return {
-            ...row,
-            result
-          };
         }));
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
