@@ -33,7 +33,6 @@ export const PlayerController = {
   selectedAvPlayAudioTrackIndex: -1,
   selectedAvPlaySubtitleTrackIndex: -1,
   pendingAvPlayAudioTrackIndex: -1,
-  avplayTickTimer: null,
   avplayReady: false,
   avplayEnded: false,
   avplayCurrentTimeMs: 0,
@@ -359,25 +358,7 @@ export const PlayerController = {
     });
   },
 
-  stopAvPlayTickTimer() {
-    if (this.avplayTickTimer) {
-      clearInterval(this.avplayTickTimer);
-      this.avplayTickTimer = null;
-    }
-  },
-
-  startAvPlayTickTimer() {
-    this.stopAvPlayTickTimer();
-    this.avplayTickTimer = setInterval(() => {
-      if (!this.isUsingAvPlay()) {
-        return;
-      }
-      this.refreshAvPlayTimeline();
-      this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine });
-    }, 1000);
-  },
-
-  refreshAvPlayTimeline() {
+  refreshAvPlayTimeline(currentTimeMsFromCallback = null) {
     if (!this.isUsingAvPlay()) {
       return;
     }
@@ -385,13 +366,17 @@ export const PlayerController = {
     if (!avplay) {
       return;
     }
-    try {
-      const currentMs = Number(avplay.getCurrentTime?.() || 0);
-      if (Number.isFinite(currentMs) && currentMs >= 0) {
-        this.avplayCurrentTimeMs = currentMs;
+    if (currentTimeMsFromCallback !== null && Number.isFinite(currentTimeMsFromCallback) && currentTimeMsFromCallback >= 0) {
+      this.avplayCurrentTimeMs = currentTimeMsFromCallback;
+    } else {
+      try {
+        const currentMs = Number(avplay.getCurrentTime?.() || 0);
+        if (Number.isFinite(currentMs) && currentMs >= 0) {
+          this.avplayCurrentTimeMs = currentMs;
+        }
+      } catch (_) {
+        // Ignore current-time polling failures.
       }
-    } catch (_) {
-      // Ignore current-time polling failures.
     }
     try {
       const durationMs = Number(avplay.getDuration?.() || 0);
@@ -802,7 +787,6 @@ export const PlayerController = {
   teardownAvPlay() {
     const avplay = this.getAvPlay();
 
-    this.stopAvPlayTickTimer();
     if (avplay) {
       try {
         avplay.setListener?.({});
@@ -904,13 +888,13 @@ export const PlayerController = {
         oncurrentplaytime: (currentTimeMs) => {
           const value = Number(currentTimeMs || 0);
           if (Number.isFinite(value) && value >= 0) {
-            this.avplayCurrentTimeMs = value;
+            this.refreshAvPlayTimeline(value);
+            this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine, currentTime: value / 1000 });
           }
         },
         onstreamcompleted: () => {
           this.avplayEnded = true;
           this.isPlaying = false;
-          this.stopAvPlayTickTimer();
           try {
             avplay.stop?.();
           } catch (_) {
@@ -922,7 +906,6 @@ export const PlayerController = {
           this.avplayReady = false;
           this.isPlaying = false;
           this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(errorValue);
-          this.stopAvPlayTickTimer();
           this.emitVideoEvent("error", {
             playbackEngine: this.playbackEngine,
             mediaErrorCode: this.lastPlaybackErrorCode,
@@ -2350,7 +2333,6 @@ export const PlayerController = {
       try {
         avplay.pause?.();
         this.isPlaying = false;
-        this.stopAvPlayTickTimer();
         this.emitVideoEvent("pause", { playbackEngine: this.playbackEngine });
       } catch (_) {
         // Ignore AVPlay pause failures.
@@ -2372,7 +2354,6 @@ export const PlayerController = {
       try {
         avplay.play?.();
         this.isPlaying = true;
-        this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
         setTimeout(() => {
           this.applyPendingAvPlayAudioTrackSelection();
