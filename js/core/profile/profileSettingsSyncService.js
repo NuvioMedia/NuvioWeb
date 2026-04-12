@@ -11,6 +11,7 @@ import { ProfileManager } from "./profileManager.js";
 
 const PULL_RPC = "sync_pull_profile_settings_blob";
 const PUSH_RPC = "sync_push_profile_settings_blob";
+const SETTINGS_SYNC_PLATFORM = "tv";
 const CACHE_KEY = "profileSettingsSyncCache";
 
 function resolveProfileId(profileId = null) {
@@ -732,7 +733,8 @@ export const ProfileSettingsSyncService = {
       }
       const resolvedProfileId = resolveProfileId(profileId);
       const response = await SupabaseApi.rpc(PULL_RPC, {
-        p_profile_id: resolvedProfileId
+        p_profile_id: resolvedProfileId,
+        p_platform: SETTINGS_SYNC_PLATFORM
       }, true);
       const blob = extractBlobFromResponse(response);
       if (!blob) {
@@ -766,7 +768,8 @@ export const ProfileSettingsSyncService = {
       const blob = buildOutgoingBlob(String(resolvedProfileId), getCachedBlob(resolvedProfileId));
       await SupabaseApi.rpc(PUSH_RPC, {
         p_profile_id: resolvedProfileId,
-        p_settings_json: blob
+        p_settings_json: blob,
+        p_platform: SETTINGS_SYNC_PLATFORM
       }, true);
       setCachedBlob(resolvedProfileId, blob);
       return true;

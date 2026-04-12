@@ -2429,6 +2429,9 @@ export const SettingsScreen = {
       return;
     }
 
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
     await this.activateFocused();
   },
 

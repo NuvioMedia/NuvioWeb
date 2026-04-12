@@ -14,8 +14,9 @@ import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
+const cacheDir = path.join(rootDir, ".cache");
 const bundleFileName = "app.bundle.js";
-const rootBundlePath = path.join(rootDir, bundleFileName);
+const tempBundlePath = path.join(cacheDir, "__app.bundle.build.js");
 
 const defaultEnvFileContents = `(function defineNuvioEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
@@ -87,11 +88,12 @@ async function buildBundle() {
   const { version } = await readAppMetadata();
 
   console.log("starting bundle build...");
+  await mkdir(cacheDir, { recursive: true });
 
   // create a temporary bundle for babel to process
   await build({
     entryPoints: [path.join(rootDir, "js/app.js")],
-    outfile: rootBundlePath,
+    outfile: tempBundlePath,
     bundle: true,
     format: "iife",
     target: ["es2015"], 
@@ -99,7 +101,7 @@ async function buildBundle() {
   });
 
   console.log("applying Babel transpilation...");
-  const bundledCode = await readFile(rootBundlePath, "utf8");
+  const bundledCode = await readFile(tempBundlePath, "utf8");
   const babelResult = await transformAsync(bundledCode, {
     presets: [
       ["@babel/preset-env", {
@@ -119,13 +121,13 @@ async function buildBundle() {
   });
 
   // save result back to the temporary bundle file (which will be the input for esbuild)
-  await writeFile(rootBundlePath, babelResult.code, "utf8");
+  await writeFile(tempBundlePath, babelResult.code, "utf8");
 
   // flattening
   // babel introduces some helper functions that are not tree-shakeable, so we need to bundle again with esbuild to flatten everything into a single file and remove any remaining unused code
   console.log("finalizing bundle with esbuild...");
   await build({
-    entryPoints: [rootBundlePath],
+    entryPoints: [tempBundlePath],
     outfile: path.join(distDir, bundleFileName),
     bundle: true,
     minify: true,
@@ -139,7 +141,8 @@ async function buildBundle() {
     }
   });
 
-  await rm(rootBundlePath).catch(() => { });
+  await cp(path.join(distDir, bundleFileName), path.join(rootDir, bundleFileName));
+  await rm(tempBundlePath).catch(() => { });
   console.log("bundle build complete");
 }
 
