@@ -309,12 +309,7 @@ export const SearchScreen = {
     this.searchRouteEnterPending = true;
     this.activationGuardUntil = Date.now() + 220;
     this.layoutPrefs = LayoutPreferences.get();
-    try {
-      this.sidebarProfile = await getSidebarProfileState();
-    } catch (err) {
-      console.warn("debug: fail on load", err);
-      this.sidebarProfile = null;
-    }
+    this.sidebarProfile = await getSidebarProfileState();
     this.sidebarExpanded = false;
     this.focusZone = "content";
     this.sidebarFocusIndex = 0;
@@ -348,13 +343,7 @@ export const SearchScreen = {
       return;
     }
     this.renderLoading();
-    try {
-      await this.reloadRows();
-    } catch (err) {
-      console.error("searchScreen: Failed to load rows", err);
-      this.rows = [];
-      this.render(); 
-    }
+    await this.reloadRows();
   },
 
   renderLoading() {
@@ -408,36 +397,19 @@ export const SearchScreen = {
     });
 
     const picked = sections.slice(0, 8);
-    const resolved = await Promise.all(
-      picked.map(async (section) => {
-        try {
-          const result = await withTimeout(
-            catalogRepository.getCatalog({
-              addonBaseUrl: section.addonBaseUrl,
-              addonId: section.addonId,
-              addonName: section.addonName,
-              catalogId: section.catalogId,
-              catalogName: section.catalogName,
-              type: section.type,
-              skip: 0,
-              supportsSkip: true,
-            }),
-            3500,
-            { status: "error", message: "timeout" },
-          );
-          return { ...section, result };
-        } catch (err) {
-          console.warn(
-            `fail on load catalog ${section.catalogName}:`,
-            err,
-          );
-          return {
-            ...section,
-            result: { status: "error", message: "fetch_failed" },
-          };
-        }
-      }),
-    );
+    const resolved = await Promise.all(picked.map(async (section) => {
+      const result = await withTimeout(catalogRepository.getCatalog({
+        addonBaseUrl: section.addonBaseUrl,
+        addonId: section.addonId,
+        addonName: section.addonName,
+        catalogId: section.catalogId,
+        catalogName: section.catalogName,
+        type: section.type,
+        skip: 0,
+        supportsSkip: true
+      }), 3500, { status: "error", message: "timeout" });
+      return { ...section, result };
+    }));
 
     return resolved
       .filter((entry) => entry.result?.status === "success" && entry.result?.data?.items?.length)
@@ -473,37 +445,20 @@ export const SearchScreen = {
       });
     });
 
-    const responses = await Promise.all(
-      searchableCatalogs.slice(0, 14).map(async (catalog) => {
-        try {
-          const result = await withTimeout(
-            catalogRepository.getCatalog({
-              addonBaseUrl: catalog.addonBaseUrl,
-              addonId: catalog.addonId,
-              addonName: catalog.addonName,
-              catalogId: catalog.catalogId,
-              catalogName: catalog.catalogName,
-              type: catalog.type,
-              skip: 0,
-              extraArgs: { search: query },
-              supportsSkip: true,
-            }),
-            3500,
-            { status: "error", message: "timeout" },
-          );
-          return { catalog, result };
-        } catch (err) {
-          console.warn(
-            `fail on search catalog ${catalog.catalogName}:`,
-            err,
-          );
-          return {
-            catalog,
-            result: { status: "error", message: "fetch_failed" },
-          };
-        }
-      }),
-    );
+    const responses = await Promise.all(searchableCatalogs.slice(0, 14).map(async (catalog) => {
+      const result = await withTimeout(catalogRepository.getCatalog({
+        addonBaseUrl: catalog.addonBaseUrl,
+        addonId: catalog.addonId,
+        addonName: catalog.addonName,
+        catalogId: catalog.catalogId,
+        catalogName: catalog.catalogName,
+        type: catalog.type,
+        skip: 0,
+        extraArgs: { search: query },
+        supportsSkip: true
+      }), 3500, { status: "error", message: "timeout" });
+      return { catalog, result };
+    }));
 
     return responses
       .filter(({ result }) => result?.status === "success" && result?.data?.items?.length)
@@ -526,8 +481,8 @@ export const SearchScreen = {
         return `
           <div class="search-empty-state search-empty-state-results">
             <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
-            <h2>${escapeHtml(t("search_no_results_title", {}, "No Results"))}</h2>
-            <p>${escapeHtml(t("search_no_results_subtitle", {}, "Try searching with different keywords"))}</p>
+            <h2>No Results</h2>
+            <p>Try searching with different keywords</p>
           </div>
         `;
       }
@@ -1077,11 +1032,6 @@ export const SearchScreen = {
     });
   },
 
-  isSearchInputEditingActive() {
-    const input = this.container?.querySelector("#searchInput");
-    return !!input && document.activeElement === input;
-  },
-
   bindActionEvents() {
     this.container?.querySelectorAll("[data-action]").forEach((node) => {
       if (node.__boundActionListeners) return;
@@ -1245,13 +1195,6 @@ export const SearchScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
-    if (this.isSearchInputEditingActive()) {
-      const navigationKeys = [35, 36, 37, 39];
-      if (navigationKeys.indexOf(code) !== -1) {
-        event.stopPropagation?.();
-        return;
-      }
-    }
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;
