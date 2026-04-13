@@ -31,7 +31,16 @@ export async function syncVersionFiles() {
   const { version } = await readAppMetadata();
 
   await Promise.all(versionManagedJsonPaths.map(async (filePath) => {
-    const parsed = await readJson(filePath);
+    let parsed;
+    try {
+      parsed = await readJson(filePath);
+    } catch (error) {
+      if (error?.code === "ENOENT") {
+        return;
+      }
+      throw error;
+    }
+
     if (String(parsed?.version || "").trim() === version) {
       return;
     }

@@ -153,15 +153,20 @@ async function runBuild() {
     await mkdir(distDir, { recursive: true });
     
     console.log("building version files...");
+    await syncVersionFiles();
     await buildCSS();
 
     console.log("copying static assets...");
+    const copiedAppInfoSource = await copyOptionalRootFile("appinfo.json");
     await Promise.all([
       cp(path.join(rootDir, "assets"), path.join(distDir, "assets"), { recursive: true }),
       cp(path.join(rootDir, "res"), path.join(distDir, "res"), { recursive: true }),
-      cp(path.join(rootDir, "appinfo.json"), path.join(distDir, "appinfo.json")),
       cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"))
     ]);
+
+    if (!copiedAppInfoSource) {
+      console.warn("WARNING: skipping appinfo.json because it is not present in the repo root.");
+    }
 
     // js bundle processing (final step to ensure all transformations are applied correctly and we end up with a single, minified bundle file)
     await buildBundle();
