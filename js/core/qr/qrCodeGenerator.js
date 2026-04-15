@@ -22,10 +22,12 @@ export const QrCodeGenerator = {
     this.roundRect(ctx, 0, 0, size, size, cornerRadius);
     ctx.fill();
 
-    // === 2️⃣ Disegno moduli arrotondati ===
+    // Match Android's ZXing output by preserving a quiet zone around the code.
     const moduleCount = qr.getModuleCount();
-    const moduleSize = size / moduleCount;
-    const moduleRadius = moduleSize * 0.3;
+    const quietZoneModules = 4;
+    const totalModules = moduleCount + (quietZoneModules * 2);
+    const moduleSize = size / totalModules;
+    const moduleRadius = moduleSize * 0.08;
 
     ctx.fillStyle = "#000000";
 
@@ -34,8 +36,8 @@ export const QrCodeGenerator = {
 
         if (qr.isDark(row, col)) {
 
-          const x = col * moduleSize;
-          const y = row * moduleSize;
+          const x = (col + quietZoneModules) * moduleSize;
+          const y = (row + quietZoneModules) * moduleSize;
 
           this.roundRect(
             ctx,
