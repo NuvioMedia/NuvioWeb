@@ -1,6 +1,5 @@
 import { Router } from "../../navigation/router.js";
 import { QrLoginService } from "../../../core/auth/qrLoginService.js";
-import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
@@ -32,7 +31,7 @@ export const AuthQrSignInScreen = {
 
           <div class="qr-copy-block">
             <h1 class="qr-title">${I18n.t("auth.qr.title")}</h1>
-            <p id="qr-description" class="qr-description">${this.getLeftDescriptionMarkup()}</p>
+            <p id="qr-description" class="qr-description">${this.getLeftDescription()}</p>
           </div>
         </section>
 
@@ -45,7 +44,7 @@ export const AuthQrSignInScreen = {
 
             <div id="qr-container" class="qr-code-frame"></div>
             <div id="qr-code-text" class="qr-code-text"></div>
-            <div id="qr-status" class="qr-status">${this.getInitialStatusText()}</div>
+            <div id="qr-status" class="qr-status">${I18n.t("auth.qr.waitingApproval")}</div>
             <div class="qr-actions">
               <button type="button" id="qr-refresh-btn" class="qr-action-btn qr-action-btn-primary focusable" data-action="refresh">${I18n.t("auth.qr.refresh")}</button>
               <button type="button" id="qr-back-btn" class="qr-action-btn qr-action-btn-secondary focusable" data-action="back">${this.getBackButtonLabel()}</button>
@@ -97,7 +96,7 @@ export const AuthQrSignInScreen = {
       }
 
       this.renderQr(result);
-      this.setStatus(this.getInitialStatusText());
+      this.setStatus(I18n.t("auth.qr.scanAndSignIn"));
       this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
     } finally {
       if (this.isMounted && sessionId === activeQrSessionId) {
@@ -107,7 +106,7 @@ export const AuthQrSignInScreen = {
     }
   },
 
-  renderQr({ qrImageUrl, loginUrl, code }) {
+  renderQr({ qrImageUrl, code }) {
     const qrContainer = this.container?.querySelector("#qr-container");
     const codeText = this.container?.querySelector("#qr-code-text");
 
@@ -115,18 +114,9 @@ export const AuthQrSignInScreen = {
       return;
     }
 
-    qrContainer.innerHTML = "";
-    if (loginUrl) {
-      const canvas = document.createElement("canvas");
-      canvas.className = "qr-image qr-image-canvas";
-      canvas.setAttribute("aria-label", I18n.t("auth.qr.qrImageAlt", {}, { fallback: "QR code" }));
-      QrCodeGenerator.generate(canvas, loginUrl, 420);
-      qrContainer.appendChild(canvas);
-    } else {
-      qrContainer.innerHTML = `
-        <img src="${qrImageUrl}" class="qr-image" alt="${I18n.t("auth.qr.qrImageAlt", {}, { fallback: "QR code" })}" />
-      `;
-    }
+    qrContainer.innerHTML = `
+      <img src="${qrImageUrl}" class="qr-image" alt="${I18n.t("auth.qr.qrImageAlt")}" />
+    `;
 
     codeText.innerText = I18n.t("auth.qr.codeLabel", { code });
   },
@@ -175,7 +165,7 @@ export const AuthQrSignInScreen = {
       }
 
       if (status === "pending") {
-        this.setStatus(this.getInitialStatusText());
+        this.setStatus(I18n.t("auth.qr.waitingApproval"));
       }
 
       if (status === "expired") {
@@ -234,22 +224,16 @@ export const AuthQrSignInScreen = {
     const backButton = this.backButton || this.container?.querySelector("#qr-back-btn");
     const disabled = Boolean(this.isLeaving || this.isStartingQr);
     if (refreshButton instanceof HTMLButtonElement) {
-      refreshButton.innerText = this.getRefreshButtonLabel();
       refreshButton.disabled = disabled;
       refreshButton.setAttribute("aria-busy", this.isStartingQr ? "true" : "false");
     }
     if (backButton instanceof HTMLButtonElement) {
-      backButton.innerText = this.getBackButtonLabel();
       backButton.disabled = Boolean(this.isLeaving);
     }
   },
 
   handleRefreshAction() {
     if (this.isLeaving || this.isStartingQr) {
-      return;
-    }
-    if (this.isSignedIn) {
-      AuthManager.signOut();
       return;
     }
     this.startQr();
@@ -261,19 +245,6 @@ export const AuthQrSignInScreen = {
     }
     this.isLeaving = true;
     this.updateActionButtons();
-    if (!this.onboardingMode) {
-      this.cleanup();
-      if (this.hasBackDestination) {
-        Router.back();
-        return;
-      }
-      Router.navigate(this.isSignedIn ? "account" : "home", {}, {
-        replaceHistory: true,
-        skipStackPush: true
-      });
-      return;
-    }
-
     LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
     if (!this.isSignedIn) {
       LocalStore.set(GUEST_QR_BYPASS_KEY, true);
@@ -298,14 +269,6 @@ export const AuthQrSignInScreen = {
     return I18n.t("auth.qr.leftDescriptionSignedOut");
   },
 
-  getLeftDescriptionMarkup() {
-    const description = this.getLeftDescription();
-    if (this.isSignedIn) {
-      return description;
-    }
-    return description.replace("email/password.", "email/<br />password.");
-  },
-
   getCardSubtitle() {
     if (this.isSignedIn) {
       return I18n.t("auth.qr.cardSubtitleSignedIn");
@@ -314,27 +277,10 @@ export const AuthQrSignInScreen = {
   },
 
   getBackButtonLabel() {
-    if (!this.onboardingMode) {
-      return I18n.t("auth.qr.back");
-    }
     if (this.isSignedIn) {
       return I18n.t("auth.qr.continue");
     }
     return I18n.t("auth.qr.continueWithoutAccount");
-  },
-
-  getRefreshButtonLabel() {
-    if (this.isSignedIn) {
-      return I18n.t("auth.account.signOut");
-    }
-    if (this.isStartingQr) {
-      return I18n.t("auth_qr_please_wait", {}, { fallback: "Please wait..." });
-    }
-    return I18n.t("auth.qr.refresh");
-  },
-
-  getInitialStatusText() {
-    return I18n.t("auth.qr.scanPrompt", {}, { fallback: "Scan QR and sign in on your phone" });
   },
 
   onKeyDown(event) {

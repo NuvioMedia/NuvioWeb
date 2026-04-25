@@ -189,8 +189,7 @@ const AVAILABLE_SUBTITLE_LANGUAGES = [
 ].sort((left, right) => left.label.localeCompare(right.label));
 
 const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
-  { id: "off", label: "Off" },
-  { id: "forced", label: "Forced" },
+  { id: "off", labelKey: "subtitle_none_forced_only", label: "None (forced only)" },
   ...AVAILABLE_SUBTITLE_LANGUAGES
 ];
 
@@ -424,10 +423,8 @@ function labelForSubtitlePlaybackLanguage(language) {
   return translateOptionLabel(
     PREFERRED_SUBTITLE_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
     normalized === "off"
-      ? "Off"
-      : normalized === "forced"
-        ? "Forced"
-        : normalized === "system"
+      ? t("subtitle_none_forced_only", {}, "None (forced only)")
+      : normalized === "system"
           ? t("common.system")
           : String(language || "system")
   );
@@ -437,9 +434,6 @@ function subtitleLanguageOptionCode(option) {
   const normalized = normalizeSelectableSubtitleLanguageCode(option?.id);
   if (!normalized || normalized === "off") {
     return "";
-  }
-  if (normalized === "forced") {
-    return "FORCED";
   }
   return normalized.toUpperCase();
 }
@@ -2435,6 +2429,9 @@ export const SettingsScreen = {
       return;
     }
 
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
     await this.activateFocused();
   },
 

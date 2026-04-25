@@ -145,7 +145,6 @@ async function buildBundle() {
   await rm(tempBundlePath).catch(() => { });
   console.log("bundle build complete");
 }
-
 async function runBuild() {
   try {
     console.log("cleaning dist directory...");
@@ -193,4 +192,5 @@ async function runBuild() {
   }
 }
 
+runBuild();
 runBuild();
