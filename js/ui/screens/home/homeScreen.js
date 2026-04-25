@@ -1372,6 +1372,19 @@ export const HomeScreen = {
     if (!this.container || !layoutMode) {
       return null;
     }
+    let focused = this.container.querySelector(".focusable.focused") || null;
+    if (focused && !focused.isConnected) {
+      focused = null;
+    }
+    if (focused && this.isSidebarNode(focused)) {
+      return {
+        layoutMode,
+        focusZone: "sidebar",
+        sidebarExpanded: Boolean(this.sidebarExpanded),
+        sidebarAction: String(focused.dataset?.action || ""),
+        sidebarSelectedRoute: String(this.container.querySelector(".home-sidebar, .modern-sidebar-shell")?.dataset?.selectedRoute || "")
+      };
+    }
     const viewport = layoutMode === "modern"
       ? this.container.querySelector(".home-modern-rows-viewport")
       : this.container.querySelector(".home-main");
@@ -1379,18 +1392,20 @@ export const HomeScreen = {
       return null;
     }
 
-    let focused = this.container.querySelector(".home-main .focusable.focused") || this.lastMainFocus || null;
+    focused = this.container.querySelector(".home-main .focusable.focused") || this.lastMainFocus || null;
     if (focused && !focused.isConnected) {
       focused = null;
     }
     if (!focused) {
       return null;
     }
-    const trackStates = Object.fromEntries(
-      Array.from(this.container.querySelectorAll("[data-track-row-key]"))
-        .map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft])
-        .filter(([key]) => key)
-    );
+    const trackStates = Array.from(
+      this.container.querySelectorAll("[data-track-row-key]"),
+    ).reduce((acc, track) => {
+      const key = String(track.dataset.trackRowKey || "");
+      if (key) acc[key] = track.scrollLeft;
+      return acc;
+    }, {});
     const section = focused?.closest?.("[data-row-key]") || null;
     const rowKey = String(section?.dataset?.rowKey || "");
     let itemIndex = -1;
@@ -1410,6 +1425,7 @@ export const HomeScreen = {
 
     return {
       layoutMode,
+      focusZone: "main",
       mainScrollTop: viewport.scrollTop,
       rowKey,
       itemIndex,
@@ -1436,12 +1452,57 @@ export const HomeScreen = {
     if (!focusState) {
       return false;
     }
+    if (focusState.focusZone === "sidebar") {
+      return this.restoreSidebarFocusState(focusState);
+    }
 
     if (this.layoutMode === "modern") {
       return this.restoreModernFocusState(focusState);
     }
 
     return this.restoreLegacyFocusState(focusState);
+  },
+
+  restoreSidebarFocusState(focusState) {
+    if (!focusState || !this.container) {
+      return false;
+    }
+    const desiredAction = String(focusState.sidebarAction || "");
+    let target = null;
+
+    if (this.layoutPrefs?.modernSidebar) {
+      this.sidebarExpanded = Boolean(focusState.sidebarExpanded);
+      setModernSidebarExpanded(this.container, this.sidebarExpanded);
+      if (this.sidebarExpanded && desiredAction) {
+        target = this.container.querySelector(`.modern-sidebar-panel .focusable[data-action="${desiredAction}"]`);
+      }
+      if (!target && this.sidebarExpanded) {
+        target = getModernSidebarSelectedNode(this.container);
+      }
+      if (!target && desiredAction === "expandSidebar") {
+        target = this.container.querySelector(".modern-sidebar-pill[data-action='expandSidebar']");
+      }
+      if (!target) {
+        target = this.container.querySelector(".modern-sidebar-pill[data-action='expandSidebar']");
+      }
+    } else {
+      setLegacySidebarExpanded(this.container, true);
+      if (desiredAction) {
+        target = this.container.querySelector(`.home-sidebar .focusable[data-action="${desiredAction}"]`);
+      }
+      if (!target) {
+        target = getLegacySidebarSelectedNode(this.container);
+      }
+    }
+
+    if (!target) {
+      return false;
+    }
+
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    this.focusWithoutAutoScroll(target);
+    return true;
   },
 
   restoreModernFocusState(focusState) {
@@ -1994,13 +2055,19 @@ export const HomeScreen = {
   },
 
   getBackgroundRenderDelay() {
+    const focusedNode = this.container?.querySelector?.(".focusable.focused") || null;
+    const sidebarFocused = Boolean(focusedNode && this.isSidebarNode(focusedNode));
     if (this.isLegacyTvRuntime()) {
-      return HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS;
+      return sidebarFocused
+        ? HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS + 80
+        : HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS;
     }
     if (this.isPerformanceConstrained()) {
-      return HOME_BACKGROUND_RENDER_DELAY_MS;
+      return sidebarFocused
+        ? HOME_BACKGROUND_RENDER_DELAY_MS + 80
+        : HOME_BACKGROUND_RENDER_DELAY_MS;
     }
-    return 0;
+    return sidebarFocused ? 40 : 0;
   },
 
   shouldProgressivelyRenderDeferredRows() {
@@ -2285,6 +2352,52 @@ export const HomeScreen = {
       this.pendingDelegatedFocusTarget = target;
     }
     focusWithoutAutoScroll(target);
+  },
+
+  patchSidebarProfileDom(profile = null) {
+    if (!this.container || !profile) {
+      return false;
+    }
+    let updated = false;
+    const profileName = String(profile.activeProfileName || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback");
+    const profileInitial = String(profile.activeProfileInitial || "P").trim() || "P";
+    const profileColor = String(profile.activeProfileColorHex || DEFAULT_PROFILE_COLOR).trim() || DEFAULT_PROFILE_COLOR;
+    const profileAvatarUrl = String(profile.activeProfileAvatarUrl || "").trim();
+
+    this.container.querySelectorAll(".home-profile-name, .modern-sidebar-profile-name").forEach((node) => {
+      if (node.textContent !== profileName) {
+        node.textContent = profileName;
+        updated = true;
+      }
+    });
+
+    this.container.querySelectorAll(".home-profile-avatar, .modern-sidebar-profile-avatar").forEach((node) => {
+      if (node.style.background !== profileColor) {
+        node.style.background = profileColor;
+        updated = true;
+      }
+      const existingImage = node.querySelector(".sidebar-profile-avatar-image");
+      if (profileAvatarUrl) {
+        if (existingImage) {
+          if (existingImage.getAttribute("src") !== profileAvatarUrl) {
+            existingImage.setAttribute("src", profileAvatarUrl);
+            existingImage.setAttribute("alt", profileName);
+            updated = true;
+          }
+        } else {
+          node.innerHTML = `<img class="sidebar-profile-avatar-image" src="${escapeAttribute(profileAvatarUrl)}" alt="${escapeAttribute(profileName)}" />`;
+          updated = true;
+        }
+      } else if (existingImage) {
+        node.textContent = profileInitial;
+        updated = true;
+      } else if (node.textContent !== profileInitial) {
+        node.textContent = profileInitial;
+        updated = true;
+      }
+    });
+
+    return updated;
   },
 
   getInitialFocusSelector() {
@@ -4332,7 +4445,9 @@ export const HomeScreen = {
       }
       if (profile && buildSidebarProfileSignature(profile) !== previousSidebarProfileSignature) {
         this.sidebarProfile = profile;
-        this.requestBackgroundRender();
+        if (!this.patchSidebarProfileDom(profile)) {
+          this.requestBackgroundRender();
+        }
       }
     });
 
@@ -4596,24 +4711,30 @@ export const HomeScreen = {
     (async () => {
       for (let index = 0; index < pendingRows.length; index += retryBatchSize) {
         const batch = pendingRows.slice(index, index + retryBatchSize);
-        const settled = await Promise.allSettled(batch.map(async (row) => {
-          const result = await withTimeout(catalogRepository.getCatalog({
-            addonBaseUrl: row.addonBaseUrl,
-            addonId: row.addonId,
-            addonName: row.addonName,
-            catalogId: row.catalogId,
-            catalogName: row.catalogName,
-            type: row.type,
-            skip: 0,
-            supportsSkip: true
-          }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
-          if (result?.status !== "success") {
-            return null;
+        const settled = await Promise.all(batch.map(async (row) => {
+          try {
+            const result = await withTimeout(catalogRepository.getCatalog({
+              addonBaseUrl: row.addonBaseUrl,
+              addonId: row.addonId,
+              addonName: row.addonName,
+              catalogId: row.catalogId,
+              catalogName: row.catalogName,
+              type: row.type,
+              skip: 0,
+              supportsSkip: true
+            }), HOME_ROW_RETRY_TIMEOUT_MS, { status: "error", message: "timeout" });
+
+            if (result?.status !== "success") {
+              throw new Error(result?.message || "Catalog status error");
+            }
+            
+            return { 
+              status: "fulfilled", 
+              value: { ...row, result } 
+            };
+          } catch (err) {
+            return { status: "rejected", reason: err };
           }
-          return {
-            ...row,
-            result
-          };
         }));
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;

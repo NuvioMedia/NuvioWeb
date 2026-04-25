@@ -536,7 +536,6 @@
     <string name="qr_login_approved">Login approved. Finishing sign in…</string>
     <string name="qr_login_pending">Waiting for approval on your phone…</string>
     <string name="qr_login_expired">QR login expired. Generate a new code.</string>
-    <string name="qr_login_scan_prompt">Scan QR and sign in on your phone</string>
     <string name="trakt_code_expires">Code expires in %1$s</string>
     <string name="trakt_token_refreshes">Trakt access token refreshes in %1$s</string>
     <string name="trakt_login_instruction">Press Login to start Trakt device authentication. A QR code will appear here.</string>
@@ -875,7 +874,6 @@
     <string name="auth_qr_please_wait">Please wait…</string>
     <string name="auth_qr_continue">Continue</string>
     <string name="auth_qr_back">Back</string>
-    <string name="cd_qr_login">QR code</string>
 
     <!-- SyncCodeGenerateScreen -->
     <string name="sync_generate_title">Generate Sync Code</string>
