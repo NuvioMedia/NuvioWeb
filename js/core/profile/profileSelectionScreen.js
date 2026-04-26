@@ -7,6 +7,7 @@ import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js
 import { Platform } from "../../platform/index.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
+import { NuvioDialog } from "../../ui/components/nuvioDialog.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#f5f5f5";
@@ -217,6 +218,8 @@ export const ProfileSelectionScreen = {
     this.lastProfileFocusKey = "profile:1";
     this.optionsProfileId = null;
     this.deleteProfileId = null;
+    this._optionsDialog = null;
+    this._deleteDialog = null;
     this.editorState = null;
     this.pinOverlayState = null;
     this.pinOverlayRenderState = null;
@@ -334,8 +337,6 @@ export const ProfileSelectionScreen = {
         ${this.renderPinOverlay()}
       </div>
       ${this.renderEditorOverlay()}
-      ${this.renderOptionsDialog()}
-      ${this.renderDeleteDialog()}
       ${this.renderPinActionToast()}
     `;
 
@@ -503,60 +504,6 @@ export const ProfileSelectionScreen = {
     `;
   },
 
-  renderOptionsDialog() {
-    const profile = this.getProfileById(this.optionsProfileId);
-    if (!profile) {
-      return "";
-    }
-    const pinEnabled = this.isProfilePinEnabled(profile.id);
-
-    return `
-      <div class="profile-dialog-backdrop" data-action="dismiss-options-dialog">
-        <div class="profile-dialog profile-dialog-small" data-overlay-root="options">
-          <div class="profile-dialog-title">${escapeHtml(t("profile_selection_options_title", {}, "Profile Options"))}</div>
-          <div class="profile-dialog-actions">
-            <button class="profile-dialog-button profile-focusable focusable"
-                    type="button"
-                    data-action="open-edit-profile"
-                    data-profile-id="${escapeHtml(profile.id)}"
-                    data-focus-key="options:edit"
-                    tabindex="0">
-              ${escapeHtml(t("profile_edit_label", {}, "Edit"))}
-            </button>
-            <button class="profile-dialog-button profile-focusable focusable"
-                    type="button"
-                    data-action="open-profile-pin"
-                    data-profile-id="${escapeHtml(profile.id)}"
-                    data-focus-key="options:pin"
-                    tabindex="0">
-              ${pinEnabled ? PROFILE_PIN_TEXT.change : PROFILE_PIN_TEXT.set}
-            </button>
-            ${pinEnabled ? `
-              <button class="profile-dialog-button profile-focusable focusable"
-                      type="button"
-                      data-action="remove-profile-pin"
-                      data-profile-id="${escapeHtml(profile.id)}"
-                      data-focus-key="options:remove-pin"
-                      tabindex="0">
-                ${PROFILE_PIN_TEXT.remove}
-              </button>
-            ` : ""}
-            ${profile.isPrimary ? "" : `
-              <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
-                      type="button"
-                      data-action="confirm-delete-profile"
-                      data-profile-id="${escapeHtml(profile.id)}"
-                      data-focus-key="options:delete"
-                      tabindex="0">
-                ${escapeHtml(t("profile_delete", {}, "Delete"))}
-              </button>
-            `}
-          </div>
-        </div>
-      </div>
-    `;
-  },
-
   getPinOverlayProfile() {
     const profileId = this.pinOverlayState?.profileId || this.pinOverlayRenderState?.profileId;
     return this.getProfileById(profileId);
@@ -644,34 +591,6 @@ export const ProfileSelectionScreen = {
     `;
   },
 
-  renderDeleteDialog() {
-    const profile = this.getProfileById(this.deleteProfileId);
-    if (!profile) {
-      return "";
-    }
-
-    return `
-      <div class="profile-dialog-backdrop" data-action="dismiss-delete-dialog">
-        <div class="profile-dialog profile-dialog-medium" data-overlay-root="delete">
-          <div class="profile-dialog-title">${escapeHtml(t("profile_delete_confirm_title", {}, "Delete Profile?"))}</div>
-          <p class="profile-dialog-subtitle">
-            ${escapeHtml(t("profile_delete_confirm_subtitle", {}, "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."))}
-          </p>
-          <div class="profile-dialog-actions">
-            <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
-                    type="button"
-                    data-action="delete-profile"
-                    data-profile-id="${escapeHtml(profile.id)}"
-                    data-focus-key="delete:confirm"
-                    tabindex="0">
-              ${escapeHtml(t("profile_delete_btn", {}, "Delete Profile"))}
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  },
-
   bindEvents() {
     const gridCards = Array.from(this.container.querySelectorAll(".profile-card"));
     gridCards.forEach((card) => {
@@ -681,7 +600,7 @@ export const ProfileSelectionScreen = {
       });
     });
 
-    Array.from(this.container.querySelectorAll(".profile-overlay-focusable, .profile-dialog-button")).forEach((node) => {
+    Array.from(this.container.querySelectorAll(".profile-overlay-focusable")).forEach((node) => {
       node.addEventListener("focus", () => this.handleFocusableFocus(node));
       node.addEventListener("click", async (event) => {
         event.stopPropagation();
@@ -722,19 +641,6 @@ export const ProfileSelectionScreen = {
         }
       });
     }
-
-    Array.from(this.container.querySelectorAll(".profile-dialog-backdrop")).forEach((backdrop) => {
-      backdrop.addEventListener("click", (event) => {
-        if (event.target !== backdrop) {
-          return;
-        }
-        if (backdrop.querySelector("[data-overlay-root='options']")) {
-          this.closeOptionsDialog();
-        } else {
-          this.closeDeleteDialog();
-        }
-      });
-    });
 
     const pinBackdrop = this.container.querySelector(".profile-pin-layer");
     if (pinBackdrop && pinOverlay) {
@@ -805,12 +711,6 @@ export const ProfileSelectionScreen = {
   getDefaultFocusKey() {
     if (this.pinOverlayState) {
       return "pin:root";
-    }
-    if (this.deleteProfileId) {
-      return "delete:confirm";
-    }
-    if (this.optionsProfileId) {
-      return "options:edit";
     }
     if (this.editorState) {
       return "editor:name";
@@ -1038,16 +938,33 @@ export const ProfileSelectionScreen = {
     this._bgCurrentColor = fromColor;
 
     const DURATION = 520; // matches ATV animateColorAsState tween(520)
+    // ATV tween() default easing is FastOutSlowIn = cubic-bezier(0.4, 0.0, 0.2, 1.0)
+    const fastOutSlowIn = (t) => {
+      // cubic-bezier(0.4, 0, 0.2, 1) approximated via the standard formula
+      // Using a closed-form cubic bezier evaluator
+      const cx = 3 * 0.4, bx = 3 * (0.2 - 0.4) - 0, ax = 1 - cx - bx;
+      const cy = 3 * 0.0, by = 3 * (1.0 - 0.0) - 0, ay = 1 - cy - by;
+      // Solve for x(t)=input using Newton-Raphson
+      let s = t;
+      for (let i = 0; i < 6; i++) {
+        const x = ((ax * s + bx) * s + cx) * s - t;
+        const dx = (3 * ax * s + 2 * bx) * s + cx;
+        if (Math.abs(dx) < 1e-6) break;
+        s -= x / dx;
+      }
+      return ((ay * s + by) * s + cy) * s;
+    };
     const startTime = performance.now();
 
     const tick = (now) => {
       const elapsed = now - startTime;
       const t = Math.min(elapsed / DURATION, 1);
+      const eased = fastOutSlowIn(t);
       // Linear interpolation (ATV uses linear tween for color)
       const animatedColor = {
-        r: Math.round(fromColor.r + (targetColor.r - fromColor.r) * t),
-        g: Math.round(fromColor.g + (targetColor.g - fromColor.g) * t),
-        b: Math.round(fromColor.b + (targetColor.b - fromColor.b) * t),
+        r: Math.round(fromColor.r + (targetColor.r - fromColor.r) * eased),
+        g: Math.round(fromColor.g + (targetColor.g - fromColor.g) * eased),
+        b: Math.round(fromColor.b + (targetColor.b - fromColor.b) * eased),
       };
       this._bgCurrentColor = animatedColor;
       screen.style.background = this.buildBackgroundStyleFromColor(animatedColor);
@@ -1151,12 +1068,61 @@ export const ProfileSelectionScreen = {
     if (!profile) {
       return;
     }
-    this.editorState = null;
-    this.deleteProfileId = null;
+    // Destroy any existing dialogs
+    this._destroyDialogs();
+
     this.optionsProfileId = String(profile.id);
-    this.pendingFocusKey = "options:edit";
-    this.suppressNextFocusClick("options:edit");
-    this.render();
+    const pinEnabled = this.isProfilePinEnabled(profile.id);
+
+    const buttons = [
+      {
+        label: t("profile_edit_label", {}, "Edit"),
+        key: "edit",
+        onAction: () => {
+          this._optionsDialog = null;
+          this.openEditEditor(this.getProfileById(profile.id));
+        }
+      },
+      {
+        label: pinEnabled ? PROFILE_PIN_TEXT.change : PROFILE_PIN_TEXT.set,
+        key: "pin",
+        onAction: () => {
+          this._optionsDialog = null;
+          const p = this.getProfileById(profile.id);
+          if (p) this.openPinOverlay(this.isProfilePinEnabled(p.id) ? "verify-change" : "set", p);
+        }
+      },
+      ...(pinEnabled ? [{
+        label: PROFILE_PIN_TEXT.remove,
+        key: "remove-pin",
+        onAction: () => {
+          this._optionsDialog = null;
+          const p = this.getProfileById(profile.id);
+          if (p) this.openPinOverlay("verify-remove", p);
+        }
+      }] : []),
+      ...(!profile.isPrimary ? [{
+        label: t("profile_delete", {}, "Delete"),
+        key: "delete",
+        danger: true,
+        onAction: () => {
+          this._optionsDialog = null;
+          this.openDeleteDialog(this.getProfileById(profile.id));
+        }
+      }] : [])
+    ];
+
+    this._optionsDialog = new NuvioDialog({
+      title: t("profile_selection_options_title", {}, "Profile Options"),
+      widthVw: 37.5, // 360dp / 960dp screen = 37.5vw
+      buttons,
+      onDismiss: () => {
+        this._optionsDialog = null;
+        this.optionsProfileId = null;
+        this.pendingFocusKey = `profile:${profile.id}`;
+        this.restoreFocus();
+      }
+    }).mount(document.body);
   },
 
   canHoldManageProfile(node) {
@@ -1231,8 +1197,12 @@ export const ProfileSelectionScreen = {
   closeOptionsDialog() {
     const profileId = this.optionsProfileId;
     this.optionsProfileId = null;
+    if (this._optionsDialog) {
+      this._optionsDialog.destroy();
+      this._optionsDialog = null;
+    }
     this.pendingFocusKey = profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1");
-    this.render();
+    this.restoreFocus();
   },
 
   openPinOverlay(type, profile, currentPin = null) {
@@ -1487,17 +1457,42 @@ export const ProfileSelectionScreen = {
     if (!profile || profile.isPrimary) {
       return;
     }
-    this.optionsProfileId = null;
+    this._destroyDialogs();
     this.deleteProfileId = String(profile.id);
-    this.pendingFocusKey = "delete:confirm";
-    this.render();
+
+    this._deleteDialog = new NuvioDialog({
+      title: t("profile_delete_confirm_title", {}, "Delete Profile?"),
+      subtitle: t("profile_delete_confirm_subtitle", {}, "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."),
+      widthVw: 43.75, // 420dp / 960dp screen = 43.75vw
+      buttons: [
+        {
+          label: t("profile_delete_btn", {}, "Delete Profile"),
+          key: "confirm",
+          danger: true,
+          onAction: () => {
+            const id = this.deleteProfileId;
+            this._deleteDialog = null;
+            this.deleteProfileId = null;
+            this.deleteProfile(id);
+          }
+        }
+      ],
+      onDismiss: () => {
+        this._deleteDialog = null;
+        this.closeDeleteDialog();
+      }
+    }).mount(document.body);
   },
 
   closeDeleteDialog() {
     const profileId = this.deleteProfileId;
     this.deleteProfileId = null;
+    if (this._deleteDialog) {
+      this._deleteDialog.destroy();
+      this._deleteDialog = null;
+    }
     this.pendingFocusKey = profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1");
-    this.render();
+    this.restoreFocus();
   },
 
   async submitEditor() {
@@ -1780,11 +1775,11 @@ export const ProfileSelectionScreen = {
       this.closePinOverlay();
       return true;
     }
-    if (this.deleteProfileId) {
+    if (this._deleteDialog || this.deleteProfileId) {
       this.closeDeleteDialog();
       return true;
     }
-    if (this.optionsProfileId) {
+    if (this._optionsDialog || this.optionsProfileId) {
       this.closeOptionsDialog();
       return true;
     }
@@ -1798,7 +1793,21 @@ export const ProfileSelectionScreen = {
     return false;
   },
 
+  _destroyDialogs() {
+    if (this._optionsDialog) {
+      this._optionsDialog.destroy();
+      this._optionsDialog = null;
+    }
+    if (this._deleteDialog) {
+      this._deleteDialog.destroy();
+      this._deleteDialog = null;
+    }
+    this.optionsProfileId = null;
+    this.deleteProfileId = null;
+  },
+
   cleanup() {
+    this._destroyDialogs();
     this.cancelPendingProfileHold();
     if (this._bgAnimRaf) {
       cancelAnimationFrame(this._bgAnimRaf);
