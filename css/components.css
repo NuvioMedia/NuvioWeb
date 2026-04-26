@@ -1280,10 +1280,14 @@ button:focus-visible {
 .nuvio-dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  /* ATV Android Dialog scrim: rgba(0,0,0,0.72) at TV — darker than phone default */
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
+  /* side padding so panel never touches edges */
+  padding: 0 48px;
+  box-sizing: border-box;
   z-index: 60;
   opacity: 0;
   pointer-events: none;
@@ -1309,7 +1313,9 @@ button:focus-visible {
    Easing: tween default = FastOutSlowIn for enter, LinearOutSlowIn doesn't apply here
    — Compose tween() default easing = FastOutSlowIn */
 .nuvio-dialog-panel {
-  width: calc(100% - 48px);
+  /* width driven by JS maxWidth (360dp=720px for options, etc.)
+     — no fixed width here so maxWidth controls size */
+  width: 100%;
   box-sizing: border-box;
   background: #1a1a1a;
   /* 1dp border: barely visible at TV distance — keep but very subtle */
@@ -1391,10 +1397,10 @@ button:focus-visible {
   cursor: pointer;
   outline: none;
   transform: scale(1);
-  /* TV Material3 uses spring animation for scale, 200ms ease approximates it */
-  transition: background 150ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              color 150ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* TV Material3 Button uses spring for scale (~300ms), tween(200ms) for color */
+  transition: background 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              color 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* All focused buttons: white bg, dark text — including danger */
