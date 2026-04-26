@@ -1274,6 +1274,150 @@ button:focus-visible {
   color: var(--text-tertiary);
 }
 
+/* ─── NuvioDialog — reusable dialog matching ATV NuvioDialog.kt ─── */
+
+/* Backdrop / scrim — Android Dialog default scrim = 0.6 */
+.nuvio-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nuvio-dialog-backdrop.nuvio-dialog-backdrop-enter {
+  opacity: 1;
+  pointer-events: auto;
+  /* Compose Dialog fadeIn = tween(150ms) */
+  transition: opacity 150ms linear;
+}
+
+.nuvio-dialog-backdrop.nuvio-dialog-backdrop-exit {
+  opacity: 0;
+  pointer-events: none;
+  /* Compose Dialog fadeOut = tween(75ms) */
+  transition: opacity 75ms linear;
+}
+
+/* Panel
+   Compose Dialog enter: scaleIn(initialScale=0.9, tween(150ms)) + fadeIn(tween(150ms))
+   Compose Dialog exit:  scaleOut(targetScale=0.9, tween(75ms))  + fadeOut(tween(75ms))
+   Easing: tween default = FastOutSlowIn for enter, LinearOutSlowIn doesn't apply here
+   — Compose tween() default easing = FastOutSlowIn */
+.nuvio-dialog-panel {
+  width: calc(100% - 48px);
+  box-sizing: border-box;
+  background: #1a1a1a;
+  /* 1dp border: barely visible at TV distance — keep but very subtle */
+  border: 2px solid rgba(255, 255, 255, 0.06);
+  border-radius: 32px;
+  padding: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  overflow: visible;
+  /* start state: scale(0.9) opacity(0) — matches Compose scaleIn(0.9) */
+  transform: scale(0.9);
+  opacity: 0;
+}
+
+.nuvio-dialog-panel.nuvio-dialog-panel-enter {
+  transform: scale(1);
+  opacity: 1;
+  transition: transform 150ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              opacity 150ms linear;
+}
+
+.nuvio-dialog-panel.nuvio-dialog-panel-exit {
+  transform: scale(0.9);
+  opacity: 0;
+  transition: transform 75ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              opacity 75ms linear;
+}
+
+/* Title — titleLarge: 20sp=40px, Medium(500) */
+.nuvio-dialog-title {
+  font-size: 40px;
+  line-height: 1.2;
+  font-weight: 500;
+  color: #ffffff;
+}
+
+/* Subtitle — bodyMedium: 14sp=28px, Normal(400) */
+.nuvio-dialog-subtitle {
+  font-size: 28px;
+  line-height: 1.45;
+  font-weight: 400;
+  color: #b3b3b3;
+  margin-top: -16px;
+}
+
+/* Actions column — gap=16dp=32px */
+.nuvio-dialog-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  overflow: visible;
+}
+
+/* Button — TV Material3 Button (ButtonDefaults):
+   padding:    16dp h / 10dp v  → 32px / 20px
+   minHeight:  40dp             → 80px
+   text style: labelLarge = 14sp=28px Medium(500)
+   shape:      CircleShape (pill)
+   unfocused:  containerColor passed explicitly = BackgroundCard #242424
+   focused:    focusedContainerColor = onSurface = #ffffff
+               focusedContentColor  = inverseOnSurface = #121212
+   scale:      focusedScale = 1.1 (ButtonDefaults.scale default)
+   No special focused color for danger — same white/dark as normal focused */
+.nuvio-dialog-button {
+  width: 100%;
+  padding: 20px 32px;
+  min-height: 80px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  border: none;
+  background: #242424;
+  color: #ffffff;
+  font-size: 28px;
+  line-height: 40px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transform: scale(1);
+  /* TV Material3 uses spring animation for scale, 200ms ease approximates it */
+  transition: background 150ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              color 150ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* All focused buttons: white bg, dark text — including danger */
+.nuvio-dialog-button.focused {
+  background: #ffffff;
+  color: #121212;
+  transform: scale(1.1);
+}
+
+/* Danger unfocused: dark red bg */
+.nuvio-dialog-button.nuvio-dialog-button-danger {
+  background: #4a2323;
+  color: #ffffff;
+}
+
+/* Danger focused: same as any focused button — white/dark (ATV confirmed) */
+.nuvio-dialog-button.nuvio-dialog-button-danger.focused {
+  background: #ffffff;
+  color: #121212;
+  transform: scale(1.1);
+}
+
+/* ─── Legacy profile-specific dialog aliases (kept for compat) ─── */
 .profile-dialog {
   width: min(92vw, 500px);
   padding: 34px 34px 28px;
