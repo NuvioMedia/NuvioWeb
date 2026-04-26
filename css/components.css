@@ -972,31 +972,45 @@ button:focus-visible {
 
 .profile-editor-panel,
 .profile-dialog {
-  border-radius: 20px;
   border: 1px solid var(--border-color);
   background: var(--bg-elevated);
   box-sizing: border-box;
 }
 
+/* ATV ProfileSelectionSpacing (all at 2x / 320dpi):
+   EditorPanelMaxWidth = 980dp = 1960px → use 92vw (ATV uses fillMaxWidth(0.92f).widthIn(max=980dp))
+   EditorPanelGap      = 28dp  = 56px
+   EditorPreviewWidth  = 280dp = 560px
+   EditorPreviewAvatarSize = 112dp = 224px
+   EditorPreviewTopOffset  = 28dp  = 56px
+   EditorDividerHeight = 320dp = 640px
+   EditorDividerSpacing= 18dp  = 36px
+   Panel padding       = 32dp  = 64px
+   Panel border-radius = 20dp  = 40px
+   Header padding-left = 24dp  = 48px */
 .profile-editor-panel {
-  width: min(92vw, 1120px);
-  padding: 38px;
+  width: 92vw;
+  max-width: 1960px;
+  padding: 64px;
   --profile-editor-neutral-bg: rgb(255 255 255 / 0.06);
   --profile-editor-neutral-bg-focused: rgb(255 255 255 / 0.1);
   --profile-editor-neutral-border: rgb(255 255 255 / 0.12);
   --profile-editor-neutral-ring: rgb(255 255 255 / 0.72);
+  /* 20dp = 40px border-radius */
+  border-radius: 40px;
 }
 
 .profile-editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 28px;
-  padding-left: 28px;
+  gap: 56px;
+  padding-left: 48px;
 }
 
+/* Kicker: 16sp = 32px, SemiBold */
 .profile-editor-heading-title {
-  font-size: 31px;
+  font-size: 60px;
   line-height: 1.1;
   font-weight: 700;
   color: var(--text-color);
@@ -1006,57 +1020,66 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 4px;
 }
 
+/* Kicker: 16sp = 32px, SemiBold(600) */
 .profile-editor-heading-kicker {
-  font-size: 18px;
+  font-size: 32px;
   line-height: 1.2;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
+/* Name: 30sp = 60px, Black(900) */
 .profile-editor-heading-name {
-  font-size: 36px;
+  font-size: 60px;
   line-height: 1.08;
-  font-weight: 800;
+  font-weight: 900;
   color: var(--text-color);
 }
 
+/* Body: margin-top = 24dp = 48px; min-height = 360dp = 720px */
 .profile-editor-body {
   display: flex;
   align-items: flex-start;
-  gap: 22px;
-  margin-top: 30px;
-  min-height: 420px;
+  gap: 0;
+  margin-top: 48px;
+  min-height: 720px;
 }
 
+/* Preview col: width = 280dp = 560px
+   padding: start=24dp=48px, top=24+28dp=104px, end=24dp=48px, bottom=24dp=48px
+   gap spacedBy = 18dp = 36px */
 .profile-editor-preview {
-  width: 320px;
-  padding: 64px 28px 28px;
+  width: 560px;
+  flex-shrink: 0;
+  padding: 104px 48px 48px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 22px;
+  gap: 36px;
 }
 
+/* Avatar preview: 112dp = 224px */
 .profile-editor-preview-avatar {
-  width: 132px;
-  height: 132px;
+  width: 224px;
+  height: 224px;
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  font-size: 64px;
+  font-size: 108px;
   font-weight: 700;
   color: var(--text-color);
 }
 
+/* Preview name: 22sp = 44px, Bold(700) */
 .profile-editor-preview-name {
   max-width: 100%;
-  font-size: 26px;
+  font-size: 44px;
   line-height: 1.18;
   font-weight: 700;
   color: var(--text-color);
@@ -1069,12 +1092,13 @@ button:focus-visible {
   color: var(--text-secondary);
 }
 
+/* Name field: EditorFieldRadius = 14dp = 28px; padding = 16dp = 32px */
 .profile-editor-field-shell {
   width: 100%;
-  padding: 16px 18px;
-  border-radius: 16px;
+  padding: 32px;
+  border-radius: 28px;
   box-sizing: border-box;
-  border: 1px solid var(--profile-editor-neutral-border, var(--border-color));
+  border: 2px solid var(--profile-editor-neutral-border, var(--border-color));
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.05));
   transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
 }
@@ -1082,7 +1106,7 @@ button:focus-visible {
 .profile-editor-field-shell:focus-within {
   background: var(--focus-bg);
   border-color: var(--secondary-color);
-  box-shadow: inset 0 0 0 1px var(--secondary-color), 0 0 0 1px rgb(var(--secondary-color-rgb) / 0.28);
+  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
 }
 
 .profile-editor-name-input {
@@ -1091,7 +1115,7 @@ button:focus-visible {
   padding: 0;
   background: transparent;
   color: var(--text-color);
-  font-size: 18px;
+  font-size: 32px;
   line-height: 1.2;
   font-family: inherit;
 }
@@ -1100,37 +1124,44 @@ button:focus-visible {
   color: var(--text-tertiary);
 }
 
+/* Divider: spacing = 18dp = 36px each side; height = 320dp = 640px */
 .profile-editor-divider {
-  width: 1px;
-  min-height: 372px;
-  margin-top: 34px;
+  width: 2px;
+  min-height: 640px;
+  margin-top: 68px;
+  margin-left: 36px;
+  margin-right: 36px;
   background: var(--border-color);
 }
 
+/* Avatar pane: gap = 12dp = 24px */
 .profile-editor-avatar-pane {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 24px;
 }
 
+/* Avatar title: 13sp = 26px, Medium(500) */
 .profile-editor-avatar-title {
   width: 100%;
-  font-size: 15px;
+  font-size: 26px;
   line-height: 1.2;
   font-weight: 500;
   color: var(--text-secondary);
   text-align: center;
 }
 
+/* Category row: gap = 8dp = 16px; vertical gap = 8dp = 16px */
 .profile-editor-category-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding-bottom: 4px;
+  gap: 16px;
+  padding-bottom: 8px;
   flex-wrap: wrap;
+  row-gap: 16px;
 }
 
 .profile-avatar-category,
@@ -1143,16 +1174,17 @@ button:focus-visible {
   font-family: inherit;
 }
 
+/* Category tab: padding = 18dp h / 8dp v = 36px / 16px; radius = 20dp = 40px; font = 13sp = 26px */
 .profile-avatar-category {
-  padding: 10px 20px;
-  border-radius: 22px;
-  border: 1px solid var(--profile-editor-neutral-border, var(--border-color));
+  padding: 16px 36px;
+  border-radius: 40px;
+  border: 2px solid var(--profile-editor-neutral-border, var(--border-color));
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.06));
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 26px;
   line-height: 1.2;
   font-weight: 500;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
 }
 
 .profile-avatar-category.is-selected {
@@ -1166,41 +1198,44 @@ button:focus-visible {
   border-color: var(--secondary-color);
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.06));
   color: var(--text-color);
-  box-shadow: inset 0 0 0 1px var(--secondary-color);
+  box-shadow: inset 0 0 0 2px var(--secondary-color);
 }
 
 .profile-avatar-category.is-selected.focused {
   background: var(--focus-bg);
 }
 
+/* Avatar grid: minCell = 88dp = 176px; gap = 12dp = 24px; max-height = 320dp = 640px */
 .profile-editor-avatar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
-  gap: 14px;
-  max-height: 372px;
-  padding: 6px 10px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 24px;
+  max-height: 640px;
+  padding: 8px 16px;
   overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .profile-editor-avatar-grid::-webkit-scrollbar {
   display: none;
 }
 
+/* Avatar tile: requiredSize = 80dp = 160px; scale 1.1 on focus; border on focus/selected */
 .profile-avatar-tile {
-  width: 96px;
-  height: 96px;
+  width: 160px;
+  height: 160px;
   padding: 0;
   margin: 0 auto;
   border-radius: 999px;
   overflow: hidden;
   background: transparent;
   transform: scale(1);
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: transform 150ms ease, box-shadow 150ms ease;
 }
 
 .profile-avatar-tile.is-selected,
 .profile-avatar-tile.focused {
-  box-shadow: inset 0 0 0 3px var(--focus-color);
+  box-shadow: inset 0 0 0 6px var(--focus-color);
 }
 
 .profile-avatar-tile.focused {
@@ -1219,24 +1254,26 @@ button:focus-visible {
   font-size: 17px;
 }
 
+/* Avatar hint: 18sp = 36px, Bold */
 .profile-editor-avatar-hint {
   width: 100%;
-  min-height: 28px;
-  font-size: 20px;
+  min-height: 48px;
+  font-size: 36px;
   line-height: 1.25;
   font-weight: 700;
   color: #808080;
   text-align: center;
 }
 
+/* OverlayButton: radius=12dp=24px, padding=28h/12v dp=56/24px, font=15sp=30px, SemiBold */
 .profile-overlay-button {
-  min-width: 138px;
-  padding: 14px 32px;
-  border-radius: 14px;
-  border: 1px solid var(--profile-editor-neutral-border, var(--border-color));
+  min-width: 200px;
+  padding: 24px 56px;
+  border-radius: 24px;
+  border: 2px solid var(--profile-editor-neutral-border, var(--border-color));
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.06));
   color: var(--text-color);
-  font-size: 17px;
+  font-size: 30px;
   line-height: 1.2;
   font-weight: 600;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
@@ -1257,14 +1294,14 @@ button:focus-visible {
   background: var(--focus-bg);
   border-color: var(--secondary-color);
   color: var(--text-color);
-  box-shadow: inset 0 0 0 1px var(--secondary-color), 0 0 0 1px rgb(var(--secondary-color-rgb) / 0.28);
+  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
 }
 
 .profile-overlay-button.profile-overlay-button-primary.focused {
   background: var(--focus-bg);
   border-color: var(--secondary-color);
   color: var(--text-color);
-  box-shadow: inset 0 0 0 1px var(--secondary-color), 0 0 0 1px rgb(var(--secondary-color-rgb) / 0.28);
+  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
 }
 
 .profile-overlay-button.is-disabled,

@@ -683,11 +683,11 @@ export const ProfileSelectionScreen = {
       if (hintNode) {
         hintNode.textContent = this.editorState.focusedAvatarName || "Focus an avatar to view its name";
       }
-      node.scrollIntoView({ block: "nearest", inline: "nearest" });
+      node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
 
     if (category) {
-      node.scrollIntoView({ block: "nearest", inline: "nearest" });
+      node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
   },
 
@@ -1079,6 +1079,7 @@ export const ProfileSelectionScreen = {
         label: t("profile_edit_label", {}, "Edit"),
         key: "edit",
         onAction: () => {
+          this._optionsDialog?.destroy();
           this._optionsDialog = null;
           this.openEditEditor(this.getProfileById(profile.id));
         }
@@ -1087,6 +1088,7 @@ export const ProfileSelectionScreen = {
         label: pinEnabled ? PROFILE_PIN_TEXT.change : PROFILE_PIN_TEXT.set,
         key: "pin",
         onAction: () => {
+          this._optionsDialog?.destroy();
           this._optionsDialog = null;
           const p = this.getProfileById(profile.id);
           if (p) this.openPinOverlay(this.isProfilePinEnabled(p.id) ? "verify-change" : "set", p);
@@ -1096,6 +1098,7 @@ export const ProfileSelectionScreen = {
         label: PROFILE_PIN_TEXT.remove,
         key: "remove-pin",
         onAction: () => {
+          this._optionsDialog?.destroy();
           this._optionsDialog = null;
           const p = this.getProfileById(profile.id);
           if (p) this.openPinOverlay("verify-remove", p);
@@ -1106,6 +1109,7 @@ export const ProfileSelectionScreen = {
         key: "delete",
         danger: true,
         onAction: () => {
+          this._optionsDialog?.destroy();
           this._optionsDialog = null;
           this.openDeleteDialog(this.getProfileById(profile.id));
         }
