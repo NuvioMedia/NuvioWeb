@@ -741,12 +741,13 @@ button:focus-visible {
   align-items: center;
   gap: 0;
   text-align: center;
+  width: 100%;
 }
 
 .profile-pin-heading {
-  max-width: 720px;
-  font-size: 42px;
-  line-height: 48px;
+  max-width: min(75vw, 1440px);
+  font-size: min(4.375vw, 84px);
+  line-height: min(5vw, 96px);
   font-weight: 700;
   color: var(--text-color);
 }
@@ -755,8 +756,8 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  margin-top: 42px;
+  gap: min(1.46vw, 28px);
+  margin-top: min(4.375vw, 84px);
 }
 
 .profile-pin-box-row.is-shaking {
@@ -764,10 +765,10 @@ button:focus-visible {
 }
 
 .profile-pin-box {
-  width: 118px;
-  height: 118px;
-  border-radius: 2px;
-  border: 1px solid rgb(255 255 255 / 0.72);
+  width: min(12.29vw, 236px);
+  height: min(12.29vw, 236px);
+  border-radius: 4px;
+  border: 2px solid rgb(255 255 255 / 0.72);
   background: transparent;
   display: inline-flex;
   align-items: center;
@@ -782,20 +783,20 @@ button:focus-visible {
 }
 
 .profile-pin-box.is-active {
-  border-width: 2px;
+  border-width: 4px;
   border-color: #fff;
   background: rgb(255 255 255 / 0.04);
 }
 
 .profile-pin-box.is-error {
-  border-width: 2px;
+  border-width: 4px;
   border-color: #e35d5d;
   background: rgb(49 24 24 / 0.76);
 }
 
 .profile-pin-dot {
-  width: 16px;
-  height: 16px;
+  width: min(1.67vw, 32px);
+  height: min(1.67vw, 32px);
   border-radius: 999px;
   background: #fff;
   opacity: 0;
@@ -804,8 +805,8 @@ button:focus-visible {
 }
 
 .profile-pin-cursor {
-  width: 2px;
-  height: 40px;
+  width: 4px;
+  height: min(4.17vw, 80px);
   background: rgb(255 255 255 / 0.9);
   opacity: 0;
   transform: scaleY(0.8);
@@ -826,14 +827,14 @@ button:focus-visible {
 .profile-pin-support,
 .profile-pin-forgot,
 .profile-pin-back-hint {
-  max-width: 720px;
+  max-width: min(75vw, 1440px);
   font-weight: 500;
 }
 
 .profile-pin-support {
-  margin-top: 26px;
-  font-size: 18px;
-  line-height: 24px;
+  margin-top: min(2.71vw, 52px);
+  font-size: min(1.875vw, 36px);
+  line-height: min(2.5vw, 48px);
   color: var(--text-secondary);
 }
 
@@ -843,17 +844,17 @@ button:focus-visible {
 
 .profile-pin-forgot,
 .profile-pin-back-hint {
-  font-size: 14px;
-  line-height: 20px;
+  font-size: min(1.46vw, 28px);
+  line-height: min(2.08vw, 40px);
   color: var(--text-tertiary);
 }
 
 .profile-pin-forgot {
-  margin-top: 10px;
+  margin-top: min(1.04vw, 20px);
 }
 
 .profile-pin-back-hint {
-  margin-top: 14px;
+  margin-top: min(1.46vw, 28px);
 }
 
 .profile-pin-toast {
@@ -977,42 +978,33 @@ button:focus-visible {
   box-sizing: border-box;
 }
 
-/* ATV ProfileSelectionSpacing (all at 2x / 320dpi):
-   EditorPanelMaxWidth = 980dp = 1960px → use 92vw (ATV uses fillMaxWidth(0.92f).widthIn(max=980dp))
-   EditorPanelGap      = 28dp  = 56px
-   EditorPreviewWidth  = 280dp = 560px
-   EditorPreviewAvatarSize = 112dp = 224px
-   EditorPreviewTopOffset  = 28dp  = 56px
-   EditorDividerHeight = 320dp = 640px
-   EditorDividerSpacing= 18dp  = 36px
-   Panel padding       = 32dp  = 64px
-   Panel border-radius = 20dp  = 40px
-   Header padding-left = 24dp  = 48px */
+/* ATV ProfileSelectionSpacing expressed against a 1920px ATV viewport. */
 .profile-editor-panel {
   width: 92vw;
   max-width: 1960px;
-  padding: 64px;
+  max-height: 96vh;
+  padding: min(3.33vw, 64px);
+  border-radius: min(2.08vw, 40px);
+  overflow: hidden;
   --profile-editor-neutral-bg: rgb(255 255 255 / 0.06);
   --profile-editor-neutral-bg-focused: rgb(255 255 255 / 0.1);
   --profile-editor-neutral-border: rgb(255 255 255 / 0.12);
   --profile-editor-neutral-ring: rgb(255 255 255 / 0.72);
-  /* 20dp = 40px border-radius */
-  border-radius: 40px;
 }
 
 .profile-editor-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 56px;
-  padding-left: 48px;
+  gap: min(2.92vw, 56px);
+  padding-left: min(2.5vw, 48px);
 }
 
-/* Kicker: 16sp = 32px, SemiBold */
+/* Create title: 26sp, Bold */
 .profile-editor-heading-title {
-  font-size: 60px;
+  font-size: min(2.604vw, 50px);
   line-height: 1.1;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-color);
 }
 
@@ -1020,68 +1012,67 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 4px;
+  gap: 0.21vw;
 }
 
-/* Kicker: 16sp = 32px, SemiBold(600) */
+/* Edit kicker: 16sp, SemiBold */
 .profile-editor-heading-kicker {
-  font-size: 32px;
+  font-size: min(1.667vw, 32px);
   line-height: 1.2;
   font-weight: 600;
   color: var(--text-secondary);
 }
 
-/* Name: 30sp = 60px, Black(900) */
+/* Edit name: 30sp, Black */
 .profile-editor-heading-name {
-  font-size: 60px;
+  font-size: min(3.125vw, 60px);
   line-height: 1.08;
   font-weight: 900;
   color: var(--text-color);
 }
 
-/* Body: margin-top = 24dp = 48px; min-height = 360dp = 720px */
+/* Body: top aligned like ATV */
 .profile-editor-body {
   display: flex;
   align-items: flex-start;
   gap: 0;
-  margin-top: 48px;
-  min-height: 720px;
+  margin-top: min(2.5vw, 48px);
+  min-height: min(37.5vw, 720px);
 }
 
-/* Preview col: width = 280dp = 560px
-   padding: start=24dp=48px, top=24+28dp=104px, end=24dp=48px, bottom=24dp=48px
-   gap spacedBy = 18dp = 36px */
+/* Preview col: 280dp wide with ATV padding/gap. */
 .profile-editor-preview {
-  width: 560px;
+  width: min(29.17vw, 560px);
   flex-shrink: 0;
-  padding: 104px 48px 48px;
+  padding: min(5.42vw, 104px) min(2.5vw, 48px) min(2.5vw, 48px);
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 36px;
+  gap: min(1.875vw, 36px);
 }
 
-/* Avatar preview: 112dp = 224px */
+/* Avatar preview: 112dp */
 .profile-editor-preview-avatar {
-  width: 224px;
-  height: 224px;
+  width: min(10.94vw, 210px);
+  height: min(10.94vw, 210px);
   border-radius: 999px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  font-size: 108px;
-  font-weight: 700;
+  font-size: min(4.167vw, 80px);
+  font-weight: 600;
+  line-height: 1;
   color: var(--text-color);
 }
 
-/* Preview name: 22sp = 44px, Bold(700) */
+/* Preview name: 22sp */
 .profile-editor-preview-name {
   max-width: 100%;
-  font-size: 44px;
+  font-size: min(2.1875vw, 42px);
   line-height: 1.18;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-color);
   text-align: center;
   overflow: hidden;
@@ -1092,11 +1083,11 @@ button:focus-visible {
   color: var(--text-secondary);
 }
 
-/* Name field: EditorFieldRadius = 14dp = 28px; padding = 16dp = 32px */
+/* Name field: 14dp radius, 16dp padding. */
 .profile-editor-field-shell {
   width: 100%;
-  padding: 32px;
-  border-radius: 28px;
+  padding: min(1.46vw, 28px);
+  border-radius: min(1.35vw, 26px);
   box-sizing: border-box;
   border: 2px solid var(--profile-editor-neutral-border, var(--border-color));
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.05));
@@ -1115,7 +1106,7 @@ button:focus-visible {
   padding: 0;
   background: transparent;
   color: var(--text-color);
-  font-size: 32px;
+  font-size: min(1.5625vw, 30px);
   line-height: 1.2;
   font-family: inherit;
 }
@@ -1124,44 +1115,44 @@ button:focus-visible {
   color: var(--text-tertiary);
 }
 
-/* Divider: spacing = 18dp = 36px each side; height = 320dp = 640px */
+/* Divider: 320dp high with 18dp side spacing. */
 .profile-editor-divider {
   width: 2px;
-  min-height: 640px;
-  margin-top: 68px;
-  margin-left: 36px;
-  margin-right: 36px;
+  min-height: min(33.33vw, 640px);
+  margin-top: min(3.54vw, 68px);
+  margin-left: min(1.875vw, 36px);
+  margin-right: min(1.875vw, 36px);
   background: var(--border-color);
 }
 
-/* Avatar pane: gap = 12dp = 24px */
+/* Avatar pane: 12dp vertical gap. */
 .profile-editor-avatar-pane {
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: min(1.25vw, 24px);
 }
 
-/* Avatar title: 13sp = 26px, Medium(500) */
+/* Avatar title: 13sp */
 .profile-editor-avatar-title {
   width: 100%;
-  font-size: 26px;
+  font-size: min(1.354vw, 26px);
   line-height: 1.2;
   font-weight: 500;
   color: var(--text-secondary);
   text-align: center;
 }
 
-/* Category row: gap = 8dp = 16px; vertical gap = 8dp = 16px */
+/* Category tabs: 8dp gaps. */
 .profile-editor-category-row {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  padding-bottom: 8px;
+  gap: min(0.833vw, 16px);
+  padding-bottom: min(0.417vw, 8px);
   flex-wrap: wrap;
-  row-gap: 16px;
+  row-gap: min(0.833vw, 16px);
 }
 
 .profile-avatar-category,
@@ -1205,13 +1196,13 @@ button:focus-visible {
   background: var(--focus-bg);
 }
 
-/* Avatar grid: minCell = 88dp = 176px; gap = 12dp = 24px; max-height = 320dp = 640px */
+/* Avatar grid: ATV uses a 320dp height cap and effectively renders 4 columns here. */
 .profile-editor-avatar-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 24px;
-  max-height: 640px;
-  padding: 8px 16px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: min(1.25vw, 24px);
+  max-height: min(21.875vw, 420px);
+  padding: min(0.417vw, 8px) min(0.833vw, 16px);
   overflow-y: auto;
   scroll-behavior: smooth;
 }
@@ -1222,8 +1213,8 @@ button:focus-visible {
 
 /* Avatar tile: requiredSize = 80dp = 160px; scale 1.1 on focus; border on focus/selected */
 .profile-avatar-tile {
-  width: 160px;
-  height: 160px;
+  width: min(8.33vw, 160px);
+  height: min(8.33vw, 160px);
   padding: 0;
   margin: 0 auto;
   border-radius: 999px;
@@ -1235,7 +1226,7 @@ button:focus-visible {
 
 .profile-avatar-tile.is-selected,
 .profile-avatar-tile.focused {
-  box-shadow: inset 0 0 0 6px var(--focus-color);
+  box-shadow: inset 0 0 0 0.3125vw var(--focus-color);
 }
 
 .profile-avatar-tile.focused {
@@ -1254,29 +1245,37 @@ button:focus-visible {
   font-size: 17px;
 }
 
-/* Avatar hint: 18sp = 36px, Bold */
+/* Avatar hint: 18sp, Bold */
 .profile-editor-avatar-hint {
   width: 100%;
-  min-height: 48px;
-  font-size: 36px;
+  min-height: min(2.5vw, 48px);
+  margin-top: min(0.42vw, 8px);
+  font-size: min(1.77vw, 34px);
   line-height: 1.25;
   font-weight: 700;
-  color: #808080;
+  color: var(--text-tertiary);
   text-align: center;
+}
+
+.profile-editor-avatar-hint.has-name {
+  color: var(--text-color);
 }
 
 /* OverlayButton: radius=12dp=24px, padding=28h/12v dp=56/24px, font=15sp=30px, SemiBold */
 .profile-overlay-button {
-  min-width: 200px;
-  padding: 24px 56px;
-  border-radius: 24px;
-  border: 2px solid var(--profile-editor-neutral-border, var(--border-color));
+  padding: min(1.25vw, 24px) min(2.92vw, 56px);
+  border-radius: min(1.25vw, 24px);
+  border: 1px solid var(--profile-editor-neutral-border, var(--border-color));
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.06));
   color: var(--text-color);
-  font-size: 30px;
+  font-size: min(1.5625vw, 30px);
   line-height: 1.2;
   font-weight: 600;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+
+.profile-editor-preview [data-action="cancel-editor"] {
+  width: 100%;
 }
 
 .profile-overlay-button-primary {
@@ -1306,9 +1305,22 @@ button:focus-visible {
 
 .profile-overlay-button.is-disabled,
 .profile-overlay-button:disabled {
-  background: rgb(255 255 255 / 0.035);
-  border-color: rgb(255 255 255 / 0.08);
-  color: var(--text-tertiary);
+  background: rgb(255 255 255 / 0.04);
+  border-color: var(--border-color);
+  color: #4d4d4d;
+}
+
+.profile-overlay-button.profile-overlay-button-primary.is-disabled,
+.profile-overlay-button.profile-overlay-button-primary:disabled {
+  background: rgb(255 255 255 / 0.04);
+  border-color: var(--border-color);
+  color: #4d4d4d;
+}
+
+.profile-editor-header .profile-overlay-button {
+  padding: min(0.94vw, 18px) min(2.29vw, 44px);
+  border-radius: min(1.15vw, 22px);
+  font-size: min(1.406vw, 27px);
 }
 
 /* ─── NuvioDialog — reusable dialog matching ATV NuvioDialog.kt ─── */

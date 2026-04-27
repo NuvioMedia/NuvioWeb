@@ -38,14 +38,7 @@ export const AvatarRepository = {
     const response = await SupabaseApi.rpc("get_avatar_catalog", {}, false);
     cachedCatalog = (Array.isArray(response) ? response : [])
       .map((row) => mapAvatar(row))
-      .filter((avatar) => avatar.id && avatar.imageUrl)
-      .sort((left, right) => {
-        const orderDelta = Number(left.sortOrder || 0) - Number(right.sortOrder || 0);
-        if (orderDelta !== 0) {
-          return orderDelta;
-        }
-        return String(left.displayName).localeCompare(String(right.displayName));
-      });
+      .filter((avatar) => avatar.id && avatar.imageUrl);
     return cachedCatalog;
   },
 

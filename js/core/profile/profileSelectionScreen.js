@@ -83,6 +83,67 @@ function getProfileInitial(name) {
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
 }
 
+const centeredScrollAnimations = new WeakMap();
+
+function animateScrollTop(container, clampedTarget, duration = 220) {
+  if (!container) {
+    return;
+  }
+  if (typeof requestAnimationFrame !== "function") {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  const existing = centeredScrollAnimations.get(container);
+  if (existing) {
+    cancelAnimationFrame(existing);
+  }
+  const startTop = container.scrollTop;
+  const delta = clampedTarget - startTop;
+  if (Math.abs(delta) < 1) {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  const startTime = performance.now();
+  const step = (now) => {
+    const elapsed = Math.min(1, (now - startTime) / duration);
+    const eased = 1 - Math.pow(1 - elapsed, 4);
+    container.scrollTop = startTop + (delta * eased);
+    if (elapsed < 1) {
+      centeredScrollAnimations.set(container, requestAnimationFrame(step));
+    } else {
+      centeredScrollAnimations.delete(container);
+    }
+  };
+  centeredScrollAnimations.set(container, requestAnimationFrame(step));
+}
+
+function centerAvatarRowInScrollContainer(node, container, siblingNodes, behavior = "smooth") {
+  if (!node || !container) {
+    return;
+  }
+  const rows = buildVisualRows(siblingNodes || []);
+  const row = rows.find((entry) => entry.nodes.includes(node));
+  if (!row) {
+    return;
+  }
+  const rowRects = row.nodes.map((entry) => entry.getBoundingClientRect());
+  const rowTop = Math.min(...rowRects.map((rect) => rect.top));
+  const rowBottom = Math.max(...rowRects.map((rect) => rect.bottom));
+  const rowHeight = rowBottom - rowTop;
+  const containerRect = container.getBoundingClientRect();
+  const targetTop = container.scrollTop + (rowTop - containerRect.top) - ((containerRect.height - rowHeight) / 2);
+  const clampedTarget = Math.max(0, targetTop);
+  if (behavior !== "smooth") {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  if (Math.abs(clampedTarget - container.scrollTop) < 8) {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  animateScrollTop(container, clampedTarget, 120);
+}
+
 function clampChannel(value) {
   return Math.min(255, Math.max(0, Math.round(value)));
 }
@@ -301,7 +362,7 @@ export const ProfileSelectionScreen = {
     if (category === "all") {
       return this.avatarCatalog;
     }
-    return this.avatarCatalog.filter((avatar) => avatar.category === category);
+    return this.avatarCatalog.filter((avatar) => String(avatar.category || "").toLowerCase() === category.toLowerCase());
   },
 
   render() {
@@ -431,7 +492,7 @@ export const ProfileSelectionScreen = {
               <div class="profile-editor-preview-avatar" style="background:${escapeHtml(this.editorState.selectedColorHex || getDefaultProfileColor())}">
                 ${previewAvatarUrl
                   ? `<img class="profile-editor-preview-image" src="${escapeHtml(previewAvatarUrl)}" alt="${escapeHtml(previewName)}"/>`
-                  : escapeHtml(getProfileInitial(previewName))}
+                  : escapeHtml(getProfileInitial(String(this.editorState.name || "").trim()))}
               </div>
 
               <div class="profile-editor-preview-name${String(this.editorState.name || "").trim() ? "" : " is-placeholder"}" data-role="editor-preview-name">${escapeHtml(previewName)}</div>
@@ -448,7 +509,7 @@ export const ProfileSelectionScreen = {
                        tabindex="0"/>
               </label>
 
-              <button class="profile-overlay-button profile-overlay-button-secondary profile-overlay-focusable"
+              <button class="profile-overlay-button profile-overlay-button-primary profile-overlay-focusable"
                       type="button"
                       data-action="cancel-editor"
                       data-focus-key="editor:cancel"
@@ -494,7 +555,7 @@ export const ProfileSelectionScreen = {
                 </div>
               `}
 
-              <div class="profile-editor-avatar-hint" data-role="editor-avatar-hint">
+              <div class="profile-editor-avatar-hint${this.editorState.focusedAvatarName ? " has-name" : ""}" data-role="editor-avatar-hint">
                 ${escapeHtml(this.editorState.focusedAvatarName || t("profile_avatar_focus_hint", {}, "Focus an avatar to view its name"))}
               </div>
             </div>
@@ -682,8 +743,11 @@ export const ProfileSelectionScreen = {
       const hintNode = this.container.querySelector("[data-role='editor-avatar-hint']");
       if (hintNode) {
         hintNode.textContent = this.editorState.focusedAvatarName || "Focus an avatar to view its name";
+        hintNode.classList.toggle("has-name", Boolean(this.editorState.focusedAvatarName));
       }
-      node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      const gridNode = node.closest(".profile-editor-avatar-grid");
+      const avatarButtons = Array.from(gridNode?.querySelectorAll("[data-action='select-avatar']") || []);
+      centerAvatarRowInScrollContainer(node, gridNode, avatarButtons, "smooth");
     }
 
     if (category) {
@@ -1027,9 +1091,9 @@ export const ProfileSelectionScreen = {
       profileId: null,
       originalName: "",
       name: "",
-      selectedColorHex: getDefaultProfileColor(),
+      selectedColorHex: "#1E88E5",
       selectedAvatarId: null,
-      baseColorHex: getDefaultProfileColor(),
+      baseColorHex: "#1E88E5",
       category: "all",
       focusedAvatarName: null
     };
