@@ -2027,7 +2027,9 @@ button:focus-visible {
 
 .modern-sidebar-shell.blur-enabled .modern-sidebar-panel {
   border-color: rgb(255 255 255 / 0.14);
-  background: linear-gradient(180deg, rgba(74, 79, 89, 0.839), rgba(63, 69, 79, 0.8), rgba(64, 71, 79, 0.776));
+  background:
+    linear-gradient(180deg, rgba(16, 16, 16, 0.22), rgba(16, 16, 16, 0.22)),
+    linear-gradient(180deg, rgba(74, 79, 89, 0.839), rgba(63, 69, 79, 0.8), rgba(64, 71, 79, 0.776));
   backdrop-filter: blur(0px) saturate(1);
   -webkit-backdrop-filter: blur(0px) saturate(1);
 }
@@ -2255,7 +2257,9 @@ button:focus-visible {
 
 .modern-sidebar-shell.blur-enabled .modern-sidebar-pill-chip {
   border-color: rgb(255 255 255 / 0.14);
-  background: linear-gradient(180deg, rgba(66, 72, 81, 0.82), rgba(59, 65, 73, 0.78));
+  background:
+    linear-gradient(180deg, rgba(16, 16, 16, 0.18), rgba(16, 16, 16, 0.18)),
+    linear-gradient(180deg, rgba(66, 72, 81, 0.82), rgba(59, 65, 73, 0.78));
 }
 
 .modern-sidebar-shell.performance-constrained.blur-enabled .modern-sidebar-panel,
