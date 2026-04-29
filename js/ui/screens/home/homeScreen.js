@@ -1796,32 +1796,12 @@ export const HomeScreen = {
     if (!(targetShell instanceof HTMLElement)) {
       return null;
     }
-    const main = targetShell.querySelector(".home-main");
     const shellStyles = getComputedStyle(targetShell);
-    const contentStart = parseCssPx(shellStyles.getPropertyValue("--home-content-start"), 52);
-    const trackEnd = parseCssPx(shellStyles.getPropertyValue("--home-track-end"), 52);
-    const rowGap = parseCssPx(shellStyles.getPropertyValue("--home-row-gap"), 16);
-    const visibleLandscapeCards = 4.25;
-    const gapCount = 4;
-    const shellWidth = main instanceof HTMLElement
-      ? main.clientWidth
-      : targetShell.clientWidth;
-    const fallbackWidth = Math.max(
-      Number(globalThis.innerWidth || 0),
-      Number(globalThis.document?.documentElement?.clientWidth || 0),
-      Number(shellWidth || 0)
-    );
-    const availableWidth = Math.max(
-      0,
-      Number(shellWidth || fallbackWidth) - contentStart - trackEnd - (rowGap * gapCount)
-    );
-    const fittedWidth = availableWidth > 0
-      ? Math.floor(availableWidth / visibleLandscapeCards)
-      : 336;
-    const posterWidth = Math.max(272, Math.min(420, fittedWidth || 336));
+    const posterWidth = parseCssPx(shellStyles.getPropertyValue("--home-landscape-poster-width"), 418);
+    const posterHeight = parseCssPx(shellStyles.getPropertyValue("--home-landscape-poster-height"), Math.round(posterWidth / 1.77));
     this.cachedModernLandscapePosterMetrics = {
       width: posterWidth,
-      height: Math.round(posterWidth * 0.5625)
+      height: posterHeight
     };
     return this.cachedModernLandscapePosterMetrics;
   },
@@ -1851,33 +1831,13 @@ export const HomeScreen = {
     if (!(targetShell instanceof HTMLElement)) {
       return null;
     }
-    const main = targetShell.querySelector(".home-main");
     const shellStyles = getComputedStyle(targetShell);
-    const contentStart = parseCssPx(shellStyles.getPropertyValue("--home-content-start"), 52);
-    const trackEnd = parseCssPx(shellStyles.getPropertyValue("--home-track-end"), 52);
-    const rowGap = parseCssPx(shellStyles.getPropertyValue("--home-row-gap"), 12);
-    const visiblePortraitCards = 7.25;
-    const gapCount = 7;
-    const shellWidth = main instanceof HTMLElement
-      ? main.clientWidth
-      : targetShell.clientWidth;
-    const fallbackWidth = Math.max(
-      Number(globalThis.innerWidth || 0),
-      Number(globalThis.document?.documentElement?.clientWidth || 0),
-      Number(shellWidth || 0)
-    );
-    const availableWidth = Math.max(
-      0,
-      Number(shellWidth || fallbackWidth) - contentStart - trackEnd - (rowGap * gapCount)
-    );
-    const fittedWidth = availableWidth > 0
-      ? Math.floor(availableWidth / visiblePortraitCards)
-      : 224;
-    const posterWidth = Math.max(208, Math.min(280, fittedWidth || 224));
+    const posterWidth = parseCssPx(shellStyles.getPropertyValue("--home-modern-portrait-poster-width"), 228);
+    const posterHeight = parseCssPx(shellStyles.getPropertyValue("--home-modern-portrait-poster-height"), Math.round(posterWidth * 1.5));
     this.cachedModernPortraitPosterMetrics = {
       width: posterWidth,
-      height: Math.round(posterWidth * 1.5),
-      expandedWidth: Math.round(posterWidth * 2.66)
+      height: posterHeight,
+      expandedWidth: Math.round(posterHeight * (16 / 9))
     };
     return this.cachedModernPortraitPosterMetrics;
   },

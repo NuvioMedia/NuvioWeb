@@ -334,16 +334,26 @@ export function setLegacySidebarExpanded(container, expanded) {
   if (!sidebar) {
     return;
   }
+  if (sidebar._legacyOpenTimer) {
+    clearTimeout(sidebar._legacyOpenTimer);
+    sidebar._legacyOpenTimer = null;
+  }
   const shouldExpand = Boolean(expanded);
   if (shouldExpand) {
+    sidebar.classList.add("opening");
     sidebar.classList.add("content-expanded");
     void sidebar.offsetWidth;
     requestAnimationFrame(() => {
       sidebar.classList.add("expanded");
     });
+    sidebar._legacyOpenTimer = setTimeout(() => {
+      sidebar.classList.remove("opening");
+      sidebar._legacyOpenTimer = null;
+    }, 350);
     return;
   }
 
+  sidebar.classList.remove("opening");
   sidebar.classList.remove("content-expanded");
   void sidebar.offsetWidth;
   requestAnimationFrame(() => {
