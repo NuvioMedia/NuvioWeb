@@ -11,7 +11,7 @@ const ROOT_SIDEBAR_ITEMS = [
     labelKey: "sidebar.home",
     iconType: "svg",
     viewBox: "0 0 24 24",
-    iconMarkup: '<path d="M12 3.2 3.5 10v10.25c0 .69.56 1.25 1.25 1.25h5.5v-6.5h3.5v6.5h5.5c.69 0 1.25-.56 1.25-1.25V10L12 3.2Zm0 1.92 7 5.6v9.53h-4v-6.5H9v6.5H5v-9.53l7-5.6Z"/>'
+    iconMarkup: '<path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>'
   },
   {
     action: "gotoSearch",
@@ -268,7 +268,26 @@ export function bindRootSidebarEvents(container, {
   onExpandSidebar = null,
   onSelectedAction = null
 } = {}) {
-  container?.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((node) => {
+  const focusables = Array.from(container?.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable") || []);
+
+  const moveSidebarFocus = (currentNode, delta) => {
+    const nodes = focusables.filter((node) => node.isConnected);
+    const currentIndex = nodes.indexOf(currentNode);
+    if (currentIndex === -1) {
+      return false;
+    }
+    const nextIndex = Math.max(0, Math.min(nodes.length - 1, currentIndex + delta));
+    const target = nodes[nextIndex] || null;
+    if (!target || target === currentNode) {
+      return true;
+    }
+    nodes.forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    focusWithoutAutoScroll(target);
+    return true;
+  };
+
+  focusables.forEach((node) => {
     node.onclick = async (event) => {
       event?.preventDefault?.();
       event?.stopPropagation?.();
@@ -277,6 +296,21 @@ export function bindRootSidebarEvents(container, {
       activateLegacySidebarAction(action, currentRoute);
       if (isSelectedSidebarAction(action, currentRoute) && typeof onSelectedAction === "function") {
         await onSelectedAction(node);
+      }
+    };
+
+    node.onkeydown = (event) => {
+      const keyCode = Number(event?.keyCode || 0);
+      if (keyCode === 38) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        moveSidebarFocus(node, -1);
+        return;
+      }
+      if (keyCode === 40) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        moveSidebarFocus(node, 1);
       }
     };
   });
@@ -298,7 +332,21 @@ export function setLegacySidebarExpanded(container, expanded) {
   if (!sidebar) {
     return;
   }
-  sidebar.classList.toggle("expanded", Boolean(expanded));
+  const shouldExpand = Boolean(expanded);
+  if (shouldExpand) {
+    sidebar.classList.add("content-expanded");
+    void sidebar.offsetWidth;
+    requestAnimationFrame(() => {
+      sidebar.classList.add("expanded");
+    });
+    return;
+  }
+
+  sidebar.classList.remove("content-expanded");
+  void sidebar.offsetWidth;
+  requestAnimationFrame(() => {
+    sidebar.classList.remove("expanded");
+  });
 }
 
 export function getLegacySidebarNodes(container) {
