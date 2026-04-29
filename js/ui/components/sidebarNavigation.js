@@ -92,10 +92,11 @@ function getItemForAction(action = "") {
   return ROOT_SIDEBAR_ITEMS.find((item) => item.action === String(action || "")) || null;
 }
 
-function getModernSidebarPresentation() {
+function getModernSidebarPresentation(selectedRoute = "") {
+  const route = String(selectedRoute || "").trim().toLowerCase();
   return {
     showPill: true,
-    keepPillExpanded: true
+    keepPillExpanded: route === "settings"
   };
 }
 
@@ -201,12 +202,13 @@ export function renderModernSidebar({
   const selectedItem = getSelectedItem(selectedRoute);
   const profileState = profile || {};
   const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
-  const { showPill, keepPillExpanded } = getModernSidebarPresentation();
+  const { keepPillExpanded } = getModernSidebarPresentation(selectedRoute);
+  const showPill = selectedItem.route !== "search";
   const selectedLabel = itemLabel(selectedItem);
   const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
 
   return `
-    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">
+    <div class="modern-sidebar-shell${expanded ? " expanded panel-visible" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">
       ${showPill ? `
         <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}" aria-expanded="${expanded ? "true" : "false"}">
           <img class="modern-sidebar-pill-chevron" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
@@ -216,7 +218,7 @@ export function renderModernSidebar({
           </span>
         </button>
       ` : ""}
-      <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
+      <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}">
         ${showProfileSelector ? `
           <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
             <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || getThemeAccentFallback()}">
@@ -438,14 +440,54 @@ export function setModernSidebarExpanded(container, expanded) {
   }
   const panel = shell.querySelector(".modern-sidebar-panel");
   const pill = shell.querySelector(".modern-sidebar-pill");
-  shell.classList.toggle("expanded", Boolean(expanded));
-  if (panel) {
-    panel.hidden = !expanded;
-    panel.setAttribute("aria-hidden", expanded ? "false" : "true");
+  if (shell._modernOpenTimer) {
+    clearTimeout(shell._modernOpenTimer);
+    shell._modernOpenTimer = null;
   }
+  if (shell._modernCloseStartTimer) {
+    clearTimeout(shell._modernCloseStartTimer);
+    shell._modernCloseStartTimer = null;
+  }
+  if (shell._modernCloseEndTimer) {
+    clearTimeout(shell._modernCloseEndTimer);
+    shell._modernCloseEndTimer = null;
+  }
+
+  if (expanded) {
+    shell.classList.add("panel-visible", "opening");
+    shell.classList.remove("collapsing");
+    if (panel) {
+      panel.setAttribute("aria-hidden", "false");
+    }
+    if (pill) {
+      pill.setAttribute("aria-expanded", "true");
+    }
+    requestAnimationFrame(() => {
+      shell.classList.add("expanded");
+    });
+    shell._modernOpenTimer = setTimeout(() => {
+      shell.classList.remove("opening");
+      shell._modernOpenTimer = null;
+    }, 365);
+    return true;
+  }
+
+  shell.classList.add("collapsing");
+  shell.classList.remove("opening");
   if (pill) {
-    pill.setAttribute("aria-expanded", expanded ? "true" : "false");
+    pill.setAttribute("aria-expanded", "false");
   }
+  shell._modernCloseStartTimer = setTimeout(() => {
+    shell.classList.remove("expanded");
+    shell._modernCloseStartTimer = null;
+  }, 70);
+  shell._modernCloseEndTimer = setTimeout(() => {
+    shell.classList.remove("panel-visible", "collapsing");
+    if (panel) {
+      panel.setAttribute("aria-hidden", "true");
+    }
+    shell._modernCloseEndTimer = null;
+  }, 430);
   return true;
 }
 
