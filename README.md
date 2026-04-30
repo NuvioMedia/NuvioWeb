@@ -100,6 +100,15 @@ npm run sync:webos -- /absolute/path/to/YourWebOSProject
 
 Package/install it with your normal webOS CLI workflow.
 
+For a local IPK directly from this repo:
+
+```bash
+npm run package:webos
+npm run install:webos -- -d lg
+npm run inspect:webos -- -d lg
+npm run logs:webos -- -d lg
+```
+
 #### Tizen self-packaged wrapper
 
 Create a separate Tizen project folder with at least:

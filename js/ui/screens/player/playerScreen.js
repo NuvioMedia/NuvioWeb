@@ -1190,11 +1190,13 @@ export const PlayerScreen = {
 
   buildPlaybackIdentityContext() {
     const itemType = normalizeItemType(this.params?.itemType || "movie");
+    const rawImdbId = String(this.params?.imdbId || this.params?.imdb_id || "").trim();
     const rawItemId = String(this.params?.itemId || "").trim();
     const rawVideoId = String(this.params?.videoId || "").trim();
     const season = Number(this.params?.season || 0);
     const episode = Number(this.params?.episode || 0);
     const imdbId = [
+      normalizePlayableImdbId(rawImdbId),
       normalizePlayableImdbId(rawVideoId),
       normalizePlayableImdbId(rawItemId)
     ].find(Boolean) || "";
@@ -1214,9 +1216,6 @@ export const PlayerScreen = {
   },
 
   async fetchParentalGuide() {
-    if (globalThis.document?.body?.classList?.contains("performance-constrained")) {
-      return;
-    }
     const { itemType, imdbId, season, episode } = this.buildPlaybackIdentityContext();
     if (!imdbId) {
       return;
@@ -2763,6 +2762,7 @@ export const PlayerScreen = {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
         itemType,
+        imdbId: this.params?.imdbId || null,
         videoId: nextEpisode.videoId,
         season: nextEpisode.season,
         episode: nextEpisode.episode,
@@ -7309,6 +7309,7 @@ export const PlayerScreen = {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
         itemType,
+        imdbId: this.params?.imdbId || null,
         videoId: selected.id,
         season: selected.season ?? null,
         episode: selected.episode ?? null,
@@ -7910,6 +7911,7 @@ export const PlayerScreen = {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
         itemType,
+        imdbId: this.params?.imdbId || null,
         videoId: nextEpisode.videoId,
         season: nextEpisode.season,
         episode: nextEpisode.episode,

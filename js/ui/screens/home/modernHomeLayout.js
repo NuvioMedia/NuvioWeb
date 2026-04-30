@@ -18,7 +18,7 @@ export function renderModernHomeLayout({
   continueWatchingItems = [],
   continueWatchingLoading = false,
   continueWatchingLoadingCount = 0,
-  rowItemLimit = 15,
+  rowItemLimit = 10,
   showHeroSection = false,
   showPosterLabels = true,
   showCatalogTypeSuffix = true,
@@ -59,7 +59,7 @@ export function renderModernHomeLayout({
       });
     }
 
-    const maxItems = Math.max(1, Number(rowItemLimit || 15));
+    const maxItems = Math.max(1, Number(rowItemLimit || 10));
     const hasSeeAll = !isLoading && items.length > maxItems;
     const visibleItems = rowItems.slice(0, maxItems);
     const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
@@ -81,7 +81,10 @@ export function renderModernHomeLayout({
         </div>
         <div class="home-track" data-track-row-key="${escapeHtml(rowKey)}">
           ${cardsMarkup}
-          ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData) : ""}
+          ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData, {
+            layoutMode: "modern",
+            preferLandscapePoster: preferLandscapePosters
+          }) : ""}
         </div>
       </section>
     `);

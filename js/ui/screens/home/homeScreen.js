@@ -14,6 +14,7 @@ import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { Platform } from "../../../platform/index.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
+import { renderLogoLoadingMarkup } from "../../components/loadingIndicator.js";
 import {
   buildModernNavigationRows,
   buildModernRowKey,
@@ -52,10 +53,11 @@ const CW_PROGRESS_END_THRESHOLD = 0.85;
 const CW_ENTER_DELAY_MS = 320;
 const CW_HOLD_DELAY_MS = 650;
 const HOME_INITIAL_CATALOG_LOAD = 10;
-const HOME_MAX_ITEMS_PER_ROW_DEFAULT = 15;
-const HOME_MAX_ITEMS_PER_ROW_CONSTRAINED = 10;
+const HOME_ITEMS_BEFORE_SEE_ALL = 10;
 const HOME_LOADING_ROW_ITEMS_DEFAULT = 10;
-const HOME_LOADING_ROW_ITEMS_CONSTRAINED = 8;
+const HOME_LOADING_ROW_ITEMS_CONSTRAINED = 4;
+const HOME_VISIBLE_ROWS_CONSTRAINED_INITIAL = 5;
+const HOME_VISIBLE_ROWS_CONSTRAINED_INCREMENT = 3;
 const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
@@ -630,7 +632,7 @@ function buildProgressFraction(item) {
 }
 
 function buildCatalogLoadingItems(rowKey, count = HOME_LOADING_ROW_ITEMS_DEFAULT) {
-  const safeCount = Math.max(1, Math.min(HOME_MAX_ITEMS_PER_ROW_DEFAULT, Number(count || HOME_LOADING_ROW_ITEMS_DEFAULT)));
+  const safeCount = Math.max(1, Math.min(HOME_ITEMS_BEFORE_SEE_ALL, Number(count || HOME_LOADING_ROW_ITEMS_DEFAULT)));
   return Array.from({ length: safeCount }, (_, index) => ({
     id: `${rowKey || "row"}__loading_${index}`,
     name: t("common.loading", {}, "Loading"),
@@ -1149,7 +1151,7 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
     focusedRowKey = "",
     focusedItemIndex = -1,
     expandFocusedPoster = false,
-    rowItemLimit = HOME_MAX_ITEMS_PER_ROW_DEFAULT
+    rowItemLimit = HOME_ITEMS_BEFORE_SEE_ALL
   } = options;
   const catalogSeeAllMap = new Map();
   const sectionsMarkup = [];
@@ -1179,14 +1181,11 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
 
     const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
     const rowSubtitle = layoutMode === "classic" && showCatalogAddonName && rowData.addonName
-      ? `from ${rowData.addonName}`
+      ? t("catalog_from_addon", [rowData.addonName], "from %1$s")
       : "";
-    const maxItems = Math.max(1, Number(rowItemLimit || HOME_MAX_ITEMS_PER_ROW_DEFAULT));
+    const maxItems = Math.max(1, Number(rowItemLimit || HOME_ITEMS_BEFORE_SEE_ALL));
     const hasSeeAll = !isLoading && items.length > maxItems;
-    const gridLimit = Math.max(1, hasSeeAll ? maxItems - 1 : maxItems);
-    const visibleItems = layoutMode === "grid"
-      ? rowItems.slice(0, gridLimit)
-      : rowItems.slice(0, maxItems);
+    const visibleItems = rowItems.slice(0, maxItems);
     const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
       item,
       rowIndex,
@@ -1199,7 +1198,7 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
     const trackMarkup = `
       <div class="${layoutMode === "grid" ? "home-grid-track" : "home-track"}" data-track-row-key="${escapeAttribute(rowKey)}">
         ${cardsMarkup}
-        ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData) : ""}
+        ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData, { layoutMode }) : ""}
       </div>
     `;
 
@@ -1232,9 +1231,13 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
   };
 }
 
-function createSeeAllCardMarkup(seeAllId, rowData) {
+function createSeeAllCardMarkup(seeAllId, rowData, options = {}) {
+  const label = t("action_see_all", {}, "See All");
+  const layoutMode = String(options?.layoutMode || "").toLowerCase();
+  const useLandscapePoster = layoutMode === "modern" && Boolean(options?.preferLandscapePoster);
+  const landscapeClass = useLandscapePoster ? " is-landscape" : "";
   return `
-    <article class="home-content-card home-seeall-card focusable"
+    <article class="home-content-card home-poster-card${landscapeClass} focusable"
              data-action="openCatalogSeeAll"
              data-see-all-id="${escapeAttribute(seeAllId)}"
              data-addon-base-url="${escapeAttribute(rowData.addonBaseUrl || "")}"
@@ -1242,11 +1245,19 @@ function createSeeAllCardMarkup(seeAllId, rowData) {
              data-addon-name="${escapeAttribute(rowData.addonName || "")}"
              data-catalog-id="${escapeAttribute(rowData.catalogId || "")}"
              data-catalog-name="${escapeAttribute(rowData.catalogName || "")}"
-             data-catalog-type="${escapeAttribute(rowData.type || "")}">
-      <div class="home-seeall-card-inner">
-        <div class="home-seeall-arrow" aria-hidden="true">&#8594;</div>
-        <div class="home-seeall-label">See All</div>
+             data-catalog-type="${escapeAttribute(rowData.type || "")}"
+             aria-label="${escapeAttribute(label)}">
+      <div class="home-poster-frame">
+        <div class="content-poster placeholder"></div>
+        ${useLandscapePoster ? `
+          <div class="home-poster-landscape-copy" aria-hidden="true">
+            <div class="home-poster-landscape-title">${escapeHtml(label)}</div>
+          </div>
+        ` : ""}
       </div>
+      ${useLandscapePoster ? "" : `<div class="home-poster-copy">
+        <div class="home-poster-title">${escapeHtml(label)}</div>
+      </div>`}
     </article>
   `;
 }
@@ -1977,7 +1988,7 @@ export const HomeScreen = {
   },
 
   shouldSuppressAutomaticTrailerPlayback() {
-    return this.isLegacyTvRuntime();
+    return false;
   },
 
   getFocusedPosterTrailerDelayMs() {
@@ -1995,9 +2006,7 @@ export const HomeScreen = {
   },
 
   getRowItemLimit() {
-    return this.isPerformanceConstrained()
-      ? HOME_MAX_ITEMS_PER_ROW_CONSTRAINED
-      : HOME_MAX_ITEMS_PER_ROW_DEFAULT;
+    return HOME_ITEMS_BEFORE_SEE_ALL;
   },
 
   getLoadingRowItemCount() {
@@ -2006,12 +2015,94 @@ export const HomeScreen = {
       : HOME_LOADING_ROW_ITEMS_DEFAULT;
   },
 
+  shouldWindowHomeRows() {
+    return this.isPerformanceConstrained();
+  },
+
+  getInitialVisibleHomeRowCount() {
+    return this.shouldWindowHomeRows()
+      ? HOME_VISIBLE_ROWS_CONSTRAINED_INITIAL
+      : Number.MAX_SAFE_INTEGER;
+  },
+
+  getVisibleHomeRows(rows = []) {
+    const catalogRows = Array.isArray(rows) ? rows : [];
+    if (!this.shouldWindowHomeRows()) {
+      return catalogRows;
+    }
+    const requestedCount = Number.isFinite(this.visibleHomeRowCount)
+      ? Number(this.visibleHomeRowCount)
+      : this.getInitialVisibleHomeRowCount();
+    const count = Math.max(1, Math.min(catalogRows.length, requestedCount));
+    return catalogRows.slice(0, count);
+  },
+
+  ensureVisibleHomeRowsIncludeFocusState(focusState = null) {
+    if (!this.shouldWindowHomeRows() || !focusState?.rowKey || !Array.isArray(this.rows)) {
+      return;
+    }
+    const rowIndex = this.rows.findIndex((row) => buildModernRowKey(row) === focusState.rowKey);
+    if (rowIndex < 0) {
+      return;
+    }
+    const requiredCount = rowIndex + 1;
+    if (!Number.isFinite(this.visibleHomeRowCount) || this.visibleHomeRowCount < requiredCount) {
+      this.visibleHomeRowCount = requiredCount;
+    }
+  },
+
+  revealMoreHomeRowsFromFocus(current, row, col) {
+    if (!this.shouldWindowHomeRows() || !Array.isArray(this.rows)) {
+      return false;
+    }
+    const currentCount = Number.isFinite(this.visibleHomeRowCount)
+      ? Number(this.visibleHomeRowCount)
+      : this.getInitialVisibleHomeRowCount();
+    if (currentCount >= this.rows.length) {
+      return false;
+    }
+    this.pendingHomeRevealFocus = {
+      rowIndex: Math.max(0, Number(row || 0) + 1),
+      colIndex: Math.max(0, Number(col || 0))
+    };
+    this.visibleHomeRowCount = Math.min(
+      this.rows.length,
+      currentCount + HOME_VISIBLE_ROWS_CONSTRAINED_INCREMENT
+    );
+    this.render();
+    return true;
+  },
+
+  applyPendingHomeRevealFocus() {
+    const pending = this.pendingHomeRevealFocus;
+    this.pendingHomeRevealFocus = null;
+    if (!pending || !this.navModel?.rows?.length) {
+      return false;
+    }
+    const rowIndex = Math.max(0, Math.min(this.navModel.rows.length - 1, Number(pending.rowIndex || 0)));
+    const rowNodes = this.navModel.rows[rowIndex] || [];
+    const target = this.resolvePreferredNodeForRow(rowNodes, Number(pending.colIndex || 0));
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    this.focusWithoutAutoScroll(target);
+    this.lastMainFocus = target;
+    this.rememberMainRowFocus(target);
+    this.ensureTrackHorizontalVisibility(target, "down");
+    this.ensureMainVerticalVisibility(target, "down");
+    this.scheduleModernHeroUpdate(target);
+    this.scheduleFocusedPosterFlow(target);
+    return true;
+  },
+
   getInitialCatalogLoadCount() {
     if (this.isPerformanceConstrained()) {
       if (this.isLegacyTvRuntime()) {
-        return 4;
+        return 3;
       }
-      return 5;
+      return 4;
     }
     if (Platform.isWebOS()) {
       const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
@@ -2028,7 +2119,7 @@ export const HomeScreen = {
 
   getDeferredCatalogBatchSize() {
     if (this.isPerformanceConstrained()) {
-      return 4;
+      return 3;
     }
     if (Platform.isWebOS()) {
       const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
@@ -3442,7 +3533,7 @@ export const HomeScreen = {
     if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
       this.collapseFocusedPoster();
     }
-    this.promotePosterCardAssets(node, { includeNeighbors: this.isPerformanceConstrained() });
+    this.promotePosterCardAssets(node, { includeNeighbors: false });
     const defaultDelayMs = this.isPerformanceConstrained()
       ? 0
       : Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
@@ -4017,7 +4108,7 @@ export const HomeScreen = {
       }
       this.scheduleModernHeroUpdate(target);
       if (this.isPerformanceConstrained()) {
-        this.promotePosterCardAssets(target, { includeNeighbors: true });
+        this.promotePosterCardAssets(target, { includeNeighbors: false });
       }
       this.scheduleFocusedPosterFlow(target);
     } else {
@@ -4194,6 +4285,9 @@ export const HomeScreen = {
       const targetRow = row + delta;
       const targetRowNodes = nav.rows[targetRow] || null;
       if (!targetRowNodes || !targetRowNodes.length) {
+        if (direction === "down" && this.revealMoreHomeRowsFromFocus(current, row, col)) {
+          return true;
+        }
         return true;
       }
       const target = this.resolvePreferredNodeForRow(targetRowNodes, col);
@@ -4325,6 +4419,7 @@ export const HomeScreen = {
     this.homeRouteEnterPending = true;
     this.continueWatchingMenu = null;
     this.pendingContinueWatchingFocusIndex = null;
+    this.pendingHomeRevealFocus = null;
     this.cancelPendingContinueWatchingEnter();
     this.forceInitialContinueWatchingFocus = false;
     this.continueWatchingLoading = false;
@@ -4357,13 +4452,8 @@ export const HomeScreen = {
     const profiles = await ProfileManager.getProfiles();
     const activeProfile = profiles.find((entry) => String(entry.id) === activeProfileId) || profiles[0] || null;
     const bootBackground = buildProfileBackgroundStyle(activeProfile?.avatarColorHex || DEFAULT_PROFILE_COLOR);
-    this.container.innerHTML = `
-      <div class="home-boot">
-        <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
-        <div class="home-boot-shimmer"></div>
-      </div>
-    `;
-    const bootNode = this.container.querySelector(".home-boot");
+    this.container.innerHTML = renderLogoLoadingMarkup({ className: "home-boot", label: "Loading home" });
+    const bootNode = this.container.querySelector(".app-loading-screen");
     if (bootNode) {
       bootNode.style.background = bootBackground;
     }
@@ -4376,6 +4466,9 @@ export const HomeScreen = {
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
+    if (!background || !Number.isFinite(this.visibleHomeRowCount)) {
+      this.visibleHomeRowCount = this.getInitialVisibleHomeRowCount();
+    }
 
     const preserveContinueWatching = Boolean(background && this.continueWatchingDisplay?.length);
     const suppressContinueWatchingLoading = preserveContinueWatching;
@@ -4453,8 +4546,9 @@ export const HomeScreen = {
 
     if (deferredDescriptors.length) {
       const progressiveDeferredRows = this.shouldProgressivelyRenderDeferredRows();
+      const allowDeferredLoadingRows = !this.isPerformanceConstrained();
       this.fetchCatalogRows(deferredDescriptors, {
-        allowLoading: true,
+        allowLoading: allowDeferredLoadingRows,
         batchSize: this.getDeferredCatalogBatchSize(),
         onBatch: progressiveDeferredRows
           ? (batchRows) => {
@@ -4801,6 +4895,8 @@ export const HomeScreen = {
     const focusState = retainedFocusState && retainedFocusState.focusKind === "item"
       ? retainedFocusState
       : null;
+    this.ensureVisibleHomeRowsIncludeFocusState(focusState || retainedFocusState);
+    const visibleRows = this.getVisibleHomeRows(this.rows);
     const expandFocusedPoster = this.layoutMode === "modern"
       && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled || modernLandscapePostersEnabled)
       && Number(this.layoutPrefs?.focusedPosterBackdropExpandDelaySeconds ?? 3) <= 0
@@ -4824,7 +4920,7 @@ export const HomeScreen = {
 
     if (this.layoutMode === "modern") {
       modernLayoutPayload = renderModernHomeLayout({
-        rows: this.rows,
+        rows: visibleRows,
         heroItem,
         heroCandidates: this.heroCandidates,
         continueWatchingItems: this.continueWatchingDisplay || [],
@@ -4854,7 +4950,7 @@ export const HomeScreen = {
         loading: Boolean(this.continueWatchingLoading),
         loadingCount: effectiveContinueWatchingLoadingCount
       });
-      const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
+      const legacyRowsPayload = renderLegacyCatalogRowsMarkup(visibleRows, {
         layoutMode: this.layoutMode,
         showPosterLabels,
         showCatalogAddonName,
@@ -4909,7 +5005,9 @@ export const HomeScreen = {
     this.bindHomeViewportEvents();
     const canAttemptRestore = Boolean(retainedFocusState);
     let restoredFocus = false;
-    if (this.continueWatchingMenu) {
+    if (this.pendingHomeRevealFocus) {
+      restoredFocus = this.applyPendingHomeRevealFocus();
+    } else if (this.continueWatchingMenu) {
       restoredFocus = this.applyContinueWatchingMenuFocus();
     } else if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
       const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);

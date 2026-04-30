@@ -1,4 +1,5 @@
 import "./runtime/polyfills.js";
+import "./runtime/remoteConsole.js";
 import "intersection-observer";  
 import "whatwg-fetch";
 

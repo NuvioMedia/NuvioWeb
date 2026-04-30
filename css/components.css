@@ -1330,7 +1330,7 @@
   margin: 40px;
 }
 
-.home-boot {
+.app-loading-screen {
   width: 100vw;
   height: 100vh;
   display: -webkit-flex;
@@ -1346,24 +1346,12 @@
   background: linear-gradient(180deg, rgba(35, 62, 91, 1) 0%, rgba(18, 29, 44, 1) 42%, rgba(13, 13, 13, 1) 100%);
 }
 
-.home-boot-logo {
+.app-loading-logo {
   width: 220px;
+  max-width: 48vw;
+  max-height: 24vh;
+  object-fit: contain;
   opacity: 0.94;
-}
-
-.home-boot-shimmer {
-  width: 620px;
-  max-width: 90%;
-  height: 9px;
-  border-radius: 5px;
-  background-color: rgba(255, 255, 255, 0.12);
-  -webkit-animation: homeBootOpacity 1.8s ease-in-out infinite;
-  animation: homeBootOpacity 1.8s ease-in-out infinite;
-}
-
-@-webkit-keyframes homeBootOpacity {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.8; }
 }
 
 .home-shell {
@@ -10624,7 +10612,6 @@
   transform: scale(1.005) !important;
 }
 
-.performance-constrained .home-boot-shimmer,
 .performance-constrained .home-continue-media-loading,
 .performance-constrained .home-continue-card-loading,
 .performance-constrained .home-continue-card-loading .home-continue-progress,

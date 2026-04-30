@@ -127,7 +127,7 @@ export const TmdbMetadataService = {
 
     const type = resolveType(contentType);
     const lang = language || settings.language || "en-US";
-    const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos&include_image_language=${encodeURIComponent(lang)},null`;
+    const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos,external_ids&include_image_language=${encodeURIComponent(lang)},null`;
     const url = `${TMDB_BASE_URL}/${type}/${encodeURIComponent(String(tmdbId))}?${params}`;
 
     const response = await fetch(url);
@@ -170,6 +170,7 @@ export const TmdbMetadataService = {
       runtime: Number.isFinite(runtimeValue) && runtimeValue > 0 ? `${runtimeValue} min` : null,
       country: countryValue || null,
       language: spokenLanguage?.iso_639_1 || spokenLanguage?.english_name || null,
+      imdbId: data?.external_ids?.imdb_id || null,
       credits: data.credits || null,
       companies,
       productionCompanies: companies,

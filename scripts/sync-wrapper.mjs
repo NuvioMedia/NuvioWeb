@@ -21,6 +21,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     TV_LOGIN_REDIRECT_BASE_URL: "",
     YOUTUBE_PROXY_URL: "",
     ADDON_REMOTE_BASE_URL: "",
+    DEBUG_LOG_ENDPOINT: "",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""
@@ -143,7 +144,6 @@ async function syncBuild(targetDir) {
   await Promise.all([
     syncFolder(targetDir, "assets"),
     syncFolder(targetDir, "css"),
-    syncFolder(targetDir, "js"),
     syncFolder(targetDir, "res")
   ]);
 
@@ -189,8 +189,6 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
 <body>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
   <script src="nuvio.env.js"></script>
-  <script src="js/runtime/polyfills.js"></script>
-  <script src="js/runtime/env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
 ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
 </body>
@@ -290,8 +288,6 @@ function loadScript(src) {
 window.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = startLocalMediaService();
 
 loadScript("nuvio.env.js");
-loadScript("js/runtime/polyfills.js");
-loadScript("js/runtime/env.js");
 loadScript("assets/libs/qrcode-generator.js");
 loadScript("app.bundle.js");
 `;
