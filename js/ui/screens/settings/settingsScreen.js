@@ -1220,6 +1220,9 @@ export const SettingsScreen = {
     this.actionMap.set("layout:hideUnreleased", () => {
       LayoutPreferences.set({ hideUnreleasedContent: !LayoutPreferences.get().hideUnreleasedContent });
     });
+    this.actionMap.set("layout:showUnairedNextUp", () => {
+      LayoutPreferences.set({ showUnairedNextUp: !LayoutPreferences.get().showUnairedNextUp });
+    });
     this.actionMap.set("layout:posterLabels", () => {
       LayoutPreferences.set({ posterLabelsEnabled: !LayoutPreferences.get().posterLabelsEnabled });
     });
@@ -1353,6 +1356,12 @@ export const SettingsScreen = {
       title: t("settings.layout.hideUnreleased.title"),
       subtitle: t("settings.layout.hideUnreleased.subtitle"),
       checked: Boolean(model.layout.hideUnreleasedContent)
+    })}
+        ${this.renderToggleRow({
+      focusKey: "layout:showUnairedNextUp",
+      title: t("settings.layout.showUnairedNextUp.title", {}, "Unaired Next Up Episodes"),
+      subtitle: t("settings.layout.showUnairedNextUp.subtitle", {}, "Show upcoming episodes in Continue Watching before their release date."),
+      checked: model.layout.showUnairedNextUp !== false
     })}
       </div>
     `;

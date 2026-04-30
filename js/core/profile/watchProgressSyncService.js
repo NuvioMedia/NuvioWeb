@@ -10,8 +10,10 @@ const PULL_RPC = "sync_pull_watch_progress";
 const SYNTHETIC_EPISODE_VIDEO_PREFIX = "__nuvio_episode__:";
 const PUSH_RETRY_BACKOFF_MS = 120000;
 const SYNC_STATE_KEY = "watchProgressSyncState";
+const MIN_PROGRESS_SYNC_DURATION_MS = 60000;
 
 let activePushPromise = null;
+let pushAgainRequested = false;
 let lastSuccessfulPushSignature = "";
 let lastFailedPushSignature = "";
 let lastFailedPushAt = 0;
@@ -296,6 +298,11 @@ function coalesceSyncItems(items = []) {
     .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0));
 }
 
+function isSyncableProgressItem(item = {}) {
+  const durationMs = Number(item?.durationMs || 0);
+  return !Number.isFinite(durationMs) || durationMs <= 0 || durationMs >= MIN_PROGRESS_SYNC_DURATION_MS;
+}
+
 function rowFreshness(row = {}) {
   const candidates = [
     row?.updated_at,
@@ -444,6 +451,62 @@ async function deleteFallbackRowsForProfile(ownerId, profileId) {
   }
 }
 
+async function pushOnce() {
+  let pushSignature = "";
+  try {
+    if (!AuthManager.isAuthenticated) {
+      return false;
+    }
+    const items = coalesceSyncItems(await watchProgressRepository.getAll())
+      .filter((item) => isSyncableProgressItem(item));
+    const profileId = resolveProfileId();
+    const ownerId = await AuthManager.getEffectiveUserId();
+    const fallbackRows = buildLegacyFallbackRows(items, ownerId, profileId);
+    pushSignature = buildPushSignature(fallbackRows);
+    if (pushSignature && pushSignature === lastSuccessfulPushSignature) {
+      return true;
+    }
+    if (
+      pushSignature
+      && pushSignature === lastFailedPushSignature
+      && (Date.now() - Number(lastFailedPushAt || 0)) < PUSH_RETRY_BACKOFF_MS
+    ) {
+      return false;
+    }
+    const rows = buildPrimaryRows(items, ownerId);
+    try {
+      await deleteFallbackRowsForProfile(ownerId, profileId);
+      await upsertRowsIndividually(FALLBACK_TABLE, fallbackRows, [
+        "user_id,profile_id,progress_key",
+        "user_id,progress_key",
+        "user_id,profile_id,content_id,video_id",
+        "user_id,content_id,video_id"
+      ]);
+    } catch (primaryError) {
+      if (!shouldTryLegacyTable(primaryError)) {
+        throw primaryError;
+      }
+      await SupabaseApi.delete(TABLE, `owner_id=eq.${encodeURIComponent(ownerId)}`, true);
+      await upsertRowsIndividually(TABLE, rows, [
+        "owner_id,content_id,video_id",
+        "owner_id,content_id"
+      ]);
+    }
+    lastSuccessfulPushSignature = pushSignature;
+    writeBaselineItems(profileId, items);
+    lastFailedPushSignature = "";
+    lastFailedPushAt = 0;
+    return true;
+  } catch (error) {
+    if (typeof pushSignature === "string" && pushSignature) {
+      lastFailedPushSignature = pushSignature;
+    }
+    lastFailedPushAt = Date.now();
+    console.warn("Watch progress sync push failed", error);
+    return false;
+  }
+}
+
 export const WatchProgressSyncService = {
 
   async pull() {
@@ -490,7 +553,9 @@ export const WatchProgressSyncService = {
         }
         return String(rowProfile) === String(profileId);
       });
-      const remoteItems = filteredRows.map((row) => mapProgressRow(row)).filter((item) => Boolean(item.contentId));
+      const remoteItems = filteredRows
+        .map((row) => mapProgressRow(row))
+        .filter((item) => Boolean(item.contentId) && isSyncableProgressItem(item));
       const snapshotItems = normalizeProgressItems(remoteItems);
       const baselineItems = readBaselineItems(profileId);
       const mergedItems = mergeProgressItems(localItems, snapshotItems, baselineItems);
@@ -510,61 +575,16 @@ export const WatchProgressSyncService = {
 
   async push() {
     if (activePushPromise) {
+      pushAgainRequested = true;
       return activePushPromise;
     }
     activePushPromise = (async () => {
-      let pushSignature = "";
-      try {
-        if (!AuthManager.isAuthenticated) {
-          return false;
-        }
-        const items = coalesceSyncItems(await watchProgressRepository.getAll());
-        const profileId = resolveProfileId();
-        const ownerId = await AuthManager.getEffectiveUserId();
-        const fallbackRows = buildLegacyFallbackRows(items, ownerId, profileId);
-        pushSignature = buildPushSignature(fallbackRows);
-        if (pushSignature && pushSignature === lastSuccessfulPushSignature) {
-          return true;
-        }
-        if (
-          pushSignature
-          && pushSignature === lastFailedPushSignature
-          && (Date.now() - Number(lastFailedPushAt || 0)) < PUSH_RETRY_BACKOFF_MS
-        ) {
-          return false;
-        }
-        const rows = buildPrimaryRows(items, ownerId);
-        try {
-          await deleteFallbackRowsForProfile(ownerId, profileId);
-          await upsertRowsIndividually(FALLBACK_TABLE, fallbackRows, [
-            "user_id,profile_id,progress_key",
-            "user_id,progress_key",
-            "user_id,profile_id,content_id,video_id",
-            "user_id,content_id,video_id"
-          ]);
-        } catch (primaryError) {
-          if (!shouldTryLegacyTable(primaryError)) {
-            throw primaryError;
-          }
-          await SupabaseApi.delete(TABLE, `owner_id=eq.${encodeURIComponent(ownerId)}`, true);
-          await upsertRowsIndividually(TABLE, rows, [
-            "owner_id,content_id,video_id",
-            "owner_id,content_id"
-          ]);
-        }
-        lastSuccessfulPushSignature = pushSignature;
-        writeBaselineItems(profileId, items);
-        lastFailedPushSignature = "";
-        lastFailedPushAt = 0;
-        return true;
-      } catch (error) {
-        if (typeof pushSignature === "string" && pushSignature) {
-          lastFailedPushSignature = pushSignature;
-        }
-        lastFailedPushAt = Date.now();
-        console.warn("Watch progress sync push failed", error);
-        return false;
-      }
+      let lastResult = false;
+      do {
+        pushAgainRequested = false;
+        lastResult = await pushOnce();
+      } while (pushAgainRequested);
+      return lastResult;
     })().finally(() => {
       activePushPromise = null;
     });

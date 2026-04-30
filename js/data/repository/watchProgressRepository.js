@@ -1,9 +1,8 @@
 import { WatchProgressStore } from "../local/watchProgressStore.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
+import { ContinueWatchingPreferences } from "../local/continueWatchingPreferences.js";
 
 const CONTINUE_WATCHING_DAYS_CAP = 60;
-const IN_PROGRESS_START_THRESHOLD = 0.02;
-const IN_PROGRESS_END_THRESHOLD = 0.85;
 
 function activeProfileId() {
   return String(ProfileManager.getActiveProfileId() || "1");
@@ -41,42 +40,12 @@ function queueWatchProgressCloudSync(delayMs = getWatchProgressSyncDebounceMs())
   }, delayMs);
 }
 
-function toProgressFraction(item = {}) {
-  const explicitPercent = Number(item.progressPercent);
-  if (Number.isFinite(explicitPercent) && explicitPercent > 0) {
-    return Math.max(0, Math.min(1, explicitPercent / 100));
-  }
-
-  const durationMs = Number(item.durationMs || 0);
-  const positionMs = Number(item.positionMs || 0);
-  if (!Number.isFinite(durationMs) || durationMs <= 0 || !Number.isFinite(positionMs) || positionMs <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(1, positionMs / durationMs));
-}
-
 function isSeriesType(type) {
   const normalized = String(type || "").toLowerCase();
   return normalized === "series";
 }
 
-function isInProgress(item = {}) {
-  const fraction = toProgressFraction(item);
-  return fraction >= IN_PROGRESS_START_THRESHOLD && fraction < IN_PROGRESS_END_THRESHOLD;
-}
-
-function isCompleted(item = {}) {
-  return toProgressFraction(item) >= IN_PROGRESS_END_THRESHOLD;
-}
-
 function shouldTreatAsInProgressForContinueWatching(item = {}) {
-  if (isInProgress(item)) {
-    return true;
-  }
-  if (isCompleted(item)) {
-    return false;
-  }
-
   const hasStartedPlayback = Number(item.positionMs || 0) > 0 || Number(item.progressPercent || 0) > 0;
   const source = String(item.source || "").toLowerCase();
   return hasStartedPlayback
@@ -117,6 +86,9 @@ function deduplicateInProgress(items = []) {
 class WatchProgressRepository {
 
   async saveProgress(progress) {
+    if (isSeriesType(progress?.contentType)) {
+      ContinueWatchingPreferences.removeDismissedNextUpKeysForContent(progress?.contentId, activeProfileId());
+    }
     WatchProgressStore.upsert({
       ...progress,
       updatedAt: progress.updatedAt || Date.now()

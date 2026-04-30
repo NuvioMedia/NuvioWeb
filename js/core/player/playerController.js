@@ -9,6 +9,8 @@ import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 
+const MIN_PROGRESS_SYNC_DURATION_MS = 60000;
+
 export const PlayerController = {
 
   video: null,
@@ -2122,19 +2124,8 @@ export const PlayerController = {
 
     if (!this.lifecycleBound) {
       this.lifecycleBound = true;
-        this.lifecycleFlushHandler = () => {
-          const context = this.createProgressContext();
-          if (!context.itemId) {
-            return;
-          }
-          this.flushProgress(
-            Math.floor(this.getCurrentTimeSeconds() * 1000),
-            Math.floor(this.getDurationSeconds() * 1000),
-            false,
-            context
-          ).finally(() => {
-            this.pushProgressIfDue(true);
-          });
+      this.lifecycleFlushHandler = () => {
+        this.flushCurrentProgress({ forceCloudSync: true });
       };
       this.visibilityFlushHandler = () => {
         if (document.visibilityState === "hidden") {
@@ -2149,6 +2140,8 @@ export const PlayerController = {
 
   async play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
     if (!this.video) return;
+
+    await this.flushCurrentProgress({ allowCloudSync: false });
 
     try {
       this.video.muted = false;
@@ -2312,6 +2305,8 @@ export const PlayerController = {
   pause() {
     if (!this.video) return;
 
+    this.flushCurrentProgress({ forceCloudSync: true });
+
     if (this.isUsingAvPlay()) {
       const avplay = this.getAvPlay();
       if (!avplay) {
@@ -2333,6 +2328,8 @@ export const PlayerController = {
 
   resume() {
     if (!this.video) return;
+
+    this.flushCurrentProgress({ forceCloudSync: false });
 
     if (this.isUsingAvPlay()) {
       const avplay = this.getAvPlay();
@@ -2371,15 +2368,7 @@ export const PlayerController = {
   stop() {
     if (!this.video) return;
 
-    const context = this.createProgressContext();
-    this.flushProgress(
-      Math.floor(this.getCurrentTimeSeconds() * 1000),
-      Math.floor(this.getDurationSeconds() * 1000),
-      false,
-      context
-    ).finally(() => {
-      this.pushProgressIfDue(true);
-    });
+    const flushPromise = this.flushCurrentProgress({ forceCloudSync: true });
 
     this.video.pause();
     this.teardownAdaptiveInstances();
@@ -2411,6 +2400,8 @@ export const PlayerController = {
       clearInterval(this.progressSaveTimer);
       this.progressSaveTimer = null;
     }
+
+    return flushPromise;
   },
 
   createProgressContext() {
@@ -2427,7 +2418,26 @@ export const PlayerController = {
     };
   },
 
-  async flushProgress(positionMs, durationMs, clear = false, context = null) {
+  async flushCurrentProgress({ forceCloudSync = false, allowCloudSync = true } = {}) {
+    const context = this.createProgressContext();
+    if (!context.itemId) {
+      return false;
+    }
+
+    await this.flushProgress(
+      Math.floor(this.getCurrentTimeSeconds() * 1000),
+      Math.floor(this.getDurationSeconds() * 1000),
+      false,
+      context,
+      { allowCloudSync: allowCloudSync && !forceCloudSync }
+    );
+    if (forceCloudSync) {
+      await this.pushProgressIfDue(true);
+    }
+    return true;
+  },
+
+  async flushProgress(positionMs, durationMs, clear = false, context = null, { allowCloudSync = true } = {}) {
     const active = context || this.createProgressContext();
     if (!active?.itemId) {
       return;
@@ -2436,6 +2446,14 @@ export const PlayerController = {
     const safePosition = Number(positionMs || 0);
     const safeDuration = Number(durationMs || 0);
     const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
+    const hasReachedMinimumSyncPosition = Number.isFinite(safePosition)
+      && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
+    if (hasFiniteDuration && safeDuration < MIN_PROGRESS_SYNC_DURATION_MS) {
+      return false;
+    }
+    if (!hasFiniteDuration && !hasReachedMinimumSyncPosition) {
+      return false;
+    }
     const isCompleted = hasFiniteDuration && safePosition / safeDuration > 0.95;
 
     if (isCompleted) {
@@ -2451,12 +2469,14 @@ export const PlayerController = {
 
     if (clear || isCompleted) {
       await watchProgressRepository.removeProgress(active.itemId, active.videoId || null);
-      this.pushProgressIfDue(true);
-      return;
+      if (!allowCloudSync) {
+        return true;
+      }
+      return this.pushProgressIfDue(true);
     }
 
     if (!Number.isFinite(safePosition) || safePosition <= 0) {
-      return;
+      return false;
     }
 
     await watchProgressRepository.saveProgress({
@@ -2472,17 +2492,21 @@ export const PlayerController = {
       positionMs: Math.max(0, Math.trunc(safePosition)),
       durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : 0
     });
-    this.pushProgressIfDue(false);
+    if (!allowCloudSync) {
+      return true;
+    }
+    return this.pushProgressIfDue(false);
   },
 
   pushProgressIfDue(force = false) {
     const now = Date.now();
     if (!force && (now - Number(this.lastProgressPushAt || 0)) < 30000) {
-      return;
+      return Promise.resolve(false);
     }
     this.lastProgressPushAt = now;
-    WatchProgressSyncService.push().catch((error) => {
+    return WatchProgressSyncService.push().catch((error) => {
       console.warn("Watch progress auto push failed", error);
+      return false;
     });
   }
 

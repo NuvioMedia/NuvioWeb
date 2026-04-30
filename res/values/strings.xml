@@ -1079,7 +1079,7 @@
     <string name="detail.noEpisodesFound">No episodes found.</string>
     <string name="detail.seasonLabel">Season {{season}}</string>
     <string name="detail.episodeOptions">Episode Options</string>
-    <string name="home.continueStatusNextUp">Next Up</string>
+    <string name="home.continueStatusNextUp">Next episode</string>
     <string name="home.continueStatusContinue">Continue</string>
     <string name="home.continueStatusAlmostDone">Almost done</string>
     <string name="home.timeLeft">{{minutes}}m left</string>
