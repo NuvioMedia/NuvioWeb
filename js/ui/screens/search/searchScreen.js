@@ -544,6 +544,7 @@ export const SearchScreen = {
 
     return this.rows.map((row, rowIndex) => {
       const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
+      const seeAllLabel = t("action_see_all", {}, "See All");
       return `
       <section class="search-results-row" data-row-key="${escapeHtml(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
@@ -576,7 +577,7 @@ export const SearchScreen = {
                      data-row-key="${escapeHtml(rowKey)}">
               <div class="search-seeall-inner">
                 <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
-                <div class="search-seeall-label">See All</div>
+                <div class="search-seeall-label">${escapeHtml(seeAllLabel)}</div>
               </div>
             </article>
           ` : ""}

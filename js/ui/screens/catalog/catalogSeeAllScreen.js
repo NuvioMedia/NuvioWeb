@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { Environment } from "../../../platform/environment.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { I18n } from "../../../i18n/index.js";
 import { focusWithoutAutoScroll } from "../../components/sidebarNavigation.js";
 
 function isBackEvent(event) {
@@ -16,6 +17,10 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
 }
 
 function extractReleaseYear(item = {}) {
@@ -431,20 +436,20 @@ export const CatalogSeeAllScreen = {
             ` : ""}
           </article>
         `).join("")
-      : `<div class="seeall-empty">No items available.</div>`;
+      : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
 
     this.container.innerHTML = `
       <div class="seeall-shell">
         <header class="seeall-header">
           <h2 class="seeall-title">${escapeHtml(title)}</h2>
           ${this.layoutPrefs?.catalogAddonNameEnabled !== false && descriptor.addonName
-            ? `<div class="seeall-subtitle">from ${escapeHtml(descriptor.addonName)}</div>`
+            ? `<div class="seeall-subtitle">${escapeHtml(t("catalog_see_all_from", [descriptor.addonName], "from %1$s"))}</div>`
             : ""}
         </header>
         <section class="seeall-grid">
           ${cards}
         </section>
-        ${this.loading ? `<div class="seeall-loading">Loading...</div>` : ""}
+        ${this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : ""}
       </div>
     `;
 
