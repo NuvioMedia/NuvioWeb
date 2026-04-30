@@ -82,6 +82,20 @@ function resolvePlayableDetailType(itemType, meta = {}) {
   return "movie";
 }
 
+function resolveMetaImdbId(meta = {}, params = {}) {
+  const candidates = [
+    meta?.imdbId,
+    meta?.imdb_id,
+    meta?.externalIds?.imdb,
+    meta?.external_ids?.imdb_id,
+    meta?.id,
+    params?.itemId
+  ];
+  return candidates
+    .map((value) => String(value || "").trim().split(":")[0])
+    .find((value) => /^tt\d+$/i.test(value)) || null;
+}
+
 function extractCast(meta = {}) {
   const toPhoto = (value) => {
     const raw = String(value || "").trim();
@@ -1174,7 +1188,8 @@ export const MetaDetailsScreen = {
     this.autoOpenedContinueWatchingStream = true;
     const extraParams = {
       resumePositionMs: Number(this.params?.resumeProgressMs || 0) || 0,
-      returnToDetail: true
+      returnToDetail: true,
+      continueWatchingBackHome: true
     };
     if (isSeriesDetailMeta(this.meta, this.episodes)) {
       const episode = this.findContinueWatchingEpisodeTarget();
@@ -1229,6 +1244,7 @@ export const MetaDetailsScreen = {
         runtime: settings.useDetails ? (enrichment.runtime || meta.runtime) : meta.runtime,
         country: settings.useDetails ? (enrichment.country || meta.country) : meta.country,
         language: settings.useDetails ? (enrichment.language || meta.language) : meta.language,
+        imdbId: enrichment.imdbId || meta.imdbId || meta.imdb_id || null,
         tmdbRating: typeof enrichment.rating === "number" ? Number(enrichment.rating.toFixed(1)) : (meta.tmdbRating || null),
         credits: enrichment.credits || meta.credits || null,
         companies: Array.isArray(enrichment.companies) ? enrichment.companies : (meta.companies || []),
@@ -2531,7 +2547,7 @@ export const MetaDetailsScreen = {
   },
 
   shouldSuppressTrailerAutoplay() {
-    return this.isLegacyTvRuntime() || this.isPerformanceConstrained();
+    return false;
   },
 
   animateScroll(container, axis, targetValue, duration = 150) {
@@ -3320,10 +3336,12 @@ export const MetaDetailsScreen = {
     }
     const currentIndex = this.episodes.findIndex((entry) => entry.id === pending.videoId);
     const nextEpisode = currentIndex >= 0 ? (this.episodes[currentIndex + 1] || null) : null;
+    const imdbId = resolveMetaImdbId(this.meta, this.params);
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
       itemType: this.params?.itemType || "series",
+      imdbId,
       videoId: pending.videoId,
       season: pending.episode?.season ?? null,
       episode: pending.episode?.episode ?? null,
@@ -3355,9 +3373,12 @@ export const MetaDetailsScreen = {
     const currentIndex = this.episodes.findIndex((entry) => entry.id === episode.id);
     const nextEpisode = currentIndex >= 0 ? (this.episodes[currentIndex + 1] || null) : null;
     const streamBackdrop = this.meta?.background || this.meta?.landscapePoster || this.meta?.poster || null;
+    const imdbId = resolveMetaImdbId(this.meta, this.params);
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
       itemType: "series",
+      imdbId,
+      returnToDetail: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
       backdrop: streamBackdrop,
       poster: this.meta?.poster || null,
@@ -3384,9 +3405,12 @@ export const MetaDetailsScreen = {
     const releaseYear = String(this.meta?.releaseInfo || "").match(/\b(19|20)\d{2}\b/)?.[0] || "";
     const streamBackdrop = this.meta?.background || this.meta?.landscapePoster || this.meta?.poster || null;
     const itemType = resolvePlayableDetailType(this.params?.itemType || this.meta?.type, this.meta);
+    const imdbId = resolveMetaImdbId(this.meta, this.params);
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
       itemType,
+      imdbId,
+      returnToDetail: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
       itemSubtitle: "",
       genres: Array.isArray(this.meta?.genres) ? this.meta.genres.slice(0, 3).join(" • ") : "",
@@ -3411,10 +3435,12 @@ export const MetaDetailsScreen = {
     if (!selectedStream?.url) {
       return;
     }
+    const imdbId = resolveMetaImdbId(this.meta, this.params);
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
       itemType: this.params?.itemType || "movie",
+      imdbId,
       season: null,
       episode: null,
       playerTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
@@ -4506,10 +4532,12 @@ export const MetaDetailsScreen = {
     }
 
     if (action === "playStream" && current.dataset.streamUrl) {
+      const imdbId = resolveMetaImdbId(this.meta, this.params);
       Router.navigate("player", {
         streamUrl: current.dataset.streamUrl,
         itemId: this.params?.itemId,
         itemType: this.params?.itemType,
+        imdbId,
         season: this.nextEpisodeToWatch?.season ?? null,
         episode: this.nextEpisodeToWatch?.episode ?? null,
         playerTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",

@@ -24,10 +24,12 @@ async function fetchJson(url, timeoutMs = 3500) {
       signal: controller?.signal
     });
     if (!response.ok) {
+      console.warn("Parental guide request failed", { url, status: response.status });
       return null;
     }
     return await response.json();
-  } catch (_) {
+  } catch (error) {
+    console.warn("Parental guide request failed", { url, error: error?.message || String(error) });
     return null;
   } finally {
     if (timer) {
