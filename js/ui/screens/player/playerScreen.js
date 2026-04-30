@@ -993,8 +993,10 @@ export const PlayerScreen = {
 
     this.parentalWarnings = normalizeParentalWarnings(params.parentalWarnings || params.parentalGuide);
     this.parentalGuideVisible = false;
+    this.parentalGuideExiting = false;
     this.parentalGuideShown = false;
     this.parentalGuideTimer = null;
+    this.parentalGuideExitTimer = null;
     this.skipIntervals = [];
     this.activeSkipInterval = null;
     this.skipIntervalDismissed = false;
@@ -2758,6 +2760,7 @@ export const PlayerScreen = {
         return;
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
+      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
       Router.navigate("player", {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
@@ -7184,17 +7187,20 @@ export const PlayerScreen = {
       return;
     }
 
-    overlay.classList.toggle("hidden", !this.parentalGuideVisible || !this.parentalWarnings.length);
-    if (!this.parentalGuideVisible || !this.parentalWarnings.length) {
+    const shouldRender = (this.parentalGuideVisible || this.parentalGuideExiting) && this.parentalWarnings.length;
+    overlay.classList.toggle("hidden", !shouldRender);
+    overlay.classList.toggle("is-exiting", Boolean(this.parentalGuideExiting));
+    if (!shouldRender) {
       overlay.innerHTML = "";
       return;
     }
 
+    const total = this.parentalWarnings.length;
     overlay.innerHTML = `
       <div class="player-parental-line"></div>
       <div class="player-parental-list">
         ${this.parentalWarnings.map((warning, index) => `
-          <div class="player-parental-item" style="animation-delay:${index * 120}ms">
+          <div class="player-parental-item" style="--parental-enter-delay:${index * 120}ms;--parental-exit-delay:${(total - index - 1) * 90}ms">
             <span class="player-parental-label">${escapeHtml(warning.label)}</span>
             <span class="player-parental-severity">${escapeHtml(warning.severity)}</span>
           </div>
@@ -7209,17 +7215,44 @@ export const PlayerScreen = {
     }
 
     this.parentalGuideVisible = true;
+    this.parentalGuideExiting = false;
     this.parentalGuideShown = true;
     this.renderParentalGuideOverlay();
 
     if (this.parentalGuideTimer) {
       clearTimeout(this.parentalGuideTimer);
     }
+    if (this.parentalGuideExitTimer) {
+      clearTimeout(this.parentalGuideExitTimer);
+      this.parentalGuideExitTimer = null;
+    }
 
     this.parentalGuideTimer = setTimeout(() => {
-      this.parentalGuideVisible = false;
-      this.renderParentalGuideOverlay();
+      this.hideParentalGuideOverlay();
     }, 5200);
+  },
+
+  hideParentalGuideOverlay() {
+    if (!this.parentalGuideVisible || !this.parentalWarnings.length) {
+      this.parentalGuideVisible = false;
+      this.parentalGuideExiting = false;
+      this.renderParentalGuideOverlay();
+      return;
+    }
+
+    this.parentalGuideVisible = false;
+    this.parentalGuideExiting = true;
+    this.renderParentalGuideOverlay();
+
+    if (this.parentalGuideExitTimer) {
+      clearTimeout(this.parentalGuideExitTimer);
+    }
+    const total = this.parentalWarnings.length;
+    this.parentalGuideExitTimer = setTimeout(() => {
+      this.parentalGuideExiting = false;
+      this.parentalGuideExitTimer = null;
+      this.renderParentalGuideOverlay();
+    }, Math.max(320, (Math.max(0, total - 1) * 90) + 280));
   },
 
   toggleEpisodePanel() {
@@ -7305,6 +7338,7 @@ export const PlayerScreen = {
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
       const nextEpisode = this.episodes[this.episodePanelIndex + 1] || null;
+      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
       Router.navigate("player", {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
@@ -7907,6 +7941,7 @@ export const PlayerScreen = {
         return;
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
+      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
       Router.navigate("player", {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
@@ -7969,6 +8004,11 @@ export const PlayerScreen = {
       clearTimeout(this.parentalGuideTimer);
       this.parentalGuideTimer = null;
     }
+    if (this.parentalGuideExitTimer) {
+      clearTimeout(this.parentalGuideExitTimer);
+      this.parentalGuideExitTimer = null;
+    }
+    this.parentalGuideExiting = false;
 
     if (this.subtitleSelectionTimer) {
       clearTimeout(this.subtitleSelectionTimer);

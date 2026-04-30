@@ -5,6 +5,7 @@ import { catalogRepository } from "../../../data/repository/catalogRepository.js
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { ContinueWatchingPreferences } from "../../../data/local/continueWatchingPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
@@ -60,6 +61,9 @@ const HOME_VISIBLE_ROWS_CONSTRAINED_INITIAL = 5;
 const HOME_VISIBLE_ROWS_CONSTRAINED_INCREMENT = 3;
 const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
+const HOME_BOOT_PRELOAD_BUDGET_MS = 10000;
+const HOME_BOOT_IMAGE_PRELOAD_MIN_MS = 800;
+const HOME_BOOT_IMAGE_PRELOAD_MAX_MS = 2200;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
 const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
 const CW_META_TIMEOUT_MS = 1800;
@@ -481,6 +485,47 @@ function withTimeout(promise, ms, fallbackValue) {
   });
 }
 
+function remainingBudgetMs(deadlineMs = 0) {
+  const deadline = Number(deadlineMs || 0);
+  if (!Number.isFinite(deadline) || deadline <= 0) {
+    return 0;
+  }
+  return Math.max(0, deadline - Date.now());
+}
+
+function mergeRowsByKey(rows = []) {
+  const byKey = new Map();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const key = row?.homeCatalogKey || buildCatalogOrderKey(row?.addonId, row?.type, row?.catalogId);
+    if (!key) {
+      return;
+    }
+    byKey.set(key, row);
+  });
+  return Array.from(byKey.values());
+}
+
+function preloadImageUrl(url) {
+  const src = String(url || "").trim();
+  if (!src || typeof Image !== "function") {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.decoding = "async";
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = src;
+    if (typeof image.decode === "function") {
+      image.decode().then(() => resolve(true)).catch(() => {
+        if (image.complete) {
+          resolve(true);
+        }
+      });
+    }
+  });
+}
+
 async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie") {
   const fallbackSource = resolveTrailerSource(meta);
   if (fallbackSource) {
@@ -542,7 +587,22 @@ function progressFractionForContinueWatching(item = {}) {
 
 function isSeriesTypeForContinueWatching(type) {
   const normalized = String(type || "").toLowerCase();
-  return normalized === "series";
+  return normalized === "series" || normalized === "tv";
+}
+
+function isMalformedNextUpSeedContentId(contentId) {
+  const normalized = String(contentId || "").trim().toLowerCase();
+  return !normalized || normalized === "tmdb" || normalized === "imdb" || normalized === "trakt"
+    || normalized === "tmdb:" || normalized === "imdb:" || normalized === "trakt:";
+}
+
+function normalizeNextUpDismissPart(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric > 0 ? numeric : -1;
+}
+
+function nextUpDismissKey(contentId, season, episode) {
+  return `${String(contentId || "").trim()}|${normalizeNextUpDismissPart(season)}|${normalizeNextUpDismissPart(episode)}`;
 }
 
 function isCompletedForContinueWatching(item = {}) {
@@ -605,7 +665,7 @@ function hasEpisodeAiredForContinueWatching(released) {
 
 function buildProgressStatus(item) {
   if (item?.isNextUp) {
-    return t("home.continueStatusNextUp", {}, "Next Up");
+    return t("home.continueStatusNextUp", {}, "Next episode");
   }
   const durationMs = Number(item?.durationMs || 0);
   const positionMs = Number(item?.positionMs || 0);
@@ -700,6 +760,8 @@ function normalizeContinueWatchingItem(item) {
     logo: firstNonEmpty(item.logo),
     description: firstNonEmpty(item.description),
     releaseInfo: firstNonEmpty(item.releaseInfo),
+    seedSeason: Number.isFinite(Number(item.seedSeason)) ? Number(item.seedSeason) : null,
+    seedEpisode: Number.isFinite(Number(item.seedEpisode)) ? Number(item.seedEpisode) : null,
     genres: Array.isArray(item.genres) ? item.genres.filter(Boolean) : [],
     runtimeMinutes: Number(item.runtimeMinutes ?? item.runtime ?? 0) || 0,
     imdbRating: resolveImdbRating(item),
@@ -2134,6 +2196,152 @@ export const HomeScreen = {
     return 0;
   },
 
+  getBootCatalogBatchSize() {
+    const deferredBatchSize = Number(this.getDeferredCatalogBatchSize() || 0);
+    if (deferredBatchSize > 0) {
+      return deferredBatchSize;
+    }
+    return this.isPerformanceConstrained() ? 3 : 8;
+  },
+
+  async resolveContinueWatchingState({
+    allProgressPromise,
+    recentProgressPromise,
+    progressAllError = null,
+    recentProgressError = null,
+    preserveContinueWatching = false,
+    previousContinueWatchingSignature = ""
+  } = {}) {
+    const [allProgress, continueWatching] = await Promise.all([
+      allProgressPromise || Promise.resolve([]),
+      recentProgressPromise || Promise.resolve([])
+    ]);
+    const normalizedAllProgress = Array.isArray(allProgress) ? allProgress : [];
+    const normalizedContinueWatching = Array.isArray(continueWatching) ? continueWatching : [];
+    const watchedItems = await watchedItemsRepository.getAll(2000).catch(() => []);
+    const dismissedNextUpKeys = ContinueWatchingPreferences.getDismissedNextUpKeys();
+    const showUnairedNextUp = LayoutPreferences.get().showUnairedNextUp !== false;
+    const nextUpProgressCandidates = this.selectNextUpProgressCandidates(normalizedAllProgress, normalizedContinueWatching, watchedItems, dismissedNextUpKeys)
+      .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
+    const shouldShowLoading = Boolean(normalizedContinueWatching.length + nextUpProgressCandidates.length);
+
+    if (!shouldShowLoading) {
+      if (preserveContinueWatching && (progressAllError || recentProgressError)) {
+        return {
+          allProgress: normalizedAllProgress,
+          continueWatching: normalizedContinueWatching,
+          watchedItems,
+          dismissedNextUpKeys,
+          showUnairedNextUp,
+          nextUpProgressCandidates,
+          continueWatchingDisplay: this.continueWatchingDisplay || [],
+          continueWatchingLoading: false,
+          preserveExistingDisplay: true
+        };
+      }
+      return {
+        allProgress: normalizedAllProgress,
+        continueWatching: normalizedContinueWatching,
+        watchedItems,
+        dismissedNextUpKeys,
+        showUnairedNextUp,
+        nextUpProgressCandidates,
+        continueWatchingDisplay: [],
+        continueWatchingLoading: false
+      };
+    }
+
+    const enriched = await this.enrichContinueWatching(normalizedContinueWatching, {
+      allProgress: normalizedAllProgress,
+      watchedItems,
+      dismissedNextUpKeys,
+      showUnairedNextUp,
+      nextUpProgressCandidates
+    });
+    const nextDisplayStrict = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+    const nextDisplay = nextDisplayStrict.length
+      ? nextDisplayStrict
+      : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
+    const nextSignature = preserveContinueWatching
+      ? buildContinueWatchingSignature(nextDisplay)
+      : "";
+
+    return {
+      allProgress: normalizedAllProgress,
+      continueWatching: normalizedContinueWatching,
+      watchedItems,
+      dismissedNextUpKeys,
+      showUnairedNextUp,
+      nextUpProgressCandidates,
+      continueWatchingDisplay: preserveContinueWatching && nextSignature === previousContinueWatchingSignature
+        ? (this.continueWatchingDisplay || [])
+        : nextDisplay,
+      continueWatchingLoading: false,
+      preserveExistingDisplay: Boolean(preserveContinueWatching && nextSignature === previousContinueWatchingSignature)
+    };
+  },
+
+  applyContinueWatchingState(state = {}) {
+    this.allProgress = Array.isArray(state.allProgress) ? state.allProgress : [];
+    this.continueWatching = Array.isArray(state.continueWatching) ? state.continueWatching : [];
+    this.watchedItems = Array.isArray(state.watchedItems) ? state.watchedItems : [];
+    this.dismissedNextUpKeys = Array.isArray(state.dismissedNextUpKeys) ? state.dismissedNextUpKeys : [];
+    this.showUnairedNextUp = state.showUnairedNextUp !== false;
+    this.nextUpProgressCandidates = Array.isArray(state.nextUpProgressCandidates) ? state.nextUpProgressCandidates : [];
+    this.continueWatchingDisplay = Array.isArray(state.continueWatchingDisplay) ? state.continueWatchingDisplay : [];
+    this.continueWatchingLoading = Boolean(state.continueWatchingLoading);
+  },
+
+  collectBootImageUrls() {
+    const urls = [];
+    const pushUrl = (value) => {
+      const url = String(value || "").trim();
+      if (url && !urls.includes(url)) {
+        urls.push(url);
+      }
+    };
+    const pushItemImages = (item = {}) => {
+      const source = item && typeof item === "object" ? item : {};
+      pushUrl(source.backdrop);
+      pushUrl(source.background);
+      pushUrl(source.landscapePoster);
+      pushUrl(source.poster);
+      pushUrl(source.thumbnail);
+      pushUrl(source.episodeThumbnail);
+      pushUrl(source.logo);
+    };
+
+    pushItemImages(normalizeCatalogItem(this.heroItem || null));
+    (this.continueWatchingDisplay || []).slice(0, CW_MAX_VISIBLE_ITEMS).forEach((item) => {
+      pushItemImages(normalizeContinueWatchingItem(item));
+    });
+    this.getVisibleHomeRows(this.rows || []).slice(0, this.getInitialVisibleHomeRowCount()).forEach((row) => {
+      (row?.result?.data?.items || []).slice(0, this.getRowItemLimit()).forEach((item) => {
+        pushItemImages(normalizeCatalogItem(item, row?.type || "movie"));
+      });
+    });
+    return urls.slice(0, this.isPerformanceConstrained() ? 24 : 60);
+  },
+
+  async preloadBootImages(deadlineMs = 0) {
+    const budgetMs = Math.min(
+      HOME_BOOT_IMAGE_PRELOAD_MAX_MS,
+      Math.max(0, remainingBudgetMs(deadlineMs))
+    );
+    if (budgetMs < HOME_BOOT_IMAGE_PRELOAD_MIN_MS) {
+      return;
+    }
+    const urls = this.collectBootImageUrls();
+    if (!urls.length) {
+      return;
+    }
+    await withTimeout(
+      Promise.allSettled(urls.map((url) => preloadImageUrl(url))),
+      budgetMs,
+      null
+    );
+  },
+
   getScrollDuration(base) {
     const baseline = Number.isFinite(base) ? base : 150;
     if (this.isLegacyTvRuntime()) {
@@ -2802,12 +3010,23 @@ export const HomeScreen = {
     const normalized = normalizeContinueWatchingItem(item);
     const contentId = String(normalized?.contentId || "");
     const videoId = String(normalized?.videoId || "");
+    const nextUpKey = normalized?.isNextUp
+      ? nextUpDismissKey(contentId, normalized.seedSeason ?? normalized.season, normalized.seedEpisode ?? normalized.episode)
+      : "";
     if (!contentId) {
       return;
     }
     const matchesItem = (entry) => {
       if (String(entry?.contentId || "") !== contentId) {
         return false;
+      }
+      if (nextUpKey) {
+        const entryKey = nextUpDismissKey(
+          entry?.contentId,
+          entry?.seedSeason ?? entry?.season,
+          entry?.seedEpisode ?? entry?.episode
+        );
+        return entryKey === nextUpKey;
       }
       if (!videoId) {
         return true;
@@ -2874,6 +3093,15 @@ export const HomeScreen = {
     const normalized = normalizeContinueWatchingItem(item);
     if (!normalized?.contentId) {
       return false;
+    }
+    if (normalized.isNextUp) {
+      const seedSeason = normalized.seedSeason ?? normalized.season ?? null;
+      const seedEpisode = normalized.seedEpisode ?? normalized.episode ?? null;
+      const dismissKey = nextUpDismissKey(normalized.contentId, seedSeason, seedEpisode);
+      ContinueWatchingPreferences.addDismissedNextUpKey(dismissKey);
+      this.dismissedNextUpKeys = ContinueWatchingPreferences.getDismissedNextUpKeys();
+      this.pruneContinueWatchingItem(normalized);
+      return true;
     }
     await watchProgressRepository.removeProgress(normalized.contentId, normalized.videoId || null);
     this.pruneContinueWatchingItem(normalized);
@@ -4462,6 +4690,7 @@ export const HomeScreen = {
 
   async loadData({ background = false } = {}) {
     const token = this.homeLoadToken;
+    const bootPreloadDeadline = background ? 0 : Date.now() + HOME_BOOT_PRELOAD_BUDGET_MS;
     const prefs = LayoutPreferences.get();
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
@@ -4487,6 +4716,17 @@ export const HomeScreen = {
       recentProgressError = error;
       return [];
     });
+    const bootContinueWatchingPromise = background ? null : this.resolveContinueWatchingState({
+      allProgressPromise: progressAllPromise,
+      recentProgressPromise,
+      progressAllError,
+      recentProgressError,
+      preserveContinueWatching,
+      previousContinueWatchingSignature
+    }).catch((error) => {
+      console.warn("Home boot continue watching warmup failed", error);
+      return null;
+    });
 
     const addons = await addonRepository.getInstalledAddons();
     const catalogDescriptors = [];
@@ -4509,13 +4749,49 @@ export const HomeScreen = {
     const initialCatalogLoad = this.getInitialCatalogLoadCount();
     const initialDescriptors = catalogDescriptors.slice(0, initialCatalogLoad);
     const deferredDescriptors = catalogDescriptors.slice(initialCatalogLoad);
+    let bootDeferredRowsPromise = null;
+    let bootDeferredRowsApplied = false;
+    if (!background && deferredDescriptors.length) {
+      bootDeferredRowsPromise = this.fetchCatalogRows(deferredDescriptors, {
+        allowLoading: true,
+        batchSize: this.getBootCatalogBatchSize(),
+        timeoutMs: HOME_ROW_TIMEOUT_MS
+      }).catch((error) => {
+        console.warn("Home boot deferred rows warmup failed", error);
+        return [];
+      });
+    }
 
     const initialRows = await this.fetchCatalogRows(initialDescriptors, { allowLoading: true });
     if (token !== this.homeLoadToken) {
       return;
     }
-    this.rows = this.sortAndFilterRows(initialRows);
-    if (!preserveContinueWatching) {
+    let bootRows = initialRows;
+    if (bootDeferredRowsPromise) {
+      const bootDeferredRows = await withTimeout(
+        bootDeferredRowsPromise,
+        remainingBudgetMs(bootPreloadDeadline),
+        null
+      );
+      if (Array.isArray(bootDeferredRows)) {
+        bootRows = mergeRowsByKey([...initialRows, ...bootDeferredRows]);
+        bootDeferredRowsApplied = true;
+      }
+    }
+    this.rows = this.sortAndFilterRows(bootRows);
+
+    let bootContinueWatchingState = null;
+    if (bootContinueWatchingPromise) {
+      bootContinueWatchingState = await withTimeout(
+        bootContinueWatchingPromise,
+        remainingBudgetMs(bootPreloadDeadline),
+        null
+      );
+    }
+    const bootContinueWatchingApplied = Boolean(bootContinueWatchingState);
+    if (bootContinueWatchingState) {
+      this.applyContinueWatchingState(bootContinueWatchingState);
+    } else if (!preserveContinueWatching) {
       this.continueWatchingDisplay = [];
       this.continueWatchingLoading = true;
       this.allProgress = [];
@@ -4528,6 +4804,17 @@ export const HomeScreen = {
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
+    let bootHeroEnriched = false;
+    if (!background && this.layoutMode !== "modern" && remainingBudgetMs(bootPreloadDeadline) > 500) {
+      bootHeroEnriched = await withTimeout(
+        this.enrichHero(this.heroCandidates[0] || null).then(() => true),
+        Math.min(remainingBudgetMs(bootPreloadDeadline), 2600),
+        false
+      );
+    }
+    if (!background) {
+      await this.preloadBootImages(bootPreloadDeadline);
+    }
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
     this.hasLoadedOnce = true;
     this.render();
@@ -4544,10 +4831,10 @@ export const HomeScreen = {
       }
     });
 
-    if (deferredDescriptors.length) {
+    if (deferredDescriptors.length && !bootDeferredRowsApplied) {
       const progressiveDeferredRows = this.shouldProgressivelyRenderDeferredRows();
       const allowDeferredLoadingRows = !this.isPerformanceConstrained();
-      this.fetchCatalogRows(deferredDescriptors, {
+      const deferredRowsPromise = bootDeferredRowsPromise || this.fetchCatalogRows(deferredDescriptors, {
         allowLoading: allowDeferredLoadingRows,
         batchSize: this.getDeferredCatalogBatchSize(),
         onBatch: progressiveDeferredRows
@@ -4567,7 +4854,8 @@ export const HomeScreen = {
             this.requestBackgroundRender();
           }
           : null
-      }).then((extraRows) => {
+      });
+      deferredRowsPromise.then((extraRows) => {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
@@ -4587,7 +4875,7 @@ export const HomeScreen = {
       });
     }
 
-    if (this.layoutMode !== "modern") {
+    if (this.layoutMode !== "modern" && !bootHeroEnriched) {
       this.enrichHero(this.heroCandidates[0] || null).then(() => {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
@@ -4598,75 +4886,26 @@ export const HomeScreen = {
       });
     }
 
-    (async () => {
-      const [allProgress, continueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
-      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-        return;
-      }
-      this.allProgress = Array.isArray(allProgress) ? allProgress : [];
-      this.continueWatching = Array.isArray(continueWatching) ? continueWatching : [];
-      const needsNextUp = this.continueWatching.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
-        || this.allProgress.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type));
-      this.watchedItems = needsNextUp ? await watchedItemsRepository.getAll(2000).catch(() => []) : [];
-      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-        return;
-      }
-      this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
-        .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
-      const shouldShowLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
+    if (!bootContinueWatchingApplied) {
+      const fallbackContinueWatchingState = () => this.resolveContinueWatchingState({
+        allProgressPromise: progressAllPromise,
+        recentProgressPromise,
+        progressAllError,
+        recentProgressError,
+        preserveContinueWatching,
+        previousContinueWatchingSignature
+      });
+      const continueWatchingStatePromise = bootContinueWatchingPromise
+        ? bootContinueWatchingPromise.then((state) => state || fallbackContinueWatchingState())
+        : fallbackContinueWatchingState();
+      continueWatchingStatePromise.then((state) => {
+        if (token !== this.homeLoadToken || Router.getCurrent() !== "home" || !state) {
+          return;
+        }
       const previousDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
       const previousHeroIdentity = buildHeroIdentity(this.heroItem);
       const previousLoadingState = Boolean(this.continueWatchingLoading);
-      if (!suppressContinueWatchingLoading) {
-        this.continueWatchingLoading = shouldShowLoading;
-        this.continueWatchingDisplay = [];
-        if (previousLoadingState !== this.continueWatchingLoading || previousDisplaySignature) {
-          this.requestBackgroundRender();
-        }
-      }
-
-      if (!shouldShowLoading) {
-        if (suppressContinueWatchingLoading && (progressAllError || recentProgressError)) {
-          this.continueWatchingLoading = false;
-          return;
-        }
-        if (preserveContinueWatching) {
-          const nextSignature = "";
-          if (nextSignature === previousContinueWatchingSignature) {
-            this.continueWatchingLoading = false;
-            return;
-          }
-        }
-        this.continueWatchingLoading = false;
-        this.continueWatchingDisplay = [];
-        if (previousLoadingState || previousDisplaySignature) {
-          this.requestBackgroundRender();
-        }
-        return;
-      }
-
-      try {
-        const enriched = await this.enrichContinueWatching(this.continueWatching, {
-          allProgress: this.allProgress,
-          watchedItems: this.watchedItems,
-          nextUpProgressCandidates: this.nextUpProgressCandidates
-        });
-        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-          return;
-        }
-        const nextDisplayStrict = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
-        const nextDisplay = nextDisplayStrict.length
-          ? nextDisplayStrict
-          : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
-        const nextSignature = preserveContinueWatching
-          ? buildContinueWatchingSignature(nextDisplay)
-          : "";
-        if (preserveContinueWatching && nextSignature === previousContinueWatchingSignature) {
-          this.continueWatchingLoading = false;
-          return;
-        }
-        this.continueWatchingDisplay = nextDisplay;
-        this.continueWatchingLoading = false;
+        this.applyContinueWatchingState(state);
         if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
           this.heroItem = this.pickInitialHero();
           if (!background && !this.hasAppliedInitialContinueWatchingFocus) {
@@ -4680,23 +4919,17 @@ export const HomeScreen = {
           || previousHeroIdentity !== nextHeroIdentity) {
           this.requestBackgroundRender();
         }
-      } catch (error) {
-        console.warn("Continue watching async enrichment failed", error);
+      }).catch((error) => {
+        console.warn("Continue watching load failed", error);
+        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+          return;
+        }
         this.continueWatchingLoading = false;
-        if (!suppressContinueWatchingLoading && previousLoadingState) {
+        if (!suppressContinueWatchingLoading) {
           this.requestBackgroundRender();
         }
-      }
-    })().catch((error) => {
-      console.warn("Continue watching load failed", error);
-      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-        return;
-      }
-      this.continueWatchingLoading = false;
-      if (!suppressContinueWatchingLoading) {
-        this.requestBackgroundRender();
-      }
-    });
+      });
+    }
 
     this.retryPendingCatalogRows();
   },
@@ -5107,11 +5340,91 @@ export const HomeScreen = {
     };
   },
 
-  selectNextUpProgressCandidates(allProgress = [], inProgressItems = []) {
+  buildNextUpProgressCandidatesFromWatchedItems(watchedItems = [], inProgressItems = [], dismissedNextUpKeys = []) {
     const cutoffMs = Date.now() - (CW_DAYS_CAP * 24 * 60 * 60 * 1000);
+    const dismissed = new Set(Array.isArray(dismissedNextUpKeys) ? dismissedNextUpKeys : []);
     const inProgressSeriesIds = new Set(
       (Array.isArray(inProgressItems) ? inProgressItems : [])
         .filter((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        .filter((item) => shouldTreatAsInProgressForContinueWatching(item))
+        .map((item) => String(item?.contentId || "").trim())
+        .filter(Boolean)
+    );
+
+    const latestWatchedByContent = new Map();
+    (Array.isArray(watchedItems) ? watchedItems : []).forEach((entry) => {
+      const watchedAt = Number(entry?.watchedAt || entry?.updatedAt || 0);
+      if (watchedAt < cutoffMs) {
+        return;
+      }
+      const contentId = String(entry?.contentId || "").trim();
+      if (isMalformedNextUpSeedContentId(contentId) || inProgressSeriesIds.has(contentId)) {
+        return;
+      }
+      const contentType = String(entry?.contentType || "series").toLowerCase();
+      if (!isSeriesTypeForContinueWatching(contentType)) {
+        return;
+      }
+      const season = Number(entry?.season || 0);
+      const episode = Number(entry?.episode || 0);
+      if (season <= 0 || episode <= 0) {
+        return;
+      }
+      if (dismissed.has(nextUpDismissKey(contentId, season, episode))) {
+        return;
+      }
+
+      const existing = latestWatchedByContent.get(contentId);
+      if (!existing) {
+        latestWatchedByContent.set(contentId, entry);
+        return;
+      }
+
+      const existingUpdated = Number(existing.watchedAt || existing.updatedAt || 0);
+      const incomingUpdated = watchedAt;
+      if (incomingUpdated > existingUpdated) {
+        latestWatchedByContent.set(contentId, entry);
+        return;
+      }
+      if (incomingUpdated === existingUpdated) {
+        const existingKey = (Number(existing.season || 0) * 1000) + Number(existing.episode || 0);
+        const incomingKey = (season * 1000) + episode;
+        if (incomingKey > existingKey) {
+          latestWatchedByContent.set(contentId, entry);
+        }
+      }
+    });
+
+    return Array.from(latestWatchedByContent.values())
+      .map((entry) => ({
+        contentId: String(entry?.contentId || "").trim(),
+        contentType: isSeriesTypeForContinueWatching(entry?.contentType) ? String(entry.contentType).toLowerCase() : "series",
+        videoId: String(entry?.videoId || entry?.contentId || "").trim(),
+        season: Number(entry?.season || 0),
+        episode: Number(entry?.episode || 0),
+        title: firstNonEmpty(entry?.title, entry?.name, entry?.contentId),
+        episodeTitle: firstNonEmpty(entry?.episodeTitle),
+        positionMs: 1,
+        durationMs: 1,
+        progressPercent: 100,
+        updatedAt: Number(entry?.watchedAt || entry?.updatedAt || Date.now()),
+        source: "watched_items"
+      }))
+      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  },
+
+  selectNextUpProgressCandidates(allProgress = [], inProgressItems = [], watchedItems = [], dismissedNextUpKeys = []) {
+    const watchedItemSeeds = this.buildNextUpProgressCandidatesFromWatchedItems(watchedItems, inProgressItems, dismissedNextUpKeys);
+    if (watchedItemSeeds.length) {
+      return watchedItemSeeds;
+    }
+
+    const cutoffMs = Date.now() - (CW_DAYS_CAP * 24 * 60 * 60 * 1000);
+    const dismissed = new Set(Array.isArray(dismissedNextUpKeys) ? dismissedNextUpKeys : []);
+    const inProgressSeriesIds = new Set(
+      (Array.isArray(inProgressItems) ? inProgressItems : [])
+        .filter((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        .filter((item) => shouldTreatAsInProgressForContinueWatching(item))
         .map((item) => String(item?.contentId || "").trim())
         .filter(Boolean)
     );
@@ -5122,7 +5435,7 @@ export const HomeScreen = {
         return;
       }
       const contentId = String(entry?.contentId || "").trim();
-      if (!contentId || inProgressSeriesIds.has(contentId)) {
+      if (isMalformedNextUpSeedContentId(contentId) || inProgressSeriesIds.has(contentId)) {
         return;
       }
       if (!isSeriesTypeForContinueWatching(entry?.contentType)) {
@@ -5131,6 +5444,9 @@ export const HomeScreen = {
       const season = Number(entry?.season || 0);
       const episode = Number(entry?.episode || 0);
       if (season <= 0 || episode <= 0 || !isCompletedForContinueWatching(entry)) {
+        return;
+      }
+      if (dismissed.has(nextUpDismissKey(contentId, season, episode))) {
         return;
       }
 
@@ -5237,7 +5553,7 @@ export const HomeScreen = {
     return null;
   },
 
-  resolveNextUpEpisode(meta = {}, completedProgress = {}, allProgress = [], watchedEpisodeKeys = new Set()) {
+  resolveNextUpEpisode(meta = {}, completedProgress = {}, allProgress = [], watchedEpisodeKeys = new Set(), { showUnairedNextUp = true } = {}) {
     const episodes = normalizeEpisodeEntries(meta?.videos || []);
     if (!episodes.length) {
       return null;
@@ -5253,6 +5569,14 @@ export const HomeScreen = {
     const anchorEpisode = Number(completedProgress?.episode || 0);
     if (anchorIndex < 0 && anchorSeason > 0 && anchorEpisode > 0) {
       anchorIndex = episodes.findIndex((entry) => Number(entry.season || 0) === anchorSeason && Number(entry.episode || 0) === anchorEpisode);
+    }
+
+    if (anchorIndex < 0 && anchorSeason === 1 && anchorEpisode > 0) {
+      const seasonCount = new Set(episodes.map((entry) => Number(entry.season || 0))).size;
+      const globalIndex = anchorEpisode - 1;
+      if (seasonCount > 1 && globalIndex >= 0 && globalIndex < episodes.length) {
+        anchorIndex = globalIndex;
+      }
     }
 
     if (anchorIndex < 0) {
@@ -5290,6 +5614,9 @@ export const HomeScreen = {
       if (candidateProgress && shouldTreatAsInProgressForContinueWatching(candidateProgress)) {
         return null;
       }
+      if (!showUnairedNextUp && !hasEpisodeAiredForContinueWatching(candidate.released)) {
+        continue;
+      }
       return candidate;
     }
 
@@ -5300,11 +5627,13 @@ export const HomeScreen = {
     allProgress = [],
     inProgressItems = [],
     nextUpProgressCandidates = [],
-    watchedItems = []
+    watchedItems = [],
+    dismissedNextUpKeys = [],
+    showUnairedNextUp = true
   } = {}) {
     const resolvedCandidates = (Array.isArray(nextUpProgressCandidates) && nextUpProgressCandidates.length)
       ? nextUpProgressCandidates
-      : this.selectNextUpProgressCandidates(allProgress, inProgressItems);
+      : this.selectNextUpProgressCandidates(allProgress, inProgressItems, watchedItems, dismissedNextUpKeys);
 
     if (!resolvedCandidates.length) {
       return [];
@@ -5314,11 +5643,17 @@ export const HomeScreen = {
     const lookupCount = Math.min(CW_MAX_NEXT_UP_LOOKUPS, neededSlots || CW_MAX_VISIBLE_ITEMS);
     const limitedCandidates = resolvedCandidates.slice(0, lookupCount);
     const watchedEpisodeIndex = this.buildWatchedEpisodeIndex(watchedItems);
+    const dismissed = new Set(Array.isArray(dismissedNextUpKeys) ? dismissedNextUpKeys : []);
 
     const nextUpItems = await Promise.all(limitedCandidates.map(async (progressEntry) => {
       const contentType = String(progressEntry?.contentType || "series").toLowerCase();
       const contentId = String(progressEntry?.contentId || "").trim();
       if (!contentId || !isSeriesTypeForContinueWatching(contentType)) {
+        return null;
+      }
+      const seedSeason = Number(progressEntry?.season || 0) || null;
+      const seedEpisode = Number(progressEntry?.episode || 0) || null;
+      if (dismissed.has(nextUpDismissKey(contentId, seedSeason, seedEpisode))) {
         return null;
       }
 
@@ -5334,7 +5669,7 @@ export const HomeScreen = {
       }
 
       const watchedEpisodeKeys = watchedEpisodeIndex.get(contentId) || new Set();
-      const nextEpisode = this.resolveNextUpEpisode(meta, progressEntry, allProgress, watchedEpisodeKeys);
+      const nextEpisode = this.resolveNextUpEpisode(meta, progressEntry, allProgress, watchedEpisodeKeys, { showUnairedNextUp });
       if (!nextEpisode) {
         return null;
       }
@@ -5346,6 +5681,8 @@ export const HomeScreen = {
         videoId: nextEpisode.id || null,
         season: Number(nextEpisode.season || 0) || null,
         episode: Number(nextEpisode.episode || 0) || null,
+        seedSeason,
+        seedEpisode,
         episodeTitle: firstNonEmpty(nextEpisode.title),
         positionMs: 0,
         durationMs: 0,
@@ -5432,12 +5769,15 @@ export const HomeScreen = {
       allProgress: options?.allProgress || [],
       inProgressItems,
       nextUpProgressCandidates: options?.nextUpProgressCandidates || [],
-      watchedItems: options?.watchedItems || []
+      watchedItems: options?.watchedItems || [],
+      dismissedNextUpKeys: options?.dismissedNextUpKeys || [],
+      showUnairedNextUp: options?.showUnairedNextUp !== false
     });
 
     const inProgressSeriesIds = new Set(
       inProgressItems
         .filter((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        .filter((item) => shouldTreatAsInProgressForContinueWatching(item))
         .map((item) => String(item?.contentId || "").trim())
         .filter(Boolean)
     );

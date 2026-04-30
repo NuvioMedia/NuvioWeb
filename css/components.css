@@ -3993,46 +3993,51 @@
 .home-screen-shell .home-continue-badge {
   position: absolute;
   z-index: 2;
-  top: 8px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 4px 8px;
+  max-width: calc(100% - 20px);
+  min-height: 30px;
+  padding: 6px 10px;
   border-radius: 4px;
   background: rgba(19, 19, 19, 0.88);
   color: rgba(255, 255, 255, 0.94);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 13px;
+  line-height: 1.1;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .home-screen-shell .home-continue-copy {
   position: absolute;
   z-index: 2;
-  left: 12px;
-  right: 12px;
-  bottom: 12px;
+  left: 14px;
+  right: 14px;
+  bottom: 16px;
 }
 
 .home-screen-shell .home-continue-kicker {
   color: rgba(255, 255, 255, 0.88);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.33;
+  font-weight: 600;
 }
 
 .home-screen-shell .home-continue-title {
-  margin-top: 2px;
+  margin-top: 3px;
   color: #fff;
-  font-size: 17px;
+  font-size: 20px;
   line-height: 1.25;
-  font-weight: 500;
+  font-weight: 650;
 }
 
 .home-screen-shell .home-continue-subtitle {
-  margin-top: 2px;
+  margin-top: 3px;
   color: rgba(255, 255, 255, 0.72);
-  font-size: 13px;
+  font-size: 15px;
   line-height: 1.33;
+  font-weight: 500;
 }
 
 .home-screen-shell .home-continue-progress {
@@ -5075,28 +5080,31 @@
 }
 
 .home-screen-shell.home-layout-modern .home-continue-kicker {
-  font-size: 12px;
+  font-size: 15px;
   line-height: 1.33;
+  font-weight: 600;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-title {
-  margin-top: 2px;
-  font-size: 16px;
+  margin-top: 3px;
+  font-size: 20px;
   line-height: 1.25;
+  font-weight: 650;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-subtitle {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 3px;
+  font-size: 15px;
   line-height: 1.33;
+  font-weight: 500;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-badge {
-  top: 8px;
-  right: 8px;
-  min-height: 24px;
-  padding: 4px 8px;
-  font-size: 11px;
+  top: 10px;
+  right: 10px;
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 13px;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-progress {
@@ -7728,7 +7736,7 @@
   top: 72px;
   z-index: 34;
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
   gap: 12px;
   opacity: 1;
   transition: opacity 220ms ease;
@@ -7739,11 +7747,21 @@
   pointer-events: none;
 }
 
+.player-parental-guide.is-exiting {
+  pointer-events: none;
+}
+
 .player-parental-line {
   width: 2px;
-  min-height: 118px;
+  min-height: 0;
   border-radius: 999px;
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.18));
+  align-self: stretch;
+}
+
+.player-parental-guide.is-exiting .player-parental-line {
+  animation: playerParentalLineOut 280ms ease both;
+  animation-delay: var(--parental-line-exit-delay, 180ms);
 }
 
 .player-parental-list {
@@ -7765,6 +7783,12 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: rgba(241, 248, 255, 0.95);
   animation: playerParentalItemIn 260ms ease both;
+  animation-delay: var(--parental-enter-delay, 0ms);
+}
+
+.player-parental-guide.is-exiting .player-parental-item {
+  animation: playerParentalItemOut 240ms ease both;
+  animation-delay: var(--parental-exit-delay, 0ms);
 }
 
 .player-parental-label {
@@ -7785,6 +7809,30 @@
   to {
     opacity: 1;
     transform: translateX(0);
+  }
+}
+
+@keyframes playerParentalItemOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-8px);
+  }
+}
+
+@keyframes playerParentalLineOut {
+  from {
+    opacity: 1;
+    transform: scaleY(1);
+    transform-origin: bottom;
+  }
+  to {
+    opacity: 0;
+    transform: scaleY(0);
+    transform-origin: bottom;
   }
 }
 
