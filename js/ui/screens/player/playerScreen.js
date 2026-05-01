@@ -2669,6 +2669,82 @@ export const PlayerScreen = {
     };
   },
 
+  resolveCurrentEpisodeEntry() {
+    if (!Array.isArray(this.episodes) || !this.episodes.length) {
+      return null;
+    }
+    const currentVideoId = String(this.params?.videoId || "").trim();
+    if (currentVideoId) {
+      const byVideoId = this.episodes.find((episode) => String(episode?.id || "") === currentVideoId);
+      if (byVideoId) {
+        return byVideoId;
+      }
+    }
+
+    const currentSeason = Number(this.params?.season || 0);
+    const currentEpisode = Number(this.params?.episode || 0);
+    if (currentSeason <= 0 || currentEpisode <= 0) {
+      return null;
+    }
+    return this.episodes.find((episode) => (
+      Number(episode?.season || 0) === currentSeason
+      && Number(episode?.episode || 0) === currentEpisode
+    )) || null;
+  },
+
+  buildStreamRouteParamsFromPlayer() {
+    const itemType = normalizeItemType(this.params?.itemType || "movie");
+    const currentEpisode = itemType === "series" ? this.resolveCurrentEpisodeEntry() : null;
+    const nextEpisode = itemType === "series" ? this.resolveNextEpisodeInfo() : null;
+    const currentPositionMs = Math.round(this.getPlaybackCurrentSeconds() * 1000);
+    const title = this.params?.playerTitle || this.params?.itemTitle || this.params?.itemId || "Untitled";
+    const backdrop = this.params?.playerBackdropUrl || this.params?.backdrop || this.params?.poster || null;
+    const logo = this.params?.playerLogoUrl || this.params?.logo || null;
+    const videoId = itemType === "series"
+      ? (this.params?.videoId || currentEpisode?.id || null)
+      : (this.params?.videoId || this.params?.itemId || null);
+
+    return {
+      itemId: this.params?.itemId || null,
+      itemType,
+      imdbId: this.params?.imdbId || null,
+      returnToDetail: true,
+      itemTitle: title,
+      itemSubtitle: itemType === "series" ? "" : (this.params?.playerSubtitle || ""),
+      year: this.params?.playerReleaseYear || this.params?.year || "",
+      backdrop,
+      poster: this.params?.poster || backdrop,
+      logo,
+      parentalWarnings: this.params?.parentalWarnings || null,
+      parentalGuide: this.params?.parentalGuide || null,
+      videoId,
+      season: itemType === "series" ? (this.params?.season ?? currentEpisode?.season ?? null) : null,
+      episode: itemType === "series" ? (this.params?.episode ?? currentEpisode?.episode ?? null) : null,
+      episodeTitle: itemType === "series"
+        ? (this.params?.playerEpisodeTitle || this.params?.playerSubtitle || currentEpisode?.title || "")
+        : "",
+      episodes: Array.isArray(this.episodes) ? this.episodes : [],
+      nextEpisodeVideoId: nextEpisode?.videoId || null,
+      nextEpisodeLabel: nextEpisode?.episodeLabel || null,
+      nextEpisodeSeason: nextEpisode?.season ?? null,
+      nextEpisodeEpisode: nextEpisode?.episode ?? null,
+      nextEpisodeTitle: nextEpisode?.episodeTitle || "",
+      nextEpisodeReleased: nextEpisode?.released || "",
+      resumePositionMs: Number.isFinite(currentPositionMs) && currentPositionMs > 0 ? currentPositionMs : 0
+    };
+  },
+
+  navigateBackToStreamScreen() {
+    if (!this.params?.itemId && !this.params?.videoId) {
+      return false;
+    }
+    void Router.navigate("stream", this.buildStreamRouteParamsFromPlayer(), {
+      skipStackPush: true,
+      replaceHistory: true
+    });
+    return true;
+  },
+
   shouldShowNextEpisodeCard() {
     const nextEpisode = this.resolveNextEpisodeInfo();
     if (!nextEpisode) {
@@ -2779,6 +2855,8 @@ export const PlayerScreen = {
         streamCandidates: streamItems,
         nextEpisodeVideoId: null,
         nextEpisodeLabel: null
+      }, {
+        replaceHistory: true
       });
     } catch (error) {
       console.warn("Next episode play failed", error);
@@ -7360,6 +7438,8 @@ export const PlayerScreen = {
         nextEpisodeEpisode: nextEpisode?.episode ?? null,
         nextEpisodeTitle: nextEpisode?.title || "",
         nextEpisodeReleased: nextEpisode?.released || ""
+      }, {
+        replaceHistory: true
       });
     } finally {
       this.switchingEpisode = false;
@@ -7606,17 +7686,8 @@ export const PlayerScreen = {
       return true;
     }
 
-    if (this.controlsVisible && this.nextEpisodeBackExitArmed) {
-      this.nextEpisodeBackExitArmed = false;
-      return false;
-    }
-
-    if (this.controlsVisible) {
-      this.setControlsVisible(false);
-      return true;
-    }
-
-    return false;
+    this.nextEpisodeBackExitArmed = false;
+    return this.navigateBackToStreamScreen();
   },
 
   async onKeyDown(event) {
@@ -7960,6 +8031,8 @@ export const PlayerScreen = {
         streamCandidates: streamItems,
         nextEpisodeVideoId: null,
         nextEpisodeLabel: null
+      }, {
+        replaceHistory: true
       });
     } catch (error) {
       console.warn("Next episode auto-play failed", error);
