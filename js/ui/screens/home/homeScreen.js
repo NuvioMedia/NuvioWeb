@@ -471,6 +471,48 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
   return source;
 }
 
+function suppressBackgroundTrailerMediaControls(mediaElement = null) {
+  if (mediaElement) {
+    mediaElement.controls = false;
+    mediaElement.removeAttribute("controls");
+    mediaElement.setAttribute("controlslist", "nodownload nofullscreen noplaybackrate noremoteplayback");
+    mediaElement.setAttribute("aria-hidden", "true");
+    mediaElement.setAttribute("tabindex", "-1");
+    try {
+      mediaElement.disablePictureInPicture = true;
+    } catch (_) {
+    }
+    try {
+      mediaElement.disableRemotePlayback = true;
+    } catch (_) {
+    }
+  }
+
+  const mediaSession = globalThis.navigator?.mediaSession;
+  if (!mediaSession) {
+    return;
+  }
+  [
+    "play",
+    "pause",
+    "stop",
+    "seekbackward",
+    "seekforward",
+    "seekto",
+    "previoustrack",
+    "nexttrack"
+  ].forEach((action) => {
+    try {
+      mediaSession.setActionHandler(action, null);
+    } catch (_) {
+    }
+  });
+  try {
+    mediaSession.playbackState = "none";
+  } catch (_) {
+  }
+}
+
 function withTimeout(promise, ms, fallbackValue) {
   let timer = null;
   return Promise.race([
@@ -3345,14 +3387,18 @@ export const HomeScreen = {
     }
     this.clearTrailerLayer(container);
     if (source.kind === "youtube" && source.embedUrl) {
+      suppressBackgroundTrailerMediaControls();
       const frame = document.createElement("iframe");
       frame.className = "home-inline-trailer-frame";
       frame.src = source.embedUrl;
       frame.title = "Trailer preview";
-      frame.allow = "autoplay; encrypted-media; picture-in-picture";
-      frame.allowFullscreen = true;
+      frame.allow = "autoplay; encrypted-media";
+      frame.allowFullscreen = false;
       frame.referrerPolicy = "strict-origin-when-cross-origin";
+      frame.tabIndex = -1;
+      frame.setAttribute("aria-hidden", "true");
       frame.addEventListener("load", () => {
+        suppressBackgroundTrailerMediaControls();
         container.classList.add("is-active");
         onReady?.();
       }, { once: true });
@@ -3368,6 +3414,7 @@ export const HomeScreen = {
       `;
       const video = container.querySelector("video");
       if (video) {
+        suppressBackgroundTrailerMediaControls(video);
         video.muted = shouldMute;
         video.defaultMuted = shouldMute;
         try {
@@ -3375,6 +3422,7 @@ export const HomeScreen = {
         } catch (_) {
         }
         const activate = () => {
+          suppressBackgroundTrailerMediaControls(video);
           container.classList.add("is-active");
           onReady?.();
         };
@@ -3383,6 +3431,7 @@ export const HomeScreen = {
         if (playAttempt?.catch) {
           playAttempt.catch(() => { });
         }
+        suppressBackgroundTrailerMediaControls(video);
       } else {
         container.classList.add("is-active");
         onReady?.();
