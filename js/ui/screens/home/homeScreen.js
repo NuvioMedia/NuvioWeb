@@ -66,7 +66,6 @@ const HOME_BOOT_IMAGE_PRELOAD_MIN_MS = 800;
 const HOME_BOOT_IMAGE_PRELOAD_MAX_MS = 2200;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
 const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
-const YOUTUBE_TRAILER_REVEAL_DELAY_MS = 1400;
 const CW_META_TIMEOUT_MS = 1800;
 const CW_META_TIMEOUT_TV_MS = 4200;
 const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
@@ -380,7 +379,7 @@ function resolveYoutubeId(value) {
   return "";
 }
 
-function buildYoutubeEmbedUrl(videoId, { muted = true, autoplay = true } = {}) {
+function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
   const cleanId = resolveYoutubeId(videoId);
   if (!cleanId) {
     return "";
@@ -392,14 +391,10 @@ function buildYoutubeEmbedUrl(videoId, { muted = true, autoplay = true } = {}) {
   try {
     const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
     proxyUrl.searchParams.set("v", cleanId);
-    proxyUrl.searchParams.set("autoplay", autoplay ? "1" : "0");
+    proxyUrl.searchParams.set("autoplay", "1");
     proxyUrl.searchParams.set("muted", muted ? "1" : "0");
     proxyUrl.searchParams.set("controls", "0");
-    proxyUrl.searchParams.set("disablekb", "1");
-    proxyUrl.searchParams.set("fs", "0");
-    proxyUrl.searchParams.set("iv_load_policy", "3");
     proxyUrl.searchParams.set("loop", "1");
-    proxyUrl.searchParams.set("modestbranding", "1");
     proxyUrl.searchParams.set("playlist", cleanId);
     proxyUrl.searchParams.set("playsinline", "1");
     proxyUrl.searchParams.set("rel", "0");
@@ -457,7 +452,7 @@ function applyTrailerAudioPreferences(source, prefs = {}) {
   }
   const muted = Boolean(prefs.focusedPosterBackdropTrailerMuted);
   if (source.kind === "youtube") {
-    const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted, autoplay: false });
+    const embedUrl = buildYoutubeEmbedUrl(source.ytId, { muted });
     if (!embedUrl) {
       return null;
     }
@@ -514,21 +509,6 @@ function suppressBackgroundTrailerMediaControls(mediaElement = null) {
   });
   try {
     mediaSession.playbackState = "none";
-  } catch (_) {
-  }
-}
-
-function postBackgroundTrailerCommand(frame, command, payload = {}) {
-  if (!frame?.contentWindow) {
-    return;
-  }
-  try {
-    frame.contentWindow.postMessage({
-      source: "nuvio-detail-trailer",
-      type: "command",
-      command,
-      payload
-    }, "*");
   } catch (_) {
   }
 }
@@ -3419,16 +3399,8 @@ export const HomeScreen = {
       frame.setAttribute("aria-hidden", "true");
       frame.addEventListener("load", () => {
         suppressBackgroundTrailerMediaControls();
-        setTimeout(() => {
-          if (!frame.isConnected || !container.contains(frame)) {
-            return;
-          }
-          suppressBackgroundTrailerMediaControls();
-          postBackgroundTrailerCommand(frame, "seekTo", { seconds: 0 });
-          postBackgroundTrailerCommand(frame, "play");
-          container.classList.add("is-active");
-          onReady?.();
-        }, YOUTUBE_TRAILER_REVEAL_DELAY_MS);
+        container.classList.add("is-active");
+        onReady?.();
       }, { once: true });
       container.appendChild(frame);
       return;
