@@ -32,6 +32,7 @@ export const Router = {
   stack: [],
   historyInitialized: false,
   popstateBound: false,
+  suppressPopstateUntil: 0,
 
   routes: {
     home: HomeScreen,
@@ -106,6 +107,12 @@ export const Router = {
     }
     this.popstateBound = true;
     window.addEventListener("popstate", async (event) => {
+      if (Date.now() < Number(this.suppressPopstateUntil || 0)) {
+        if (window?.history && typeof window.history.pushState === "function") {
+          window.history.pushState({ route: this.current, params: this.currentParams }, "");
+        }
+        return;
+      }
       const currentScreen = this.getCurrentScreen();
       if (currentScreen?.consumeBackRequest?.()) {
         if (window?.history && typeof window.history.pushState === "function") {
@@ -134,6 +141,13 @@ export const Router = {
         });
       }
     });
+  },
+
+  suppressNextPopstate(durationMs = 700) {
+    this.suppressPopstateUntil = Math.max(
+      Number(this.suppressPopstateUntil || 0),
+      Date.now() + Math.max(0, Number(durationMs || 0))
+    );
   },
 
   async navigate(routeName, params = {}, options = {}) {
@@ -197,6 +211,7 @@ export const Router = {
   async back() {
     const currentScreen = this.getCurrentScreen();
     if (currentScreen?.consumeBackRequest?.()) {
+      this.suppressNextPopstate();
       return;
     }
 

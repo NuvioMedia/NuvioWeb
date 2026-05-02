@@ -5,6 +5,15 @@ import { Environment } from "../../../platform/environment.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
 import { focusWithoutAutoScroll } from "../../components/sidebarNavigation.js";
+import {
+  activatePosterOption,
+  createPosterOptionsState,
+  getPosterOptions,
+  posterItemFromNode,
+  renderPosterOptionsMenu
+} from "../../components/posterOptionsMenu.js";
+
+const POSTER_HOLD_DELAY_MS = 650;
 
 function isBackEvent(event) {
   return Environment.isBackEvent(event);
@@ -169,6 +178,9 @@ export const CatalogSeeAllScreen = {
     this.preserveViewportOnNextRender = false;
     this.savedScrollTop = 0;
     this.loadToken = (this.loadToken || 0) + 1;
+    this.posterOptionsMenu = null;
+    this.pendingPosterHoldTarget = null;
+    this.pendingPosterHoldTimer = null;
 
     if (navigationContext?.isBackNavigation && this.hydrateFromRouteState(navigationContext?.restoredState || null, params)) {
       this.loading = false;
@@ -413,6 +425,152 @@ export const CatalogSeeAllScreen = {
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
   },
 
+  isPosterHoldTarget(node) {
+    return Boolean(node?.matches?.(".seeall-card.focusable[data-action='openDetail']"));
+  },
+
+  cancelPendingPosterHold() {
+    if (this.pendingPosterHoldTimer) {
+      clearTimeout(this.pendingPosterHoldTimer);
+      this.pendingPosterHoldTimer = null;
+    }
+    this.pendingPosterHoldTarget = null;
+  },
+
+  hasPendingPosterHold(node) {
+    const pending = this.pendingPosterHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return String(node.dataset.focusKey || "") === String(pending.focusKey || "");
+  },
+
+  startPendingPosterHold(node) {
+    if (!this.isPosterHoldTarget(node)) {
+      return false;
+    }
+    this.cancelPendingPosterHold();
+    this.pendingPosterHoldTarget = {
+      focusKey: String(node.dataset.focusKey || "")
+    };
+    this.pendingPosterHoldTimer = setTimeout(() => {
+      this.pendingPosterHoldTimer = null;
+      const current = this.container?.querySelector(".seeall-card.focusable.focused[data-action='openDetail']") || null;
+      if (!this.hasPendingPosterHold(current)) {
+        return;
+      }
+      this.pendingPosterHoldTarget.holdTriggered = true;
+      void this.openPosterOptionsMenu(current);
+    }, POSTER_HOLD_DELAY_MS);
+    return true;
+  },
+
+  completePendingPosterHold(node) {
+    const pending = this.pendingPosterHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    this.cancelPendingPosterHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!this.isPosterHoldTarget(node)) {
+      return false;
+    }
+    this.openDetailFromNode(node);
+    return true;
+  },
+
+  async openPosterOptionsMenu(node) {
+    const item = posterItemFromNode(node, this.params?.type || "movie");
+    if (!item?.id) {
+      return false;
+    }
+    this.captureViewState();
+    this.posterOptionsMenu = await createPosterOptionsState(item, {
+      focusKey: node.dataset.focusKey || "",
+      itemIndex: Number(node.dataset.itemIndex || -1)
+    });
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render();
+    return true;
+  },
+
+  closePosterOptionsMenu() {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    this.lastFocusedKey = this.posterOptionsMenu.focusKey || this.lastFocusedKey;
+    this.posterOptionsMenu = null;
+    this.pendingRestoreFocus = true;
+    this.preserveViewportOnNextRender = true;
+    this.render();
+    return true;
+  },
+
+  applyPosterOptionsFocus() {
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!buttons.length) {
+      return false;
+    }
+    const index = Math.max(0, Math.min(buttons.length - 1, Number(this.posterOptionsMenu?.optionIndex || 0)));
+    buttons.forEach((node, buttonIndex) => node.classList.toggle("focused", buttonIndex === index));
+    const target = buttons[index] || buttons[0] || null;
+    if (!target) {
+      return false;
+    }
+    target.classList.add("focused");
+    focusWithoutAutoScroll(target);
+    return true;
+  },
+
+  movePosterOptionsFocus(delta) {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const options = getPosterOptions(this.posterOptionsMenu);
+    this.posterOptionsMenu = {
+      ...this.posterOptionsMenu,
+      optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0) + delta))
+    };
+    this.applyPosterOptionsFocus();
+    return true;
+  },
+
+  openDetailFromNode(node) {
+    if (!node) {
+      return false;
+    }
+    Router.navigate("detail", {
+      itemId: node.dataset.itemId,
+      itemType: node.dataset.itemType || "movie",
+      fallbackTitle: node.dataset.itemTitle || "Untitled"
+    });
+    return true;
+  },
+
+  async activatePosterOptionsMenu() {
+    const options = getPosterOptions(this.posterOptionsMenu);
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu?.optionIndex || 0)))];
+    const result = await activatePosterOption(this.posterOptionsMenu, option?.action);
+    if (result.type === "details") {
+      this.posterOptionsMenu = null;
+      Router.navigate("detail", {
+        itemId: result.item.id,
+        itemType: result.item.type || "movie",
+        fallbackTitle: result.item.title || "Untitled"
+      });
+      return true;
+    }
+    if (result.type === "updated") {
+      this.posterOptionsMenu = result.state;
+      this.render();
+      return true;
+    }
+    return false;
+  },
+
   render() {
     const descriptor = this.params || {};
     const title = descriptor.catalogName || "Catalog";
@@ -422,7 +580,9 @@ export const CatalogSeeAllScreen = {
                    data-action="openDetail"
                    data-item-id="${item.id || ""}"
                     data-item-type="${item.type || descriptor.type || "movie"}"
-                    data-item-title="${escapeHtml(item.name || "Untitled")}"
+                   data-item-title="${escapeHtml(item.name || "Untitled")}"
+                    data-poster-src="${escapeHtml(item.poster || "")}"
+                    data-backdrop-src="${escapeHtml(item.background || item.backdrop || "")}"
                     data-focus-key="item:${item.id || index}"
                     data-item-index="${index}">
             <div class="seeall-card-poster-wrap">
@@ -451,12 +611,17 @@ export const CatalogSeeAllScreen = {
         </section>
         ${this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : ""}
       </div>
+      ${renderPosterOptionsMenu(this.posterOptionsMenu)}
     `;
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
     this.bindCardEvents();
     this.bindShellEvents();
+    if (this.posterOptionsMenu) {
+      this.applyPosterOptionsFocus();
+      return;
+    }
     if (this.pendingRestoreFocus) {
       const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
       this.pendingRestoreFocus = false;
@@ -498,13 +663,48 @@ export const CatalogSeeAllScreen = {
   async onKeyDown(event) {
     if (isBackEvent(event)) {
       event?.preventDefault?.();
+      if (this.closePosterOptionsMenu()) {
+        return;
+      }
       Router.back();
+      return;
+    }
+    const code = Number(event?.keyCode || 0);
+    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    const focusedBeforeDpad = this.container?.querySelector(".focusable.focused") || null;
+    if (this.posterOptionsMenu) {
+      if (code === 38 || code === 40) {
+        event?.preventDefault?.();
+        this.movePosterOptionsFocus(code === 38 ? -1 : 1);
+        return;
+      }
+      if (code === 13) {
+        event?.preventDefault?.();
+        if (this.suppressHoldMenuEnterUntilKeyUp) {
+          return;
+        }
+        await this.activatePosterOptionsMenu();
+        return;
+      }
+      return;
+    }
+    if (this.isPosterHoldTarget(focusedBeforeDpad) && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93)) {
+      event?.preventDefault?.();
+      this.cancelPendingPosterHold();
+      await this.openPosterOptionsMenu(focusedBeforeDpad);
+      return;
+    }
+    if (code === 13 && this.isPosterHoldTarget(focusedBeforeDpad)) {
+      event?.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingPosterHold(focusedBeforeDpad)) {
+        this.startPendingPosterHold(focusedBeforeDpad);
+      }
       return;
     }
     if (this.handleGridDpad(event)) {
       return;
     }
-    if (Number(event?.keyCode || 0) !== 13) {
+    if (code !== 13) {
       return;
     }
     const current = this.container.querySelector(".focusable.focused");
@@ -513,16 +713,36 @@ export const CatalogSeeAllScreen = {
     }
     const action = String(current.dataset.action || "");
     if (action === "openDetail") {
-      Router.navigate("detail", {
-        itemId: current.dataset.itemId,
-        itemType: current.dataset.itemType || "movie",
-        fallbackTitle: current.dataset.itemTitle || "Untitled"
-      });
+      this.openDetailFromNode(current);
     }
+  },
+
+  onKeyUp(event) {
+    if (this.suppressHoldMenuEnterUntilKeyUp) {
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event?.preventDefault?.();
+        return;
+      }
+    }
+    if (Number(event?.keyCode || 0) !== 13) {
+      return;
+    }
+    const current = this.container?.querySelector(".seeall-card.focusable.focused[data-action='openDetail']") || null;
+    if (this.completePendingPosterHold(current)) {
+      event?.preventDefault?.();
+    }
+  },
+
+  consumeBackRequest() {
+    return this.closePosterOptionsMenu();
   },
 
   cleanup() {
     this.loadToken = (this.loadToken || 0) + 1;
+    this.cancelPendingPosterHold();
+    this.posterOptionsMenu = null;
+    this.suppressHoldMenuEnterUntilKeyUp = false;
     ScreenUtils.hide(this.container);
   }
 
