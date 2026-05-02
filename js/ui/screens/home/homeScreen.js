@@ -316,8 +316,35 @@ function extractYear(item) {
   return "";
 }
 
+/**
+ * For movies: returns "Month DD, YYYY" (e.g. "April 24, 2026") from any ISO date field.
+ * For non-movies: falls back to extractYear().
+ * Matches ATV ModernHomeModels.kt extractYearText(type=Movie, released=ISO) behaviour.
+ */
+function extractReleaseDateText(item) {
+  const type = String(item?.type || item?.apiType || "").toLowerCase();
+  if (type === "movie") {
+    const candidates = [item?.released, item?.releaseDate, item?.release_date, item?.releaseInfo];
+    for (const candidate of candidates) {
+      const str = String(candidate || "");
+      const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (isoMatch) {
+        const date = new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]));
+        if (!Number.isNaN(date.getTime())) {
+          return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+        }
+      }
+    }
+  }
+  return extractYear(item);
+}
+
+function hasFullReleaseDateText(item) {
+  return /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/.test(extractReleaseDateText(item));
+}
+
 function formatRuntimeText(item) {
-  const value = Number(
+  const value = parseRuntimeMinutes(
     item?.runtimeMinutes
     ?? item?.runtime
     ?? item?.durationMinutes
@@ -325,6 +352,33 @@ function formatRuntimeText(item) {
     ?? 0
   );
   return formatDurationMinutes(value);
+}
+
+function shouldEnrichModernHero(hero) {
+  if (!hero || hero.heroSource === "continueWatching" || hero.heroMetaEnriched) {
+    return false;
+  }
+  return true;
+}
+
+function parseRuntimeMinutes(value) {
+  if (value == null || value === "") {
+    return 0;
+  }
+  const numberValue = Number(value);
+  if (Number.isFinite(numberValue) && numberValue > 0) {
+    return numberValue;
+  }
+  const text = String(value).toLowerCase();
+  const hourMatch = text.match(/(\d+(?:\.\d+)?)\s*h/);
+  const minuteMatch = text.match(/(\d+)\s*(?:m|min)/);
+  if (hourMatch || minuteMatch) {
+    const hours = hourMatch ? Number(hourMatch[1]) : 0;
+    const minutes = minuteMatch ? Number(minuteMatch[1]) : 0;
+    return Math.round((hours * 60) + minutes);
+  }
+  const leading = text.match(/^(\d+)/);
+  return leading ? Number(leading[1]) : 0;
 }
 
 function formatDurationMinutes(totalMinutes) {
@@ -343,10 +397,10 @@ function formatDurationMinutes(totalMinutes) {
 
 function formatEpisodeCode(season, episode) {
   if (Number.isFinite(season) && Number.isFinite(episode)) {
-    return `S${season}E${episode}`;
+    return `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
   }
   if (Number.isFinite(episode)) {
-    return `E${episode}`;
+    return `E${String(episode).padStart(2, "0")}`;
   }
   return "";
 }
@@ -655,7 +709,7 @@ function normalizeCatalogItem(item, fallbackType = "movie") {
     description: firstNonEmpty(item.description, item.overview, item.plot),
     releaseInfo: firstNonEmpty(item.releaseInfo, item.released),
     genres: Array.isArray(item.genres) ? item.genres.filter(Boolean) : [],
-    runtimeMinutes: Number(item.runtimeMinutes ?? item.runtime ?? 0) || 0,
+    runtimeMinutes: parseRuntimeMinutes(item.runtimeMinutes ?? item.runtime ?? 0),
     imdbRating: resolveImdbRating(item),
     ageRating: firstNonEmpty(item.ageRating, item.age_rating),
     status: firstNonEmpty(item.status),
@@ -697,6 +751,7 @@ function normalizeContinueWatchingItem(item) {
       : firstNonEmpty(item.background, item.backdrop, item.poster, item.thumbnail, item.episodeThumbnail),
     logo: firstNonEmpty(item.logo),
     description: firstNonEmpty(item.description),
+    episodeDescription: firstNonEmpty(item.episodeDescription, item.episode_description),
     releaseInfo: firstNonEmpty(item.releaseInfo),
     genres: Array.isArray(item.genres) ? item.genres.filter(Boolean) : [],
     runtimeMinutes: Number(item.runtimeMinutes ?? item.runtime ?? 0) || 0,
@@ -854,7 +909,7 @@ function buildModernHeroPresentation(hero) {
   const genres = Array.isArray(normalized.genres) ? normalized.genres.filter(Boolean) : [];
   const contentTypeText = toTitleCase(normalized.type || normalized.apiType || "movie");
   const runtimeText = formatRuntimeText(normalized);
-  const yearText = extractYear(normalized);
+  const yearText = extractReleaseDateText(normalized);
   const imdbText = resolveImdbRating(normalized);
   const statusBadge = firstNonEmpty(normalized.status).toUpperCase();
   const ageRatingBadge = firstNonEmpty(normalized.ageRating);
@@ -863,7 +918,7 @@ function buildModernHeroPresentation(hero) {
     ? firstNonEmpty(normalized.progressStatus).toUpperCase()
     : "";
   const leadingMeta = isContinueWatchingHero
-    ? [[normalized.episodeCode, normalized.episodeTitle].filter(Boolean).join(" · ") || contentTypeText].filter(Boolean)
+    ? [[normalized.episodeCode, normalized.episodeTitle, genres[0]].filter(Boolean).join(" · ") || contentTypeText].filter(Boolean)
     : [contentTypeText, genres[0]].filter(Boolean);
   const trailingMeta = isContinueWatchingHero
     ? [yearText].filter(Boolean)
@@ -875,7 +930,10 @@ function buildModernHeroPresentation(hero) {
   return {
     title: normalized.name || "Untitled",
     logo: firstNonEmpty(normalized.logo),
-    description: firstNonEmpty(normalized.description) || "",
+    description: firstNonEmpty(
+      isContinueWatchingHero ? normalized.episodeDescription : null,
+      normalized.description
+    ) || "",
     backdrop: firstNonEmpty(
       normalized.background,
       normalized.backdrop,
@@ -1040,11 +1098,11 @@ function renderRowHeader(title, subtitle = "") {
 
 function renderContinueWatchingCard(item, index) {
   const normalized = normalizeContinueWatchingItem(item);
-  const subtitle = firstNonEmpty(normalized.episodeTitle, normalized.releaseInfo, toTitleCase(normalized.type));
+  const subtitle = normalized.episodeTitle || "";
   const isNextUp = Boolean(normalized?.isNextUp);
   const hasAired = normalized?.hasAired !== false;
   const cardImage = !isNextUp
-    ? firstNonEmpty(normalized.backdrop, normalized.poster)
+    ? firstNonEmpty(normalized.episodeThumbnail, normalized.thumbnail, normalized.backdrop, normalized.poster)
     : (!hasAired
       ? firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail)
       : firstNonEmpty(normalized.thumbnail, normalized.backdrop, normalized.poster));
@@ -2100,6 +2158,7 @@ export const HomeScreen = {
     heroNode.dataset.itemId = hero?.id || "";
     heroNode.dataset.itemType = hero?.type || "movie";
     heroNode.dataset.itemTitle = hero?.name || "Untitled";
+    heroNode.classList.toggle("is-hero-meta-enriching", Boolean(hero?.heroMetaEnriching));
 
     const backdrop = heroNode.querySelector(".home-hero-backdrop");
     if (backdrop) {
@@ -2685,14 +2744,90 @@ export const HomeScreen = {
     const isRapidNav = previous > 0 && (now - previous) < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs;
     const delay = this.getHeroFocusDelay({ rapid: isRapidNav });
     this.lastModernHeroNavAt = now;
-    this.heroFocusDelayTimer = setTimeout(() => {
-      this.heroItem = hero;
+    this.heroFocusDelayTimer = setTimeout(async () => {
+      this.heroItem = shouldEnrichModernHero(hero) ? { ...hero, heroMetaEnriching: true } : hero;
       const matchedIndex = this.heroCandidates.findIndex((item) => String(item?.id || "") === String(hero.id || ""));
       if (matchedIndex >= 0) {
         this.heroIndex = matchedIndex;
       }
       this.applyHeroToDom();
+      if (shouldEnrichModernHero(hero)) {
+        await this.enrichCurrentHeroAsync(hero);
+      }
     }, delay);
+  },
+
+  async enrichCurrentHeroAsync(hero) {
+    if (!hero || !hero.id || hero.heroSource === "continueWatching") {
+      return;
+    }
+    const itemId = String(hero.id);
+    const itemType = String(hero.type || hero.apiType || "movie");
+    const token = (this.heroEnrichmentToken = (Number(this.heroEnrichmentToken || 0) + 1));
+    try {
+      const result = await Promise.race([
+        metaRepository.getMetaFromAllAddons(itemType, itemId),
+        new Promise((_, reject) => setTimeout(() => reject(new Error("hero-enrich-timeout")), 4000))
+      ]);
+      if (Number(this.heroEnrichmentToken) !== token) {
+        return;
+      }
+      if (String(this.heroItem?.id || "") !== itemId) {
+        return;
+      }
+      if (result?.status !== "success" || !result.data) {
+        this.heroItem = { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
+        this.applyHeroToDom();
+        return;
+      }
+      const meta = result.data;
+      const enrichedImdb = resolveImdbRating(meta);
+      const enrichedRuntime = parseRuntimeMinutes(meta.runtimeMinutes ?? meta.runtime);
+      const mergedHero = {
+        ...this.heroItem,
+        heroMetaEnriched: true,
+        heroMetaEnriching: false,
+        ...(enrichedImdb != null ? { imdbRating: enrichedImdb } : {}),
+        ...(enrichedRuntime > 0 ? { runtimeMinutes: enrichedRuntime } : {}),
+        ...(meta.released ? { released: meta.released } : {}),
+        ...(meta.releaseInfo ? { releaseInfo: meta.releaseInfo } : {}),
+        ...(Array.isArray(meta.genres) && meta.genres.length ? { genres: meta.genres } : {}),
+        ...(meta.description ? { description: meta.description } : {}),
+        ...(meta.logo ? { logo: meta.logo } : {}),
+        ...(meta.background ? { background: meta.background } : {})
+      };
+      this.heroItem = mergedHero;
+      this.mergeHeroIntoCatalogState(itemId, mergedHero);
+      this.applyHeroToDom();
+    } catch (_e) {
+      if (String(this.heroItem?.id || "") === itemId) {
+        this.heroItem = { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
+        this.applyHeroToDom();
+      }
+    }
+  },
+
+  mergeHeroIntoCatalogState(itemId, mergedHero) {
+    this.heroCandidates = (this.heroCandidates || []).map((item) => {
+      return String(item?.id || "") === itemId ? { ...item, ...mergedHero } : item;
+    });
+    this.rows = (this.rows || []).map((row) => {
+      const items = row?.result?.data?.items;
+      if (!Array.isArray(items)) {
+        return row;
+      }
+      const nextItems = items.map((item) => String(item?.id || "") === itemId ? { ...item, ...mergedHero } : item);
+      return {
+        ...row,
+        result: {
+          ...row.result,
+          data: {
+            ...(row.result?.data || {}),
+            items: nextItems
+          }
+        }
+      };
+    });
   },
 
   isModernPosterNode(node) {
@@ -3511,7 +3646,7 @@ export const HomeScreen = {
 
     let nextValue = null;
     if (isVerticalMove) {
-      nextValue = anchorTop - inset + this.getModernVerticalScrollOffset(main);
+      nextValue = anchorTop;
     } else if (adjustedTop < visibleTop) {
       nextValue = anchorTop - inset;
     } else if (adjustedBottom > visibleBottom) {
@@ -4617,6 +4752,7 @@ export const HomeScreen = {
   render() {
     this.cancelScheduledRender();
     this.cancelModernCameraFollow({ stopAnimations: true });
+    this.teardownModernTrackScrollPagination();
     const retainedFocusState = this.captureCurrentFocusState() || this.savedFocusStates?.[this.layoutMode] || null;
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
@@ -4624,9 +4760,13 @@ export const HomeScreen = {
       && Boolean(this.continueWatchingLoading)
       && !this.continueWatchingDisplay?.length
       && !this.heroItem;
-    const heroItem = shouldHoldHeroForContinueWatching
+    let heroItem = shouldHoldHeroForContinueWatching
       ? null
       : normalizeCatalogItem(this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows), "movie");
+    if (this.layoutMode === "modern" && shouldEnrichModernHero(heroItem)) {
+      heroItem = { ...heroItem, heroMetaEnriching: true };
+      this.heroItem = heroItem;
+    }
     const showHeroSection = Boolean(this.layoutPrefs?.heroSectionEnabled) && Boolean(heroItem);
     const modernLandscapePostersEnabled = this.layoutMode === "modern"
       && Boolean(this.layoutPrefs?.modernLandscapePostersEnabled);
@@ -4746,6 +4886,9 @@ export const HomeScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
     this.bindHomeViewportEvents();
+    if (this.layoutMode === "modern") {
+      this.setupModernTrackScrollPagination();
+    }
     const canAttemptRestore = Boolean(retainedFocusState);
     let restoredFocus = false;
     if (this.continueWatchingMenu) {
@@ -4806,7 +4949,23 @@ export const HomeScreen = {
     if (this.layoutMode === "grid") {
       this.setupGridStickyHeader(showHeroSection);
     }
+    if (this.layoutMode === "modern") {
+      // Defer until browser has done layout so offsetTop values are accurate.
+      // Skip if focus is currently inside the CW section (user wants to see CW).
+      requestAnimationFrame(() => {
+        const rowsViewport = this.container?.querySelector(".home-modern-rows-viewport");
+        const catalogs = rowsViewport?.querySelector(".home-modern-catalogs");
+        const cwSection = rowsViewport?.querySelector(".home-row-continue");
+        const cwFocused = cwSection?.querySelector(".focusable.focused");
+        if (rowsViewport && catalogs && cwSection && !cwFocused) {
+          rowsViewport.scrollTop = catalogs.offsetTop;
+        }
+      });
+    }
     this.startHeroRotation();
+    if (this.layoutMode === "modern" && heroItem) {
+      void this.enrichCurrentHeroAsync(heroItem);
+    }
     this.homeRouteEnterPending = false;
     this.renderedLayoutMode = this.layoutMode;
     this.ensureHomeTruncationObservers();
@@ -5418,6 +5577,132 @@ export const HomeScreen = {
     return false;
   },
 
+  // ---------------------------------------------------------------------------
+  // Scroll-triggered pagination for modern layout catalog tracks
+  // Matches ATV ModernHomeRows.kt: fires when lastVisible >= total - 4 AND hasMore
+  // ---------------------------------------------------------------------------
+
+  setupModernTrackScrollPagination() {
+    this.teardownModernTrackScrollPagination();
+    if (this.layoutMode !== "modern" || !this.container) {
+      return;
+    }
+    const tracks = Array.from(this.container.querySelectorAll(".home-modern-row .home-track"));
+    if (!tracks.length) {
+      return;
+    }
+    this._trackScrollHandlers = this._trackScrollHandlers || new Map();
+    tracks.forEach((track) => {
+      const rowKey = String(track.dataset.trackRowKey || "");
+      if (!rowKey || this._trackScrollHandlers.has(track)) {
+        return;
+      }
+      const handler = () => {
+        if (this._trackPaginationInFlight?.has(rowKey)) {
+          return;
+        }
+        const cards = track.querySelectorAll(".home-content-card:not(.home-poster-card-loading)");
+        const totalVisible = cards.length;
+        if (!totalVisible) {
+          return;
+        }
+        // Estimate card width from first real card or fallback to CSS variable
+        const firstCard = cards[0];
+        const cardWidth = firstCard ? firstCard.offsetWidth : 212;
+        const gapApprox = 24; // --home-poster-gap
+        const nearEndThreshold = (cardWidth + gapApprox) * 4;
+        const distanceFromEnd = track.scrollWidth - (track.scrollLeft + track.clientWidth);
+        if (distanceFromEnd > nearEndThreshold) {
+          return;
+        }
+        // Find row data with hasMore
+        const rowData = (this.rows || []).find((row) => buildModernRowKey(row) === rowKey);
+        const rowResult = rowData?.result;
+        if (!rowResult || rowResult.status !== "success") {
+          return;
+        }
+        const rowPayload = rowResult.data;
+        if (!rowPayload?.hasMore) {
+          return;
+        }
+        const currentItems = Array.isArray(rowPayload.items) ? rowPayload.items : [];
+        const skip = currentItems.length;
+        this._trackPaginationInFlight = this._trackPaginationInFlight || new Set();
+        this._trackPaginationInFlight.add(rowKey);
+        const token = this.homeLoadToken;
+        catalogRepository.getCatalog({
+          addonBaseUrl: rowData.addonBaseUrl || "",
+          addonId: rowData.addonId || "",
+          addonName: rowData.addonName || "",
+          catalogId: rowData.catalogId || "",
+          catalogName: rowData.catalogName || "",
+          type: rowData.type || "movie",
+          skip,
+          supportsSkip: true
+        }).then((result) => {
+          if (token !== this.homeLoadToken || result?.status !== "success") {
+            return;
+          }
+          const newItems = Array.isArray(result.data?.items) ? result.data.items : [];
+          if (!newItems.length) {
+            // Mark hasMore=false so we stop trying
+            if (rowData?.result?.data) {
+              rowData.result.data.hasMore = false;
+            }
+            return;
+          }
+          const startIndex = currentItems.length;
+          const rowIndex = (this.rows || []).indexOf(rowData);
+          const layoutPrefs = this.layoutPrefs || {};
+          const showPosterLabels = Boolean(layoutPrefs.showPosterLabels !== false);
+          const preferLandscape = Boolean(layoutPrefs.modernLandscapePosters);
+          const showCatalogTypeSuffix = Boolean(layoutPrefs.showCatalogTypeSuffix !== false);
+          const rowItemLimit = Number(this.getRowItemLimit?.() || 15);
+          const newMarkup = newItems.map((item, i) =>
+            createPosterCardMarkup(
+              item,
+              rowIndex,
+              startIndex + i,
+              rowData.type || "movie",
+              showPosterLabels,
+              "modern",
+              false,
+              preferLandscape
+            )
+          ).join("");
+          if (newMarkup && track.isConnected) {
+            const frag = document.createRange().createContextualFragment(newMarkup);
+            track.appendChild(frag);
+            ScreenUtils.indexFocusables(track);
+          }
+          // Update in-memory row data
+          if (rowData?.result?.data) {
+            rowData.result.data.items = [...currentItems, ...newItems];
+            rowData.result.data.hasMore = result.data?.hasMore ?? newItems.length > 0;
+            rowData.result.data.currentPage = result.data?.currentPage ?? rowData.result.data.currentPage;
+          }
+        }).catch((err) => {
+          console.warn("Home track pagination failed for", rowKey, err);
+        }).finally(() => {
+          this._trackPaginationInFlight?.delete(rowKey);
+        });
+      };
+      this._trackScrollHandlers.set(track, handler);
+      track.addEventListener("scroll", handler, { passive: true });
+    });
+  },
+
+  teardownModernTrackScrollPagination() {
+    if (!this._trackScrollHandlers) {
+      return;
+    }
+    this._trackScrollHandlers.forEach((handler, track) => {
+      track.removeEventListener("scroll", handler);
+    });
+    this._trackScrollHandlers.clear();
+    this._trackPaginationInFlight?.clear();
+  },
+
   cleanup() {
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
@@ -5432,6 +5717,7 @@ export const HomeScreen = {
     this.clearFocusedPosterFlowState();
     this.collapseFocusedPoster();
     this.teardownGridStickyHeader();
+    this.teardownModernTrackScrollPagination();
     if (this.homeViewportFocusSyncTimer) {
       clearTimeout(this.homeViewportFocusSyncTimer);
       this.homeViewportFocusSyncTimer = null;

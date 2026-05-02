@@ -4956,18 +4956,18 @@ button:focus-visible {
   --modern-hero-media-height: calc(100% - var(--modern-rows-viewport-height) + 132px);
   --modern-trailer-overscan-zoom: 1.35;
   --modern-hero-copy-top-safe: 40px;
-  --modern-hero-copy-bottom-gap: 16px;
+  --modern-hero-copy-bottom-gap: 40px;
   --modern-hero-copy-right: 52px;
   --modern-hero-copy-max-width: 42%;
-  --modern-hero-logo-max-width: 248px;
-  --modern-hero-logo-max-height: 112px;
+  --modern-hero-logo-max-width: 440px;
+  --modern-hero-logo-max-height: 200px;
   --modern-hero-title-size: calc(var(--home-poster-width) * 0.36);
   --modern-hero-title-max-width: 100%;
   --modern-hero-meta-size: calc(var(--home-poster-width) * 0.1);
   --modern-hero-meta-max-width: 100%;
   --modern-hero-secondary-size: calc(var(--home-poster-width) * 0.085);
-  --modern-hero-description-size: calc(var(--home-poster-width) * 0.098);
-  --modern-hero-description-max-width: 100%;
+  --modern-hero-description-size: 22px;
+  --modern-hero-description-max-width: min(100%, 560px);
   --home-modern-portrait-poster-width: var(--home-poster-width);
   --home-modern-portrait-poster-height: calc(var(--home-modern-portrait-poster-width) * 1.5);
   --home-modern-portrait-expanded-width: calc(var(--home-modern-portrait-poster-width) * 2.66);
@@ -5117,11 +5117,16 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-hero-logo {
-  width: auto;
+  width: min(100%, var(--modern-hero-logo-max-width));
   max-width: min(100%, var(--modern-hero-logo-max-width));
+  height: var(--modern-hero-logo-max-height);
   max-height: var(--modern-hero-logo-max-height);
-  height: auto;
+  object-fit: contain;
   object-position: left top;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-meta-enriching .home-modern-hero-copy {
+  visibility: hidden;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-title-text {
@@ -5233,7 +5238,8 @@ button:focus-visible {
   overflow: hidden;
   color: #ffffff;
   font-size: var(--modern-hero-description-size);
-  line-height: 1.45;
+  line-height: 1.35;
+  letter-spacing: 0.5px;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line .home-hero-imdb,
@@ -5272,7 +5278,7 @@ button:focus-visible {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 144px;
   padding: 24px 0 48px;
 }
 
@@ -5809,6 +5815,26 @@ button:focus-visible {
   gap: 20px;
 }
 
+.settings-group-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-group-title {
+  color: #fff;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.settings-group-subtitle {
+  color: var(--text-secondary);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
 .settings-account-card {
   padding: 28px;
 }
@@ -6078,13 +6104,12 @@ button:focus-visible {
   border: 2px solid var(--focus-color) !important;
 }
 
-.settings-theme-card.is-selected,
 .settings-layout-card.is-selected {
   border: 1px solid var(--focus-color) !important;
 }
 
 .settings-theme-card.is-selected:not(.focused) {
-  border-color: var(--focus-color) !important;
+  border-color: transparent !important;
 }
 
 .settings-row-copy {
@@ -6166,39 +6191,53 @@ button:focus-visible {
   overflow: hidden;
 }
 
-.settings-theme-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.settings-appearance-group-card {
+  display: flex;
+  flex-direction: column;
   gap: 20px;
-  max-height: 318px;
-  overflow-y: auto;
-  padding: 2px;
+}
+
+.settings-theme-row {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-padding: 8px;
+}
+
+.settings-theme-row::-webkit-scrollbar {
+  display: none;
 }
 
 .settings-theme-card {
-  min-height: 260px;
-  border-radius: 30px;
+  flex: 0 0 192px;
+  width: 192px;
+  min-height: 172px;
+  border-radius: 36px;
   border: 1px solid transparent;
   background: var(--bg-color);
   color: #fff;
-  padding: 28px 30px 24px;
+  padding: 24px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  gap: 18px;
+  gap: 16px;
 }
 
 .settings-theme-swatch-wrap {
-  min-height: 120px;
+  min-height: 80px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .settings-theme-swatch {
-  width: 112px;
-  height: 112px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
@@ -6210,13 +6249,13 @@ button:focus-visible {
 }
 
 .settings-theme-check {
-  width: 52px;
-  height: 52px;
+  width: 40px;
+  height: 40px;
 }
 
 .settings-theme-check path {
   fill: none;
-  stroke: #111;
+  stroke: currentColor;
   stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -6225,6 +6264,11 @@ button:focus-visible {
 .settings-theme-name {
   font-size: 24px;
   color: var(--text-secondary);
+  line-height: 1.15;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .settings-theme-card.is-selected .settings-theme-name,
@@ -6233,11 +6277,7 @@ button:focus-visible {
 }
 
 .settings-theme-underline {
-  margin-top: auto;
-  width: 100%;
-  height: 8px;
-  border-radius: 999px;
-  opacity: 0.96;
+  display: none;
 }
 
 .settings-collapsible {
@@ -6812,6 +6852,11 @@ button:focus-visible {
   max-height: min(480px, calc(100vh - 120px));
 }
 
+.settings-appearance-dialog {
+  width: min(800px, calc(100vw - 160px));
+  max-height: min(560px, calc(100vh - 120px));
+}
+
 .settings-language-dialog-list {
   max-height: 320px;
   padding: 4px 2px 4px 0;
@@ -6944,11 +6989,17 @@ button:focus-visible {
 }
 
 .settings-profile-manage-row {
+  min-height: 120px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-color);
 }
 
+.settings-profile-card {
+  margin-top: 120px;
+}
+
 .settings-profile-manage-row .settings-row-title {
+  font-size: 32px;
   font-weight: 600;
 }
 

@@ -7,8 +7,8 @@ export const MODERN_HOME_CONSTANTS = {
   cameraFollowDurationXMs: 440,
   cameraFollowDurationYMs: 440,
   cameraSafetyDurationMs: 180,
-  rowFocusInset: 40,
-  trackEdgePadding: 52
+  rowFocusInset: 80,
+  trackEdgePadding: 104
 };
 
 export function renderModernHomeLayout({
@@ -60,7 +60,6 @@ export function renderModernHomeLayout({
     }
 
     const maxItems = Math.max(1, Number(rowItemLimit || 15));
-    const hasSeeAll = !isLoading && items.length > maxItems;
     const visibleItems = rowItems.slice(0, maxItems);
     const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
     const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
@@ -81,7 +80,6 @@ export function renderModernHomeLayout({
         </div>
         <div class="home-track" data-track-row-key="${escapeHtml(rowKey)}">
           ${cardsMarkup}
-          ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData) : ""}
         </div>
       </section>
     `);
@@ -200,7 +198,7 @@ function renderModernHeroMarkup({
   }
   return `
     <section class="home-hero home-hero-modern">
-      <article class="home-hero-card home-modern-hero-card"
+      <article class="home-hero-card home-modern-hero-card${heroItem?.heroMetaEnriching ? " is-hero-meta-enriching" : ""}"
                data-item-id="${escapeAttribute(heroItem?.id || "")}"
                data-item-type="${escapeAttribute(heroItem?.type || "movie")}"
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}">
