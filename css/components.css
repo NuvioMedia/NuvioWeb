@@ -7026,7 +7026,7 @@
   inset: 0;
   z-index: 20;
   opacity: 1;
-  transition: opacity 220ms ease;
+  transition: opacity 200ms ease;
 }
 
 .player-loading-overlay.hidden {
@@ -7043,6 +7043,11 @@
 
 .player-loading-overlay.logo-only .player-loading-center {
   width: auto;
+}
+
+.player-loading-overlay.logo-only .player-loading-identity {
+  opacity: 1;
+  animation: playerLoadingIdentityPulse 2000ms linear infinite alternate;
 }
 
 .player-loading-overlay.logo-only .player-loading-logo {
@@ -7073,6 +7078,22 @@
   text-align: center;
 }
 
+.player-loading-identity {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  transform-origin: center center;
+  opacity: 0;
+  animation:
+    playerLoadingIdentityFade 700ms linear 400ms forwards,
+    playerLoadingIdentityPulse 2000ms linear 400ms infinite alternate;
+  will-change: opacity, transform;
+}
+
+.player-loading-overlay.hidden .player-loading-identity {
+  animation: none;
+}
+
 .player-loading-logo {
   max-width: 420px;
   max-height: 170px;
@@ -7093,6 +7114,24 @@
   margin-top: 10px;
   font-size: clamp(24px, 1.5vw, 30px);
   color: rgba(242, 247, 254, 0.9);
+}
+
+@keyframes playerLoadingIdentityFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes playerLoadingIdentityPulse {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.04);
+  }
 }
 
 .player-controls-overlay {
@@ -7147,7 +7186,7 @@
 }
 
 .player-controls-overlay.pause-overlay-active .player-controls-bottom {
-  opacity: 0.24;
+  opacity: 0;
 }
 
 .player-controls-overlay.pause-overlay-active .player-meta,
@@ -7450,7 +7489,7 @@
   inset: 0;
   z-index: 31;
   opacity: 1;
-  transition: opacity 180ms ease;
+  transition: opacity 200ms ease;
   overflow: hidden;
 }
 
@@ -7463,94 +7502,141 @@
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.56) 46%, rgba(0, 0, 0, 0.82) 100%),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.72) 34%, rgba(0, 0, 0, 0.36) 62%, rgba(0, 0, 0, 0.12) 100%);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+    linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.4) 30%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0) 100%),
+    rgba(0, 0, 0, 0.34);
 }
 
 .player-pause-overlay-top {
   position: absolute;
-  top: var(--tv-safe-gutter);
-  right: var(--tv-safe-gutter);
+  top: 40px;
+  right: 56px;
   text-align: right;
   z-index: 1;
-  color: rgba(255, 255, 255, 0.9);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.38);
+  color: rgba(255, 255, 255, 0.95);
 }
 
 .player-pause-overlay-clock {
-  font-size: clamp(32px, 2.1vw, 40px);
-  font-weight: 560;
+  font-size: 34px;
+  font-weight: 400;
   line-height: 1;
 }
 
 .player-pause-overlay-ends-at {
-  margin-top: 2px;
-  font-size: var(--tv-caption-text);
-  color: rgba(255, 255, 255, 0.68);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.32);
+  display: none;
 }
 
 .player-pause-overlay-content {
   position: absolute;
-  left: var(--tv-safe-gutter);
-  top: 50%;
-  transform: translateY(-50%);
-  right: min(28vw, 460px);
-  max-width: min(48vw, 820px);
+  left: 56px;
+  right: 56px;
+  bottom: 120px;
+  max-width: none;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 14px;
-  text-shadow: 0 4px 22px rgba(0, 0, 0, 0.62);
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 0;
 }
 
 .player-pause-kicker {
-  font-size: var(--tv-caption-text);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.64);
+  font-size: var(--tv-body-text);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(255, 255, 255, 0.58);
+  margin-bottom: 12px;
 }
 
 .player-pause-logo {
-  max-width: min(38vw, 520px);
-  max-height: 120px;
+  max-width: min(42vw, 560px);
+  max-height: 96px;
   object-fit: contain;
-  object-position: left center;
-  filter: drop-shadow(0 10px 28px rgba(0, 0, 0, 0.58));
+  object-position: left bottom;
 }
 
 .player-pause-title {
-  font-size: clamp(44px, 3vw, 62px);
-  font-weight: 740;
-  line-height: 1.05;
+  font-size: clamp(42px, 3.2vw, 60px);
+  font-weight: 700;
+  line-height: 1.1;
   color: #ffffff;
+  max-width: min(70vw, 1160px);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .player-pause-meta-line {
-  font-size: var(--tv-secondary-text);
-  font-weight: 600;
+  margin-top: 8px;
+  font-size: var(--tv-body-text);
+  font-weight: 400;
   color: rgba(255, 255, 255, 0.72);
 }
 
 .player-pause-episode-title {
-  font-size: clamp(28px, 1.9vw, 38px);
-  font-weight: 650;
-  line-height: 1.12;
-  color: rgba(255, 255, 255, 0.94);
+  margin-top: 12px;
+  font-size: clamp(24px, 1.7vw, 32px);
+  font-weight: 600;
+  line-height: 1.2;
+  color: #ffffff;
+  max-width: min(70vw, 1160px);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .player-pause-description {
-  max-width: min(46vw, 760px);
-  font-size: clamp(20px, 1.3vw, 26px);
+  margin-top: 16px;
+  max-width: min(72vw, 1220px);
+  font-size: var(--tv-body-text);
   line-height: 1.42;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.72);
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   overflow: hidden;
+}
+
+.player-pause-cast-section {
+  margin-top: 20px;
+  max-width: 100%;
+}
+
+.player-pause-cast-label {
+  font-size: var(--tv-caption-text);
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.player-pause-cast-row {
+  margin-top: 12px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 14px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.player-pause-cast-chip {
+  min-height: 44px;
+  max-width: 240px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  font-size: var(--tv-caption-text);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.player-pause-cast-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-skip-intro {
@@ -7732,107 +7818,142 @@
 
 .player-parental-guide {
   position: absolute;
-  left: 28px;
-  top: 72px;
+  left: 32px;
+  top: 24px;
   z-index: 34;
   display: flex;
-  align-items: stretch;
-  gap: 12px;
-  opacity: 1;
-  transition: opacity 220ms ease;
+  align-items: flex-start;
+  gap: 10px;
+  opacity: 0;
+  animation: playerParentalContainerIn 300ms ease both;
 }
 
 .player-parental-guide.hidden {
   opacity: 0;
   pointer-events: none;
+  animation: none;
 }
 
 .player-parental-guide.is-exiting {
   pointer-events: none;
+  animation: playerParentalContainerOut 200ms ease both;
+  animation-delay: var(--parental-container-exit-delay, 0ms);
 }
 
 .player-parental-line {
-  width: 2px;
-  min-height: 0;
-  border-radius: 999px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.18));
+  width: 3px;
+  border-radius: 1px;
+  background: var(--secondary-color);
   align-self: stretch;
+  transform: scaleY(0);
+  transform-origin: top;
+  animation: playerParentalLineIn 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: var(--parental-line-enter-delay, 300ms);
 }
 
 .player-parental-guide.is-exiting .player-parental-line {
-  animation: playerParentalLineOut 280ms ease both;
-  animation-delay: var(--parental-line-exit-delay, 180ms);
+  transform-origin: bottom;
+  animation: playerParentalLineOut 300ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  animation-delay: var(--parental-line-exit-delay, 0ms);
 }
 
 .player-parental-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
 }
 
 .player-parental-item {
-  min-width: 240px;
-  min-height: 38px;
-  padding: 6px 12px;
-  border-radius: 10px;
+  height: 18px;
+  padding: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  background: rgba(8, 12, 18, 0.82);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: rgba(241, 248, 255, 0.95);
-  animation: playerParentalItemIn 260ms ease both;
+  justify-content: flex-start;
+  gap: 0;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.85);
+  opacity: 0;
+  animation: playerParentalItemIn 200ms ease both;
   animation-delay: var(--parental-enter-delay, 0ms);
 }
 
 .player-parental-guide.is-exiting .player-parental-item {
-  animation: playerParentalItemOut 240ms ease both;
+  animation: playerParentalItemOut 150ms ease both;
   animation-delay: var(--parental-exit-delay, 0ms);
 }
 
 .player-parental-label {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.player-parental-separator {
+  font-size: 11px;
+  line-height: 18px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
 .player-parental-severity {
-  font-size: 16px;
-  color: rgba(225, 235, 247, 0.8);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+@keyframes playerParentalContainerIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes playerParentalContainerOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes playerParentalLineIn {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
 }
 
 @keyframes playerParentalItemIn {
   from {
     opacity: 0;
-    transform: translateX(-8px);
   }
   to {
     opacity: 1;
-    transform: translateX(0);
   }
 }
 
 @keyframes playerParentalItemOut {
   from {
     opacity: 1;
-    transform: translateX(0);
   }
   to {
     opacity: 0;
-    transform: translateX(-8px);
   }
 }
 
 @keyframes playerParentalLineOut {
   from {
-    opacity: 1;
     transform: scaleY(1);
-    transform-origin: bottom;
   }
   to {
-    opacity: 0;
     transform: scaleY(0);
-    transform-origin: bottom;
   }
 }
 
@@ -10667,6 +10788,20 @@
 .performance-constrained .home-modern-hero-card-loading,
 .performance-constrained .home-modern-hero-media-loading .home-hero-backdrop-loading,
 .performance-constrained .home-hero-backdrop-loading {
+  animation: none !important;
+}
+
+.performance-constrained .library-loading-spinner {
+  animation: librarySpin 860ms linear infinite !important;
+}
+
+.performance-constrained .player-loading-identity {
+  animation:
+    playerLoadingIdentityFade 700ms linear 400ms forwards,
+    playerLoadingIdentityPulse 2000ms linear 400ms infinite alternate !important;
+}
+
+.performance-constrained .player-loading-overlay.hidden .player-loading-identity {
   animation: none !important;
 }
 

@@ -4,9 +4,11 @@ import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
+import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { ContinueWatchingPreferences } from "../../../data/local/continueWatchingPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
+import { HomeImageCacheStore } from "../../../data/local/homeImageCacheStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
@@ -64,11 +66,17 @@ const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
 const HOME_BOOT_PRELOAD_BUDGET_MS = 10000;
 const HOME_BOOT_IMAGE_PRELOAD_MIN_MS = 800;
 const HOME_BOOT_IMAGE_PRELOAD_MAX_MS = 2200;
+const HOME_CACHED_IMAGE_PREWARM_MAX_MS = 1600;
+const HOME_CACHED_IMAGE_PREWARM_MIN_MS = 300;
+const HOME_IMAGE_PRELOAD_LIMIT = 100;
+const HOME_IMAGE_PRELOAD_LIMIT_CONSTRAINED = 40;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
 const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
 const CW_META_TIMEOUT_MS = 1800;
 const CW_META_TIMEOUT_TV_MS = 4200;
 const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
+const CW_BACKGROUND_META_TIMEOUT_MS = 9000;
+const CW_BACKGROUND_NEXT_UP_META_TIMEOUT_MS = 9000;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -547,14 +555,24 @@ function mergeRowsByKey(rows = []) {
   return Array.from(byKey.values());
 }
 
+const preloadedHomeImageUrls = new Set();
+const pendingHomeImagePreloads = new Map();
+
 function preloadImageUrl(url) {
   const src = String(url || "").trim();
   if (!src || typeof Image !== "function") {
     return Promise.resolve(false);
   }
-  return new Promise((resolve) => {
+  if (preloadedHomeImageUrls.has(src)) {
+    return Promise.resolve(true);
+  }
+  if (pendingHomeImagePreloads.has(src)) {
+    return pendingHomeImagePreloads.get(src);
+  }
+  const promise = new Promise((resolve) => {
     const image = new Image();
     image.decoding = "async";
+    image.loading = "eager";
     image.onload = () => resolve(true);
     image.onerror = () => resolve(false);
     image.src = src;
@@ -565,7 +583,42 @@ function preloadImageUrl(url) {
         }
       });
     }
+  }).then((loaded) => {
+    if (loaded) {
+      preloadedHomeImageUrls.add(src);
+    }
+    return loaded;
+  }).finally(() => {
+    pendingHomeImagePreloads.delete(src);
   });
+  pendingHomeImagePreloads.set(src, promise);
+  return promise;
+}
+
+function normalizeImageUrls(urls = [], limit = 0) {
+  const seen = new Set();
+  const normalized = [];
+  (Array.isArray(urls) ? urls : []).forEach((value) => {
+    const url = String(value || "").trim();
+    if (!url || url.startsWith("data:") || url.startsWith("blob:") || seen.has(url)) {
+      return;
+    }
+    seen.add(url);
+    normalized.push(url);
+  });
+  const max = Number(limit || 0);
+  return max > 0 ? normalized.slice(0, max) : normalized;
+}
+
+function preloadHomeImageUrls(urls = [], { limit = 0, remember = true } = {}) {
+  const normalized = normalizeImageUrls(urls, limit);
+  if (!normalized.length) {
+    return Promise.resolve([]);
+  }
+  if (remember) {
+    HomeImageCacheStore.rememberUrls(normalized);
+  }
+  return Promise.allSettled(normalized.map((url) => preloadImageUrl(url)));
 }
 
 async function resolveTrailerMetaWithTmdbFallback(meta = {}, itemType = "movie") {
@@ -615,9 +668,11 @@ function getContinueWatchingMetaTimeout(timeoutMs) {
 }
 
 function progressFractionForContinueWatching(item = {}) {
-  const explicitPercent = Number(item.progressPercent);
-  if (Number.isFinite(explicitPercent) && explicitPercent > 0) {
-    return Math.max(0, Math.min(1, explicitPercent / 100));
+  if (item.progressPercent != null && item.progressPercent !== "") {
+    const explicitPercent = Number(item.progressPercent);
+    if (Number.isFinite(explicitPercent)) {
+      return Math.max(0, Math.min(1, explicitPercent / 100));
+    }
   }
   const durationMs = Number(item.durationMs || 0);
   const positionMs = Number(item.positionMs || 0);
@@ -649,6 +704,21 @@ function nextUpDismissKey(contentId, season, episode) {
 
 function isCompletedForContinueWatching(item = {}) {
   return progressFractionForContinueWatching(item) >= CW_PROGRESS_END_THRESHOLD;
+}
+
+function shouldUseAsCompletedNextUpSeed(item = {}) {
+  if (isMalformedNextUpSeedContentId(item?.contentId)) {
+    return false;
+  }
+  if (!isCompletedForContinueWatching(item)) {
+    return false;
+  }
+  const source = String(item.source || "").toLowerCase();
+  if (source !== "trakt_playback") {
+    return true;
+  }
+  const explicitPercent = Number(item.progressPercent);
+  return Number.isFinite(explicitPercent) && explicitPercent >= 95;
 }
 
 function isInProgressForContinueWatching(item = {}) {
@@ -2252,7 +2322,10 @@ export const HomeScreen = {
     progressAllError = null,
     recentProgressError = null,
     preserveContinueWatching = false,
-    previousContinueWatchingSignature = ""
+    previousContinueWatchingSignature = "",
+    metaTimeoutMs = CW_META_TIMEOUT_MS,
+    nextUpMetaTimeoutMs = CW_NEXT_UP_META_TIMEOUT_MS,
+    keepLoadingWhenUnresolved = false
   } = {}) {
     const [allProgress, continueWatching] = await Promise.all([
       allProgressPromise || Promise.resolve([]),
@@ -2298,12 +2371,15 @@ export const HomeScreen = {
       watchedItems,
       dismissedNextUpKeys,
       showUnairedNextUp,
-      nextUpProgressCandidates
+      nextUpProgressCandidates,
+      metaTimeoutMs,
+      nextUpMetaTimeoutMs
     });
     const nextDisplayStrict = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
     const nextDisplay = nextDisplayStrict.length
       ? nextDisplayStrict
       : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
+    const unresolvedWithProgress = shouldShowLoading && !nextDisplay.length;
     const nextSignature = preserveContinueWatching
       ? buildContinueWatchingSignature(nextDisplay)
       : "";
@@ -2318,8 +2394,9 @@ export const HomeScreen = {
       continueWatchingDisplay: preserveContinueWatching && nextSignature === previousContinueWatchingSignature
         ? (this.continueWatchingDisplay || [])
         : nextDisplay,
-      continueWatchingLoading: false,
-      preserveExistingDisplay: Boolean(preserveContinueWatching && nextSignature === previousContinueWatchingSignature)
+      continueWatchingLoading: Boolean(keepLoadingWhenUnresolved && unresolvedWithProgress),
+      preserveExistingDisplay: Boolean(preserveContinueWatching && nextSignature === previousContinueWatchingSignature),
+      needsContinueWatchingRetry: Boolean(unresolvedWithProgress)
     };
   },
 
@@ -2332,6 +2409,68 @@ export const HomeScreen = {
     this.nextUpProgressCandidates = Array.isArray(state.nextUpProgressCandidates) ? state.nextUpProgressCandidates : [];
     this.continueWatchingDisplay = Array.isArray(state.continueWatchingDisplay) ? state.continueWatchingDisplay : [];
     this.continueWatchingLoading = Boolean(state.continueWatchingLoading);
+    this.needsContinueWatchingRetry = Boolean(state.needsContinueWatchingRetry);
+  },
+
+  retryContinueWatchingState({
+    token,
+    allProgressPromise,
+    recentProgressPromise,
+    progressAllError = null,
+    recentProgressError = null,
+    preserveContinueWatching = false,
+    previousContinueWatchingSignature = "",
+    background = false
+  } = {}) {
+    if (!this.needsContinueWatchingRetry || this.continueWatchingRetryInFlight) {
+      return;
+    }
+
+    const retryPromise = this.resolveContinueWatchingState({
+      allProgressPromise,
+      recentProgressPromise,
+      progressAllError,
+      recentProgressError,
+      preserveContinueWatching,
+      previousContinueWatchingSignature,
+      metaTimeoutMs: CW_BACKGROUND_META_TIMEOUT_MS,
+      nextUpMetaTimeoutMs: CW_BACKGROUND_NEXT_UP_META_TIMEOUT_MS,
+      keepLoadingWhenUnresolved: false
+    });
+    this.continueWatchingRetryInFlight = retryPromise;
+    retryPromise.then((state) => {
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home" || !state) {
+        return;
+      }
+      const previousDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
+      const previousHeroIdentity = buildHeroIdentity(this.heroItem);
+      const previousLoadingState = Boolean(this.continueWatchingLoading);
+      this.applyContinueWatchingState(state);
+      if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
+        this.heroItem = this.pickInitialHero();
+        if (!background && !this.hasAppliedInitialContinueWatchingFocus) {
+          this.forceInitialContinueWatchingFocus = true;
+        }
+      }
+      const nextDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
+      const nextHeroIdentity = buildHeroIdentity(this.heroItem);
+      if (previousLoadingState !== this.continueWatchingLoading
+        || previousDisplaySignature !== nextDisplaySignature
+        || previousHeroIdentity !== nextHeroIdentity) {
+        this.requestBackgroundRender();
+      }
+    }).catch((error) => {
+      console.warn("Continue watching retry failed", error);
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        return;
+      }
+      this.continueWatchingLoading = false;
+      this.requestBackgroundRender();
+    }).finally(() => {
+      if (this.continueWatchingRetryInFlight === retryPromise) {
+        this.continueWatchingRetryInFlight = null;
+      }
+    });
   },
 
   collectBootImageUrls() {
@@ -2362,7 +2501,29 @@ export const HomeScreen = {
         pushItemImages(normalizeCatalogItem(item, row?.type || "movie"));
       });
     });
-    return urls.slice(0, this.isPerformanceConstrained() ? 24 : 60);
+    return urls.slice(0, this.isPerformanceConstrained() ? HOME_IMAGE_PRELOAD_LIMIT_CONSTRAINED : HOME_IMAGE_PRELOAD_LIMIT);
+  },
+
+  async prewarmCachedHomeImages(deadlineMs = 0) {
+    const budgetMs = Math.min(
+      HOME_CACHED_IMAGE_PREWARM_MAX_MS,
+      Math.max(0, remainingBudgetMs(deadlineMs))
+    );
+    if (budgetMs < HOME_CACHED_IMAGE_PREWARM_MIN_MS) {
+      return;
+    }
+    const urls = HomeImageCacheStore.getUrls(this.isPerformanceConstrained() ? 60 : 160);
+    if (!urls.length) {
+      return;
+    }
+    await withTimeout(
+      preloadHomeImageUrls(urls, {
+        limit: this.isPerformanceConstrained() ? 36 : 90,
+        remember: false
+      }),
+      budgetMs,
+      null
+    );
   },
 
   async preloadBootImages(deadlineMs = 0) {
@@ -2378,10 +2539,22 @@ export const HomeScreen = {
       return;
     }
     await withTimeout(
-      Promise.allSettled(urls.map((url) => preloadImageUrl(url))),
+      preloadHomeImageUrls(urls, {
+        limit: this.isPerformanceConstrained() ? HOME_IMAGE_PRELOAD_LIMIT_CONSTRAINED : HOME_IMAGE_PRELOAD_LIMIT
+      }),
       budgetMs,
       null
     );
+  },
+
+  preloadCurrentHomeImages() {
+    const urls = this.collectBootImageUrls();
+    if (!urls.length) {
+      return;
+    }
+    void preloadHomeImageUrls(urls, {
+      limit: this.isPerformanceConstrained() ? HOME_IMAGE_PRELOAD_LIMIT_CONSTRAINED : HOME_IMAGE_PRELOAD_LIMIT
+    });
   },
 
   getScrollDuration(base) {
@@ -2780,6 +2953,179 @@ export const HomeScreen = {
     return normalizeContinueWatchingItem(this.continueWatchingDisplay?.[index] || this.continueWatching?.[index] || null);
   },
 
+  getPosterMenuItemFromNode(node) {
+    if (!node?.matches?.(".home-poster-card.focusable[data-action='openDetail']")) {
+      return null;
+    }
+    const rowIndex = Number(node.dataset.rowIndex ?? -1);
+    const itemIndex = Number(node.dataset.itemIndex ?? -1);
+    if (Number.isFinite(rowIndex) && Number.isFinite(itemIndex) && rowIndex >= 0 && itemIndex >= 0) {
+      const row = this.rows?.[rowIndex] || null;
+      const item = row?.result?.data?.items?.[itemIndex] || null;
+      return normalizeCatalogItem(item, row?.type || node.dataset.itemType || "movie");
+    }
+    return normalizeCatalogItem({
+      id: node.dataset.itemId || "",
+      type: node.dataset.itemType || "movie",
+      name: node.dataset.itemTitle || "Untitled",
+      poster: node.dataset.posterSrc || "",
+      background: node.dataset.backdropSrc || "",
+      logo: node.dataset.logoSrc || ""
+    }, node.dataset.itemType || "movie");
+  },
+
+  getPosterHoldMenuItem() {
+    const menu = this.posterHoldMenu;
+    if (!menu) {
+      return null;
+    }
+    const row = this.rows?.[Number(menu.rowIndex ?? -1)] || null;
+    const item = row?.result?.data?.items?.[Number(menu.itemIndex ?? -1)] || null;
+    return normalizeCatalogItem(item, row?.type || menu.item?.type || "movie")
+      || normalizeCatalogItem(menu.item, menu.item?.type || "movie");
+  },
+
+  isPosterHoldItemWatched(item) {
+    const contentId = String(item?.id || item?.contentId || "");
+    if (!contentId) {
+      return false;
+    }
+    return Boolean((this.watchedItems || []).some((entry) => String(entry?.contentId || "") === contentId));
+  },
+
+  getPosterHoldMenuOptions() {
+    const item = this.getPosterHoldMenuItem();
+    if (!item?.id) {
+      return [];
+    }
+    const watched = this.isPosterHoldItemWatched(item);
+    const isMovie = !isSeriesTypeForContinueWatching(item.type);
+    const options = [
+      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") },
+      {
+        action: "toggleLibrary",
+        label: this.posterHoldMenu?.isSaved
+          ? t("detail.removeFromLibrary", {}, "Remove from Library")
+          : t("detail.addToLibrary", {}, "Add to Library")
+      }
+    ];
+    if (isMovie) {
+      options.push({
+        action: "toggleWatched",
+        label: watched ? t("hero_mark_unwatched", {}, "Mark as unwatched") : t("hero_mark_watched", {}, "Mark as watched")
+      });
+    }
+    return options;
+  },
+
+  renderPosterHoldMenu() {
+    const item = this.getPosterHoldMenuItem();
+    if (!item?.id) {
+      return "";
+    }
+    return renderHoldMenuMarkup({
+      kicker: "",
+      title: item.name || item.title || "Untitled",
+      subtitle: t("home_poster_dialog_subtitle", {}, "Choose what you want to do with this title."),
+      focusedIndex: Number(this.posterHoldMenu?.optionIndex || 0),
+      options: this.getPosterHoldMenuOptions()
+    });
+  },
+
+  applyPosterHoldMenuFocus() {
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!buttons.length) {
+      return false;
+    }
+    this.container?.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (!node.classList.contains("hold-menu-button")) {
+        node.classList.remove("focused");
+      }
+    });
+    const currentIndex = Math.max(0, Math.min(buttons.length - 1, Number(this.posterHoldMenu?.optionIndex || 0)));
+    buttons.forEach((node, index) => node.classList.toggle("focused", index === currentIndex));
+    const target = buttons[currentIndex] || buttons[0] || null;
+    if (!target) {
+      return false;
+    }
+    target.classList.add("focused");
+    this.focusWithoutAutoScroll(target);
+    return true;
+  },
+
+  movePosterHoldMenuFocus(delta) {
+    if (!this.posterHoldMenu) {
+      return false;
+    }
+    const options = this.getPosterHoldMenuOptions();
+    if (!options.length) {
+      return false;
+    }
+    this.posterHoldMenu = {
+      ...this.posterHoldMenu,
+      optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.posterHoldMenu.optionIndex || 0) + delta))
+    };
+    this.applyPosterHoldMenuFocus();
+    return true;
+  },
+
+  async openPosterHoldMenu(node) {
+    const item = this.getPosterMenuItemFromNode(node);
+    if (!item?.id) {
+      return false;
+    }
+    this.cancelPendingPosterEnter();
+    this.cancelPendingPosterHold();
+    this.posterHoldMenu = {
+      rowIndex: Number(node?.dataset?.rowIndex ?? -1),
+      itemIndex: Number(node?.dataset?.itemIndex ?? -1),
+      item,
+      isSaved: await savedLibraryRepository.isSaved(item.id),
+      optionIndex: 0
+    };
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render();
+    return true;
+  },
+
+  closePosterHoldMenu() {
+    if (!this.posterHoldMenu) {
+      return false;
+    }
+    this.pendingPosterFocus = {
+      rowIndex: Number(this.posterHoldMenu.rowIndex ?? -1),
+      itemIndex: Number(this.posterHoldMenu.itemIndex ?? -1)
+    };
+    this.posterHoldMenu = null;
+    this.render();
+    return true;
+  },
+
+  hasOpenHoldMenu() {
+    return Boolean(
+      this.posterHoldMenu
+      || this.continueWatchingMenu
+      || this.container?.querySelector?.(".hold-menu")
+    );
+  },
+
+  closeOpenHoldMenu() {
+    if (this.posterHoldMenu) {
+      return this.closePosterHoldMenu();
+    }
+    if (this.continueWatchingMenu) {
+      return this.closeContinueWatchingMenu();
+    }
+    if (this.container?.querySelector?.(".hold-menu")) {
+      this.posterHoldMenu = null;
+      this.continueWatchingMenu = null;
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      this.render();
+      return true;
+    }
+    return false;
+  },
+
   getContinueWatchingMenuItem() {
     const menu = this.continueWatchingMenu;
     if (!menu) {
@@ -2808,14 +3154,15 @@ export const HomeScreen = {
     if (!item) {
       return [];
     }
-    const watched = this.isContinueWatchingItemWatched(item);
-    return [
-      { action: "resume", label: t("common.resume", {}, "Resume") },
-      { action: "startOver", label: t("common.startOver", {}, "Start Over") },
-      { action: "details", label: t("common.viewDetails", {}, "View Details") },
-      { action: "toggleWatched", label: watched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched") },
-      { action: "remove", label: t("home.removeContinueWatching", {}, "Remove from Continue Watching") }
+    const options = [
+      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") },
+      { action: "playManually", label: t("play_manually", {}, "Play manually") }
     ];
+    if (!item.isNextUp) {
+      options.push({ action: "startOver", label: t("cw_action_start_from_beginning", {}, "Start from beginning") });
+    }
+    options.push({ action: "remove", label: t("cw_action_remove", {}, "Remove") });
+    return options;
   },
 
   renderContinueWatchingMenu() {
@@ -2826,9 +3173,9 @@ export const HomeScreen = {
     const options = this.getContinueWatchingMenuOptions();
     const subtitle = firstNonEmpty(item.episodeCode, item.episodeTitle, item.releaseInfo, toTitleCase(item.type));
     return renderHoldMenuMarkup({
-      kicker: t("home.continueWatching", {}, "Continue Watching"),
+      kicker: "",
       title: item.title || "Untitled",
-      subtitle,
+      subtitle: t("cw_dialog_subtitle", {}, subtitle || "Choose what you want to do with this item."),
       focusedIndex: Number(this.continueWatchingMenu?.optionIndex || 0),
       options: options.map((option) => ({
         ...option,
@@ -2887,6 +3234,7 @@ export const HomeScreen = {
       optionIndex: 0,
       item
     };
+    this.suppressHoldMenuEnterUntilKeyUp = true;
     this.render();
     return true;
   },
@@ -2979,6 +3327,102 @@ export const HomeScreen = {
     return true;
   },
 
+  cancelPendingPosterEnter() {
+    if (this.pendingPosterEnterTimer) {
+      clearTimeout(this.pendingPosterEnterTimer);
+      this.pendingPosterEnterTimer = null;
+    }
+    this.pendingPosterEnterTarget = null;
+  },
+
+  isPosterHoldTarget(node) {
+    return Boolean(node?.matches?.(".home-poster-card.focusable[data-action='openDetail']"));
+  },
+
+  cancelPendingPosterHold() {
+    if (this.pendingPosterHoldTimer) {
+      clearTimeout(this.pendingPosterHoldTimer);
+      this.pendingPosterHoldTimer = null;
+    }
+    this.pendingPosterHoldTarget = null;
+  },
+
+  hasPendingPosterHold(node) {
+    const pending = this.pendingPosterHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return String(node.dataset.itemId || "") === String(pending.itemId || "");
+  },
+
+  startPendingPosterHold(node) {
+    const item = this.getPosterMenuItemFromNode(node);
+    if (!item?.id) {
+      return false;
+    }
+    this.cancelPendingPosterEnter();
+    this.cancelPendingPosterHold();
+    this.pendingPosterHoldTarget = {
+      itemId: String(item.id || ""),
+      holdTriggered: false
+    };
+    this.pendingPosterHoldTimer = setTimeout(() => {
+      this.pendingPosterHoldTimer = null;
+      const pending = this.pendingPosterHoldTarget;
+      if (!pending || Router.getCurrent() !== "home") {
+        return;
+      }
+      const current = this.container?.querySelector(".home-poster-card.focusable.focused[data-action='openDetail']") || null;
+      if (!this.hasPendingPosterHold(current)) {
+        return;
+      }
+      pending.holdTriggered = true;
+      void this.openPosterHoldMenu(current);
+    }, CW_HOLD_DELAY_MS);
+    return true;
+  },
+
+  completePendingPosterHold(node) {
+    const pending = this.pendingPosterHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    this.cancelPendingPosterHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!this.isPosterHoldTarget(node)) {
+      return false;
+    }
+    this.openDetailFromNode(node);
+    return true;
+  },
+
+  schedulePosterEnter(node) {
+    if (!this.isPosterHoldTarget(node)) {
+      return false;
+    }
+    this.cancelPendingPosterEnter();
+    this.pendingPosterEnterTarget = {
+      itemId: String(node.dataset.itemId || "")
+    };
+    this.pendingPosterEnterTimer = setTimeout(() => {
+      this.pendingPosterEnterTimer = null;
+      const pending = this.pendingPosterEnterTarget;
+      this.pendingPosterEnterTarget = null;
+      if (!pending || Router.getCurrent() !== "home") {
+        return;
+      }
+      const current = this.container?.querySelector(".home-poster-card.focusable.focused[data-action='openDetail']") || null;
+      if (String(current?.dataset?.itemId || "") !== String(pending.itemId || "")) {
+        return;
+      }
+      this.openDetailFromNode(current);
+    }, CW_ENTER_DELAY_MS);
+    return true;
+  },
+
   scheduleContinueWatchingEnter(node) {
     const item = this.getContinueWatchingItemFromNode(node);
     if (!item?.contentId) {
@@ -3043,7 +3487,26 @@ export const HomeScreen = {
     Router.navigate("detail", {
       itemId: normalized.contentId,
       itemType: normalized.type || "movie",
-      fallbackTitle: normalized.title || normalized.contentId || "Untitled"
+      fallbackTitle: normalized.title || normalized.contentId || "Untitled",
+      resumeVideoId: normalized.videoId || null,
+      resumeSeason: normalized.season ?? null,
+      resumeEpisode: normalized.episode ?? null
+    });
+    return true;
+  },
+
+  openContinueWatchingManualStreamSelection(item) {
+    const params = continueWatchingStreamParams(item);
+    if (!params) {
+      return false;
+    }
+    this.cancelPendingContinueWatchingEnter();
+    this.continueWatchingMenu = null;
+    Router.navigate("stream", {
+      ...params,
+      returnToDetail: true,
+      continueWatchingBackHome: true,
+      returnHomeOnBack: true
     });
     return true;
   },
@@ -3158,14 +3621,14 @@ export const HomeScreen = {
       return false;
     }
     const anchorIndex = Math.max(0, Number(this.continueWatchingMenu?.index || 0));
-    if (option.action === "resume") {
-      return this.openContinueWatchingFromItem(item);
+    if (option.action === "details") {
+      return this.openContinueWatchingDetails(item);
+    }
+    if (option.action === "playManually") {
+      return this.openContinueWatchingManualStreamSelection(item);
     }
     if (option.action === "startOver") {
       return this.openContinueWatchingFromItem(item, { startOver: true });
-    }
-    if (option.action === "details") {
-      return this.openContinueWatchingDetails(item);
     }
     if (option.action === "toggleWatched") {
       await this.toggleContinueWatchingWatched(item);
@@ -3176,6 +3639,97 @@ export const HomeScreen = {
     }
     this.continueWatchingMenu = null;
     this.pendingContinueWatchingFocusIndex = anchorIndex;
+    this.render();
+    return true;
+  },
+
+  async togglePosterLibraryItem(item) {
+    const normalized = normalizeCatalogItem(item, item?.type || "movie");
+    if (!normalized?.id) {
+      return false;
+    }
+    const isSaved = await savedLibraryRepository.toggle({
+      contentId: normalized.id,
+      contentType: normalized.type || "movie",
+      title: normalized.name || normalized.title || normalized.id || "Untitled",
+      poster: normalized.poster || null,
+      background: normalized.background || normalized.backdrop || normalized.landscapePoster || null
+    });
+    if (this.posterHoldMenu) {
+      this.posterHoldMenu = {
+        ...this.posterHoldMenu,
+        isSaved: Boolean(isSaved)
+      };
+    }
+    return true;
+  },
+
+  async togglePosterWatchedItem(item) {
+    const normalized = normalizeCatalogItem(item, item?.type || "movie");
+    if (!normalized?.id) {
+      return false;
+    }
+    if (this.isPosterHoldItemWatched(normalized)) {
+      await watchedItemsRepository.unmark(normalized.id);
+      this.watchedItems = Array.isArray(this.watchedItems)
+        ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(normalized.id))
+        : [];
+      return true;
+    }
+    await watchedItemsRepository.mark({
+      contentId: normalized.id,
+      contentType: normalized.type || "movie",
+      title: normalized.name || normalized.title || normalized.id || "Untitled",
+      watchedAt: Date.now()
+    });
+    await watchProgressRepository.saveProgress({
+      contentId: normalized.id,
+      contentType: normalized.type || "movie",
+      videoId: null,
+      positionMs: 100,
+      durationMs: 100,
+      updatedAt: Date.now()
+    });
+    this.watchedItems = [
+      {
+        contentId: normalized.id,
+        contentType: normalized.type || "movie",
+        title: normalized.name || normalized.title || normalized.id || "Untitled",
+        watchedAt: Date.now()
+      },
+      ...(Array.isArray(this.watchedItems) ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(normalized.id)) : [])
+    ];
+    return true;
+  },
+
+  async activatePosterHoldMenuOption() {
+    const item = this.getPosterHoldMenuItem();
+    const options = this.getPosterHoldMenuOptions();
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterHoldMenu?.optionIndex || 0)))];
+    if (!item || !option) {
+      return false;
+    }
+    const focusRestore = {
+      rowIndex: Number(this.posterHoldMenu?.rowIndex ?? -1),
+      itemIndex: Number(this.posterHoldMenu?.itemIndex ?? -1)
+    };
+    if (option.action === "details") {
+      this.posterHoldMenu = null;
+      Router.navigate("detail", {
+        itemId: item.id,
+        itemType: item.type || "movie",
+        fallbackTitle: item.name || item.title || item.id || "Untitled"
+      });
+      return true;
+    }
+    if (option.action === "toggleLibrary") {
+      await this.togglePosterLibraryItem(item);
+    } else if (option.action === "toggleWatched") {
+      await this.togglePosterWatchedItem(item);
+    } else {
+      return false;
+    }
+    this.pendingPosterFocus = focusRestore;
     this.render();
     return true;
   },
@@ -3213,6 +3767,32 @@ export const HomeScreen = {
     return this.layoutMode === "modern" && Boolean(node?.classList?.contains("home-poster-card"));
   },
 
+  collectPosterCardImageUrls(card) {
+    if (!card) {
+      return [];
+    }
+    const urls = [
+      card.dataset?.posterSrc,
+      card.dataset?.backdropSrc,
+      card.dataset?.logoSrc
+    ];
+    card.querySelectorAll(".content-poster, .home-poster-expanded-backdrop, .home-poster-expanded-logo, .home-poster-landscape-logo").forEach((node) => {
+      urls.push(node.getAttribute("src"));
+      urls.push(node.dataset?.src);
+    });
+    return normalizeImageUrls(urls);
+  },
+
+  preloadPosterCardImages(card) {
+    const urls = this.collectPosterCardImageUrls(card);
+    if (!urls.length) {
+      return;
+    }
+    void preloadHomeImageUrls(urls, {
+      limit: this.isPerformanceConstrained() ? 4 : 8
+    });
+  },
+
   hydrateFocusedPosterAssets(node, { defer = false } = {}) {
     if (!this.isModernPosterNode(node)) {
       return;
@@ -3233,6 +3813,13 @@ export const HomeScreen = {
         };
         if (src && !backdrop.getAttribute("src")) {
           backdrop.setAttribute("src", src);
+        }
+        if (src) {
+          preloadImageUrl(src).then((loaded) => {
+            if (loaded && node.isConnected && backdrop.isConnected && String(backdrop.getAttribute("src") || "") === src) {
+              markBackdropReady();
+            }
+          });
         }
         if (backdrop.complete && Number(backdrop.naturalWidth || 0) > 0) {
           markBackdropReady();
@@ -3264,6 +3851,9 @@ export const HomeScreen = {
         if (src && !logo.getAttribute("src")) {
           logo.setAttribute("src", src);
         }
+        if (src) {
+          void preloadImageUrl(src);
+        }
         logo.removeAttribute("data-src");
       }
     };
@@ -3289,6 +3879,7 @@ export const HomeScreen = {
       if (!this.isModernPosterNode(card)) {
         return;
       }
+      this.preloadPosterCardImages(card);
       const poster = card.querySelector(".content-poster");
       if (poster instanceof HTMLImageElement) {
         poster.loading = "eager";
@@ -3810,7 +4401,7 @@ export const HomeScreen = {
     if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
       this.collapseFocusedPoster();
     }
-    this.promotePosterCardAssets(node, { includeNeighbors: false });
+    this.promotePosterCardAssets(node, { includeNeighbors: true });
     const defaultDelayMs = this.isPerformanceConstrained()
       ? 0
       : Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
@@ -4613,11 +5204,19 @@ export const HomeScreen = {
         }
         if (target.closest(".hold-menu")) {
           const optionIndex = Number(target.dataset.holdIndex || 0);
-          this.continueWatchingMenu = {
-            ...(this.continueWatchingMenu || {}),
-            optionIndex
-          };
-          void this.activateContinueWatchingMenuOption();
+          if (this.posterHoldMenu) {
+            this.posterHoldMenu = {
+              ...this.posterHoldMenu,
+              optionIndex
+            };
+            void this.activatePosterHoldMenuOption();
+          } else {
+            this.continueWatchingMenu = {
+              ...(this.continueWatchingMenu || {}),
+              optionIndex
+            };
+            void this.activateContinueWatchingMenuOption();
+          }
           return;
         }
         const action = String(target.dataset.action || "");
@@ -4687,10 +5286,28 @@ export const HomeScreen = {
     viewport.addEventListener("scroll", this.boundHomeViewportScrollHandler, { passive: true });
   },
 
+  bindBackHandler() {
+    if (this.homeBackHandler) {
+      document.removeEventListener("keydown", this.homeBackHandler, true);
+    }
+    this.homeBackHandler = (event) => {
+      if (!this.hasOpenHoldMenu() || !Platform.isBackEvent(event)) {
+        return;
+      }
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      this.closeOpenHoldMenu();
+      Router.suppressNextPopstate?.();
+    };
+    document.addEventListener("keydown", this.homeBackHandler, true);
+  },
+
   async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("home");
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
+    this.bindBackHandler();
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
     this.homeRouteEnterPending = true;
@@ -4700,6 +5317,7 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingEnter();
     this.forceInitialContinueWatchingFocus = false;
     this.continueWatchingLoading = false;
+    this.needsContinueWatchingRetry = false;
     this.isRestoringFocusFromBack = Boolean(navigationContext?.isBackNavigation);
     if (navigationContext?.restoredState?.layoutMode) {
       this.savedFocusStates = {
@@ -4740,6 +5358,9 @@ export const HomeScreen = {
   async loadData({ background = false } = {}) {
     const token = this.homeLoadToken;
     const bootPreloadDeadline = background ? 0 : Date.now() + HOME_BOOT_PRELOAD_BUDGET_MS;
+    const cachedImagePrewarmPromise = background ? null : this.prewarmCachedHomeImages(bootPreloadDeadline).catch((error) => {
+      console.warn("Home cached image prewarm failed", error);
+    });
     const prefs = LayoutPreferences.get();
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
@@ -4771,7 +5392,8 @@ export const HomeScreen = {
       progressAllError,
       recentProgressError,
       preserveContinueWatching,
-      previousContinueWatchingSignature
+      previousContinueWatchingSignature,
+      keepLoadingWhenUnresolved: true
     }).catch((error) => {
       console.warn("Home boot continue watching warmup failed", error);
       return null;
@@ -4816,6 +5438,16 @@ export const HomeScreen = {
       return;
     }
     let bootRows = initialRows;
+
+    let bootContinueWatchingState = null;
+    if (bootContinueWatchingPromise) {
+      bootContinueWatchingState = await withTimeout(
+        bootContinueWatchingPromise,
+        remainingBudgetMs(bootPreloadDeadline),
+        null
+      );
+    }
+
     if (bootDeferredRowsPromise) {
       const bootDeferredRows = await withTimeout(
         bootDeferredRowsPromise,
@@ -4829,14 +5461,6 @@ export const HomeScreen = {
     }
     this.rows = this.sortAndFilterRows(bootRows);
 
-    let bootContinueWatchingState = null;
-    if (bootContinueWatchingPromise) {
-      bootContinueWatchingState = await withTimeout(
-        bootContinueWatchingPromise,
-        remainingBudgetMs(bootPreloadDeadline),
-        null
-      );
-    }
     const bootContinueWatchingApplied = Boolean(bootContinueWatchingState);
     if (bootContinueWatchingState) {
       this.applyContinueWatchingState(bootContinueWatchingState);
@@ -4862,11 +5486,30 @@ export const HomeScreen = {
       );
     }
     if (!background) {
+      if (cachedImagePrewarmPromise) {
+        await withTimeout(
+          cachedImagePrewarmPromise,
+          Math.min(600, remainingBudgetMs(bootPreloadDeadline)),
+          null
+        );
+      }
       await this.preloadBootImages(bootPreloadDeadline);
     }
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
     this.hasLoadedOnce = true;
     this.render();
+    if (this.needsContinueWatchingRetry) {
+      this.retryContinueWatchingState({
+        token,
+        allProgressPromise: progressAllPromise,
+        recentProgressPromise,
+        progressAllError,
+        recentProgressError,
+        preserveContinueWatching,
+        previousContinueWatchingSignature,
+        background
+      });
+    }
     const previousSidebarProfileSignature = buildSidebarProfileSignature(this.sidebarProfile);
     sidebarProfilePromise.then((profile) => {
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
@@ -4917,6 +5560,7 @@ export const HomeScreen = {
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
+        this.preloadCurrentHomeImages();
         this.requestBackgroundRender();
         this.retryPendingCatalogRows();
       }).catch((error) => {
@@ -4942,7 +5586,8 @@ export const HomeScreen = {
         progressAllError,
         recentProgressError,
         preserveContinueWatching,
-        previousContinueWatchingSignature
+        previousContinueWatchingSignature,
+        keepLoadingWhenUnresolved: true
       });
       const continueWatchingStatePromise = bootContinueWatchingPromise
         ? bootContinueWatchingPromise.then((state) => state || fallbackContinueWatchingState())
@@ -4960,6 +5605,18 @@ export const HomeScreen = {
           if (!background && !this.hasAppliedInitialContinueWatchingFocus) {
             this.forceInitialContinueWatchingFocus = true;
           }
+        }
+        if (this.needsContinueWatchingRetry) {
+          this.retryContinueWatchingState({
+            token,
+            allProgressPromise: progressAllPromise,
+            recentProgressPromise,
+            progressAllError,
+            recentProgressError,
+            preserveContinueWatching,
+            previousContinueWatchingSignature,
+            background
+          });
         }
         const nextDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
         const nextHeroIdentity = buildHeroIdentity(this.heroItem);
@@ -5268,6 +5925,7 @@ export const HomeScreen = {
         </main>
       </div>
       ${this.renderContinueWatchingMenu()}
+      ${this.renderPosterHoldMenu()}
     `;
 
     if (modernLandscapePostersEnabled) {
@@ -5291,6 +5949,8 @@ export const HomeScreen = {
       restoredFocus = this.applyPendingHomeRevealFocus();
     } else if (this.continueWatchingMenu) {
       restoredFocus = this.applyContinueWatchingMenuFocus();
+    } else if (this.posterHoldMenu) {
+      restoredFocus = this.applyPosterHoldMenuFocus();
     } else if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
       const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
       const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
@@ -5314,6 +5974,21 @@ export const HomeScreen = {
           this.scheduleModernHeroUpdate(current);
           this.scheduleFocusedPosterFlow(current);
         }
+      }
+    } else if (this.pendingPosterFocus && Number.isFinite(Number(this.pendingPosterFocus.rowIndex)) && Number.isFinite(Number(this.pendingPosterFocus.itemIndex))) {
+      const rowIndex = Number(this.pendingPosterFocus.rowIndex);
+      const itemIndex = Number(this.pendingPosterFocus.itemIndex);
+      this.pendingPosterFocus = null;
+      const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${rowIndex}"][data-item-index="${itemIndex}"]`) || null;
+      if (target) {
+        restoredFocus = true;
+        this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+        target.classList.add("focused");
+        this.focusWithoutAutoScroll(target);
+        this.lastMainFocus = target;
+        this.rememberMainRowFocus(target);
+        this.ensureTrackHorizontalVisibility(target);
+        this.ensureMainVerticalVisibility(target);
       }
     } else if (canAttemptRestore) {
       restoredFocus = this.restoreFocusState(retainedFocusState);
@@ -5492,7 +6167,7 @@ export const HomeScreen = {
       }
       const season = Number(entry?.season || 0);
       const episode = Number(entry?.episode || 0);
-      if (season <= 0 || episode <= 0 || !isCompletedForContinueWatching(entry)) {
+      if (season <= 0 || episode <= 0 || !shouldUseAsCompletedNextUpSeed(entry)) {
         return;
       }
       if (dismissed.has(nextUpDismissKey(contentId, season, episode))) {
@@ -5678,7 +6353,8 @@ export const HomeScreen = {
     nextUpProgressCandidates = [],
     watchedItems = [],
     dismissedNextUpKeys = [],
-    showUnairedNextUp = true
+    showUnairedNextUp = true,
+    metaTimeoutMs = CW_NEXT_UP_META_TIMEOUT_MS
   } = {}) {
     const resolvedCandidates = (Array.isArray(nextUpProgressCandidates) && nextUpProgressCandidates.length)
       ? nextUpProgressCandidates
@@ -5708,7 +6384,7 @@ export const HomeScreen = {
 
       let meta = null;
       try {
-        meta = await this.fetchMetaForContinueWatching(contentType, contentId, CW_NEXT_UP_META_TIMEOUT_MS);
+        meta = await this.fetchMetaForContinueWatching(contentType, contentId, metaTimeoutMs);
       } catch (error) {
         console.warn("Next up meta lookup failed", error);
       }
@@ -5764,9 +6440,10 @@ export const HomeScreen = {
   },
 
   async enrichContinueWatching(items = [], options = {}) {
+    const metaTimeoutMs = Number(options?.metaTimeoutMs || 0) || CW_META_TIMEOUT_MS;
     const inProgressItems = await Promise.all((items || []).map(async (item) => {
       try {
-        const meta = await this.fetchMetaForContinueWatching(item.contentType || "movie", item.contentId, 1800);
+        const meta = await this.fetchMetaForContinueWatching(item.contentType || "movie", item.contentId, metaTimeoutMs);
         if (meta) {
           return {
             ...item,
@@ -5820,7 +6497,8 @@ export const HomeScreen = {
       nextUpProgressCandidates: options?.nextUpProgressCandidates || [],
       watchedItems: options?.watchedItems || [],
       dismissedNextUpKeys: options?.dismissedNextUpKeys || [],
-      showUnairedNextUp: options?.showUnairedNextUp !== false
+      showUnairedNextUp: options?.showUnairedNextUp !== false,
+      metaTimeoutMs: Number(options?.nextUpMetaTimeoutMs || 0) || CW_NEXT_UP_META_TIMEOUT_MS
     });
 
     const inProgressSeriesIds = new Set(
@@ -5943,25 +6621,44 @@ export const HomeScreen = {
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
     const code = Number(event?.keyCode || 0);
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
-    const isTizenHoldTarget = Platform.isTizen() && this.isContinueWatchingHoldTarget(currentFocusedNode);
-    if (!isTizenHoldTarget || code !== 13) {
+    const isContinueWatchingHoldTarget = this.isContinueWatchingHoldTarget(currentFocusedNode);
+    const isPosterHoldTarget = this.isPosterHoldTarget(currentFocusedNode);
+    if (!isContinueWatchingHoldTarget || code !== 13) {
       this.cancelPendingContinueWatchingEnter();
       this.cancelPendingContinueWatchingHold();
     }
-    if (this.continueWatchingMenu) {
+    if (!isPosterHoldTarget || code !== 13) {
+      this.cancelPendingPosterEnter();
+      this.cancelPendingPosterHold();
+    }
+    if (this.hasOpenHoldMenu()) {
       if (Platform.isBackEvent(event)) {
         event.preventDefault?.();
-        this.closeContinueWatchingMenu();
+        event.stopPropagation?.();
+        event.stopImmediatePropagation?.();
+        this.closeOpenHoldMenu();
+        Router.suppressNextPopstate?.();
         return;
       }
       if (code === 38 || code === 40) {
         event.preventDefault?.();
-        this.moveContinueWatchingMenuFocus(code === 38 ? -1 : 1);
+        if (this.posterHoldMenu) {
+          this.movePosterHoldMenuFocus(code === 38 ? -1 : 1);
+        } else {
+          this.moveContinueWatchingMenuFocus(code === 38 ? -1 : 1);
+        }
         return;
       }
       if (code === 13) {
         event.preventDefault?.();
-        void this.activateContinueWatchingMenuOption();
+        if (this.suppressHoldMenuEnterUntilKeyUp) {
+          return;
+        }
+        if (this.posterHoldMenu) {
+          void this.activatePosterHoldMenuOption();
+        } else {
+          void this.activateContinueWatchingMenuOption();
+        }
         return;
       }
       return;
@@ -5998,7 +6695,6 @@ export const HomeScreen = {
     if (this.handleHomeDpad(event)) {
       return;
     }
-    const isContinueWatchingHoldTarget = this.isContinueWatchingHoldTarget(currentFocusedNode);
     const wantsContinueWatchingMenu = isContinueWatchingHoldTarget
       && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
     if (wantsContinueWatchingMenu) {
@@ -6008,10 +6704,26 @@ export const HomeScreen = {
       this.openContinueWatchingMenu(currentFocusedNode);
       return;
     }
-    if (Platform.isTizen() && code === 13 && isContinueWatchingHoldTarget) {
+    if (code === 13 && isContinueWatchingHoldTarget) {
       event.preventDefault?.();
       if (!event?.repeat && !this.hasPendingContinueWatchingHold(currentFocusedNode)) {
         this.startPendingContinueWatchingHold(currentFocusedNode);
+      }
+      return;
+    }
+    const wantsPosterHoldMenu = isPosterHoldTarget
+      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
+    if (wantsPosterHoldMenu) {
+      event.preventDefault?.();
+      this.cancelPendingPosterEnter();
+      this.cancelPendingPosterHold();
+      void this.openPosterHoldMenu(currentFocusedNode);
+      return;
+    }
+    if (code === 13 && isPosterHoldTarget) {
+      event.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingPosterHold(currentFocusedNode)) {
+        this.startPendingPosterHold(currentFocusedNode);
       }
       return;
     }
@@ -6038,7 +6750,13 @@ export const HomeScreen = {
       activateLegacySidebarAction(action, "home");
       return;
     }
-    if (action === "openDetail") this.openDetailFromNode(current);
+    if (action === "openDetail") {
+      if (this.isPosterHoldTarget(current)) {
+        this.schedulePosterEnter(current);
+      } else {
+        this.openDetailFromNode(current);
+      }
+    }
     if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
     if (action === "resumeProgress") {
       this.scheduleContinueWatchingEnter(current);
@@ -6046,8 +6764,12 @@ export const HomeScreen = {
   },
 
   onKeyUp(event) {
-    if (!Platform.isTizen()) {
-      return;
+    if (this.suppressHoldMenuEnterUntilKeyUp) {
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event.preventDefault?.();
+        return;
+      }
     }
     if (Number(event?.keyCode || 0) !== 13) {
       return;
@@ -6055,12 +6777,18 @@ export const HomeScreen = {
     const current = this.container?.querySelector(".home-continue-card.focusable.focused") || null;
     if (this.completePendingContinueWatchingHold(current)) {
       event.preventDefault?.();
+      return;
+    }
+    const poster = this.container?.querySelector(".home-poster-card.focusable.focused[data-action='openDetail']") || null;
+    if (this.completePendingPosterHold(poster)) {
+      event.preventDefault?.();
     }
   },
 
   consumeBackRequest() {
-    if (this.continueWatchingMenu) {
-      this.closeContinueWatchingMenu();
+    if (this.hasOpenHoldMenu()) {
+      this.closeOpenHoldMenu();
+      Router.suppressNextPopstate?.();
       return true;
     }
     return false;
@@ -6069,7 +6797,13 @@ export const HomeScreen = {
   cleanup() {
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
+    this.cancelPendingPosterEnter();
+    this.cancelPendingPosterHold();
     this.continueWatchingMenu = null;
+    this.posterHoldMenu = null;
+    this.suppressHoldMenuEnterUntilKeyUp = false;
+    this.needsContinueWatchingRetry = false;
+    this.continueWatchingRetryInFlight = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.cancelScheduledRender();
@@ -6088,6 +6822,10 @@ export const HomeScreen = {
       this.boundHomeViewport.removeEventListener("scroll", this.boundHomeViewportScrollHandler);
     }
     this.boundHomeViewport = null;
+    if (this.homeBackHandler) {
+      document.removeEventListener("keydown", this.homeBackHandler, true);
+      this.homeBackHandler = null;
+    }
     if (this.homeTruncationFrame) {
       cancelAnimationFrame(this.homeTruncationFrame);
       this.homeTruncationFrame = null;
