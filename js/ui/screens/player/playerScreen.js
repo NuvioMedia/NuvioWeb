@@ -7313,6 +7313,7 @@ export const PlayerScreen = {
       overlay.innerHTML = "";
       overlay.style.removeProperty("animation-delay");
       overlay.style.removeProperty("--parental-item-count");
+      overlay.style.removeProperty("--parental-line-height");
       overlay.style.removeProperty("--parental-line-exit-delay");
       overlay.style.removeProperty("--parental-container-exit-delay");
       return;
@@ -7323,8 +7324,13 @@ export const PlayerScreen = {
     const firstItemDelay = PARENTAL_GUIDE_CONTAINER_IN_MS + PARENTAL_GUIDE_LINE_IN_MS + PARENTAL_GUIDE_ITEM_STAGGER_MS;
     const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
     const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;
+    const viewportWidth = Number(globalThis.innerWidth || 0);
+    const rowHeight = Math.max(30, Math.min(viewportWidth * 0.0205, 40));
+    const rowGap = 5;
+    const lineHeight = (rowHeight * total) + (rowGap * Math.max(0, total - 1));
     overlay.style.animationDelay = this.parentalGuideExiting ? `${containerExitDelay}ms` : "0ms";
     overlay.style.setProperty("--parental-item-count", String(total));
+    overlay.style.setProperty("--parental-line-height", `${lineHeight}px`);
     overlay.style.setProperty("--parental-line-exit-delay", `${lineExitDelay}ms`);
     overlay.style.setProperty("--parental-container-exit-delay", `${containerExitDelay}ms`);
     const lineDelay = this.parentalGuideExiting ? lineExitDelay : lineEnterDelay;

@@ -7844,7 +7844,7 @@
 
 .player-parental-line {
   width: 4px;
-  height: calc((var(--parental-row-height) * var(--parental-item-count, 1)) + (var(--parental-row-gap) * (var(--parental-item-count, 1) - 1)));
+  height: var(--parental-line-height, var(--parental-row-height));
   border-radius: 3px;
   background: var(--secondary-color);
   transform: scaleY(0);

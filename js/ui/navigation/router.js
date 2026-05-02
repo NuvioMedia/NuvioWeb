@@ -34,6 +34,7 @@ export const Router = {
   popstateBound: false,
   suppressPopstateUntil: 0,
   skipConsumeNextPopstate: false,
+  ignoreNextPopstate: false,
 
   routes: {
     home: HomeScreen,
@@ -108,6 +109,10 @@ export const Router = {
     }
     this.popstateBound = true;
     window.addEventListener("popstate", async (event) => {
+      if (this.ignoreNextPopstate) {
+        this.ignoreNextPopstate = false;
+        return;
+      }
       if (Date.now() < Number(this.suppressPopstateUntil || 0)) {
         if (window?.history && typeof window.history.pushState === "function") {
           window.history.pushState({ route: this.current, params: this.currentParams }, "");
@@ -151,6 +156,10 @@ export const Router = {
       Number(this.suppressPopstateUntil || 0),
       Date.now() + Math.max(0, Number(durationMs || 0))
     );
+  },
+
+  ignoreSinglePopstate() {
+    this.ignoreNextPopstate = true;
   },
 
   async navigate(routeName, params = {}, options = {}) {
