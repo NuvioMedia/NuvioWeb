@@ -18,6 +18,7 @@ import { SavedLibrarySyncService } from "../../../core/profile/savedLibrarySyncS
 import { WatchedItemsSyncService } from "../../../core/profile/watchedItemsSyncService.js";
 import { WatchProgressSyncService } from "../../../core/profile/watchProgressSyncService.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
+import { SupabaseApi } from "../../../data/remote/supabase/supabaseApi.js";
 import { Platform } from "../../../platform/index.js";
 import { I18n } from "../../../i18n/index.js";
 import { PluginManager } from "../../../core/player/pluginManager.js";
@@ -501,6 +502,64 @@ function getSessionEmail() {
   return String(payload?.email || payload?.user_metadata?.email || "").trim() || null;
 }
 
+async function fetchAccountSyncOverview() {
+  const response = await SupabaseApi.rpc("get_sync_overview", {}, true);
+  const source = response && typeof response === "object" && !Array.isArray(response)
+    ? response
+    : {};
+  const addons = source.addons && typeof source.addons === "object" ? source.addons : {};
+  const plugins = source.plugins && typeof source.plugins === "object" ? source.plugins : {};
+  const libraryItems = source.library_items && typeof source.library_items === "object" ? source.library_items : {};
+  const watchProgress = source.watch_progress && typeof source.watch_progress === "object" ? source.watch_progress : {};
+  const watchedItems = source.watched_items && typeof source.watched_items === "object" ? source.watched_items : {};
+  const remoteProfiles = source.profiles && typeof source.profiles === "object" ? source.profiles : {};
+  const profiles = await ProfileManager.getProfiles();
+  const allProfileIds = Array.from(new Set([
+    ...Object.keys(addons),
+    ...Object.keys(plugins),
+    ...Object.keys(libraryItems),
+    ...Object.keys(watchProgress),
+    ...Object.keys(watchedItems),
+    ...Object.keys(remoteProfiles)
+  ]))
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+    .sort((left, right) => left - right);
+
+  const readCount = (bucket, id) => {
+    const value = Number(bucket[String(id)] || 0);
+    return Number.isFinite(value) ? value : 0;
+  };
+  const total = (bucket) => Object.values(bucket).reduce((sum, value) => {
+    const count = Number(value || 0);
+    return sum + (Number.isFinite(count) ? count : 0);
+  }, 0);
+
+  return {
+    profileCount: Object.keys(remoteProfiles).length,
+    totalAddons: total(addons),
+    totalPlugins: total(plugins),
+    totalLibrary: total(libraryItems),
+    totalWatchProgress: total(watchProgress),
+    totalWatchedItems: total(watchedItems),
+    perProfile: allProfileIds.map((profileId) => {
+      const profileIdString = String(profileId);
+      const localProfile = profiles.find((profile) => String(profile?.id) === profileIdString || String(profile?.profileIndex) === profileIdString);
+      const remoteProfile = remoteProfiles[profileIdString] || {};
+      return {
+        profileId,
+        profileName: localProfile?.name || remoteProfile.name || `Profile ${profileId}`,
+        avatarColorHex: localProfile?.avatarColorHex || remoteProfile.color || "#1E88E5",
+        addons: readCount(addons, profileId),
+        plugins: readCount(plugins, profileId),
+        library: readCount(libraryItems, profileId),
+        watchProgress: readCount(watchProgress, profileId),
+        watchedItems: readCount(watchedItems, profileId)
+      };
+    })
+  };
+}
+
 function getVisibleSections(model) {
   const isPrimaryProfileActive = String(model?.activeProfileId || "1") === "1";
   return SECTION_META.filter((section) => {
@@ -778,6 +837,8 @@ export const SettingsScreen = {
   },
 
   async collectModel() {
+    const authState = AuthManager.getAuthState();
+    this.ensureAccountSyncOverview(authState);
     const [addons, profiles] = await Promise.all([
       addonRepository.getInstalledAddons(),
       ProfileManager.getProfiles()
@@ -800,8 +861,36 @@ export const SettingsScreen = {
       animeSkip: AnimeSkipSettingsStore.get(),
       rotatedDpad: Boolean(LocalStore.get(ROTATED_DPAD_KEY, true)),
       strictDpadGrid: Boolean(LocalStore.get(STRICT_DPAD_GRID_KEY, true)),
-      authState: AuthManager.getAuthState()
+      authState,
+      accountSyncOverview: this.accountSyncOverview || null,
+      accountSyncOverviewLoading: Boolean(this.accountSyncOverviewPromise)
     };
+  },
+
+  ensureAccountSyncOverview(authState = AuthManager.getAuthState()) {
+    if (authState !== "authenticated") {
+      this.accountSyncOverview = null;
+      this.accountSyncOverviewPromise = null;
+      this.accountSyncOverviewLoaded = false;
+      return;
+    }
+    if (this.accountSyncOverviewLoaded || this.accountSyncOverviewPromise) {
+      return;
+    }
+    this.accountSyncOverviewPromise = fetchAccountSyncOverview()
+      .then((overview) => {
+        this.accountSyncOverview = overview;
+      })
+      .catch((error) => {
+        console.warn("Account sync overview failed", error);
+      })
+      .finally(() => {
+        this.accountSyncOverviewLoaded = true;
+        this.accountSyncOverviewPromise = null;
+        if (this.container && this.activeSection === "account") {
+          void this.render();
+        }
+      });
   },
 
   renderNav() {
@@ -1062,33 +1151,133 @@ export const SettingsScreen = {
 
   renderAccountSection(model) {
     const signedIn = model.authState === "authenticated";
+    const loading = model.authState === "loading";
     this.actionMap.set("account:signin", () => Router.navigate("authQrSignIn"));
     this.actionMap.set("account:signout", async () => {
       await AuthManager.signOut();
-      Router.navigate("authQrSignIn");
+      this.accountSyncOverview = null;
+      this.accountSyncOverviewPromise = null;
+      this.accountSyncOverviewLoaded = false;
+      await this.render();
     });
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "account"))}
-      <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-stack">
-          ${signedIn
-        ? `<div class="settings-account-status">
-                <span class="settings-account-status-label">${t("settings.status.signedIn")}</span>
-                <strong class="settings-account-status-value">${escapeHtml(model.accountEmail || t("settings.status.linkedFallback"))}</strong>
-              </div>`
-        : `<p class="settings-account-note">${t("settings.account.syncNote")}</p>
-              ${this.renderActionRow({
-          focusKey: "account:signin",
-          title: t("settings.account.signInWithQr"),
-          subtitle: t("settings.account.signInWithQrSubtitle")
-        })}`}
-          ${signedIn ? this.renderActionRow({
-          focusKey: "account:signout",
-          title: t("settings.account.signOut"),
-          subtitle: t("settings.account.signOutSubtitle")
-        }) : ""}
+      <div class="settings-group-card settings-group-card-fill settings-account-card">
+        <div class="settings-account-list">
+          ${loading ? `<p class="settings-account-loading">${escapeHtml(t("account_loading", {}, "Loading..."))}</p>` : ""}
+          ${!loading && !signedIn ? `
+            <p class="settings-account-description">${escapeHtml(t("account_sync_description", {}, "Sync your library, watch progress, addons, and plugins across devices."))}</p>
+            <p class="settings-account-inline-note">${escapeHtml(t("account_sync_restart_note", {}, "Sync is not real-time across active devices. Restart this device after signing in or to pick up changes made elsewhere."))}</p>
+            ${this.renderAccountActionButton({
+        focusKey: "account:signin",
+        icon: "vpn_key",
+        title: t("account_signin_qr_title", {}, "Sign In with QR"),
+        subtitle: t("account_signin_qr_subtitle", {}, "Scan a QR code and complete email login on your phone")
+      })}
+          ` : ""}
+          ${signedIn ? `
+            ${this.renderAccountStatusCard(model.accountEmail || t("settings.status.linkedFallback", {}, "Linked account"))}
+            <p class="settings-account-inline-note">${escapeHtml(t("account_sync_restart_note", {}, "Sync is not real-time across active devices. Restart this device after signing in or to pick up changes made elsewhere."))}</p>
+            ${model.accountSyncOverview
+        ? this.renderAccountSyncOverview(model.accountSyncOverview)
+        : (model.accountSyncOverviewLoading ? this.renderAccountSyncOverviewLoading() : "")}
+            ${this.renderAccountSignOutButton()}
+          ` : ""}
         </div>
+      </div>
+    `;
+  },
+
+  renderAccountStatusCard(value) {
+    return `
+      <div class="settings-account-status-card">
+        <span class="settings-account-status-icon material-icons" aria-hidden="true">check_circle</span>
+        <span class="settings-account-status-label">${escapeHtml(t("account_signed_in_label", {}, "Signed in"))}</span>
+        <strong class="settings-account-status-value">${escapeHtml(value)}</strong>
+      </div>
+    `;
+  },
+
+  renderAccountActionButton({ focusKey, icon, title, subtitle }) {
+    return `
+      <button class="settings-account-action-button settings-content-focusable focusable"
+              data-zone="content"
+              ${this.registerAction(focusKey, this.actionMap.get(focusKey))}
+              data-role="action">
+        <span class="settings-account-button-icon material-icons" aria-hidden="true">${escapeHtml(icon)}</span>
+        <span class="settings-account-button-copy">
+          <span class="settings-account-button-title">${escapeHtml(title)}</span>
+          <span class="settings-account-button-subtitle">${escapeHtml(subtitle)}</span>
+        </span>
+      </button>
+    `;
+  },
+
+  renderAccountSignOutButton() {
+    return `
+      <button class="settings-account-signout-button settings-content-focusable focusable"
+              data-zone="content"
+              ${this.registerAction("account:signout", this.actionMap.get("account:signout"))}
+              data-role="action">
+        <span class="settings-account-signout-icon material-icons" aria-hidden="true">logout</span>
+        <span class="settings-account-signout-label">${escapeHtml(t("account_sign_out", {}, "Sign Out"))}</span>
+      </button>
+    `;
+  },
+
+  renderAccountSyncOverviewLoading() {
+    return `
+      <div class="settings-account-sync-overview settings-account-sync-loading">
+        ${escapeHtml(t("account_loading_sync", {}, "Loading sync data..."))}
+      </div>
+    `;
+  },
+
+  renderAccountSyncOverview(overview) {
+    const statLabels = [
+      t("account_stat_addons", {}, "addons"),
+      t("account_stat_plugins", {}, "plugins"),
+      t("account_stat_library", {}, "library"),
+      t("account_stat_progress", {}, "progress"),
+      t("account_stat_watched", {}, "watched")
+    ];
+    const renderStats = (values) => values.map((value, index) => `
+      <span class="settings-account-stat">
+        <strong>${escapeHtml(value)}</strong>
+        <small>${escapeHtml(statLabels[index])}</small>
+      </span>
+    `).join("");
+    const rows = Array.isArray(overview?.perProfile) ? overview.perProfile : [];
+    return `
+      <div class="settings-account-sync-overview">
+        <div class="settings-account-sync-row settings-account-sync-total-row">
+          <span class="settings-account-sync-total-label">${escapeHtml(t("account_total_label", {}, "Total"))}</span>
+          <span class="settings-account-sync-stats">
+            ${renderStats([
+        overview.totalAddons || 0,
+        overview.totalPlugins || 0,
+        overview.totalLibrary || 0,
+        overview.totalWatchProgress || 0,
+        overview.totalWatchedItems || 0
+      ])}
+          </span>
+        </div>
+        ${rows.map((profile) => `
+          <div class="settings-account-sync-row">
+            <span class="settings-account-profile-badge" style="background:${escapeHtml(profile.avatarColorHex || "#1E88E5")};">${escapeHtml(String(profile.profileName || "?").charAt(0).toUpperCase() || "?")}</span>
+            <span class="settings-account-profile-name">${escapeHtml(profile.profileName || `Profile ${profile.profileId || ""}`)}</span>
+            <span class="settings-account-sync-stats">
+              ${renderStats([
+        profile.addons || 0,
+        profile.plugins || 0,
+        profile.library || 0,
+        profile.watchProgress || 0,
+        profile.watchedItems || 0
+      ])}
+            </span>
+          </div>
+        `).join("")}
       </div>
     `;
   },

@@ -5809,35 +5809,250 @@ button:focus-visible {
   gap: 20px;
 }
 
-.settings-account-note {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 20px;
-  line-height: 1.3;
+.settings-account-card {
+  padding: 28px;
 }
 
-.settings-account-status {
+.settings-account-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 22px 26px;
-  border-radius: 26px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-elevated);
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.settings-account-loading,
+.settings-account-description,
+.settings-account-inline-note {
+  margin: 0;
+}
+
+.settings-account-loading {
+  color: var(--text-secondary);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.settings-account-description {
+  color: var(--text-secondary);
+  font-size: 24px;
+  line-height: 1.24;
+}
+
+.settings-account-inline-note {
+  padding: 0 24px;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.46));
+  font-size: 24px;
+  line-height: 1.24;
+}
+
+.settings-account-status-card {
+  width: 100%;
+  min-height: 64px;
+  padding: 16px 24px;
+  border-radius: 16px;
+  background: rgb(var(--secondary-color-rgb) / 0.1);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #fff;
+}
+
+.settings-account-status-icon {
+  flex: 0 0 auto;
+  color: var(--secondary-color);
+  font-size: 32px;
+  line-height: 1;
 }
 
 .settings-account-status-label {
-  color: var(--text-secondary);
-  font-size: 18px;
-  line-height: 1.1;
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.46));
+  font-size: 22px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .settings-account-status-value {
+  min-width: 0;
   color: #fff;
-  font-size: 30px;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+  word-break: break-word;
+}
+
+.settings-account-action-button,
+.settings-account-signout-button {
+  width: 100%;
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  text-align: left;
+}
+
+.settings-account-action-button {
+  min-height: 84px;
+  padding: 20px 28px;
+  background: var(--card-bg);
+  gap: 24px;
+}
+
+.settings-account-action-button.focused,
+.settings-account-action-button:focus-visible {
+  border-color: var(--focus-color);
+  background: var(--focus-bg);
+  transform: scale(1.02);
+}
+
+.settings-account-button-icon {
+  flex: 0 0 auto;
+  color: var(--text-secondary);
+  font-size: 44px;
+  line-height: 1;
+}
+
+.settings-account-action-button.focused .settings-account-button-icon,
+.settings-account-action-button:focus-visible .settings-account-button-icon {
+  color: var(--primary-color);
+}
+
+.settings-account-button-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.settings-account-button-title {
+  color: #fff;
+  font-size: 28px;
   font-weight: 500;
   line-height: 1.16;
-  word-break: break-word;
+}
+
+.settings-account-button-subtitle {
+  color: var(--text-secondary);
+  font-size: 22px;
+  line-height: 1.18;
+}
+
+.settings-account-signout-button {
+  min-height: 68px;
+  padding: 16px 28px;
+  background: rgb(198 40 40 / 0.12);
+  gap: 20px;
+}
+
+.settings-account-signout-button.focused,
+.settings-account-signout-button:focus-visible {
+  border-color: rgb(244 67 54 / 0.5);
+  background: rgb(198 40 40 / 0.25);
+  transform: scale(1.02);
+}
+
+.settings-account-signout-icon {
+  color: #f44336;
+  font-size: 36px;
+  line-height: 1;
+}
+
+.settings-account-signout-label {
+  color: #f44336;
+  font-size: 28px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.settings-account-sync-overview {
+  width: 100%;
+  padding: 20px;
+  border-radius: 16px;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-account-sync-loading {
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.settings-account-sync-row {
+  min-height: 56px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  display: flex;
+  align-items: center;
+}
+
+.settings-account-sync-total-label {
+  width: 200px;
+  flex: 0 0 200px;
+  color: var(--secondary-color);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.settings-account-profile-badge {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  flex: 0 0 auto;
+}
+
+.settings-account-profile-name {
+  width: 140px;
+  margin-left: 16px;
+  color: #fff;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-account-sync-stats {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+.settings-account-stat {
+  min-width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.settings-account-stat strong {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.settings-account-stat small {
+  color: var(--text-tertiary, rgba(255, 255, 255, 0.46));
+  font-size: 16px;
+  line-height: 1;
 }
 
 .settings-action-row {
