@@ -27,10 +27,21 @@ const DEFAULTS = {
   persistAudioAmplification: false
 };
 
-function normalizeSelectableSubtitleLanguageCode(language) {
-  const code = String(language ?? "").trim().toLowerCase();
+function extractLanguageCode(value, fallback = "off") {
+  if (value && typeof value === "object") {
+    return extractLanguageCode(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
+  }
+  const code = String(value ?? "").trim();
+  if (!code || code.toLowerCase() === "[object object]") {
+    return fallback;
+  }
+  return code;
+}
+
+function normalizeSelectableSubtitleLanguageCode(language, fallback = "off") {
+  const code = extractLanguageCode(language, fallback).trim().toLowerCase();
   if (!code) {
-      return "off";
+    return fallback;
   }
   switch (code) {
     case "pt-br":
@@ -59,15 +70,23 @@ function normalizePlayerSettings(settings = {}) {
     ...DEFAULTS.subtitleStyle,
     ...(settings.subtitleStyle || {})
   };
+  const preferredLanguage = normalizeSelectableSubtitleLanguageCode(
+    subtitleStyle.preferredLanguage ?? settings.subtitleLanguage,
+    DEFAULTS.subtitleStyle.preferredLanguage
+  );
+  const secondaryPreferredLanguage = normalizeSelectableSubtitleLanguageCode(
+    subtitleStyle.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
+    DEFAULTS.subtitleStyle.secondaryPreferredLanguage
+  );
   return {
     ...DEFAULTS,
     ...settings,
-    subtitleLanguage: normalizeSelectableSubtitleLanguageCode(settings.subtitleLanguage ?? DEFAULTS.subtitleLanguage),
-    secondarySubtitleLanguage: normalizeSelectableSubtitleLanguageCode(settings.secondarySubtitleLanguage ?? DEFAULTS.secondarySubtitleLanguage),
+    subtitleLanguage: preferredLanguage,
+    secondarySubtitleLanguage: secondaryPreferredLanguage,
     subtitleStyle: {
       ...subtitleStyle,
-      preferredLanguage: normalizeSelectableSubtitleLanguageCode(subtitleStyle.preferredLanguage ?? DEFAULTS.subtitleStyle.preferredLanguage),
-      secondaryPreferredLanguage: normalizeSelectableSubtitleLanguageCode(subtitleStyle.secondaryPreferredLanguage ?? DEFAULTS.subtitleStyle.secondaryPreferredLanguage)
+      preferredLanguage,
+      secondaryPreferredLanguage
     }
   };
 }

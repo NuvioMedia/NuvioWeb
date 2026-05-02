@@ -6,6 +6,12 @@
   "scripts": {
     "build": "node ./scripts/build.mjs",
     "build:on-commit": "node ./scripts/commit-build-poller.mjs",
+    "install:webos": "node ./scripts/ares-install-webos.mjs",
+    "inspect:webos": "node ./scripts/ares-inspect-webos.mjs",
+    "logs:webos": "node ./scripts/ares-logs-webos.mjs",
+    "console:webos": "node ./scripts/remote-console-server.mjs",
+    "media:webos-sim": "node --require ./scripts/localhost-listen-patch.cjs ./services/com.nuvio.lg.service/runtime/media-http.cjs",
+    "package:webos": "npm run build && node ./scripts/package-webos.mjs",
     "serve": "node ./scripts/serve.mjs",
     "sync": "node ./scripts/sync-wrapper.mjs",
     "sync:tizen": "node ./scripts/sync-wrapper.mjs --tizen",

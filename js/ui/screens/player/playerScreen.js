@@ -80,6 +80,17 @@ const SKIP_INTERVAL_CHECK_MS = 250;
 const PAUSE_OVERLAY_DELAY_MS = 5000;
 const MAX_PAUSE_OVERLAY_CAST = 8;
 const UNSUPPORTED_EMBEDDED_SUBTITLE_CODECS = new Set(["HDMV/PGS", "VOBSUB"]);
+const PARENTAL_GUIDE_CONTAINER_IN_MS = 300;
+const PARENTAL_GUIDE_LINE_IN_MS = 400;
+const PARENTAL_GUIDE_ITEM_STAGGER_MS = 80;
+const PARENTAL_GUIDE_ITEM_IN_MS = 200;
+const PARENTAL_GUIDE_HOLD_MS = 5000;
+const PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS = 60;
+const PARENTAL_GUIDE_ITEM_EXIT_MS = 150;
+const PARENTAL_GUIDE_LINE_OUT_DELAY_MS = 100;
+const PARENTAL_GUIDE_LINE_OUT_MS = 300;
+const PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS = 200;
+const PARENTAL_GUIDE_CONTAINER_OUT_MS = 200;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -648,6 +659,17 @@ function normalizeSubtitleLanguageKey(value) {
   return cleaned ? cleaned.toLowerCase() : SUBTITLE_LANGUAGE_UNKNOWN_KEY;
 }
 
+function extractSubtitleLanguageSetting(value, fallback = SUBTITLE_LANGUAGE_OFF_KEY) {
+  if (value && typeof value === "object") {
+    return extractSubtitleLanguageSetting(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
+  }
+  const code = cleanDisplayText(value);
+  if (!code || code.toLowerCase() === "[object object]") {
+    return fallback;
+  }
+  return code;
+}
+
 function subtitleLanguageLabel(languageKey) {
   if (languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
     return t("subtitle_none", {}, "Off");
@@ -993,8 +1015,10 @@ export const PlayerScreen = {
 
     this.parentalWarnings = normalizeParentalWarnings(params.parentalWarnings || params.parentalGuide);
     this.parentalGuideVisible = false;
+    this.parentalGuideExiting = false;
     this.parentalGuideShown = false;
     this.parentalGuideTimer = null;
+    this.parentalGuideExitTimer = null;
     this.skipIntervals = [];
     this.activeSkipInterval = null;
     this.skipIntervalDismissed = false;
@@ -1060,8 +1084,8 @@ export const PlayerScreen = {
     this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
     this.subtitleStyleSettings = {
       ...playerSettings.subtitleStyle,
-      preferredLanguage: String(playerSettings.subtitleStyle?.preferredLanguage || playerSettings.subtitleLanguage || "off"),
-      secondaryPreferredLanguage: String(playerSettings.subtitleStyle?.secondaryPreferredLanguage || playerSettings.secondarySubtitleLanguage || "off")
+      preferredLanguage: extractSubtitleLanguageSetting(playerSettings.subtitleStyle?.preferredLanguage || playerSettings.subtitleLanguage || "off"),
+      secondaryPreferredLanguage: extractSubtitleLanguageSetting(playerSettings.subtitleStyle?.secondaryPreferredLanguage || playerSettings.secondarySubtitleLanguage || "off")
     };
     this.audioAmplificationDb = clamp(Number(playerSettings.audioAmplificationDb || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
     this.persistAudioAmplification = Boolean(playerSettings.persistAudioAmplification);
@@ -1190,11 +1214,13 @@ export const PlayerScreen = {
 
   buildPlaybackIdentityContext() {
     const itemType = normalizeItemType(this.params?.itemType || "movie");
+    const rawImdbId = String(this.params?.imdbId || this.params?.imdb_id || "").trim();
     const rawItemId = String(this.params?.itemId || "").trim();
     const rawVideoId = String(this.params?.videoId || "").trim();
     const season = Number(this.params?.season || 0);
     const episode = Number(this.params?.episode || 0);
     const imdbId = [
+      normalizePlayableImdbId(rawImdbId),
       normalizePlayableImdbId(rawVideoId),
       normalizePlayableImdbId(rawItemId)
     ].find(Boolean) || "";
@@ -1214,9 +1240,6 @@ export const PlayerScreen = {
   },
 
   async fetchParentalGuide() {
-    if (globalThis.document?.body?.classList?.contains("performance-constrained")) {
-      return;
-    }
     const { itemType, imdbId, season, episode } = this.buildPlaybackIdentityContext();
     if (!imdbId) {
       return;
@@ -1231,10 +1254,15 @@ export const PlayerScreen = {
     if (JSON.stringify(this.parentalWarnings || []) === JSON.stringify(warnings)) {
       return;
     }
+    const hasAlreadyShown = Boolean(this.parentalGuideShown);
     this.parentalWarnings = warnings;
-    this.parentalGuideShown = false;
+    if (!hasAlreadyShown) {
+      this.parentalGuideShown = false;
+    }
     this.renderParentalGuideOverlay();
-    this.maybeShowParentalGuideOverlay();
+    if (!hasAlreadyShown) {
+      this.maybeShowParentalGuideOverlay();
+    }
   },
 
   async fetchSkipIntervals() {
@@ -2193,8 +2221,10 @@ export const PlayerScreen = {
           <div class="player-loading-backdrop"${this.params.playerBackdropUrl ? ` style="background-image:url('${this.params.playerBackdropUrl}')"` : ""}></div>
           <div class="player-loading-gradient"></div>
           <div class="player-loading-center">
-            ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
-            <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
+            <div class="player-loading-identity">
+              ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
+              <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
+            </div>
             ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml(this.params.playerSubtitle)}</div>` : ""}
           </div>
         </div>
@@ -2546,15 +2576,10 @@ export const PlayerScreen = {
 
     const meta = this.pauseOverlayMeta || this.buildPauseOverlayMeta();
     const clockText = String(this.lastUiTickState?.clockText || this.uiRefs?.clock?.textContent || "--:--").trim() || "--:--";
-    const endsAtText = String(
-      this.lastUiTickState?.endsAtText
-      || this.uiRefs?.endsAt?.textContent
-      || t("player_ends_at", ["--:--"], "Ends at %1$s")
-    ).trim() || t("player_ends_at", ["--:--"], "Ends at %1$s");
+    const castItems = Array.isArray(meta.cast) ? meta.cast.slice(0, MAX_PAUSE_OVERLAY_CAST) : [];
     overlay.innerHTML = `
       <div class="player-pause-overlay-top">
         <div class="player-pause-overlay-clock">${escapeHtml(clockText)}</div>
-        <div class="player-pause-overlay-ends-at">${escapeHtml(endsAtText)}</div>
       </div>
       <div class="player-pause-overlay-shade"></div>
       <div class="player-pause-overlay-content">
@@ -2563,6 +2588,18 @@ export const PlayerScreen = {
         ${meta.releaseYear || meta.episodeCode ? `<div class="player-pause-meta-line">${escapeHtml([meta.releaseYear, meta.episodeCode].filter(Boolean).join(" • "))}</div>` : ""}
         ${meta.episodeTitle ? `<div class="player-pause-episode-title">${escapeHtml(meta.episodeTitle)}</div>` : ""}
         ${meta.description ? `<div class="player-pause-description">${escapeHtml(meta.description)}</div>` : ""}
+        ${castItems.length ? `
+          <div class="player-pause-cast-section">
+            <div class="player-pause-cast-label">${escapeHtml(t("pause_cast_label", {}, "Cast"))}</div>
+            <div class="player-pause-cast-row">
+              ${castItems.map((member) => `
+                <div class="player-pause-cast-chip">
+                  <span>${escapeHtml(member.name || "")}</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        ` : ""}
       </div>
     `;
   },
@@ -2668,6 +2705,87 @@ export const PlayerScreen = {
     };
   },
 
+  resolveCurrentEpisodeEntry() {
+    if (!Array.isArray(this.episodes) || !this.episodes.length) {
+      return null;
+    }
+    const currentVideoId = String(this.params?.videoId || "").trim();
+    if (currentVideoId) {
+      const byVideoId = this.episodes.find((episode) => String(episode?.id || "") === currentVideoId);
+      if (byVideoId) {
+        return byVideoId;
+      }
+    }
+
+    const currentSeason = Number(this.params?.season || 0);
+    const currentEpisode = Number(this.params?.episode || 0);
+    if (currentSeason <= 0 || currentEpisode <= 0) {
+      return null;
+    }
+    return this.episodes.find((episode) => (
+      Number(episode?.season || 0) === currentSeason
+      && Number(episode?.episode || 0) === currentEpisode
+    )) || null;
+  },
+
+  buildStreamRouteParamsFromPlayer() {
+    const itemType = normalizeItemType(this.params?.itemType || "movie");
+    const currentEpisode = itemType === "series" ? this.resolveCurrentEpisodeEntry() : null;
+    const nextEpisode = itemType === "series" ? this.resolveNextEpisodeInfo() : null;
+    const currentPositionMs = Math.round(this.getPlaybackCurrentSeconds() * 1000);
+    const title = this.params?.playerTitle || this.params?.itemTitle || this.params?.itemId || "Untitled";
+    const backdrop = this.params?.playerBackdropUrl || this.params?.backdrop || this.params?.poster || null;
+    const logo = this.params?.playerLogoUrl || this.params?.logo || null;
+    const videoId = itemType === "series"
+      ? (this.params?.videoId || currentEpisode?.id || null)
+      : (this.params?.videoId || this.params?.itemId || null);
+
+    return {
+      itemId: this.params?.itemId || null,
+      itemType,
+      imdbId: this.params?.imdbId || null,
+      returnToDetail: true,
+      fromDetailRoute: Boolean(this.params?.fromDetailRoute),
+      itemTitle: title,
+      itemSubtitle: itemType === "series" ? "" : (this.params?.playerSubtitle || ""),
+      year: this.params?.playerReleaseYear || this.params?.year || "",
+      backdrop,
+      poster: this.params?.poster || backdrop,
+      logo,
+      parentalWarnings: this.params?.parentalWarnings || null,
+      parentalGuide: this.params?.parentalGuide || null,
+      videoId,
+      season: itemType === "series" ? (this.params?.season ?? currentEpisode?.season ?? null) : null,
+      episode: itemType === "series" ? (this.params?.episode ?? currentEpisode?.episode ?? null) : null,
+      episodeTitle: itemType === "series"
+        ? (this.params?.playerEpisodeTitle || this.params?.playerSubtitle || currentEpisode?.title || "")
+        : "",
+      episodes: Array.isArray(this.episodes) ? this.episodes : [],
+      nextEpisodeVideoId: nextEpisode?.videoId || null,
+      nextEpisodeLabel: nextEpisode?.episodeLabel || null,
+      nextEpisodeSeason: nextEpisode?.season ?? null,
+      nextEpisodeEpisode: nextEpisode?.episode ?? null,
+      nextEpisodeTitle: nextEpisode?.episodeTitle || "",
+      nextEpisodeReleased: nextEpisode?.released || "",
+      resumePositionMs: Number.isFinite(currentPositionMs) && currentPositionMs > 0 ? currentPositionMs : 0
+    };
+  },
+
+  navigateBackToStreamScreen() {
+    if (!this.params?.itemId && !this.params?.videoId) {
+      return false;
+    }
+    if (this.params?.returnToStreamOnBack && Router.historyInitialized) {
+      void Router.back({ skipConsume: true });
+      return true;
+    }
+    void Router.navigate("stream", this.buildStreamRouteParamsFromPlayer(), {
+      skipStackPush: true,
+      replaceHistory: true
+    });
+    return true;
+  },
+
   shouldShowNextEpisodeCard() {
     const nextEpisode = this.resolveNextEpisodeInfo();
     if (!nextEpisode) {
@@ -2759,10 +2877,12 @@ export const PlayerScreen = {
         return;
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
+      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
       Router.navigate("player", {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
         itemType,
+        imdbId: this.params?.imdbId || null,
         videoId: nextEpisode.videoId,
         season: nextEpisode.season,
         episode: nextEpisode.episode,
@@ -2776,6 +2896,8 @@ export const PlayerScreen = {
         streamCandidates: streamItems,
         nextEpisodeVideoId: null,
         nextEpisodeLabel: null
+      }, {
+        replaceHistory: true
       });
     } catch (error) {
       console.warn("Next episode play failed", error);
@@ -5492,7 +5614,7 @@ export const PlayerScreen = {
       return SUBTITLE_LANGUAGE_OFF_KEY;
     }
 
-    const configured = String(settings.subtitleStyle?.preferredLanguage || settings.subtitleLanguage || "off").trim().toLowerCase();
+    const configured = extractSubtitleLanguageSetting(settings.subtitleStyle?.preferredLanguage || settings.subtitleLanguage || "off").trim().toLowerCase();
     if (!configured || configured === "off" || configured === "none" || configured === "forced") {
       return SUBTITLE_LANGUAGE_OFF_KEY;
     }
@@ -7184,21 +7306,49 @@ export const PlayerScreen = {
       return;
     }
 
-    overlay.classList.toggle("hidden", !this.parentalGuideVisible || !this.parentalWarnings.length);
-    if (!this.parentalGuideVisible || !this.parentalWarnings.length) {
+    const shouldRender = (this.parentalGuideVisible || this.parentalGuideExiting) && this.parentalWarnings.length;
+    overlay.classList.toggle("hidden", !shouldRender);
+    overlay.classList.toggle("is-exiting", Boolean(this.parentalGuideExiting));
+    if (!shouldRender) {
       overlay.innerHTML = "";
+      overlay.style.removeProperty("animation-delay");
+      overlay.style.removeProperty("--parental-item-count");
+      overlay.style.removeProperty("--parental-line-height");
+      overlay.style.removeProperty("--parental-line-exit-delay");
+      overlay.style.removeProperty("--parental-container-exit-delay");
       return;
     }
 
+    const total = this.parentalWarnings.length;
+    const lineEnterDelay = PARENTAL_GUIDE_CONTAINER_IN_MS;
+    const firstItemDelay = PARENTAL_GUIDE_CONTAINER_IN_MS + PARENTAL_GUIDE_LINE_IN_MS + PARENTAL_GUIDE_ITEM_STAGGER_MS;
+    const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
+    const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;
+    const viewportWidth = Number(globalThis.innerWidth || 0);
+    const rowHeight = Math.max(30, Math.min(viewportWidth * 0.0205, 40));
+    const rowGap = 5;
+    const lineHeight = (rowHeight * total) + (rowGap * Math.max(0, total - 1));
+    overlay.style.animationDelay = this.parentalGuideExiting ? `${containerExitDelay}ms` : "0ms";
+    overlay.style.setProperty("--parental-item-count", String(total));
+    overlay.style.setProperty("--parental-line-height", `${lineHeight}px`);
+    overlay.style.setProperty("--parental-line-exit-delay", `${lineExitDelay}ms`);
+    overlay.style.setProperty("--parental-container-exit-delay", `${containerExitDelay}ms`);
+    const lineDelay = this.parentalGuideExiting ? lineExitDelay : lineEnterDelay;
     overlay.innerHTML = `
-      <div class="player-parental-line"></div>
+      <div class="player-parental-line" style="animation-delay:${lineDelay}ms;--parental-line-enter-delay:${lineEnterDelay}ms"></div>
       <div class="player-parental-list">
-        ${this.parentalWarnings.map((warning, index) => `
-          <div class="player-parental-item" style="animation-delay:${index * 120}ms">
+        ${this.parentalWarnings.map((warning, index) => {
+          const enterDelay = firstItemDelay + (index * (PARENTAL_GUIDE_ITEM_STAGGER_MS + PARENTAL_GUIDE_ITEM_IN_MS));
+          const exitDelay = PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + ((total - index - 1) * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS));
+          const activeDelay = this.parentalGuideExiting ? exitDelay : enterDelay;
+          return `
+          <div class="player-parental-item" style="animation-delay:${activeDelay}ms;--parental-enter-delay:${enterDelay}ms;--parental-exit-delay:${exitDelay}ms">
             <span class="player-parental-label">${escapeHtml(warning.label)}</span>
+            <span class="player-parental-separator"> · </span>
             <span class="player-parental-severity">${escapeHtml(warning.severity)}</span>
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     `;
   },
@@ -7209,17 +7359,49 @@ export const PlayerScreen = {
     }
 
     this.parentalGuideVisible = true;
+    this.parentalGuideExiting = false;
     this.parentalGuideShown = true;
     this.renderParentalGuideOverlay();
 
     if (this.parentalGuideTimer) {
       clearTimeout(this.parentalGuideTimer);
     }
+    if (this.parentalGuideExitTimer) {
+      clearTimeout(this.parentalGuideExitTimer);
+      this.parentalGuideExitTimer = null;
+    }
 
+    const enterDuration = PARENTAL_GUIDE_CONTAINER_IN_MS
+      + PARENTAL_GUIDE_LINE_IN_MS
+      + (this.parentalWarnings.length * (PARENTAL_GUIDE_ITEM_STAGGER_MS + PARENTAL_GUIDE_ITEM_IN_MS));
     this.parentalGuideTimer = setTimeout(() => {
+      this.hideParentalGuideOverlay();
+    }, enterDuration + PARENTAL_GUIDE_HOLD_MS);
+  },
+
+  hideParentalGuideOverlay() {
+    if (!this.parentalGuideVisible || !this.parentalWarnings.length) {
       this.parentalGuideVisible = false;
+      this.parentalGuideExiting = false;
       this.renderParentalGuideOverlay();
-    }, 5200);
+      return;
+    }
+
+    this.parentalGuideVisible = false;
+    this.parentalGuideExiting = true;
+    this.renderParentalGuideOverlay();
+
+    if (this.parentalGuideExitTimer) {
+      clearTimeout(this.parentalGuideExitTimer);
+    }
+    const total = this.parentalWarnings.length;
+    const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
+    const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;
+    this.parentalGuideExitTimer = setTimeout(() => {
+      this.parentalGuideExiting = false;
+      this.parentalGuideExitTimer = null;
+      this.renderParentalGuideOverlay();
+    }, containerExitDelay + PARENTAL_GUIDE_CONTAINER_OUT_MS);
   },
 
   toggleEpisodePanel() {
@@ -7305,10 +7487,12 @@ export const PlayerScreen = {
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
       const nextEpisode = this.episodes[this.episodePanelIndex + 1] || null;
+      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
       Router.navigate("player", {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
         itemType,
+        imdbId: this.params?.imdbId || null,
         videoId: selected.id,
         season: selected.season ?? null,
         episode: selected.episode ?? null,
@@ -7325,6 +7509,8 @@ export const PlayerScreen = {
         nextEpisodeEpisode: nextEpisode?.episode ?? null,
         nextEpisodeTitle: nextEpisode?.title || "",
         nextEpisodeReleased: nextEpisode?.released || ""
+      }, {
+        replaceHistory: true
       });
     } finally {
       this.switchingEpisode = false;
@@ -7571,17 +7757,8 @@ export const PlayerScreen = {
       return true;
     }
 
-    if (this.controlsVisible && this.nextEpisodeBackExitArmed) {
-      this.nextEpisodeBackExitArmed = false;
-      return false;
-    }
-
-    if (this.controlsVisible) {
-      this.setControlsVisible(false);
-      return true;
-    }
-
-    return false;
+    this.nextEpisodeBackExitArmed = false;
+    return this.navigateBackToStreamScreen();
   },
 
   async onKeyDown(event) {
@@ -7906,10 +8083,12 @@ export const PlayerScreen = {
         return;
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
+      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
       Router.navigate("player", {
         streamUrl: bestStream,
         itemId: this.params?.itemId,
         itemType,
+        imdbId: this.params?.imdbId || null,
         videoId: nextEpisode.videoId,
         season: nextEpisode.season,
         episode: nextEpisode.episode,
@@ -7923,6 +8102,8 @@ export const PlayerScreen = {
         streamCandidates: streamItems,
         nextEpisodeVideoId: null,
         nextEpisodeLabel: null
+      }, {
+        replaceHistory: true
       });
     } catch (error) {
       console.warn("Next episode auto-play failed", error);
@@ -7967,6 +8148,11 @@ export const PlayerScreen = {
       clearTimeout(this.parentalGuideTimer);
       this.parentalGuideTimer = null;
     }
+    if (this.parentalGuideExitTimer) {
+      clearTimeout(this.parentalGuideExitTimer);
+      this.parentalGuideExitTimer = null;
+    }
+    this.parentalGuideExiting = false;
 
     if (this.subtitleSelectionTimer) {
       clearTimeout(this.subtitleSelectionTimer);

@@ -10,7 +10,7 @@ const ALL_KEY = "__all__";
 const MESSAGE_CLEAR_MS = 2400;
 
 export const LIBRARY_SORT_OPTIONS = [
-  { key: LibrarySortOptionKey.DEFAULT, label: "Trakt Order" },
+  { key: LibrarySortOptionKey.DEFAULT, label: "List Order" },
   { key: LibrarySortOptionKey.ADDED_DESC, label: "Added ↓" },
   { key: LibrarySortOptionKey.ADDED_ASC, label: "Added ↑" },
   { key: LibrarySortOptionKey.TITLE_ASC, label: "Title A-Z" },
@@ -252,7 +252,7 @@ export class LibraryController {
   }
 
   getSourceLabel() {
-    return this.state.sourceMode === LibrarySourceMode.TRAKT ? "TRAKT" : "LOCAL";
+    return this.state.sourceMode === LibrarySourceMode.TRAKT ? "SYNCED" : "LOCAL";
   }
 
   getSelectedTypeLabel() {

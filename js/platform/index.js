@@ -104,6 +104,15 @@ export const Platform = {
   },
 
   exitApp() {
+    if (globalThis.document && typeof globalThis.CustomEvent === "function") {
+      const beforeExitEvent = new CustomEvent("nuvio:beforeExitApp", {
+        cancelable: true
+      });
+      globalThis.document.dispatchEvent(beforeExitEvent);
+      if (beforeExitEvent.defaultPrevented) {
+        return false;
+      }
+    }
     return getAdapter().exitApp();
   },
 

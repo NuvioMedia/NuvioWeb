@@ -392,23 +392,24 @@ export const StreamScreen = {
   },
 
   navigateBackFromStream() {
-    if (this.params?.returnToDetail || this.params?.continueWatchingBackHome) {
-      const itemId = String(this.params?.itemId || "").trim();
-      if (!itemId) {
-        return false;
-      }
-      void Router.navigate("detail", {
-        itemId,
-        itemType: normalizeType(this.params?.itemType),
-        fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
-        returnHomeOnBack: true
-      }, {
-        skipStackPush: true,
-        replaceHistory: true
-      });
+    const itemId = String(this.params?.itemId || "").trim();
+    if (!itemId) {
+      return false;
+    }
+    if (this.params?.fromDetailRoute && Router.historyInitialized) {
+      void Router.back({ skipConsume: true });
       return true;
     }
-    return false;
+    void Router.navigate("detail", {
+      itemId,
+      itemType: normalizeType(this.params?.itemType),
+      fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
+      returnHomeOnBack: Boolean(this.params?.continueWatchingBackHome || this.params?.returnHomeOnBack)
+    }, {
+      skipStackPush: true,
+      replaceHistory: true
+    });
+    return true;
   },
 
   consumeBackRequest() {
@@ -463,7 +464,7 @@ export const StreamScreen = {
       return;
     }
 
-    await this.loadStreams();
+    void this.loadStreams();
   },
 
   async loadStreams() {
@@ -854,6 +855,7 @@ export const StreamScreen = {
       streamUrl: targetUrl,
       itemId: this.params?.itemId || null,
       itemType: itemType || "movie",
+      imdbId: this.params?.imdbId || null,
       videoId: this.params?.videoId || null,
       resumePositionMs: Number(this.params?.resumePositionMs || 0) || 0,
       episodeLabel: this.params?.season && this.params?.episode
@@ -871,6 +873,8 @@ export const StreamScreen = {
       episode: this.params?.episode == null ? null : Number(this.params.episode),
       episodes: Array.isArray(this.params?.episodes) ? this.params.episodes : [],
       streamCandidates: filtered,
+      returnToStreamOnBack: true,
+      fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       nextEpisodeVideoId: this.params?.nextEpisodeVideoId || null,
       nextEpisodeLabel: this.params?.nextEpisodeLabel || null,
       nextEpisodeSeason: this.params?.nextEpisodeSeason ?? null,

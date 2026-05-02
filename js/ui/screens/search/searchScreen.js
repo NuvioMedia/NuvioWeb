@@ -19,6 +19,15 @@ import {
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import {
+  activatePosterOption,
+  createPosterOptionsState,
+  getPosterOptions,
+  posterItemFromNode,
+  renderPosterOptionsMenu
+} from "../../components/posterOptionsMenu.js";
+
+const POSTER_HOLD_DELAY_MS = 650;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -309,7 +318,12 @@ export const SearchScreen = {
     this.searchRouteEnterPending = true;
     this.activationGuardUntil = Date.now() + 220;
     this.layoutPrefs = LayoutPreferences.get();
-    this.sidebarProfile = await getSidebarProfileState();
+    try {
+      this.sidebarProfile = await getSidebarProfileState();
+    } catch (err) {
+      console.warn("debug: fail on load", err);
+      this.sidebarProfile = null;
+    }
     this.sidebarExpanded = false;
     this.focusZone = "content";
     this.sidebarFocusIndex = 0;
@@ -324,6 +338,9 @@ export const SearchScreen = {
     this.voiceSearchActive = false;
     this.voiceRecognition = this.voiceRecognition || null;
     this.searchToastTimer = null;
+    this.posterOptionsMenu = null;
+    this.pendingPosterHoldTarget = null;
+    this.pendingPosterHoldTimer = null;
     this.hydrateFromRouteState(navigationContext?.restoredState || null, params);
     if (!navigationContext?.isBackNavigation) {
       this.focusZone = "content";
@@ -343,7 +360,13 @@ export const SearchScreen = {
       return;
     }
     this.renderLoading();
-    await this.reloadRows();
+    try {
+      await this.reloadRows();
+    } catch (err) {
+      console.error("searchScreen: Failed to load rows", err);
+      this.rows = [];
+      this.render(); 
+    }
   },
 
   renderLoading() {
@@ -397,19 +420,36 @@ export const SearchScreen = {
     });
 
     const picked = sections.slice(0, 8);
-    const resolved = await Promise.all(picked.map(async (section) => {
-      const result = await withTimeout(catalogRepository.getCatalog({
-        addonBaseUrl: section.addonBaseUrl,
-        addonId: section.addonId,
-        addonName: section.addonName,
-        catalogId: section.catalogId,
-        catalogName: section.catalogName,
-        type: section.type,
-        skip: 0,
-        supportsSkip: true
-      }), 3500, { status: "error", message: "timeout" });
-      return { ...section, result };
-    }));
+    const resolved = await Promise.all(
+      picked.map(async (section) => {
+        try {
+          const result = await withTimeout(
+            catalogRepository.getCatalog({
+              addonBaseUrl: section.addonBaseUrl,
+              addonId: section.addonId,
+              addonName: section.addonName,
+              catalogId: section.catalogId,
+              catalogName: section.catalogName,
+              type: section.type,
+              skip: 0,
+              supportsSkip: true,
+            }),
+            3500,
+            { status: "error", message: "timeout" },
+          );
+          return { ...section, result };
+        } catch (err) {
+          console.warn(
+            `fail on load catalog ${section.catalogName}:`,
+            err,
+          );
+          return {
+            ...section,
+            result: { status: "error", message: "fetch_failed" },
+          };
+        }
+      }),
+    );
 
     return resolved
       .filter((entry) => entry.result?.status === "success" && entry.result?.data?.items?.length)
@@ -445,20 +485,37 @@ export const SearchScreen = {
       });
     });
 
-    const responses = await Promise.all(searchableCatalogs.slice(0, 14).map(async (catalog) => {
-      const result = await withTimeout(catalogRepository.getCatalog({
-        addonBaseUrl: catalog.addonBaseUrl,
-        addonId: catalog.addonId,
-        addonName: catalog.addonName,
-        catalogId: catalog.catalogId,
-        catalogName: catalog.catalogName,
-        type: catalog.type,
-        skip: 0,
-        extraArgs: { search: query },
-        supportsSkip: true
-      }), 3500, { status: "error", message: "timeout" });
-      return { catalog, result };
-    }));
+    const responses = await Promise.all(
+      searchableCatalogs.slice(0, 14).map(async (catalog) => {
+        try {
+          const result = await withTimeout(
+            catalogRepository.getCatalog({
+              addonBaseUrl: catalog.addonBaseUrl,
+              addonId: catalog.addonId,
+              addonName: catalog.addonName,
+              catalogId: catalog.catalogId,
+              catalogName: catalog.catalogName,
+              type: catalog.type,
+              skip: 0,
+              extraArgs: { search: query },
+              supportsSkip: true,
+            }),
+            3500,
+            { status: "error", message: "timeout" },
+          );
+          return { catalog, result };
+        } catch (err) {
+          console.warn(
+            `fail on search catalog ${catalog.catalogName}:`,
+            err,
+          );
+          return {
+            catalog,
+            result: { status: "error", message: "fetch_failed" },
+          };
+        }
+      }),
+    );
 
     return responses
       .filter(({ result }) => result?.status === "success" && result?.data?.items?.length)
@@ -481,8 +538,8 @@ export const SearchScreen = {
         return `
           <div class="search-empty-state search-empty-state-results">
             <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
-            <h2>No Results</h2>
-            <p>Try searching with different keywords</p>
+            <h2>${escapeHtml(t("search_no_results_title", {}, "No Results"))}</h2>
+            <p>${escapeHtml(t("search_no_results_subtitle", {}, "Try searching with different keywords"))}</p>
           </div>
         `;
       }
@@ -499,6 +556,7 @@ export const SearchScreen = {
 
     return this.rows.map((row, rowIndex) => {
       const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
+      const seeAllLabel = t("action_see_all", {}, "See All");
       return `
       <section class="search-results-row" data-row-key="${escapeHtml(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
@@ -510,6 +568,8 @@ export const SearchScreen = {
                      data-item-id="${item.id || ""}"
                      data-item-type="${item.type || row.type || "movie"}"
                      data-item-title="${item.name || "Untitled"}"
+                     data-poster-src="${escapeHtml(item.poster || "")}"
+                     data-backdrop-src="${escapeHtml(item.background || item.backdrop || item.landscapePoster || "")}"
                      data-row-key="${escapeHtml(rowKey)}">
               <div class="search-result-poster-wrap">
                 ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" loading="lazy" decoding="async" />` : `<div class="search-result-poster placeholder"></div>`}
@@ -531,7 +591,7 @@ export const SearchScreen = {
                      data-row-key="${escapeHtml(rowKey)}">
               <div class="search-seeall-inner">
                 <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
-                <div class="search-seeall-label">See All</div>
+                <div class="search-seeall-label">${escapeHtml(seeAllLabel)}</div>
               </div>
             </article>
           ` : ""}
@@ -582,6 +642,7 @@ export const SearchScreen = {
           ${this.renderRows()}
         </main>
       </div>
+      ${renderPosterOptionsMenu(this.posterOptionsMenu)}
     `;
     this.searchRouteEnterPending = false;
 
@@ -604,6 +665,139 @@ export const SearchScreen = {
       this.restoreContentFocus(shouldFocusResults);
     }
     this.pendingAutoFocusResults = false;
+  },
+
+  isPosterHoldTarget(node) {
+    return node instanceof HTMLElement
+      && node.classList.contains("search-result-card")
+      && String(node.dataset.action || "") === "openDetail";
+  },
+
+  cancelPendingPosterHold() {
+    if (this.pendingPosterHoldTimer) {
+      clearTimeout(this.pendingPosterHoldTimer);
+      this.pendingPosterHoldTimer = null;
+    }
+    this.pendingPosterHoldTarget = null;
+  },
+
+  hasPendingPosterHold(node) {
+    return this.pendingPosterHoldTarget === node && Boolean(this.pendingPosterHoldTimer);
+  },
+
+  startPendingPosterHold(node) {
+    this.cancelPendingPosterHold();
+    if (!this.isPosterHoldTarget(node)) {
+      return;
+    }
+    this.pendingPosterHoldTarget = node;
+    this.pendingPosterHoldTimer = setTimeout(() => {
+      this.pendingPosterHoldTimer = null;
+      const target = this.pendingPosterHoldTarget;
+      this.pendingPosterHoldTarget = null;
+      if (target?.isConnected && target.classList.contains("focused")) {
+        void this.openPosterOptionsMenu(target);
+      }
+    }, POSTER_HOLD_DELAY_MS);
+  },
+
+  completePendingPosterHold(node) {
+    if (!this.pendingPosterHoldTarget) {
+      return false;
+    }
+    const target = this.pendingPosterHoldTarget;
+    const hadTimer = Boolean(this.pendingPosterHoldTimer);
+    this.cancelPendingPosterHold();
+    if (hadTimer && target === node) {
+      this.openDetailFromNode(target);
+    }
+    return true;
+  },
+
+  async openPosterOptionsMenu(node) {
+    const item = posterItemFromNode(node);
+    if (!item?.id) {
+      return false;
+    }
+    this.captureLiveViewState();
+    this.posterOptionsMenu = await createPosterOptionsState(item);
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render();
+    this.applyPosterOptionsFocus();
+    return true;
+  },
+
+  closePosterOptionsMenu() {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const itemId = String(this.posterOptionsMenu.item?.id || "");
+    this.posterOptionsMenu = null;
+    this.render();
+    const target = itemId
+      ? this.container?.querySelector(`.search-result-card.focusable[data-item-id="${escapeSelectorValue(itemId)}"]`)
+      : null;
+    if (target) {
+      this.focusNode(this.container?.querySelector(".focusable.focused"), target);
+    }
+    return true;
+  },
+
+  applyPosterOptionsFocus() {
+    const button = this.container?.querySelector(".hold-menu-button.focusable");
+    if (!button) {
+      return false;
+    }
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (node !== button) node.classList.remove("focused");
+    });
+    button.classList.add("focused");
+    focusWithoutAutoScroll(button);
+    return true;
+  },
+
+  movePosterOptionsFocus(delta) {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const options = getPosterOptions(this.posterOptionsMenu);
+    if (!options.length) {
+      return false;
+    }
+    const currentIndex = Number(this.posterOptionsMenu.optionIndex || 0);
+    this.posterOptionsMenu.optionIndex = Math.max(0, Math.min(options.length - 1, currentIndex + delta));
+    this.render();
+    this.applyPosterOptionsFocus();
+    return true;
+  },
+
+  async activatePosterOptionsMenu() {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const options = getPosterOptions(this.posterOptionsMenu);
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0)))];
+    if (!option) {
+      return false;
+    }
+    const result = await activatePosterOption(this.posterOptionsMenu, option.action);
+    if (result?.type === "details") {
+      this.openDetailFromNode({
+        dataset: {
+          itemId: result.item.id,
+          itemType: result.item.type || "movie",
+          itemTitle: result.item.title || "Untitled"
+        }
+      });
+      return true;
+    }
+    if (result?.type === "updated") {
+      this.posterOptionsMenu = result.state;
+      this.render();
+      this.applyPosterOptionsFocus();
+      return true;
+    }
+    return false;
   },
 
   buildNavigationModel() {
@@ -1032,6 +1226,11 @@ export const SearchScreen = {
     });
   },
 
+  isSearchInputEditingActive() {
+    const input = this.container?.querySelector("#searchInput");
+    return !!input && document.activeElement === input;
+  },
+
   bindActionEvents() {
     this.container?.querySelectorAll("[data-action]").forEach((node) => {
       if (node.__boundActionListeners) return;
@@ -1184,6 +1383,36 @@ export const SearchScreen = {
   },
 
   async onKeyDown(event) {
+    const code = Number(event?.keyCode || 0);
+    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
+    const isPosterHoldTarget = this.isPosterHoldTarget(currentFocusedNode);
+    if (!isPosterHoldTarget || code !== 13) {
+      this.cancelPendingPosterHold();
+    }
+
+    if (this.posterOptionsMenu) {
+      if (Platform.isBackEvent(event)) {
+        event.preventDefault?.();
+        this.closePosterOptionsMenu();
+        return;
+      }
+      if (code === 38 || code === 40) {
+        event.preventDefault?.();
+        this.movePosterOptionsFocus(code === 38 ? -1 : 1);
+        return;
+      }
+      if (code === 13) {
+        event.preventDefault?.();
+        if (this.suppressHoldMenuEnterUntilKeyUp) {
+          return;
+        }
+        await this.activatePosterOptionsMenu();
+        return;
+      }
+      return;
+    }
+
     if (Platform.isBackEvent(event)) {
       event.preventDefault?.();
       if (this.focusZone === "sidebar") {
@@ -1194,7 +1423,13 @@ export const SearchScreen = {
       return;
     }
 
-    const code = Number(event?.keyCode || 0);
+    if (this.isSearchInputEditingActive()) {
+      const navigationKeys = [35, 36, 37, 39];
+      if (navigationKeys.indexOf(code) !== -1) {
+        event.stopPropagation?.();
+        return;
+      }
+    }
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;
@@ -1235,6 +1470,22 @@ export const SearchScreen = {
       }
     }
 
+    const wantsPosterOptionsMenu = isPosterHoldTarget
+      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
+    if (wantsPosterOptionsMenu) {
+      event.preventDefault?.();
+      this.cancelPendingPosterHold();
+      await this.openPosterOptionsMenu(currentFocusedNode);
+      return;
+    }
+    if (code === 13 && isPosterHoldTarget) {
+      event.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingPosterHold(currentFocusedNode)) {
+        this.startPendingPosterHold(currentFocusedNode);
+      }
+      return;
+    }
+
     const dpadResult = this.handleSearchDpad(event);
     if (dpadResult === "sidebar") {
       await this.openSidebar();
@@ -1264,8 +1515,32 @@ export const SearchScreen = {
     }
   },
 
+  onKeyUp(event) {
+    if (this.suppressHoldMenuEnterUntilKeyUp) {
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event?.preventDefault?.();
+        return;
+      }
+    }
+    if (Number(event?.keyCode || 0) !== 13) {
+      return;
+    }
+    const current = this.container?.querySelector(".search-result-card.focusable.focused") || null;
+    if (this.completePendingPosterHold(current)) {
+      event?.preventDefault?.();
+    }
+  },
+
+  consumeBackRequest() {
+    return this.closePosterOptionsMenu();
+  },
+
   cleanup() {
     this.cancelScheduledRender();
+    this.cancelPendingPosterHold();
+    this.posterOptionsMenu = null;
+    this.suppressHoldMenuEnterUntilKeyUp = false;
     if (this.searchToastTimer) {
       clearTimeout(this.searchToastTimer);
       this.searchToastTimer = null;
