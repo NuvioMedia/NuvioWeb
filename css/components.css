@@ -6188,7 +6188,7 @@ button:focus-visible {
 }
 
 .settings-theme-grid-card {
-  overflow: hidden;
+  overflow: visible;
 }
 
 .settings-appearance-group-card {
@@ -6201,7 +6201,8 @@ button:focus-visible {
   display: flex;
   gap: 20px;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: visible;
+  min-height: 188px;
   padding: 8px;
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -6215,6 +6216,7 @@ button:focus-visible {
 .settings-theme-card {
   flex: 0 0 192px;
   width: 192px;
+  height: 172px;
   min-height: 172px;
   border-radius: 36px;
   border: 1px solid transparent;
@@ -6995,7 +6997,7 @@ button:focus-visible {
 }
 
 .settings-profile-card {
-  margin-top: 120px;
+  margin-top: 28px;
 }
 
 .settings-profile-manage-row .settings-row-title {

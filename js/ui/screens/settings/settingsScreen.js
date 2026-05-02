@@ -45,13 +45,13 @@ const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
 const THEME_OPTIONS = [
-  { id: "WHITE", labelKey: "settings.appearance.themes.white", color: "#f5f5f5" },
-  { id: "CRIMSON", labelKey: "settings.appearance.themes.crimson", color: "#e53935" },
-  { id: "OCEAN", labelKey: "settings.appearance.themes.ocean", color: "#1e88e5" },
-  { id: "VIOLET", labelKey: "settings.appearance.themes.violet", color: "#8e24aa" },
-  { id: "EMERALD", labelKey: "settings.appearance.themes.emerald", color: "#43a047" },
-  { id: "AMBER", labelKey: "settings.appearance.themes.amber", color: "#fb8c00" },
-  { id: "ROSE", labelKey: "settings.appearance.themes.rose", color: "#d81b60" }
+  { id: "WHITE", labelKey: "settings.appearance.themes.white", color: "#f5f5f5", onColor: "#111111" },
+  { id: "CRIMSON", labelKey: "settings.appearance.themes.crimson", color: "#e53935", onColor: "#ffffff" },
+  { id: "OCEAN", labelKey: "settings.appearance.themes.ocean", color: "#1e88e5", onColor: "#ffffff" },
+  { id: "VIOLET", labelKey: "settings.appearance.themes.violet", color: "#8e24aa", onColor: "#ffffff" },
+  { id: "EMERALD", labelKey: "settings.appearance.themes.emerald", color: "#43a047", onColor: "#ffffff" },
+  { id: "AMBER", labelKey: "settings.appearance.themes.amber", color: "#fb8c00", onColor: "#ffffff" },
+  { id: "ROSE", labelKey: "settings.appearance.themes.rose", color: "#d81b60", onColor: "#ffffff" }
 ];
 
 const FONT_OPTIONS = [
@@ -61,19 +61,30 @@ const FONT_OPTIONS = [
 ];
 
 const APP_LANGUAGE_NATIVE_LABELS = {
+  ar: "Arabic",
+  bs: "Bosnian",
+  cs: "Cestina",
+  de: "Deutsch",
   en: "English",
+  el: "Greek",
   es: "Espanol",
   fr: "Francais",
+  he: "Hebrew",
   hi: "Hindi",
   hu: "Magyar",
   it: "Italiano",
   ja: "Japanese",
+  lt: "Lietuviu",
   nl: "Nederlands",
+  no: "Norsk",
   pl: "Polski",
+  pt: "Portugues",
   ro: "Romana",
+  ru: "Russian",
   se: "Svenska",
   sk: "Slovencina",
   sl: "Slovenscina",
+  sv: "Svenska",
   tr: "Turkce",
   vi: "Tieng Viet"
 };
@@ -984,11 +995,10 @@ export const SettingsScreen = {
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-theme-swatch-wrap">
           <span class="settings-theme-swatch${swatchClass}" style="background:${escapeHtml(theme.color)};">
-            ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
+            ${selected ? `<span class="settings-theme-check-wrap" style="color:${escapeHtml(theme.onColor || "#fff")};">${iconSvg(ROW_ICONS.check, "settings-theme-check")}</span>` : ""}
           </span>
         </span>
         <span class="settings-theme-name">${escapeHtml(translateOptionLabel(theme))}</span>
-        <span class="settings-theme-underline" style="background:${escapeHtml(theme.color)};"></span>
       </button>
     `;
   },
@@ -1290,11 +1300,11 @@ export const SettingsScreen = {
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "profiles"))}
-      <div class="settings-group-card settings-group-card-fill">
+      <div class="settings-group-card settings-profile-card">
         <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "profiles:manage",
-      title: t("settings.profiles.manageProfiles"),
+      title: t("profile_manage_button", {}, "Manage Profiles"),
       subtitle: "",
       icon: null,
       classes: "settings-profile-manage-row"
@@ -1314,10 +1324,11 @@ export const SettingsScreen = {
 
     this.actionMap.set("appearance:font", () => {
       this.openOptionDialog({
-        title: t("settings.dialogs.selectFont"),
+        title: t("appearance_font_dialog_title", {}, "Choose Font"),
         options: FONT_OPTIONS,
         selectedId: model.theme.fontFamily,
         returnFocusKey: "appearance:font",
+        dialogClassName: "settings-appearance-dialog",
         onSelect: (option) => {
           ThemeStore.set({ fontFamily: option.id });
           ThemeManager.apply();
@@ -1327,10 +1338,11 @@ export const SettingsScreen = {
 
     this.actionMap.set("appearance:language", () => {
       this.openOptionDialog({
-        title: t("settings.dialogs.selectLanguage"),
+        title: t("appearance_language_dialog_title", {}, "Choose Language"),
         options: LANGUAGE_OPTIONS,
         selectedId: model.theme.language,
         returnFocusKey: "appearance:language",
+        dialogClassName: "settings-appearance-dialog",
         onSelect: async (option) => {
           ThemeStore.set({ language: option.id });
           await I18n.init();
@@ -1339,34 +1351,62 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("appearance:amoled", () => {
+      const nextAmoled = !Boolean(ThemeStore.get().amoledMode);
+      ThemeStore.set({
+        amoledMode: nextAmoled,
+        amoledSurfacesMode: nextAmoled ? Boolean(ThemeStore.get().amoledSurfacesMode) : false
+      });
+      ThemeManager.apply();
+    });
+    this.actionMap.set("appearance:amoledSurfaces", () => {
+      ThemeStore.set({ amoledSurfacesMode: !Boolean(ThemeStore.get().amoledSurfacesMode) });
+      ThemeManager.apply();
+    });
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "appearance"))}
-      <div class="settings-group-card settings-theme-grid-card">
-        <div class="settings-theme-grid">
+      <div class="settings-group-card settings-appearance-group-card settings-theme-grid-card">
+        <div class="settings-group-heading">
+          <div class="settings-group-title">${escapeHtml(t("appearance_color_theme", {}, "Color Theme"))}</div>
+          <div class="settings-group-subtitle">${escapeHtml(t("appearance_color_theme_subtitle", {}, "Pick the accent color used across the app"))}</div>
+        </div>
+        <div class="settings-theme-row">
           ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
       theme,
       String(model.theme.themeName).toUpperCase() === theme.id,
       `appearance:theme:${theme.id}`
     )).join("")}
         </div>
+        ${this.renderToggleRow({
+      focusKey: "appearance:amoled",
+      title: t("appearance_amoled_mode", {}, "AMOLED Mode"),
+      subtitle: t("appearance_amoled_mode_subtitle", {}, "Use pure black for app backgrounds"),
+      checked: Boolean(model.theme.amoledMode)
+    })}
+        ${model.theme.amoledMode ? this.renderToggleRow({
+      focusKey: "appearance:amoledSurfaces",
+      title: t("appearance_amoled_surfaces_mode", {}, "Pure Black Surfaces"),
+      subtitle: t("appearance_amoled_surfaces_mode_subtitle", {}, "Also make cards, panels, and containers pure black"),
+      checked: Boolean(model.theme.amoledSurfacesMode)
+    }) : ""}
       </div>
-      <div class="settings-group-card">
+      <div class="settings-group-card settings-appearance-group-card">
+        <div class="settings-group-heading">
+          <div class="settings-group-title">${escapeHtml(t("appearance_font_and_language", {}, "Font and Language"))}</div>
+          <div class="settings-group-subtitle">${escapeHtml(t("appearance_font_and_language_subtitle", {}, "Choose the typeface and locale used throughout the app"))}</div>
+        </div>
         <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "appearance:font",
-      title: t("settings.appearance.appFont"),
-      subtitle: t("settings.appearance.appFontSubtitle"),
+      title: t("appearance_font", {}, "App Font"),
+      subtitle: t("appearance_font_subtitle", {}, "Choose your preferred font"),
       value: labelForFont(model.theme.fontFamily)
     })}
-        </div>
-      </div>
-      <div class="settings-group-card">
-        <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "appearance:language",
-      title: t("settings.appearance.appLanguage"),
-      subtitle: t("settings.appearance.appLanguageSubtitle"),
+      title: t("appearance_language", {}, "App Language"),
+      subtitle: t("appearance_language_subtitle", {}, "Override system language"),
       value: labelForLanguage(model.theme.language)
     })}
         </div>
