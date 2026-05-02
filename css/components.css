@@ -7821,9 +7821,11 @@
   left: 32px;
   top: 24px;
   z-index: 34;
+  --parental-row-height: clamp(30px, 2.05vw, 40px);
+  --parental-row-gap: 5px;
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 14px;
   opacity: 0;
   animation: playerParentalContainerIn 300ms ease both;
 }
@@ -7841,10 +7843,10 @@
 }
 
 .player-parental-line {
-  width: 3px;
-  border-radius: 1px;
+  width: 4px;
+  height: calc((var(--parental-row-height) * var(--parental-item-count, 1)) + (var(--parental-row-gap) * (var(--parental-item-count, 1) - 1)));
+  border-radius: 3px;
   background: var(--secondary-color);
-  align-self: stretch;
   transform: scaleY(0);
   transform-origin: top;
   animation: playerParentalLineIn 400ms cubic-bezier(0.4, 0, 0.2, 1) both;
@@ -7860,11 +7862,11 @@
 .player-parental-list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--parental-row-gap);
 }
 
 .player-parental-item {
-  height: 18px;
+  height: var(--parental-row-height);
   padding: 0;
   display: flex;
   align-items: center;
@@ -7874,32 +7876,32 @@
   border: none;
   color: rgba(255, 255, 255, 0.85);
   opacity: 0;
-  animation: playerParentalItemIn 200ms ease both;
+  animation: playerParentalItemIn 200ms cubic-bezier(0.4, 0, 0.2, 1) both;
   animation-delay: var(--parental-enter-delay, 0ms);
 }
 
 .player-parental-guide.is-exiting .player-parental-item {
-  animation: playerParentalItemOut 150ms ease both;
+  animation: playerParentalItemOut 150ms cubic-bezier(0.4, 0, 0.2, 1) both;
   animation-delay: var(--parental-exit-delay, 0ms);
 }
 
 .player-parental-label {
-  font-size: 11px;
-  line-height: 18px;
-  font-weight: 600;
+  font-size: clamp(19px, 1.25vw, 25px);
+  line-height: clamp(30px, 2.05vw, 40px);
+  font-weight: 700;
   color: rgba(255, 255, 255, 0.85);
 }
 
 .player-parental-separator {
-  font-size: 11px;
-  line-height: 18px;
+  font-size: clamp(19px, 1.25vw, 25px);
+  line-height: clamp(30px, 2.05vw, 40px);
   color: rgba(255, 255, 255, 0.4);
 }
 
 .player-parental-severity {
-  font-size: 11px;
-  line-height: 18px;
-  font-weight: 400;
+  font-size: clamp(18px, 1.18vw, 24px);
+  line-height: clamp(30px, 2.05vw, 40px);
+  font-weight: 500;
   color: rgba(255, 255, 255, 0.5);
 }
 

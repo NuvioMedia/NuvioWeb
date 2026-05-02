@@ -659,6 +659,17 @@ function normalizeSubtitleLanguageKey(value) {
   return cleaned ? cleaned.toLowerCase() : SUBTITLE_LANGUAGE_UNKNOWN_KEY;
 }
 
+function extractSubtitleLanguageSetting(value, fallback = SUBTITLE_LANGUAGE_OFF_KEY) {
+  if (value && typeof value === "object") {
+    return extractSubtitleLanguageSetting(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
+  }
+  const code = cleanDisplayText(value);
+  if (!code || code.toLowerCase() === "[object object]") {
+    return fallback;
+  }
+  return code;
+}
+
 function subtitleLanguageLabel(languageKey) {
   if (languageKey === SUBTITLE_LANGUAGE_OFF_KEY) {
     return t("subtitle_none", {}, "Off");
@@ -1073,8 +1084,8 @@ export const PlayerScreen = {
     this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
     this.subtitleStyleSettings = {
       ...playerSettings.subtitleStyle,
-      preferredLanguage: String(playerSettings.subtitleStyle?.preferredLanguage || playerSettings.subtitleLanguage || "off"),
-      secondaryPreferredLanguage: String(playerSettings.subtitleStyle?.secondaryPreferredLanguage || playerSettings.secondarySubtitleLanguage || "off")
+      preferredLanguage: extractSubtitleLanguageSetting(playerSettings.subtitleStyle?.preferredLanguage || playerSettings.subtitleLanguage || "off"),
+      secondaryPreferredLanguage: extractSubtitleLanguageSetting(playerSettings.subtitleStyle?.secondaryPreferredLanguage || playerSettings.secondarySubtitleLanguage || "off")
     };
     this.audioAmplificationDb = clamp(Number(playerSettings.audioAmplificationDb || 0), AUDIO_AMPLIFICATION_MIN_DB, AUDIO_AMPLIFICATION_MAX_DB);
     this.persistAudioAmplification = Boolean(playerSettings.persistAudioAmplification);
@@ -2734,6 +2745,7 @@ export const PlayerScreen = {
       itemType,
       imdbId: this.params?.imdbId || null,
       returnToDetail: true,
+      fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       itemTitle: title,
       itemSubtitle: itemType === "series" ? "" : (this.params?.playerSubtitle || ""),
       year: this.params?.playerReleaseYear || this.params?.year || "",
@@ -2762,6 +2774,10 @@ export const PlayerScreen = {
   navigateBackToStreamScreen() {
     if (!this.params?.itemId && !this.params?.videoId) {
       return false;
+    }
+    if (this.params?.returnToStreamOnBack && Router.historyInitialized) {
+      void Router.back({ skipConsume: true });
+      return true;
     }
     void Router.navigate("stream", this.buildStreamRouteParamsFromPlayer(), {
       skipStackPush: true,
@@ -5598,7 +5614,7 @@ export const PlayerScreen = {
       return SUBTITLE_LANGUAGE_OFF_KEY;
     }
 
-    const configured = String(settings.subtitleStyle?.preferredLanguage || settings.subtitleLanguage || "off").trim().toLowerCase();
+    const configured = extractSubtitleLanguageSetting(settings.subtitleStyle?.preferredLanguage || settings.subtitleLanguage || "off").trim().toLowerCase();
     if (!configured || configured === "off" || configured === "none" || configured === "forced") {
       return SUBTITLE_LANGUAGE_OFF_KEY;
     }
@@ -7295,6 +7311,8 @@ export const PlayerScreen = {
     overlay.classList.toggle("is-exiting", Boolean(this.parentalGuideExiting));
     if (!shouldRender) {
       overlay.innerHTML = "";
+      overlay.style.removeProperty("animation-delay");
+      overlay.style.removeProperty("--parental-item-count");
       overlay.style.removeProperty("--parental-line-exit-delay");
       overlay.style.removeProperty("--parental-container-exit-delay");
       return;
@@ -7305,18 +7323,26 @@ export const PlayerScreen = {
     const firstItemDelay = PARENTAL_GUIDE_CONTAINER_IN_MS + PARENTAL_GUIDE_LINE_IN_MS + PARENTAL_GUIDE_ITEM_STAGGER_MS;
     const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
     const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;
+    overlay.style.animationDelay = this.parentalGuideExiting ? `${containerExitDelay}ms` : "0ms";
+    overlay.style.setProperty("--parental-item-count", String(total));
     overlay.style.setProperty("--parental-line-exit-delay", `${lineExitDelay}ms`);
     overlay.style.setProperty("--parental-container-exit-delay", `${containerExitDelay}ms`);
+    const lineDelay = this.parentalGuideExiting ? lineExitDelay : lineEnterDelay;
     overlay.innerHTML = `
-      <div class="player-parental-line" style="--parental-line-enter-delay:${lineEnterDelay}ms"></div>
+      <div class="player-parental-line" style="animation-delay:${lineDelay}ms;--parental-line-enter-delay:${lineEnterDelay}ms"></div>
       <div class="player-parental-list">
-        ${this.parentalWarnings.map((warning, index) => `
-          <div class="player-parental-item" style="--parental-enter-delay:${firstItemDelay + (index * (PARENTAL_GUIDE_ITEM_STAGGER_MS + PARENTAL_GUIDE_ITEM_IN_MS))}ms;--parental-exit-delay:${(total - index - 1) * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)}ms">
+        ${this.parentalWarnings.map((warning, index) => {
+          const enterDelay = firstItemDelay + (index * (PARENTAL_GUIDE_ITEM_STAGGER_MS + PARENTAL_GUIDE_ITEM_IN_MS));
+          const exitDelay = PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + ((total - index - 1) * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS));
+          const activeDelay = this.parentalGuideExiting ? exitDelay : enterDelay;
+          return `
+          <div class="player-parental-item" style="animation-delay:${activeDelay}ms;--parental-enter-delay:${enterDelay}ms;--parental-exit-delay:${exitDelay}ms">
             <span class="player-parental-label">${escapeHtml(warning.label)}</span>
             <span class="player-parental-separator"> · </span>
             <span class="player-parental-severity">${escapeHtml(warning.severity)}</span>
           </div>
-        `).join("")}
+        `;
+        }).join("")}
       </div>
     `;
   },

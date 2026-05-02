@@ -396,6 +396,10 @@ export const StreamScreen = {
     if (!itemId) {
       return false;
     }
+    if (this.params?.fromDetailRoute && Router.historyInitialized) {
+      void Router.back({ skipConsume: true });
+      return true;
+    }
     void Router.navigate("detail", {
       itemId,
       itemType: normalizeType(this.params?.itemType),
@@ -869,6 +873,8 @@ export const StreamScreen = {
       episode: this.params?.episode == null ? null : Number(this.params.episode),
       episodes: Array.isArray(this.params?.episodes) ? this.params.episodes : [],
       streamCandidates: filtered,
+      returnToStreamOnBack: true,
+      fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       nextEpisodeVideoId: this.params?.nextEpisodeVideoId || null,
       nextEpisodeLabel: this.params?.nextEpisodeLabel || null,
       nextEpisodeSeason: this.params?.nextEpisodeSeason ?? null,

@@ -5,6 +5,7 @@ import { ProfileManager } from "./profileManager.js";
 
 const PULL_RPC = "sync_pull_library";
 const PUSH_RPC = "sync_push_library";
+const PULL_PAGE_SIZE = 500;
 
 function resolveProfileId() {
   const raw = Number(ProfileManager.getActiveProfileId() || 1);
@@ -16,7 +17,7 @@ function resolveProfileId() {
 
 function mapRemoteItem(row = {}) {
   const contentId = row.content_id || row.contentId || row.id || "";
-  const updatedAtRaw = row.updated_at || row.updatedAt || row.created_at || row.createdAt || null;
+  const updatedAtRaw = row.added_at || row.addedAt || row.updated_at || row.updatedAt || row.created_at || row.createdAt || null;
   const updatedAt = Number(updatedAtRaw);
   return {
     contentId,
@@ -78,7 +79,8 @@ function toRemoteItem(item = {}) {
     release_info: item.releaseInfo || "",
     imdb_rating: item.imdbRating == null ? null : Number(item.imdbRating),
     genres: Array.isArray(item.genres) ? item.genres : [],
-    addon_base_url: item.addonBaseUrl || null
+    addon_base_url: item.addonBaseUrl || null,
+    added_at: Number(item.updatedAt || item.addedAt || Date.now())
   };
 }
 
@@ -89,8 +91,21 @@ export const SavedLibrarySyncService = {
       if (!AuthManager.isAuthenticated) {
         return [];
       }
+      const profileId = resolveProfileId();
       const localItems = await savedLibraryRepository.getAll(1000);
-      const rows = await SupabaseApi.rpc(PULL_RPC, { p_profile_id: resolveProfileId() }, true);
+      const rows = [];
+      for (let offset = 0; ; offset += PULL_PAGE_SIZE) {
+        const page = await SupabaseApi.rpc(PULL_RPC, {
+          p_profile_id: profileId,
+          p_limit: PULL_PAGE_SIZE,
+          p_offset: offset
+        }, true);
+        const pageRows = Array.isArray(page) ? page : [];
+        rows.push(...pageRows);
+        if (pageRows.length < PULL_PAGE_SIZE) {
+          break;
+        }
+      }
       const remoteItems = (rows || [])
         .map((row) => mapRemoteItem(row))
         .filter((item) => Boolean(item.contentId));
