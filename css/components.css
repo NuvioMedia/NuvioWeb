@@ -3826,10 +3826,10 @@ button:focus-visible {
   --home-track-end: 200px;
   --home-continue-track-end: 48px;
   --home-poster-width: 232px;
-  --home-poster-radius: 12px;
+  --home-poster-radius: 24px;
   --home-continue-width: 432px;
   --home-continue-height: 243px;
-  background: #000;
+  background: #0D0D0D;
   color: #fff;
 }
 
@@ -3857,7 +3857,7 @@ button:focus-visible {
   min-height: 400px;
   border: none;
   border-radius: 0;
-  background: #000;
+  background: #0D0D0D;
   overflow: hidden;
 }
 
@@ -4034,9 +4034,21 @@ button:focus-visible {
   margin-bottom: 32px;
 }
 
+.home-screen-shell.home-layout-modern .home-row {
+  margin-bottom: 48px;
+}
+
+.home-screen-shell.home-layout-classic .home-row {
+  margin-bottom: 64px;
+}
+
 .home-screen-shell .home-row-head {
   margin-bottom: 12px;
   padding-left: var(--home-content-start);
+}
+
+.home-screen-shell.home-layout-modern .home-row-head {
+  margin-bottom: 28px;
 }
 
 .home-screen-shell .home-row-title {
@@ -4780,7 +4792,7 @@ button:focus-visible {
   --home-track-end: 24px;
   --home-continue-track-end: 24px;
   --home-poster-width: 232px;
-  --home-poster-radius: 12px;
+  --home-poster-radius: 24px;
   --home-continue-width: 330px;
   --home-continue-height: 186px;
 }
@@ -4934,10 +4946,10 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern {
-  --home-content-start: 52px;
-  --home-row-gap: 12px;
-  --home-track-end: 52px;
-  --home-continue-track-end: 52px;
+  --home-content-start: 104px;
+  --home-row-gap: 24px;
+  --home-track-end: 104px;
+  --home-continue-track-end: 104px;
   --modern-rows-viewport-height: 52%;
   --modern-rows-page-height: 56vh;
   --modern-hero-media-width: 72%;
@@ -4959,23 +4971,23 @@ button:focus-visible {
   --home-modern-portrait-poster-width: var(--home-poster-width);
   --home-modern-portrait-poster-height: calc(var(--home-modern-portrait-poster-width) * 1.5);
   --home-modern-portrait-expanded-width: calc(var(--home-modern-portrait-poster-width) * 2.66);
-  --home-poster-width: 224px;
+  --home-poster-width: 212px;
   --home-poster-height: calc(var(--home-poster-width) * 1.5);
   --home-landscape-poster-width: calc(var(--home-poster-width) * 1.5);
   --home-landscape-poster-height: calc(var(--home-landscape-poster-width) * 0.5625);
   --home-poster-expanded-width: calc(var(--home-poster-width) * 2.66);
   --home-poster-copy-height: 74px;
-  --home-poster-radius: 12px;
-  --home-continue-width: 520px;
-  --home-continue-height: 293px;
+  --home-poster-radius: 24px;
+  --home-continue-width: 419px;
+  --home-continue-height: 236px;
 }
 
 .home-screen-shell.home-layout-modern.home-modern-landscape-posters {
-  --home-row-gap: 16px;
+  --home-row-gap: 24px;
   --modern-rows-viewport-height: 50%;
-  --home-landscape-poster-width: 336px;
-  --home-landscape-poster-height: 189px;
-  --home-poster-radius: 16px;
+  --home-landscape-poster-width: 419px;
+  --home-landscape-poster-height: 236px;
+  --home-poster-radius: 24px;
 }
 
 .home-screen-shell.home-layout-modern .home-hero,
@@ -5004,36 +5016,31 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
+  /* Horizontal gradient: spans ~45% of media width (ATV ModernHeroGradientLayer exact stops) */
   background:
     linear-gradient(
       90deg,
-      #000 0%,
-      rgba(0, 0, 0, 0.94) 18%,
-      rgba(0, 0, 0, 0.72) 38%,
-      rgba(0, 0, 0, 0.28) 58%,
-      rgba(0, 0, 0, 0.08) 78%,
-      rgba(0, 0, 0, 0) 100%
-    ),
-    linear-gradient(
-      180deg,
-      rgba(0, 0, 0, 0.34) 0%,
-      rgba(0, 0, 0, 0.16) 18%,
-      rgba(0, 0, 0, 0.04) 34%,
-      rgba(0, 0, 0, 0) 54%
-    ),
-    radial-gradient(circle at 58% 50%, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 42%),
-    linear-gradient(
-      115deg,
-      rgba(0, 0, 0, 0.16) 0%,
-      rgba(0, 0, 0, 0.06) 38%,
-      rgba(0, 0, 0, 0.02) 72%,
-      rgba(0, 0, 0, 0) 100%
+      #0d0d0d 0%,
+      rgba(13, 13, 13, 0.86) 22%,
+      rgba(13, 13, 13, 0.56) 46%,
+      rgba(13, 13, 13, 0.16) 76%,
+      transparent 100%
     );
+  /* Restrict to left 45% so the right side of the image stays unobscured */
+  width: 45%;
+  right: auto;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
+  /* Vertical bottom strip: starts at 82% height (ATV ModernHeroGradientLayer exact stops) */
   background:
-    linear-gradient(180deg, transparent 88%, rgba(0, 0, 0, 0.18) 93%, rgba(0, 0, 0, 0.58) 97%, #000 100%);
+    linear-gradient(180deg,
+      transparent 0%,
+      transparent 82%,
+      rgba(13, 13, 13, 0.25) 89.2%,
+      rgba(13, 13, 13, 0.65) 95.5%,
+      #0d0d0d 100%
+    );
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop-wrap,
@@ -5144,10 +5151,10 @@ button:focus-visible {
   margin-top: 0;
   width: min(100%, var(--modern-hero-meta-max-width));
   max-width: min(100%, var(--modern-hero-meta-max-width));
-  color: rgba(255, 255, 255, 0.84);
+  color: #b3b3b3;
   font-size: var(--modern-hero-meta-size);
   line-height: 1.25;
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-group {
@@ -5220,9 +5227,11 @@ button:focus-visible {
   min-height: 0;
   margin-top: 0;
   max-width: min(100%, var(--modern-hero-description-max-width));
-  display: block;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
   overflow: hidden;
-  color: rgba(255, 255, 255, 0.8);
+  color: #ffffff;
   font-size: var(--modern-hero-description-size);
   line-height: 1.45;
 }
@@ -5342,7 +5351,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-poster-card:not(.is-landscape),
 .home-screen-shell.home-layout-modern .home-seeall-card {
-  --home-poster-radius: 18px;
+  --home-poster-radius: 24px;
   flex-basis: var(--home-modern-portrait-poster-width);
   min-width: var(--home-modern-portrait-poster-width);
   max-width: var(--home-modern-portrait-poster-width);
@@ -5518,7 +5527,7 @@ button:focus-visible {
   width: 100%;
   height: var(--home-poster-height);
   aspect-ratio: auto;
-  border-radius: 12px;
+  border-radius: var(--home-poster-radius);
   transition: height 180ms ease-out, border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 
@@ -5544,17 +5553,7 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-poster-copy {
-  padding: 8px 4px 0;
-}
-
-.home-screen-shell.home-layout-modern .home-poster-title {
-  font-size: 16px;
-  line-height: 1.25;
-}
-
-.home-screen-shell.home-layout-modern .home-poster-subtitle {
-  font-size: 12px;
-  line-height: 1.33;
+  display: none;
 }
 
 .settings-shell {
@@ -5571,18 +5570,18 @@ button:focus-visible {
 }
 
 .settings-workspace {
-  flex: 1;
-  width: min(1720px, calc(100% - 80px));
+  flex: 0 0 auto;
+  width: calc(100vw - var(--legacy-sidebar-rail-width) - 64px);
   height: calc(100vh - 96px);
-  margin: 48px auto;
+  margin: 48px 64px 48px var(--legacy-sidebar-rail-width);
   min-width: 0;
   min-height: 0;
-  border-radius: 42px;
+  border-radius: 56px;
   border: 1px solid var(--border-color);
   background: var(--bg-elevated);
   padding: 40px;
   display: grid;
-  grid-template-columns: 442px minmax(0, 1fr);
+  grid-template-columns: 440px minmax(0, 1fr);
   gap: 32px;
 }
 
@@ -5618,7 +5617,7 @@ button:focus-visible {
 
 .settings-nav-item {
   min-height: 112px;
-  padding: 0 32px;
+  padding: 0 36px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: var(--bg-color);
@@ -5633,6 +5632,7 @@ button:focus-visible {
 .settings-nav-item.focused {
   background: var(--card-bg);
   color: #fff;
+  font-weight: 600;
 }
 
 .settings-nav-item.selected {
@@ -5651,7 +5651,7 @@ button:focus-visible {
 }
 
 .settings-nav-label {
-  font-size: 28px;
+  font-size: 32px;
   font-weight: 400;
   line-height: 1;
 }
@@ -5665,12 +5665,12 @@ button:focus-visible {
 
 .settings-nav-badge {
   flex: 0 0 auto;
-  padding: 6px 12px;
+  padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   background: rgba(255, 255, 255, 0.08);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 24px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -5700,8 +5700,8 @@ button:focus-visible {
 }
 
 .settings-nav-icon-image {
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
   filter: brightness(0) saturate(100%) invert(76%) sepia(0%) saturate(0%) hue-rotate(184deg) brightness(96%) contrast(90%);
 }
@@ -5715,8 +5715,8 @@ button:focus-visible {
 .settings-row-icon,
 .settings-plugin-add-icon,
 .settings-plugin-icon-symbol {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -5731,7 +5731,7 @@ button:focus-visible {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 24px;
   overflow-y: auto;
   padding-right: 2px;
   scrollbar-width: none;
@@ -5762,15 +5762,15 @@ button:focus-visible {
 .settings-content-header {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   padding: 6px 0 6px;
 }
 
 .settings-title {
   margin: 0;
   color: #fff;
-  font-size: 54px;
-  font-weight: 500;
+  font-size: 48px;
+  font-weight: 600;
   line-height: 1.04;
   letter-spacing: -0.04em;
 }
@@ -5778,16 +5778,16 @@ button:focus-visible {
 .settings-subtitle {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 24px;
+  font-size: 28px;
   font-weight: 400;
   line-height: 1.2;
 }
 
 .settings-group-card {
-  border-radius: 34px;
+  border-radius: 36px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
-  padding: 24px;
+  padding: 28px;
 }
 
 .settings-group-card-fill {
@@ -5806,7 +5806,7 @@ button:focus-visible {
 .settings-stack {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .settings-account-note {
@@ -5841,9 +5841,9 @@ button:focus-visible {
 }
 
 .settings-action-row {
-  min-height: 126px;
+  min-height: 124px;
   width: 100%;
-  padding: 18px 32px;
+  padding: 24px 36px;
   border-radius: 999px;
   border: 1px solid transparent;
   background: var(--bg-color);
@@ -5851,7 +5851,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 18px;
+  gap: 24px;
   text-align: left;
 }
 
@@ -5876,19 +5876,19 @@ button:focus-visible {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .settings-row-title {
   color: #fff;
-  font-size: 28px;
-  font-weight: 500;
+  font-size: 32px;
+  font-weight: 400;
   line-height: 1.1;
 }
 
 .settings-row-subtitle {
   color: var(--text-secondary);
-  font-size: 20px;
+  font-size: 24px;
   font-weight: 400;
   line-height: 1.18;
 }
@@ -5896,25 +5896,25 @@ button:focus-visible {
 .settings-row-tail {
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: 20px;
   color: var(--text-secondary);
   flex: 0 0 auto;
 }
 
 .settings-row-badge {
-  padding: 8px 14px;
+  padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid var(--border-color);
   background: var(--bg-elevated);
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .settings-row-value {
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1;
 }
 
@@ -5926,19 +5926,18 @@ button:focus-visible {
   width: 92px;
   height: 48px;
   border-radius: 999px;
-  background: linear-gradient(135deg, rgb(var(--bg-elevated-rgb) / 0.95) 0%, rgb(var(--card-bg-rgb) / 0.96) 100%);
+  background: var(--border-color);
   display: inline-flex;
   align-items: center;
   justify-content: flex-start;
   padding: 4px;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.08), inset 0 -3px 10px rgba(0, 0, 0, 0.28);
-  transition: background 160ms ease, box-shadow 160ms ease;
+  transition: background 160ms ease;
+  flex-shrink: 0;
 }
 
 .settings-toggle-pill.is-checked {
   justify-content: flex-end;
-  background: linear-gradient(135deg, rgb(var(--secondary-color-rgb) / 0.34) 0%, rgb(var(--secondary-color-rgb) / 0.24) 100%);
-  box-shadow: inset 0 1px 0 rgb(var(--focus-color-rgb) / 0.22), 0 0 18px rgb(var(--secondary-color-rgb) / 0.2);
+  background: rgb(var(--secondary-color-rgb) / 0.35);
 }
 
 .settings-toggle-thumb {
@@ -5946,12 +5945,6 @@ button:focus-visible {
   height: 40px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.28);
-  transition: box-shadow 160ms ease;
-}
-
-.settings-toggle-pill.is-checked .settings-toggle-thumb {
-  box-shadow: 0 4px 12px rgb(var(--secondary-color-rgb) / 0.18), 0 0 10px rgb(var(--focus-color-rgb) / 0.18);
 }
 
 .settings-theme-grid-card {
@@ -6043,55 +6036,55 @@ button:focus-visible {
 }
 
 .settings-subsection-card {
-  border-radius: 24px;
-  padding: 18px;
+  border-radius: 36px;
+  padding: 28px;
 }
 
 .settings-collapsible-trigger,
 .settings-subsection-card .settings-action-row {
-  min-height: 126px;
-  padding: 18px 32px;
+  min-height: 124px;
+  padding: 24px 36px;
   border-radius: 999px;
   background: var(--bg-color);
-  gap: 18px;
+  gap: 24px;
 }
 
 .settings-collapsible-trigger .settings-row-copy,
 .settings-subsection-card .settings-row-copy {
-  gap: 6px;
+  gap: 4px;
 }
 
 .settings-collapsible-trigger .settings-row-title,
 .settings-subsection-card .settings-row-title {
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1.15;
 }
 
 .settings-collapsible-trigger .settings-row-subtitle,
 .settings-subsection-card .settings-row-subtitle {
-  font-size: 20px;
+  font-size: 24px;
   line-height: 1.2;
 }
 
 .settings-collapsible-trigger .settings-row-tail,
 .settings-subsection-card .settings-row-tail {
-  gap: 18px;
+  gap: 20px;
 }
 
 .settings-collapsible-trigger .settings-row-value,
 .settings-subsection-card .settings-row-value {
-  font-size: 24px;
+  font-size: 28px;
   line-height: 1.15;
 }
 
 .settings-collapsible-trigger .settings-row-icon,
 .settings-subsection-card .settings-row-icon {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
 }
 
 .settings-subsection-card .settings-stack {
-  gap: 12px;
+  gap: 20px;
 }
 
 .settings-layout-grid {
