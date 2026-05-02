@@ -14,11 +14,11 @@ export const browserAdapter = {
   },
 
   isBackEvent(event) {
-    return isBackEvent(event, [27, 8]);
+    return isBackEvent(event, [461, 10009, 27, 8]);
   },
 
   normalizeKey(event) {
-    return normalizeKeyEvent(event, [27, 8]);
+    return normalizeKeyEvent(event, [461, 10009, 27, 8]);
   },
 
   getDeviceLabel() {

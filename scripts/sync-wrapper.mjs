@@ -348,6 +348,7 @@ async function updateWebOsMetadata(targetDir) {
   appInfo.icon = wrapperIconFiles.webosIcon.target;
   appInfo.largeIcon = wrapperIconFiles.webosLargeIcon.target;
   appInfo.services = [webOsServiceId];
+  delete appInfo.disableBackHistoryAPI;
 
   await writeTextFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`);
   await syncWrapperIcons(targetDir, { includeLargeIcon: true });

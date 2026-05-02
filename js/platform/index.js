@@ -55,10 +55,14 @@ function detectPlatformName() {
   if (override && ADAPTERS[override]) {
     return override;
   }
+  const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
   if (globalThis.webOS || globalThis.PalmSystem || globalThis.webOSSystem) {
     return "webos";
   }
-  if (globalThis.tizen || String(globalThis.navigator?.userAgent || "").toLowerCase().includes("tizen")) {
+  if (userAgent.includes("webos") || userAgent.includes("web0s")) {
+    return "webos";
+  }
+  if (globalThis.tizen || userAgent.includes("tizen")) {
     return "tizen";
   }
   return "browser";
