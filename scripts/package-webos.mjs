@@ -76,23 +76,26 @@ ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
 `;
 }
 
-async function injectDebugLogEndpoint(targetDir) {
+async function injectWebOsRuntimeEnv(targetDir) {
   const endpoint = String(process.env.NUVIO_DEBUG_LOG_ENDPOINT || "").trim();
-  if (!endpoint) {
-    return;
+  const values = {
+    WEBOS_SERVICE_ID: webOsServiceId
+  };
+  if (endpoint) {
+    values.DEBUG_LOG_ENDPOINT = endpoint;
   }
   const envPath = path.join(targetDir, "nuvio.env.js");
   const injection = `
-(function configureNuvioDebugLogEndpoint() {
+(function configureNuvioWebOsRuntimeEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
-    DEBUG_LOG_ENDPOINT: ${JSON.stringify(endpoint)}
-  });
+  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, ${JSON.stringify(values, null, 2)});
 }());
 `;
   const existing = await readFile(envPath, "utf8").catch(() => "");
   await writeFile(envPath, `${existing.trim()}\n${injection}`, "utf8");
-  console.log(`remote console endpoint: ${endpoint}`);
+  if (endpoint) {
+    console.log(`remote console endpoint: ${endpoint}`);
+  }
 }
 
 async function stageApp() {
@@ -115,7 +118,7 @@ async function stageApp() {
 
   const webOsScriptPath = await resolveWebOsScriptPath(appStageDir);
   await writeFile(path.join(appStageDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }), "utf8");
-  await injectDebugLogEndpoint(appStageDir);
+  await injectWebOsRuntimeEnv(appStageDir);
 }
 
 async function stageService() {

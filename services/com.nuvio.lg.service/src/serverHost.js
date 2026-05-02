@@ -1,15 +1,15 @@
-const fs = require("fs");
-const http = require("http");
-const path = require("path");
-const Module = require("module");
+var fs = require("fs");
+var http = require("http");
+var path = require("path");
+var Module = require("module");
 
-const SERVICE_ID = "com.nuvio.lg.service";
-const { PORT_CANDIDATES } = require("./constants");
-const REQUEST_TIMEOUT_MS = 5000;
+var SERVICE_ID = "com.nuvio.lg.service";
+var PORT_CANDIDATES = require("./constants").PORT_CANDIDATES;
+var REQUEST_TIMEOUT_MS = 5000;
 
 function loadCommonJsScript(filename) {
-  const code = fs.readFileSync(filename, "utf8");
-  const mod = new Module(filename, module);
+  var code = fs.readFileSync(filename, "utf8");
+  var mod = new Module(filename, module);
   mod.filename = filename;
   mod.paths = Module._nodeModulePaths(path.dirname(filename));
   mod._compile(code, filename);
@@ -21,61 +21,62 @@ function bootLocalRuntime(runtimePath) {
 }
 
 function requestLocalPath(port, pathname, callback) {
-  const req = http.get(
+  var req = http.get(
     {
       host: "127.0.0.1",
-      port,
+      port: port,
       path: pathname
     },
-    (res) => {
-      let body = "";
+    function(res) {
+      var body = "";
       res.setEncoding("utf8");
-      res.on("data", (chunk) => {
+      res.on("data", function(chunk) {
         body += chunk;
       });
-      res.on("end", () => {
+      res.on("end", function() {
         callback(null, {
-          port,
+          port: port,
           statusCode: res.statusCode || 0,
-          body
+          body: body
         });
       });
     }
   );
 
-  req.setTimeout(REQUEST_TIMEOUT_MS, () => {
-    req.destroy(new Error(`Local media request timed out after ${REQUEST_TIMEOUT_MS}ms`));
+  req.setTimeout(REQUEST_TIMEOUT_MS, function() {
+    req.destroy(new Error("Local media request timed out after " + REQUEST_TIMEOUT_MS + "ms"));
   });
 
-  req.on("error", (error) => {
+  req.on("error", function(error) {
     callback(error);
   });
 }
 
-function probeLocalServer(callback, index = 0) {
-  if (index >= PORT_CANDIDATES.length) {
+function probeLocalServer(callback, index) {
+  var candidateIndex = typeof index === "number" ? index : 0;
+  if (candidateIndex >= PORT_CANDIDATES.length) {
     callback(null, null);
     return;
   }
 
-  const port = PORT_CANDIDATES[index];
-  requestLocalPath(port, "/settings", (error, result) => {
+  var port = PORT_CANDIDATES[candidateIndex];
+  requestLocalPath(port, "/settings", function(error, result) {
     if (!error && result && result.statusCode >= 200 && result.statusCode < 500) {
       callback(null, result);
       return;
     }
-    probeLocalServer(callback, index + 1);
+    probeLocalServer(callback, candidateIndex + 1);
   });
 }
 
 function requestActiveServerPath(pathname, callback) {
-  probeLocalServer((error, status) => {
+  probeLocalServer(function(error, status) {
     if (error) {
       callback(error);
       return;
     }
 
-    if (!status?.port) {
+    if (!status || !status.port) {
       callback(new Error("Local media server unavailable"));
       return;
     }
@@ -85,9 +86,9 @@ function requestActiveServerPath(pathname, callback) {
 }
 
 module.exports = {
-  SERVICE_ID,
-  PORT_CANDIDATES,
-  bootLocalRuntime,
-  probeLocalServer,
-  requestActiveServerPath
+  SERVICE_ID: SERVICE_ID,
+  PORT_CANDIDATES: PORT_CANDIDATES,
+  bootLocalRuntime: bootLocalRuntime,
+  probeLocalServer: probeLocalServer,
+  requestActiveServerPath: requestActiveServerPath
 };
