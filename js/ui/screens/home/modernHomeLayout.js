@@ -8,7 +8,10 @@ export const MODERN_HOME_CONSTANTS = {
   cameraFollowDurationYMs: 440,
   cameraSafetyDurationMs: 180,
   rowFocusInset: 80,
-  trackEdgePadding: 104
+  trackEdgePadding: 104,
+  verticalFastScrollVelocityPxPerSec: 6400,
+  verticalFastScrollEndTimeoutMs: 160,
+  verticalFastScrollMaxFrameMs: 48
 };
 
 export function renderModernHomeLayout({

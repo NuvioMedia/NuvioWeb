@@ -3892,6 +3892,131 @@ export const HomeScreen = {
     }, 120);
   },
 
+  endModernVerticalFastScroll({ land = true } = {}) {
+    const state = this.modernVerticalFastScrollState || null;
+    if (state?.raf) {
+      cancelAnimationFrame(state.raf);
+    }
+    if (this.modernVerticalFastScrollEndTimer) {
+      clearTimeout(this.modernVerticalFastScrollEndTimer);
+      this.modernVerticalFastScrollEndTimer = null;
+    }
+    this.modernVerticalFastScrollState = null;
+    if (land && state?.direction) {
+      this.landModernVerticalFastScroll(state.direction);
+    }
+  },
+
+  canModernFastScroll(main, direction) {
+    if (!main) {
+      return false;
+    }
+    const maxScrollTop = Math.max(0, Number(main.scrollHeight || 0) - Number(main.clientHeight || 0));
+    const scrollTop = Number(main.scrollTop || 0);
+    if (direction > 0) {
+      return scrollTop < maxScrollTop - 1;
+    }
+    return scrollTop > 1;
+  },
+
+  startModernVerticalFastScroll(direction) {
+    const main = this.container?.querySelector(".home-modern-rows-viewport");
+    if (this.layoutMode !== "modern" || !main || !direction) {
+      return false;
+    }
+    this.cancelModernCameraFollow({ stopAnimations: true });
+    if (!this.canModernFastScroll(main, direction)) {
+      this.endModernVerticalFastScroll({ land: true });
+      return true;
+    }
+
+    const existing = this.modernVerticalFastScrollState;
+    if (existing?.raf && existing.direction === direction) {
+      this.armModernVerticalFastScrollEndTimer();
+      return true;
+    }
+    this.endModernVerticalFastScroll({ land: false });
+
+    const state = {
+      container: main,
+      direction,
+      raf: null,
+      lastTime: performance.now()
+    };
+    const tick = (now) => {
+      if (this.modernVerticalFastScrollState !== state || !main.isConnected) {
+        return;
+      }
+      const dtMs = Math.min(
+        MODERN_HOME_CONSTANTS.verticalFastScrollMaxFrameMs,
+        Math.max(0, now - state.lastTime)
+      );
+      state.lastTime = now;
+      const maxScrollTop = Math.max(0, Number(main.scrollHeight || 0) - Number(main.clientHeight || 0));
+      const current = Number(main.scrollTop || 0);
+      const delta = direction * MODERN_HOME_CONSTANTS.verticalFastScrollVelocityPxPerSec * (dtMs / 1000);
+      const next = Math.max(0, Math.min(maxScrollTop, current + delta));
+      main.scrollTop = next;
+      if (Math.abs(next - current) <= 0.1 || next <= 0 || next >= maxScrollTop) {
+        this.endModernVerticalFastScroll({ land: true });
+        return;
+      }
+      state.raf = requestAnimationFrame(tick);
+    };
+    this.modernVerticalFastScrollState = state;
+    state.raf = requestAnimationFrame(tick);
+    this.armModernVerticalFastScrollEndTimer();
+    return true;
+  },
+
+  armModernVerticalFastScrollEndTimer() {
+    if (this.modernVerticalFastScrollEndTimer) {
+      clearTimeout(this.modernVerticalFastScrollEndTimer);
+    }
+    this.modernVerticalFastScrollEndTimer = setTimeout(() => {
+      this.modernVerticalFastScrollEndTimer = null;
+      this.endModernVerticalFastScroll({ land: true });
+    }, MODERN_HOME_CONSTANTS.verticalFastScrollEndTimeoutMs);
+  },
+
+  landModernVerticalFastScroll(direction) {
+    const main = this.container?.querySelector(".home-modern-rows-viewport");
+    if (!main || !this.navModel?.rows?.length) {
+      return;
+    }
+    const mainRect = main.getBoundingClientRect();
+    const visibleRows = this.navModel.rows
+      .map((rowNodes) => {
+        const anchor = this.getMainFocusAnchor(rowNodes[0]);
+        if (!anchor) {
+          return null;
+        }
+        const rect = anchor.getBoundingClientRect();
+        const overlap = Math.min(rect.bottom, mainRect.bottom) - Math.max(rect.top, mainRect.top);
+        if (overlap <= 0) {
+          return null;
+        }
+        const edgeDistance = direction > 0
+          ? Math.abs(rect.top - mainRect.top)
+          : Math.abs(rect.bottom - mainRect.bottom);
+        return { rowNodes, overlap, edgeDistance };
+      })
+      .filter(Boolean)
+      .sort((left, right) => {
+        if (right.overlap !== left.overlap) {
+          return right.overlap - left.overlap;
+        }
+        return left.edgeDistance - right.edgeDistance;
+      });
+    const target = this.resolveBestVisibleNodeForRow(visibleRows[0]?.rowNodes || []);
+    const current = this.container?.querySelector(".home-main .focusable.focused") || null;
+    if (target && current !== target) {
+      this.focusNode(current, target, direction > 0 ? "down" : "up", { repeat: true });
+    } else if (target) {
+      this.syncMainFocusToViewport({ suppressFlows: false });
+    }
+  },
+
   ensureMainVerticalVisibility(target, direction = null, current = null, layoutAdjustment = 0) {
     if (this.layoutMode === "modern") {
       const next = this.getModernMainAlignedScrollTarget(target, direction, current, layoutAdjustment);
@@ -4172,6 +4297,9 @@ export const HomeScreen = {
     }
 
     if (direction === "up" || direction === "down") {
+      if (this.layoutMode === "modern" && event?.repeat && this.startModernVerticalFastScroll(direction === "down" ? 1 : -1)) {
+        return true;
+      }
       const delta = direction === "up" ? -1 : 1;
       const targetRow = row + delta;
       const targetRowNodes = nav.rows[targetRow] || null;
@@ -5674,6 +5802,7 @@ export const HomeScreen = {
             const frag = document.createRange().createContextualFragment(newMarkup);
             track.appendChild(frag);
             ScreenUtils.indexFocusables(track);
+            this.buildNavigationModel();
           }
           // Update in-memory row data
           if (rowData?.result?.data) {
@@ -5711,6 +5840,7 @@ export const HomeScreen = {
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.cancelScheduledRender();
     this.cancelModernCameraFollow({ stopAnimations: true });
+    this.endModernVerticalFastScroll({ land: false });
     this.stopHeroRotation();
     this.cancelPendingHeroFocus();
     this.cancelFocusedPosterFlow();
