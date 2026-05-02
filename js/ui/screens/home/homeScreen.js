@@ -1648,6 +1648,27 @@ export const HomeScreen = {
     return this.restoreLegacyFocusState(focusState);
   },
 
+  restoreHomeViewportScrollState(focusState = null) {
+    if (!focusState || focusState.layoutMode !== this.layoutMode || !this.container) {
+      return false;
+    }
+    const viewport = this.getHomeViewport();
+    if (!viewport) {
+      return false;
+    }
+
+    Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
+      const track = this.container.querySelector(`[data-track-row-key="${rowKey}"]`);
+      if (track) {
+        track.scrollLeft = Number(scrollLeft || 0);
+      }
+    });
+
+    const maxScrollTop = Math.max(0, Number(viewport.scrollHeight || 0) - Number(viewport.clientHeight || 0));
+    viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, Number(focusState.mainScrollTop || 0)));
+    return true;
+  },
+
   restoreSidebarFocusState(focusState) {
     if (!focusState || !this.container) {
       return false;
@@ -2004,6 +2025,9 @@ export const HomeScreen = {
   shouldSuspendModernViewportFocusSync() {
     if (this.layoutMode !== "modern") {
       return false;
+    }
+    if (this.hasOpenHoldMenu()) {
+      return true;
     }
     if (this.modernCameraFollowTimer) {
       return true;
@@ -3074,6 +3098,7 @@ export const HomeScreen = {
     if (!item?.id) {
       return false;
     }
+    const backgroundFocusState = this.captureCurrentFocusState();
     this.cancelPendingPosterEnter();
     this.cancelPendingPosterHold();
     this.posterHoldMenu = {
@@ -3081,7 +3106,8 @@ export const HomeScreen = {
       itemIndex: Number(node?.dataset?.itemIndex ?? -1),
       item,
       isSaved: await savedLibraryRepository.isSaved(item.id),
-      optionIndex: 0
+      optionIndex: 0,
+      backgroundFocusState
     };
     this.suppressHoldMenuEnterUntilKeyUp = true;
     this.render();
@@ -3232,7 +3258,8 @@ export const HomeScreen = {
       videoId: item.videoId || "",
       index: Number(node?.dataset?.cwIndex || 0),
       optionIndex: 0,
-      item
+      item,
+      backgroundFocusState: this.captureCurrentFocusState()
     };
     this.suppressHoldMenuEnterUntilKeyUp = true;
     this.render();
@@ -5948,8 +5975,10 @@ export const HomeScreen = {
     if (this.pendingHomeRevealFocus) {
       restoredFocus = this.applyPendingHomeRevealFocus();
     } else if (this.continueWatchingMenu) {
+      this.restoreHomeViewportScrollState(this.continueWatchingMenu.backgroundFocusState || retainedFocusState);
       restoredFocus = this.applyContinueWatchingMenuFocus();
     } else if (this.posterHoldMenu) {
+      this.restoreHomeViewportScrollState(this.posterHoldMenu.backgroundFocusState || retainedFocusState);
       restoredFocus = this.applyPosterHoldMenuFocus();
     } else if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
       const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);

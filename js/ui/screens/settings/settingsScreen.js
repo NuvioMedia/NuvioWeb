@@ -391,10 +391,21 @@ function labelForPlaybackLanguage(language) {
   );
 }
 
-function normalizeSelectableSubtitleLanguageCode(language) {
-  const code = String(language ?? "").trim().toLowerCase();
+function extractLanguageCode(value, fallback = "off") {
+  if (value && typeof value === "object") {
+    return extractLanguageCode(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
+  }
+  const code = String(value ?? "").trim();
+  if (!code || code.toLowerCase() === "[object object]") {
+    return fallback;
+  }
+  return code;
+}
+
+function normalizeSelectableSubtitleLanguageCode(language, fallback = "off") {
+  const code = extractLanguageCode(language, fallback).trim().toLowerCase();
   if (!code) {
-    return "system";
+    return fallback;
   }
   switch (code) {
     case "pt-br":
@@ -436,14 +447,6 @@ function subtitleLanguageOptionCode(option) {
     return "";
   }
   return normalized.toUpperCase();
-}
-
-function qualityLabel(value) {
-  const normalized = String(value || "auto").toLowerCase();
-  if (normalized === "2160p") return "2160p";
-  if (normalized === "1080p") return "1080p";
-  if (normalized === "720p") return "720p";
-  return t("common.auto");
 }
 
 function renderModeLabel(value) {
@@ -1704,9 +1707,6 @@ export const SettingsScreen = {
     this.actionMap.set("playback:toggle:general", () => {
       this.toggleExpandedSection("playback", "general");
     });
-    this.actionMap.set("playback:toggle:stream", () => {
-      this.toggleExpandedSection("playback", "stream");
-    });
     this.actionMap.set("playback:toggle:audio", () => {
       this.toggleExpandedSection("playback", "audio");
     });
@@ -1716,18 +1716,6 @@ export const SettingsScreen = {
 
     this.actionMap.set("playback:autoplay", () => {
       PlayerSettingsStore.set({ autoplayNextEpisode: !PlayerSettingsStore.get().autoplayNextEpisode });
-    });
-    this.actionMap.set("playback:quality", () => {
-      const options = ["auto", "2160p", "1080p", "720p"];
-      this.openOptionDialog({
-        title: t("settings.dialogs.preferredQuality"),
-        options: options.map((option) => ({ id: option, label: qualityLabel(option) })),
-        selectedId: String(PlayerSettingsStore.get().preferredQuality || "auto"),
-        returnFocusKey: "playback:quality",
-        onSelect: (option) => {
-          PlayerSettingsStore.set({ preferredQuality: option.id });
-        }
-      });
     });
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
@@ -1803,17 +1791,6 @@ export const SettingsScreen = {
       </div>
     `;
 
-    const streamBody = `
-      <div class="settings-stack">
-        ${this.renderActionRow({
-      focusKey: "playback:quality",
-      title: t("settings.playback.preferredQuality.title"),
-      subtitle: t("settings.playback.preferredQuality.subtitle"),
-      value: qualityLabel(model.player.preferredQuality)
-    })}
-      </div>
-    `;
-
     const audioBody = `
       <div class="settings-stack">
         ${this.renderToggleRow({
@@ -1864,13 +1841,6 @@ export const SettingsScreen = {
       subtitle: t("settings.playback.groups.general.subtitle"),
       expanded: Boolean(expanded.general),
       bodyHtml: generalBody
-    })}
-          ${this.renderCollapsibleRow({
-      focusKey: "playback:toggle:stream",
-      title: t("settings.playback.groups.stream.title"),
-      subtitle: t("settings.playback.groups.stream.subtitle"),
-      expanded: Boolean(expanded.stream),
-      bodyHtml: streamBody
     })}
           ${this.renderCollapsibleRow({
       focusKey: "playback:toggle:audio",

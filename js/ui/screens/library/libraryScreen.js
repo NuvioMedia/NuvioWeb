@@ -362,7 +362,7 @@ export const LibraryScreen = {
     return `
       <div class="library-overlay">
         <section class="library-dialog library-manage-dialog">
-          <h3 class="library-dialog-title">Manage Trakt Lists</h3>
+          <h3 class="library-dialog-title">Manage Lists</h3>
           ${state.errorMessage ? `<p class="library-dialog-error">${escapeHtml(state.errorMessage)}</p>` : ""}
           <div class="library-manage-list">
             ${personalTabs.length

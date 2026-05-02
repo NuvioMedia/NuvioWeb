@@ -807,18 +807,18 @@
     <string name="search_voice_unavailable">Voice search is unavailable on this device.</string>
 
     <!-- LibraryScreen -->
-    <string name="library_syncing">Syncing Trakt library…</string>
+    <string name="library_syncing">Syncing library…</string>
     <string name="library_title">Library</string>
     <string name="library_filter_list">List</string>
     <string name="library_filter_type">Type</string>
     <string name="library_filter_sort">Sort</string>
-    <string name="library_sort_trakt_order">Trakt Order</string>
+    <string name="library_sort_trakt_order">List Order</string>
     <string name="library_sort_added_desc">Added ↓</string>
     <string name="library_sort_added_asc">Added ↑</string>
     <string name="library_sort_title_asc">Title A-Z</string>
     <string name="library_sort_title_desc">Title Z-A</string>
     <string name="library_manage_lists">Manage Lists</string>
-    <string name="library_manage_trakt_lists">Manage Trakt Lists</string>
+    <string name="library_manage_trakt_lists">Manage Lists</string>
     <string name="library_no_lists">No personal lists yet.</string>
     <string name="library_list_create">Create</string>
     <string name="library_list_edit">Edit</string>
@@ -830,7 +830,7 @@
     <string name="library_list_description_label">Description</string>
     <string name="library_list_privacy">Privacy</string>
     <string name="library_delete_title">Delete this list?</string>
-    <string name="library_delete_subtitle">This removes the list and all list items from Trakt.</string>
+    <string name="library_delete_subtitle">This removes the list and all its items.</string>
     <string name="library_delete_confirm">Delete</string>
     <string name="library_source_local">LOCAL</string>
     <string name="library_type_all">All</string>
@@ -953,7 +953,7 @@
     <string name="update_unknown_sources">Allow installs from unknown sources to continue.</string>
     <!-- AccountScreen -->
     <string name="account_title">Account</string>
-    <string name="account_sign_in_description">Sign in to sync your library, watch progress, addons, and plugins across devices. Library sync uses Nuvio Sync when Trakt is not connected, and watch progress can use either Trakt or Nuvio Sync.</string>
+    <string name="account_sign_in_description">Sign in to sync your library, watch progress, addons, and plugins across devices.</string>
     <string name="account_sync_code_title">Sync Code</string>
     <string name="account_sync_code_description">Sync across devices without creating an account.</string>
     <string name="account_linked_devices">Linked Devices (%1$d)</string>

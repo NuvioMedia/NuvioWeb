@@ -33,6 +33,7 @@ export const Router = {
   historyInitialized: false,
   popstateBound: false,
   suppressPopstateUntil: 0,
+  skipConsumeNextPopstate: false,
 
   routes: {
     home: HomeScreen,
@@ -113,8 +114,10 @@ export const Router = {
         }
         return;
       }
+      const shouldSkipConsume = Boolean(this.skipConsumeNextPopstate);
+      this.skipConsumeNextPopstate = false;
       const currentScreen = this.getCurrentScreen();
-      if (currentScreen?.consumeBackRequest?.()) {
+      if (!shouldSkipConsume && currentScreen?.consumeBackRequest?.()) {
         if (window?.history && typeof window.history.pushState === "function") {
           window.history.pushState({ route: this.current, params: this.currentParams }, "");
         }
@@ -208,9 +211,9 @@ export const Router = {
     }
   },
 
-  async back() {
+  async back(options = {}) {
     const currentScreen = this.getCurrentScreen();
-    if (currentScreen?.consumeBackRequest?.()) {
+    if (!options?.skipConsume && currentScreen?.consumeBackRequest?.()) {
       this.suppressNextPopstate();
       return;
     }
@@ -221,6 +224,9 @@ export const Router = {
     }
 
     if (window?.history && typeof window.history.back === "function" && this.historyInitialized) {
+      if (options?.skipConsume) {
+        this.skipConsumeNextPopstate = true;
+      }
       window.history.back();
       return;
     }

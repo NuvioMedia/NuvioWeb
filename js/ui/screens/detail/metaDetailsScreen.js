@@ -4228,6 +4228,7 @@ export const MetaDetailsScreen = {
       parentalGuide: this.meta?.parentalGuide || null,
       episodes: this.episodes || [],
       streamCandidates: pending.streams || [],
+      fromDetailRoute: true,
       nextEpisodeVideoId: nextEpisode?.id || null,
       nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null,
       nextEpisodeSeason: nextEpisode?.season ?? null,
@@ -4250,6 +4251,7 @@ export const MetaDetailsScreen = {
       itemType: "series",
       imdbId,
       returnToDetail: true,
+      fromDetailRoute: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
       backdrop: streamBackdrop,
       poster: this.meta?.poster || null,
@@ -4282,6 +4284,7 @@ export const MetaDetailsScreen = {
       itemType,
       imdbId,
       returnToDetail: true,
+      fromDetailRoute: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
       itemSubtitle: "",
       genres: Array.isArray(this.meta?.genres) ? this.meta.genres.slice(0, 3).join(" • ") : "",
@@ -4322,7 +4325,8 @@ export const MetaDetailsScreen = {
       parentalWarnings: this.meta?.parentalWarnings || null,
       parentalGuide: this.meta?.parentalGuide || null,
       episodes: [],
-      streamCandidates: pending.streams || []
+      streamCandidates: pending.streams || [],
+      fromDetailRoute: true
     });
   },
 
@@ -4779,7 +4783,7 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(actions, actionIndex + 1) || true;
       if (direction === "down") {
         if (seasons.length) {
-          return this.focusInList(seasons, Math.min(actionIndex, seasons.length - 1)) || true;
+          return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (episodes.length) {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;

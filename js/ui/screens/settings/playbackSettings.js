@@ -4,14 +4,6 @@ export const PlaybackSettings = {
 
   getItems() {
     const settings = PlayerSettingsStore.get();
-    const quality = String(settings.preferredQuality || "auto");
-    const qualityLabel = quality === "2160p"
-      ? "2160p"
-      : quality === "1080p"
-        ? "1080p"
-        : quality === "720p"
-          ? "720p"
-          : "Auto";
 
     return [
       {
@@ -32,22 +24,6 @@ export const PlaybackSettings = {
           PlayerSettingsStore.set({
             subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled
           });
-        }
-      },
-      {
-        id: "playback_quality_cycle",
-        label: `Quality target: ${qualityLabel}`,
-        description: "Cycle Auto -> 2160p -> 1080p -> 720p",
-        action: () => {
-          const current = String(PlayerSettingsStore.get().preferredQuality || "auto");
-          const next = current === "auto"
-            ? "2160p"
-            : current === "2160p"
-              ? "1080p"
-              : current === "1080p"
-                ? "720p"
-                : "auto";
-          PlayerSettingsStore.set({ preferredQuality: next });
         }
       }
     ];

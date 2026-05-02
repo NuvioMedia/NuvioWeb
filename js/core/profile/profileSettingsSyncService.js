@@ -115,8 +115,19 @@ function stringOrNull(value) {
   return normalized ? normalized : null;
 }
 
+function extractLanguageCode(value, fallback = "off") {
+  if (value && typeof value === "object") {
+    return extractLanguageCode(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
+  }
+  const code = String(value ?? "").trim();
+  if (!code || code.toLowerCase() === "[object object]") {
+    return fallback;
+  }
+  return code;
+}
+
 function normalizeSubtitleLanguage(value, fallback = "off") {
-  const code = String(value ?? fallback).trim().toLowerCase();
+  const code = extractLanguageCode(value, fallback).trim().toLowerCase();
   if (!code) {
     return fallback;
   }
