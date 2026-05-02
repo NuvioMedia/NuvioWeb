@@ -8,8 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
-const webOsServiceId = "com.nuvio.lg.service";
-const webOsServiceDirName = "com.nuvio.lg.service";
+const webOsServiceSourceDirName = "com.nuvio.lg.service";
+const webOsServiceId = "space.nuvio.webos.service";
+const webOsServiceDirName = webOsServiceId;
 const tizenServiceDirName = "com.nuvio.tizen.service";
 const tizenServiceIdSuffix = ".NuvioMediaService";
 const tizenServiceEntryPath = `services/${tizenServiceDirName}/src/service.js`;
@@ -22,6 +23,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     YOUTUBE_PROXY_URL: "",
     ADDON_REMOTE_BASE_URL: "",
     DEBUG_LOG_ENDPOINT: "",
+    WEBOS_SERVICE_ID: "space.nuvio.webos.service",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""
@@ -127,14 +129,15 @@ async function syncRootFolder(targetDir, folderName) {
   await cp(path.join(rootDir, folderName), path.join(targetDir, folderName), { recursive: true });
 }
 
-async function syncServiceFolder(targetDir, serviceDirName) {
+async function syncServiceFolder(targetDir, serviceDirName, { targetServiceDirName = serviceDirName } = {}) {
   const targetServicesDir = path.join(targetDir, "services");
   await mkdir(targetServicesDir, { recursive: true });
+  await rm(path.join(targetServicesDir, webOsServiceSourceDirName), { recursive: true, force: true });
   await rm(path.join(targetServicesDir, webOsServiceDirName), { recursive: true, force: true });
   await rm(path.join(targetServicesDir, tizenServiceDirName), { recursive: true, force: true });
   await cp(
     path.join(rootDir, "services", serviceDirName),
-    path.join(targetServicesDir, serviceDirName),
+    path.join(targetServicesDir, targetServiceDirName),
     { recursive: true }
   );
 }
@@ -348,13 +351,24 @@ async function updateWebOsMetadata(targetDir) {
 
   await writeTextFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`);
   await syncWrapperIcons(targetDir, { includeLargeIcon: true });
-
-  const webOsScriptPath = await resolveWebOsScriptPath(targetDir);
-  await writeTextFile(path.join(targetDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }));
 }
 
 async function syncWebOsCompanionFiles(targetDir) {
-  await syncServiceFolder(targetDir, webOsServiceDirName);
+  await syncServiceFolder(targetDir, webOsServiceSourceDirName, {
+    targetServiceDirName: webOsServiceDirName
+  });
+
+  const serviceDir = path.join(targetDir, "services", webOsServiceDirName);
+  const filesToRewrite = [
+    path.join(serviceDir, "package.json"),
+    path.join(serviceDir, "services.json"),
+    path.join(serviceDir, "src", "serverHost.js")
+  ];
+
+  await Promise.all(filesToRewrite.map(async (filePath) => {
+    const current = await readTextFile(filePath, `Expected webOS service file at ${filePath}.`);
+    await writeTextFile(filePath, current.replaceAll(webOsServiceSourceDirName, webOsServiceId));
+  }));
 }
 
 function upsertXmlTag(xml, tagName, innerText) {
@@ -467,8 +481,7 @@ async function updateTizenMetadata(targetDir) {
 
 const { platform, targetDir } = parseArgs(process.argv.slice(2));
 await syncVersionFiles();
-await assertDistExists();
-await syncBuild(targetDir);
+await mkdir(targetDir, { recursive: true });
 
 if (platform === "webos") {
   await updateWebOsMetadata(targetDir);
@@ -476,6 +489,8 @@ if (platform === "webos") {
 }
 
 if (platform === "tizen") {
+  await assertDistExists();
+  await syncBuild(targetDir);
   await updateTizenMetadata(targetDir);
 }
 

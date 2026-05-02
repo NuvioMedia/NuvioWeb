@@ -1,5 +1,8 @@
 import { Platform } from "../../platform/index.js";
-import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
+import {
+  isWebOsCompanionServiceAvailable,
+  requestWebOsCompanionService
+} from "../../platform/webos/webosCompanionService.js";
 
 const LOCAL_MEDIA_SERVER_PORT_CANDIDATES = [2710, 2711, 2712, 2713, 2714];
 const REQUEST_TIMEOUT_MS = 4000;
@@ -19,12 +22,13 @@ function buildTracksUrl(port, mediaUrl) {
 }
 
 async function requestTracksViaLuna(mediaUrl) {
-  const payload = await WebOsLunaService.request("luna://com.nuvio.lg.service", {
+  const result = await requestWebOsCompanionService({
     method: "tracks",
     parameters: {
       url: String(mediaUrl || "").trim()
     }
   });
+  const payload = result?.payload || {};
 
   return Array.isArray(payload?.tracks) ? payload.tracks : [];
 }
@@ -91,7 +95,7 @@ export const localMediaTracksRepository = {
     }
 
     const requestPromise = (async () => {
-      if (Platform.isWebOS() && WebOsLunaService.isAvailable()) {
+      if (Platform.isWebOS() && isWebOsCompanionServiceAvailable()) {
         try {
           const lunaTracks = await requestTracksViaLuna(targetUrl);
           tracksCache.set(targetUrl, {

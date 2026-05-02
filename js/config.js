@@ -21,6 +21,7 @@ export const IMDB_RATINGS_API_BASE_URL = String(runtimeEnv.IMDB_RATINGS_API_BASE
 export const AVATAR_PUBLIC_BASE_URL = String(runtimeEnv.AVATAR_PUBLIC_BASE_URL || "").trim();
 export const ADDON_REMOTE_BASE_URL = String(runtimeEnv.ADDON_REMOTE_BASE_URL || "").trim();
 export const DEBUG_LOG_ENDPOINT = String(runtimeEnv.DEBUG_LOG_ENDPOINT || "").trim();
+export const WEBOS_SERVICE_ID = String(runtimeEnv.WEBOS_SERVICE_ID || "").trim();
 export const ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
 export const PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
 export const TMDB_API_KEY = String(runtimeEnv.TMDB_API_KEY || "").trim();

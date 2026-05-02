@@ -1,29 +1,28 @@
-const path = require("path");
+var path = require("path");
 
-const {
-  SERVICE_ID,
-  bootLocalRuntime,
-  probeLocalServer,
-  requestActiveServerPath
-} = require("./serverHost");
+var serverHost = require("./serverHost");
+var SERVICE_ID = serverHost.SERVICE_ID;
+var bootLocalRuntime = serverHost.bootLocalRuntime;
+var probeLocalServer = serverHost.probeLocalServer;
+var requestActiveServerPath = serverHost.requestActiveServerPath;
 
-const RUNTIME_PATH = path.resolve(__dirname, "..", "runtime", "media-http.cjs");
+var RUNTIME_PATH = path.resolve(__dirname, "..", "runtime", "media-http.cjs");
 
 function createService() {
   try {
-    const Service = require("webos-service");
+    var Service = require("webos-service");
     return new Service(SERVICE_ID);
   } catch (error) {
-    console.warn(`[${SERVICE_ID}] webos-service unavailable, using local mock:`, error.message);
+    console.warn("[" + SERVICE_ID + "] webos-service unavailable, using local mock:", error.message);
     return {
-      register() {}
+      register: function() {}
     };
   }
 }
 
-const service = createService();
+var service = createService();
 
-const runtimeState = {
+var runtimeState = {
   booted: false,
   bootTimestamp: null,
   error: null
@@ -39,13 +38,13 @@ function ensureRuntimeStarted() {
   try {
     bootLocalRuntime(RUNTIME_PATH);
     runtimeState.booted = true;
-    console.log(`[${SERVICE_ID}] local media runtime booted from`, RUNTIME_PATH);
+    console.log("[" + SERVICE_ID + "] local media runtime booted from", RUNTIME_PATH);
   } catch (error) {
     runtimeState.error = {
       message: String(error && error.message ? error.message : error),
       stack: String(error && error.stack ? error.stack : "")
     };
-    console.error(`[${SERVICE_ID}] failed to boot local media runtime:`, error);
+    console.error("[" + SERVICE_ID + "] failed to boot local media runtime:", error);
   }
 }
 
@@ -55,7 +54,7 @@ function respond(message, payload) {
     return;
   }
 
-  console.log(`[${SERVICE_ID}] response:`, JSON.stringify(payload));
+  console.log("[" + SERVICE_ID + "] response:", JSON.stringify(payload));
 }
 
 function buildBasePayload() {
@@ -69,27 +68,27 @@ function buildBasePayload() {
   };
 }
 
-function buildErrorPayload(error, extras = {}) {
+function buildErrorPayload(error, extras) {
   return Object.assign(buildBasePayload(), {
     returnValue: false,
     errorCode: -1,
-    errorText: String(error?.message || error || "Unknown service error")
-  }, extras);
+    errorText: String(error && error.message ? error.message : error || "Unknown service error")
+  }, extras || {});
 }
 
 function getMessagePayload(message) {
-  if (message?.payload && typeof message.payload === "object") {
+  if (message && message.payload && typeof message.payload === "object") {
     return message.payload;
   }
   return {};
 }
 
-function registerCommand(commandName, includeBody = false) {
-  service.register(commandName, (message) => {
+function registerCommand(commandName, includeBody) {
+  service.register(commandName, function(message) {
     ensureRuntimeStarted();
-    probeLocalServer((_, status) => {
+    probeLocalServer(function(_, status) {
       respond(message, Object.assign(buildBasePayload(), {
-        url: status ? `http://127.0.0.1:${status.port}` : null,
+        url: status ? "http://127.0.0.1:" + status.port : null,
         settingsReachable: Boolean(status),
         settingsStatusCode: status ? status.statusCode : null,
         settingsBody: includeBody && status ? status.body : null
@@ -99,7 +98,7 @@ function registerCommand(commandName, includeBody = false) {
 }
 
 function registerTracksCommand() {
-  service.register("tracks", (message) => {
+  service.register("tracks", function(message) {
     ensureRuntimeStarted();
 
     if (runtimeState.error) {
@@ -107,14 +106,14 @@ function registerTracksCommand() {
       return;
     }
 
-    const mediaUrl = String(getMessagePayload(message).url || "").trim();
+    var mediaUrl = String(getMessagePayload(message).url || "").trim();
     if (!mediaUrl) {
       respond(message, buildErrorPayload("Missing required parameter: url"));
       return;
     }
 
-    const tracksPath = `/tracks/${encodeURIComponent(mediaUrl)}`;
-    requestActiveServerPath(tracksPath, (error, status) => {
+    var tracksPath = "/tracks/" + encodeURIComponent(mediaUrl);
+    requestActiveServerPath(tracksPath, function(error, status) {
       if (error) {
         respond(message, buildErrorPayload(error, {
           proxiedPath: tracksPath
@@ -123,18 +122,19 @@ function registerTracksCommand() {
       }
 
       if (!status || status.statusCode < 200 || status.statusCode >= 300) {
-        respond(message, buildErrorPayload(`Track request failed with HTTP ${status?.statusCode || 0}`, {
+        var statusCode = status ? status.statusCode || 0 : 0;
+        respond(message, buildErrorPayload("Track request failed with HTTP " + statusCode, {
           proxiedPath: tracksPath,
-          statusCode: status?.statusCode || 0,
-          rawBody: status?.body || ""
+          statusCode: statusCode,
+          rawBody: status ? status.body || "" : ""
         }));
         return;
       }
 
       try {
-        const tracks = JSON.parse(status.body || "[]");
+        var tracks = JSON.parse(status.body || "[]");
         respond(message, Object.assign(buildBasePayload(), {
-          url: `http://127.0.0.1:${status.port}`,
+          url: "http://127.0.0.1:" + status.port,
           proxiedPath: tracksPath,
           statusCode: status.statusCode,
           tracks: Array.isArray(tracks) ? tracks : []
@@ -151,6 +151,6 @@ function registerTracksCommand() {
 }
 
 ensureRuntimeStarted();
-registerCommand("ping");
+registerCommand("ping", false);
 registerCommand("status", true);
 registerTracksCommand();
