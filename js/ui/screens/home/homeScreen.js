@@ -3109,6 +3109,7 @@ export const HomeScreen = {
       optionIndex: 0,
       backgroundFocusState
     };
+    this.armHoldMenuBackTrap();
     this.suppressHoldMenuEnterUntilKeyUp = true;
     this.render();
     return true;
@@ -3123,8 +3124,51 @@ export const HomeScreen = {
       itemIndex: Number(this.posterHoldMenu.itemIndex ?? -1)
     };
     this.posterHoldMenu = null;
+    this.releaseHoldMenuBackTrap();
     this.render();
     return true;
+  },
+
+  armHoldMenuBackTrap() {
+    if (this.holdMenuBackTrapArmed) {
+      return;
+    }
+    if (!window?.history || typeof window.history.pushState !== "function") {
+      return;
+    }
+    const route = Router.getCurrent?.() || "home";
+    if (route !== "home") {
+      return;
+    }
+    try {
+      window.history.pushState({
+        route: "home",
+        params: Router.currentParams || {},
+        homeHoldMenuBackTrap: true
+      }, "");
+      this.holdMenuBackTrapArmed = true;
+    } catch (error) {
+      console.warn("Failed to arm home hold menu back trap", error);
+    }
+  },
+
+  releaseHoldMenuBackTrap() {
+    const shouldPruneCurrentHistoryEntry = Boolean(
+      this.holdMenuBackTrapArmed
+      && window?.history
+      && typeof window.history.back === "function"
+      && window.history.state?.homeHoldMenuBackTrap === true
+    );
+    this.holdMenuBackTrapArmed = false;
+    if (!shouldPruneCurrentHistoryEntry) {
+      return;
+    }
+    try {
+      Router.ignoreSinglePopstate?.();
+      window.history.back();
+    } catch (error) {
+      console.warn("Failed to release home hold menu back trap", error);
+    }
   },
 
   hasOpenHoldMenu() {
@@ -3132,21 +3176,33 @@ export const HomeScreen = {
       this.posterHoldMenu
       || this.continueWatchingMenu
       || this.container?.querySelector?.(".hold-menu")
+      || document.querySelector("#home .hold-menu")
     );
   },
 
   closeOpenHoldMenu() {
+    const hadDomMenu = Boolean(this.container?.querySelector?.(".hold-menu") || document.querySelector("#home .hold-menu"));
     if (this.posterHoldMenu) {
-      return this.closePosterHoldMenu();
+      const closed = this.closePosterHoldMenu();
+      if (closed) {
+        this.suppressHomeExitUntil = Date.now() + 700;
+      }
+      return closed;
     }
     if (this.continueWatchingMenu) {
-      return this.closeContinueWatchingMenu();
+      const closed = this.closeContinueWatchingMenu();
+      if (closed) {
+        this.suppressHomeExitUntil = Date.now() + 700;
+      }
+      return closed;
     }
-    if (this.container?.querySelector?.(".hold-menu")) {
+    if (hadDomMenu) {
       this.posterHoldMenu = null;
       this.continueWatchingMenu = null;
+      this.releaseHoldMenuBackTrap();
       this.suppressHoldMenuEnterUntilKeyUp = false;
       this.render();
+      this.suppressHomeExitUntil = Date.now() + 700;
       return true;
     }
     return false;
@@ -3261,6 +3317,7 @@ export const HomeScreen = {
       item,
       backgroundFocusState: this.captureCurrentFocusState()
     };
+    this.armHoldMenuBackTrap();
     this.suppressHoldMenuEnterUntilKeyUp = true;
     this.render();
     return true;
@@ -3272,6 +3329,7 @@ export const HomeScreen = {
     }
     this.pendingContinueWatchingFocusIndex = Math.max(0, Number(this.continueWatchingMenu.index || 0));
     this.continueWatchingMenu = null;
+    this.releaseHoldMenuBackTrap();
     this.render();
     return true;
   },
@@ -3489,6 +3547,7 @@ export const HomeScreen = {
     const normalized = normalizeContinueWatchingItem(item);
     this.cancelPendingContinueWatchingEnter();
     this.continueWatchingMenu = null;
+    this.releaseHoldMenuBackTrap();
 
     Router.navigate("detail", {
       itemId: normalized.contentId,
@@ -3511,6 +3570,7 @@ export const HomeScreen = {
     }
     this.cancelPendingContinueWatchingEnter();
     this.continueWatchingMenu = null;
+    this.releaseHoldMenuBackTrap();
     Router.navigate("detail", {
       itemId: normalized.contentId,
       itemType: normalized.type || "movie",
@@ -3529,6 +3589,7 @@ export const HomeScreen = {
     }
     this.cancelPendingContinueWatchingEnter();
     this.continueWatchingMenu = null;
+    this.releaseHoldMenuBackTrap();
     Router.navigate("stream", {
       ...params,
       returnToDetail: true,
@@ -3665,6 +3726,7 @@ export const HomeScreen = {
       return false;
     }
     this.continueWatchingMenu = null;
+    this.releaseHoldMenuBackTrap();
     this.pendingContinueWatchingFocusIndex = anchorIndex;
     this.render();
     return true;
@@ -3742,6 +3804,7 @@ export const HomeScreen = {
     };
     if (option.action === "details") {
       this.posterHoldMenu = null;
+      this.releaseHoldMenuBackTrap();
       Router.navigate("detail", {
         itemId: item.id,
         itemType: item.type || "movie",
@@ -5316,18 +5379,38 @@ export const HomeScreen = {
   bindBackHandler() {
     if (this.homeBackHandler) {
       document.removeEventListener("keydown", this.homeBackHandler, true);
+      document.removeEventListener("keyup", this.homeBackHandler, true);
+    }
+    if (this.homeBeforeExitHandler) {
+      document.removeEventListener("nuvio:beforeExitApp", this.homeBeforeExitHandler, true);
     }
     this.homeBackHandler = (event) => {
-      if (!this.hasOpenHoldMenu() || !Platform.isBackEvent(event)) {
+      if (!Platform.isBackEvent(event)) {
         return;
       }
-      event.preventDefault?.();
-      event.stopPropagation?.();
-      event.stopImmediatePropagation?.();
-      this.closeOpenHoldMenu();
-      Router.suppressNextPopstate?.();
+      if (this.closeOpenHoldMenu()) {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        event.stopImmediatePropagation?.();
+        Router.suppressNextPopstate?.();
+        return;
+      }
+      if (Date.now() < Number(this.suppressHomeExitUntil || 0)) {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        event.stopImmediatePropagation?.();
+        Router.suppressNextPopstate?.();
+      }
+    };
+    this.homeBeforeExitHandler = (event) => {
+      if (this.closeOpenHoldMenu() || Date.now() < Number(this.suppressHomeExitUntil || 0)) {
+        event.preventDefault?.();
+        Router.suppressNextPopstate?.();
+      }
     };
     document.addEventListener("keydown", this.homeBackHandler, true);
+    document.addEventListener("keyup", this.homeBackHandler, true);
+    document.addEventListener("nuvio:beforeExitApp", this.homeBeforeExitHandler, true);
   },
 
   async mount(params = {}, navigationContext = {}) {
@@ -6660,6 +6743,15 @@ export const HomeScreen = {
       this.cancelPendingPosterEnter();
       this.cancelPendingPosterHold();
     }
+    if (Platform.isBackEvent(event)) {
+      if (this.closeOpenHoldMenu() || Date.now() < Number(this.suppressHomeExitUntil || 0)) {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        event.stopImmediatePropagation?.();
+        Router.suppressNextPopstate?.();
+        return;
+      }
+    }
     if (this.hasOpenHoldMenu()) {
       if (Platform.isBackEvent(event)) {
         event.preventDefault?.();
@@ -6815,8 +6907,11 @@ export const HomeScreen = {
   },
 
   consumeBackRequest() {
-    if (this.hasOpenHoldMenu()) {
-      this.closeOpenHoldMenu();
+    if (this.closeOpenHoldMenu()) {
+      Router.suppressNextPopstate?.();
+      return true;
+    }
+    if (Date.now() < Number(this.suppressHomeExitUntil || 0)) {
       Router.suppressNextPopstate?.();
       return true;
     }
@@ -6830,6 +6925,7 @@ export const HomeScreen = {
     this.cancelPendingPosterHold();
     this.continueWatchingMenu = null;
     this.posterHoldMenu = null;
+    this.releaseHoldMenuBackTrap();
     this.suppressHoldMenuEnterUntilKeyUp = false;
     this.needsContinueWatchingRetry = false;
     this.continueWatchingRetryInFlight = null;
@@ -6853,7 +6949,12 @@ export const HomeScreen = {
     this.boundHomeViewport = null;
     if (this.homeBackHandler) {
       document.removeEventListener("keydown", this.homeBackHandler, true);
+      document.removeEventListener("keyup", this.homeBackHandler, true);
       this.homeBackHandler = null;
+    }
+    if (this.homeBeforeExitHandler) {
+      document.removeEventListener("nuvio:beforeExitApp", this.homeBeforeExitHandler, true);
+      this.homeBeforeExitHandler = null;
     }
     if (this.homeTruncationFrame) {
       cancelAnimationFrame(this.homeTruncationFrame);
