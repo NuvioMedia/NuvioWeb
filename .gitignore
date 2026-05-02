@@ -16,6 +16,7 @@ dist/
 logs/
 app.bundle.js
 
-NuvioTV/
+NuvioTVWebOS/
+androidTV/
 ecosystem.config.cjs
 scripts/commit-build-poller.mjs
