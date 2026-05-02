@@ -80,6 +80,17 @@ const SKIP_INTERVAL_CHECK_MS = 250;
 const PAUSE_OVERLAY_DELAY_MS = 5000;
 const MAX_PAUSE_OVERLAY_CAST = 8;
 const UNSUPPORTED_EMBEDDED_SUBTITLE_CODECS = new Set(["HDMV/PGS", "VOBSUB"]);
+const PARENTAL_GUIDE_CONTAINER_IN_MS = 300;
+const PARENTAL_GUIDE_LINE_IN_MS = 400;
+const PARENTAL_GUIDE_ITEM_STAGGER_MS = 80;
+const PARENTAL_GUIDE_ITEM_IN_MS = 200;
+const PARENTAL_GUIDE_HOLD_MS = 5000;
+const PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS = 60;
+const PARENTAL_GUIDE_ITEM_EXIT_MS = 150;
+const PARENTAL_GUIDE_LINE_OUT_DELAY_MS = 100;
+const PARENTAL_GUIDE_LINE_OUT_MS = 300;
+const PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS = 200;
+const PARENTAL_GUIDE_CONTAINER_OUT_MS = 200;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -1232,10 +1243,15 @@ export const PlayerScreen = {
     if (JSON.stringify(this.parentalWarnings || []) === JSON.stringify(warnings)) {
       return;
     }
+    const hasAlreadyShown = Boolean(this.parentalGuideShown);
     this.parentalWarnings = warnings;
-    this.parentalGuideShown = false;
+    if (!hasAlreadyShown) {
+      this.parentalGuideShown = false;
+    }
     this.renderParentalGuideOverlay();
-    this.maybeShowParentalGuideOverlay();
+    if (!hasAlreadyShown) {
+      this.maybeShowParentalGuideOverlay();
+    }
   },
 
   async fetchSkipIntervals() {
@@ -2194,8 +2210,10 @@ export const PlayerScreen = {
           <div class="player-loading-backdrop"${this.params.playerBackdropUrl ? ` style="background-image:url('${this.params.playerBackdropUrl}')"` : ""}></div>
           <div class="player-loading-gradient"></div>
           <div class="player-loading-center">
-            ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
-            <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
+            <div class="player-loading-identity">
+              ${this.params.playerLogoUrl ? `<img class="player-loading-logo" src="${this.params.playerLogoUrl}" alt="logo" />` : ""}
+              <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
+            </div>
             ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml(this.params.playerSubtitle)}</div>` : ""}
           </div>
         </div>
@@ -2547,15 +2565,10 @@ export const PlayerScreen = {
 
     const meta = this.pauseOverlayMeta || this.buildPauseOverlayMeta();
     const clockText = String(this.lastUiTickState?.clockText || this.uiRefs?.clock?.textContent || "--:--").trim() || "--:--";
-    const endsAtText = String(
-      this.lastUiTickState?.endsAtText
-      || this.uiRefs?.endsAt?.textContent
-      || t("player_ends_at", ["--:--"], "Ends at %1$s")
-    ).trim() || t("player_ends_at", ["--:--"], "Ends at %1$s");
+    const castItems = Array.isArray(meta.cast) ? meta.cast.slice(0, MAX_PAUSE_OVERLAY_CAST) : [];
     overlay.innerHTML = `
       <div class="player-pause-overlay-top">
         <div class="player-pause-overlay-clock">${escapeHtml(clockText)}</div>
-        <div class="player-pause-overlay-ends-at">${escapeHtml(endsAtText)}</div>
       </div>
       <div class="player-pause-overlay-shade"></div>
       <div class="player-pause-overlay-content">
@@ -2564,6 +2577,18 @@ export const PlayerScreen = {
         ${meta.releaseYear || meta.episodeCode ? `<div class="player-pause-meta-line">${escapeHtml([meta.releaseYear, meta.episodeCode].filter(Boolean).join(" • "))}</div>` : ""}
         ${meta.episodeTitle ? `<div class="player-pause-episode-title">${escapeHtml(meta.episodeTitle)}</div>` : ""}
         ${meta.description ? `<div class="player-pause-description">${escapeHtml(meta.description)}</div>` : ""}
+        ${castItems.length ? `
+          <div class="player-pause-cast-section">
+            <div class="player-pause-cast-label">${escapeHtml(t("pause_cast_label", {}, "Cast"))}</div>
+            <div class="player-pause-cast-row">
+              ${castItems.map((member) => `
+                <div class="player-pause-cast-chip">
+                  <span>${escapeHtml(member.name || "")}</span>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        ` : ""}
       </div>
     `;
   },
@@ -7270,16 +7295,25 @@ export const PlayerScreen = {
     overlay.classList.toggle("is-exiting", Boolean(this.parentalGuideExiting));
     if (!shouldRender) {
       overlay.innerHTML = "";
+      overlay.style.removeProperty("--parental-line-exit-delay");
+      overlay.style.removeProperty("--parental-container-exit-delay");
       return;
     }
 
     const total = this.parentalWarnings.length;
+    const lineEnterDelay = PARENTAL_GUIDE_CONTAINER_IN_MS;
+    const firstItemDelay = PARENTAL_GUIDE_CONTAINER_IN_MS + PARENTAL_GUIDE_LINE_IN_MS + PARENTAL_GUIDE_ITEM_STAGGER_MS;
+    const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
+    const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;
+    overlay.style.setProperty("--parental-line-exit-delay", `${lineExitDelay}ms`);
+    overlay.style.setProperty("--parental-container-exit-delay", `${containerExitDelay}ms`);
     overlay.innerHTML = `
-      <div class="player-parental-line"></div>
+      <div class="player-parental-line" style="--parental-line-enter-delay:${lineEnterDelay}ms"></div>
       <div class="player-parental-list">
         ${this.parentalWarnings.map((warning, index) => `
-          <div class="player-parental-item" style="--parental-enter-delay:${index * 120}ms;--parental-exit-delay:${(total - index - 1) * 90}ms">
+          <div class="player-parental-item" style="--parental-enter-delay:${firstItemDelay + (index * (PARENTAL_GUIDE_ITEM_STAGGER_MS + PARENTAL_GUIDE_ITEM_IN_MS))}ms;--parental-exit-delay:${(total - index - 1) * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)}ms">
             <span class="player-parental-label">${escapeHtml(warning.label)}</span>
+            <span class="player-parental-separator"> · </span>
             <span class="player-parental-severity">${escapeHtml(warning.severity)}</span>
           </div>
         `).join("")}
@@ -7305,9 +7339,12 @@ export const PlayerScreen = {
       this.parentalGuideExitTimer = null;
     }
 
+    const enterDuration = PARENTAL_GUIDE_CONTAINER_IN_MS
+      + PARENTAL_GUIDE_LINE_IN_MS
+      + (this.parentalWarnings.length * (PARENTAL_GUIDE_ITEM_STAGGER_MS + PARENTAL_GUIDE_ITEM_IN_MS));
     this.parentalGuideTimer = setTimeout(() => {
       this.hideParentalGuideOverlay();
-    }, 5200);
+    }, enterDuration + PARENTAL_GUIDE_HOLD_MS);
   },
 
   hideParentalGuideOverlay() {
@@ -7326,11 +7363,13 @@ export const PlayerScreen = {
       clearTimeout(this.parentalGuideExitTimer);
     }
     const total = this.parentalWarnings.length;
+    const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
+    const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;
     this.parentalGuideExitTimer = setTimeout(() => {
       this.parentalGuideExiting = false;
       this.parentalGuideExitTimer = null;
       this.renderParentalGuideOverlay();
-    }, Math.max(320, (Math.max(0, total - 1) * 90) + 280));
+    }, containerExitDelay + PARENTAL_GUIDE_CONTAINER_OUT_MS);
   },
 
   toggleEpisodePanel() {

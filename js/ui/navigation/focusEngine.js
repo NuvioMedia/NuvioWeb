@@ -79,6 +79,7 @@ export const FocusEngine = {
 
       const currentScreen = Router.getCurrentScreen();
       if (currentScreen?.consumeBackRequest?.()) {
+        Router.suppressNextPopstate?.();
         return;
       }
 

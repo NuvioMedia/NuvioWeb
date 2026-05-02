@@ -7,6 +7,7 @@ import { catalogRepository } from "../../../data/repository/catalogRepository.js
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
+import { libraryRepository } from "../../../data/repository/libraryRepository.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
@@ -18,9 +19,19 @@ import { Platform } from "../../../platform/index.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
+import {
+  activatePosterOption,
+  createPosterOptionsState,
+  getPosterOptions,
+  posterItemFromNode,
+  renderPosterOptionsMenu
+} from "../../components/posterOptionsMenu.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const EPISODE_HOLD_DELAY_MS = 650;
+const POSTER_HOLD_DELAY_MS = 650;
+const HERO_HOLD_DELAY_MS = 650;
+const DETAIL_PROGRESS_END_THRESHOLD = 0.85;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -57,6 +68,21 @@ function normalizeEpisodes(videos = []) {
       }
       return left.episode - right.episode;
     });
+}
+
+function detailProgressFraction(progress = {}) {
+  if (progress?.progressPercent != null && progress.progressPercent !== "") {
+    const explicitPercent = Number(progress.progressPercent);
+    if (Number.isFinite(explicitPercent)) {
+      return Math.max(0, Math.min(1, explicitPercent / 100));
+    }
+  }
+  const position = Number(progress?.positionMs || 0);
+  const duration = Number(progress?.durationMs || 0);
+  if (!Number.isFinite(position) || !Number.isFinite(duration) || position <= 0 || duration <= 0) {
+    return 0;
+  }
+  return Math.max(0, Math.min(1, position / duration));
 }
 
 function isSeriesDetailMeta(meta = {}, episodes = null) {
@@ -830,14 +856,22 @@ export const MetaDetailsScreen = {
     this.pendingEpisodeSelection = null;
     this.pendingMovieSelection = null;
     this.episodeHoldMenu = null;
+    this.posterOptionsMenu = null;
+    this.heroPlayMenu = null;
+    this.libraryListMenu = null;
+    this.pendingPosterHoldTarget = null;
+    this.pendingPosterHoldTimer = null;
+    this.pendingHeroHoldTarget = null;
+    this.pendingHeroHoldTimer = null;
     this.streamChooserFocus = null;
     this.streamChooserLoadToken = 0;
     this.isLoadingDetail = true;
     this.detailLoadToken = (this.detailLoadToken || 0) + 1;
     this.seriesInsightTab = "cast";
     this.movieInsightTab = "cast";
-    this.selectedRatingSeason = 1;
-    this.selectedSeason = 1;
+    this.selectedRatingSeason = 0;
+    this.selectedSeason = 0;
+    this.hasManualSeasonSelection = false;
     this.collectionItems = [];
     this.collectionName = "";
     this.trailerSource = null;
@@ -950,9 +984,9 @@ export const MetaDetailsScreen = {
     this.episodes = normalizeEpisodes(meta?.videos || []);
     this.castItems = extractCast(meta);
     this.buildEpisodeState(allProgressItems, allWatchedItems);
-    this.selectedSeason = this.selectedSeason || this.episodes[0]?.season || 1;
-    this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
     this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
+    this.selectedSeason = this.resolveInitialSelectedSeason(progress, allProgressItems);
+    this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
     this.moreLikeThisItems = [];
     this.collectionItems = [];
     this.collectionName = "";
@@ -986,7 +1020,7 @@ export const MetaDetailsScreen = {
           this.castItems = fallbackCast;
         }
       }
-      this.selectedSeason = this.selectedSeason || this.episodes[0]?.season || 1;
+      this.selectedSeason = this.resolveInitialSelectedSeason(progress, allProgressItems);
       this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
       this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
       this.updateRenderedDetailSections(this.meta);
@@ -1088,18 +1122,130 @@ export const MetaDetailsScreen = {
     }
   },
 
+  getAvailableSeasons(episodes = this.episodes) {
+    return Array.from(new Set((Array.isArray(episodes) ? episodes : [])
+      .map((episode) => Number(episode?.season || 0))
+      .filter((season) => Number.isFinite(season) && season > 0)))
+      .sort((left, right) => left - right);
+  },
+
+  hasAvailableSeason(season, episodes = this.episodes) {
+    const wanted = Number(season || 0);
+    return wanted > 0 && this.getAvailableSeasons(episodes).includes(wanted);
+  },
+
+  findEpisodeFromProgress(progress = {}) {
+    if (!this.episodes?.length || !progress) {
+      return null;
+    }
+    const videoId = String(progress?.videoId || "").trim();
+    if (videoId) {
+      const directMatch = this.episodes.find((episode) => String(episode?.id || "") === videoId);
+      if (directMatch) {
+        return directMatch;
+      }
+    }
+    const season = Number(progress?.season || 0);
+    const episode = Number(progress?.episode || 0);
+    if (season > 0 && episode > 0) {
+      return this.episodes.find((entry) => (
+        Number(entry?.season || 0) === season
+        && Number(entry?.episode || 0) === episode
+      )) || null;
+    }
+    return null;
+  },
+
+  getNextEpisodeAfter(episode = null) {
+    if (!episode || !this.episodes?.length) {
+      return null;
+    }
+    const currentIndex = this.episodes.findIndex((entry) => (
+      String(entry?.id || "") === String(episode?.id || "")
+      || (
+        Number(entry?.season || 0) === Number(episode?.season || 0)
+        && Number(entry?.episode || 0) === Number(episode?.episode || 0)
+      )
+    ));
+    return currentIndex >= 0 ? (this.episodes[currentIndex + 1] || null) : null;
+  },
+
+  getLatestSeriesProgress(progress = null, progressItems = []) {
+    const contentId = String(this.params?.itemId || "").trim();
+    const candidates = [];
+    if (progress && String(progress?.contentId || contentId) === contentId) {
+      candidates.push(progress);
+    }
+    (Array.isArray(progressItems) ? progressItems : []).forEach((entry) => {
+      if (String(entry?.contentId || "").trim() !== contentId) {
+        return;
+      }
+      if (Number(entry?.season || 0) <= 0 && !String(entry?.videoId || "").trim()) {
+        return;
+      }
+      candidates.push(entry);
+    });
+    return candidates
+      .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0))[0] || null;
+  },
+
+  resolvePreferredSeasonFromProgress(progress = null, progressItems = []) {
+    const routeSeason = Number(
+      this.params?.preferredSeason
+      ?? this.params?.resumeSeason
+      ?? this.params?.initialSeason
+      ?? 0
+    );
+    if (Number.isFinite(routeSeason) && routeSeason > 0) {
+      return routeSeason;
+    }
+
+    const latestProgress = this.getLatestSeriesProgress(progress, progressItems);
+    const progressEpisode = this.findEpisodeFromProgress(latestProgress);
+    if (progressEpisode) {
+      if (detailProgressFraction(latestProgress) >= DETAIL_PROGRESS_END_THRESHOLD) {
+        return Number(this.getNextEpisodeAfter(progressEpisode)?.season || progressEpisode.season || 0);
+      }
+      return Number(progressEpisode.season || 0);
+    }
+
+    const progressSeason = Number(latestProgress?.season || 0);
+    return Number.isFinite(progressSeason) && progressSeason > 0 ? progressSeason : 0;
+  },
+
+  resolveInitialSelectedSeason(progress = null, progressItems = []) {
+    const seasons = this.getAvailableSeasons();
+    const currentSeason = Number(this.selectedSeason || 0);
+    if (this.hasManualSeasonSelection && currentSeason > 0 && seasons.includes(currentSeason)) {
+      return currentSeason;
+    }
+    const preferredSeason = this.resolvePreferredSeasonFromProgress(progress, progressItems);
+    if (preferredSeason > 0 && (!seasons.length || seasons.includes(preferredSeason))) {
+      return preferredSeason;
+    }
+
+    if (currentSeason > 0 && seasons.includes(currentSeason)) {
+      return currentSeason;
+    }
+
+    return seasons[0] || 1;
+  },
+
   computeNextEpisodeToWatch(progress) {
     if (!this.episodes?.length) {
       return null;
     }
-    const currentVideoId = progress?.videoId || null;
-    if (!currentVideoId) {
+    const currentEpisode = this.findEpisodeFromProgress(progress);
+    if (!currentEpisode) {
       return this.episodes[0];
     }
-    const currentIndex = this.episodes.findIndex((episode) => episode.id === currentVideoId);
-    if (currentIndex < 0) {
-      return this.episodes[0];
-    }
+    const currentIndex = this.episodes.findIndex((episode) => (
+      String(episode?.id || "") === String(currentEpisode?.id || "")
+      || (
+        Number(episode?.season || 0) === Number(currentEpisode?.season || 0)
+        && Number(episode?.episode || 0) === Number(currentEpisode?.episode || 0)
+      )
+    ));
     return this.episodes[currentIndex + 1] || this.episodes[currentIndex] || this.episodes[0];
   },
 
@@ -1506,6 +1652,10 @@ export const MetaDetailsScreen = {
         <div id="episodeStreamChooserMount"></div>
       </div>
       ${this.renderEpisodeHoldMenu()}
+      ${this.renderSeasonHoldMenu()}
+      ${renderPosterOptionsMenu(this.posterOptionsMenu)}
+      ${this.renderHeroPlayMenu()}
+      ${this.renderLibraryListMenu()}
     `;
 
     ScreenUtils.indexFocusables(this.container);
@@ -1515,6 +1665,15 @@ export const MetaDetailsScreen = {
     this.bindDetailChrome();
     if (this.episodeHoldMenu) {
       this.applyEpisodeHoldMenuFocus();
+    }
+    if (this.seasonHoldMenu) {
+      this.applySeasonHoldMenuFocus();
+    }
+    if (this.posterOptionsMenu) {
+      this.applyPosterOptionsFocus();
+    }
+    if (this.heroPlayMenu || this.libraryListMenu) {
+      this.applyHeroOptionsFocus();
     }
   },
   renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
@@ -1723,6 +1882,9 @@ export const MetaDetailsScreen = {
         </div>
         <div id="movieStreamChooserMount"></div>
       </div>
+      ${renderPosterOptionsMenu(this.posterOptionsMenu)}
+      ${this.renderHeroPlayMenu()}
+      ${this.renderLibraryListMenu()}
     `;
 
     ScreenUtils.indexFocusables(this.container);
@@ -1730,6 +1892,12 @@ export const MetaDetailsScreen = {
       ScreenUtils.setInitialFocus(this.container, ".movie-detail-content .focusable");
     }
     this.bindDetailChrome();
+    if (this.posterOptionsMenu) {
+      this.applyPosterOptionsFocus();
+    }
+    if (this.heroPlayMenu || this.libraryListMenu) {
+      this.applyHeroOptionsFocus();
+    }
   },
 
   captureRenderedChromeState() {
@@ -2012,14 +2180,17 @@ export const MetaDetailsScreen = {
     if (!episode) {
       return [];
     }
-    const progress = this.getEpisodeMenuProgress(episode);
     const watched = this.isEpisodeMarkedWatched(episode);
-    const hasResume = !watched && Number(progress?.positionMs || 0) > 0;
-    return [
-      { action: hasResume ? "resume" : "play", label: hasResume ? t("common.resume", {}, "Resume") : t("detail.play", {}, "Play") },
-      { action: "startOver", label: t("common.startOver", {}, "Start Over") },
-      { action: "toggleWatched", label: watched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched") }
+    const seasonFullyWatched = this.isSeasonFullyWatched(episode.season);
+    const options = [
+      { action: "toggleWatched", label: watched ? t("episodes_mark_unwatched", {}, "Mark as unwatched") : t("episodes_mark_watched", {}, "Mark as watched") },
+      { action: seasonFullyWatched ? "markSeasonUnwatched" : "markSeasonWatched", label: seasonFullyWatched ? t("episodes_mark_season_unwatched", {}, "Mark season as unwatched") : t("episodes_mark_season_watched", {}, "Mark season as watched") }
     ];
+    if (this.getPreviousEpisodes(episode).length > 0) {
+      options.push({ action: "markPreviousWatched", label: t("episodes_mark_previous_watched", {}, "Mark previous episodes as watched") });
+    }
+    options.push({ action: "play", label: t("episodes_play", {}, "Play") });
+    return options;
   },
 
   renderEpisodeHoldMenu() {
@@ -2037,6 +2208,100 @@ export const MetaDetailsScreen = {
     });
   },
 
+  getSeasonHoldMenuSeason() {
+    const season = Number(this.seasonHoldMenu?.season || 0);
+    return Number.isFinite(season) && season > 0 ? season : null;
+  },
+
+  getSeasonHoldMenuOptions() {
+    const season = this.getSeasonHoldMenuSeason();
+    if (!season) {
+      return [];
+    }
+    const fullyWatched = this.isSeasonFullyWatched(season);
+    return [
+      {
+        action: fullyWatched ? "markSeasonUnwatched" : "markSeasonWatched",
+        label: fullyWatched
+          ? t("episodes_mark_season_unwatched", {}, "Mark season as unwatched")
+          : t("episodes_mark_season_watched", {}, "Mark season as watched")
+      }
+    ];
+  },
+
+  renderSeasonHoldMenu() {
+    const season = this.getSeasonHoldMenuSeason();
+    if (!season) {
+      return "";
+    }
+    return renderHoldMenuMarkup({
+      kicker: "",
+      title: t("detail.seasonLabel", { season }, "Season {{season}}"),
+      subtitle: t("episodes_season_actions", {}, "Season actions"),
+      focusedIndex: Number(this.seasonHoldMenu?.optionIndex || 0),
+      options: this.getSeasonHoldMenuOptions()
+    });
+  },
+
+  renderHeroPlayMenu() {
+    if (!this.heroPlayMenu) {
+      return "";
+    }
+    return renderHoldMenuMarkup({
+      kicker: "",
+      title: this.meta?.name || this.params?.fallbackTitle || "Untitled",
+      subtitle: t("detail.playOptions", {}, "Play options"),
+      focusedIndex: Number(this.heroPlayMenu.optionIndex || 0),
+      options: [
+        { action: "playManually", label: t("play_manually", {}, "Play manually") }
+      ]
+    });
+  },
+
+  getCurrentLibraryItem() {
+    return {
+      itemId: this.params?.itemId || this.meta?.id || "",
+      itemType: this.params?.itemType || this.meta?.type || "movie",
+      title: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
+      poster: this.meta?.poster || null,
+      background: this.meta?.background || this.meta?.landscapePoster || null,
+      description: this.meta?.description || "",
+      releaseInfo: this.meta?.releaseInfo || "",
+      imdbRating: this.meta?.imdbRating == null ? null : Number(this.meta.imdbRating),
+      genres: Array.isArray(this.meta?.genres) ? this.meta.genres : []
+    };
+  },
+
+  getLibraryListMenuOptions() {
+    if (!this.libraryListMenu) {
+      return [];
+    }
+    const membership = this.libraryListMenu.membership || {};
+    const tabs = Array.isArray(this.libraryListMenu.tabs) ? this.libraryListMenu.tabs : [];
+    return [
+      ...tabs.map((tab) => ({
+        action: `toggleLibraryList:${tab.key}`,
+        label: `${membership[tab.key] ? "[x]" : "[ ]"} ${tab.title || tab.key}`
+      })),
+      { action: "saveLibraryLists", label: t("action_save", {}, "Save") }
+    ];
+  },
+
+  renderLibraryListMenu() {
+    if (!this.libraryListMenu) {
+      return "";
+    }
+    const subtitle = this.libraryListMenu.error
+      || t("detail_lists_subtitle", {}, "Choose which lists should include this title");
+    return renderHoldMenuMarkup({
+      kicker: "",
+      title: this.meta?.name || this.params?.fallbackTitle || "Untitled",
+      subtitle,
+      focusedIndex: Number(this.libraryListMenu.optionIndex || 0),
+      options: this.getLibraryListMenuOptions()
+    });
+  },
+
   applyEpisodeHoldMenuFocus() {
     const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
     if (!buttons.length) {
@@ -2051,6 +2316,55 @@ export const MetaDetailsScreen = {
     target.classList.add("focused");
     target.focus();
     return true;
+  },
+
+  applySeasonHoldMenuFocus() {
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!buttons.length) {
+      return false;
+    }
+    const index = Math.max(0, Math.min(buttons.length - 1, Number(this.seasonHoldMenu?.optionIndex || 0)));
+    buttons.forEach((node, buttonIndex) => node.classList.toggle("focused", buttonIndex === index));
+    const target = buttons[index] || buttons[0] || null;
+    if (!target) {
+      return false;
+    }
+    target.classList.add("focused");
+    target.focus();
+    return true;
+  },
+
+  applyHeroOptionsFocus() {
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!buttons.length) {
+      return false;
+    }
+    const source = this.libraryListMenu || this.heroPlayMenu || {};
+    const index = Math.max(0, Math.min(buttons.length - 1, Number(source.optionIndex || 0)));
+    buttons.forEach((node, buttonIndex) => node.classList.toggle("focused", buttonIndex === index));
+    const target = buttons[index] || buttons[0] || null;
+    if (!target) {
+      return false;
+    }
+    target.classList.add("focused");
+    target.focus();
+    return true;
+  },
+
+  moveHeroOptionsFocus(delta) {
+    const menu = this.libraryListMenu || this.heroPlayMenu;
+    if (!menu) {
+      return false;
+    }
+    const options = this.libraryListMenu
+      ? this.getLibraryListMenuOptions()
+      : [{ action: "playManually", label: t("play_manually", {}, "Play manually") }];
+    if (!options.length) {
+      return false;
+    }
+    menu.optionIndex = Math.max(0, Math.min(options.length - 1, Number(menu.optionIndex || 0) + delta));
+    this.render(this.meta, this.captureDetailFocus());
+    return this.applyHeroOptionsFocus();
   },
 
   moveEpisodeHoldMenuFocus(delta) {
@@ -2072,6 +2386,271 @@ export const MetaDetailsScreen = {
     return Boolean(node?.matches?.(".series-episode-card.focusable"));
   },
 
+  isSeasonHoldTarget(node) {
+    return Boolean(node?.matches?.(".series-season-btn.focusable"));
+  },
+
+  isPosterHoldTarget(node) {
+    return Boolean(node?.matches?.(".detail-morelike-card.focusable"));
+  },
+
+  isHeroHoldTarget(node) {
+    const action = String(node?.dataset?.action || "");
+    return Boolean(node?.matches?.(".series-primary-btn.focusable, .series-circle-btn.focusable"))
+      && (action === "playDefault" || action === "toggleLibrary");
+  },
+
+  cancelPendingHeroHold() {
+    if (this.pendingHeroHoldTimer) {
+      clearTimeout(this.pendingHeroHoldTimer);
+      this.pendingHeroHoldTimer = null;
+    }
+    this.pendingHeroHoldTarget = null;
+  },
+
+  hasPendingHeroHold(node) {
+    const pending = this.pendingHeroHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return String(node.dataset.action || "") === String(pending.action || "");
+  },
+
+  startPendingHeroHold(node) {
+    const action = String(node?.dataset?.action || "");
+    if (action !== "playDefault" && action !== "toggleLibrary") {
+      return false;
+    }
+    this.cancelPendingHeroHold();
+    this.pendingHeroHoldTarget = {
+      action,
+      holdTriggered: false
+    };
+    this.pendingHeroHoldTimer = setTimeout(() => {
+      this.pendingHeroHoldTimer = null;
+      const pending = this.pendingHeroHoldTarget;
+      if (!pending || Router.getCurrent() !== "detail") {
+        return;
+      }
+      const current = this.container?.querySelector(".series-detail-actions .focusable.focused") || null;
+      if (!this.hasPendingHeroHold(current)) {
+        return;
+      }
+      pending.holdTriggered = true;
+      if (pending.action === "playDefault") {
+        this.openHeroPlayMenu();
+      } else {
+        void this.openLibraryListMenu();
+      }
+    }, HERO_HOLD_DELAY_MS);
+    return true;
+  },
+
+  async completePendingHeroHold(node) {
+    const pending = this.pendingHeroHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    const action = String(pending.action || "");
+    this.cancelPendingHeroHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!node || String(node.dataset.action || "") !== action) {
+      return false;
+    }
+    if (action === "playDefault") {
+      await this.playDefaultFromHero();
+      return true;
+    }
+    if (action === "toggleLibrary") {
+      await this.toggleLibraryFromHero();
+      return true;
+    }
+    return false;
+  },
+
+  openHeroPlayMenu() {
+    this.heroPlayMenu = { optionIndex: 0 };
+    this.libraryListMenu = null;
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render(this.meta, { selector: ".series-detail-actions [data-action='playDefault']" });
+    this.applyHeroOptionsFocus();
+    return true;
+  },
+
+  closeHeroMenus() {
+    if (!this.heroPlayMenu && !this.libraryListMenu) {
+      return false;
+    }
+    const focusSelector = this.libraryListMenu
+      ? ".series-detail-actions [data-action='toggleLibrary']"
+      : ".series-detail-actions [data-action='playDefault']";
+    this.heroPlayMenu = null;
+    this.libraryListMenu = null;
+    this.render(this.meta, { selector: focusSelector });
+    return true;
+  },
+
+  async openLibraryListMenu() {
+    const item = this.getCurrentLibraryItem();
+    if (!item.itemId) {
+      return false;
+    }
+    const tabs = await libraryRepository.getListTabs().catch(() => []);
+    const resolvedTabs = Array.isArray(tabs) && tabs.length
+      ? tabs
+      : [{ key: "local", title: t("detail.library", {}, "Library"), type: "local" }];
+    const snapshot = await libraryRepository.getMembershipSnapshot(item).catch(() => ({ listMembership: {} }));
+    this.libraryListMenu = {
+      item,
+      tabs: resolvedTabs,
+      membership: Object.fromEntries(resolvedTabs.map((tab) => [tab.key, Boolean(snapshot?.listMembership?.[tab.key])])),
+      optionIndex: 0,
+      error: ""
+    };
+    this.heroPlayMenu = null;
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render(this.meta, { selector: ".series-detail-actions [data-action='toggleLibrary']" });
+    this.applyHeroOptionsFocus();
+    return true;
+  },
+
+  async playDefaultFromHero() {
+    if (isSeriesDetailMeta(this.meta, this.episodes)) {
+      const targetEpisode = this.nextEpisodeToWatch
+        || this.episodes?.find((entry) => entry.season === this.selectedSeason)
+        || this.episodes?.[0]
+        || null;
+      if (targetEpisode?.id) {
+        await this.openEpisodeStreamChooser(targetEpisode.id);
+      }
+      return;
+    }
+    await this.openMovieStreamChooser();
+  },
+
+  async toggleLibraryFromHero() {
+    await savedLibraryRepository.toggle({
+      contentId: this.params?.itemId,
+      contentType: this.params?.itemType || "movie",
+      title: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
+      poster: this.meta?.poster || null,
+      background: this.meta?.background || null
+    });
+    this.isSavedInLibrary = !this.isSavedInLibrary;
+    this.syncDetailActionButtons();
+  },
+
+  cancelPendingPosterHold() {
+    if (this.pendingPosterHoldTimer) {
+      clearTimeout(this.pendingPosterHoldTimer);
+      this.pendingPosterHoldTimer = null;
+    }
+    this.pendingPosterHoldTarget = null;
+  },
+
+  hasPendingPosterHold(node) {
+    return this.pendingPosterHoldTarget === node && Boolean(this.pendingPosterHoldTimer);
+  },
+
+  startPendingPosterHold(node) {
+    this.cancelPendingPosterHold();
+    if (!this.isPosterHoldTarget(node)) {
+      return;
+    }
+    this.pendingPosterHoldTarget = node;
+    this.pendingPosterHoldTimer = setTimeout(() => {
+      this.pendingPosterHoldTimer = null;
+      const target = this.pendingPosterHoldTarget;
+      this.pendingPosterHoldTarget = null;
+      if (target?.isConnected && target.classList.contains("focused")) {
+        void this.openPosterOptionsMenu(target);
+      }
+    }, POSTER_HOLD_DELAY_MS);
+  },
+
+  completePendingPosterHold(node) {
+    if (!this.pendingPosterHoldTarget) {
+      return false;
+    }
+    const target = this.pendingPosterHoldTarget;
+    const hadTimer = Boolean(this.pendingPosterHoldTimer);
+    this.cancelPendingPosterHold();
+    if (hadTimer && target === node) {
+      this.openMoreLikeDetailFromNode(target);
+    }
+    return true;
+  },
+
+  async openPosterOptionsMenu(node) {
+    const item = posterItemFromNode(node, this.params?.itemType || "movie");
+    if (!item?.id) {
+      return false;
+    }
+    this.posterOptionsMenu = await createPosterOptionsState(item);
+    this.pendingFocusRestore = this.getPosterFocusDescriptor(item.id);
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render(this.meta, this.pendingFocusRestore);
+    this.applyPosterOptionsFocus();
+    return true;
+  },
+
+  closePosterOptionsMenu() {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const itemId = String(this.posterOptionsMenu.item?.id || "");
+    this.posterOptionsMenu = null;
+    this.render(this.meta, this.getPosterFocusDescriptor(itemId));
+    return true;
+  },
+
+  applyPosterOptionsFocus() {
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!buttons.length || !this.posterOptionsMenu) {
+      return false;
+    }
+    const index = Math.max(0, Math.min(buttons.length - 1, Number(this.posterOptionsMenu.optionIndex || 0)));
+    buttons.forEach((node, buttonIndex) => node.classList.toggle("focused", buttonIndex === index));
+    const target = buttons[index] || buttons[0] || null;
+    if (!target) {
+      return false;
+    }
+    target.classList.add("focused");
+    target.focus();
+    return true;
+  },
+
+  movePosterOptionsFocus(delta) {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const options = getPosterOptions(this.posterOptionsMenu);
+    if (!options.length) {
+      return false;
+    }
+    this.posterOptionsMenu = {
+      ...this.posterOptionsMenu,
+      optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0) + delta))
+    };
+    return this.applyPosterOptionsFocus();
+  },
+
+  getPosterFocusDescriptor(itemId) {
+    const id = String(itemId || "").trim();
+    return id ? { selector: `.detail-morelike-card[data-item-id="${escapeSelectorValue(id)}"]` } : null;
+  },
+
+  openMoreLikeDetailFromNode(node) {
+    Router.navigate("detail", {
+      itemId: node.dataset.itemId,
+      itemType: node.dataset.itemType || "movie",
+      fallbackTitle: node.dataset.itemTitle || "Untitled"
+    });
+  },
+
   cancelPendingEpisodeHold() {
     if (this.pendingEpisodeHoldTimer) {
       clearTimeout(this.pendingEpisodeHoldTimer);
@@ -2080,12 +2659,28 @@ export const MetaDetailsScreen = {
     this.pendingEpisodeHoldTarget = null;
   },
 
+  cancelPendingSeasonHold() {
+    if (this.pendingSeasonHoldTimer) {
+      clearTimeout(this.pendingSeasonHoldTimer);
+      this.pendingSeasonHoldTimer = null;
+    }
+    this.pendingSeasonHoldTarget = null;
+  },
+
   hasPendingEpisodeHold(node) {
     const pending = this.pendingEpisodeHoldTarget;
     if (!pending || !node) {
       return false;
     }
     return String(node.dataset.videoId || "") === String(pending.videoId || "");
+  },
+
+  hasPendingSeasonHold(node) {
+    const pending = this.pendingSeasonHoldTarget;
+    if (!pending || !node) {
+      return false;
+    }
+    return Number(node.dataset.season || 0) === Number(pending.season || 0);
   },
 
   startPendingEpisodeHold(node) {
@@ -2114,6 +2709,32 @@ export const MetaDetailsScreen = {
     return true;
   },
 
+  startPendingSeasonHold(node) {
+    const season = Number(node?.dataset?.season || 0);
+    if (!Number.isFinite(season) || season <= 0) {
+      return false;
+    }
+    this.cancelPendingSeasonHold();
+    this.pendingSeasonHoldTarget = {
+      season,
+      holdTriggered: false
+    };
+    this.pendingSeasonHoldTimer = setTimeout(() => {
+      this.pendingSeasonHoldTimer = null;
+      const pending = this.pendingSeasonHoldTarget;
+      if (!pending || Router.getCurrent() !== "detail") {
+        return;
+      }
+      const current = this.container?.querySelector(".series-season-btn.focusable.focused") || null;
+      if (!this.hasPendingSeasonHold(current)) {
+        return;
+      }
+      pending.holdTriggered = true;
+      this.openSeasonHoldMenu(current);
+    }, EPISODE_HOLD_DELAY_MS);
+    return true;
+  },
+
   async completePendingEpisodeHold(node) {
     const pending = this.pendingEpisodeHoldTarget;
     if (!pending) {
@@ -2135,6 +2756,31 @@ export const MetaDetailsScreen = {
     return true;
   },
 
+  completePendingSeasonHold(node) {
+    const pending = this.pendingSeasonHoldTarget;
+    if (!pending) {
+      return false;
+    }
+    const holdTriggered = Boolean(pending.holdTriggered);
+    this.cancelPendingSeasonHold();
+    if (holdTriggered) {
+      return true;
+    }
+    if (!this.isSeasonHoldTarget(node)) {
+      return false;
+    }
+    const season = Number(node?.dataset?.season || 0);
+    if (!Number.isFinite(season) || season <= 0) {
+      return false;
+    }
+    if (season !== this.selectedSeason) {
+      this.hasManualSeasonSelection = true;
+      this.selectedSeason = season;
+      this.render(this.meta);
+    }
+    return true;
+  },
+
   openEpisodeHoldMenu(node) {
     const episode = this.getEpisodeByVideoId(node?.dataset?.videoId || "");
     if (!episode) {
@@ -2146,7 +2792,22 @@ export const MetaDetailsScreen = {
       optionIndex: 0,
       episode: { ...episode }
     };
+    this.suppressHoldMenuEnterUntilKeyUp = true;
     this.render(this.meta, this.pendingFocusRestore);
+    return true;
+  },
+
+  openSeasonHoldMenu(node) {
+    const season = Number(node?.dataset?.season || 0);
+    if (!Number.isFinite(season) || season <= 0) {
+      return false;
+    }
+    this.seasonHoldMenu = {
+      season,
+      optionIndex: 0
+    };
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    this.render(this.meta, { selector: `.series-season-btn[data-season="${season}"]` });
     return true;
   },
 
@@ -2160,6 +2821,16 @@ export const MetaDetailsScreen = {
     return true;
   },
 
+  closeSeasonHoldMenu() {
+    if (!this.seasonHoldMenu) {
+      return false;
+    }
+    const season = Number(this.seasonHoldMenu.season || this.selectedSeason || 1);
+    this.seasonHoldMenu = null;
+    this.render(this.meta, { selector: `.series-season-btn[data-season="${season}"]` });
+    return true;
+  },
+
   startEpisodeFromHoldMenu(episode, options = {}) {
     if (!episode?.id) {
       return false;
@@ -2169,6 +2840,89 @@ export const MetaDetailsScreen = {
     this.navigateToStreamScreenForEpisode(episode, {
       resumePositionMs: options.startOver ? 0 : (Number(progress?.positionMs || 0) || 0)
     });
+    return true;
+  },
+
+  getSeasonEpisodes(season) {
+    const seasonNumber = Number(season || 0);
+    return (this.episodes || []).filter((episode) => Number(episode?.season || 0) === seasonNumber);
+  },
+
+  isSeasonFullyWatched(season) {
+    const episodes = this.getSeasonEpisodes(season);
+    return episodes.length > 0 && episodes.every((episode) => this.isEpisodeMarkedWatched(episode));
+  },
+
+  getPreviousEpisodes(episode) {
+    if (!episode) {
+      return [];
+    }
+    const targetSeason = Number(episode?.season || 0);
+    const targetEpisode = Number(episode?.episode || 0);
+    return (this.episodes || []).filter((entry) => {
+      const entrySeason = Number(entry?.season || 0);
+      const entryEpisode = Number(entry?.episode || 0);
+      return entrySeason < targetSeason || (entrySeason === targetSeason && entryEpisode < targetEpisode);
+    });
+  },
+
+  async setEpisodesWatchedState(episodes = [], watched = true) {
+    const targets = (episodes || []).filter((episode) => episode?.id);
+    if (!targets.length) {
+      return false;
+    }
+    for (const episode of targets) {
+      if (watched) {
+        await watchedItemsRepository.mark({
+          contentId: this.params?.itemId,
+          contentType: "series",
+          title: this.meta?.name || this.params?.fallbackTitle || episode.title || "Untitled",
+          season: episode.season,
+          episode: episode.episode,
+          watchedAt: Date.now()
+        });
+        await watchProgressRepository.saveProgress({
+          contentId: this.params?.itemId,
+          contentType: "series",
+          videoId: episode.id,
+          season: episode.season,
+          episode: episode.episode,
+          positionMs: 100,
+          durationMs: 100,
+          updatedAt: Date.now()
+        });
+      } else {
+        await watchedItemsRepository.unmark(this.params?.itemId, {
+          season: episode.season,
+          episode: episode.episode
+        });
+        await watchProgressRepository.removeProgress(this.params?.itemId, episode.id);
+      }
+    }
+    await this.refreshEpisodePlaybackState();
+    return true;
+  },
+
+  async setSeasonWatchedState(season, watched) {
+    const episodes = this.getSeasonEpisodes(season);
+    if (!episodes.length) {
+      return false;
+    }
+    await this.setEpisodesWatchedState(episodes, watched);
+    this.episodeHoldMenu = null;
+    this.seasonHoldMenu = null;
+    this.render(this.meta, { selector: `.series-season-btn[data-season="${Number(season || this.selectedSeason || 1)}"]` });
+    return true;
+  },
+
+  async markPreviousEpisodesWatched(episode) {
+    const previousEpisodes = this.getPreviousEpisodes(episode);
+    if (!previousEpisodes.length) {
+      return false;
+    }
+    await this.setEpisodesWatchedState(previousEpisodes, true);
+    this.episodeHoldMenu = null;
+    this.render(this.meta, this.getEpisodeFocusDescriptor(episode.id));
     return true;
   },
 
@@ -2230,14 +2984,100 @@ export const MetaDetailsScreen = {
     if (!episode || !option) {
       return false;
     }
-    if (option.action === "resume" || option.action === "play") {
+    if (option.action === "play") {
       return this.startEpisodeFromHoldMenu(episode);
-    }
-    if (option.action === "startOver") {
-      return this.startEpisodeFromHoldMenu(episode, { startOver: true });
     }
     if (option.action === "toggleWatched") {
       return this.setEpisodeWatchedState(episode, !this.isEpisodeMarkedWatched(episode));
+    }
+    if (option.action === "markSeasonWatched" || option.action === "markSeasonUnwatched") {
+      return this.setSeasonWatchedState(episode.season, option.action === "markSeasonWatched");
+    }
+    if (option.action === "markPreviousWatched") {
+      return this.markPreviousEpisodesWatched(episode);
+    }
+    return false;
+  },
+
+  async activateSeasonHoldMenuOption() {
+    const season = this.getSeasonHoldMenuSeason();
+    const options = this.getSeasonHoldMenuOptions();
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.seasonHoldMenu?.optionIndex || 0)))];
+    if (!season || !option) {
+      return false;
+    }
+    if (option.action === "markSeasonWatched" || option.action === "markSeasonUnwatched") {
+      return this.setSeasonWatchedState(season, option.action === "markSeasonWatched");
+    }
+    return false;
+  },
+
+  async activatePosterOptionsMenu() {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const options = getPosterOptions(this.posterOptionsMenu);
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0)))];
+    if (!option) {
+      return false;
+    }
+    const result = await activatePosterOption(this.posterOptionsMenu, option.action);
+    if (result?.type === "details") {
+      Router.navigate("detail", {
+        itemId: result.item.id,
+        itemType: result.item.type || "movie",
+        fallbackTitle: result.item.title || "Untitled"
+      });
+      return true;
+    }
+    if (result?.type === "updated") {
+      this.posterOptionsMenu = result.state;
+      this.render(this.meta, this.getPosterFocusDescriptor(result.state?.item?.id));
+      this.applyPosterOptionsFocus();
+      return true;
+    }
+    return false;
+  },
+
+  async activateHeroOptionsMenu() {
+    if (this.heroPlayMenu) {
+      this.heroPlayMenu = null;
+      this.render(this.meta, { selector: ".series-detail-actions [data-action='playDefault']" });
+      await this.playDefaultFromHero();
+      return true;
+    }
+    if (!this.libraryListMenu) {
+      return false;
+    }
+    const options = this.getLibraryListMenuOptions();
+    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.libraryListMenu.optionIndex || 0)))];
+    const action = String(option?.action || "");
+    if (action.startsWith("toggleLibraryList:")) {
+      const key = action.slice("toggleLibraryList:".length);
+      this.libraryListMenu.membership = {
+        ...(this.libraryListMenu.membership || {}),
+        [key]: !this.libraryListMenu.membership?.[key]
+      };
+      this.render(this.meta, { selector: ".series-detail-actions [data-action='toggleLibrary']" });
+      this.applyHeroOptionsFocus();
+      return true;
+    }
+    if (action === "saveLibraryLists") {
+      try {
+        await libraryRepository.applyMembershipChanges(this.libraryListMenu.item, {
+          desiredMembership: this.libraryListMenu.membership || {}
+        });
+        this.isSavedInLibrary = Object.values(this.libraryListMenu.membership || {}).some(Boolean);
+        this.libraryListMenu = null;
+        this.render(this.meta, { selector: ".series-detail-actions [data-action='toggleLibrary']" });
+        this.syncDetailActionButtons();
+      } catch (error) {
+        console.warn("Failed to update library lists", error);
+        this.libraryListMenu.error = t("detail_lists_save_failed", {}, "Could not save list changes.");
+        this.render(this.meta, { selector: ".series-detail-actions [data-action='toggleLibrary']" });
+        this.applyHeroOptionsFocus();
+      }
+      return true;
     }
     return false;
   },
@@ -2268,7 +3108,9 @@ export const MetaDetailsScreen = {
            data-action="openMoreLikeDetail"
            data-item-id="${item.id}"
            data-item-type="${item.type || this.params?.itemType || "movie"}"
-           data-item-title="${escapeHtml(item.name || "Untitled")}">
+           data-item-title="${escapeHtml(item.name || "Untitled")}"
+           data-poster-src="${escapeHtml(item.poster || primaryImage || "")}"
+           data-backdrop-src="${escapeHtml(item.background || item.backdrop || item.landscapePoster || primaryImage || "")}">
         <div class="detail-morelike-poster-wrap">
           ${primaryImage
             ? `<img class="detail-morelike-poster-image" src="${escapeHtml(primaryImage)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml(fallbackImage)}"` : ""} onerror="const next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; const placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />`
@@ -2351,6 +3193,7 @@ export const MetaDetailsScreen = {
       if (target.matches(".series-season-btn.focusable")) {
         const season = Number(target.dataset.season || 0);
         if (season > 0 && season !== this.selectedSeason) {
+          this.hasManualSeasonSelection = true;
           this.selectedSeason = season;
           this.render(this.meta, { selector: `.series-season-btn[data-season="${season}"]` });
         }
@@ -2474,7 +3317,23 @@ export const MetaDetailsScreen = {
     const active = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const target = current || (active && this.container.contains(active) ? active : null);
     if (target?.matches?.(".hold-menu-button.focusable")) {
-      return this.getEpisodeFocusDescriptor(this.episodeHoldMenu?.videoId);
+      if (this.episodeHoldMenu) {
+        return this.getEpisodeFocusDescriptor(this.episodeHoldMenu?.videoId);
+      }
+      if (this.seasonHoldMenu) {
+        const season = Number(this.seasonHoldMenu.season || this.selectedSeason || 1);
+        return { selector: `.series-season-btn[data-season="${season}"]` };
+      }
+      if (this.posterOptionsMenu) {
+        return this.getPosterFocusDescriptor(this.posterOptionsMenu?.item?.id);
+      }
+      if (this.libraryListMenu) {
+        return { selector: ".series-detail-actions [data-action='toggleLibrary']" };
+      }
+      if (this.heroPlayMenu) {
+        return { selector: ".series-detail-actions [data-action='playDefault']" };
+      }
+      return null;
     }
     if (!(target instanceof HTMLElement) || !target.closest(".series-detail-content")) {
       return null;
@@ -3303,8 +4162,20 @@ export const MetaDetailsScreen = {
   },
 
   consumeBackRequest() {
+    if (this.seasonHoldMenu) {
+      this.closeSeasonHoldMenu();
+      return true;
+    }
     if (this.episodeHoldMenu) {
       this.closeEpisodeHoldMenu();
+      return true;
+    }
+    if (this.posterOptionsMenu) {
+      this.closePosterOptionsMenu();
+      return true;
+    }
+    if (this.heroPlayMenu || this.libraryListMenu) {
+      this.closeHeroMenus();
       return true;
     }
     if (this.isTrailerPlaying) {
@@ -4259,25 +5130,60 @@ export const MetaDetailsScreen = {
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
     const currentFocusedNode = this.container.querySelector(".focusable.focused") || null;
 
-    const isTizenHoldTarget = Environment.isTizen() && this.isEpisodeHoldTarget(currentFocusedNode);
-    if (!isTizenHoldTarget || code !== 13) {
+    const isEpisodeHoldTarget = this.isEpisodeHoldTarget(currentFocusedNode);
+    const isSeasonHoldTarget = this.isSeasonHoldTarget(currentFocusedNode);
+    const isPosterHoldTarget = this.isPosterHoldTarget(currentFocusedNode);
+    const isHeroHoldTarget = this.isHeroHoldTarget(currentFocusedNode);
+    if ((!isEpisodeHoldTarget && !isSeasonHoldTarget) || code !== 13) {
       this.cancelPendingEpisodeHold();
+      this.cancelPendingSeasonHold();
+    }
+    if (!isPosterHoldTarget || code !== 13) {
+      this.cancelPendingPosterHold();
+    }
+    if (!isHeroHoldTarget || code !== 13) {
+      this.cancelPendingHeroHold();
     }
 
-    if (this.episodeHoldMenu) {
+    if (this.episodeHoldMenu || this.seasonHoldMenu || this.posterOptionsMenu || this.heroPlayMenu || this.libraryListMenu) {
       if (isBackEvent(event)) {
         event?.preventDefault?.();
-        this.closeEpisodeHoldMenu();
+        if (this.heroPlayMenu || this.libraryListMenu) {
+          this.closeHeroMenus();
+        } else if (this.posterOptionsMenu) {
+          this.closePosterOptionsMenu();
+        } else if (this.seasonHoldMenu) {
+          this.closeSeasonHoldMenu();
+        } else {
+          this.closeEpisodeHoldMenu();
+        }
         return;
       }
       if (code === 38 || code === 40) {
         event?.preventDefault?.();
-        this.moveEpisodeHoldMenuFocus(code === 38 ? -1 : 1);
+        if (this.heroPlayMenu || this.libraryListMenu) {
+          this.moveHeroOptionsFocus(code === 38 ? -1 : 1);
+        } else if (this.posterOptionsMenu) {
+          this.movePosterOptionsFocus(code === 38 ? -1 : 1);
+        } else if (this.episodeHoldMenu) {
+          this.moveEpisodeHoldMenuFocus(code === 38 ? -1 : 1);
+        }
         return;
       }
       if (code === 13) {
         event?.preventDefault?.();
-        await this.activateEpisodeHoldMenuOption();
+        if (this.suppressHoldMenuEnterUntilKeyUp) {
+          return;
+        }
+        if (this.heroPlayMenu || this.libraryListMenu) {
+          await this.activateHeroOptionsMenu();
+        } else if (this.posterOptionsMenu) {
+          await this.activatePosterOptionsMenu();
+        } else if (this.seasonHoldMenu) {
+          await this.activateSeasonHoldMenuOption();
+        } else {
+          await this.activateEpisodeHoldMenuOption();
+        }
         return;
       }
       return;
@@ -4335,7 +5241,6 @@ export const MetaDetailsScreen = {
       }
     }
 
-    const isEpisodeHoldTarget = this.isEpisodeHoldTarget(currentFocusedNode);
     const wantsEpisodeHoldMenu = isEpisodeHoldTarget
       && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
     if (wantsEpisodeHoldMenu) {
@@ -4344,10 +5249,59 @@ export const MetaDetailsScreen = {
       this.openEpisodeHoldMenu(currentFocusedNode);
       return;
     }
-    if (Environment.isTizen() && code === 13 && isEpisodeHoldTarget) {
+    const wantsSeasonHoldMenu = isSeasonHoldTarget
+      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
+    if (wantsSeasonHoldMenu) {
+      event?.preventDefault?.();
+      this.cancelPendingSeasonHold();
+      this.openSeasonHoldMenu(currentFocusedNode);
+      return;
+    }
+    const wantsPosterOptionsMenu = isPosterHoldTarget
+      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
+    if (wantsPosterOptionsMenu) {
+      event?.preventDefault?.();
+      this.cancelPendingPosterHold();
+      await this.openPosterOptionsMenu(currentFocusedNode);
+      return;
+    }
+    const wantsHeroOptionsMenu = isHeroHoldTarget
+      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
+    if (wantsHeroOptionsMenu) {
+      event?.preventDefault?.();
+      this.cancelPendingHeroHold();
+      if (String(currentFocusedNode?.dataset?.action || "") === "playDefault") {
+        this.openHeroPlayMenu();
+      } else {
+        await this.openLibraryListMenu();
+      }
+      return;
+    }
+    if (code === 13 && isEpisodeHoldTarget) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingEpisodeHold(currentFocusedNode)) {
         this.startPendingEpisodeHold(currentFocusedNode);
+      }
+      return;
+    }
+    if (code === 13 && isHeroHoldTarget) {
+      event?.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingHeroHold(currentFocusedNode)) {
+        this.startPendingHeroHold(currentFocusedNode);
+      }
+      return;
+    }
+    if (code === 13 && isPosterHoldTarget) {
+      event?.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingPosterHold(currentFocusedNode)) {
+        this.startPendingPosterHold(currentFocusedNode);
+      }
+      return;
+    }
+    if (code === 13 && isSeasonHoldTarget) {
+      event?.preventDefault?.();
+      if (!event?.repeat && !this.hasPendingSeasonHold(currentFocusedNode)) {
+        this.startPendingSeasonHold(currentFocusedNode);
       }
       return;
     }
@@ -4390,17 +5344,7 @@ export const MetaDetailsScreen = {
     }
 
     if (action === "playDefault") {
-      if (isSeriesDetailMeta(this.meta, this.episodes)) {
-        const targetEpisode = this.nextEpisodeToWatch
-          || this.episodes?.find((entry) => entry.season === this.selectedSeason)
-          || this.episodes?.[0]
-          || null;
-        if (targetEpisode?.id) {
-          await this.openEpisodeStreamChooser(targetEpisode.id);
-        }
-        return;
-      }
-      await this.openMovieStreamChooser();
+      await this.playDefaultFromHero();
       return;
     }
 
@@ -4412,6 +5356,7 @@ export const MetaDetailsScreen = {
     if (action === "selectSeason") {
       const season = Number(current.dataset.season || 1);
       if (season !== this.selectedSeason) {
+        this.hasManualSeasonSelection = true;
         this.selectedSeason = season;
         this.render(this.meta);
       }
@@ -4493,15 +5438,7 @@ export const MetaDetailsScreen = {
     }
 
     if (action === "toggleLibrary") {
-      await savedLibraryRepository.toggle({
-        contentId: this.params?.itemId,
-        contentType: this.params?.itemType || "movie",
-        title: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
-        poster: this.meta?.poster || null,
-        background: this.meta?.background || null
-      });
-      this.isSavedInLibrary = !this.isSavedInLibrary;
-      this.syncDetailActionButtons();
+      await this.toggleLibraryFromHero();
       return;
     }
 
@@ -4552,17 +5489,17 @@ export const MetaDetailsScreen = {
     }
 
     if (action === "openMoreLikeDetail") {
-      Router.navigate("detail", {
-        itemId: current.dataset.itemId,
-        itemType: current.dataset.itemType || "movie",
-        fallbackTitle: current.dataset.itemTitle || "Untitled"
-      });
+      this.openMoreLikeDetailFromNode(current);
     }
   },
 
   async onKeyUp(event) {
-    if (!Environment.isTizen()) {
-      return;
+    if (this.suppressHoldMenuEnterUntilKeyUp) {
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event?.preventDefault?.();
+        return;
+      }
     }
     if (Number(event?.keyCode || 0) !== 13) {
       return;
@@ -4570,13 +5507,36 @@ export const MetaDetailsScreen = {
     const current = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
     if (await this.completePendingEpisodeHold(current)) {
       event?.preventDefault?.();
+      return;
+    }
+    const season = this.container?.querySelector(".series-season-btn.focusable.focused") || null;
+    if (this.completePendingSeasonHold(season)) {
+      event?.preventDefault?.();
+      return;
+    }
+    const poster = this.container?.querySelector(".detail-morelike-card.focusable.focused") || null;
+    if (this.completePendingPosterHold(poster)) {
+      event?.preventDefault?.();
+      return;
+    }
+    const hero = this.container?.querySelector(".series-detail-actions .focusable.focused") || null;
+    if (await this.completePendingHeroHold(hero)) {
+      event?.preventDefault?.();
     }
   },
 
   cleanup() {
     this.detailLoadToken = (this.detailLoadToken || 0) + 1;
     this.cancelPendingEpisodeHold();
+    this.cancelPendingSeasonHold();
+    this.cancelPendingPosterHold();
+    this.cancelPendingHeroHold();
     this.episodeHoldMenu = null;
+    this.seasonHoldMenu = null;
+    this.posterOptionsMenu = null;
+    this.heroPlayMenu = null;
+    this.libraryListMenu = null;
+    this.suppressHoldMenuEnterUntilKeyUp = false;
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
     if (this.detailScrollHandler && this.container) {
       const content = this.container.querySelector(".series-detail-content");

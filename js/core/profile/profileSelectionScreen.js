@@ -4,7 +4,6 @@ import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
-import { Platform } from "../../platform/index.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
 
@@ -1120,6 +1119,7 @@ export const ProfileSelectionScreen = {
     this.optionsProfileId = String(profile.id);
     this.pendingFocusKey = "options:edit";
     this.suppressNextFocusClick("options:edit");
+    this.suppressOptionsDialogEnterUntilKeyUp = true;
     this.render();
   },
 
@@ -1652,7 +1652,7 @@ export const ProfileSelectionScreen = {
       || this.container.querySelector("[data-overlay-root='editor']");
     const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
 
-    if (!Platform.isTizen() || code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
+    if (code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
       this.cancelPendingProfileHold();
     }
 
@@ -1681,6 +1681,9 @@ export const ProfileSelectionScreen = {
         return;
       }
       event?.preventDefault?.();
+      if (overlayRoot.dataset.overlayRoot === "options" && this.suppressOptionsDialogEnterUntilKeyUp) {
+        return;
+      }
       this.rememberKeyboardActivation(focused);
       await this.activateFocusedNode(focused);
       return;
@@ -1702,7 +1705,7 @@ export const ProfileSelectionScreen = {
       }
     }
 
-    if (Platform.isTizen() && code === 13 && this.canHoldManageProfile(currentProfileCard)) {
+    if (code === 13 && this.canHoldManageProfile(currentProfileCard)) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingProfileHold(currentProfileCard)) {
         this.startPendingProfileHold(currentProfileCard);
@@ -1727,8 +1730,12 @@ export const ProfileSelectionScreen = {
   },
 
   async onKeyUp(event) {
-    if (!Platform.isTizen()) {
-      return;
+    if (this.suppressOptionsDialogEnterUntilKeyUp) {
+      this.suppressOptionsDialogEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event?.preventDefault?.();
+        return;
+      }
     }
     if (Number(event?.keyCode || 0) !== 13 || this.pinOverlayState || this.optionsProfileId || this.deleteProfileId || this.editorState) {
       return;
@@ -1774,6 +1781,7 @@ export const ProfileSelectionScreen = {
     }
     this.pinTransitionCallback = null;
     this.suppressedFocusClick = null;
+    this.suppressOptionsDialogEnterUntilKeyUp = false;
     const container = document.getElementById("profileSelection");
     if (!container) {
       return;

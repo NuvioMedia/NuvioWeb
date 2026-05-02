@@ -145,6 +145,7 @@ function shouldTryLegacyTable(error) {
 function mapProgressRow(row = {}) {
   const contentId = row.content_id || row.contentId || "";
   const contentType = row.content_type || row.contentType || "movie";
+  const source = String(row.source || "").trim();
   const updatedAtRaw = row.updated_at ?? row.last_watched ?? row.lastWatched ?? null;
   const updatedAt = (() => {
     if (updatedAtRaw == null) {
@@ -159,6 +160,8 @@ function mapProgressRow(row = {}) {
   })();
   const positionMsRaw = row.position_ms ?? row.position ?? 0;
   const durationMsRaw = row.duration_ms ?? row.duration ?? 0;
+  const progressPercentRaw = row.progress_percent ?? row.progressPercent ?? null;
+  const progressPercent = Number(progressPercentRaw);
   const seasonRaw = row.season ?? row.season_number ?? null;
   const episodeRaw = row.episode ?? row.episode_number ?? null;
   const seasonNum = Number(seasonRaw);
@@ -185,6 +188,8 @@ function mapProgressRow(row = {}) {
     episode: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : null,
     positionMs: toMs(positionMsRaw),
     durationMs: toMs(durationMsRaw),
+    progressPercent: Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null,
+    source: source || "local",
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()
   };
 }
