@@ -5589,6 +5589,19 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 440px minmax(0, 1fr);
   gap: 32px;
+  transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1), margin 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: width, margin;
+}
+
+.settings-shell:has(.home-sidebar[data-collapsible="true"]) .settings-workspace {
+  width: calc(100vw - 128px);
+  margin-left: 64px;
+}
+
+.settings-shell:has(.modern-sidebar-shell) .settings-workspace {
+  width: calc(100vw - 128px);
+  margin: 68px 64px 24px;
+  height: calc(100vh - 92px);
 }
 
 .settings-rail-item,
