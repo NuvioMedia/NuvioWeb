@@ -5,7 +5,7 @@
   "version": "0.1.5",
   "scripts": {
     "build": "node ./scripts/build.mjs",
-    "build:on-commit": "node ./scripts/commit-build-poller.mjs",
+    "build:on-release": "node ./scripts/release-build-poller.mjs",
     "install:webos": "node ./scripts/ares-install-webos.mjs",
     "inspect:webos": "node ./scripts/ares-inspect-webos.mjs",
     "logs:webos": "node ./scripts/ares-logs-webos.mjs",
