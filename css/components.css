@@ -1325,12 +1325,11 @@ button:focus-visible {
 
 /* ─── NuvioDialog — reusable dialog matching ATV NuvioDialog.kt ─── */
 
-/* Backdrop / scrim — Android Dialog default scrim = 0.6 */
+/* Backdrop / scrim — ATV dialogs dim the app heavily behind the focused panel. */
 .nuvio-dialog-backdrop {
   position: fixed;
   inset: 0;
-  /* ATV Android Dialog scrim: rgba(0,0,0,0.72) at TV — darker than phone default */
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.84);
   display: flex;
   align-items: center;
   justify-content: center;
