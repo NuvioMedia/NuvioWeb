@@ -20,6 +20,7 @@ import { FocusEngine } from "./ui/navigation/focusEngine.js";
 import { PlayerController } from "./core/player/playerController.js";
 import { AuthManager } from "./core/auth/authManager.js";
 import { AuthState } from "./core/auth/authState.js";
+import { ProfileManager } from "./core/profile/profileManager.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
@@ -30,6 +31,11 @@ import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
 
 const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
+const SIGNED_OUT_ALLOWED_ROUTES = new Set(["trakt"]);
+
+function isSignedOutRouteAllowed() {
+  return SIGNED_OUT_ALLOWED_ROUTES.has(Router.getCurrent());
+}
 
 function formatErrorMessage(error) {
   if (!error) {
@@ -100,9 +106,13 @@ async function bootstrapApp() {
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
       const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
+      if (isSignedOutRouteAllowed()) {
+        return;
+      }
       if (shouldBypassQr) {
-        if (Router.getCurrent() !== "home") {
-          Router.navigate("home", {}, {
+        ProfileManager.clearActiveProfile();
+        if (Router.getCurrent() !== "profileSelection") {
+          Router.navigate("profileSelection", {}, {
             replaceHistory: true,
             skipStackPush: true
           });
@@ -117,6 +127,7 @@ async function bootstrapApp() {
 
     if (state === AuthState.AUTHENTICATED) {
       LocalStore.remove(GUEST_QR_BYPASS_KEY);
+      ProfileManager.clearActiveProfile();
       StartupSyncService.start();
       Router.navigate("profileSelection");
     }

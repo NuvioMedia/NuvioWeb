@@ -303,11 +303,6 @@ export const ProfileSelectionScreen = {
     this.profiles = await ProfileManager.getProfiles();
     await this.refreshProfilePinStates();
     this.lastProfileFocusKey = `profile:${this.activeProfileId || "1"}`;
-    if (!this.isManagementMode && this.profiles.length === 1 && !this.isProfilePinEnabled(this.profiles[0]?.id)) {
-      await this.activateProfile(this.profiles[0].id);
-      return;
-    }
-
     await this.loadAvatarCatalog();
     this.render();
   },
