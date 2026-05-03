@@ -5629,6 +5629,13 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.settings-content-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .settings-sidebar {
   min-height: 0;
   width: 100%;
@@ -5649,9 +5656,8 @@ button:focus-visible {
   display: none;
 }
 
-.settings-sidebar-scroll-indicator {
+.settings-scroll-indicator {
   position: absolute;
-  left: 50%;
   z-index: 2;
   width: 64px;
   height: 64px;
@@ -5661,11 +5667,10 @@ button:focus-visible {
   justify-content: center;
   pointer-events: none;
   opacity: 0;
-  transform: translateX(-50%);
   transition: opacity 150ms ease;
 }
 
-.settings-sidebar-scroll-indicator svg {
+.settings-scroll-indicator svg {
   width: 64px;
   height: 64px;
   fill: none;
@@ -5675,16 +5680,40 @@ button:focus-visible {
   stroke-linejoin: round;
 }
 
-.settings-sidebar-scroll-indicator-up {
+.settings-scroll-indicator-up,
+.settings-scroll-indicator-down {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.settings-scroll-indicator-up {
   top: 4px;
 }
 
-.settings-sidebar-scroll-indicator-down {
+.settings-scroll-indicator-down {
   bottom: 4px;
 }
 
-.settings-sidebar-frame.can-scroll-backward .settings-sidebar-scroll-indicator-up,
-.settings-sidebar-frame.can-scroll-forward .settings-sidebar-scroll-indicator-down {
+.settings-scroll-indicator-left,
+.settings-scroll-indicator-right {
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.settings-scroll-indicator-left {
+  left: 4px;
+}
+
+.settings-scroll-indicator-right {
+  right: 4px;
+}
+
+.settings-sidebar-frame.can-scroll-backward .settings-scroll-indicator-up,
+.settings-sidebar-frame.can-scroll-forward .settings-scroll-indicator-down,
+.settings-content-frame.can-scroll-backward .settings-scroll-indicator-up,
+.settings-content-frame.can-scroll-forward .settings-scroll-indicator-down,
+.settings-horizontal-scroll-frame.can-scroll-backward .settings-scroll-indicator-left,
+.settings-horizontal-scroll-frame.can-scroll-forward .settings-scroll-indicator-right {
   opacity: 0.55;
 }
 
@@ -5808,6 +5837,8 @@ button:focus-visible {
 .settings-content {
   min-width: 0;
   min-height: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -6262,6 +6293,12 @@ button:focus-visible {
 
 .settings-theme-grid-card {
   overflow: visible;
+}
+
+.settings-horizontal-scroll-frame {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .settings-appearance-group-card {

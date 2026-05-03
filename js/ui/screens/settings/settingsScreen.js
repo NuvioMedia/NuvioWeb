@@ -499,6 +499,183 @@ function scrollIntoNearestView(node) {
   }
 }
 
+function getScrollMax(node, axis = "y") {
+  if (!node) {
+    return 0;
+  }
+  return Math.max(0, axis === "x" ? node.scrollWidth - node.clientWidth : node.scrollHeight - node.clientHeight);
+}
+
+function getScrollPosition(node, axis = "y") {
+  return Number(axis === "x" ? node?.scrollLeft || 0 : node?.scrollTop || 0);
+}
+
+function setScrollPosition(node, value, axis = "y") {
+  if (!node) {
+    return;
+  }
+  if (axis === "x") {
+    node.scrollLeft = value;
+    return;
+  }
+  node.scrollTop = value;
+}
+
+function animateSettingsScroll(container, nextPosition, axis = "y") {
+  if (!container) {
+    return;
+  }
+
+  const frameKey = axis === "x" ? "settingsScrollAnimationFrameX" : "settingsScrollAnimationFrameY";
+  if (container[frameKey]) {
+    cancelAnimationFrame(container[frameKey]);
+    container[frameKey] = null;
+  }
+
+  const startPosition = getScrollPosition(container, axis);
+  if (Math.abs(nextPosition - startPosition) < 1 || typeof requestAnimationFrame !== "function") {
+    setScrollPosition(container, nextPosition, axis);
+    updateSettingsScrollIndicators(container);
+    return;
+  }
+
+  let position = startPosition;
+  let velocity = 0;
+  let lastTime = performance.now();
+  const damping = 2 * SETTINGS_RAIL_SCROLL_DAMPING_RATIO * Math.sqrt(SETTINGS_RAIL_SCROLL_STIFFNESS);
+  const step = (now) => {
+    const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - lastTime) / 1000));
+    lastTime = now;
+
+    const displacement = position - nextPosition;
+    const acceleration = (-SETTINGS_RAIL_SCROLL_STIFFNESS * displacement) - (damping * velocity);
+    velocity += acceleration * deltaSeconds;
+    position += velocity * deltaSeconds;
+    setScrollPosition(container, position, axis);
+    updateSettingsScrollIndicators(container);
+
+    if (Math.abs(position - nextPosition) > 0.5 || Math.abs(velocity) > 0.5) {
+      container[frameKey] = requestAnimationFrame(step);
+    } else {
+      setScrollPosition(container, nextPosition, axis);
+      container[frameKey] = null;
+      updateSettingsScrollIndicators(container);
+    }
+  };
+
+  container[frameKey] = requestAnimationFrame(step);
+}
+
+function scrollSettingsNodeIntoContainer(node, container, axis = "y") {
+  if (!node || !container) {
+    return;
+  }
+
+  const maxScroll = getScrollMax(container, axis);
+  if (maxScroll <= 0) {
+    updateSettingsScrollIndicators(container);
+    return;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const nodeRect = node.getBoundingClientRect();
+  const containerSize = axis === "x" ? container.clientWidth : container.clientHeight;
+  const nodeStart = axis === "x" ? nodeRect.left - containerRect.left : nodeRect.top - containerRect.top;
+  const nodeSize = axis === "x" ? nodeRect.width || node.offsetWidth || 0 : nodeRect.height || node.offsetHeight || 0;
+  const itemCenterInViewport = nodeStart + (nodeSize / 2);
+  const targetCenter = containerSize * SETTINGS_RAIL_SCROLL_TARGET_RATIO;
+  const nextPosition = clamp(getScrollPosition(container, axis) + itemCenterInViewport - targetCenter, 0, maxScroll);
+
+  if (Math.abs(getScrollPosition(container, axis) - nextPosition) < 1) {
+    updateSettingsScrollIndicators(container);
+    return;
+  }
+  animateSettingsScroll(container, nextPosition, axis);
+}
+
+function scrollSettingsContentItem(node) {
+  if (!node) {
+    return;
+  }
+
+  const horizontalContainer = node.closest?.(".settings-theme-row");
+  if (horizontalContainer) {
+    scrollSettingsNodeIntoContainer(node, horizontalContainer, "x");
+  }
+
+  const verticalContainer = node.closest?.(".settings-content, .settings-group-card-fill");
+  if (verticalContainer) {
+    scrollSettingsNodeIntoContainer(node, verticalContainer, "y");
+    return;
+  }
+
+  scrollIntoNearestView(node);
+}
+
+function updateSettingsScrollIndicators(container) {
+  if (!container) {
+    return;
+  }
+
+  const verticalFrame = container.closest?.(".settings-content-frame, .settings-sidebar-frame");
+  if (verticalFrame && (container.classList?.contains("settings-content") || container.classList?.contains("settings-sidebar"))) {
+    const maxScroll = getScrollMax(container, "y");
+    const scrollTop = getScrollPosition(container, "y");
+    verticalFrame.classList.toggle("can-scroll-backward", scrollTop > 1);
+    verticalFrame.classList.toggle("can-scroll-forward", maxScroll > 1 && scrollTop < maxScroll - 1);
+  }
+
+  const horizontalFrame = container.closest?.(".settings-horizontal-scroll-frame");
+  if (horizontalFrame && container.classList?.contains("settings-theme-row")) {
+    const maxScroll = getScrollMax(container, "x");
+    const scrollLeft = getScrollPosition(container, "x");
+    horizontalFrame.classList.toggle("can-scroll-backward", scrollLeft > 1);
+    horizontalFrame.classList.toggle("can-scroll-forward", maxScroll > 1 && scrollLeft < maxScroll - 1);
+  }
+}
+
+function updateSettingsScrollIndicatorsSoon(container) {
+  if (!container) {
+    return;
+  }
+  requestAnimationFrame(() => updateSettingsScrollIndicators(container));
+}
+
+function bindSettingsScrollIndicators(root) {
+  if (!root) {
+    return;
+  }
+
+  root.querySelectorAll?.(".settings-sidebar, .settings-content, .settings-theme-row").forEach((container) => {
+    if (!container.settingsScrollIndicatorBound) {
+      container.settingsScrollIndicatorBound = true;
+      container.addEventListener("scroll", () => updateSettingsScrollIndicators(container), { passive: true });
+    }
+    updateSettingsScrollIndicatorsSoon(container);
+  });
+}
+
+function settingsScrollIndicatorMarkup(axis = "vertical") {
+  if (axis === "horizontal") {
+    return `
+      <span class="settings-scroll-indicator settings-scroll-indicator-left" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false"><path d="M14.6 7.4 10 12l4.6 4.6" /></svg>
+      </span>
+      <span class="settings-scroll-indicator settings-scroll-indicator-right" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false"><path d="m9.4 7.4 4.6 4.6-4.6 4.6" /></svg>
+      </span>
+    `;
+  }
+  return `
+    <span class="settings-scroll-indicator settings-scroll-indicator-up" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false"><path d="M7.4 14.6 12 10l4.6 4.6" /></svg>
+    </span>
+    <span class="settings-scroll-indicator settings-scroll-indicator-down" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false"><path d="m7.4 9.4 4.6 4.6 4.6-4.6" /></svg>
+    </span>
+  `;
+}
+
 function decodeJwtPayload(token) {
   try {
     const [, payload] = String(token || "").split(".");
@@ -803,7 +980,7 @@ function isAppearanceThemeFocusKey(focusKey) {
 export const SettingsScreen = {
 
   ensureShell() {
-    if (this.container?.querySelector?.(".settings-shell .settings-sidebar-frame")) {
+    if (this.container?.querySelector?.(".settings-shell .settings-sidebar-frame") && this.container?.querySelector?.(".settings-shell .settings-content-frame")) {
       return;
     }
     this.container.innerHTML = `
@@ -812,14 +989,12 @@ export const SettingsScreen = {
         <div class="settings-workspace">
           <div class="settings-sidebar-frame">
             <aside class="settings-sidebar" data-settings-nav></aside>
-            <span class="settings-sidebar-scroll-indicator settings-sidebar-scroll-indicator-up" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path d="M7.4 14.6 12 10l4.6 4.6" /></svg>
-            </span>
-            <span class="settings-sidebar-scroll-indicator settings-sidebar-scroll-indicator-down" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path d="m7.4 9.4 4.6 4.6 4.6-4.6" /></svg>
-            </span>
+            ${settingsScrollIndicatorMarkup("vertical")}
           </div>
-          <section class="settings-content" data-settings-content></section>
+          <div class="settings-content-frame">
+            <section class="settings-content" data-settings-content></section>
+            ${settingsScrollIndicatorMarkup("vertical")}
+          </div>
         </div>
         <div data-settings-dialog></div>
       </div>
@@ -1444,12 +1619,15 @@ export const SettingsScreen = {
           <div class="settings-group-title">${escapeHtml(t("appearance_color_theme", {}, "Color Theme"))}</div>
           <div class="settings-group-subtitle">${escapeHtml(t("appearance_color_theme_subtitle", {}, "Pick the accent color used across the app"))}</div>
         </div>
-        <div class="settings-theme-row">
-          ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
+        <div class="settings-horizontal-scroll-frame">
+          <div class="settings-theme-row">
+            ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
       theme,
       String(model.theme.themeName).toUpperCase() === theme.id,
       `appearance:theme:${theme.id}`
     )).join("")}
+          </div>
+          ${settingsScrollIndicatorMarkup("horizontal")}
         </div>
         ${this.renderToggleRow({
       focusKey: "appearance:amoled",
@@ -2316,6 +2494,7 @@ export const SettingsScreen = {
       this.railScrollNode = navSlot;
     }
     updateSettingsRailIndicatorsSoon(navSlot);
+    updateSettingsScrollIndicatorsSoon(navSlot);
 
     const sectionChanged = this.renderedSectionId !== section.id;
     const previousScrollState = !sectionChanged ? captureSettingsScrollState(contentSlot) : null;
@@ -2345,9 +2524,11 @@ export const SettingsScreen = {
       onExpandSidebar: () => this.openSidebar()
     });
     ScreenUtils.indexFocusables(this.container);
+    bindSettingsScrollIndicators(this.container);
     this.settingsRouteEnterPending = false;
     this.applyFocus();
     updateSettingsRailIndicatorsSoon(navSlot);
+    updateSettingsScrollIndicatorsSoon(contentSlot);
   },
 
   applyFocus() {
@@ -2393,7 +2574,7 @@ export const SettingsScreen = {
       if (fallbackContent) {
         fallbackContent.classList.add("focused");
         focusSettingsNode(fallbackContent);
-        scrollIntoNearestView(fallbackContent);
+        scrollSettingsContentItem(fallbackContent);
         this.contentFocusKey = String(fallbackContent.dataset.focusKey || "");
         return;
       }
@@ -2482,7 +2663,7 @@ export const SettingsScreen = {
         focusSettingsNode(rememberedTheme);
         this.contentFocusKey = String(rememberedTheme.dataset.focusKey || "");
         this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-        scrollIntoNearestView(rememberedTheme);
+        scrollSettingsContentItem(rememberedTheme);
         return before !== rememberedTheme;
       }
     }
@@ -2523,7 +2704,7 @@ export const SettingsScreen = {
         focusSettingsNode(nextTheme);
         this.contentFocusKey = String(nextTheme.dataset.focusKey || "");
         this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-        scrollIntoNearestView(nextTheme);
+        scrollSettingsContentItem(nextTheme);
         return before !== nextTheme;
       }
     }
@@ -2536,7 +2717,7 @@ export const SettingsScreen = {
         this.rememberAppearanceThemeFocusKey(beforeFocusKey);
       }
       this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-      scrollIntoNearestView(after);
+      scrollSettingsContentItem(after);
     }
     return before !== after;
   },
