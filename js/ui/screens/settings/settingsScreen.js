@@ -38,6 +38,9 @@ import {
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
 const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
+const SETTINGS_RAIL_SCROLL_TARGET_RATIO = 0.42;
+const SETTINGS_RAIL_SCROLL_STIFFNESS = 180;
+const SETTINGS_RAIL_SCROLL_DAMPING_RATIO = 0.95;
 const SETTINGS_VERSION_LABEL = typeof __NUVIO_APP_VERSION__ !== "undefined"
   ? __NUVIO_APP_VERSION__
   : "0.0.0";
@@ -231,7 +234,6 @@ const SECTION_ICONS = {
   layout: "grid_view",
   plugins: "build",
   integration: "link",
-  playback: "settings",
   trakt: "trakt",
   about: "info"
 };
@@ -341,6 +343,9 @@ function translateSectionCopy(section) {
 function renderSectionNavIcon(sectionId) {
   if (sectionId === "trakt") {
     return '<img class="settings-nav-icon settings-nav-icon-image" src="assets/icons/trakt_tv_glyph.svg" alt="" aria-hidden="true" />';
+  }
+  if (sectionId === "playback") {
+    return iconSvg('<path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"></path>', "settings-nav-icon settings-nav-icon-svg");
   }
   const iconName = SECTION_ICONS[sectionId] || "settings";
   return `<span class="settings-nav-icon settings-nav-icon-material material-icons" aria-hidden="true">${iconName}</span>`;
@@ -595,33 +600,93 @@ function scrollSettingsRailItem(node) {
 
   const railRect = rail.getBoundingClientRect();
   const itemRect = node.getBoundingClientRect();
-  const itemTop = (itemRect.top - railRect.top) + rail.scrollTop;
-  const itemBottom = (itemRect.bottom - railRect.top) + rail.scrollTop;
-  const itemHeight = itemRect.height || node.offsetHeight || 0;
-  const padding = Math.max(12, Math.round(clientHeight * 0.12));
-  const viewTop = rail.scrollTop + padding;
-  const viewBottom = rail.scrollTop + clientHeight - padding;
-  let nextScrollTop = rail.scrollTop;
-
-  if (itemTop < viewTop) {
-    nextScrollTop = Math.max(0, itemTop - padding);
-  } else if (itemBottom > viewBottom) {
-    nextScrollTop = Math.min(maxScroll, itemBottom - clientHeight + padding);
-  } else {
-    return;
-  }
+  const itemCenterInViewport = (itemRect.top - railRect.top) + ((itemRect.height || node.offsetHeight || 0) / 2);
+  const targetCenter = clientHeight * SETTINGS_RAIL_SCROLL_TARGET_RATIO;
+  const nextScrollTop = clamp(rail.scrollTop + itemCenterInViewport - targetCenter, 0, maxScroll);
 
   if (Math.abs(rail.scrollTop - nextScrollTop) < 1) {
     return;
   }
-  if (typeof rail.scrollTo === "function") {
-    rail.scrollTo({
-      top: nextScrollTop,
-      behavior: "auto"
-    });
+  animateSettingsRailScroll(rail, nextScrollTop);
+}
+
+function animateSettingsRailScroll(rail, nextScrollTop) {
+  if (!rail) {
     return;
   }
-  rail.scrollTop = nextScrollTop;
+
+  if (rail.settingsScrollAnimationFrame) {
+    cancelAnimationFrame(rail.settingsScrollAnimationFrame);
+    rail.settingsScrollAnimationFrame = null;
+  }
+
+  const startTop = Number(rail.scrollTop || 0);
+  if (Math.abs(nextScrollTop - startTop) < 1 || typeof requestAnimationFrame !== "function") {
+    rail.scrollTop = nextScrollTop;
+    updateSettingsRailIndicators(rail);
+    return;
+  }
+
+  let position = startTop;
+  let velocity = 0;
+  let lastTime = performance.now();
+  const damping = 2 * SETTINGS_RAIL_SCROLL_DAMPING_RATIO * Math.sqrt(SETTINGS_RAIL_SCROLL_STIFFNESS);
+  const step = (now) => {
+    const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - lastTime) / 1000));
+    lastTime = now;
+
+    const displacement = position - nextScrollTop;
+    const acceleration = (-SETTINGS_RAIL_SCROLL_STIFFNESS * displacement) - (damping * velocity);
+    velocity += acceleration * deltaSeconds;
+    position += velocity * deltaSeconds;
+    rail.scrollTop = position;
+    updateSettingsRailIndicators(rail);
+
+    if (Math.abs(position - nextScrollTop) > 0.5 || Math.abs(velocity) > 0.5) {
+      rail.settingsScrollAnimationFrame = requestAnimationFrame(step);
+    } else {
+      rail.scrollTop = nextScrollTop;
+      rail.settingsScrollAnimationFrame = null;
+      updateSettingsRailIndicators(rail);
+    }
+  };
+
+  rail.settingsScrollAnimationFrame = requestAnimationFrame(step);
+}
+
+function updateSettingsRailIndicators(rail) {
+  if (!rail) {
+    return;
+  }
+
+  const frame = rail.closest?.(".settings-sidebar-frame");
+  if (!frame) {
+    return;
+  }
+
+  const maxScroll = Math.max(0, rail.scrollHeight - rail.clientHeight);
+  const scrollTop = Number(rail.scrollTop || 0);
+  frame.classList.toggle("can-scroll-backward", scrollTop > 1);
+  frame.classList.toggle("can-scroll-forward", maxScroll > 1 && scrollTop < maxScroll - 1);
+}
+
+function updateSettingsRailIndicatorsSoon(rail) {
+  if (!rail) {
+    return;
+  }
+  requestAnimationFrame(() => updateSettingsRailIndicators(rail));
+}
+
+function focusSettingsNode(node) {
+  if (!node || typeof node.focus !== "function") {
+    return;
+  }
+
+  try {
+    node.focus({ preventScroll: true });
+  } catch (_) {
+    node.focus();
+  }
 }
 
 function isScrollContainerAtBoundary(node, direction) {
@@ -738,14 +803,22 @@ function isAppearanceThemeFocusKey(focusKey) {
 export const SettingsScreen = {
 
   ensureShell() {
-    if (this.container?.querySelector?.(".settings-shell")) {
+    if (this.container?.querySelector?.(".settings-shell .settings-sidebar-frame")) {
       return;
     }
     this.container.innerHTML = `
       <div class="home-shell settings-shell">
         <div class="settings-root-sidebar-slot" data-settings-root-sidebar></div>
         <div class="settings-workspace">
-          <aside class="settings-sidebar" data-settings-nav></aside>
+          <div class="settings-sidebar-frame">
+            <aside class="settings-sidebar" data-settings-nav></aside>
+            <span class="settings-sidebar-scroll-indicator settings-sidebar-scroll-indicator-up" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="M7.4 14.6 12 10l4.6 4.6" /></svg>
+            </span>
+            <span class="settings-sidebar-scroll-indicator settings-sidebar-scroll-indicator-down" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false"><path d="m7.4 9.4 4.6 4.6 4.6-4.6" /></svg>
+            </span>
+          </div>
           <section class="settings-content" data-settings-content></section>
         </div>
         <div data-settings-dialog></div>
@@ -2234,6 +2307,15 @@ export const SettingsScreen = {
     if (navSlot && navSlot.innerHTML !== navHtml) {
       navSlot.innerHTML = navHtml;
     }
+    if (navSlot && this.railScrollNode !== navSlot) {
+      if (this.railScrollNode && this.handleRailScrollBound) {
+        this.railScrollNode.removeEventListener("scroll", this.handleRailScrollBound);
+      }
+      this.handleRailScrollBound = () => updateSettingsRailIndicators(navSlot);
+      navSlot.addEventListener("scroll", this.handleRailScrollBound, { passive: true });
+      this.railScrollNode = navSlot;
+    }
+    updateSettingsRailIndicatorsSoon(navSlot);
 
     const sectionChanged = this.renderedSectionId !== section.id;
     const previousScrollState = !sectionChanged ? captureSettingsScrollState(contentSlot) : null;
@@ -2265,12 +2347,13 @@ export const SettingsScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.settingsRouteEnterPending = false;
     this.applyFocus();
+    updateSettingsRailIndicatorsSoon(navSlot);
   },
 
   applyFocus() {
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     const selectedNode = this.container.querySelector(".settings-nav-item.selected");
-    if (selectedNode) {
+    if (selectedNode && this.focusZone !== "nav") {
       scrollSettingsRailItem(selectedNode);
     }
 
@@ -2279,7 +2362,7 @@ export const SettingsScreen = {
         || this.container.querySelector(".settings-dialog-option");
       if (dialogNode) {
         dialogNode.classList.add("focused");
-        dialogNode.focus();
+        focusSettingsNode(dialogNode);
         scrollIntoNearestView(dialogNode);
       }
       return;
@@ -2290,7 +2373,7 @@ export const SettingsScreen = {
       const sidebarNode = sidebarNodes[this.sidebarFocusIndex] || getRootSidebarSelectedNode(this.container, this.layoutPrefs);
       if (sidebarNode) {
         sidebarNode.classList.add("focused");
-        sidebarNode.focus();
+        focusSettingsNode(sidebarNode);
         if (!this.layoutPrefs?.modernSidebar) {
           setLegacySidebarExpanded(this.container, true);
         }
@@ -2309,7 +2392,7 @@ export const SettingsScreen = {
       const fallbackContent = contentNode || this.container.querySelector(".settings-content-focusable");
       if (fallbackContent) {
         fallbackContent.classList.add("focused");
-        fallbackContent.focus();
+        focusSettingsNode(fallbackContent);
         scrollIntoNearestView(fallbackContent);
         this.contentFocusKey = String(fallbackContent.dataset.focusKey || "");
         return;
@@ -2321,7 +2404,7 @@ export const SettingsScreen = {
       || this.container.querySelector(".settings-nav-item");
     if (navNode) {
       navNode.classList.add("focused");
-      navNode.focus();
+      focusSettingsNode(navNode);
       scrollSettingsRailItem(navNode);
     }
   },
@@ -2396,7 +2479,7 @@ export const SettingsScreen = {
       if (rememberedTheme) {
         before?.classList?.remove("focused");
         rememberedTheme.classList.add("focused");
-        rememberedTheme.focus();
+        focusSettingsNode(rememberedTheme);
         this.contentFocusKey = String(rememberedTheme.dataset.focusKey || "");
         this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
         scrollIntoNearestView(rememberedTheme);
@@ -2437,7 +2520,7 @@ export const SettingsScreen = {
       if (nextTheme) {
         before?.classList?.remove("focused");
         nextTheme.classList.add("focused");
-        nextTheme.focus();
+        focusSettingsNode(nextTheme);
         this.contentFocusKey = String(nextTheme.dataset.focusKey || "");
         this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
         scrollIntoNearestView(nextTheme);
@@ -2681,7 +2764,17 @@ export const SettingsScreen = {
     if (this.container && this.handleWheelBound) {
       this.container.removeEventListener("wheel", this.handleWheelBound);
     }
+    const navSlot = this.container?.querySelector?.("[data-settings-nav]");
+    if (navSlot && this.handleRailScrollBound) {
+      navSlot.removeEventListener("scroll", this.handleRailScrollBound);
+    }
+    if (navSlot?.settingsScrollAnimationFrame) {
+      cancelAnimationFrame(navSlot.settingsScrollAnimationFrame);
+      navSlot.settingsScrollAnimationFrame = null;
+    }
     this.handleWheelBound = null;
+    this.handleRailScrollBound = null;
+    this.railScrollNode = null;
     this.activeSection = null;
     this.focusZone = "nav";
     this.sidebarFocusIndex = 0;

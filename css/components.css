@@ -5622,11 +5622,20 @@ button:focus-visible {
   font: inherit;
 }
 
+.settings-sidebar-frame {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .settings-sidebar {
   min-height: 0;
+  width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 28px;
   overflow-y: auto;
   padding-right: 0;
   scrollbar-width: none;
@@ -5638,6 +5647,45 @@ button:focus-visible {
 
 .settings-sidebar::-webkit-scrollbar {
   display: none;
+}
+
+.settings-sidebar-scroll-indicator {
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+  width: 64px;
+  height: 64px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-50%);
+  transition: opacity 150ms ease;
+}
+
+.settings-sidebar-scroll-indicator svg {
+  width: 64px;
+  height: 64px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.settings-sidebar-scroll-indicator-up {
+  top: 4px;
+}
+
+.settings-sidebar-scroll-indicator-down {
+  bottom: 4px;
+}
+
+.settings-sidebar-frame.can-scroll-backward .settings-sidebar-scroll-indicator-up,
+.settings-sidebar-frame.can-scroll-forward .settings-sidebar-scroll-indicator-down {
+  opacity: 0.55;
 }
 
 .settings-nav-item {
@@ -5722,6 +5770,12 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   -webkit-font-smoothing: antialiased;
+}
+
+.settings-nav-icon-svg {
+  width: 36px;
+  height: 36px;
+  fill: currentColor;
 }
 
 .settings-nav-icon-image {
