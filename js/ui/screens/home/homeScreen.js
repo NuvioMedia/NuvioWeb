@@ -396,11 +396,13 @@ function formatDurationMinutes(totalMinutes) {
 }
 
 function formatEpisodeCode(season, episode) {
-  if (Number.isFinite(season) && Number.isFinite(episode)) {
-    return `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
+  const seasonNumber = Number(season);
+  const episodeNumber = Number(episode);
+  if (Number.isFinite(seasonNumber) && seasonNumber > 0 && Number.isFinite(episodeNumber) && episodeNumber > 0) {
+    return `S${seasonNumber} E${episodeNumber}`;
   }
-  if (Number.isFinite(episode)) {
-    return `E${String(episode).padStart(2, "0")}`;
+  if (Number.isFinite(episodeNumber) && episodeNumber > 0) {
+    return `E${episodeNumber}`;
   }
   return "";
 }
@@ -642,6 +644,15 @@ function normalizeEpisodeEntries(videos = []) {
     });
 }
 
+function findEpisodeEntry(videos = [], season = null, episode = null) {
+  const targetSeason = Number(season || 0);
+  const targetEpisode = Number(episode || 0);
+  if (targetSeason <= 0 || targetEpisode <= 0) {
+    return null;
+  }
+  return normalizeEpisodeEntries(videos).find((entry) => entry.season === targetSeason && entry.episode === targetEpisode) || null;
+}
+
 function hasEpisodeAiredForContinueWatching(released) {
   const raw = String(released || "").trim();
   if (!raw) {
@@ -762,8 +773,8 @@ function normalizeContinueWatchingItem(item) {
     country: firstNonEmpty(item.country),
     progressStatus: buildProgressStatus(item),
     progressFraction: buildProgressFraction(item),
-    episodeCode: formatEpisodeCode(item.season, item.episode),
-    episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
+    episodeCode: isSeries ? formatEpisodeCode(item.season, item.episode) : "",
+    episodeTitle: isSeries ? firstNonEmpty(item.episodeTitle, item.subtitle) : ""
   };
 }
 
@@ -1102,7 +1113,7 @@ function renderContinueWatchingCard(item, index) {
   const isNextUp = Boolean(normalized?.isNextUp);
   const hasAired = normalized?.hasAired !== false;
   const cardImage = !isNextUp
-    ? firstNonEmpty(normalized.episodeThumbnail, normalized.thumbnail, normalized.backdrop, normalized.poster)
+    ? firstNonEmpty(normalized.episodeThumbnail, normalized.backdrop, normalized.poster)
     : (!hasAired
       ? firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail)
       : firstNonEmpty(normalized.thumbnail, normalized.backdrop, normalized.poster));
@@ -1118,7 +1129,7 @@ function renderContinueWatchingCard(item, index) {
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
           <div class="home-continue-title">${escapeHtml(normalized.title)}</div>
-          <div class="home-continue-subtitle">${escapeHtml(subtitle || t("home.continueWatchingSubtitle", {}, "Continue watching"))}</div>
+          ${subtitle ? `<div class="home-continue-subtitle">${escapeHtml(subtitle)}</div>` : ""}
         </div>
         <div class="home-continue-progress"><span style="width:${Math.round((normalized.progressFraction || 0) * 100)}%"></span></div>
       </div>
@@ -5410,11 +5421,12 @@ export const HomeScreen = {
       try {
         const meta = await this.fetchMetaForContinueWatching(item.contentType || "movie", item.contentId, 1800);
         if (meta) {
+          const episodeEntry = findEpisodeEntry(meta.videos, item.season, item.episode);
           return {
             ...item,
             title: meta.name || prettyId(item.contentId),
             landscapePoster: meta.landscapePoster || meta.thumbnail || meta.backdrop || meta.background || null,
-            episodeThumbnail: meta.episodeThumbnail || null,
+            episodeThumbnail: episodeEntry?.thumbnail || meta.episodeThumbnail || item.episodeThumbnail || null,
             poster: meta.poster || meta.thumbnail || meta.background || meta.backdrop || null,
             background: meta.background || meta.backdrop || meta.thumbnail || meta.poster || null,
             backdrop: meta.backdrop || meta.background || null,
@@ -5428,7 +5440,9 @@ export const HomeScreen = {
             ageRating: firstNonEmpty(meta.ageRating, meta.age_rating),
             status: firstNonEmpty(meta.status),
             language: firstNonEmpty(meta.language),
-            country: firstNonEmpty(meta.country)
+            country: firstNonEmpty(meta.country),
+            episodeTitle: firstNonEmpty(episodeEntry?.title, item.episodeTitle, item.subtitle),
+            episodeDescription: firstNonEmpty(episodeEntry?.overview, item.episodeDescription, item.episode_description)
           };
         }
       } catch (error) {

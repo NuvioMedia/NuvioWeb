@@ -4363,14 +4363,14 @@ button:focus-visible {
   flex-basis: var(--home-continue-width);
   min-width: var(--home-continue-width);
   max-width: var(--home-continue-width);
-  border-radius: 12px;
+  border-radius: 24px;
 }
 
 .home-screen-shell .home-continue-media {
   position: relative;
   height: var(--home-continue-height);
   border: 0;
-  border-radius: 10px;
+  border-radius: 24px;
   overflow: hidden;
   background:
     linear-gradient(180deg, rgba(28, 28, 28, 0.28) 0%, rgba(0, 0, 0, 0.74) 100%),
@@ -4397,7 +4397,7 @@ button:focus-visible {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0.12) 35%, rgba(0, 0, 0, 0.74) 100%);
+  background: linear-gradient(180deg, transparent 0%, transparent 45%, rgba(13, 13, 13, 0.7) 78%, rgba(13, 13, 13, 0.95) 100%);
 }
 
 .home-screen-shell .home-continue-badge {
@@ -5278,7 +5278,7 @@ button:focus-visible {
   min-height: 100%;
   display: flex;
   flex-direction: column;
-  gap: 144px;
+  gap: 48px;
   padding: 24px 0 48px;
 }
 
@@ -5482,41 +5482,47 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-continue-copy {
-  left: 16px;
-  right: 16px;
-  bottom: 16px;
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-kicker {
-  font-size: 12px;
+  font-size: 24px;
   line-height: 1.33;
+  letter-spacing: 1px;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-title {
-  margin-top: 2px;
-  font-size: 16px;
-  line-height: 1.25;
+  margin-top: 0;
+  font-size: 28px;
+  line-height: 1.42;
+  letter-spacing: 0.2px;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-subtitle {
-  margin-top: 2px;
-  font-size: 12px;
+  margin-top: 0;
+  font-size: 24px;
   line-height: 1.33;
+  letter-spacing: 0.8px;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-badge {
-  top: 8px;
-  right: 8px;
-  min-height: 24px;
-  padding: 4px 8px;
-  font-size: 11px;
+  top: 16px;
+  right: 16px;
+  min-height: 28px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 20px;
+  line-height: 1.4;
 }
 
 .home-screen-shell.home-layout-modern .home-continue-progress {
-  left: 10px;
-  right: 10px;
-  bottom: 4px;
-  height: 3px;
+  left: 20px;
+  right: 20px;
+  bottom: 8px;
+  height: 6px;
+  border-radius: 3px;
 }
 
 .home-screen-shell.home-layout-modern .home-content-card.focused {
