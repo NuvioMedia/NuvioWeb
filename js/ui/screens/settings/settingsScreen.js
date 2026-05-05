@@ -485,6 +485,17 @@ function focusKeySelector(selector, key) {
   return `${selector}[data-focus-key="${escapeSelector(String(key))}"]`;
 }
 
+function isSettingsActivateEvent(event) {
+  const code = Number(event?.keyCode || event?.which || 0);
+  const key = String(event?.key || "");
+  return code === 13
+    || code === 23
+    || key === "Enter"
+    || key === "NumpadEnter"
+    || key === "OK"
+    || key === "Select";
+}
+
 function scrollIntoNearestView(node) {
   if (!node || typeof node.scrollIntoView !== "function") {
     return;
@@ -891,10 +902,12 @@ function captureSettingsScrollState(contentNode) {
     return null;
   }
 
-  const themeGrid = contentNode.querySelector(".settings-theme-grid");
+  const fillScrollers = Array.from(contentNode.querySelectorAll(".settings-group-card-fill, .settings-trakt-scroll-area"));
+  const horizontalScrollers = Array.from(contentNode.querySelectorAll(".settings-theme-row"));
   return {
     contentScrollTop: Number(contentNode.scrollTop || 0),
-    themeGridScrollTop: Number(themeGrid?.scrollTop || 0)
+    fillScrollTops: fillScrollers.map((node) => Number(node.scrollTop || 0)),
+    horizontalScrollLefts: horizontalScrollers.map((node) => Number(node.scrollLeft || 0))
   };
 }
 
@@ -904,10 +917,12 @@ function restoreSettingsScrollState(contentNode, scrollState) {
   }
 
   contentNode.scrollTop = Number(scrollState.contentScrollTop || 0);
-  const themeGrid = contentNode.querySelector(".settings-theme-grid");
-  if (themeGrid) {
-    themeGrid.scrollTop = Number(scrollState.themeGridScrollTop || 0);
-  }
+  Array.from(contentNode.querySelectorAll(".settings-group-card-fill, .settings-trakt-scroll-area")).forEach((node, index) => {
+    node.scrollTop = Number(scrollState.fillScrollTops?.[index] || 0);
+  });
+  Array.from(contentNode.querySelectorAll(".settings-theme-row")).forEach((node, index) => {
+    node.scrollLeft = Number(scrollState.horizontalScrollLefts?.[index] || 0);
+  });
 }
 
 function addonKindsLabel(addon) {
@@ -2574,7 +2589,11 @@ export const SettingsScreen = {
       if (fallbackContent) {
         fallbackContent.classList.add("focused");
         focusSettingsNode(fallbackContent);
-        scrollSettingsContentItem(fallbackContent);
+        if (this.suppressNextContentFocusScroll) {
+          this.suppressNextContentFocusScroll = false;
+        } else {
+          scrollSettingsContentItem(fallbackContent);
+        }
         this.contentFocusKey = String(fallbackContent.dataset.focusKey || "");
         return;
       }
@@ -2806,10 +2825,13 @@ export const SettingsScreen = {
 
     this.contentFocusKey = focusKey;
     this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
+    const role = String(current.dataset.role || "");
+    const isSectionToggle = role === "section-toggle";
+    this.suppressNextContentFocusScroll = this.focusZone === "content" && (role === "toggle" || isSectionToggle);
     await action();
 
     if (Router.getCurrent() === "settings") {
-      await this.render();
+      await this.render({ refreshModel: !isSectionToggle });
       this.focusZone = "content";
       this.applyFocus();
     }
@@ -2924,10 +2946,11 @@ export const SettingsScreen = {
       }
     }
 
-    if (code !== 13) {
+    if (!isSettingsActivateEvent(event)) {
       return;
     }
 
+    event?.preventDefault?.();
     await this.activateFocused();
   },
 
