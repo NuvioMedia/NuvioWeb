@@ -1550,9 +1550,7 @@ export const HomeScreen = {
     this.focusWithoutAutoScroll(target);
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
-    if (!this.isNodeWithinMainViewport(target)) {
-      this.ensureMainVerticalVisibility(target);
-    }
+    this.ensureMainVerticalVisibility(target, "down");
     this.scheduleModernHeroUpdate(target);
     this.scheduleFocusedPosterFlow(target);
     return true;
@@ -1730,37 +1728,43 @@ export const HomeScreen = {
     const active = existing[key];
     if (active) {
       active.target = nextValue;
-      active.stiffness = Number(options?.stiffness ?? active.stiffness ?? 0.12);
-      active.damping = Number(options?.damping ?? active.damping ?? 0.8);
-      active.precision = Number(options?.precision ?? active.precision ?? 0.75);
-      active.velocityEpsilon = Number(options?.velocityEpsilon ?? active.velocityEpsilon ?? 0.35);
+      active.stiffness = Number(options?.stiffness ?? active.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness);
+      active.dampingRatio = Number(options?.dampingRatio ?? active.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio);
+      active.precision = Number(options?.precision ?? active.precision ?? 0.5);
+      active.velocityEpsilon = Number(options?.velocityEpsilon ?? active.velocityEpsilon ?? 0.5);
+      active.damping = 2 * active.dampingRatio * Math.sqrt(active.stiffness);
       springMap.set(container, existing);
       return;
     }
 
+    const stiffness = Number(options?.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness);
+    const dampingRatio = Number(options?.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio);
+
     const state = {
       target: nextValue,
+      position: Number(container[property] || 0),
       velocity: 0,
       raf: null,
       lastTime: performance.now(),
-      stiffness: Number(options?.stiffness ?? 0.12),
-      damping: Number(options?.damping ?? 0.8),
-      precision: Number(options?.precision ?? 0.75),
-      velocityEpsilon: Number(options?.velocityEpsilon ?? 0.35)
+      stiffness,
+      dampingRatio,
+      damping: 2 * dampingRatio * Math.sqrt(stiffness),
+      precision: Number(options?.precision ?? 0.5),
+      velocityEpsilon: Number(options?.velocityEpsilon ?? 0.5)
     };
 
     const tick = (now) => {
-      const current = Number(container[property] || 0);
-      const delta = Number(state.target || 0) - current;
-      const frameScale = Math.min(2.2, Math.max(0.85, (now - state.lastTime) / 16.6667));
+      const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - state.lastTime) / 1000));
       state.lastTime = now;
-      state.velocity = (state.velocity + (delta * state.stiffness * frameScale)) * Math.pow(state.damping, frameScale);
-      const next = current + state.velocity;
-      container[property] = Math.round(next);
+      const displacement = state.position - Number(state.target || 0);
+      const acceleration = (-state.stiffness * displacement) - (state.damping * state.velocity);
+      state.velocity += acceleration * deltaSeconds;
+      state.position += state.velocity * deltaSeconds;
+      container[property] = state.position;
 
       const remaining = Number(state.target || 0) - Number(container[property] || 0);
       if (Math.abs(remaining) <= state.precision && Math.abs(state.velocity) <= state.velocityEpsilon) {
-        container[property] = Math.round(state.target);
+        container[property] = state.target;
         existing[key] = null;
         springMap.set(container, existing);
         return;
@@ -1781,13 +1785,7 @@ export const HomeScreen = {
   },
 
   shouldUseDelayedModernCameraFollow(target, direction = null) {
-    if (this.layoutMode !== "modern" || !this.isMainNode(target) || !direction) {
-      return false;
-    }
-    if (direction === "left" || direction === "right") {
-      return false;
-    }
-    return !Boolean(globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+    return false;
   },
 
   cancelModernCameraFollow({ stopAnimations = false } = {}) {
@@ -1822,7 +1820,9 @@ export const HomeScreen = {
     const map = this.scrollAnimations || null;
     const state = map?.get?.(container) || null;
     const key = axis === "y" ? "y" : "x";
-    return Boolean(state?.[key]);
+    const springMap = this.springScrollAnimations || null;
+    const springState = springMap?.get?.(container) || null;
+    return Boolean(state?.[key] || springState?.[key]?.raf);
   },
 
   shouldSuspendModernViewportFocusSync() {
@@ -3993,25 +3993,28 @@ export const HomeScreen = {
     const anchor = this.getMainFocusAnchor(target);
     const mainRect = main.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
     const inset = this.getRowFocusInset();
     const visibleTop = mainRect.top + inset;
     const visibleBottom = mainRect.bottom - 24;
     const anchorTop = anchorRect.top - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
     const anchorBottom = anchorRect.bottom - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
+    const targetTop = targetRect.top - mainRect.top + main.scrollTop - Number(layoutAdjustment || 0);
     const adjustedTop = mainRect.top + anchorTop - main.scrollTop;
     const adjustedBottom = mainRect.top + anchorBottom - main.scrollTop;
     const currentAnchor = this.getMainFocusAnchor(current);
     const sameAnchor = Boolean(currentAnchor && currentAnchor === anchor);
     const isHorizontalMove = direction === "left" || direction === "right";
     const isVerticalMove = direction === "up" || direction === "down";
+    const isEnteringMainFromSidebar = direction === "right" && current && !this.isMainNode(current);
 
     if (isHorizontalMove && sameAnchor) {
       return null;
     }
 
     let nextValue = null;
-    if (isVerticalMove) {
-      nextValue = anchorTop;
+    if (isVerticalMove || isEnteringMainFromSidebar) {
+      nextValue = targetTop - inset;
     } else if (adjustedTop < visibleTop) {
       nextValue = anchorTop - inset;
     } else if (adjustedBottom > visibleBottom) {
@@ -4066,7 +4069,6 @@ export const HomeScreen = {
   },
 
   applyModernCameraFollowTargets(horizontal = null, vertical = null) {
-    const easing = this.getModernCameraPanEasing();
     if (horizontal?.container?.isConnected) {
       if (Math.abs(Number(horizontal.container.scrollLeft || 0) - Number(horizontal.value || 0)) > 1) {
         this.animateScroll(
@@ -4074,7 +4076,7 @@ export const HomeScreen = {
           "x",
           horizontal.value,
           MODERN_HOME_CONSTANTS.cameraFollowDurationXMs,
-          { easing }
+          { mode: "spring" }
         );
       }
       this.modernCameraFollowLastHorizontalContainer = horizontal.container;
@@ -4086,7 +4088,7 @@ export const HomeScreen = {
           "y",
           vertical.value,
           MODERN_HOME_CONSTANTS.cameraFollowDurationYMs,
-          { easing }
+          { mode: "spring" }
         );
       }
       this.modernCameraFollowLastVerticalContainer = vertical.container;
@@ -4392,10 +4394,7 @@ export const HomeScreen = {
       if (delta <= 1) {
         return;
       }
-      const duration = direction === "up" || direction === "down"
-        ? this.getScrollDuration(220)
-        : this.getScrollDuration(180);
-      this.animateScroll(next.container, "y", next.value, duration);
+      this.animateSpringScroll(next.container, "y", next.value);
       return;
     }
 
@@ -4434,7 +4433,7 @@ export const HomeScreen = {
       if (Math.abs(Number(next.container.scrollLeft || 0) - Number(next.value || 0)) <= 1) {
         return;
       }
-      this.animateScroll(next.container, "x", next.value, 140);
+      this.animateSpringScroll(next.container, "x", next.value);
       return;
     }
 
