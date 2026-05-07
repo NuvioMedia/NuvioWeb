@@ -210,86 +210,106 @@ function buildTizenIndexHtml() {
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
-  <script type="module" defer src="main.js"></script>
+  <script defer src="main.js"></script>
 </body>
 </html>
 `;
 }
 
 function buildTizenMainJs() {
-  return `import * as wrtService from "wrt:service";
+  return `(function bootstrapTizenApp() {
+  var root = typeof globalThis !== "undefined" ? globalThis : window;
+  root.__NUVIO_PLATFORM__ = "tizen";
 
-window.__NUVIO_PLATFORM__ = "tizen";
-
-var tvInput = window.tizen && window.tizen.tvinputdevice;
-if (tvInput && typeof tvInput.registerKey === "function") {
-  ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"].forEach(function registerKey(keyName) {
-    try {
-      tvInput.registerKey(keyName);
-    } catch (_) {}
-  });
-}
-
-function getTizenPackageId() {
-  try {
-    return String(window.tizen?.application?.getCurrentApplication?.().appInfo?.packageId || "").trim();
-  } catch (_) {
-    return "";
-  }
-}
-
-function startLocalMediaService() {
-  var packageId = getTizenPackageId();
-  if (!packageId || typeof wrtService.startService !== "function") {
-    return Promise.resolve(false);
+  function renderStartupError(message) {
+    var safeMessage = String(message || "Unknown startup error");
+    document.body.innerHTML = '' +
+      '<div style="min-height:100vh;background:#0f1115;color:#f4f7fb;padding:48px;font-family:Arial,sans-serif;">' +
+        '<div style="max-width:960px;margin:0 auto;">' +
+          '<h1 style="margin:0 0 16px;font-size:42px;">Nuvio TV failed to start</h1>' +
+          '<p style="margin:0 0 20px;font-size:20px;color:#c7d0dd;">The Tizen bootstrap script could not finish loading the app.</p>' +
+          '<pre style="white-space:pre-wrap;word-break:break-word;background:#171b22;border:1px solid #2b3340;border-radius:12px;padding:20px;font-size:18px;line-height:1.5;">' + safeMessage + '</pre>' +
+        '</div>' +
+      '</div>';
   }
 
-  var serviceId = packageId + "${tizenServiceIdSuffix}";
-  return new Promise(function(resolve) {
-    var settled = false;
+  function createResolvedThenable(value) {
+    return {
+      then: function(resolve) {
+        if (typeof resolve === "function") {
+          resolve(value);
+        }
+        return this;
+      },
+      catch: function() {
+        return this;
+      }
+    };
+  }
 
-    function finish(value) {
-      if (settled) {
+  function registerMediaKeys() {
+    var tvInput = root.tizen && root.tizen.tvinputdevice;
+    if (!tvInput || typeof tvInput.registerKey !== "function") {
+      return;
+    }
+
+    ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"].forEach(function registerKey(keyName) {
+      try {
+        tvInput.registerKey(keyName);
+      } catch (_) {}
+    });
+  }
+
+  function loadScript(src, callback) {
+    var script = document.createElement("script");
+    script.src = src;
+    script.async = false;
+    script.onload = function() {
+      callback(null);
+    };
+    script.onerror = function() {
+      callback(new Error("Failed to load " + src));
+    };
+    document.body.appendChild(script);
+  }
+
+  function loadScriptsSequentially(sources, index) {
+    if (index >= sources.length) {
+      return;
+    }
+
+    loadScript(sources[index], function(error) {
+      if (error) {
+        console.error("[bootstrap] Script load failed", error);
+        renderStartupError(error.message || error);
         return;
       }
-      settled = true;
-      resolve(Boolean(value));
+      loadScriptsSequentially(sources, index + 1);
+    });
+  }
+
+  function start() {
+    registerMediaKeys();
+    root.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = createResolvedThenable(false);
+    loadScriptsSequentially([
+      "nuvio.env.js",
+      "assets/libs/qrcode-generator.js",
+      "app.bundle.js"
+    ], 0);
+  }
+
+  if (document.readyState === "loading") {
+    function onReady() {
+      document.removeEventListener("DOMContentLoaded", onReady);
+      start();
     }
 
-    try {
-      wrtService.startService(
-        serviceId,
-        function() {
-          finish(true);
-        },
-        function(error) {
-          console.warn("[tizen-service] Failed to start local media service", serviceId, error);
-          finish(false);
-        }
-      );
-    } catch (error) {
-      console.warn("[tizen-service] Failed to request local media service", serviceId, error);
-      finish(false);
-    }
+    document.addEventListener("DOMContentLoaded", onReady);
+    return;
+  }
 
-    setTimeout(function() {
-      finish(false);
-    }, 2500);
-  });
-}
-
-function loadScript(src) {
-  var script = document.createElement("script");
-  script.src = src;
-  script.defer = false;
-  document.body.appendChild(script);
-}
-
-window.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = startLocalMediaService();
-
-loadScript("nuvio.env.js");
-loadScript("assets/libs/qrcode-generator.js");
-loadScript("app.bundle.js");
+  start();
+}());
 `;
 }
 
