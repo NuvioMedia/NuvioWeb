@@ -6889,41 +6889,51 @@ button:focus-visible {
 .settings-dialog-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.76);
+  background: rgba(0, 0, 0, 0.72);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 48px;
+  box-sizing: border-box;
   z-index: 20;
+  animation: settingsSelectionBackdropIn 150ms linear both;
 }
 
 .settings-dialog {
-  width: min(420px, calc(100vw - 80px));
-  max-height: min(420px, calc(100vh - 120px));
-  padding: 22px;
-  border-radius: 28px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
+  width: 100%;
+  max-width: 37.5vw;
+  max-height: min(43vw, calc(100vh - 96px));
+  padding: 48px;
+  border-radius: 32px;
+  border: 2px solid #333333;
+  background: #1a1a1a;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 32px;
+  box-sizing: border-box;
+  overflow: visible;
+  transform-origin: center;
+  animation: settingsSelectionMenuIn 150ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 .settings-dialog-title {
   color: #fff;
-  font-size: 28px;
+  font-size: 40px;
   font-weight: 500;
-  line-height: 1.1;
+  line-height: 1.2;
 }
 
 .settings-dialog-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  box-sizing: border-box;
+  max-height: min(556px, calc(100vh - 288px));
   overflow-y: auto;
   scrollbar-width: none;
-  scroll-behavior: smooth;
-  scroll-padding-top: 8px;
-  scroll-padding-bottom: 8px;
+  scroll-behavior: auto;
+  padding: 8px 32px;
+  margin: 0 -32px;
 }
 
 .settings-dialog-list::-webkit-scrollbar {
@@ -6931,67 +6941,78 @@ button:focus-visible {
 }
 
 .settings-dialog-option {
-  min-height: 72px;
-  padding: 0 20px;
-  border-radius: 18px;
+  min-height: 80px;
+  padding: 20px 32px;
+  border-radius: 999px;
   border: 1px solid transparent;
-  background: var(--bg-color);
-  color: var(--text-secondary);
+  background: #242424;
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: flex-start;
   text-align: left;
+  transform-origin: center;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .settings-dialog-option.is-selected {
   border-color: transparent;
-  background: var(--focus-bg);
-  color: var(--text-color);
+  background: #333333;
+  color: #ffffff;
 }
 
 .settings-dialog-option.focused {
-  border: 2px solid var(--focus-color) !important;
-  background: var(--secondary-color);
-  color: var(--on-secondary);
+  border-color: transparent !important;
+  background: #f5f5f5;
+  color: #111;
+  transform: scale(1.1);
+  z-index: 1;
 }
 
 .settings-dialog-option-label {
-  font-size: 22px;
-  line-height: 1.15;
+  font-size: 28px;
+  line-height: 40px;
+  font-weight: 500;
+  letter-spacing: 0.1px;
 }
 
 .settings-language-dialog {
-  width: min(400px, calc(100vw - 80px));
-  max-height: min(480px, calc(100vh - 120px));
+  max-width: 37.5vw;
+  max-height: min(43vw, calc(100vh - 96px));
 }
 
 .settings-appearance-dialog {
-  width: min(800px, calc(100vw - 160px));
-  max-height: min(560px, calc(100vh - 120px));
+  max-width: 37.5vw;
+  max-height: min(43vw, calc(100vh - 96px));
 }
 
 .settings-language-dialog-list {
-  max-height: 320px;
-  padding: 4px 2px 4px 0;
+  max-height: min(556px, calc(100vh - 288px));
 }
 
 .settings-language-option {
-  min-height: 64px;
-  padding: 0 16px;
-  border-radius: 10px;
-  background: var(--card-bg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  scroll-margin-block: 8px;
+  min-height: 80px;
+  padding: 20px 32px;
+  border-radius: 999px;
+  background: #242424;
+  border: 1px solid transparent;
+  scroll-margin-block: 12px;
 }
 
 .settings-language-option.is-selected {
-  background: var(--focus-bg);
+  background: #333333;
   border-color: transparent;
 }
 
 .settings-language-option.focused {
-  background: var(--secondary-color);
-  border: 2px solid var(--focus-color) !important;
+  background: #f5f5f5;
+  border-color: transparent !important;
 }
 
 .settings-language-option-copy {
@@ -7010,7 +7031,7 @@ button:focus-visible {
 
 .settings-language-option-code {
   color: var(--text-secondary);
-  font-size: 15px;
+  font-size: 24px;
   font-weight: 600;
   letter-spacing: 0.08em;
 }
@@ -7023,7 +7044,7 @@ button:focus-visible {
 }
 
 .settings-language-option.is-selected .settings-dialog-option-label {
-  color: var(--text-color);
+  color: #ffffff;
 }
 
 .settings-language-option.is-selected .settings-language-option-code,
@@ -7032,11 +7053,27 @@ button:focus-visible {
 }
 
 .settings-language-option.focused .settings-dialog-option-label {
-  color: var(--on-secondary);
+  color: #111;
 }
 
 .settings-language-option.focused .settings-language-option-check {
-  color: var(--on-secondary);
+  color: #111;
+}
+
+@keyframes settingsSelectionBackdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes settingsSelectionMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .settings-empty-state {

@@ -609,6 +609,12 @@ function scrollSettingsContentItem(node) {
     return;
   }
 
+  const dialogContainer = node.closest?.(".settings-dialog-list");
+  if (dialogContainer) {
+    scrollSettingsNodeIntoContainer(node, dialogContainer, "y");
+    return;
+  }
+
   const horizontalContainer = node.closest?.(".settings-theme-row");
   if (horizontalContainer) {
     scrollSettingsNodeIntoContainer(node, horizontalContainer, "x");
@@ -2559,7 +2565,7 @@ export const SettingsScreen = {
       if (dialogNode) {
         dialogNode.classList.add("focused");
         focusSettingsNode(dialogNode);
-        scrollIntoNearestView(dialogNode);
+        scrollSettingsContentItem(dialogNode);
       }
       return;
     }
