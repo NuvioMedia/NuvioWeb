@@ -21,6 +21,7 @@ import { PlayerController } from "./core/player/playerController.js";
 import { AuthManager } from "./core/auth/authManager.js";
 import { AuthState } from "./core/auth/authState.js";
 import { ProfileManager } from "./core/profile/profileManager.js";
+import { ProfileSyncService } from "./core/profile/profileSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
@@ -32,6 +33,7 @@ import { I18n } from "./i18n/index.js";
 
 const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
 const SIGNED_OUT_ALLOWED_ROUTES = new Set(["trakt"]);
+let hasSelectedProfileThisSession = false;
 
 function isSignedOutRouteAllowed() {
   return SIGNED_OUT_ALLOWED_ROUTES.has(Router.getCurrent());
@@ -82,6 +84,33 @@ function isAddonRemoteMode() {
   }
 }
 
+async function shouldShowProfileSelection() {
+  await ProfileSyncService.pull();
+  const profiles = await ProfileManager.getProfiles();
+  const activeProfileId = ProfileManager.getActiveProfileId();
+  const pinStates = await ProfileSyncService.pullProfileLockStates();
+  const activeProfileHasPin = Boolean(pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]);
+
+  return !hasSelectedProfileThisSession && (profiles.length > 1 || activeProfileHasPin);
+}
+
+async function routeAfterAuthentication() {
+  const showProfileSelection = await shouldShowProfileSelection();
+  if (showProfileSelection) {
+    Router.navigate("profileSelection");
+    return;
+  }
+
+  hasSelectedProfileThisSession = true;
+  const profiles = await ProfileManager.getProfiles();
+  const activeProfileId = ProfileManager.getActiveProfileId();
+  const activeProfile = profiles.find((profile) => String(profile.id) === String(activeProfileId)) || profiles[0] || null;
+  if (activeProfile) {
+    await ProfileManager.setActiveProfile(activeProfile.id);
+  }
+  Router.navigate("home");
+}
+
 async function bootstrapApp() {
   renderAppShell();
   Platform.init();
@@ -105,6 +134,7 @@ async function bootstrapApp() {
 
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
+      hasSelectedProfileThisSession = false;
       const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
       if (isSignedOutRouteAllowed()) {
         return;
@@ -127,9 +157,11 @@ async function bootstrapApp() {
 
     if (state === AuthState.AUTHENTICATED) {
       LocalStore.remove(GUEST_QR_BYPASS_KEY);
-      ProfileManager.clearActiveProfile();
       StartupSyncService.start();
-      Router.navigate("profileSelection");
+      routeAfterAuthentication().catch((error) => {
+        console.warn("Failed to resolve authenticated route", error);
+        Router.navigate("profileSelection");
+      });
     }
   });
 

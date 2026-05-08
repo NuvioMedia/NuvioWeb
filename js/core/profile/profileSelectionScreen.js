@@ -1726,7 +1726,9 @@ export const ProfileSelectionScreen = {
       return;
     }
     await ProfileManager.setActiveProfile(profileId);
-    await StartupSyncService.syncPull();
+    StartupSyncService.syncPull().catch((error) => {
+      console.warn("Profile startup sync failed", error);
+    });
     await I18n.init();
     ThemeManager.apply();
     I18n.apply();

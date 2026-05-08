@@ -1559,37 +1559,27 @@ button:focus-visible {
   margin: 40px;
 }
 
-.home-boot {
-  width: 100vw;
-  height: 100vh;
+.home-loading-state {
+  min-height: calc(100vh - 78px);
+  width: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 26px;
-  background:
-    linear-gradient(180deg, rgba(35, 62, 91, 1) 0%, rgba(18, 29, 44, 1) 42%, rgba(13, 13, 13, 1) 100%),
-    linear-gradient(90deg, rgba(30, 136, 229, 0.26) 0%, rgba(30, 136, 229, 0.08) 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%);
 }
 
-.home-boot-logo {
-  width: 220px;
-  opacity: 0.94;
+.home-loading-spinner {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 4px solid rgba(158, 158, 158, 0.22);
+  border-top-color: #9e9e9e;
+  animation: homeLoadingSpin 820ms linear infinite;
 }
 
-.home-boot-shimmer {
-  width: min(62vw, 760px);
-  height: 9px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.12));
-  background-size: 100% 100%;
-  opacity: 0.7;
-  animation: homeBootShimmer 1.8s ease-in-out infinite;
-}
-
-@keyframes homeBootShimmer {
-  0%, 100% { opacity: 0.45; }
-  50% { opacity: 0.95; }
+@keyframes homeLoadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .home-shell {
@@ -11419,7 +11409,6 @@ button:focus-visible {
   transform: scale(1.005) !important;
 }
 
-.performance-constrained .home-boot-shimmer,
 .performance-constrained .home-continue-media-loading,
 .performance-constrained .home-continue-card-loading,
 .performance-constrained .home-continue-card-loading .home-continue-progress,

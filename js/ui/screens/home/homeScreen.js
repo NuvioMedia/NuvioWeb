@@ -12,6 +12,7 @@ import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
+import { AvatarRepository } from "../../../data/remote/supabase/avatarRepository.js";
 import { Platform } from "../../../platform/index.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
@@ -44,7 +45,6 @@ import { NuvioDialog } from "../../components/nuvioDialog.js";
 const HERO_ROTATE_FIRST_DELAY_MS = 20000;
 const HERO_ROTATE_INTERVAL_MS = 10000;
 const HOME_LAYOUT_SEQUENCE = ["modern", "grid", "classic"];
-const DEFAULT_PROFILE_COLOR = "#1E88E5";
 const CW_MAX_NEXT_UP_LOOKUPS = 24;
 const CW_MAX_VISIBLE_ITEMS = 10;
 const CW_DAYS_CAP = 60;
@@ -67,6 +67,25 @@ const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
+}
+
+async function getLocalSidebarProfileState() {
+  const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
+  const profiles = await ProfileManager.getProfiles();
+  const avatarCatalog = await AvatarRepository.getAvatarCatalog().catch(() => []);
+  const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId)
+    || profiles[0]
+    || null;
+  const name = String(activeProfile?.name || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback");
+  const avatarUrl = activeProfile?.avatarUrl || AvatarRepository.getAvatarImageUrl(activeProfile?.avatarId, avatarCatalog);
+
+  return {
+    activeProfileName: name,
+    activeProfileInitial: name ? name.charAt(0).toUpperCase() : "P",
+    activeProfileColorHex: String(activeProfile?.avatarColorHex || "#1E88E5"),
+    activeProfileAvatarUrl: String(avatarUrl || ""),
+    showProfileSelector: Boolean(activeProfile)
+  };
 }
 
 function escapeHtml(value) {
@@ -239,48 +258,11 @@ function uniqueById(items = []) {
   });
 }
 
-function clampChannel(value) {
-  return Math.min(255, Math.max(0, Math.round(value)));
-}
-
-function parseHexColor(colorHex, fallback = { r: 30, g: 136, b: 229 }) {
-  const value = String(colorHex || "").trim();
-  const match = value.match(/^#([0-9a-f]{6})$/i);
-  if (!match) {
-    return fallback;
-  }
-  const normalized = match[1];
-  return {
-    r: parseInt(normalized.slice(0, 2), 16),
-    g: parseInt(normalized.slice(2, 4), 16),
-    b: parseInt(normalized.slice(4, 6), 16)
-  };
-}
-
-function mixColors(baseColor, accentColor, weight) {
-  const normalizedWeight = Math.min(1, Math.max(0, Number(weight) || 0));
-  return {
-    r: clampChannel((baseColor.r * (1 - normalizedWeight)) + (accentColor.r * normalizedWeight)),
-    g: clampChannel((baseColor.g * (1 - normalizedWeight)) + (accentColor.g * normalizedWeight)),
-    b: clampChannel((baseColor.b * (1 - normalizedWeight)) + (accentColor.b * normalizedWeight))
-  };
-}
-
-function colorToRgba(color, alpha = 1) {
-  const normalizedAlpha = Math.min(1, Math.max(0, Number(alpha) || 0));
-  return `rgba(${clampChannel(color.r)}, ${clampChannel(color.g)}, ${clampChannel(color.b)}, ${normalizedAlpha})`;
-}
-
-function buildProfileBackgroundStyle(colorHex) {
-  const rootStyles = getComputedStyle(document.documentElement);
-  const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
-  const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
-  const accent = parseHexColor(colorHex, parseHexColor(DEFAULT_PROFILE_COLOR));
-  const gradientTop = mixColors(elevated, accent, 0.3);
-  const gradientMid = mixColors(background, accent, 0.14);
+function renderHomeLoadingState() {
   return `
-    linear-gradient(180deg, ${colorToRgba(gradientTop, 1)} 0%, ${colorToRgba(gradientMid, 1)} 42%, ${colorToRgba(background, 1)} 100%),
-    linear-gradient(90deg, ${colorToRgba(accent, 0.26)} 0%, ${colorToRgba(accent, 0.08)} 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%)
+    <div class="home-loading-state" aria-label="Loading">
+      <div class="home-loading-spinner" aria-hidden="true"></div>
+    </div>
   `;
 }
 
@@ -4838,19 +4820,16 @@ export const HomeScreen = {
 
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.hasAppliedInitialContinueWatchingFocus = false;
-    const profiles = await ProfileManager.getProfiles();
-    const activeProfile = profiles.find((entry) => String(entry.id) === activeProfileId) || profiles[0] || null;
-    const bootBackground = buildProfileBackgroundStyle(activeProfile?.avatarColorHex || DEFAULT_PROFILE_COLOR);
-    this.container.innerHTML = `
-      <div class="home-boot">
-        <img src="assets/brand/app_logo_wordmark.png" class="home-boot-logo" alt="Nuvio" />
-        <div class="home-boot-shimmer"></div>
-      </div>
-    `;
-    const bootNode = this.container.querySelector(".home-boot");
-    if (bootNode) {
-      bootNode.style.background = bootBackground;
-    }
+    this.isInitialHomeLoading = true;
+    this.layoutPrefs = LayoutPreferences.get();
+    this.layoutMode = String(this.layoutPrefs.homeLayout || "classic").toLowerCase();
+    this.rows = [];
+    this.continueWatchingDisplay = [];
+    this.continueWatchingLoading = false;
+    this.heroCandidates = [];
+    this.heroItem = null;
+    this.sidebarProfile = await getLocalSidebarProfileState().catch(() => null);
+    this.render();
     await this.loadData({ background: false });
   },
 
@@ -4877,6 +4856,44 @@ export const HomeScreen = {
     const recentProgressPromise = watchProgressRepository.getRecent(10).catch((error) => {
       recentProgressError = error;
       return [];
+    });
+    const initialContinueWatchingPromise = background ? null : (async () => {
+      const [allProgress, continueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
+      const allProgressItems = Array.isArray(allProgress) ? allProgress : [];
+      const continueWatchingItems = Array.isArray(continueWatching) ? continueWatching : [];
+      const nextUpProgressCandidates = this.selectNextUpProgressCandidates(allProgressItems, continueWatchingItems)
+        .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
+      const hasCandidates = Boolean(continueWatchingItems.length + nextUpProgressCandidates.length);
+      if (!hasCandidates) {
+        return {
+          allProgress: allProgressItems,
+          continueWatching: continueWatchingItems,
+          watchedItems: [],
+          nextUpProgressCandidates,
+          display: []
+        };
+      }
+      const needsNextUp = continueWatchingItems.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
+        || allProgressItems.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type));
+      const watchedItems = needsNextUp ? await watchedItemsRepository.getAll(2000).catch(() => []) : [];
+      const enriched = await this.enrichContinueWatching(continueWatchingItems, {
+        allProgress: allProgressItems,
+        watchedItems,
+        nextUpProgressCandidates
+      });
+      const displayWithArtwork = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+      return {
+        allProgress: allProgressItems,
+        continueWatching: continueWatchingItems,
+        watchedItems,
+        nextUpProgressCandidates,
+        display: displayWithArtwork.length
+          ? displayWithArtwork
+          : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false })
+      };
+    })().catch((error) => {
+      console.warn("Initial continue watching load failed", error);
+      return null;
     });
 
     const addons = await addonRepository.getInstalledAddons();
@@ -4905,24 +4922,27 @@ export const HomeScreen = {
     if (token !== this.homeLoadToken) {
       return;
     }
-    const [initialAllProgress, initialContinueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
+    const [initialAllProgress, initialContinueWatching, initialContinueWatchingState] = await Promise.all([
+      progressAllPromise,
+      recentProgressPromise,
+      initialContinueWatchingPromise
+    ]);
     if (token !== this.homeLoadToken) {
       return;
     }
     const initialAllProgressItems = Array.isArray(initialAllProgress) ? initialAllProgress : [];
     const initialContinueWatchingItems = Array.isArray(initialContinueWatching) ? initialContinueWatching : [];
-    const initialNextUpProgressCandidates = this.selectNextUpProgressCandidates(initialAllProgressItems, initialContinueWatchingItems)
+    const initialNextUpProgressCandidates = (initialContinueWatchingState?.nextUpProgressCandidates || this.selectNextUpProgressCandidates(initialAllProgressItems, initialContinueWatchingItems))
       .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
-    const hasInitialContinueWatchingCandidates = Boolean(initialContinueWatchingItems.length + initialNextUpProgressCandidates.length);
     this.rows = this.sortAndFilterRows(initialRows);
     if (!preserveContinueWatching) {
-      this.continueWatchingDisplay = [];
-      this.continueWatchingLoading = hasInitialContinueWatchingCandidates;
-      this.allProgress = initialAllProgressItems;
-      this.continueWatching = initialContinueWatchingItems;
-      this.watchedItems = [];
+      this.continueWatchingDisplay = initialContinueWatchingState?.display || [];
+      this.continueWatchingLoading = false;
+      this.allProgress = initialContinueWatchingState?.allProgress || initialAllProgressItems;
+      this.continueWatching = initialContinueWatchingState?.continueWatching || initialContinueWatchingItems;
+      this.watchedItems = initialContinueWatchingState?.watchedItems || [];
       this.nextUpProgressCandidates = initialNextUpProgressCandidates;
-      if (!background && this.layoutMode === "modern" && hasInitialContinueWatchingCandidates) {
+      if (!background && this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
         this.forceInitialContinueWatchingFocus = true;
       }
     } else {
@@ -4932,6 +4952,7 @@ export const HomeScreen = {
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
+    this.isInitialHomeLoading = false;
     this.hasLoadedOnce = true;
     this.render();
     const previousSidebarProfileSignature = buildSidebarProfileSignature(this.sidebarProfile);
@@ -4998,7 +5019,8 @@ export const HomeScreen = {
       });
     }
 
-    (async () => {
+    if (background || !initialContinueWatchingState?.display?.length) {
+      (async () => {
       const [allProgress, continueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
@@ -5087,16 +5109,17 @@ export const HomeScreen = {
           this.requestBackgroundRender();
         }
       }
-    })().catch((error) => {
-      console.warn("Continue watching load failed", error);
-      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-        return;
-      }
-      this.continueWatchingLoading = false;
-      if (!suppressContinueWatchingLoading) {
-        this.requestBackgroundRender();
-      }
-    });
+      })().catch((error) => {
+        console.warn("Continue watching load failed", error);
+        if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+          return;
+        }
+        this.continueWatchingLoading = false;
+        if (!suppressContinueWatchingLoading) {
+          this.requestBackgroundRender();
+        }
+      });
+    }
 
     this.retryPendingCatalogRows();
   },
@@ -5315,7 +5338,10 @@ export const HomeScreen = {
     let mainContentMarkup = "";
     let modernLayoutPayload = null;
 
-    if (this.layoutMode === "modern") {
+    if (this.isInitialHomeLoading) {
+      mainContentMarkup = renderHomeLoadingState();
+      this.catalogSeeAllMap = new Map();
+    } else if (this.layoutMode === "modern") {
       modernLayoutPayload = renderModernHomeLayout({
         rows: this.rows,
         heroItem,
