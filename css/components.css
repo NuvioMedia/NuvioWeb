@@ -7167,10 +7167,7 @@ button:focus-visible {
 }
 
 .addons-shell .home-sidebar {
-  position: relative;
-  inset: auto;
   background: var(--addons-bg);
-  z-index: 6;
 }
 
 .addons-main {
@@ -7363,16 +7360,16 @@ button:focus-visible {
 
 .addons-large-row-copy strong {
   display: block;
-  font-size: 32px;
-  line-height: 48px;
-  font-weight: 700;
+  font-size: 28px;
+  line-height: 36px;
+  font-weight: 600;
 }
 
 .addons-large-row-copy small {
   display: block;
-  margin-top: 0;
-  font-size: 24px;
-  line-height: 32px;
+  margin-top: 4px;
+  font-size: 20px;
+  line-height: 28px;
   letter-spacing: 0.4px;
   color: var(--addons-text-secondary);
 }
@@ -7549,35 +7546,64 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   z-index: 40;
+  animation: addonsQrOverlayEnter 180ms ease-out both;
 }
 
 .addons-qr-dialog {
   display: flex;
   flex-direction: column;
   align-items: center;
-  max-width: 760px;
-  padding: 24px 32px 0;
+  width: 100%;
+  max-width: min(47.92vw, 920px);
+  padding: 0 min(1.67vw, 32px);
+  transform-origin: center center;
+  animation: addonsQrDialogEnter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes addonsQrOverlayEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes addonsQrDialogEnter {
+  from {
+    opacity: 0;
+    transform: translateY(32px) scale(0.88);
+  }
+  68% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.035);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .addons-qr-instruction {
   margin: 0;
-  font-size: 28px;
-  line-height: 40px;
+  font-size: min(1.67vw, 32px);
+  line-height: min(2.08vw, 40px);
   color: var(--addons-text-secondary);
   text-align: center;
+  white-space: nowrap;
 }
 
 .addons-qr-canvas {
-  margin-top: 32px;
-  width: 440px;
-  height: 440px;
+  margin-top: min(1.04vw, 20px);
+  width: min(22.92vw, 440px);
+  height: min(22.92vw, 440px);
   display: block;
 }
 
 .addons-qr-url {
-  margin: 24px 0 0;
-  font-size: 24px;
-  line-height: 32px;
+  margin: min(0.73vw, 14px) 0 0;
+  font-size: min(1.46vw, 28px);
+  line-height: min(2.08vw, 40px);
   color: var(--addons-text-tertiary);
   text-align: center;
   word-break: break-word;
@@ -7595,15 +7621,16 @@ button:focus-visible {
 .addons-qr-close {
   display: inline-flex;
   align-items: center;
-  gap: 16px;
-  margin-top: 48px;
-  padding: 24px 48px;
+  gap: min(0.63vw, 12px);
+  min-height: min(4.17vw, 80px);
+  margin-top: min(1.15vw, 22px);
+  padding: 0 min(1.67vw, 32px);
   border: none;
   border-radius: 999px;
   background: var(--addons-card);
   color: var(--addons-text);
-  font-size: 24px;
-  line-height: 32px;
+  font-size: min(1.35vw, 26px);
+  line-height: min(2.08vw, 40px);
   font-weight: 500;
 }
 
@@ -7613,7 +7640,7 @@ button:focus-visible {
 }
 
 .addons-qr-close .material-icons {
-  font-size: 36px;
+  font-size: min(1.67vw, 32px);
 }
 
 .catalog-order-shell {
