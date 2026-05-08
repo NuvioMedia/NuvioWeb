@@ -1732,7 +1732,7 @@ export const ProfileSelectionScreen = {
     await I18n.init();
     ThemeManager.apply();
     I18n.apply();
-    Router.navigate("home");
+    Router.navigate("home", { forceReload: true });
   },
 
   async onKeyDown(event) {

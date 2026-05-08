@@ -4803,10 +4803,12 @@ export const HomeScreen = {
     }
     const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
     const profileChanged = activeProfileId !== String(this.loadedProfileId || "");
-    if (profileChanged) {
+    const forceReload = Boolean(params?.forceReload);
+    if (profileChanged || forceReload) {
       this.hasLoadedOnce = false;
       this.hasAppliedInitialContinueWatchingFocus = false;
       this.sidebarProfile = null;
+      this.savedFocusStates = {};
     }
 
     if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
@@ -4870,6 +4872,7 @@ export const HomeScreen = {
           continueWatching: continueWatchingItems,
           watchedItems: [],
           nextUpProgressCandidates,
+          hasCandidates,
           display: []
         };
       }
@@ -4882,14 +4885,19 @@ export const HomeScreen = {
         nextUpProgressCandidates
       });
       const displayWithArtwork = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
+      const displayWithoutArtwork = buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
+      const displayFallback = (enriched || [])
+        .map((item) => normalizeContinueWatchingItem(item))
+        .filter((item) => item?.contentId);
       return {
         allProgress: allProgressItems,
         continueWatching: continueWatchingItems,
         watchedItems,
         nextUpProgressCandidates,
+        hasCandidates,
         display: displayWithArtwork.length
           ? displayWithArtwork
-          : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false })
+          : (displayWithoutArtwork.length ? displayWithoutArtwork : displayFallback)
       };
     })().catch((error) => {
       console.warn("Initial continue watching load failed", error);
@@ -4934,6 +4942,11 @@ export const HomeScreen = {
     const initialContinueWatchingItems = Array.isArray(initialContinueWatching) ? initialContinueWatching : [];
     const initialNextUpProgressCandidates = (initialContinueWatchingState?.nextUpProgressCandidates || this.selectNextUpProgressCandidates(initialAllProgressItems, initialContinueWatchingItems))
       .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
+    const hasInitialContinueWatchingCandidates = Boolean(
+      initialContinueWatchingState?.hasCandidates
+      || initialContinueWatchingItems.length
+      || initialNextUpProgressCandidates.length
+    );
     this.rows = this.sortAndFilterRows(initialRows);
     if (!preserveContinueWatching) {
       this.continueWatchingDisplay = initialContinueWatchingState?.display || [];
@@ -4942,7 +4955,7 @@ export const HomeScreen = {
       this.continueWatching = initialContinueWatchingState?.continueWatching || initialContinueWatchingItems;
       this.watchedItems = initialContinueWatchingState?.watchedItems || [];
       this.nextUpProgressCandidates = initialNextUpProgressCandidates;
-      if (!background && this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
+      if (!background && this.layoutMode === "modern" && hasInitialContinueWatchingCandidates && this.continueWatchingDisplay.length) {
         this.forceInitialContinueWatchingFocus = true;
       }
     } else {
