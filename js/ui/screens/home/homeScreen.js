@@ -7,6 +7,7 @@ import { watchedItemsRepository } from "../../../data/repository/watchedItemsRep
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
+import { CollectionsStore, buildCollectionHomeKey } from "../../../data/local/collectionsStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
@@ -342,7 +343,7 @@ function formatRuntimeText(item) {
 }
 
 function shouldEnrichModernHero(hero) {
-  if (!hero || hero.heroSource === "continueWatching" || hero.heroMetaEnriched) {
+  if (!hero || hero.heroSource === "continueWatching" || hero.heroSource === "collection" || hero.heroMetaEnriched) {
     return false;
   }
   return true;
@@ -380,6 +381,118 @@ function formatDurationMinutes(totalMinutes) {
     return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
   }
   return `${minutes}m`;
+}
+
+function normalizeCollectionPosterShape(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "POSTER") {
+    return "POSTER";
+  }
+  if (normalized === "LANDSCAPE" || normalized === "WIDE") {
+    return "LANDSCAPE";
+  }
+  return "SQUARE";
+}
+
+function isCollectionFolderItem(item = {}) {
+  return String(item?.heroSource || "").toLowerCase() === "collection"
+    || String(item?.type || item?.apiType || "").toLowerCase() === "collection_folder"
+    || Boolean(item?.collectionId && item?.folderId);
+}
+
+function normalizeCollectionFolderItem(item, collectionMeta = null) {
+  if (!item) {
+    return null;
+  }
+  const collectionId = firstNonEmpty(item.collectionId, collectionMeta?.id);
+  const folderId = firstNonEmpty(item.folderId, item.id);
+  const title = firstNonEmpty(item.title, item.name);
+  if (!collectionId || !folderId || !title) {
+    return null;
+  }
+  const collectionTitle = firstNonEmpty(item.collectionTitle, collectionMeta?.title);
+  const coverImageUrl = firstNonEmpty(item.coverImageUrl, item.coverImage);
+  const focusGifUrl = firstNonEmpty(item.focusGifUrl);
+  const focusGifEnabled = item.focusGifEnabled !== false;
+  const hideTitle = Boolean(item.hideTitle);
+  const tileShape = normalizeCollectionPosterShape(item.tileShape || item.posterShape);
+  const coverEmoji = firstNonEmpty(item.coverEmoji);
+  const cardImage = focusGifEnabled
+    ? firstNonEmpty(coverImageUrl, collectionMeta?.backdropImageUrl)
+    : firstNonEmpty(focusGifUrl, coverImageUrl, collectionMeta?.backdropImageUrl);
+  const heroBackdrop = firstNonEmpty(item.heroBackdropUrl, coverImageUrl, collectionMeta?.backdropImageUrl);
+  return {
+    ...item,
+    id: `collection:${collectionId}:${folderId}`,
+    type: "collection_folder",
+    apiType: "collection_folder",
+    heroSource: "collection",
+    name: hideTitle ? "" : title,
+    title: hideTitle ? "" : title,
+    heroTitle: hideTitle ? "" : (coverEmoji ? `${coverEmoji}  ${title}` : title),
+    subtitle: hideTitle ? "" : collectionTitle,
+    poster: cardImage,
+    background: heroBackdrop,
+    backdrop: heroBackdrop,
+    landscapePoster: heroBackdrop,
+    logo: firstNonEmpty(item.titleLogoUrl),
+    description: "",
+    genres: [],
+    collectionId,
+    collectionTitle,
+    folderId,
+    coverImageUrl,
+    focusGifUrl,
+    focusGifEnabled,
+    coverEmoji,
+    tileShape,
+    hideTitle,
+    heroBackdropUrl: firstNonEmpty(item.heroBackdropUrl),
+    heroVideoUrl: firstNonEmpty(item.heroVideoUrl),
+    titleLogoUrl: firstNonEmpty(item.titleLogoUrl)
+  };
+}
+
+function buildCollectionHomeRow(collection = {}) {
+  const rowKey = buildCollectionHomeKey(collection);
+  return {
+    rowKind: "collection",
+    collectionId: collection.id,
+    collectionTitle: collection.title,
+    collection,
+    type: "collection_folder",
+    homeCatalogKey: rowKey,
+    homeCatalogDisableKey: rowKey,
+    pinToTop: Boolean(collection.pinToTop),
+    focusGlowEnabled: collection.focusGlowEnabled !== false,
+    viewMode: String(collection.viewMode || "TABBED_GRID"),
+    showAllTab: collection.showAllTab !== false,
+    result: {
+      status: "success",
+      data: {
+        items: (Array.isArray(collection.folders) ? collection.folders : [])
+          .map((folder) => normalizeCollectionFolderItem({
+            ...folder,
+            collectionId: collection.id,
+            collectionTitle: collection.title
+          }, collection))
+          .filter(Boolean)
+      }
+    }
+  };
+}
+
+function normalizeHomeRowItem(row = null, item = null) {
+  if (!row || !item) {
+    return null;
+  }
+  if (row.rowKind === "collection") {
+    return normalizeCollectionFolderItem(item, row.collection || {
+      id: row.collectionId,
+      title: row.collectionTitle
+    });
+  }
+  return normalizeCatalogItem(item, row.type || "movie");
 }
 
 function formatEpisodeCode(season, episode) {
@@ -943,7 +1056,9 @@ function buildSidebarProfileSignature(profile = null) {
 }
 
 function buildHeroIdentity(item = null) {
-  const normalized = normalizeCatalogItem(item || null, "movie");
+  const normalized = isCollectionFolderItem(item)
+    ? normalizeCollectionFolderItem(item)
+    : normalizeCatalogItem(item || null, "movie");
   if (!normalized) {
     return "";
   }
@@ -956,6 +1071,18 @@ function buildHeroIdentity(item = null) {
 }
 
 function buildHeroDisplayModel(hero, layoutMode) {
+  if (isCollectionFolderItem(hero)) {
+    const normalized = normalizeCollectionFolderItem(hero);
+    return {
+      title: normalized?.heroTitle || normalized?.name || normalized?.collectionTitle || "Untitled",
+      description: " ",
+      logo: firstNonEmpty(normalized?.titleLogoUrl, normalized?.logo),
+      backdrop: firstNonEmpty(normalized?.heroBackdropUrl, normalized?.background, normalized?.backdrop, normalized?.poster),
+      metaPrimary: [],
+      metaSecondary: [],
+      chips: []
+    };
+  }
   const year = extractYear(hero);
   const imdb = resolveImdbRating(hero);
   const genres = Array.isArray(hero?.genres) ? hero.genres.filter(Boolean).slice(0, 3) : [];
@@ -1002,6 +1129,31 @@ function buildHeroDisplayModel(hero, layoutMode) {
 }
 
 function buildModernHeroPresentation(hero) {
+  if (isCollectionFolderItem(hero)) {
+    const normalizedCollection = normalizeCollectionFolderItem(hero);
+    if (!normalizedCollection) {
+      return null;
+    }
+    return {
+      title: normalizedCollection.heroTitle || normalizedCollection.name || "",
+      logo: firstNonEmpty(normalizedCollection.titleLogoUrl, normalizedCollection.logo),
+      description: "",
+      backdrop: firstNonEmpty(
+        normalizedCollection.heroBackdropUrl,
+        normalizedCollection.background,
+        normalizedCollection.backdrop,
+        normalizedCollection.poster
+      ),
+      leadingMeta: [],
+      trailingMeta: [],
+      secondaryHighlightText: "",
+      badges: [],
+      languageText: "",
+      showImdbPrimary: false,
+      showImdbSecondary: false,
+      imdbText: ""
+    };
+  }
   const isContinueWatchingHero = hero?.heroSource === "continueWatching";
   const normalized = isContinueWatchingHero
     ? normalizeContinueWatchingItem(hero)
@@ -1164,6 +1316,9 @@ function renderHeroMarkup(layoutMode, heroItem, heroCandidates) {
 }
 
 function buildPosterSubtitle(item, layoutMode) {
+  if (isCollectionFolderItem(item)) {
+    return firstNonEmpty(item.collectionTitle, item.subtitle, "");
+  }
   const normalized = normalizeCatalogItem(item);
   if (layoutMode === "modern") {
     return firstNonEmpty(normalized.releaseInfo, "");
@@ -1172,6 +1327,9 @@ function buildPosterSubtitle(item, layoutMode) {
 }
 
 function buildExpandedPosterMeta(item) {
+  if (isCollectionFolderItem(item)) {
+    return "";
+  }
   const normalized = normalizeCatalogItem(item);
   const parts = [];
   const typeLabel = toTitleCase(normalized.type || normalized.apiType || "movie");
@@ -1318,9 +1476,10 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
   const sectionsMarkup = [];
 
   rows.forEach((rowData, rowIndex) => {
+    const isCollectionRow = rowData?.rowKind === "collection";
     const items = Array.isArray(rowData?.result?.data?.items) ? rowData.result.data.items : [];
     const isLoading = rowData?.result?.status === "loading";
-    const rowKey = buildModernRowKey(rowData);
+    const rowKey = String(rowData?.homeCatalogKey || buildModernRowKey(rowData));
     const loadingItems = isLoading ? (rowData.loadingItems || buildCatalogLoadingItems(rowKey, rowItemLimit)) : [];
     const rowItems = items.length ? items : loadingItems;
     if (!rowItems.length) {
@@ -1328,7 +1487,7 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
     }
 
     const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-    if (!isLoading) {
+    if (!isLoading && !isCollectionRow) {
       catalogSeeAllMap.set(seeAllId, {
         addonBaseUrl: rowData.addonBaseUrl || "",
         addonId: rowData.addonId || "",
@@ -1340,12 +1499,14 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
       });
     }
 
-    const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+    const rowTitle = isCollectionRow
+      ? String(rowData.collectionTitle || rowData.collection?.title || "Collection")
+      : formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
     const rowSubtitle = layoutMode === "classic" && showCatalogAddonName && rowData.addonName
       ? `from ${rowData.addonName}`
       : "";
     const maxItems = Math.max(1, Number(rowItemLimit || HOME_MAX_ITEMS_PER_ROW_DEFAULT));
-    const hasSeeAll = !isLoading && items.length > maxItems;
+    const hasSeeAll = !isCollectionRow && !isLoading && items.length > maxItems;
     const gridLimit = Math.max(1, hasSeeAll ? maxItems - 1 : maxItems);
     const visibleItems = layoutMode === "grid"
       ? rowItems.slice(0, gridLimit)
@@ -1430,6 +1591,48 @@ function groupNodesByOffsetTop(nodes = []) {
 }
 
 function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic", isExpanded = false, preferLandscapePoster = false) {
+  const collectionItem = isCollectionFolderItem(item) ? normalizeCollectionFolderItem(item) : null;
+  if (collectionItem) {
+    const visualSrc = firstNonEmpty(collectionItem.poster, collectionItem.coverImageUrl, collectionItem.backdrop);
+    const subtitle = buildPosterSubtitle(collectionItem, layoutMode);
+    const shapeClass = " is-collection-landscape";
+    const focusGifOverlay = collectionItem.focusGifEnabled && collectionItem.focusGifUrl
+      ? `<img class="home-poster-focus-gif" data-src="${escapeAttribute(collectionItem.focusGifUrl)}" alt="" aria-hidden="true" />`
+      : "";
+    const contentMarkup = visualSrc
+      ? `<img class="content-poster" src="${escapeAttribute(visualSrc)}" decoding="async" loading="lazy" alt="${escapeAttribute(collectionItem.name || collectionItem.heroTitle || collectionItem.collectionTitle || "collection")}" />`
+      : (collectionItem.coverEmoji
+        ? `<div class="home-collection-emoji" aria-hidden="true">${escapeHtml(collectionItem.coverEmoji)}</div>`
+        : '<div class="content-poster placeholder"></div>');
+    return `
+      <article class="home-content-card home-poster-card home-collection-card focusable${shapeClass}"
+               data-action="openCollectionFolder"
+               data-row-index="${rowIndex}"
+               data-item-index="${itemIndex}"
+               data-item-id="${escapeAttribute(collectionItem.id)}"
+               data-item-type="collection_folder"
+               data-item-title="${escapeAttribute(collectionItem.name || collectionItem.heroTitle || collectionItem.collectionTitle || "Collection") }"
+               data-collection-id="${escapeAttribute(collectionItem.collectionId)}"
+               data-folder-id="${escapeAttribute(collectionItem.folderId)}"
+               data-collection-title="${escapeAttribute(collectionItem.collectionTitle || "") }"
+               data-focus-gif-enabled="${collectionItem.focusGifEnabled ? "true" : "false"}"
+               data-focus-gif-src="${escapeAttribute(collectionItem.focusGifUrl || "") }"
+               data-hero-video-url="${escapeAttribute(collectionItem.heroVideoUrl || "") }"
+               data-logo-src="${escapeAttribute(collectionItem.titleLogoUrl || "") }"
+               data-backdrop-src="${escapeAttribute(collectionItem.heroBackdropUrl || collectionItem.backdrop || "") }">
+        <div class="home-poster-frame">
+          ${contentMarkup}
+          ${focusGifOverlay}
+        </div>
+        ${layoutMode !== "modern" && showLabels && !collectionItem.hideTitle ? `
+          <div class="home-poster-copy">
+            <div class="home-poster-title">${escapeHtml(collectionItem.name || collectionItem.collectionTitle || "Collection")}</div>
+            ${subtitle ? `<div class="home-poster-subtitle">${escapeHtml(subtitle)}</div>` : ""}
+          </div>
+        ` : ""}
+      </article>
+    `;
+  }
   const isLoading = Boolean(item?.isLoading);
   const normalized = normalizeCatalogItem(item, itemType);
   const subtitle = buildPosterSubtitle(normalized, layoutMode);
@@ -1641,6 +1844,7 @@ export const HomeScreen = {
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target);
+    this.syncFocusedCollectionCardState();
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
     this.ensureMainVerticalVisibility(target, "down");
@@ -1688,6 +1892,7 @@ export const HomeScreen = {
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target);
+    this.syncFocusedCollectionCardState();
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
     if (target.closest(".home-track, .home-grid-track")) {
@@ -1705,6 +1910,7 @@ export const HomeScreen = {
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target);
+    this.syncFocusedCollectionCardState();
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
     this.ensureTrackHorizontalVisibility(target);
@@ -2144,9 +2350,6 @@ export const HomeScreen = {
     if (this.isLegacyTvRuntime()) {
       return rapid ? 260 : 150;
     }
-    if (this.isPerformanceConstrained()) {
-      return rapid ? 220 : 120;
-    }
     return rapid ? MODERN_HOME_CONSTANTS.heroRapidSettleMs : MODERN_HOME_CONSTANTS.heroFocusDelayMs;
   },
 
@@ -2340,6 +2543,7 @@ export const HomeScreen = {
       descriptionNode.textContent = display.description || " ";
     }
     this.scheduleHomeTruncationUpdate({ scope: heroNode });
+    this.syncCollectionHeroMedia(hero);
 
     const indicators = heroNode.querySelector(".home-hero-indicators");
     if (indicators) {
@@ -2437,7 +2641,7 @@ export const HomeScreen = {
     if (node.dataset.rowIndex != null && node.dataset.itemIndex != null) {
       const row = this.rows?.[Number(node.dataset.rowIndex)] || null;
       const item = row?.result?.data?.items?.[Number(node.dataset.itemIndex)] || null;
-      return normalizeCatalogItem(item, row?.type || "movie");
+      return normalizeHomeRowItem(row, item);
     }
     return null;
   },
@@ -2614,6 +2818,44 @@ export const HomeScreen = {
     }
   },
 
+  captureHoldMenuScrollState() {
+    const viewport = this.getHomeViewport();
+    if (!viewport) {
+      return null;
+    }
+    const trackStates = Object.fromEntries(
+      Array.from(this.container?.querySelectorAll("[data-track-row-key]") || [])
+        .map((track) => [String(track.dataset.trackRowKey || ""), Number(track.scrollLeft || 0)])
+        .filter(([key]) => key)
+    );
+    return {
+      mainScrollTop: Number(viewport.scrollTop || 0),
+      trackStates
+    };
+  },
+
+  restoreHoldMenuScrollState() {
+    const state = this.holdMenuScrollState;
+    const viewport = this.getHomeViewport();
+    if (!state || !viewport) {
+      return false;
+    }
+    Object.entries(state.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
+      const track = this.container?.querySelector(`[data-track-row-key="${rowKey}"]`);
+      if (track) {
+        track.scrollLeft = Number(scrollLeft || 0);
+      }
+    });
+    const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, Number(state.mainScrollTop || 0)));
+    return true;
+  },
+
+  scheduleHoldMenuScrollRestore() {
+    this.restoreHoldMenuScrollState();
+    requestAnimationFrame(() => requestAnimationFrame(() => this.restoreHoldMenuScrollState()));
+  },
+
   restoreContinueWatchingMenuFocus() {
     const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
     const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
@@ -2628,8 +2870,10 @@ export const HomeScreen = {
     this.focusWithoutAutoScroll(target);
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
-    this.ensureTrackHorizontalVisibility(target);
-    this.ensureMainVerticalVisibility(target);
+    if (!this.restoreHoldMenuScrollState()) {
+      this.ensureTrackHorizontalVisibility(target);
+      this.ensureMainVerticalVisibility(target);
+    }
   },
 
   restorePosterHoldMenuFocus() {
@@ -2647,8 +2891,10 @@ export const HomeScreen = {
     this.focusWithoutAutoScroll(target);
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
-    this.ensureTrackHorizontalVisibility(target);
-    this.ensureMainVerticalVisibility(target);
+    if (!this.restoreHoldMenuScrollState()) {
+      this.ensureTrackHorizontalVisibility(target);
+      this.ensureMainVerticalVisibility(target);
+    }
   },
 
   mountContinueWatchingDialog() {
@@ -2680,8 +2926,10 @@ export const HomeScreen = {
         }
         this.continueWatchingMenu = null;
         this.restoreContinueWatchingMenuFocus();
+        this.holdMenuScrollState = null;
       }
     }).mount(document.body);
+    this.scheduleHoldMenuScrollRestore();
     return true;
   },
 
@@ -2717,13 +2965,18 @@ export const HomeScreen = {
         }
         this.posterHoldMenu = null;
         this.restorePosterHoldMenuFocus();
+        this.holdMenuScrollState = null;
       }
     }).mount(document.body);
+    this.scheduleHoldMenuScrollRestore();
     return true;
   },
 
   getPosterItemFromNode(node) {
     if (!node?.matches?.(".home-poster-card.focusable")) {
+      return null;
+    }
+    if (String(node.dataset.action || "") === "openCollectionFolder") {
       return null;
     }
     return normalizeCatalogItem({
@@ -2745,6 +2998,7 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
     this.continueWatchingMenu = null;
+    this.holdMenuScrollState = this.captureHoldMenuScrollState();
     const [isSaved, isWatched] = await Promise.all([
       savedLibraryRepository.isSaved(item.id).catch(() => false),
       watchedItemsRepository.isWatched(item.id).catch(() => false)
@@ -2771,6 +3025,7 @@ export const HomeScreen = {
     this.posterHoldMenu = null;
     this.destroyHomeHoldDialog();
     this.restorePosterHoldMenuFocus();
+    this.holdMenuScrollState = null;
     return true;
   },
 
@@ -2781,6 +3036,7 @@ export const HomeScreen = {
     }
     this.cancelPendingContinueWatchingEnter();
     this.posterHoldMenu = null;
+    this.holdMenuScrollState = this.captureHoldMenuScrollState();
     this.continueWatchingMenu = {
       contentId: item.contentId,
       videoId: item.videoId || "",
@@ -2799,11 +3055,13 @@ export const HomeScreen = {
     this.continueWatchingMenu = null;
     this.destroyHomeHoldDialog();
     this.restoreContinueWatchingMenuFocus();
+    this.holdMenuScrollState = null;
     return true;
   },
 
   isPosterHoldTarget(node) {
-    return Boolean(node?.matches?.(".home-poster-card.focusable"));
+    return Boolean(node?.matches?.(".home-poster-card.focusable"))
+      && String(node?.dataset?.action || "") === "openDetail";
   },
 
   isHomeHoldTarget(node) {
@@ -2957,6 +3215,7 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingEnter();
     this.destroyHomeHoldDialog();
     this.continueWatchingMenu = null;
+    this.holdMenuScrollState = null;
 
     Router.navigate("detail", {
       itemId: normalized.contentId,
@@ -2980,6 +3239,7 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingEnter();
     this.destroyHomeHoldDialog();
     this.continueWatchingMenu = null;
+    this.holdMenuScrollState = null;
     Router.navigate("detail", {
       itemId: normalized.contentId,
       itemType: normalized.type || "movie",
@@ -3098,6 +3358,7 @@ export const HomeScreen = {
     this.destroyHomeHoldDialog();
     this.continueWatchingMenu = null;
     this.pendingContinueWatchingFocusIndex = anchorIndex;
+    this.holdMenuScrollState = null;
     this.render();
     return true;
   },
@@ -3164,6 +3425,7 @@ export const HomeScreen = {
     this.destroyHomeHoldDialog();
     if (option.action === "details") {
       this.posterHoldMenu = null;
+      this.holdMenuScrollState = null;
       Router.navigate("detail", {
         itemId: item.id,
         itemType: item.type || "movie",
@@ -3179,6 +3441,7 @@ export const HomeScreen = {
       return false;
     }
     this.posterHoldMenu = null;
+    this.holdMenuScrollState = null;
     this.render();
     return true;
   },
@@ -3216,7 +3479,7 @@ export const HomeScreen = {
   },
 
   async enrichCurrentHeroAsync(hero) {
-    if (!hero || !hero.id || hero.heroSource === "continueWatching") {
+    if (!hero || !hero.id || hero.heroSource === "continueWatching" || hero.heroSource === "collection") {
       return;
     }
     const itemId = String(hero.id);
@@ -3290,6 +3553,59 @@ export const HomeScreen = {
 
   isModernPosterNode(node) {
     return this.layoutMode === "modern" && Boolean(node?.classList?.contains("home-poster-card"));
+  },
+
+  isCollectionFolderNode(node) {
+    return Boolean(node?.matches?.('.home-poster-card[data-action="openCollectionFolder"]'));
+  },
+
+  hydrateCollectionFocusGif(node, active = false) {
+    const gifNode = node?.querySelector?.(".home-poster-focus-gif") || null;
+    if (!(gifNode instanceof HTMLImageElement)) {
+      return;
+    }
+    if (active) {
+      const src = String(gifNode.dataset.src || gifNode.getAttribute("src") || "").trim();
+      if (src && !gifNode.getAttribute("src")) {
+        gifNode.setAttribute("src", src);
+      }
+      node.classList.add("is-focus-gif-active");
+      return;
+    }
+    node.classList.remove("is-focus-gif-active");
+  },
+
+  syncFocusedCollectionCardState() {
+    Array.from(this.container?.querySelectorAll('.home-poster-card[data-action="openCollectionFolder"]') || []).forEach((node) => {
+      this.hydrateCollectionFocusGif(node, false);
+    });
+  },
+
+  syncCollectionHeroMedia(hero = null) {
+    const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
+    const heroMedia = this.container?.querySelector(".home-modern-hero-media");
+    const activeHero = isCollectionFolderItem(hero) ? normalizeCollectionFolderItem(hero) : null;
+    const videoUrl = firstNonEmpty(activeHero?.heroVideoUrl);
+    const playbackKey = videoUrl && activeHero ? `${activeHero.collectionId}:${activeHero.folderId}:${videoUrl}` : "";
+    if (!heroLayer || !heroMedia || !playbackKey) {
+      if (this.collectionHeroMediaKey) {
+        this.collectionHeroMediaKey = "";
+        this.clearTrailerLayer(heroLayer);
+        heroMedia.classList.remove("trailer-active");
+      }
+      return;
+    }
+    if (this.collectionHeroMediaKey === playbackKey && heroLayer.classList.contains("is-active")) {
+      heroMedia.classList.add("trailer-active");
+      return;
+    }
+    this.collectionHeroMediaKey = playbackKey;
+    this.heroTrailerPlaybackState = null;
+    this.mountTrailerLayer(heroLayer, { kind: "video", url: videoUrl, muted: true }, () => {
+      if (this.collectionHeroMediaKey === playbackKey) {
+        heroMedia.classList.add("trailer-active");
+      }
+    });
   },
 
   hydrateFocusedPosterAssets(node, { defer = false } = {}) {
@@ -3582,6 +3898,9 @@ export const HomeScreen = {
   },
 
   async getTrailerSourceForItem(item) {
+    if (isCollectionFolderItem(item)) {
+      return null;
+    }
     const itemId = String(item?.id || item?.contentId || "").trim();
     const itemType = String(item?.type || item?.apiType || "movie").trim() || "movie";
     if (!itemId) {
@@ -3620,6 +3939,17 @@ export const HomeScreen = {
 
   async activateFocusedPosterFlow(node, flowToken = Number(this.focusedPosterFlowToken || 0)) {
     if (!this.isModernPosterNode(node) || !node.classList.contains("focused")) {
+      return;
+    }
+    if (this.isCollectionFolderNode(node)) {
+      this.collapseFocusedPoster(this.expandedPosterNode, { instant: true });
+      await new Promise((resolve) => {
+        setTimeout(resolve, 140);
+      });
+      if (!node.classList.contains("focused") || Number(this.focusedPosterFlowToken || 0) !== Number(flowToken || 0)) {
+        return;
+      }
+      this.hydrateCollectionFocusGif(node, true);
       return;
     }
     const prefs = this.layoutPrefs || {};
@@ -4570,6 +4900,12 @@ export const HomeScreen = {
     current.classList.remove("focused");
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target, { suppressDelegatedFocus: true });
+    if (this.isCollectionFolderNode(current)) {
+      this.hydrateCollectionFocusGif(current, false);
+    }
+    if (this.isCollectionFolderNode(target)) {
+      this.hydrateCollectionFocusGif(target, true);
+    }
     this.setSidebarExpanded(this.isSidebarNode(target));
     if (this.isMainNode(target)) {
       this.lastMainFocus = target;
@@ -4797,6 +5133,7 @@ export const HomeScreen = {
         if (this.isMainNode(target)) {
           this.lastMainFocus = target;
         }
+        this.syncFocusedCollectionCardState();
         this.scheduleModernHeroUpdate(target);
         this.scheduleFocusedPosterFlow(target);
       };
@@ -4825,7 +5162,7 @@ export const HomeScreen = {
           return;
         }
         const action = String(target.dataset.action || "");
-        if (action === "openDetail") {
+        if (action === "openDetail" || action === "openCollectionFolder") {
           this.openDetailFromNode(target);
           return;
         }
@@ -5019,6 +5356,7 @@ export const HomeScreen = {
     });
 
     const addons = await addonRepository.getInstalledAddons();
+    this.collections = CollectionsStore.get();
     const catalogDescriptors = [];
 
     addons.forEach((addon) => {
@@ -5061,7 +5399,7 @@ export const HomeScreen = {
       || initialContinueWatchingItems.length
       || initialNextUpProgressCandidates.length
     );
-    this.rows = this.sortAndFilterRows(initialRows);
+    this.rows = this.sortAndFilterRows(initialRows, this.collections);
     if (!preserveContinueWatching) {
       this.continueWatchingDisplay = initialContinueWatchingState?.display || [];
       this.continueWatchingLoading = false;
@@ -5075,7 +5413,7 @@ export const HomeScreen = {
     } else {
       this.continueWatchingLoading = false;
     }
-    this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+    this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
@@ -5108,8 +5446,8 @@ export const HomeScreen = {
             batchRows.forEach((row) => {
               combinedByKey.set(row.homeCatalogKey, row);
             });
-            this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
-            this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+            this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()), this.collections);
+            this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
             if (!this.heroItem) {
               this.heroItem = this.pickInitialHero();
             }
@@ -5124,8 +5462,8 @@ export const HomeScreen = {
         [...this.rows, ...extraRows].forEach((row) => {
           combinedByKey.set(row.homeCatalogKey, row);
         });
-        this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
-        this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+        this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()), this.collections);
+        this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
@@ -5331,17 +5669,22 @@ export const HomeScreen = {
     return fetchedRows;
   },
 
-  sortAndFilterRows(rows = []) {
-    const allKeys = rows.map((row) => row.homeCatalogKey);
+  sortAndFilterRows(rows = [], collections = []) {
+    const collectionRows = (Array.isArray(collections) ? collections : [])
+      .map((collection) => buildCollectionHomeRow(collection))
+      .filter((row) => Array.isArray(row?.result?.data?.items) && row.result.data.items.length);
+    const catalogRows = (Array.isArray(rows) ? rows : []).filter((row) => row?.rowKind !== "collection");
+    const rowMap = new Map([...catalogRows, ...collectionRows].map((row) => [row.homeCatalogKey, row]));
+    const allKeys = Array.from(rowMap.keys());
     const orderedKeys = HomeCatalogStore.ensureOrderKeys(allKeys);
-    const enabledRows = rows.filter((row) => !HomeCatalogStore.isDisabled(row.homeCatalogDisableKey));
-    const orderIndex = new Map(orderedKeys.map((key, index) => [key, index]));
-    enabledRows.sort((left, right) => {
-      const l = orderIndex.has(left.homeCatalogKey) ? orderIndex.get(left.homeCatalogKey) : Number.MAX_SAFE_INTEGER;
-      const r = orderIndex.has(right.homeCatalogKey) ? orderIndex.get(right.homeCatalogKey) : Number.MAX_SAFE_INTEGER;
-      return l - r;
-    });
-    return enabledRows;
+    const disabledKeys = new Set(HomeCatalogStore.get().disabled || []);
+    const pinnedTopRows = collectionRows.filter((row) => row.pinToTop && !disabledKeys.has(row.homeCatalogDisableKey));
+    const pinnedKeys = new Set(pinnedTopRows.map((row) => row.homeCatalogKey));
+    const orderedRows = orderedKeys
+      .filter((key) => !pinnedKeys.has(key) && !disabledKeys.has(key))
+      .map((key) => rowMap.get(key))
+      .filter(Boolean);
+    return [...pinnedTopRows, ...orderedRows];
   },
 
   retryPendingCatalogRows() {
@@ -5393,8 +5736,8 @@ export const HomeScreen = {
           updatedRows.forEach((row) => {
             combinedByKey.set(row.homeCatalogKey, row);
           });
-          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()));
-          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows).map((item) => normalizeCatalogItem(item)));
+          this.rows = this.sortAndFilterRows(Array.from(combinedByKey.values()), this.collections);
+          this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
           if (!this.heroItem) {
             this.heroItem = this.pickInitialHero();
           }
@@ -5429,9 +5772,13 @@ export const HomeScreen = {
       && Boolean(this.continueWatchingLoading)
       && !this.continueWatchingDisplay?.length
       && !this.heroItem;
-    let heroItem = shouldHoldHeroForContinueWatching
-      ? null
-      : normalizeCatalogItem(this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows), "movie");
+    let heroItem = null;
+    if (!shouldHoldHeroForContinueWatching) {
+      const rawHeroItem = this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows);
+      heroItem = isCollectionFolderItem(rawHeroItem)
+        ? normalizeCollectionFolderItem(rawHeroItem)
+        : normalizeCatalogItem(rawHeroItem, "movie");
+    }
     if (this.layoutMode === "modern" && shouldEnrichModernHero(heroItem)) {
       heroItem = { ...heroItem, heroMetaEnriching: true };
       this.heroItem = heroItem;
@@ -6040,7 +6387,7 @@ export const HomeScreen = {
     for (const row of rows) {
       const first = row.result?.data?.items?.[0];
       if (first) {
-        return normalizeCatalogItem(first, row.type || "movie");
+        return normalizeHomeRowItem(row, first);
       }
     }
     return null;
@@ -6050,19 +6397,28 @@ export const HomeScreen = {
     const flat = [];
     rows.forEach((row) => {
       (row?.result?.data?.items || []).slice(0, 4).forEach((item) => {
-        if (!item?.id || flat.some((entry) => entry.id === item.id)) {
+        const normalized = normalizeHomeRowItem(row, item);
+        if (!normalized?.id || flat.some((entry) => entry.id === normalized.id)) {
           return;
         }
-        flat.push(item);
+        flat.push(normalized);
       });
     });
     return flat.slice(0, 10);
   },
 
   async enrichHero(baseHero = null) {
-    const hero = normalizeCatalogItem(baseHero || this.pickHeroItem(this.rows), "movie");
+    const nextBaseHero = baseHero || this.pickHeroItem(this.rows);
+    const hero = isCollectionFolderItem(nextBaseHero)
+      ? normalizeCollectionFolderItem(nextBaseHero)
+      : normalizeCatalogItem(nextBaseHero, "movie");
     if (!hero) {
       this.heroItem = null;
+      return;
+    }
+
+    if (isCollectionFolderItem(hero)) {
+      this.heroItem = hero;
       return;
     }
 
@@ -6107,6 +6463,10 @@ export const HomeScreen = {
   },
 
   openDetailFromNode(node) {
+    if (String(node?.dataset?.action || "") === "openCollectionFolder") {
+      this.openCollectionFolderFromNode(node);
+      return;
+    }
     const itemId = node.dataset.itemId;
     if (!itemId) {
       return;
@@ -6115,6 +6475,19 @@ export const HomeScreen = {
       itemId,
       itemType: node.dataset.itemType || "movie",
       fallbackTitle: node.dataset.itemTitle || "Untitled"
+    });
+  },
+
+  openCollectionFolderFromNode(node) {
+    const collectionId = String(node?.dataset?.collectionId || "").trim();
+    const folderId = String(node?.dataset?.folderId || "").trim();
+    if (!collectionId || !folderId) {
+      return;
+    }
+    Router.navigate("folderDetail", {
+      collectionId,
+      folderId,
+      collectionTitle: node?.dataset?.collectionTitle || ""
     });
   },
 
@@ -6143,8 +6516,9 @@ export const HomeScreen = {
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
     const code = Number(event?.keyCode || 0);
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
-    const isTizenHoldTarget = Platform.isTizen() && this.isHomeHoldTarget(currentFocusedNode);
-    if (!isTizenHoldTarget || code !== 13) {
+    const supportsRemoteEnterHold = Platform.isTizen() || Platform.isWebOS();
+    const isRemoteHoldTarget = supportsRemoteEnterHold && this.isHomeHoldTarget(currentFocusedNode);
+    if (!isRemoteHoldTarget || code !== 13) {
       this.cancelPendingContinueWatchingEnter();
       this.cancelPendingContinueWatchingHold();
     }
@@ -6221,7 +6595,7 @@ export const HomeScreen = {
       this.openHoldMenuForNode(currentFocusedNode);
       return;
     }
-    if (Platform.isTizen() && code === 13 && isHomeHoldTarget) {
+    if (supportsRemoteEnterHold && code === 13 && isHomeHoldTarget) {
       event.preventDefault?.();
       if (!event?.repeat && !this.hasPendingContinueWatchingHold(currentFocusedNode)) {
         this.startPendingContinueWatchingHold(currentFocusedNode);
@@ -6251,7 +6625,7 @@ export const HomeScreen = {
       activateLegacySidebarAction(action, "home");
       return;
     }
-    if (action === "openDetail") this.openDetailFromNode(current);
+    if (action === "openDetail" || action === "openCollectionFolder") this.openDetailFromNode(current);
     if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(current);
     if (action === "resumeProgress") {
       this.scheduleContinueWatchingEnter(current);
@@ -6259,7 +6633,7 @@ export const HomeScreen = {
   },
 
   onKeyUp(event) {
-    if (!Platform.isTizen()) {
+    if (!Platform.isTizen() && !Platform.isWebOS()) {
       return;
     }
     if (Number(event?.keyCode || 0) !== 13) {
