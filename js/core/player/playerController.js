@@ -55,6 +55,8 @@ export const PlayerController = {
   webosDeviceInfoPromise: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
   viewportSyncHandler: null,
+  avplayDisplayRect: null,
+  avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
 
   isExpectedPlayInterruption(error) {
     const message = String(error?.message || "").toLowerCase();
@@ -764,6 +766,60 @@ export const PlayerController = {
     }
   },
 
+  getAvPlayVideoDimensions() {
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.getCurrentStreamInfo !== "function") {
+      return null;
+    }
+    let streams = [];
+    try {
+      const value = avplay.getCurrentStreamInfo();
+      streams = Array.isArray(value) ? value : [];
+    } catch (_) {
+      streams = [];
+    }
+    const videoTrack = streams.find((track) => this.normalizeAvPlayTrackType(track?.type) === "VIDEO") || null;
+    if (!videoTrack) {
+      return null;
+    }
+    const extraInfo = this.parseAvPlayExtraInfo(videoTrack.extra_info || videoTrack.extraInfo || null) || {};
+    const widthCandidates = [
+      videoTrack.width,
+      videoTrack.Width,
+      videoTrack.videoWidth,
+      extraInfo.width,
+      extraInfo.Width,
+      extraInfo.videoWidth,
+      extraInfo.video_width
+    ];
+    const heightCandidates = [
+      videoTrack.height,
+      videoTrack.Height,
+      videoTrack.videoHeight,
+      extraInfo.height,
+      extraInfo.Height,
+      extraInfo.videoHeight,
+      extraInfo.video_height
+    ];
+    let width = widthCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
+    let height = heightCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
+    if (!width || !height) {
+      const resolutionText = String(
+        videoTrack.resolution
+        || videoTrack.Resolution
+        || extraInfo.resolution
+        || extraInfo.Resolution
+        || ""
+      );
+      const match = resolutionText.match(/(\d{2,5})\s*[xX]\s*(\d{2,5})/);
+      if (match) {
+        width = Number(match[1]);
+        height = Number(match[2]);
+      }
+    }
+    return width > 0 && height > 0 ? { width, height } : null;
+  },
+
   mapAvPlayErrorToMediaCode(errorValue) {
     const errorText = String(errorValue || "").toLowerCase();
     if (!errorText) {
@@ -778,7 +834,7 @@ export const PlayerController = {
     return 4;
   },
 
-  setAvPlayDisplayRect() {
+  setAvPlayDisplayRect(rect = null, displayMethod = null) {
     const avplay = this.getAvPlay();
     if (!avplay) {
       return;
@@ -787,15 +843,32 @@ export const PlayerController = {
     const documentHeight = Number(document.documentElement?.clientHeight || 0);
     const screenWidth = Number(globalThis.screen?.width || 0);
     const screenHeight = Number(globalThis.screen?.height || 0);
-    const width = Math.max(1, Math.round(Math.max(Number(window.innerWidth || 0), documentWidth, screenWidth, 1920)));
-    const height = Math.max(1, Math.round(Math.max(Number(window.innerHeight || 0), documentHeight, screenHeight, 1080)));
+    const fallbackWidth = Math.max(1, Math.round(Math.max(Number(window.innerWidth || 0), documentWidth, screenWidth, 1920)));
+    const fallbackHeight = Math.max(1, Math.round(Math.max(Number(window.innerHeight || 0), documentHeight, screenHeight, 1080)));
+    if (rect) {
+      this.avplayDisplayRect = {
+        x: Math.round(Number(rect.x || 0)),
+        y: Math.round(Number(rect.y || 0)),
+        width: Math.max(1, Math.round(Number(rect.width || fallbackWidth))),
+        height: Math.max(1, Math.round(Number(rect.height || fallbackHeight)))
+      };
+    }
+    if (displayMethod) {
+      this.avplayDisplayMethod = String(displayMethod);
+    }
+    const targetRect = this.avplayDisplayRect || {
+      x: 0,
+      y: 0,
+      width: fallbackWidth,
+      height: fallbackHeight
+    };
     try {
-      avplay.setDisplayRect?.(0, 0, width, height);
+      avplay.setDisplayRect?.(targetRect.x, targetRect.y, targetRect.width, targetRect.height);
     } catch (_) {
       // Ignore display-rect failures.
     }
     try {
-      avplay.setDisplayMethod?.("PLAYER_DISPLAY_MODE_FULL_SCREEN");
+      avplay.setDisplayMethod?.(this.avplayDisplayMethod || "PLAYER_DISPLAY_MODE_FULL_SCREEN");
     } catch (_) {
       // Ignore display-method failures.
     }

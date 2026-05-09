@@ -3213,6 +3213,7 @@ export const PlayerScreen = {
       this.refreshTrackDialogs();
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
+      this.applyAspectMode({ showToast: false });
       this.attemptPendingPlaybackRestore();
       this.updateUiTick();
       if (this.stickyProgressFocus && this.controlsVisible) {
@@ -3258,6 +3259,7 @@ export const PlayerScreen = {
       this.markPlaybackProgress();
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
+      this.applyAspectMode({ showToast: false });
       this.ensureTrackDataWarmup();
       if (this.paused) {
         this.schedulePauseOverlay();
@@ -3273,6 +3275,7 @@ export const PlayerScreen = {
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
       this.applySubtitlePresentationSettings();
+      this.applyAspectMode({ showToast: false });
       this.updateUiTick();
     };
 
@@ -3654,6 +3657,13 @@ export const PlayerScreen = {
     if (!overlay) {
       return;
     }
+    const preserveProgressFocus = Boolean(
+      this.loadingVisible
+      && this.controlsVisible
+      && this.stickyProgressFocus
+      && this.controlFocusZone === "progress"
+      && this.hasPresentedPlaybackFrame
+    );
     const showLogoOnly = Boolean(
       this.loadingVisible
       && this.hasPresentedPlaybackFrame
@@ -3663,15 +3673,18 @@ export const PlayerScreen = {
     overlay.classList.toggle("logo-only", showLogoOnly);
     if (this.loadingVisible) {
       this.dismissPauseOverlay();
-      if (this.seekOverlayVisible || this.seekPreviewSeconds != null) {
+      if (!preserveProgressFocus && (this.seekOverlayVisible || this.seekPreviewSeconds != null)) {
         this.cancelSeekPreview({ commit: false });
       }
-      if (this.controlFocusZone === "progress") {
+      if (!preserveProgressFocus && this.controlFocusZone === "progress") {
         this.stickyProgressFocus = false;
         this.autoHideControlsAfterSeek = false;
         this.controlFocusZone = "buttons";
       }
       this.renderControlButtons();
+      if (preserveProgressFocus) {
+        this.scheduleProgressBarRefocus();
+      }
     } else if (this.paused) {
       this.schedulePauseOverlay();
     }
@@ -7289,11 +7302,61 @@ export const PlayerScreen = {
     const mode = this.aspectModes[this.aspectModeIndex] || this.aspectModes[0];
     const video = PlayerController.video;
     if (video) {
-      video.style.objectFit = mode.objectFit;
+      const rect = this.calculateAspectRect(mode.objectFit, video);
+      video.style.position = "fixed";
+      video.style.left = `${Math.round(rect.x)}px`;
+      video.style.top = `${Math.round(rect.y)}px`;
+      video.style.width = `${Math.round(rect.width)}px`;
+      video.style.height = `${Math.round(rect.height)}px`;
+      video.style.maxWidth = "none";
+      video.style.maxHeight = "none";
+      video.style.objectFit = "fill";
+      video.style.background = "black";
+      if (typeof PlayerController.setAvPlayDisplayRect === "function") {
+        PlayerController.setAvPlayDisplayRect(rect, rect.displayMethod);
+      }
     }
     if (showToast) {
       this.showAspectToast(mode.label);
     }
+  },
+
+  calculateAspectRect(objectFit = "contain", video = PlayerController.video) {
+    const viewportWidth = Math.max(1, Number(window.innerWidth || document.documentElement?.clientWidth || globalThis.screen?.width || 1920));
+    const viewportHeight = Math.max(1, Number(window.innerHeight || document.documentElement?.clientHeight || globalThis.screen?.height || 1080));
+    if (objectFit === "fill") {
+      return {
+        x: 0,
+        y: 0,
+        width: viewportWidth,
+        height: viewportHeight,
+        displayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN"
+      };
+    }
+
+    const avplayDimensions = typeof PlayerController.getAvPlayVideoDimensions === "function"
+      ? PlayerController.getAvPlayVideoDimensions()
+      : null;
+    const videoWidth = Number(video?.videoWidth || avplayDimensions?.width || 0);
+    const videoHeight = Number(video?.videoHeight || avplayDimensions?.height || 0);
+    const mediaRatio = videoWidth > 0 && videoHeight > 0
+      ? videoWidth / videoHeight
+      : 16 / 9;
+    const viewportRatio = viewportWidth / viewportHeight;
+    const shouldCover = objectFit === "cover";
+    const widthLimited = shouldCover
+      ? viewportRatio > mediaRatio
+      : viewportRatio < mediaRatio;
+    const width = widthLimited ? viewportWidth : viewportHeight * mediaRatio;
+    const height = widthLimited ? viewportWidth / mediaRatio : viewportHeight;
+
+    return {
+      x: (viewportWidth - width) / 2,
+      y: (viewportHeight - height) / 2,
+      width,
+      height,
+      displayMethod: shouldCover ? "PLAYER_DISPLAY_MODE_FULL_SCREEN" : "PLAYER_DISPLAY_MODE_LETTER_BOX"
+    };
   },
 
   cycleAspectMode() {

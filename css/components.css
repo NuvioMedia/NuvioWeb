@@ -7141,6 +7141,7 @@
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  padding: 32px;
   padding: var(--tv-safe-gutter);
   opacity: 1;
   transition: opacity 200ms ease;
@@ -7212,6 +7213,7 @@
 }
 
 .player-clock {
+  font-size: 36px;
   font-size: clamp(32px, 2.1vw, 40px);
   font-weight: 600;
   line-height: 1;
@@ -7219,6 +7221,7 @@
 
 .player-ends-at {
   margin-top: 2px;
+  font-size: 16px;
   font-size: var(--tv-caption-text);
   color: rgba(231, 238, 246, 0.82);
 }
@@ -7226,9 +7229,11 @@
 .player-controls-bottom {
   position: relative;
   z-index: 1;
+  padding-top: 80px;
   padding-top: clamp(68px, 7vh, 96px);
   display: flex;
   flex-direction: column;
+  gap: 14px;
   gap: var(--tv-card-gap);
 }
 
@@ -7238,6 +7243,7 @@
 }
 
 .player-title {
+  font-size: 48px;
   font-size: clamp(40px, 2.8vw, 56px);
   font-weight: 700;
   line-height: 1.1;
@@ -7245,12 +7251,14 @@
 
 .player-subtitle {
   margin-top: 4px;
+  font-size: 28px;
   font-size: var(--tv-subtitle-text);
   color: rgba(239, 245, 251, 0.9);
 }
 
 .player-meta-tertiary {
   margin-top: 6px;
+  font-size: 18px;
   font-size: var(--tv-secondary-text);
   color: rgba(255, 255, 255, 0.68);
 }
@@ -7286,45 +7294,59 @@
   width: 0%;
   height: 100%;
   border-radius: 3px;
+  background: #f5f5f5;
   background: var(--player-secondary);
   transition: width 150ms linear;
 }
 
 .player-controls-row {
+  margin-top: 22px;
   margin-top: clamp(18px, 1.4vw, 28px);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 30px;
   gap: clamp(24px, 1.8vw, 36px);
 }
 
 .player-control-buttons {
   display: flex;
   align-items: center;
+  gap: 14px;
   gap: clamp(12px, 1vw, 18px);
 }
 
 .player-control-btn {
+  width: 64px;
   width: var(--tv-control-size);
+  min-width: 64px;
   min-width: var(--tv-control-size);
+  height: 64px;
   height: var(--tv-control-size);
   padding: 0;
   border-radius: 999px;
   border: none;
   background: transparent;
   color: #f4f8fd;
+  font-size: 18px;
   font-size: var(--tv-secondary-text);
   font-weight: 700;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
 }
 
 .player-control-icon {
+  width: 32px;
   width: var(--tv-control-icon-size);
+  height: 32px;
   height: var(--tv-control-icon-size);
+  max-width: 36px;
+  max-height: 36px;
   display: block;
+  object-fit: contain;
   filter: invert(1) brightness(1.15);
 }
 
@@ -7340,6 +7362,7 @@
 }
 
 .player-control-label {
+  font-size: 16px;
   font-size: clamp(15px, 0.95vw, 18px);
   font-weight: 700;
 }
@@ -7374,6 +7397,7 @@
 
 .player-time-label {
   margin-left: auto;
+  font-size: 22px;
   font-size: clamp(20px, 1.3vw, 26px);
   font-weight: 500;
   color: rgba(244, 248, 253, 0.96);

@@ -934,6 +934,7 @@
     <string name="cast_detail_error">Something went wrong</string>
     <string name="cast_detail_retry">Retry</string>
     <string name="cast_detail_filmography">Filmography</string>
+    <string name="cast_detail_known_for">Known For</string>
 
     <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">from %1$s</string>

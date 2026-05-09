@@ -2,6 +2,7 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
+import { I18n } from "../../../i18n/index.js";
 import {
   activatePosterOption,
   createPosterOptionsState,
@@ -13,6 +14,10 @@ import {
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w780";
 const POSTER_HOLD_DELAY_MS = 650;
+
+function t(key, params = {}, fallback = key) {
+  return I18n.t(key, params, { fallback });
+}
 
 function toImage(path) {
   const value = String(path || "").trim();
@@ -189,7 +194,7 @@ export const CastDetailScreen = {
           </div>
         </section>
         <section class="cast-detail-credits">
-          <h3 class="cast-detail-section-title">Known For</h3>
+          <h3 class="cast-detail-section-title">${t("cast_detail_known_for", {}, "Known For")}</h3>
           <div class="cast-credit-track">${creditsHtml}</div>
         </section>
       </div>

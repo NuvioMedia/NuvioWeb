@@ -881,6 +881,7 @@
    <string name="cast_detail_error">Qualcosa è andato storto</string>
     <string name="cast_detail_retry">Riprova</string>
     <string name="cast_detail_filmography">Filmografia</string>
+    <string name="cast_detail_known_for">Conosciuto per</string>
 
     <!-- CatalogSeeAllScreen -->
     <string name="catalog_see_all_from">da %1$s</string>
