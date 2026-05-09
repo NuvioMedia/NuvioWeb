@@ -410,6 +410,35 @@ function getAddonIconPath(addonName = "") {
   return "";
 }
 
+function getAddonBadgeLabel(name = "") {
+  const cleaned = String(name || "").trim();
+  if (!cleaned) {
+    return "A";
+  }
+  if (/torrentio|torbox|torrent/i.test(cleaned)) {
+    return "µ";
+  }
+  return cleaned
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
+    .slice(0, 2) || cleaned.charAt(0).toUpperCase();
+}
+
+function renderStreamAddonIcon(addonName = "") {
+  const iconPath = getAddonIconPath(addonName);
+  const fallback = escapeHtml(getAddonBadgeLabel(addonName));
+  if (!iconPath) {
+    return `<span class="series-stream-addon-fallback" aria-hidden="true">${fallback}</span>`;
+  }
+  return `
+    <span class="series-stream-addon-badge" aria-hidden="true">
+      <img class="series-stream-addon-icon" src="${escapeHtml(iconPath)}" alt="" decoding="async" onerror="this.hidden=true;const fallback=this.nextElementSibling;if(fallback){fallback.hidden=false;}" />
+      <span class="series-stream-addon-fallback" hidden>${fallback}</span>
+    </span>
+  `;
+}
+
 function escapeHtml(value = "") {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -4055,7 +4084,7 @@ export const MetaDetailsScreen = {
             <div class="series-stream-title">${stream.label || "Stream"}</div>
             <div class="series-stream-desc">${stream.description || ""}</div>
             <div class="series-stream-meta">
-              ${getAddonIconPath(stream.addonName) ? `<img class="series-stream-addon-icon" src="${getAddonIconPath(stream.addonName)}" alt="" aria-hidden="true" />` : ""}
+              ${renderStreamAddonIcon(stream.addonName)}
               <span>${stream.addonName || "Addon"}${stream.sourceType ? ` - ${stream.sourceType}` : ""}</span>
             </div>
             <div class="series-stream-tags">
@@ -4119,7 +4148,7 @@ export const MetaDetailsScreen = {
             <div class="series-stream-title">${stream.label || "Stream"}</div>
             <div class="series-stream-desc">${stream.description || ""}</div>
             <div class="series-stream-meta">
-              ${getAddonIconPath(stream.addonName) ? `<img class="series-stream-addon-icon" src="${getAddonIconPath(stream.addonName)}" alt="" aria-hidden="true" />` : ""}
+              ${renderStreamAddonIcon(stream.addonName)}
               <span>${stream.addonName || "Addon"}${stream.sourceType ? ` - ${stream.sourceType}` : ""}</span>
             </div>
             <div class="series-stream-tags">

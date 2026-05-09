@@ -189,7 +189,7 @@ const AVAILABLE_SUBTITLE_LANGUAGES = [
 ].sort((left, right) => left.label.localeCompare(right.label));
 
 const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
-  { id: "off", labelKey: "subtitle_none_forced_only", label: "None (forced only)" },
+  { id: "forced", labelKey: "subtitle_none_forced_only", label: "None (forced only)" },
   ...AVAILABLE_SUBTITLE_LANGUAGES
 ];
 
@@ -433,7 +433,7 @@ function labelForSubtitlePlaybackLanguage(language) {
   const normalized = normalizeSelectableSubtitleLanguageCode(language);
   return translateOptionLabel(
     PREFERRED_SUBTITLE_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
-    normalized === "off"
+    normalized === "off" || normalized === "forced"
       ? t("subtitle_none_forced_only", {}, "None (forced only)")
       : normalized === "system"
           ? t("common.system")
@@ -443,7 +443,7 @@ function labelForSubtitlePlaybackLanguage(language) {
 
 function subtitleLanguageOptionCode(option) {
   const normalized = normalizeSelectableSubtitleLanguageCode(option?.id);
-  if (!normalized || normalized === "off") {
+  if (!normalized || normalized === "off" || normalized === "forced") {
     return "";
   }
   return normalized.toUpperCase();
@@ -1743,7 +1743,7 @@ export const SettingsScreen = {
       this.openOptionDialog({
         title: t("settings.dialogs.preferredSubtitleLanguage"),
         options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
-        selectedId: currentLanguage === "system" ? "off" : currentLanguage,
+        selectedId: currentLanguage === "system" || currentLanguage === "off" ? "forced" : currentLanguage,
         returnFocusKey: "playback:subtitleLanguage",
         dialogClassName: "settings-language-dialog",
         optionRenderer: "subtitle-language",

@@ -21,6 +21,10 @@ function buildTracksUrl(port, mediaUrl) {
   return `http://127.0.0.1:${port}/tracks/${encodeURIComponent(String(mediaUrl || "").trim())}`;
 }
 
+function buildSameOriginTracksUrl(mediaUrl) {
+  return `/tracks/${encodeURIComponent(String(mediaUrl || "").trim())}`;
+}
+
 async function requestTracksViaLuna(mediaUrl) {
   const result = await requestWebOsCompanionService({
     method: "tracks",
@@ -110,6 +114,20 @@ export const localMediaTracksRepository = {
 
       if (Platform.isTizen()) {
         await waitForTizenMediaService();
+      }
+
+      if (Platform.isBrowser()) {
+        try {
+          const payload = await fetchJson(buildSameOriginTracksUrl(targetUrl));
+          const tracks = Array.isArray(payload) ? payload : [];
+          tracksCache.set(targetUrl, {
+            tracks,
+            expiresAt: Date.now() + TRACK_CACHE_TTL_MS
+          });
+          return tracks;
+        } catch (_) {
+          // Fall back to direct localhost probing below.
+        }
       }
 
       for (const port of getCandidatePorts()) {

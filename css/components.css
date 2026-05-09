@@ -9002,6 +9002,25 @@
   color: var(--text-secondary);
 }
 
+.series-stream-addon-badge,
+.series-stream-addon-fallback {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.series-stream-addon-fallback {
+  border-radius: 999px;
+  background: rgb(var(--secondary-color-rgb) / 0.18);
+  color: var(--text-color);
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+}
+
 .series-stream-addon-icon {
   width: 18px;
   height: 18px;

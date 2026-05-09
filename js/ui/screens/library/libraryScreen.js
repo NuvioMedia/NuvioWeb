@@ -304,17 +304,18 @@ export const LibraryScreen = {
           ${items.map((item) => {
             const focusKey = `${item.type}:${item.id}`;
             const year = extractReleaseYear(item);
+            const title = item.name || item.id || t("library_untitled", {}, "Untitled");
             return `
               <article class="library-grid-card focusable"
                        data-action="openDetail"
                        data-item-id="${escapeHtml(item.id)}"
                        data-item-type="${escapeHtml(item.type || "movie")}"
-                       data-item-title="${escapeHtml(item.name || item.id || "Untitled")}"
+                       data-item-title="${escapeHtml(title)}"
                        data-poster-src="${escapeHtml(item.poster || "")}"
                        data-backdrop-src="${escapeHtml(item.background || "")}"
                        data-focus-key="${escapeHtml(focusKey)}">
                 <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml(item.poster)}')"` : ""}></div>
-                <div class="library-grid-title">${escapeHtml(item.name || item.id || "Untitled")}</div>
+                <div class="library-grid-title">${escapeHtml(title)}</div>
                 ${year ? `<div class="library-grid-year">${escapeHtml(year)}</div>` : ""}
               </article>
             `;
@@ -343,12 +344,14 @@ export const LibraryScreen = {
         <button class="library-action-button focusable library-primary"
                 data-action="openManageLists"
                 ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
-          Manage Lists
+          ${escapeHtml(t("library_manage_lists", {}, "Manage Lists"))}
         </button>
         <button class="library-action-button focusable library-primary"
                 data-action="refreshLibrary"
                 ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
-          ${state.isSyncing ? "Syncing..." : "Sync"}
+          ${escapeHtml(state.isSyncing
+            ? t("library_action_syncing", {}, "Syncing...")
+            : t("library_action_sync", {}, "Sync"))}
         </button>
       </section>
     `;
@@ -362,7 +365,7 @@ export const LibraryScreen = {
     return `
       <div class="library-overlay">
         <section class="library-dialog library-manage-dialog">
-          <h3 class="library-dialog-title">Manage Lists</h3>
+          <h3 class="library-dialog-title">${escapeHtml(t("library_manage_lists", {}, "Manage Lists"))}</h3>
           ${state.errorMessage ? `<p class="library-dialog-error">${escapeHtml(state.errorMessage)}</p>` : ""}
           <div class="library-manage-list">
             ${personalTabs.length
@@ -374,18 +377,18 @@ export const LibraryScreen = {
                     ${escapeHtml(tab.title)}
                   </button>
                 `).join("")
-              : `<div class="library-manage-empty">No lists yet.</div>`
+              : `<div class="library-manage-empty">${escapeHtml(t("library_no_lists", {}, "No personal lists yet."))}</div>`
             }
           </div>
           <div class="library-dialog-actions">
-            <button class="library-action-button focusable" data-action="createList" ${state.pendingOperation ? "disabled" : ""}>Create</button>
-            <button class="library-action-button focusable" data-action="editList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Edit</button>
-            <button class="library-action-button focusable" data-action="moveListUp" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Move Up</button>
-            <button class="library-action-button focusable" data-action="moveListDown" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Move Down</button>
+            <button class="library-action-button focusable" data-action="createList" ${state.pendingOperation ? "disabled" : ""}>${escapeHtml(t("library_list_create", {}, "Create"))}</button>
+            <button class="library-action-button focusable" data-action="editList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_edit", {}, "Edit"))}</button>
+            <button class="library-action-button focusable" data-action="moveListUp" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_move_up", {}, "Move Up"))}</button>
+            <button class="library-action-button focusable" data-action="moveListDown" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_move_down", {}, "Move Down"))}</button>
           </div>
           <div class="library-dialog-actions">
-            <button class="library-action-button focusable danger" data-action="deleteList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Delete</button>
-            <button class="library-action-button focusable" data-action="closeManageLists" ${state.pendingOperation ? "disabled" : ""}>Close</button>
+            <button class="library-action-button focusable danger" data-action="deleteList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_delete", {}, "Delete"))}</button>
+            <button class="library-action-button focusable" data-action="closeManageLists" ${state.pendingOperation ? "disabled" : ""}>${escapeHtml(t("library_list_close", {}, "Close"))}</button>
           </div>
         </section>
       </div>
@@ -400,29 +403,31 @@ export const LibraryScreen = {
     return `
       <div class="library-overlay">
         <section class="library-dialog library-list-editor">
-          <h3 class="library-dialog-title">${editor.mode === "create" ? "Create List" : "Edit List"}</h3>
+          <h3 class="library-dialog-title">${escapeHtml(editor.mode === "create"
+            ? t("library_create_title", {}, "Create List")
+            : t("library_edit_title", {}, "Edit List"))}</h3>
           <label class="library-dialog-field">
-            <span class="library-dialog-field-label">Name</span>
+            <span class="library-dialog-field-label">${escapeHtml(t("library_list_name_label", {}, "Name"))}</span>
             <input class="library-dialog-input focusable"
                    data-editor-field="name"
                    value="${escapeHtml(editor.name)}"
                    ${state.pendingOperation ? "disabled" : ""} />
           </label>
           <label class="library-dialog-field">
-            <span class="library-dialog-field-label">Description</span>
+            <span class="library-dialog-field-label">${escapeHtml(t("library_list_description_label", {}, "Description"))}</span>
             <textarea class="library-dialog-textarea focusable"
                       data-editor-field="description"
                       ${state.pendingOperation ? "disabled" : ""}>${escapeHtml(editor.description)}</textarea>
           </label>
           <div class="library-dialog-field">
-            <span class="library-dialog-field-label">Privacy</span>
+            <span class="library-dialog-field-label">${escapeHtml(t("library_list_privacy", {}, "Privacy"))}</span>
             <div class="library-privacy-row">
               ${LIBRARY_PRIVACY_OPTIONS.map((privacy) => `
                 <button class="library-privacy-button focusable${privacy === editor.privacy ? " selected" : ""}"
                         data-action="selectPrivacy"
                         data-privacy="${privacy}"
                         ${state.pendingOperation ? "disabled" : ""}>
-                  ${escapeHtml(privacy.charAt(0).toUpperCase() + privacy.slice(1))}
+                  ${escapeHtml(t(`library_privacy_${privacy}`, {}, privacy.charAt(0).toUpperCase() + privacy.slice(1)))}
                 </button>
               `).join("")}
             </div>
@@ -431,12 +436,14 @@ export const LibraryScreen = {
             <button class="library-action-button focusable"
                     data-action="saveListEditor"
                     ${state.pendingOperation ? "disabled" : ""}>
-              ${state.pendingOperation ? "Saving..." : "Save"}
+              ${escapeHtml(state.pendingOperation
+                ? t("library_action_saving", {}, "Saving...")
+                : t("action_save", {}, "Save"))}
             </button>
             <button class="library-action-button focusable"
                     data-action="cancelListEditor"
                     ${state.pendingOperation ? "disabled" : ""}>
-              Cancel
+              ${escapeHtml(t("action_cancel", {}, "Cancel"))}
             </button>
           </div>
         </section>
@@ -451,18 +458,18 @@ export const LibraryScreen = {
     return `
       <div class="library-overlay">
         <section class="library-dialog library-delete-dialog">
-          <h3 class="library-dialog-title">Delete List</h3>
-          <p class="library-dialog-subtitle">This will permanently delete the selected list.</p>
+          <h3 class="library-dialog-title">${escapeHtml(t("library_delete_title", {}, "Delete this list?"))}</h3>
+          <p class="library-dialog-subtitle">${escapeHtml(t("library_delete_subtitle", {}, "This removes the list and all its items."))}</p>
           <div class="library-dialog-actions stacked">
             <button class="library-action-button focusable danger"
                     data-action="confirmDeleteList"
                     ${state.pendingOperation ? "disabled" : ""}>
-              Delete
+              ${escapeHtml(t("library_delete_confirm", {}, "Delete"))}
             </button>
             <button class="library-action-button focusable"
                     data-action="cancelDeleteList"
                     ${state.pendingOperation ? "disabled" : ""}>
-              Cancel
+              ${escapeHtml(t("action_cancel", {}, "Cancel"))}
             </button>
           </div>
         </section>
@@ -486,10 +493,10 @@ export const LibraryScreen = {
 
     const pickerMarkup = [
       state.sourceMode === "trakt"
-        ? this.renderPicker("list", "List", this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
+        ? this.renderPicker("list", t("library_filter_list", {}, "List"), this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
         : "",
-      this.renderPicker("type", "Type", this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide"),
-      this.renderPicker("sort", "Sort", this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide")
+      this.renderPicker("type", t("library_filter_type", {}, "Type"), this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide"),
+      this.renderPicker("sort", t("library_filter_sort", {}, "Sort"), this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide")
     ].filter(Boolean).join("");
 
     this.container.innerHTML = `
@@ -498,7 +505,7 @@ export const LibraryScreen = {
         <main class="home-main library-main">
           <section class="library-page">
             <header class="library-page-header">
-              <h1 class="library-page-title">Library</h1>
+              <h1 class="library-page-title">${escapeHtml(t("library_title", {}, "Library"))}</h1>
               <div class="library-page-source">${escapeHtml(this.controller.getSourceLabel())}</div>
             </header>
 
@@ -653,7 +660,7 @@ export const LibraryScreen = {
       Router.navigate("detail", {
         itemId: result.item.id,
         itemType: result.item.type || "movie",
-        fallbackTitle: result.item.title || "Untitled"
+        fallbackTitle: result.item.title || t("library_untitled", {}, "Untitled")
       });
       return true;
     }
@@ -1187,7 +1194,7 @@ export const LibraryScreen = {
       Router.navigate("detail", {
         itemId: node.dataset.itemId,
         itemType: node.dataset.itemType || "movie",
-        fallbackTitle: node.dataset.itemTitle || "Untitled"
+        fallbackTitle: node.dataset.itemTitle || t("library_untitled", {}, "Untitled")
       });
       return;
     }

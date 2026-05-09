@@ -149,6 +149,17 @@ function normalizeSubtitleLanguage(value, fallback = "off") {
   }
 }
 
+function normalizePreferredSubtitleLanguageForAndroid(settings = {}) {
+  const normalized = normalizeSubtitleLanguage(
+    settings.subtitleStyle?.preferredLanguage ?? settings.subtitleLanguage,
+    "off"
+  );
+  if (normalized === "off" && settings.subtitlesEnabled !== false) {
+    return "forced";
+  }
+  return normalized;
+}
+
 function normalizeAudioLanguageForAndroid(value) {
   const normalized = String(value || "").trim();
   if (!normalized || normalized.toLowerCase() === "system") {
@@ -429,7 +440,7 @@ const FEATURE_ADAPTERS = {
       const settings = PlayerSettingsStore.getForProfile(profileId);
       return {
         preferred_audio_language: normalizeAudioLanguageForAndroid(settings.preferredAudioLanguage),
-        subtitle_preferred_language: normalizeSubtitleLanguage(settings.subtitleStyle?.preferredLanguage ?? settings.subtitleLanguage, "off"),
+        subtitle_preferred_language: normalizePreferredSubtitleLanguageForAndroid(settings),
         subtitle_secondary_language: normalizeSubtitleLanguage(settings.subtitleStyle?.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage, "off"),
         subtitle_size: Math.max(50, Math.trunc(Number(settings.subtitleStyle?.fontSize ?? 100) || 100)),
         subtitle_vertical_offset: Math.trunc(Number(settings.subtitleStyle?.verticalOffset ?? 0) || 0),

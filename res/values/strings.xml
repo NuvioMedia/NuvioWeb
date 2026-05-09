@@ -819,7 +819,12 @@
     <string name="library_sort_title_desc">Title Z-A</string>
     <string name="library_manage_lists">Manage Lists</string>
     <string name="library_manage_trakt_lists">Manage Lists</string>
+    <string name="library_action_sync">Sync</string>
+    <string name="library_action_syncing">Syncing...</string>
+    <string name="library_action_saving">Saving...</string>
     <string name="library_no_lists">No personal lists yet.</string>
+    <string name="library_create_title">Create List</string>
+    <string name="library_edit_title">Edit List</string>
     <string name="library_list_create">Create</string>
     <string name="library_list_edit">Edit</string>
     <string name="library_list_move_up">Move Up</string>
@@ -829,6 +834,10 @@
     <string name="library_list_name_label">Name</string>
     <string name="library_list_description_label">Description</string>
     <string name="library_list_privacy">Privacy</string>
+    <string name="library_privacy_private">Private</string>
+    <string name="library_privacy_link">Link</string>
+    <string name="library_privacy_friends">Friends</string>
+    <string name="library_privacy_public">Public</string>
     <string name="library_delete_title">Delete this list?</string>
     <string name="library_delete_subtitle">This removes the list and all its items.</string>
     <string name="library_delete_confirm">Delete</string>
@@ -839,6 +848,17 @@
     <string name="library_empty_trakt_title">No %1$s in this list</string>
     <string name="library_empty_local_subtitle">Start saving your favorites to see them here</string>
     <string name="library_empty_trakt_subtitle">Use + in details to add items to watchlist or lists</string>
+    <string name="library_untitled">Untitled</string>
+    <string name="library_error_name_required">List name is required</string>
+    <string name="library_error_save_failed">Failed to save list</string>
+    <string name="library_error_delete_failed">Failed to delete list</string>
+    <string name="library_error_reorder_failed">Failed to reorder lists</string>
+    <string name="library_error_refresh_failed">Failed to refresh library</string>
+    <string name="library_message_list_created">List created</string>
+    <string name="library_message_list_updated">List updated</string>
+    <string name="library_message_list_deleted">List deleted</string>
+    <string name="library_message_list_order_updated">List order updated</string>
+    <string name="library_message_synced">Library synced</string>
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Loading…</string>

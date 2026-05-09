@@ -228,7 +228,7 @@ function extractIndexerName(stream = {}) {
 function getAddonBadgeLabel(name = "") {
   const cleaned = String(name || "").trim();
   if (!cleaned) {
-    return "?";
+    return "A";
   }
   if (/torrentio|torbox|torrent/i.test(cleaned)) {
     return "µ";
@@ -723,7 +723,7 @@ export const StreamScreen = {
       renderMetaItem("source", extractIndexerName(stream))
     ].filter(Boolean).join("");
     const addonBadge = addonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)
-      ? `<img src="${escapeHtml(addonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" /><span hidden>${addonBadgeLabel}</span>`
+      ? `<img src="${escapeHtml(addonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" onerror="this.hidden=true;const fallback=this.nextElementSibling;if(fallback){fallback.hidden=false;}" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
 
     return `

@@ -767,7 +767,12 @@
     <string name="library_sort_title_desc">Titolo Z-A</string>
     <string name="library_manage_lists">Gestisci liste</string>
     <string name="library_manage_trakt_lists">Gestisci liste</string>
+    <string name="library_action_sync">Sincronizza</string>
+    <string name="library_action_syncing">Sincronizzazione...</string>
+    <string name="library_action_saving">Salvataggio...</string>
     <string name="library_no_lists">Ancora nessuna lista personale.</string>
+    <string name="library_create_title">Crea lista</string>
+    <string name="library_edit_title">Modifica lista</string>
     <string name="library_list_create">Crea</string>
     <string name="library_list_edit">Modifica</string>
     <string name="library_list_move_up">Sposta su</string>
@@ -777,6 +782,10 @@
     <string name="library_list_name_label">Nome</string>
     <string name="library_list_description_label">Descrizione</string>
     <string name="library_list_privacy">Privacy</string>
+    <string name="library_privacy_private">Privata</string>
+    <string name="library_privacy_link">Con link</string>
+    <string name="library_privacy_friends">Amici</string>
+    <string name="library_privacy_public">Pubblica</string>
     <string name="library_delete_title">Eliminare questa lista?</string>
     <string name="library_delete_subtitle">Questo rimuoverà la lista e tutti i suoi elementi.</string>
     <string name="library_delete_confirm">Elimina</string>
@@ -787,6 +796,17 @@
     <string name="library_empty_trakt_title">Nessun %1$s in questa lista</string>
     <string name="library_empty_local_subtitle">Inizia a salvare i tuoi preferiti per vederli qui</string>
     <string name="library_empty_trakt_subtitle">Usa il tasto + nei dettagli per aggiungere elementi alla lista da guardare o alle tue liste</string>
+    <string name="library_untitled">Senza titolo</string>
+    <string name="library_error_name_required">Il nome della lista è obbligatorio</string>
+    <string name="library_error_save_failed">Impossibile salvare la lista</string>
+    <string name="library_error_delete_failed">Impossibile eliminare la lista</string>
+    <string name="library_error_reorder_failed">Impossibile riordinare le liste</string>
+    <string name="library_error_refresh_failed">Impossibile aggiornare la libreria</string>
+    <string name="library_message_list_created">Lista creata</string>
+    <string name="library_message_list_updated">Lista aggiornata</string>
+    <string name="library_message_list_deleted">Lista eliminata</string>
+    <string name="library_message_list_order_updated">Ordine liste aggiornato</string>
+    <string name="library_message_synced">Libreria sincronizzata</string>
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Caricamento…</string>

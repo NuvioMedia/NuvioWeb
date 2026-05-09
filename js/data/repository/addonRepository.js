@@ -23,6 +23,24 @@ class AddonRepository {
     return trimmed;
   }
 
+  normalizeManifestAssetUrl(value, baseUrl) {
+    const raw = String(value || "").trim();
+    if (!raw) {
+      return null;
+    }
+    if (/^\/\//.test(raw)) {
+      return `https:${raw}`;
+    }
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
+    }
+    try {
+      return new URL(raw, `${this.canonicalizeUrl(baseUrl)}/`).href;
+    } catch (_) {
+      return raw;
+    }
+  }
+
   getInstalledAddonUrls() {
     const fromStorage = LocalStore.get(ADDON_URLS_KEY, null);
     if (Array.isArray(fromStorage)) {
@@ -189,7 +207,7 @@ class AddonRepository {
       displayName: manifest.name || "Unknown Addon",
       version: manifest.version || "0.0.0",
       description: manifest.description || null,
-      logo: manifest.logo || null,
+      logo: this.normalizeManifestAssetUrl(manifest.logo, baseUrl),
       baseUrl,
       types,
       rawTypes: types,
