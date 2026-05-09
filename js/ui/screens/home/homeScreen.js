@@ -14,6 +14,7 @@ import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { ProfileManager } from "../../../core/profile/profileManager.js";
 import { AvatarRepository } from "../../../data/remote/supabase/avatarRepository.js";
 import { Platform } from "../../../platform/index.js";
+import { LocalStore } from "../../../core/storage/localStore.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import {
@@ -64,6 +65,9 @@ const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
 const CW_META_TIMEOUT_MS = 1800;
 const CW_META_TIMEOUT_TV_MS = 4200;
 const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
+const CW_META_RETRY_TIMEOUT_MS = 8000;
+const CW_ENRICHMENT_CACHE_KEY = "homeContinueWatchingEnrichmentCache";
+const CW_ENRICHMENT_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -795,6 +799,107 @@ function buildVisibleContinueWatchingItems(items = [], options = {}) {
     .filter((item) => isPresentableContinueWatchingItem(item, options));
 }
 
+function buildCompleteContinueWatchingDisplay(items = []) {
+  return (items || [])
+    .map((item) => normalizeContinueWatchingItem(item))
+    .filter((item) => item?.contentId);
+}
+
+function needsContinueWatchingMetadataRefresh(items = []) {
+  return (items || []).some((item) => {
+    const normalized = normalizeContinueWatchingItem(item);
+    return normalized?.contentId && (isRawContinueWatchingTitle(normalized) || !hasContinueWatchingArtwork(normalized));
+  });
+}
+
+function continueWatchingEnrichmentCacheKey(item = {}) {
+  const type = String(item.contentType || item.type || "movie").trim().toLowerCase() || "movie";
+  const contentId = String(item.contentId || item.id || "").trim();
+  const season = item.season == null ? "" : String(Number(item.season || 0));
+  const episode = item.episode == null ? "" : String(Number(item.episode || 0));
+  return contentId ? `${type}:${contentId}:${season}:${episode}` : "";
+}
+
+function readContinueWatchingEnrichmentCache() {
+  const cache = LocalStore.get(CW_ENRICHMENT_CACHE_KEY, {});
+  return cache && typeof cache === "object" ? cache : {};
+}
+
+function getCachedContinueWatchingEnrichment(item = {}) {
+  const key = continueWatchingEnrichmentCacheKey(item);
+  if (!key) {
+    return null;
+  }
+  const cached = readContinueWatchingEnrichmentCache()[key];
+  if (!cached || typeof cached !== "object") {
+    return null;
+  }
+  if ((Date.now() - Number(cached.cachedAt || 0)) > CW_ENRICHMENT_CACHE_MAX_AGE_MS) {
+    return null;
+  }
+  return cached;
+}
+
+function applyCachedContinueWatchingEnrichment(item = {}) {
+  const cached = getCachedContinueWatchingEnrichment(item);
+  if (!cached) {
+    return item;
+  }
+  return {
+    ...item,
+    ...cached,
+    contentId: item.contentId,
+    contentType: item.contentType,
+    videoId: item.videoId,
+    season: item.season,
+    episode: item.episode,
+    positionMs: item.positionMs,
+    durationMs: item.durationMs,
+    progressPercent: item.progressPercent,
+    updatedAt: item.updatedAt,
+    source: item.source
+  };
+}
+
+function saveContinueWatchingEnrichment(item = {}) {
+  const normalized = normalizeContinueWatchingItem(item);
+  if (!normalized?.contentId || isRawContinueWatchingTitle(normalized) || !hasContinueWatchingArtwork(normalized)) {
+    return;
+  }
+  const key = continueWatchingEnrichmentCacheKey(normalized);
+  if (!key) {
+    return;
+  }
+  const cache = readContinueWatchingEnrichmentCache();
+  cache[key] = {
+    cachedAt: Date.now(),
+    title: normalized.title,
+    name: normalized.name,
+    landscapePoster: normalized.landscapePoster,
+    episodeThumbnail: normalized.episodeThumbnail,
+    poster: normalized.poster,
+    background: normalized.background,
+    backdrop: normalized.backdrop,
+    thumbnail: normalized.thumbnail,
+    logo: normalized.logo,
+    description: normalized.description,
+    releaseInfo: normalized.releaseInfo,
+    imdbRating: normalized.imdbRating,
+    genres: normalized.genres,
+    runtimeMinutes: normalized.runtimeMinutes,
+    ageRating: normalized.ageRating,
+    status: normalized.status,
+    language: normalized.language,
+    country: normalized.country,
+    episodeTitle: normalized.episodeTitle,
+    episodeDescription: normalized.episodeDescription
+  };
+  const entries = Object.entries(cache)
+    .sort(([, left], [, right]) => Number(right?.cachedAt || 0) - Number(left?.cachedAt || 0))
+    .slice(0, 200);
+  LocalStore.set(CW_ENRICHMENT_CACHE_KEY, Object.fromEntries(entries));
+}
+
 function buildContinueWatchingSignature(items = []) {
   return (items || [])
     .map((item) => {
@@ -809,6 +914,12 @@ function buildContinueWatchingSignature(items = []) {
         normalized.videoId || "",
         normalized.season ?? "",
         normalized.episode ?? "",
+        normalized.title || normalized.name || "",
+        normalized.poster || "",
+        normalized.background || normalized.backdrop || normalized.thumbnail || "",
+        normalized.logo || "",
+        normalized.episodeTitle || "",
+        normalized.episodeThumbnail || "",
         position,
         duration,
         normalized.progressStatus || "",
@@ -4803,8 +4914,9 @@ export const HomeScreen = {
     }
     const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
     const profileChanged = activeProfileId !== String(this.loadedProfileId || "");
+    const watchProgressSourceChanged = watchProgressRepository.getContinueWatchingSourceKey() !== String(this.loadedWatchProgressSourceKey || "");
     const forceReload = Boolean(params?.forceReload);
-    if (profileChanged || forceReload) {
+    if (profileChanged || watchProgressSourceChanged || forceReload) {
       this.hasLoadedOnce = false;
       this.hasAppliedInitialContinueWatchingFocus = false;
       this.sidebarProfile = null;
@@ -4851,7 +4963,7 @@ export const HomeScreen = {
     let progressAllError = null;
     let recentProgressError = null;
     const sidebarProfilePromise = getSidebarProfileState().catch(() => null);
-    const progressAllPromise = watchProgressRepository.getAll().catch((error) => {
+    const progressAllPromise = watchProgressRepository.getAllForContinueWatching().catch((error) => {
       progressAllError = error;
       return [];
     });
@@ -4886,18 +4998,20 @@ export const HomeScreen = {
       });
       const displayWithArtwork = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
       const displayWithoutArtwork = buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
-      const displayFallback = (enriched || [])
-        .map((item) => normalizeContinueWatchingItem(item))
-        .filter((item) => item?.contentId);
+      const displayFallback = buildCompleteContinueWatchingDisplay(enriched);
+      const display = displayWithoutArtwork.length >= displayFallback.length
+        ? displayWithoutArtwork
+        : displayFallback;
       return {
         allProgress: allProgressItems,
         continueWatching: continueWatchingItems,
         watchedItems,
         nextUpProgressCandidates,
         hasCandidates,
-        display: displayWithArtwork.length
+        needsMetadataRefresh: needsContinueWatchingMetadataRefresh(display),
+        display: displayWithArtwork.length === displayFallback.length
           ? displayWithArtwork
-          : (displayWithoutArtwork.length ? displayWithoutArtwork : displayFallback)
+          : display
       };
     })().catch((error) => {
       console.warn("Initial continue watching load failed", error);
@@ -4965,6 +5079,7 @@ export const HomeScreen = {
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
+    this.loadedWatchProgressSourceKey = watchProgressRepository.getContinueWatchingSourceKey();
     this.isInitialHomeLoading = false;
     this.hasLoadedOnce = true;
     this.render();
@@ -5032,7 +5147,7 @@ export const HomeScreen = {
       });
     }
 
-    if (background || !initialContinueWatchingState?.display?.length) {
+    if (background || !initialContinueWatchingState?.display?.length || initialContinueWatchingState?.needsMetadataRefresh) {
       (async () => {
       const [allProgress, continueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
@@ -5084,15 +5199,19 @@ export const HomeScreen = {
         const enriched = await this.enrichContinueWatching(this.continueWatching, {
           allProgress: this.allProgress,
           watchedItems: this.watchedItems,
-          nextUpProgressCandidates: this.nextUpProgressCandidates
+          nextUpProgressCandidates: this.nextUpProgressCandidates,
+          metaTimeoutMs: initialContinueWatchingState?.needsMetadataRefresh ? CW_META_RETRY_TIMEOUT_MS : undefined,
+          forceRefreshMetadata: Boolean(initialContinueWatchingState?.needsMetadataRefresh)
         });
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
         const nextDisplayStrict = buildVisibleContinueWatchingItems(enriched, { requireArtwork: true });
-        const nextDisplay = nextDisplayStrict.length
+        const nextDisplayFallback = buildCompleteContinueWatchingDisplay(enriched);
+        const nextDisplayLoose = buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
+        const nextDisplay = nextDisplayStrict.length === nextDisplayFallback.length
           ? nextDisplayStrict
-          : buildVisibleContinueWatchingItems(enriched, { requireArtwork: false });
+          : (nextDisplayLoose.length >= nextDisplayFallback.length ? nextDisplayLoose : nextDisplayFallback);
         const nextSignature = preserveContinueWatching
           ? buildContinueWatchingSignature(nextDisplay)
           : "";
@@ -5658,6 +5777,12 @@ export const HomeScreen = {
       typeCandidates.push("movie");
     }
 
+    const rawContentId = String(contentId || "").trim();
+    const idCandidates = [rawContentId];
+    if (rawContentId.includes(":")) {
+      idCandidates.push(rawContentId.split(":").pop());
+    }
+
     const seenTypes = new Set();
     for (const type of typeCandidates) {
       const normalizedCandidate = String(type || "").trim().toLowerCase();
@@ -5665,16 +5790,24 @@ export const HomeScreen = {
         continue;
       }
       seenTypes.add(normalizedCandidate);
-      try {
-        const result = await withTimeout(
-          metaRepository.getMetaFromAllAddons(normalizedCandidate, contentId),
-          effectiveTimeoutMs,
-          { status: "error", message: "timeout" }
-        );
-        if (result?.status === "success" && result?.data) {
-          return result.data;
+      const seenIds = new Set();
+      for (const candidateId of idCandidates) {
+        const normalizedId = String(candidateId || "").trim();
+        if (!normalizedId || seenIds.has(normalizedId)) {
+          continue;
         }
-      } catch (_) { }
+        seenIds.add(normalizedId);
+        try {
+          const result = await withTimeout(
+            metaRepository.getMetaFromAllAddons(normalizedCandidate, normalizedId),
+            effectiveTimeoutMs,
+            { status: "error", message: "timeout" }
+          );
+          if (result?.status === "success" && result?.data) {
+            return result.data;
+          }
+        } catch (_) { }
+      }
     }
 
     return null;
@@ -5822,11 +5955,19 @@ export const HomeScreen = {
 
   async enrichContinueWatching(items = [], options = {}) {
     const inProgressItems = await Promise.all((items || []).map(async (item) => {
+      const cachedItem = applyCachedContinueWatchingEnrichment(item);
+      if (!options?.forceRefreshMetadata && !needsContinueWatchingMetadataRefresh([cachedItem])) {
+        return cachedItem;
+      }
       try {
-        const meta = await this.fetchMetaForContinueWatching(item.contentType || "movie", item.contentId, 1800);
+        const meta = await this.fetchMetaForContinueWatching(
+          item.contentType || "movie",
+          item.contentId,
+          options?.metaTimeoutMs || 1800
+        );
         if (meta) {
           const episodeEntry = findEpisodeEntry(meta.videos, item.season, item.episode);
-          return {
+          const enriched = {
             ...item,
             title: meta.name || prettyId(item.contentId),
             landscapePoster: meta.landscapePoster || meta.thumbnail || meta.backdrop || meta.background || null,
@@ -5848,29 +5989,31 @@ export const HomeScreen = {
             episodeTitle: firstNonEmpty(episodeEntry?.title, item.episodeTitle, item.subtitle),
             episodeDescription: firstNonEmpty(episodeEntry?.overview, item.episodeDescription, item.episode_description)
           };
+          saveContinueWatchingEnrichment(enriched);
+          return enriched;
         }
       } catch (error) {
         console.warn("Continue watching enrichment failed", error);
       }
       return {
-        ...item,
-        title: firstNonEmpty(item.title, item.name),
-        landscapePoster: item.landscapePoster || item.thumbnail || item.backdrop || item.background || null,
-        episodeThumbnail: item.episodeThumbnail || null,
-        poster: item.poster || item.thumbnail || null,
-        background: item.background || item.backdrop || item.poster || null,
-        backdrop: item.backdrop || item.background || null,
-        thumbnail: item.thumbnail || item.poster || null,
-        logo: item.logo || null,
-        description: item.description || "",
-        releaseInfo: item.releaseInfo || "",
-        genres: Array.isArray(item.genres) ? item.genres : [],
-        runtimeMinutes: Number(item.runtimeMinutes ?? item.runtime ?? 0) || 0,
-        ageRating: firstNonEmpty(item.ageRating, item.age_rating),
-        status: firstNonEmpty(item.status),
-        language: firstNonEmpty(item.language),
-        country: firstNonEmpty(item.country),
-        episodeTitle: firstNonEmpty(item.episodeTitle, item.subtitle)
+        ...cachedItem,
+        title: firstNonEmpty(cachedItem.title, cachedItem.name),
+        landscapePoster: cachedItem.landscapePoster || cachedItem.thumbnail || cachedItem.backdrop || cachedItem.background || null,
+        episodeThumbnail: cachedItem.episodeThumbnail || null,
+        poster: cachedItem.poster || cachedItem.thumbnail || null,
+        background: cachedItem.background || cachedItem.backdrop || cachedItem.poster || null,
+        backdrop: cachedItem.backdrop || cachedItem.background || null,
+        thumbnail: cachedItem.thumbnail || cachedItem.poster || null,
+        logo: cachedItem.logo || null,
+        description: cachedItem.description || "",
+        releaseInfo: cachedItem.releaseInfo || "",
+        genres: Array.isArray(cachedItem.genres) ? cachedItem.genres : [],
+        runtimeMinutes: Number(cachedItem.runtimeMinutes ?? cachedItem.runtime ?? 0) || 0,
+        ageRating: firstNonEmpty(cachedItem.ageRating, cachedItem.age_rating),
+        status: firstNonEmpty(cachedItem.status),
+        language: firstNonEmpty(cachedItem.language),
+        country: firstNonEmpty(cachedItem.country),
+        episodeTitle: firstNonEmpty(cachedItem.episodeTitle, cachedItem.subtitle)
       };
     }));
 
