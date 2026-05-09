@@ -6773,6 +6773,8 @@ export const HomeScreen = {
       if (code === 13) {
         event.preventDefault?.();
         if (this.suppressHoldMenuEnterUntilKeyUp) {
+          event.stopPropagation?.();
+          event.stopImmediatePropagation?.();
           return;
         }
         if (this.posterHoldMenu) {
@@ -6885,14 +6887,15 @@ export const HomeScreen = {
   },
 
   onKeyUp(event) {
-    if (this.suppressHoldMenuEnterUntilKeyUp) {
+    const code = Number(event?.keyCode || 0);
+    if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
       this.suppressHoldMenuEnterUntilKeyUp = false;
-      if (Number(event?.keyCode || 0) === 13) {
-        event.preventDefault?.();
-        return;
-      }
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+      return;
     }
-    if (Number(event?.keyCode || 0) !== 13) {
+    if (code !== 13) {
       return;
     }
     const current = this.container?.querySelector(".home-continue-card.focusable.focused") || null;
