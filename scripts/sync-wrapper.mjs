@@ -213,86 +213,151 @@ function buildTizenIndexHtml() {
   <link rel="stylesheet" href="css/themes.css" />
 </head>
 <body>
-  <script type="module" defer src="main.js"></script>
+  <script defer src="main.js"></script>
 </body>
 </html>
 `;
 }
 
 function buildTizenMainJs() {
-  return `import * as wrtService from "wrt:service";
+  return `/// <reference path="../../index.d.ts" />
 
-window.__NUVIO_PLATFORM__ = "tizen";
+(function bootstrapTizen() {
+  "use strict";
 
-var tvInput = window.tizen && window.tizen.tvinputdevice;
-if (tvInput && typeof tvInput.registerKey === "function") {
-  ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"].forEach(function registerKey(keyName) {
-    try {
-      tvInput.registerKey(keyName);
-    } catch (_) {}
-  });
-}
+  window.__NUVIO_PLATFORM__ = "tizen";
 
-function getTizenPackageId() {
-  try {
-    return String(window.tizen?.application?.getCurrentApplication?.().appInfo?.packageId || "").trim();
-  } catch (_) {
-    return "";
-  }
-}
-
-function startLocalMediaService() {
-  var packageId = getTizenPackageId();
-  if (!packageId || typeof wrtService.startService !== "function") {
-    return Promise.resolve(false);
-  }
-
-  var serviceId = packageId + "${tizenServiceIdSuffix}";
-  return new Promise(function(resolve) {
-    var settled = false;
-
-    function finish(value) {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      resolve(Boolean(value));
+  function ensureRuntimeCompatibility() {
+    if (typeof window.globalThis === "undefined") {
+      window.globalThis = window;
     }
 
-    try {
-      wrtService.startService(
-        serviceId,
-        function() {
-          finish(true);
-        },
-        function(error) {
-          console.warn("[tizen-service] Failed to start local media service", serviceId, error);
-          finish(false);
+    if (!String.prototype.replaceAll) {
+      String.prototype.replaceAll = function replaceAll(searchValue, replaceValue) {
+        var source = String(this);
+        if (searchValue instanceof RegExp) {
+          return source.replace(searchValue, replaceValue);
         }
-      );
-    } catch (error) {
-      console.warn("[tizen-service] Failed to request local media service", serviceId, error);
-      finish(false);
+        return source.split(String(searchValue)).join(String(replaceValue));
+      };
     }
 
-    setTimeout(function() {
-      finish(false);
-    }, 2500);
-  });
-}
+    if (!Object.fromEntries) {
+      Object.fromEntries = function fromEntries(entries) {
+        var result = {};
+        var iterator;
+        var next;
+        var entry;
 
-function loadScript(src) {
-  var script = document.createElement("script");
-  script.src = src;
-  script.defer = false;
-  document.body.appendChild(script);
-}
+        if (!entries) {
+          return result;
+        }
 
-window.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = startLocalMediaService();
+        if (typeof Symbol !== "undefined" && entries[Symbol.iterator]) {
+          iterator = entries[Symbol.iterator]();
+          while (!(next = iterator.next()).done) {
+            entry = next.value;
+            result[entry[0]] = entry[1];
+          }
+          return result;
+        }
 
-loadScript("nuvio.env.js");
-loadScript("assets/libs/qrcode-generator.js");
-loadScript("app.bundle.js");
+        for (var index = 0; index < entries.length; index += 1) {
+          result[entries[index][0]] = entries[index][1];
+        }
+        return result;
+      };
+    }
+
+    if (typeof window.Node === "undefined") {
+      window.Node = { ELEMENT_NODE: 1 };
+    }
+  }
+
+  function registerRemoteKeys() {
+    var tvInput = window.tizen && window.tizen.tvinputdevice;
+    if (!tvInput || typeof tvInput.registerKey !== "function") {
+      return;
+    }
+
+    ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"].forEach(function registerKey(keyName) {
+      try {
+        tvInput.registerKey(keyName);
+      } catch (ignored) {}
+    });
+  }
+
+  function getTizenPackageId() {
+    try {
+      var appApi = window.tizen && window.tizen.application;
+      var currentApp = appApi && typeof appApi.getCurrentApplication === "function"
+        ? appApi.getCurrentApplication()
+        : null;
+      return String(currentApp && currentApp.appInfo && currentApp.appInfo.packageId || "").trim();
+    } catch (ignored) {
+      return "";
+    }
+  }
+
+  function startLocalMediaService() {
+    var appApi = window.tizen && window.tizen.application;
+    var packageId = getTizenPackageId();
+    var serviceId = packageId ? packageId + "${tizenServiceIdSuffix}" : "";
+
+    if (!serviceId || !appApi || typeof appApi.launch !== "function") {
+      return Promise.resolve(false);
+    }
+
+    return new Promise(function(resolve) {
+      var settled = false;
+
+      function finish(value) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(Boolean(value));
+      }
+
+      try {
+        appApi.launch(
+          serviceId,
+          function() {
+            finish(true);
+          },
+          function(error) {
+            console.warn("[tizen-service] Failed to launch local media service", serviceId, error);
+            finish(false);
+          }
+        );
+      } catch (error) {
+        console.warn("[tizen-service] Failed to request local media service", serviceId, error);
+        finish(false);
+      }
+
+      setTimeout(function() {
+        finish(false);
+      }, 2500);
+    });
+  }
+
+  function loadScript(src) {
+    var script = document.createElement("script");
+    script.async = false;
+    script.src = src;
+    script.defer = false;
+    document.body.appendChild(script);
+  }
+
+  ensureRuntimeCompatibility();
+  registerRemoteKeys();
+
+  window.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = startLocalMediaService();
+
+  loadScript("nuvio.env.js");
+  loadScript("assets/libs/qrcode-generator.js");
+  loadScript("app.bundle.js");
+}());
 `;
 }
 

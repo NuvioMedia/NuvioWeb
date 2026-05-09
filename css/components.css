@@ -6961,12 +6961,20 @@
 
 .player-ui-root {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   pointer-events: none;
 }
 
 .player-external-frame-shell {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 5;
   pointer-events: auto;
@@ -7023,6 +7031,10 @@
 
 .player-loading-overlay {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 20;
   opacity: 1;
@@ -7056,6 +7068,10 @@
 
 .player-loading-backdrop {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background: #080b10 center center / cover no-repeat;
   filter: saturate(0.92);
@@ -7063,6 +7079,10 @@
 
 .player-loading-gradient {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.58) 58%, rgba(0, 0, 0, 0.92) 100%),
@@ -7136,6 +7156,10 @@
 
 .player-controls-overlay {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 30;
   display: flex;
@@ -7153,6 +7177,10 @@
 }
 
 .player-controls-gradient-top {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.18) 34%, rgba(0, 0, 0, 0) 60%),
@@ -7510,6 +7538,10 @@
 
 .player-pause-overlay {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 31;
   opacity: 1;
@@ -7524,6 +7556,10 @@
 
 .player-pause-overlay-shade {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.4) 30%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0) 100%),
@@ -7760,6 +7796,10 @@
 
 .player-next-episode-thumb-shade {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0) 26%, rgba(0, 0, 0, 0.32) 100%);
 }
@@ -7985,6 +8025,10 @@
 
 .player-modal-backdrop {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 34;
   pointer-events: auto;

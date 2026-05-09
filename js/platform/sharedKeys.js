@@ -48,13 +48,17 @@ export function normalizeDirectionalKeyCode(code) {
 
 export function normalizeKeyEvent(event, backCodes = []) {
   const key = String(event?.key || "");
+  const keyName = String(event?.keyName || event?.detail?.keyName || "");
   const code = String(event?.code || "");
-  const rawCode = Number(getArrowCodeFromKey(key) || event?.keyCode || 0);
+  const keyNameLower = keyName.toLowerCase();
+  const fallbackCode = keyNameLower === "back" ? 10009 : 0;
+  const rawCode = Number(getArrowCodeFromKey(key) || event?.keyCode || event?.which || fallbackCode || 0);
   const normalizedCode = normalizeDirectionalKeyCode(rawCode);
   const isBack = isBackEvent(event, backCodes, normalizedCode);
   return {
-    key,
+    key: key || (keyNameLower === "back" ? "Back" : keyName),
     code,
+    keyName,
     keyCode: normalizedCode,
     originalKeyCode: rawCode,
     isArrow: normalizedCode >= 37 && normalizedCode <= 40,
@@ -67,12 +71,18 @@ export function isBackEvent(event, backCodes = [], normalizedCode = null) {
   const target = event?.target || null;
   const key = String(event?.key || "");
   const keyLower = key.toLowerCase();
+  const keyName = String(event?.keyName || event?.detail?.keyName || "");
+  const keyNameLower = keyName.toLowerCase();
   const code = String(event?.code || "");
-  const rawCode = Number(event?.keyCode || 0);
+  const rawCode = Number(event?.keyCode || event?.which || 0);
   const effectiveCode = Number(normalizedCode || rawCode || 0);
 
   if (isEditableTarget(target) && (key === "Backspace" || rawCode === 8 || key === "Delete" || rawCode === 46)) {
     return false;
+  }
+
+  if (keyNameLower === "back") {
+    return true;
   }
 
   if (backCodes.includes(effectiveCode) || backCodes.includes(rawCode)) {

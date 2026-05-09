@@ -13,6 +13,7 @@ function buildNormalizedEvent(event) {
   return {
     key: normalizedKey.key,
     code: normalizedKey.code,
+    keyName: normalizedKey.keyName,
     target: event?.target || null,
     altKey: Boolean(event?.altKey),
     ctrlKey: Boolean(event?.ctrlKey),
@@ -47,8 +48,34 @@ export const FocusEngine = {
   init() {
     this.boundHandleKey = this.handleKey.bind(this);
     this.boundHandleKeyUp = this.handleKeyUp.bind(this);
+    this.boundHandleTizenHardwareKey = this.handleTizenHardwareKey.bind(this);
     document.addEventListener("keydown", this.boundHandleKey, true);
     document.addEventListener("keyup", this.boundHandleKeyUp, true);
+    if (Platform.isTizen()) {
+      document.addEventListener("tizenhwkey", this.boundHandleTizenHardwareKey, true);
+    }
+  },
+
+  handleBack(event, normalizedEvent = buildNormalizedEvent(event)) {
+    const now = Date.now();
+    if (now - this.lastBackHandledAt < 250) {
+      event?.preventDefault?.();
+      event?.stopImmediatePropagation?.();
+      return;
+    }
+    this.lastBackHandledAt = now;
+
+    normalizedEvent.preventDefault();
+    normalizedEvent.stopPropagation();
+    normalizedEvent.stopImmediatePropagation();
+
+    const currentScreen = Router.getCurrentScreen();
+    if (currentScreen?.consumeBackRequest?.()) {
+      Router.suppressNextPopstate?.();
+      return;
+    }
+
+    Router.back();
   },
 
   handleKey(event) {
@@ -65,25 +92,7 @@ export const FocusEngine = {
         keyCode: normalizedEvent.keyCode,
       })
     ) {
-      const now = Date.now();
-      if (now - this.lastBackHandledAt < 250) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return;
-      }
-      this.lastBackHandledAt = now;
-
-      normalizedEvent.preventDefault();
-      normalizedEvent.stopPropagation();
-      normalizedEvent.stopImmediatePropagation();
-
-      const currentScreen = Router.getCurrentScreen();
-      if (currentScreen?.consumeBackRequest?.()) {
-        Router.suppressNextPopstate?.();
-        return;
-      }
-
-      Router.back();
+      this.handleBack(event, normalizedEvent);
       return;
     }
 
@@ -103,5 +112,12 @@ export const FocusEngine = {
     }
     const normalizedEvent = buildNormalizedEvent(event);
     currentScreen.onKeyUp(normalizedEvent);
+  },
+
+  handleTizenHardwareKey(event) {
+    if (!Platform.isBackEvent(event)) {
+      return;
+    }
+    this.handleBack(event, buildNormalizedEvent(event));
   },
 };
