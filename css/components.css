@@ -1649,6 +1649,7 @@ button:focus-visible {
 }
 
 .home-sidebar {
+  box-sizing: border-box;
   width: var(--legacy-sidebar-rail-width);
   height: 100vh;
   position: absolute;
@@ -4939,6 +4940,7 @@ button:focus-visible {
   --home-row-gap: 24px;
   --home-track-end: 104px;
   --home-continue-track-end: 104px;
+  --modern-track-peek-extension: 104px;
   --modern-rows-viewport-height: 52%;
   --modern-rows-viewport-padding-bottom: 52vh;
   --modern-rows-page-height: 56vh;
@@ -5316,6 +5318,9 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-track {
+  --home-track-gap: 24px;
+  margin-left: calc(var(--modern-track-peek-extension) * -1);
+  padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
   padding-right: 52px;
   padding-bottom: 0;
   align-items: flex-end;

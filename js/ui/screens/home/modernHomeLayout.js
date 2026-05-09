@@ -10,7 +10,7 @@ export const MODERN_HOME_CONSTANTS = {
   springScrollStiffness: 180,
   springScrollDampingRatio: 0.95,
   rowFocusInset: 40,
-  trackEdgePadding: 52,
+  trackEdgePadding: 104,
   verticalFastScrollVelocityPxPerSec: 6400,
   verticalFastScrollEndTimeoutMs: 160,
   verticalFastScrollMaxFrameMs: 48
