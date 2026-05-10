@@ -1,6 +1,7 @@
 import { safeApiCall } from "../../core/network/safeApiCall.js";
 import { addonRepository } from "./addonRepository.js";
 import { StreamApi } from "../remote/api/streamApi.js";
+import { MetaApi } from "../remote/api/metaApi.js";
 import { PluginManager } from "../../core/player/pluginManager.js";
 import { TmdbService } from "../../core/tmdb/tmdbService.js";
 
@@ -47,14 +48,20 @@ class StreamRepository {
     const addonTasks = streamAddons.map(async (addon) => {
       try {
         const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
-        if (streamsResult.status !== "success" || streamsResult.data.length === 0) {
+        if (streamsResult.status !== "success") {
+          return null;
+        }
+        const addonStreams = streamsResult.data.length
+          ? streamsResult.data
+          : await this.fetchInlineStreamsFromMeta(addon, type, videoId);
+        if (addonStreams.length === 0) {
           return null;
         }
 
         const group = {
           addonName: addon.displayName,
           addonLogo: addon.logo,
-          streams: streamsResult.data.map((stream) => ({
+          streams: addonStreams.map((stream) => ({
             ...stream,
             addonName: addon.displayName,
             addonLogo: addon.logo
@@ -111,8 +118,19 @@ class StreamRepository {
   }
 
   buildStreamUrl(baseUrl, type, videoId) {
-    const cleanBaseUrl = String(baseUrl || "").replace(/\/+$/, "");
-    return `${cleanBaseUrl}/stream/${this.encode(type)}/${this.encode(videoId)}.json`;
+    const cleanBaseUrl = addonRepository.canonicalizeUrl(baseUrl);
+    const queryStart = cleanBaseUrl.indexOf("?");
+    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
+    return `${basePath}/stream/${this.encode(type)}/${this.encode(videoId)}.json${baseQuery}`;
+  }
+
+  buildMetaUrl(baseUrl, type, id) {
+    const cleanBaseUrl = addonRepository.canonicalizeUrl(baseUrl);
+    const queryStart = cleanBaseUrl.indexOf("?");
+    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
+    return `${basePath}/meta/${this.encode(type)}/${this.encode(id)}.json${baseQuery}`;
   }
 
   encode(value) {
@@ -137,12 +155,45 @@ class StreamRepository {
       url: stream.url || null,
       ytId: stream.ytId || null,
       infoHash: stream.infoHash || null,
-      fileIdx: stream.fileIdx || null,
+      fileIdx: stream.fileIdx ?? null,
       externalUrl: stream.externalUrl || null,
       behaviorHints: stream.behaviorHints || null,
       sources: Array.isArray(stream.sources) ? stream.sources : [],
       subtitles: sidecarSubtitles
     };
+  }
+
+  async fetchInlineStreamsFromMeta(addon, type, videoId) {
+    const rawVideoId = String(videoId || "").trim();
+    if (!addon?.baseUrl || !rawVideoId) {
+      return [];
+    }
+
+    const metaId = this.buildContentLevelMetaId(rawVideoId);
+    const url = this.buildMetaUrl(addon.baseUrl, type, metaId);
+    const result = await safeApiCall(() => MetaApi.getMeta(url));
+    if (result.status !== "success") {
+      return [];
+    }
+
+    const meta = result.data?.meta || null;
+    const videos = Array.isArray(meta?.videos) ? meta.videos : [];
+    const matchingVideo = videos.find((video) => String(video?.id || "") === rawVideoId);
+    const streams = Array.isArray(matchingVideo?.streams) ? matchingVideo.streams : [];
+    return streams.map((stream) => this.mapStream(stream)).filter((stream) => stream.url || stream.externalUrl || stream.ytId);
+  }
+
+  buildContentLevelMetaId(videoId) {
+    const raw = String(videoId || "").trim();
+    if (!raw) {
+      return "";
+    }
+    const parts = raw.split(":");
+    const contentParts = parts.slice();
+    while (contentParts.length > 1 && /^\d+$/.test(contentParts[contentParts.length - 1])) {
+      contentParts.pop();
+    }
+    return contentParts.length ? contentParts.join(":") : raw;
   }
 
 }

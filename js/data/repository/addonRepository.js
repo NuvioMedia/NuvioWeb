@@ -3,6 +3,7 @@ import { LocalStore } from "../../core/storage/localStore.js";
 import { AddonApi } from "../remote/api/addonApi.js";
 
 const ADDON_URLS_KEY = "installedAddonUrls";
+const MANIFEST_SUFFIX = "/manifest.json";
 const DEFAULT_ADDON_URLS = [
   "https://v3-cinemeta.strem.io",
   "https://opensubtitles-v3.strem.io"
@@ -17,10 +18,21 @@ class AddonRepository {
 
   canonicalizeUrl(url) {
     const trimmed = String(url || "").trim().replace(/\/+$/, "");
-    if (trimmed.endsWith("/manifest.json")) {
-      return trimmed.slice(0, -"/manifest.json".length);
-    }
-    return trimmed;
+    const queryStart = trimmed.indexOf("?");
+    const path = queryStart >= 0 ? trimmed.slice(0, queryStart) : trimmed;
+    const query = queryStart >= 0 ? trimmed.slice(queryStart) : "";
+    const cleanPath = path.toLowerCase().endsWith(MANIFEST_SUFFIX)
+      ? path.slice(0, -MANIFEST_SUFFIX.length).replace(/\/+$/, "")
+      : path.replace(/\/+$/, "");
+    return `${cleanPath}${query}`;
+  }
+
+  buildManifestUrl(baseUrl) {
+    const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
+    const queryStart = cleanBaseUrl.indexOf("?");
+    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
+    return `${basePath}/manifest.json${baseQuery}`;
   }
 
   normalizeManifestAssetUrl(value, baseUrl) {
@@ -31,11 +43,14 @@ class AddonRepository {
     if (/^\/\//.test(raw)) {
       return `https:${raw}`;
     }
-    if (/^https?:\/\//i.test(raw)) {
+    if (/^(?:https?:|data:|blob:)/i.test(raw)) {
       return raw;
     }
     try {
-      return new URL(raw, `${this.canonicalizeUrl(baseUrl)}/`).href;
+      const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
+      const queryStart = cleanBaseUrl.indexOf("?");
+      const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+      return new URL(raw, `${basePath}/`).href;
     } catch (_) {
       return raw;
     }
@@ -57,8 +72,9 @@ class AddonRepository {
 
   async fetchAddon(baseUrl) {
     const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
+    const manifestUrl = this.buildManifestUrl(cleanBaseUrl);
 
-    const result = await safeApiCall(() => AddonApi.getManifest(cleanBaseUrl));
+    const result = await safeApiCall(() => AddonApi.getManifest(manifestUrl));
     if (result.status === "success") {
       const addon = this.mapManifest(result.data, cleanBaseUrl);
       this.manifestCache.set(cleanBaseUrl, addon);

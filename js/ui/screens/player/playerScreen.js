@@ -718,13 +718,19 @@ function flattenStreamGroups(streamResult) {
     const addonName = group.addonName || "Addon";
     (group.streams || []).forEach((stream, index) => {
       const entry = {
-        id: `${addonName}-${index}-${stream.url || ""}`,
+        id: `${addonName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
         label: stream.title || stream.name || `${addonName} stream`,
         description: stream.description || stream.name || "",
         addonName,
         addonLogo: group.addonLogo || stream.addonLogo || null,
         sourceType: stream.type || stream.source || "",
-        url: stream.url,
+        url: stream.url || stream.externalUrl || "",
+        ytId: stream.ytId || null,
+        infoHash: stream.infoHash || null,
+        fileIdx: stream.fileIdx ?? null,
+        externalUrl: stream.externalUrl || null,
+        behaviorHints: stream.behaviorHints || null,
+        subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
         raw: stream
       };
       if (entry.url) {
@@ -1197,6 +1203,9 @@ export const PlayerScreen = {
     const rawItemId = String(this.params?.itemId || "").trim();
     const baseItemId = rawItemId ? String(rawItemId.split(":")[0] || "").trim() : "";
     const id = baseItemId || rawItemId || "";
+    const currentStream = this.getCurrentStreamCandidate();
+    const rawStream = currentStream?.raw || currentStream || {};
+    const behaviorHints = rawStream?.behaviorHints || {};
 
     let videoId = null;
     if (type === "series") {
@@ -1209,7 +1218,14 @@ export const PlayerScreen = {
       }
     }
 
-    return { type, id, videoId };
+    return {
+      type,
+      id,
+      videoId,
+      videoHash: behaviorHints.videoHash || rawStream.videoHash || this.params?.videoHash || null,
+      videoSize: behaviorHints.videoSize || rawStream.videoSize || this.params?.videoSize || null,
+      filename: behaviorHints.filename || rawStream.filename || this.params?.filename || null
+    };
   },
 
   buildPlaybackIdentityContext() {
@@ -1366,17 +1382,24 @@ export const PlayerScreen = {
 
   normalizeStreamCandidates(streams = []) {
     return (streams || []).map((stream, index) => {
-      if (!stream?.url) {
+      const streamUrl = stream?.url || stream?.externalUrl || "";
+      if (!streamUrl) {
         return null;
       }
       return {
-        id: stream.id || `stream-${index}-${stream.url}`,
+        id: stream.id || `stream-${index}-${streamUrl}`,
         label: stream.title || stream.name || stream.label || `Source ${index + 1}`,
         description: stream.description || stream.name || "",
         addonName: stream.addonName || stream.sourceName || "Addon",
         addonLogo: stream.addonLogo || null,
         sourceType: stream.type || stream.source || "",
-        url: stream.url,
+        url: streamUrl,
+        ytId: stream.ytId || null,
+        infoHash: stream.infoHash || null,
+        fileIdx: stream.fileIdx ?? null,
+        externalUrl: stream.externalUrl || null,
+        behaviorHints: stream.behaviorHints || null,
+        subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
         raw: stream
       };
     }).filter(Boolean);
@@ -7598,7 +7621,12 @@ export const PlayerScreen = {
           repositorySubtitles = await subtitleRepository.getSubtitles(
             subtitleLookup.type,
             subtitleLookup.id,
-            subtitleLookup.videoId || null
+            subtitleLookup.videoId || null,
+            {
+              videoHash: subtitleLookup.videoHash || null,
+              videoSize: subtitleLookup.videoSize || null,
+              filename: subtitleLookup.filename || null
+            }
           );
         }
       } catch (error) {
@@ -7964,16 +7992,12 @@ export const PlayerScreen = {
 
     if (!this.controlsVisible) {
       if (keyCode === 37) {
-        this.autoHideControlsAfterSeek = true;
-        this.setControlsVisible(true, { focus: false });
-        this.focusProgressBar();
+        this.autoHideControlsAfterSeek = false;
         this.beginSeekPreview(-1, Boolean(event?.repeat));
         return;
       }
       if (keyCode === 39) {
-        this.autoHideControlsAfterSeek = true;
-        this.setControlsVisible(true, { focus: false });
-        this.focusProgressBar();
+        this.autoHideControlsAfterSeek = false;
         this.beginSeekPreview(1, Boolean(event?.repeat));
         return;
       }

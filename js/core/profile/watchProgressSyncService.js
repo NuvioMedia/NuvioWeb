@@ -158,8 +158,10 @@ function mapProgressRow(row = {}) {
     const parsed = new Date(updatedAtRaw).getTime();
     return Number.isFinite(parsed) ? parsed : Date.now();
   })();
-  const positionMsRaw = row.position_ms ?? row.position ?? 0;
-  const durationMsRaw = row.duration_ms ?? row.duration ?? 0;
+  const hasPositionMs = row.position_ms != null || row.positionMs != null;
+  const hasDurationMs = row.duration_ms != null || row.durationMs != null;
+  const positionMsRaw = row.position_ms ?? row.positionMs ?? row.position ?? 0;
+  const durationMsRaw = row.duration_ms ?? row.durationMs ?? row.duration ?? 0;
   const progressPercentRaw = row.progress_percent ?? row.progressPercent ?? null;
   const progressPercent = Number(progressPercentRaw);
   const seasonRaw = row.season ?? row.season_number ?? null;
@@ -168,15 +170,19 @@ function mapProgressRow(row = {}) {
   const episodeNum = Number(episodeRaw);
   const rawVideoId = row.video_id || row.videoId || null;
   const normalizedVideoId = typeof rawVideoId === "string" && rawVideoId.trim() === contentId ? null : rawVideoId;
-  const toMs = (value) => {
+  const toMilliseconds = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) {
       return 0;
     }
-    if (n > 1_000_000_000_000) {
-      return n;
+    return Math.trunc(n);
+  };
+  const secondsToMilliseconds = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n) || n <= 0) {
+      return 0;
     }
-    return n < 1_000_000 ? Math.trunc(n * 1000) : Math.trunc(n);
+    return Math.trunc(n * 1000);
   };
   return {
     contentId,
@@ -186,8 +192,8 @@ function mapProgressRow(row = {}) {
       : normalizedVideoId,
     season: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : null,
     episode: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : null,
-    positionMs: toMs(positionMsRaw),
-    durationMs: toMs(durationMsRaw),
+    positionMs: hasPositionMs ? toMilliseconds(positionMsRaw) : secondsToMilliseconds(positionMsRaw),
+    durationMs: hasDurationMs ? toMilliseconds(durationMsRaw) : secondsToMilliseconds(durationMsRaw),
     progressPercent: Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null,
     source: source || "local",
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()

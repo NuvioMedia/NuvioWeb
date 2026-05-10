@@ -71,18 +71,18 @@ function normalizeEpisodes(videos = []) {
 }
 
 function detailProgressFraction(progress = {}) {
+  const position = Number(progress?.positionMs || 0);
+  const duration = Number(progress?.durationMs || 0);
+  if (Number.isFinite(position) && Number.isFinite(duration) && position > 0 && duration > 0) {
+    return Math.max(0, Math.min(1, position / duration));
+  }
   if (progress?.progressPercent != null && progress.progressPercent !== "") {
     const explicitPercent = Number(progress.progressPercent);
     if (Number.isFinite(explicitPercent)) {
       return Math.max(0, Math.min(1, explicitPercent / 100));
     }
   }
-  const position = Number(progress?.positionMs || 0);
-  const duration = Number(progress?.durationMs || 0);
-  if (!Number.isFinite(position) || !Number.isFinite(duration) || position <= 0 || duration <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(1, position / duration));
+  return 0;
 }
 
 function isSeriesDetailMeta(meta = {}, episodes = null) {
@@ -1553,13 +1553,19 @@ export const MetaDetailsScreen = {
       const groupName = group.addonName || "Addon";
       (group.streams || []).forEach((stream, index) => {
         const entry = {
-          id: `${groupName}-${index}-${stream.url || ""}`,
+          id: `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
           label: stream.title || stream.name || `${groupName} stream`,
           description: stream.description || stream.name || "",
           addonName: groupName,
           addonLogo: group.addonLogo || stream.addonLogo || null,
           sourceType: stream.type || stream.source || "",
-          url: stream.url,
+          url: stream.url || stream.externalUrl || "",
+          ytId: stream.ytId || null,
+          infoHash: stream.infoHash || null,
+          fileIdx: stream.fileIdx ?? null,
+          externalUrl: stream.externalUrl || null,
+          behaviorHints: stream.behaviorHints || null,
+          subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
           raw: stream
         };
         if (entry.url) {

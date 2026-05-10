@@ -105,7 +105,7 @@ function flattenStreams(streamResult) {
         url: stream.url || null,
         ytId: stream.ytId || null,
         infoHash: stream.infoHash || null,
-        fileIdx: stream.fileIdx || null,
+        fileIdx: stream.fileIdx ?? null,
         externalUrl: stream.externalUrl || null,
         behaviorHints: stream.behaviorHints || null,
         sources: Array.isArray(stream.sources) ? stream.sources : [],
@@ -245,6 +245,37 @@ function normalizeAddonLogoUrl(value = "") {
   return String(value || "").trim();
 }
 
+function normalizeAddonLookupKey(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildAddonLogoLookup(addons = []) {
+  const lookup = {};
+  (addons || []).forEach((addon) => {
+    const logo = normalizeAddonLogoUrl(addon?.logo);
+    if (!logo) {
+      return;
+    }
+    [
+      addon?.displayName,
+      addon?.name,
+      addon?.id,
+      addon?.baseUrl
+    ].forEach((key) => {
+      const normalized = normalizeAddonLookupKey(key);
+      if (normalized && !lookup[normalized]) {
+        lookup[normalized] = logo;
+      }
+    });
+  });
+  return lookup;
+}
+
+function resolveAddonLogo(addonName = "", lookup = {}) {
+  const key = normalizeAddonLookupKey(addonName);
+  return key ? normalizeAddonLogoUrl(lookup?.[key]) : "";
+}
+
 function rememberFailedAddonLogo(url = "") {
   const normalized = normalizeAddonLogoUrl(url);
   if (normalized) {
@@ -352,6 +383,27 @@ function getOrderedFilterNames(sourceChips = [], streams = []) {
   return ordered;
 }
 
+function sortStreamsByAddonOrder(streams = [], sourceChips = []) {
+  const order = new Map();
+  (sourceChips || []).forEach((chip, index) => {
+    const name = String(chip?.name || "").trim();
+    if (name && !order.has(name)) {
+      order.set(name, index);
+    }
+  });
+  return (streams || [])
+    .map((stream, index) => ({ stream, index }))
+    .sort((left, right) => {
+      const leftOrder = order.has(left.stream?.addonName) ? order.get(left.stream.addonName) : Number.MAX_SAFE_INTEGER;
+      const rightOrder = order.has(right.stream?.addonName) ? order.get(right.stream.addonName) : Number.MAX_SAFE_INTEGER;
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.stream);
+}
+
 export const StreamScreen = {
 
   cancelScheduledRender() {
@@ -374,6 +426,18 @@ export const StreamScreen = {
         return;
       }
       this.render();
+    });
+  },
+
+  applyAddonLogos(streams = []) {
+    const lookup = this.addonLogoLookup || {};
+    return (streams || []).map((stream) => {
+      const currentLogo = normalizeAddonLogoUrl(stream?.addonLogo);
+      if (currentLogo) {
+        return stream;
+      }
+      const addonLogo = resolveAddonLogo(stream?.addonName, lookup);
+      return addonLogo ? { ...stream, addonLogo } : stream;
     });
   },
 
@@ -426,6 +490,7 @@ export const StreamScreen = {
       addonFilter: String(this.addonFilter || "all"),
       focusState: this.focusState ? { ...this.focusState } : { zone: "filter", index: 0 },
       sourceChips: Array.isArray(this.sourceChips) ? this.sourceChips.map((chip) => ({ ...chip })) : [],
+      addonLogoLookup: this.addonLogoLookup ? { ...this.addonLogoLookup } : {},
       listScrollTop: Number(list?.scrollTop || 0)
     };
   },
@@ -441,6 +506,7 @@ export const StreamScreen = {
     this.loading = true;
     this.streams = [];
     this.sourceChips = [];
+    this.addonLogoLookup = {};
     this.addonFilter = "all";
 
     const restored = navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
@@ -453,6 +519,9 @@ export const StreamScreen = {
       this.addonFilter = String(restored.addonFilter || "all");
       this.focusState = restored.focusState ? { ...restored.focusState } : { zone: "filter", index: 0 };
       this.sourceChips = Array.isArray(restored.sourceChips) ? restored.sourceChips.map((chip) => ({ ...chip })) : [];
+      this.addonLogoLookup = restored.addonLogoLookup && typeof restored.addonLogoLookup === "object"
+        ? { ...restored.addonLogoLookup }
+        : {};
       this.listScrollTop = Number(restored.listScrollTop || 0);
     }
 
@@ -478,15 +547,17 @@ export const StreamScreen = {
     this.addonFilter = "all";
     this.focusState = { zone: "filter", index: 0 };
     this.listScrollTop = 0;
+    this.addonLogoLookup = {};
 
     try {
       const addons = await addonRepository.getInstalledAddons();
       if (token !== this.loadToken) {
         return;
       }
+      this.addonLogoLookup = buildAddonLogoLookup(addons);
       this.sourceChips = addons
         .filter((addon) => supportsStreamResource(addon, itemType))
-        .map((addon) => ({ name: addon.displayName, status: "loading" }));
+        .map((addon) => ({ name: addon.displayName, logo: normalizeAddonLogoUrl(addon.logo), status: "loading" }));
       this.requestRender();
     } catch (error) {
       console.warn("Failed to resolve stream addons", error);
@@ -503,7 +574,7 @@ export const StreamScreen = {
       ));
       successSet.forEach((name) => {
         if (!known.has(name)) {
-          this.sourceChips.push({ name, status: "success" });
+          this.sourceChips.push({ name, logo: resolveAddonLogo(name, this.addonLogoLookup), status: "success" });
         }
       });
     };
@@ -518,7 +589,7 @@ export const StreamScreen = {
         }
         const groups = Array.isArray(chunkResult.data) ? chunkResult.data : [];
         markSuccessfulSources(groups.map((group) => group?.addonName || ""));
-        const chunkItems = flattenStreams(chunkResult);
+        const chunkItems = this.applyAddonLogos(flattenStreams(chunkResult));
         if (!chunkItems.length) {
           this.requestRender();
           return;
@@ -536,7 +607,7 @@ export const StreamScreen = {
       if (token !== this.loadToken) {
         return;
       }
-      this.streams = mergeStreamItems(this.streams, flattenStreams(streamResult));
+      this.streams = mergeStreamItems(this.streams, this.applyAddonLogos(flattenStreams(streamResult)));
       markSuccessfulSources(this.streams.map((stream) => stream.addonName));
       this.sourceChips = this.sourceChips.map((chip) => (
         chip.status === "loading" ? { ...chip, status: "error" } : chip
@@ -582,10 +653,11 @@ export const StreamScreen = {
   },
 
   getFilteredStreams(filter = this.addonFilter) {
+    const orderedStreams = sortStreamsByAddonOrder(this.streams, this.sourceChips);
     if (filter === "all") {
-      return this.streams;
+      return orderedStreams;
     }
-    return this.streams.filter((stream) => stream.addonName === filter);
+    return orderedStreams.filter((stream) => stream.addonName === filter);
   },
 
   hasPendingSourceLoads(filter = this.addonFilter) {
@@ -715,7 +787,7 @@ export const StreamScreen = {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
     const descriptionLines = getStreamDescriptionLines(stream);
-    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo);
+    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
     const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
     const meta = [
       renderMetaItem("peers", extractPeerCount(stream)),

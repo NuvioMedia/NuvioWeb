@@ -668,18 +668,18 @@ function getContinueWatchingMetaTimeout(timeoutMs) {
 }
 
 function progressFractionForContinueWatching(item = {}) {
+  const durationMs = Number(item.durationMs || 0);
+  const positionMs = Number(item.positionMs || 0);
+  if (Number.isFinite(durationMs) && durationMs > 0 && Number.isFinite(positionMs) && positionMs > 0) {
+    return Math.max(0, Math.min(1, positionMs / durationMs));
+  }
   if (item.progressPercent != null && item.progressPercent !== "") {
     const explicitPercent = Number(item.progressPercent);
     if (Number.isFinite(explicitPercent)) {
       return Math.max(0, Math.min(1, explicitPercent / 100));
     }
   }
-  const durationMs = Number(item.durationMs || 0);
-  const positionMs = Number(item.positionMs || 0);
-  if (!Number.isFinite(durationMs) || durationMs <= 0 || !Number.isFinite(positionMs) || positionMs <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(1, positionMs / durationMs));
+  return 0;
 }
 
 function isSeriesTypeForContinueWatching(type) {
