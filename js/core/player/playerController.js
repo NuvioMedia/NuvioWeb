@@ -966,12 +966,17 @@ export const PlayerController = {
           this.avplayEnded = true;
           this.isPlaying = false;
           this.stopAvPlayTickTimer();
+          this.refreshAvPlayTimeline();
+          const completedDurationMs = Number(this.avplayDurationMs || 0);
+          if (Number.isFinite(completedDurationMs) && completedDurationMs > 0) {
+            this.avplayCurrentTimeMs = Math.max(Number(this.avplayCurrentTimeMs || 0), completedDurationMs);
+          }
+          this.emitVideoEvent("ended", { playbackEngine: this.playbackEngine });
           try {
             avplay.stop?.();
           } catch (_) {
             // Ignore stream-complete stop failures.
           }
-          this.emitVideoEvent("ended", { playbackEngine: this.playbackEngine });
         },
         onerror: (errorValue) => {
           this.avplayReady = false;
@@ -2521,13 +2526,15 @@ export const PlayerController = {
     const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
     const hasReachedMinimumSyncPosition = Number.isFinite(safePosition)
       && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
-    if (hasFiniteDuration && safeDuration < MIN_PROGRESS_SYNC_DURATION_MS) {
-      return false;
-    }
-    if (!hasFiniteDuration && !hasReachedMinimumSyncPosition) {
-      return false;
-    }
     const isCompleted = hasFiniteDuration && safePosition / safeDuration > 0.95;
+    if (!clear && !isCompleted) {
+      if (hasFiniteDuration && safeDuration < MIN_PROGRESS_SYNC_DURATION_MS) {
+        return false;
+      }
+      if (!hasFiniteDuration && !hasReachedMinimumSyncPosition) {
+        return false;
+      }
+    }
 
     if (isCompleted) {
       await watchedItemsRepository.mark({
