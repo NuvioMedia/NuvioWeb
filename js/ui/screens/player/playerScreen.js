@@ -1010,6 +1010,7 @@ export const PlayerScreen = {
     this.seekRepeatCount = 0;
     this.seekCommitTimer = null;
     this.seekOverlayTimer = null;
+    this.seekOverlaySuppressControlsUntil = 0;
     this.pauseOverlayVisible = false;
     this.pauseOverlayTimer = null;
     this.pauseOverlayDelayMs = PAUSE_OVERLAY_DELAY_MS;
@@ -1073,6 +1074,7 @@ export const PlayerScreen = {
     this.paused = false;
     this.controlsVisible = true;
     this.loadingVisible = true;
+    this.loadingCompletionTimer = null;
     this.moreActionsVisible = false;
     this.controlFocusZone = "buttons";
     this.stickyProgressFocus = false;
@@ -1167,6 +1169,8 @@ export const PlayerScreen = {
       clearInterval(this.tickTimer);
       this.tickTimer = null;
     }
+
+    this.clearLoadingCompletionTimer();
     PlayerController.stop();
     this.loadingVisible = false;
     this.updateLoadingVisibility();
@@ -3214,7 +3218,7 @@ export const PlayerScreen = {
       this.dismissPauseOverlay();
       this.loadingVisible = true;
       this.updateLoadingVisibility();
-      if (!this.sourcesPanelVisible) {
+      if (!this.sourcesPanelVisible && !this.isSeekOverlaySuppressingControls()) {
         this.setControlsVisible(true, { focus: false });
       }
       this.schedulePlaybackStallGuard();
@@ -3227,18 +3231,18 @@ export const PlayerScreen = {
       this.hasPresentedPlaybackFrame = true;
       this.markPlaybackProgress();
       this.clearPlaybackStallGuard();
-      this.loadingVisible = false;
       this.paused = false;
+      this.seekOverlaySuppressControlsUntil = 0;
       this.startupTrackPreferenceReady = true;
       this.dismissPauseOverlay();
       this.updateMediaSessionPlaybackState();
-      this.updateLoadingVisibility();
       this.refreshTrackDialogs();
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
       this.applyAspectMode({ showToast: false });
       this.attemptPendingPlaybackRestore();
       this.updateUiTick();
+      this.scheduleLoadingCompletionCheck(900);
       if (this.stickyProgressFocus && this.controlsVisible) {
         this.focusProgressBar();
       }
@@ -3277,8 +3281,6 @@ export const PlayerScreen = {
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
       this.updateUiTick();
-      this.loadingVisible = false;
-      this.updateLoadingVisibility();
       this.markPlaybackProgress();
       this.applyAudioAmplification();
       this.applySubtitlePresentationSettings();
@@ -3288,6 +3290,7 @@ export const PlayerScreen = {
         this.schedulePauseOverlay();
       }
       this.startTrackDiscoveryWindow({ durationMs: 5000, intervalMs: 300 });
+      this.scheduleLoadingCompletionCheck(900);
       setTimeout(() => {
         this.attemptSilentAudioRecovery("metadata");
       }, 500);
@@ -3580,6 +3583,58 @@ export const PlayerScreen = {
     return !this.loadingVisible;
   },
 
+  isSeekOverlaySuppressingControls() {
+    return Date.now() < Number(this.seekOverlaySuppressControlsUntil || 0);
+  },
+
+  suppressControlsForHiddenSeek(durationMs = 2500) {
+    if (this.controlsVisible) {
+      return;
+    }
+    this.seekOverlaySuppressControlsUntil = Math.max(
+      Number(this.seekOverlaySuppressControlsUntil || 0),
+      Date.now() + Math.max(0, Number(durationMs || 0))
+    );
+  },
+
+  clearLoadingCompletionTimer() {
+    if (this.loadingCompletionTimer) {
+      clearTimeout(this.loadingCompletionTimer);
+      this.loadingCompletionTimer = null;
+    }
+  },
+
+  isPlaybackStartupSettled() {
+    if (!this.hasPresentedPlaybackFrame || this.pendingPlaybackRestore) {
+      return false;
+    }
+    return !this.trackDiscoveryInProgress
+      && !this.subtitleLoading
+      && !this.embeddedSubtitleLoading
+      && !this.manifestLoading
+      && !this.startupAudioPreferenceApplying
+      && !this.startupSubtitlePreferenceApplying;
+  },
+
+  scheduleLoadingCompletionCheck(delayMs = 250) {
+    this.clearLoadingCompletionTimer();
+    if (!this.loadingVisible || this.isExternalFrameMode()) {
+      return;
+    }
+    this.loadingCompletionTimer = setTimeout(() => {
+      this.loadingCompletionTimer = null;
+      if (!this.loadingVisible || this.isExternalFrameMode()) {
+        return;
+      }
+      if (!this.isPlaybackStartupSettled()) {
+        this.scheduleLoadingCompletionCheck(250);
+        return;
+      }
+      this.loadingVisible = false;
+      this.updateLoadingVisibility();
+    }, Math.max(0, Number(delayMs || 0)));
+  },
+
   clearControlsAutoHide() {
     if (this.controlsHideTimer) {
       clearTimeout(this.controlsHideTimer);
@@ -3687,6 +3742,11 @@ export const PlayerScreen = {
       && this.controlFocusZone === "progress"
       && this.hasPresentedPlaybackFrame
     );
+    const preserveHiddenSeekOverlay = Boolean(
+      this.loadingVisible
+      && !this.controlsVisible
+      && this.isSeekOverlaySuppressingControls()
+    );
     const showLogoOnly = Boolean(
       this.loadingVisible
       && this.hasPresentedPlaybackFrame
@@ -3696,7 +3756,7 @@ export const PlayerScreen = {
     overlay.classList.toggle("logo-only", showLogoOnly);
     if (this.loadingVisible) {
       this.dismissPauseOverlay();
-      if (!preserveProgressFocus && (this.seekOverlayVisible || this.seekPreviewSeconds != null)) {
+      if (!preserveProgressFocus && !preserveHiddenSeekOverlay && (this.seekOverlayVisible || this.seekPreviewSeconds != null)) {
         this.cancelSeekPreview({ commit: false });
       }
       if (!preserveProgressFocus && this.controlFocusZone === "progress") {
@@ -3707,6 +3767,9 @@ export const PlayerScreen = {
       this.renderControlButtons();
       if (preserveProgressFocus) {
         this.scheduleProgressBarRefocus();
+      }
+      if (preserveHiddenSeekOverlay) {
+        this.renderSeekOverlay();
       }
     } else if (this.paused) {
       this.schedulePauseOverlay();
@@ -3926,6 +3989,7 @@ export const PlayerScreen = {
     }
 
     if (this.seekPreviewSeconds != null) {
+      this.suppressControlsForHiddenSeek();
       this.seekPlaybackSeconds(Number(this.seekPreviewSeconds));
     }
 
@@ -3985,6 +4049,7 @@ export const PlayerScreen = {
     this.seekRepeatCount = 0;
     this.seekOverlayVisible = false;
     this.autoHideControlsAfterSeek = false;
+    this.seekOverlaySuppressControlsUntil = 0;
     this.renderSeekOverlay();
   },
 

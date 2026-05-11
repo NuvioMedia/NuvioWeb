@@ -22,7 +22,6 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     TV_LOGIN_REDIRECT_BASE_URL: "",
     YOUTUBE_PROXY_URL: "",
     ADDON_REMOTE_BASE_URL: "",
-    DEBUG_LOG_ENDPOINT: "",
     WEBOS_SERVICE_ID: "space.nuvio.webos.service",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],

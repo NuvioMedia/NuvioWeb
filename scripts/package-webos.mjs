@@ -77,13 +77,9 @@ ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
 }
 
 async function injectWebOsRuntimeEnv(targetDir) {
-  const endpoint = String(process.env.NUVIO_DEBUG_LOG_ENDPOINT || "").trim();
   const values = {
     WEBOS_SERVICE_ID: webOsServiceId
   };
-  if (endpoint) {
-    values.DEBUG_LOG_ENDPOINT = endpoint;
-  }
   const envPath = path.join(targetDir, "nuvio.env.js");
   const injection = `
 (function configureNuvioWebOsRuntimeEnv() {
@@ -93,9 +89,6 @@ async function injectWebOsRuntimeEnv(targetDir) {
 `;
   const existing = await readFile(envPath, "utf8").catch(() => "");
   await writeFile(envPath, `${existing.trim()}\n${injection}`, "utf8");
-  if (endpoint) {
-    console.log(`remote console endpoint: ${endpoint}`);
-  }
 }
 
 async function stageApp() {

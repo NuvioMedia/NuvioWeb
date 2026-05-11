@@ -2,10 +2,17 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
+import { LocalStore } from "../../../core/storage/localStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { I18n } from "../../../i18n/index.js";
 
 const failedAddonLogoUrls = new Set();
+const addonLogoCache = new Map();
+const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
+const ADDON_LOGO_CACHE_LIMIT = 36;
+const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
+let addonLogoCacheHydrated = false;
+let addonLogoCachePersistTimer = null;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -243,6 +250,163 @@ function getAddonBadgeLabel(name = "") {
 
 function normalizeAddonLogoUrl(value = "") {
   return String(value || "").trim();
+}
+
+function isImgurLogoUrl(value = "") {
+  const url = normalizeAddonLogoUrl(value);
+  if (!url) {
+    return false;
+  }
+  try {
+    const host = new URL(url, globalThis.location?.href || "https://nuvio.local/").hostname.toLowerCase();
+    return host === "i.imgur.com" || host === "imgur.com" || host.endsWith(".imgur.com");
+  } catch (_) {
+    return /(^|\/\/)(?:i\.)?imgur\.com\//i.test(url);
+  }
+}
+
+function hydrateAddonLogoCache() {
+  if (addonLogoCacheHydrated) {
+    return;
+  }
+  addonLogoCacheHydrated = true;
+  const cached = LocalStore.get(ADDON_LOGO_CACHE_KEY, {});
+  const entries = cached && typeof cached === "object" && !Array.isArray(cached)
+    ? cached
+    : {};
+  Object.keys(entries).forEach((url) => {
+    const entry = entries[url];
+    const dataUrl = String(entry?.dataUrl || "").trim();
+    if (!url || !dataUrl.startsWith("data:image/")) {
+      return;
+    }
+    addonLogoCache.set(url, {
+      status: "ready",
+      displayUrl: dataUrl,
+      updatedAt: Number(entry?.updatedAt || Date.now())
+    });
+  });
+}
+
+function persistAddonLogoCache() {
+  addonLogoCachePersistTimer = null;
+  const entries = Array.from(addonLogoCache.entries())
+    .filter(([, entry]) => (
+      entry?.status === "ready"
+      && String(entry.displayUrl || "").startsWith("data:image/")
+      && String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
+    ))
+    .sort((left, right) => Number(right[1].updatedAt || 0) - Number(left[1].updatedAt || 0))
+    .slice(0, ADDON_LOGO_CACHE_LIMIT);
+  const payload = {};
+  entries.forEach(([url, entry]) => {
+    payload[url] = {
+      dataUrl: entry.displayUrl,
+      updatedAt: Number(entry.updatedAt || Date.now())
+    };
+  });
+  LocalStore.set(ADDON_LOGO_CACHE_KEY, payload);
+}
+
+function scheduleAddonLogoCachePersist() {
+  if (addonLogoCachePersistTimer) {
+    return;
+  }
+  addonLogoCachePersistTimer = setTimeout(persistAddonLogoCache, 800);
+}
+
+function imageToDataUrl(image) {
+  const naturalWidth = Math.max(1, Number(image?.naturalWidth || image?.width || 1));
+  const naturalHeight = Math.max(1, Number(image?.naturalHeight || image?.height || 1));
+  const maxSize = 144;
+  const ratio = Math.min(1, maxSize / Math.max(naturalWidth, naturalHeight));
+  const width = Math.max(1, Math.round(naturalWidth * ratio));
+  const height = Math.max(1, Math.round(naturalHeight * ratio));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas unavailable");
+  }
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
+
+function requestAddonLogo(url = "", onSettled = null) {
+  const normalized = normalizeAddonLogoUrl(url);
+  if (!normalized || failedAddonLogoUrls.has(normalized)) {
+    return;
+  }
+  hydrateAddonLogoCache();
+  const cached = addonLogoCache.get(normalized);
+  if (cached?.status === "ready" || cached?.status === "loading" || cached?.status === "direct") {
+    return;
+  }
+
+  addonLogoCache.set(normalized, { status: "loading", updatedAt: Date.now() });
+
+  const fail = () => {
+    failedAddonLogoUrls.add(normalized);
+    addonLogoCache.set(normalized, { status: "failed", updatedAt: Date.now() });
+    if (typeof onSettled === "function") {
+      onSettled();
+    }
+  };
+  const image = new Image();
+  const shouldTryDataCache = !isImgurLogoUrl(normalized);
+  if (shouldTryDataCache) {
+    image.crossOrigin = "anonymous";
+  }
+  image.decoding = "async";
+  try {
+    image.referrerPolicy = "no-referrer";
+  } catch (_) {
+    // Some TV browsers expose referrerPolicy as read-only.
+  }
+  image.onload = () => {
+    if (!shouldTryDataCache) {
+      addonLogoCache.set(normalized, {
+        status: "direct",
+        displayUrl: normalized,
+        updatedAt: Date.now()
+      });
+      if (typeof onSettled === "function") {
+        onSettled();
+      }
+      return;
+    }
+    try {
+      const dataUrl = imageToDataUrl(image);
+      addonLogoCache.set(normalized, {
+        status: "ready",
+        displayUrl: dataUrl,
+        updatedAt: Date.now()
+      });
+      scheduleAddonLogoCachePersist();
+    } catch (_) {
+      fail();
+      return;
+    }
+    if (typeof onSettled === "function") {
+      onSettled();
+    }
+  };
+  image.onerror = fail;
+  image.src = normalized;
+}
+
+function getCachedAddonLogoDisplayUrl(url = "") {
+  const normalized = normalizeAddonLogoUrl(url);
+  if (!normalized || failedAddonLogoUrls.has(normalized)) {
+    return "";
+  }
+  hydrateAddonLogoCache();
+  const cached = addonLogoCache.get(normalized);
+  return cached?.status === "ready" || cached?.status === "direct"
+    ? String(cached.displayUrl || "")
+    : "";
 }
 
 function normalizeAddonLookupKey(value = "") {
@@ -788,14 +952,19 @@ export const StreamScreen = {
     const quality = getStreamQuality(stream);
     const descriptionLines = getStreamDescriptionLines(stream);
     const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
+    const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
+    const displayAddonLogoUrl = cachedAddonLogoUrl || "";
+    if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
+      requestAddonLogo(addonLogoUrl, () => this.requestRender());
+    }
     const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
     const meta = [
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
       renderMetaItem("source", extractIndexerName(stream))
     ].filter(Boolean).join("");
-    const addonBadge = addonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)
-      ? `<img src="${escapeHtml(addonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" onerror="this.hidden=true;const fallback=this.nextElementSibling;if(fallback){fallback.hidden=false;}" /><span hidden>${addonBadgeLabel}</span>`
+    const addonBadge = displayAddonLogoUrl
+      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
 
     return `
