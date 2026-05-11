@@ -3294,6 +3294,8 @@ export const PlayerScreen = {
     };
 
     const onPlayable = () => {
+      this.loadingVisible = false;
+      this.updateLoadingVisibility();
       this.attemptPendingPlaybackRestore();
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();

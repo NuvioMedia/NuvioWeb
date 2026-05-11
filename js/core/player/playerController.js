@@ -35,7 +35,6 @@ export const PlayerController = {
   selectedAvPlayAudioTrackIndex: -1,
   selectedAvPlaySubtitleTrackIndex: -1,
   pendingAvPlayAudioTrackIndex: -1,
-  avplayTickTimer: null,
   avplayReady: false,
   avplayEnded: false,
   avplayCurrentTimeMs: 0,
@@ -363,25 +362,7 @@ export const PlayerController = {
     });
   },
 
-  stopAvPlayTickTimer() {
-    if (this.avplayTickTimer) {
-      clearInterval(this.avplayTickTimer);
-      this.avplayTickTimer = null;
-    }
-  },
-
-  startAvPlayTickTimer() {
-    this.stopAvPlayTickTimer();
-    this.avplayTickTimer = setInterval(() => {
-      if (!this.isUsingAvPlay()) {
-        return;
-      }
-      this.refreshAvPlayTimeline();
-      this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine });
-    }, 1000);
-  },
-
-  refreshAvPlayTimeline() {
+  refreshAvPlayTimeline(currentTimeMsFromCallback = null) {
     if (!this.isUsingAvPlay()) {
       return;
     }
@@ -389,13 +370,17 @@ export const PlayerController = {
     if (!avplay) {
       return;
     }
-    try {
-      const currentMs = Number(avplay.getCurrentTime?.() || 0);
-      if (Number.isFinite(currentMs) && currentMs >= 0) {
-        this.avplayCurrentTimeMs = currentMs;
+    if (currentTimeMsFromCallback !== null && Number.isFinite(currentTimeMsFromCallback) && currentTimeMsFromCallback >= 0) {
+      this.avplayCurrentTimeMs = currentTimeMsFromCallback;
+    } else {
+      try {
+        const currentMs = Number(avplay.getCurrentTime?.() || 0);
+        if (Number.isFinite(currentMs) && currentMs >= 0) {
+          this.avplayCurrentTimeMs = currentMs;
+        }
+      } catch (_) {
+        // Ignore current-time polling failures.
       }
-    } catch (_) {
-      // Ignore current-time polling failures.
     }
     try {
       const durationMs = Number(avplay.getDuration?.() || 0);
@@ -877,7 +862,6 @@ export const PlayerController = {
   teardownAvPlay() {
     const avplay = this.getAvPlay();
 
-    this.stopAvPlayTickTimer();
     if (avplay) {
       try {
         avplay.setListener?.({});
@@ -885,10 +869,7 @@ export const PlayerController = {
         // Ignore listener reset failures.
       }
       try {
-        const state = String(avplay.getState?.() || "").toUpperCase();
-        if (state && state !== "NONE" && state !== "IDLE") {
-          avplay.stop?.();
-        }
+        avplay.stop?.();
       } catch (_) {
         // Ignore stop failures.
       }
@@ -897,6 +878,11 @@ export const PlayerController = {
       } catch (_) {
         // Ignore close failures.
       }
+    }
+
+    const avplayObj = document.getElementById("avplayPlayer");
+    if (avplayObj) {
+      avplayObj.style.display = "none";
     }
 
     this.avplayActive = false;
@@ -933,6 +919,26 @@ export const PlayerController = {
     this.lastPlaybackErrorCode = 0;
     this.playbackEngine = this.getPlatformAvplayEngineName();
 
+    let avplayObj = document.getElementById("avplayPlayer");
+    if (!avplayObj) {
+      avplayObj = document.createElement("object");
+      avplayObj.id = "avplayPlayer";
+      avplayObj.type = "application/avplayer";
+      avplayObj.style.position = "absolute";
+      avplayObj.style.left = "0";
+      avplayObj.style.top = "0";
+      avplayObj.style.width = "100vw";
+      avplayObj.style.height = "100vh";
+      avplayObj.style.zIndex = "9999";
+      document.body.appendChild(avplayObj);
+    }
+    avplayObj.style.display = "block";
+
+    const videoEl = document.getElementById("videoPlayer");
+    if (videoEl) {
+      videoEl.style.display = "none";
+    }
+
     this.emitVideoEvent("waiting", { playbackEngine: this.playbackEngine });
 
     try {
@@ -943,8 +949,6 @@ export const PlayerController = {
       this.playbackEngine = "none";
       return false;
     }
-
-    this.setAvPlayDisplayRect();
 
     try {
       avplay.setListener?.({
@@ -959,13 +963,13 @@ export const PlayerController = {
         oncurrentplaytime: (currentTimeMs) => {
           const value = Number(currentTimeMs || 0);
           if (Number.isFinite(value) && value >= 0) {
-            this.avplayCurrentTimeMs = value;
+            this.refreshAvPlayTimeline(value);
+            this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine, currentTime: value / 1000 });
           }
         },
         onstreamcompleted: () => {
           this.avplayEnded = true;
           this.isPlaying = false;
-          this.stopAvPlayTickTimer();
           try {
             avplay.stop?.();
           } catch (_) {
@@ -977,7 +981,6 @@ export const PlayerController = {
           this.avplayReady = false;
           this.isPlaying = false;
           this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(errorValue);
-          this.stopAvPlayTickTimer();
           this.emitVideoEvent("error", {
             playbackEngine: this.playbackEngine,
             mediaErrorCode: this.lastPlaybackErrorCode,
@@ -988,6 +991,8 @@ export const PlayerController = {
     } catch (_) {
       // Ignore listener setup failures; prepareAsync/play may still work.
     }
+
+    this.setAvPlayDisplayRect();
 
     const onPrepared = () => {
       if (!this.isUsingAvPlay()) {
@@ -1004,7 +1009,6 @@ export const PlayerController = {
       try {
         avplay.play?.();
         this.isPlaying = true;
-        this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
         setTimeout(() => {
           this.applyPendingAvPlayAudioTrackSelection();
@@ -1359,6 +1363,14 @@ export const PlayerController = {
   },
 
   applyNativeSource(url, mimeType = null, engineName = "native-file") {
+    const avplayObj = document.getElementById("avplayPlayer");
+    if (avplayObj) {
+      avplayObj.style.display = "none";
+    }
+    const videoEl = document.getElementById("videoPlayer");
+    if (videoEl) {
+      videoEl.style.display = "block";
+    }
     if (!nativeVideoEngine.load(this.video, url, mimeType)) {
       return false;
     }
@@ -2248,6 +2260,7 @@ export const PlayerController = {
       return;
     }
     const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType, itemType);
+    console.log("[PlayerController] Selected playback engine:", preferredEngine);
     this.rememberPlaybackEngineAttempt(this.currentPlaybackUrl, preferredEngine, {
       reset: !forceEngine
     });
@@ -2388,7 +2401,6 @@ export const PlayerController = {
       try {
         avplay.pause?.();
         this.isPlaying = false;
-        this.stopAvPlayTickTimer();
         this.emitVideoEvent("pause", { playbackEngine: this.playbackEngine });
       } catch (_) {
         // Ignore AVPlay pause failures.
@@ -2412,7 +2424,6 @@ export const PlayerController = {
       try {
         avplay.play?.();
         this.isPlaying = true;
-        this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
         setTimeout(() => {
           this.applyPendingAvPlayAudioTrackSelection();
