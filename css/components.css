@@ -7046,26 +7046,6 @@
   pointer-events: none;
 }
 
-.player-loading-overlay.logo-only .player-loading-backdrop,
-.player-loading-overlay.logo-only .player-loading-gradient,
-.player-loading-overlay.logo-only .player-loading-title,
-.player-loading-overlay.logo-only .player-loading-subtitle {
-  display: none;
-}
-
-.player-loading-overlay.logo-only .player-loading-center {
-  width: auto;
-}
-
-.player-loading-overlay.logo-only .player-loading-identity {
-  opacity: 1;
-  animation: playerLoadingIdentityPulse 2000ms linear infinite alternate;
-}
-
-.player-loading-overlay.logo-only .player-loading-logo {
-  margin-bottom: 0;
-}
-
 .player-loading-backdrop {
   position: absolute;
   top: 0;

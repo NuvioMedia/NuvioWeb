@@ -25,6 +25,18 @@ function buildSameOriginTracksUrl(mediaUrl) {
   return `/tracks/${encodeURIComponent(String(mediaUrl || "").trim())}`;
 }
 
+function rememberLocalMediaServerUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    const port = Number(parsed.port || 0);
+    if (Number.isFinite(port) && port > 0) {
+      cachedLocalMediaServerPort = port;
+    }
+  } catch (_) {
+    // Ignore malformed service URLs.
+  }
+}
+
 async function requestTracksViaLuna(mediaUrl) {
   const result = await requestWebOsCompanionService({
     method: "tracks",
@@ -33,6 +45,7 @@ async function requestTracksViaLuna(mediaUrl) {
     }
   });
   const payload = result?.payload || {};
+  rememberLocalMediaServerUrl(payload?.url);
 
   return Array.isArray(payload?.tracks) ? payload.tracks : [];
 }

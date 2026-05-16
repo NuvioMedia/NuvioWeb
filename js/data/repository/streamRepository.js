@@ -19,16 +19,8 @@ class StreamRepository {
   }
 
   async getStreamsFromAllAddons(type, videoId, options = {}) {
-    const addons = await addonRepository.getInstalledAddons();
-    const streamAddons = addons.filter((addon) => addon.resources.some((resource) => {
-      if (resource.name !== "stream") {
-        return false;
-      }
-      if (!resource.types || resource.types.length === 0) {
-        return true;
-      }
-      return resource.types.some((resourceType) => resourceType === type);
-    }));
+    const addonUrls = addonRepository.getInstalledAddonUrls();
+    const onAddon = typeof options?.onAddon === "function" ? options.onAddon : null;
 
     const onChunk = typeof options?.onChunk === "function" ? options.onChunk : null;
     const notifyChunk = (group) => {
@@ -45,8 +37,38 @@ class StreamRepository {
       }
     };
 
-    const addonTasks = streamAddons.map(async (addon) => {
+    const supportsStreamType = (addon) => (addon?.resources || []).some((resource) => {
+      if (resource.name !== "stream") {
+        return false;
+      }
+      if (!resource.types || resource.types.length === 0) {
+        return true;
+      }
+      return resource.types.some((resourceType) => resourceType === type);
+    });
+
+    const notifyAddon = (addon, orderIndex) => {
+      if (!onAddon || !addon) {
+        return;
+      }
       try {
+        onAddon({ ...addon, orderIndex });
+      } catch (error) {
+        console.warn("Stream addon callback failed", error);
+      }
+    };
+
+    const addonTasks = addonUrls.map(async (addonUrl, orderIndex) => {
+      try {
+        const addonResult = await addonRepository.fetchAddon(addonUrl, { preferCache: true });
+        if (addonResult.status !== "success" || !supportsStreamType(addonResult.data)) {
+          return null;
+        }
+        const addon = {
+          ...addonResult.data,
+          orderIndex
+        };
+        notifyAddon(addon, orderIndex);
         const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
         if (streamsResult.status !== "success") {
           return null;
@@ -61,10 +83,12 @@ class StreamRepository {
         const group = {
           addonName: addon.displayName,
           addonLogo: addon.logo,
+          addonOrderIndex: orderIndex,
           streams: addonStreams.map((stream) => ({
             ...stream,
             addonName: addon.displayName,
-            addonLogo: addon.logo
+            addonLogo: addon.logo,
+            addonOrderIndex: orderIndex
           }))
         };
         notifyChunk(group);
@@ -86,7 +110,9 @@ class StreamRepository {
     })();
 
     const results = await Promise.all(addonTasks);
-    const addonsWithStreams = results.filter(Boolean);
+    const addonsWithStreams = results
+      .filter(Boolean)
+      .sort((left, right) => Number(left.addonOrderIndex || 0) - Number(right.addonOrderIndex || 0));
     const pluginStreams = await pluginTask;
     return { status: "success", data: [...addonsWithStreams, ...pluginStreams] };
   }

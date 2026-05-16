@@ -1,7 +1,6 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
-import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { I18n } from "../../../i18n/index.js";
@@ -48,18 +47,6 @@ function isBackEvent(event) {
 function normalizeType(itemType) {
   const normalized = String(itemType || "movie").toLowerCase();
   return normalized || "movie";
-}
-
-function supportsStreamResource(addon, type) {
-  return (addon?.resources || []).some((resource) => {
-    if (resource?.name !== "stream") {
-      return false;
-    }
-    if (!Array.isArray(resource.types) || !resource.types.length) {
-      return true;
-    }
-    return resource.types.some((resourceType) => String(resourceType || "").toLowerCase() === String(type || "").toLowerCase());
-  });
 }
 
 function detectQuality(text = "") {
@@ -713,19 +700,32 @@ export const StreamScreen = {
     this.listScrollTop = 0;
     this.addonLogoLookup = {};
 
-    try {
-      const addons = await addonRepository.getInstalledAddons();
-      if (token !== this.loadToken) {
+    this.sourceChips = [];
+    this.requestRender();
+
+    const upsertSourceChip = (addon, status = "loading") => {
+      const name = String(addon?.displayName || addon?.name || "").trim();
+      if (!name) {
         return;
       }
-      this.addonLogoLookup = buildAddonLogoLookup(addons);
-      this.sourceChips = addons
-        .filter((addon) => supportsStreamResource(addon, itemType))
-        .map((addon) => ({ name: addon.displayName, logo: normalizeAddonLogoUrl(addon.logo), status: "loading" }));
-      this.requestRender();
-    } catch (error) {
-      console.warn("Failed to resolve stream addons", error);
-    }
+      const orderIndex = Number(addon?.orderIndex);
+      const nextChip = {
+        name,
+        logo: normalizeAddonLogoUrl(addon.logo),
+        status,
+        orderIndex: Number.isFinite(orderIndex) ? orderIndex : Number.MAX_SAFE_INTEGER
+      };
+      const existingIndex = this.sourceChips.findIndex((chip) => chip.name === name);
+      if (existingIndex >= 0) {
+        this.sourceChips[existingIndex] = { ...this.sourceChips[existingIndex], ...nextChip };
+      } else {
+        this.sourceChips.push(nextChip);
+      }
+      this.addonLogoLookup[name] = nextChip.logo;
+      this.sourceChips = this.sourceChips
+        .slice()
+        .sort((left, right) => Number(left.orderIndex || 0) - Number(right.orderIndex || 0));
+    };
 
     const markSuccessfulSources = (names = []) => {
       if (!Array.isArray(names) || !names.length) {
@@ -738,7 +738,7 @@ export const StreamScreen = {
       ));
       successSet.forEach((name) => {
         if (!known.has(name)) {
-          this.sourceChips.push({ name, logo: resolveAddonLogo(name, this.addonLogoLookup), status: "success" });
+          this.sourceChips.push({ name, logo: resolveAddonLogo(name, this.addonLogoLookup), status: "success", orderIndex: Number.MAX_SAFE_INTEGER });
         }
       });
     };
@@ -747,6 +747,13 @@ export const StreamScreen = {
       itemId: String(this.params?.itemId || ""),
       season: this.params?.season ?? null,
       episode: this.params?.episode ?? null,
+      onAddon: (addon) => {
+        if (token !== this.loadToken) {
+          return;
+        }
+        upsertSourceChip(addon, "loading");
+        this.requestRender();
+      },
       onChunk: (chunkResult) => {
         if (token !== this.loadToken || chunkResult?.status !== "success") {
           return;
@@ -759,6 +766,7 @@ export const StreamScreen = {
           return;
         }
         this.streams = mergeStreamItems(this.streams, chunkItems);
+        this.loading = false;
         if (this.focusState.zone !== "card") {
           this.focusState = { zone: "card", index: 0 };
         }

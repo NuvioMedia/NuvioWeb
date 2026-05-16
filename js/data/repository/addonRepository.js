@@ -13,6 +13,12 @@ class AddonRepository {
 
   constructor() {
     this.manifestCache = new Map();
+    this.manifestErrorCache = new Map();
+    this.manifestRequests = new Map();
+    this.installedAddonsCache = null;
+    this.installedAddonsCacheKey = "";
+    this.installedAddonsPromise = null;
+    this.installedAddonsPromiseKey = "";
     this.changeListeners = new Set();
   }
 
@@ -70,40 +76,122 @@ class AddonRepository {
     return [...DEFAULT_ADDON_URLS];
   }
 
-  async fetchAddon(baseUrl) {
+  async fetchAddon(baseUrl, options = {}) {
     const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
     const manifestUrl = this.buildManifestUrl(cleanBaseUrl);
+    const force = Boolean(options?.force);
+    const preferCache = Boolean(options?.preferCache);
 
-    const result = await safeApiCall(() => AddonApi.getManifest(manifestUrl));
-    if (result.status === "success") {
-      const addon = this.mapManifest(result.data, cleanBaseUrl);
-      this.manifestCache.set(cleanBaseUrl, addon);
-      return { status: "success", data: addon };
+    if (!force && preferCache) {
+      const cached = this.manifestCache.get(cleanBaseUrl);
+      if (cached) {
+        return { status: "success", data: cached };
+      }
+      const cachedError = this.manifestErrorCache.get(cleanBaseUrl);
+      if (cachedError) {
+        return cachedError;
+      }
     }
 
-    const cached = this.manifestCache.get(cleanBaseUrl);
-    if (cached) {
-      return { status: "success", data: cached };
+    if (!force && this.manifestRequests.has(cleanBaseUrl)) {
+      return this.manifestRequests.get(cleanBaseUrl);
     }
 
-    const fallback = this.getBuiltinFallbackManifest(cleanBaseUrl);
-    if (fallback) {
-      this.manifestCache.set(cleanBaseUrl, fallback);
-      return { status: "success", data: fallback };
-    }
+    const request = (async () => {
+      const result = await safeApiCall(() => AddonApi.getManifest(manifestUrl));
+      if (result.status === "success") {
+        const addon = this.mapManifest(result.data, cleanBaseUrl);
+        this.manifestCache.set(cleanBaseUrl, addon);
+        this.manifestErrorCache.delete(cleanBaseUrl);
+        return { status: "success", data: addon };
+      }
 
-    return result;
+      const cached = this.manifestCache.get(cleanBaseUrl);
+      if (cached) {
+        return { status: "success", data: cached };
+      }
+
+      const fallback = this.getBuiltinFallbackManifest(cleanBaseUrl);
+      if (fallback) {
+        this.manifestCache.set(cleanBaseUrl, fallback);
+        this.manifestErrorCache.delete(cleanBaseUrl);
+        return { status: "success", data: fallback };
+      }
+
+      this.manifestErrorCache.set(cleanBaseUrl, result);
+      return result;
+    })();
+
+    this.manifestRequests.set(cleanBaseUrl, request);
+    try {
+      return await request;
+    } finally {
+      if (this.manifestRequests.get(cleanBaseUrl) === request) {
+        this.manifestRequests.delete(cleanBaseUrl);
+      }
+    }
   }
 
-  async getInstalledAddons() {
-    const urls = this.getInstalledAddonUrls();
-    const fetched = await Promise.all(urls.map((url) => this.fetchAddon(url)));
+  invalidateInstalledAddonsCache() {
+    this.installedAddonsCache = null;
+    this.installedAddonsCacheKey = "";
+    this.installedAddonsPromise = null;
+    this.installedAddonsPromiseKey = "";
+  }
 
-    const addons = fetched
-      .filter((result) => result.status === "success")
-      .map((result) => result.data);
-
+  getCachedInstalledAddons(urls = this.getInstalledAddonUrls()) {
+    const normalizedUrls = Array.isArray(urls) ? urls : [];
+    const addons = normalizedUrls
+      .map((url) => this.manifestCache.get(this.canonicalizeUrl(url)))
+      .filter(Boolean);
     return this.applyDisplayNames(addons);
+  }
+
+  async getInstalledAddons(options = {}) {
+    const urls = this.getInstalledAddonUrls();
+    const cacheKey = JSON.stringify(urls);
+    const force = Boolean(options?.force);
+    const cacheOnly = Boolean(options?.cacheOnly);
+    if (!force && this.installedAddonsCache && this.installedAddonsCacheKey === cacheKey) {
+      return [...this.installedAddonsCache];
+    }
+
+    if (cacheOnly) {
+      return this.getCachedInstalledAddons(urls);
+    }
+
+    if (!force && this.installedAddonsPromise && this.installedAddonsPromiseKey === cacheKey) {
+      return this.installedAddonsPromise;
+    }
+
+    const request = (async () => {
+      const fetched = await Promise.all(urls.map((url) => this.fetchAddon(url, {
+        force,
+        preferCache: !force
+      })));
+
+      const addons = fetched
+        .filter((result) => result.status === "success")
+        .map((result) => result.data);
+
+      const displayAddons = this.applyDisplayNames(addons);
+      if (JSON.stringify(this.getInstalledAddonUrls()) === cacheKey) {
+        this.installedAddonsCache = displayAddons;
+        this.installedAddonsCacheKey = cacheKey;
+      }
+      return [...displayAddons];
+    })();
+
+    this.installedAddonsPromise = request;
+    this.installedAddonsPromiseKey = cacheKey;
+    try {
+      return await request;
+    } finally {
+      if (this.installedAddonsPromise === request) {
+        this.installedAddonsPromise = null;
+        this.installedAddonsPromiseKey = "";
+      }
+    }
   }
 
   async addAddon(url) {
@@ -118,6 +206,8 @@ class AddonRepository {
     }
 
     LocalStore.set(ADDON_URLS_KEY, [...current, clean]);
+    this.manifestErrorCache.delete(clean);
+    this.invalidateInstalledAddonsCache();
     this.notifyAddonsChanged("add");
     return true;
   }
@@ -131,6 +221,8 @@ class AddonRepository {
     }
     LocalStore.set(ADDON_URLS_KEY, next);
     this.manifestCache.delete(clean);
+    this.manifestErrorCache.delete(clean);
+    this.invalidateInstalledAddonsCache();
     this.notifyAddonsChanged("remove");
     return true;
   }
@@ -142,7 +234,9 @@ class AddonRepository {
     }
 
     this.manifestCache.delete(clean);
-    const result = await this.fetchAddon(clean);
+    this.manifestErrorCache.delete(clean);
+    this.invalidateInstalledAddonsCache();
+    const result = await this.fetchAddon(clean, { force: true });
     if (result.status === "success") {
       this.notifyAddonsChanged("refresh");
     }
@@ -155,6 +249,16 @@ class AddonRepository {
     const current = this.getInstalledAddonUrls();
     const changed = JSON.stringify(current) !== JSON.stringify(normalized);
     LocalStore.set(ADDON_URLS_KEY, normalized);
+    if (changed) {
+      const normalizedSet = new Set(normalized);
+      current
+        .filter((url) => !normalizedSet.has(url))
+        .forEach((url) => {
+          this.manifestCache.delete(url);
+          this.manifestErrorCache.delete(url);
+        });
+      this.invalidateInstalledAddonsCache();
+    }
     if (changed && !silent) {
       this.notifyAddonsChanged("reorder");
     }
@@ -172,6 +276,7 @@ class AddonRepository {
   }
 
   notifyAddonsChanged(reason = "unknown") {
+    this.invalidateInstalledAddonsCache();
     this.changeListeners.forEach((listener) => {
       try {
         listener(reason);

@@ -11,7 +11,9 @@ class SubtitleRepository {
     const rawId = String(id || "").trim();
     const normalizedId = this.normalizeIdForLookup(rawId);
     const idCandidates = this.uniqueNonEmpty([normalizedId, rawId]);
-    const addons = await addonRepository.getInstalledAddons();
+    const addons = await addonRepository.getInstalledAddons({
+      cacheOnly: Boolean(options?.manifestCacheOnly)
+    });
 
     const subtitleAddons = addons.filter((addon) => (addon.resources || []).some((resource) => {
       if (!this.isSubtitleResource(resource?.name)) {

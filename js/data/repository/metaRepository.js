@@ -13,6 +13,7 @@ class MetaRepository {
   constructor() {
     this.metaCache = new Map();
     this.inFlightMeta = new Map();
+    this.inFlightMetaAll = new Map();
   }
 
   async getMeta(addonBaseUrl, type, id) {
@@ -59,54 +60,67 @@ class MetaRepository {
       return { status: "success", data: this.metaCache.get(cacheKey) };
     }
 
-    const addons = await addonRepository.getInstalledAddons();
-    const metaAddons = addons.filter((addon) => (addon.resources || []).some((resource) => resource?.name === "meta"));
-    const candidates = [];
-    const seenCandidates = new Set();
-    const addCandidate = (addon, candidateType) => {
-      const cleanType = String(candidateType || "").trim();
-      if (!addon || !cleanType) {
-        return;
-      }
-      const key = `${addon.baseUrl}::${cleanType}`;
-      if (seenCandidates.has(key)) {
-        return;
-      }
-      seenCandidates.add(key);
-      candidates.push({ addon, type: cleanType });
-    };
+    if (this.inFlightMetaAll.has(cacheKey)) {
+      return this.inFlightMetaAll.get(cacheKey);
+    }
 
-    addons.forEach((addon) => {
-      if (this.supportsMetaType(addon, requestedType)) {
-        addCandidate(addon, requestedType);
-      }
-    });
-    if (inferredType.toLowerCase() !== requestedType.toLowerCase()) {
+    const request = (async () => {
+      const addons = await addonRepository.getInstalledAddons();
+      const metaAddons = addons.filter((addon) => (addon.resources || []).some((resource) => resource?.name === "meta"));
+      const candidates = [];
+      const seenCandidates = new Set();
+      const addCandidate = (addon, candidateType) => {
+        const cleanType = String(candidateType || "").trim();
+        if (!addon || !cleanType) {
+          return;
+        }
+        const key = `${addon.baseUrl}::${cleanType}`;
+        if (seenCandidates.has(key)) {
+          return;
+        }
+        seenCandidates.add(key);
+        candidates.push({ addon, type: cleanType });
+      };
+
       addons.forEach((addon) => {
-        if (this.supportsMetaType(addon, inferredType)) {
-          addCandidate(addon, inferredType);
+        if (this.supportsMetaType(addon, requestedType)) {
+          addCandidate(addon, requestedType);
         }
       });
-    }
-    const topMetaAddon = metaAddons[0];
-    if (topMetaAddon) {
-      const fallbackType = this.supportsMetaType(topMetaAddon, requestedType)
-        ? requestedType
-        : this.supportsMetaType(topMetaAddon, inferredType)
-          ? inferredType
-          : (inferredType || requestedType);
-      addCandidate(topMetaAddon, fallbackType);
-    }
-
-    for (const { addon, type: candidateType } of candidates) {
-      const result = await this.getMeta(addon.baseUrl, candidateType, id);
-      if (result.status === "success") {
-        this.metaCache.set(cacheKey, result.data);
-        return result;
+      if (inferredType.toLowerCase() !== requestedType.toLowerCase()) {
+        addons.forEach((addon) => {
+          if (this.supportsMetaType(addon, inferredType)) {
+            addCandidate(addon, inferredType);
+          }
+        });
       }
-    }
+      const topMetaAddon = metaAddons[0];
+      if (topMetaAddon) {
+        const fallbackType = this.supportsMetaType(topMetaAddon, requestedType)
+          ? requestedType
+          : this.supportsMetaType(topMetaAddon, inferredType)
+            ? inferredType
+            : (inferredType || requestedType);
+        addCandidate(topMetaAddon, fallbackType);
+      }
 
-    return { status: "error", message: "Meta not found in installed addons", code: 404 };
+      for (const { addon, type: candidateType } of candidates) {
+        const result = await this.getMeta(addon.baseUrl, candidateType, id);
+        if (result.status === "success") {
+          this.metaCache.set(cacheKey, result.data);
+          return result;
+        }
+      }
+
+      return { status: "error", message: "Meta not found in installed addons", code: 404 };
+    })();
+
+    this.inFlightMetaAll.set(cacheKey, request);
+    try {
+      return await request;
+    } finally {
+      this.inFlightMetaAll.delete(cacheKey);
+    }
   }
 
   buildMetaUrl(baseUrl, type, id) {
@@ -174,6 +188,7 @@ class MetaRepository {
   clearCache() {
     this.metaCache.clear();
     this.inFlightMeta.clear();
+    this.inFlightMetaAll.clear();
   }
 
 }
