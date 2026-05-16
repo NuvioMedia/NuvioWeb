@@ -1,7 +1,6 @@
 import { WebOsLunaService } from "./webosLunaService.js";
 
 const DEFAULT_SERVICE_IDS = [
-  "space.nuvio.webos.service",
   "com.nuvio.lg.service"
 ];
 

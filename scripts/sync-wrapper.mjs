@@ -9,7 +9,7 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
 const webOsServiceSourceDirName = "com.nuvio.lg.service";
-const webOsServiceId = "space.nuvio.webos.service";
+const webOsServiceId = "com.nuvio.lg.service";
 const webOsServiceDirName = webOsServiceId;
 const tizenServiceDirName = "com.nuvio.tizen.service";
 const tizenServiceIdSuffix = ".NuvioMediaService";
@@ -22,7 +22,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     TV_LOGIN_REDIRECT_BASE_URL: "",
     YOUTUBE_PROXY_URL: "",
     ADDON_REMOTE_BASE_URL: "",
-    WEBOS_SERVICE_ID: "space.nuvio.webos.service",
+    WEBOS_SERVICE_ID: "com.nuvio.lg.service",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""
