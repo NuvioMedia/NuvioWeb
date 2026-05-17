@@ -57,6 +57,7 @@ export const PlayerController = {
   viewportSyncHandler: null,
   avplayDisplayRect: null,
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
+  startupAudioGateActive: false,
 
   isExpectedPlayInterruption(error) {
     const message = String(error?.message || "").toLowerCase();
@@ -379,6 +380,83 @@ export const PlayerController = {
       this.refreshAvPlayTimeline();
       this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine });
     }, 1000);
+  },
+
+  applyStartupAudioGateToVideo() {
+    if (!this.video) {
+      return;
+    }
+    try {
+      const gated = Boolean(this.startupAudioGateActive);
+      this.video.muted = gated;
+      this.video.defaultMuted = gated;
+      if (!gated && (!Number.isFinite(Number(this.video.volume)) || Number(this.video.volume) <= 0)) {
+        this.video.volume = 1;
+      }
+    } catch (_) {
+      // Ignore unsupported volume/mute operations.
+    }
+  },
+
+  setStartupAudioGate(active, { resume = true } = {}) {
+    const shouldGate = Boolean(active);
+    const wasGated = Boolean(this.startupAudioGateActive);
+    this.startupAudioGateActive = shouldGate;
+    this.applyStartupAudioGateToVideo();
+
+    if (shouldGate) {
+      if (this.isUsingAvPlay() && this.isPlaying) {
+        const avplay = this.getAvPlay();
+        try {
+          avplay?.pause?.();
+          this.isPlaying = false;
+          this.stopAvPlayTickTimer();
+        } catch (_) {
+          // Ignore AVPlay pause failures while replacing the source.
+        }
+      }
+      return;
+    }
+
+    if (!resume || !wasGated || !this.isUsingAvPlay() || !this.avplayReady) {
+      return;
+    }
+    this.startPreparedAvPlayPlayback();
+  },
+
+  startPreparedAvPlayPlayback({ syncTracks = true } = {}) {
+    const avplay = this.getAvPlay();
+    if (!avplay || !this.isUsingAvPlay()) {
+      return false;
+    }
+    try {
+      avplay.play?.();
+      this.isPlaying = true;
+      this.startAvPlayTickTimer();
+      this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
+      setTimeout(() => {
+        this.applyPendingAvPlayAudioTrackSelection();
+      }, 0);
+      setTimeout(() => {
+        if (!this.isUsingAvPlay()) {
+          return;
+        }
+        this.applyPendingAvPlayAudioTrackSelection();
+        if (syncTracks) {
+          this.syncAvPlayTrackInfo({ force: true });
+          this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
+        }
+      }, syncTracks ? 500 : 300);
+      return true;
+    } catch (error) {
+      this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
+      this.isPlaying = false;
+      this.emitVideoEvent("error", {
+        playbackEngine: this.playbackEngine,
+        mediaErrorCode: this.lastPlaybackErrorCode
+      });
+      return false;
+    }
   },
 
   refreshAvPlayTimeline() {
@@ -1006,30 +1084,10 @@ export const PlayerController = {
       this.emitVideoEvent("loadeddata", { playbackEngine: this.playbackEngine });
       this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
-      try {
-        avplay.play?.();
-        this.isPlaying = true;
-        this.startAvPlayTickTimer();
-        this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
-        setTimeout(() => {
-          this.applyPendingAvPlayAudioTrackSelection();
-        }, 0);
-        setTimeout(() => {
-          if (!this.isUsingAvPlay()) {
-            return;
-          }
-          this.applyPendingAvPlayAudioTrackSelection();
-          this.syncAvPlayTrackInfo({ force: true });
-          this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
-        }, 500);
-      } catch (error) {
-        this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
-        this.isPlaying = false;
-        this.emitVideoEvent("error", {
-          playbackEngine: this.playbackEngine,
-          mediaErrorCode: this.lastPlaybackErrorCode
-        });
+      if (this.startupAudioGateActive) {
+        return;
       }
+      this.startPreparedAvPlayPlayback({ syncTracks: true });
     };
 
     const onPrepareError = (errorValue) => {
@@ -1536,6 +1594,7 @@ export const PlayerController = {
     });
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      this.applyStartupAudioGateToVideo();
       const playPromise = this.video.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch((error) => {
@@ -2060,6 +2119,7 @@ export const PlayerController = {
         if (playToken !== null && playToken !== this.playRequestToken) {
           return null;
         }
+        this.applyStartupAudioGateToVideo();
         return this.video.play();
       })
       .then((playPromise) => {
@@ -2221,15 +2281,7 @@ export const PlayerController = {
 
     await this.flushCurrentProgress({ allowCloudSync: false });
 
-    try {
-      this.video.muted = false;
-      this.video.defaultMuted = false;
-      if (!Number.isFinite(Number(this.video.volume)) || Number(this.video.volume) <= 0) {
-        this.video.volume = 1;
-      }
-    } catch (_) {
-      // Ignore unsupported volume/mute operations.
-    }
+    this.applyStartupAudioGateToVideo();
 
     this.currentItemId = itemId;
     this.currentItemType = itemType;
@@ -2408,6 +2460,10 @@ export const PlayerController = {
     if (!this.video) return;
 
     this.flushCurrentProgress({ forceCloudSync: false });
+    if (this.startupAudioGateActive) {
+      this.applyStartupAudioGateToVideo();
+      return;
+    }
 
     if (this.isUsingAvPlay()) {
       const avplay = this.getAvPlay();
@@ -2447,6 +2503,7 @@ export const PlayerController = {
     if (!this.video) return;
 
     const flushPromise = this.flushCurrentProgress({ forceCloudSync: true });
+    this.setStartupAudioGate(false, { resume: false });
 
     this.video.pause();
     this.teardownAdaptiveInstances();

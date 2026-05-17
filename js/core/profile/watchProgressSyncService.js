@@ -11,6 +11,8 @@ const SYNTHETIC_EPISODE_VIDEO_PREFIX = "__nuvio_episode__:";
 const PUSH_RETRY_BACKOFF_MS = 120000;
 const SYNC_STATE_KEY = "watchProgressSyncState";
 const MIN_PROGRESS_SYNC_DURATION_MS = 60000;
+const MAX_AMBIGUOUS_SECONDS_PROGRESS_VALUE = 8 * 60 * 60;
+const MAX_REASONABLE_PROGRESS_DURATION_MS = 24 * 60 * 60 * 1000;
 
 let activePushPromise = null;
 let pushAgainRequested = false;
@@ -177,13 +179,16 @@ function mapProgressRow(row = {}) {
     }
     return Math.trunc(n);
   };
-  const secondsToMilliseconds = (value) => {
+  const normalizeAmbiguousRemoteTime = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) {
       return 0;
     }
-    return Math.trunc(n * 1000);
+    return Math.trunc(n > MAX_AMBIGUOUS_SECONDS_PROGRESS_VALUE ? n : n * 1000);
   };
+  const positionMs = hasPositionMs ? toMilliseconds(positionMsRaw) : normalizeAmbiguousRemoteTime(positionMsRaw);
+  const durationMs = hasDurationMs ? toMilliseconds(durationMsRaw) : normalizeAmbiguousRemoteTime(durationMsRaw);
+  const normalizedTimes = normalizeInflatedProgressTimes(positionMs, durationMs);
   return {
     contentId,
     contentType,
@@ -192,11 +197,30 @@ function mapProgressRow(row = {}) {
       : normalizedVideoId,
     season: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : null,
     episode: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : null,
-    positionMs: hasPositionMs ? toMilliseconds(positionMsRaw) : secondsToMilliseconds(positionMsRaw),
-    durationMs: hasDurationMs ? toMilliseconds(durationMsRaw) : secondsToMilliseconds(durationMsRaw),
+    positionMs: normalizedTimes.positionMs,
+    durationMs: normalizedTimes.durationMs,
     progressPercent: Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null,
     source: source || "local",
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()
+  };
+}
+
+function normalizeInflatedProgressTimes(positionMs = 0, durationMs = 0) {
+  const position = Number(positionMs || 0);
+  const duration = Number(durationMs || 0);
+  if (
+    Number.isFinite(duration)
+    && duration > MAX_REASONABLE_PROGRESS_DURATION_MS
+    && (duration / 1000) <= MAX_REASONABLE_PROGRESS_DURATION_MS
+  ) {
+    return {
+      positionMs: Number.isFinite(position) && position > 0 ? Math.trunc(position / 1000) : 0,
+      durationMs: Math.trunc(duration / 1000)
+    };
+  }
+  return {
+    positionMs: Number.isFinite(position) && position > 0 ? Math.trunc(position) : 0,
+    durationMs: Number.isFinite(duration) && duration > 0 ? Math.trunc(duration) : 0
   };
 }
 
@@ -206,14 +230,6 @@ function resolveProfileId() {
     return Math.trunc(raw);
   }
   return 1;
-}
-
-function toSeconds(valueMs) {
-  const n = Number(valueMs || 0);
-  if (!Number.isFinite(n) || n <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.trunc(n / 1000));
 }
 
 function toPositiveIntegerOrNull(value) {
@@ -371,8 +387,8 @@ function buildRemoteProgressEntries(items = []) {
     video_id: toRemoteVideoId(item),
     season: item.season == null ? null : Number(item.season),
     episode: item.episode == null ? null : Number(item.episode),
-    position: toSeconds(item.positionMs),
-    duration: toSeconds(item.durationMs),
+    position: Math.max(0, Math.trunc(Number(item.positionMs || 0))),
+    duration: Math.max(0, Math.trunc(Number(item.durationMs || 0))),
     last_watched: Number(item.updatedAt || Date.now()),
     progress_key: toProgressKey(item)
   })));

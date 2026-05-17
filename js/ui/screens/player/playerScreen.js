@@ -1074,6 +1074,7 @@ export const PlayerScreen = {
     this.paused = false;
     this.controlsVisible = true;
     this.loadingVisible = true;
+    this.startupAudioGateActive = false;
     this.loadingCompletionTimer = null;
     this.moreActionsVisible = false;
     this.controlFocusZone = "buttons";
@@ -1123,6 +1124,7 @@ export const PlayerScreen = {
     if (initialStreamUrl && !this.isExternalFrameMode()) {
       const sourceCandidate = this.getStreamCandidateByUrl(initialStreamUrl) || this.getCurrentStreamCandidate();
       this.activePlaybackUrl = initialStreamUrl;
+      this.enableStartupAudioGate();
       PlayerController.play(this.activePlaybackUrl, this.buildPlaybackContext(sourceCandidate));
       this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
       this.startTrackDiscoveryWindow();
@@ -1171,6 +1173,7 @@ export const PlayerScreen = {
     }
 
     this.clearLoadingCompletionTimer();
+    this.releaseStartupAudioGate({ resume: false });
     PlayerController.stop();
     this.loadingVisible = false;
     this.updateLoadingVisibility();
@@ -2215,11 +2218,12 @@ export const PlayerScreen = {
 
     this.activePlaybackUrl = targetUrl;
     const currentStreamCandidate = this.getCurrentStreamCandidate();
-    PlayerController.play(targetUrl, this.buildPlaybackContext(currentStreamCandidate));
     this.paused = false;
     this.hasPresentedPlaybackFrame = false;
     this.loadingVisible = true;
     this.updateLoadingVisibility();
+    this.enableStartupAudioGate();
+    PlayerController.play(targetUrl, this.buildPlaybackContext(currentStreamCandidate));
     this.setControlsVisible(true, { focus: false });
   },
 
@@ -3480,6 +3484,7 @@ export const PlayerScreen = {
       }
 
       this.clearPlaybackStallGuard();
+      this.releaseStartupAudioGate({ resume: false });
       this.loadingVisible = false;
       this.paused = true;
       this.dismissPauseOverlay();
@@ -3750,8 +3755,28 @@ export const PlayerScreen = {
     }
   },
 
+  enableStartupAudioGate() {
+    this.startupAudioGateActive = true;
+    PlayerController.setStartupAudioGate?.(true);
+  },
+
+  releaseStartupAudioGate({ resume = true } = {}) {
+    if (!this.startupAudioGateActive) {
+      return;
+    }
+    this.startupAudioGateActive = false;
+    PlayerController.setStartupAudioGate?.(false, { resume });
+  },
+
   isPlaybackStartupSettled() {
-    if (!this.hasPresentedPlaybackFrame || this.pendingPlaybackRestore) {
+    const avplayReadyBehindGate = Boolean(
+      this.startupAudioGateActive
+      && typeof PlayerController.isUsingAvPlay === "function"
+      && PlayerController.isUsingAvPlay()
+      && typeof PlayerController.getPlaybackReadyState === "function"
+      && Number(PlayerController.getPlaybackReadyState() || 0) >= 3
+    );
+    if ((!this.hasPresentedPlaybackFrame && !avplayReadyBehindGate) || this.pendingPlaybackRestore) {
       return false;
     }
     return !this.trackDiscoveryInProgress
@@ -3879,6 +3904,9 @@ export const PlayerScreen = {
   updateLoadingVisibility() {
     const overlay = this.uiRefs?.loadingOverlay;
     if (!overlay) {
+      if (!this.loadingVisible) {
+        this.releaseStartupAudioGate();
+      }
       return;
     }
     const preserveProgressFocus = Boolean(
@@ -3911,8 +3939,11 @@ export const PlayerScreen = {
       if (preserveHiddenSeekOverlay) {
         this.renderSeekOverlay();
       }
-    } else if (this.paused) {
-      this.schedulePauseOverlay();
+    } else {
+      this.releaseStartupAudioGate();
+      if (this.paused) {
+        this.schedulePauseOverlay();
+      }
     }
     this.renderNextEpisodeCard();
   },
@@ -4401,6 +4432,7 @@ export const PlayerScreen = {
     this.hasPresentedPlaybackFrame = false;
     this.loadingVisible = true;
     this.updateLoadingVisibility();
+    this.enableStartupAudioGate();
     this.cancelSeekPreview({ commit: false });
     if (preservePlaybackState) {
       const restoreTimeSeconds = this.getPlaybackCurrentSeconds();
@@ -8598,6 +8630,7 @@ export const PlayerScreen = {
     this.unbindVideoEvents();
     this.clearMediaSessionHandlers();
 
+    this.releaseStartupAudioGate({ resume: false });
     PlayerController.stop();
 
     if (this.container) {

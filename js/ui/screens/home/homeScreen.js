@@ -52,7 +52,7 @@ const CW_MAX_NEXT_UP_LOOKUPS = 24;
 const CW_MAX_VISIBLE_ITEMS = 10;
 const CW_DAYS_CAP = 60;
 const CW_PROGRESS_START_THRESHOLD = 0.02;
-const CW_PROGRESS_END_THRESHOLD = 0.85;
+const CW_PROGRESS_END_THRESHOLD = 0.90;
 const CW_ENTER_DELAY_MS = 320;
 const CW_HOLD_DELAY_MS = 650;
 const HOME_INITIAL_CATALOG_LOAD = 10;
@@ -780,12 +780,17 @@ function buildProgressStatus(item) {
     return t("home.continueStatusNextUp", {}, "Next episode");
   }
   const durationMs = Number(item?.durationMs || 0);
-  const positionMs = Number(item?.positionMs || 0);
+  const rawPositionMs = Number(item?.positionMs || 0);
+  const progressPercent = Number(item?.progressPercent);
+  const positionMs = rawPositionMs > 0
+    ? rawPositionMs
+    : (durationMs > 0 && Number.isFinite(progressPercent) ? durationMs * Math.max(0, Math.min(100, progressPercent)) / 100 : 0);
   if (!durationMs || !positionMs) {
     return t("home.continueStatusContinue", {}, "Continue");
   }
-  const remainingMinutes = Math.max(0, Math.round((durationMs - positionMs) / 60000));
-  const progress = Math.max(0, Math.min(1, positionMs / durationMs));
+  const effectivePositionMs = Math.max(0, Math.min(durationMs, positionMs));
+  const remainingMinutes = Math.max(0, Math.round((durationMs - effectivePositionMs) / 60000));
+  const progress = Math.max(0, Math.min(1, effectivePositionMs / durationMs));
   if (progress >= 0.85 || remainingMinutes <= 10) {
     return t("home.continueStatusAlmostDone", {}, "Almost done");
   }
