@@ -65,6 +65,51 @@ const LANGUAGE_CODE_ALIASES = {
   vie: "vi",
   zho: "zh"
 };
+const LANGUAGE_NAME_ALIASES = {
+  arabic: "ar",
+  arabo: "ar",
+  chinese: "zh",
+  cinese: "zh",
+  deutsch: "de",
+  dutch: "nl",
+  english: "en",
+  inglese: "en",
+  french: "fr",
+  francais: "fr",
+  francese: "fr",
+  german: "de",
+  hindi: "hi",
+  hungarian: "hu",
+  italiano: "it",
+  italian: "it",
+  giapponese: "ja",
+  japanese: "ja",
+  korean: "ko",
+  coreano: "ko",
+  olandese: "nl",
+  polish: "pl",
+  polacco: "pl",
+  portuguese: "pt",
+  portoghese: "pt",
+  romanian: "ro",
+  rumeno: "ro",
+  russian: "ru",
+  russo: "ru",
+  slovak: "sk",
+  slovacco: "sk",
+  slovenian: "sl",
+  sloveno: "sl",
+  spanish: "es",
+  espanol: "es",
+  spagnolo: "es",
+  castellano: "es",
+  swedish: "sv",
+  svedese: "sv",
+  turkish: "tr",
+  turco: "tr",
+  vietnamese: "vi",
+  vietnamita: "vi"
+};
 const SUBTITLE_LANGUAGE_OFF_KEY = "__off__";
 const SUBTITLE_LANGUAGE_UNKNOWN_KEY = "__unknown__";
 const SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C5C", "#00FF88"];
@@ -240,6 +285,31 @@ function normalizeTrackLanguageCode(value) {
   return [base, ...parts.slice(1)].join("-");
 }
 
+function normalizeLanguageNameText(value) {
+  const comparable = normalizeComparableText(value);
+  const asciiComparable = typeof comparable.normalize === "function"
+    ? comparable.normalize("NFD")
+    : comparable;
+  return asciiComparable
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\b(forced|force|forc|forzato|forzata|forzati|forzate|subtitle|subtitles|sub|sdh|cc|closed|captions?|full|normal|default|signs?|songs?|foreign|only)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function inferTrackLanguageCodeFromText(value) {
+  const normalized = normalizeLanguageNameText(value);
+  if (!normalized) {
+    return "";
+  }
+  const padded = ` ${normalized} `;
+  const aliasEntries = Object.entries(LANGUAGE_NAME_ALIASES)
+    .sort((left, right) => right[0].length - left[0].length);
+  const match = aliasEntries.find(([name]) => padded.includes(` ${name} `));
+  return match?.[1] || "";
+}
+
 function getTrackLanguageValue(track = {}) {
   const candidates = [
     track?.language,
@@ -386,6 +456,26 @@ function getTrackDescriptorLabels(track = {}) {
   }
 
   return descriptors;
+}
+
+function isForcedSubtitleTrack(track = {}) {
+  if (Boolean(track?.forced) || Boolean(track?.isForced)) {
+    return true;
+  }
+  const searchText = getTrackMetadataStrings(track).join(" ").toLowerCase();
+  return /\b(forced|forc|forzato|forzata|forzati|forzate)\b/.test(searchText);
+}
+
+function getSubtitleEntryLanguageSource(entry = {}) {
+  const explicitLanguage = getTrackLanguageValue(entry);
+  if (explicitLanguage) {
+    return explicitLanguage;
+  }
+  const secondaryLanguage = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : "";
+  if (secondaryLanguage) {
+    return secondaryLanguage;
+  }
+  return entry.label || entry.title || "";
 }
 
 function formatAudioCodecName(value) {
@@ -651,11 +741,14 @@ function formatSubtitleVerticalOffset(value = 0) {
 }
 
 function normalizeSubtitleLanguageKey(value) {
-  const code = normalizeTrackLanguageCode(value);
+  const code = normalizeTrackLanguageCode(value) || inferTrackLanguageCodeFromText(value);
   if (code) {
     return code;
   }
   const cleaned = cleanDisplayText(value);
+  if (!normalizeLanguageNameText(cleaned)) {
+    return SUBTITLE_LANGUAGE_UNKNOWN_KEY;
+  }
   return cleaned ? cleaned.toLowerCase() : SUBTITLE_LANGUAGE_UNKNOWN_KEY;
 }
 
@@ -1074,6 +1167,7 @@ export const PlayerScreen = {
     this.paused = false;
     this.controlsVisible = true;
     this.loadingVisible = true;
+    this.seekLoading = false;
     this.startupAudioGateActive = false;
     this.loadingCompletionTimer = null;
     this.moreActionsVisible = false;
@@ -1256,7 +1350,14 @@ export const PlayerScreen = {
   },
 
   maybeShowParentalGuideOverlay() {
-    if (this.parentalGuideShown || !this.parentalWarnings.length || this.paused) {
+    if (
+      this.parentalGuideShown
+      || !this.parentalWarnings.length
+      || this.paused
+      || this.loadingVisible
+      || this.startupAudioGateActive
+      || !this.hasPresentedPlaybackFrame
+    ) {
       return;
     }
     this.showParentalGuideOverlay();
@@ -1564,6 +1665,7 @@ export const PlayerScreen = {
           label: getMeaningfulTrackLabel(track) || fallbackLabel,
           language: normalizedLanguage || String(rawLanguage || "").trim().toLowerCase(),
           secondary: descriptors.length ? descriptors.join(" · ") : String(normalizedLanguage || rawLanguage || "").trim().toUpperCase(),
+          forced: isForcedSubtitleTrack(track),
           codec: cleanDisplayText(track?.codec)
         };
       });
@@ -3375,6 +3477,17 @@ export const PlayerScreen = {
     };
 
     const onPlaying = () => {
+      this.seekLoading = false;
+      if (this.startupAudioGateActive) {
+        this.paused = false;
+        this.startupTrackPreferenceReady = true;
+        this.refreshTrackDialogs();
+        this.applyAudioAmplification();
+        this.applySubtitlePresentationSettings();
+        this.applyAspectMode({ showToast: false });
+        this.scheduleLoadingCompletionCheck(250);
+        return;
+      }
       this.failedStreamUrls.clear();
       this.lastPlaybackErrorAt = 0;
       this.sourcesError = "";
@@ -3404,6 +3517,11 @@ export const PlayerScreen = {
     };
 
     const onPause = () => {
+      if (this.startupAudioGateActive) {
+        this.paused = false;
+        this.updateMediaSessionPlaybackState();
+        return;
+      }
       const ended = typeof PlayerController.isPlaybackEnded === "function"
         ? PlayerController.isPlaybackEnded()
         : Boolean(video.ended);
@@ -3447,6 +3565,7 @@ export const PlayerScreen = {
     };
 
     const onPlayable = () => {
+      this.seekLoading = false;
       this.attemptPendingPlaybackRestore();
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
@@ -3465,6 +3584,7 @@ export const PlayerScreen = {
     };
 
     const onError = (event) => {
+      this.seekLoading = false;
       const now = Date.now();
       if ((now - Number(this.lastPlaybackErrorAt || 0)) < 120) {
         return;
@@ -3776,7 +3896,13 @@ export const PlayerScreen = {
       && typeof PlayerController.getPlaybackReadyState === "function"
       && Number(PlayerController.getPlaybackReadyState() || 0) >= 3
     );
-    if ((!this.hasPresentedPlaybackFrame && !avplayReadyBehindGate) || this.pendingPlaybackRestore) {
+    const nativeReadyBehindGate = Boolean(
+      this.startupAudioGateActive
+      && !(typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay())
+      && typeof PlayerController.getPlaybackReadyState === "function"
+      && Number(PlayerController.getPlaybackReadyState() || 0) >= 3
+    );
+    if ((!this.hasPresentedPlaybackFrame && !avplayReadyBehindGate && !nativeReadyBehindGate) || this.pendingPlaybackRestore) {
       return false;
     }
     return !this.trackDiscoveryInProgress
@@ -3838,6 +3964,10 @@ export const PlayerScreen = {
   },
 
   seekPlaybackSeconds(seconds) {
+    // Show logo-only loading state for user-initiated seeks
+    this.seekLoading = true;
+    this.loadingVisible = true;
+    this.updateLoadingVisibility();
     if (typeof PlayerController.seekToSeconds === "function") {
       return Boolean(PlayerController.seekToSeconds(seconds));
     }
@@ -3922,6 +4052,10 @@ export const PlayerScreen = {
       && this.isSeekOverlaySuppressingControls()
     );
     overlay.classList.toggle("hidden", !this.loadingVisible);
+    overlay.classList.toggle("seek-only", Boolean(this.seekLoading));
+    if (!this.loadingVisible) {
+      this.seekLoading = false;
+    }
     if (this.loadingVisible) {
       this.dismissPauseOverlay();
       if (!preserveProgressFocus && !preserveHiddenSeekOverlay && (this.seekOverlayVisible || this.seekPreviewSeconds != null)) {
@@ -5189,6 +5323,7 @@ export const PlayerScreen = {
       ...track,
       label: cleanDisplayText(embeddedTrack.label) || track?.label || subtitleLabel(index),
       language: embeddedTrack.language || track?.language || "",
+      forced: Boolean(track?.forced) || Boolean(embeddedTrack.forced),
       secondary: embeddedTrack.secondary || String(embeddedTrack.language || track?.language || "").toUpperCase()
     };
   },
@@ -5624,7 +5759,9 @@ export const PlayerScreen = {
             return {
               id: `subtitle-avplay-${normalizedTrackIndex}`,
               label: mergedTrack?.label || subtitleLabel(index),
+              language: getTrackLanguageValue(mergedTrack),
               secondary: mergedTrack?.secondary || String(mergedTrack?.language || "").toUpperCase(),
+              isForced: isForcedSubtitleTrack(mergedTrack),
               selected: normalizedTrackIndex === selectedAvPlaySubtitleTrack,
               trackIndex: null,
               avplaySubtitleTrackIndex: normalizedTrackIndex
@@ -5646,7 +5783,9 @@ export const PlayerScreen = {
           ...dashSubtitleTracks.map((track, index) => ({
             id: `subtitle-dash-${index}-${track?.id ?? ""}`,
             label: track?.label || subtitleLabel(index),
+            language: getTrackLanguageValue(track),
             secondary: String(track?.language || "").toUpperCase(),
+            isForced: isForcedSubtitleTrack(track),
             selected: index === selectedDashSubtitleTrack,
             trackIndex: null,
             dashSubtitleTrackIndex: index
@@ -5665,7 +5804,9 @@ export const PlayerScreen = {
           ...embeddedSubtitleTracks.map((track, index) => ({
             id: `subtitle-embedded-${track.embeddedTrackIndex}`,
             label: track.label || subtitleLabel(index),
+            language: getTrackLanguageValue(track),
             secondary: track.secondary || String(track.language || "").toUpperCase(),
+            isForced: isForcedSubtitleTrack(track),
             selected: track.embeddedTrackIndex === this.selectedEmbeddedSubtitleTrackIndex,
             trackIndex: null,
             embeddedSubtitleTrackIndex: track.embeddedTrackIndex
@@ -5673,14 +5814,18 @@ export const PlayerScreen = {
           ...builtInTracks.map((track, index) => ({
             id: `subtitle-built-${index}`,
             label: track.label || subtitleLabel(index),
+            language: getTrackLanguageValue(track),
             secondary: String(track.language || "").toUpperCase(),
+            isForced: isForcedSubtitleTrack(track),
             selected: this.selectedEmbeddedSubtitleTrackIndex < 0 && index === this.selectedSubtitleTrackIndex,
             trackIndex: index
           })),
         ...this.manifestSubtitleTracks.map((track) => ({
           id: `subtitle-manifest-${track.id}`,
           label: track.name || t("subtitle_dialog_title", {}, "Subtitle"),
+          language: getTrackLanguageValue(track),
           secondary: String(track.language || "").toUpperCase(),
+          isForced: isForcedSubtitleTrack(track),
           selected: this.selectedManifestSubtitleTrackId === track.id,
           trackIndex: null,
           manifestSubtitleTrackId: track.id
@@ -5712,7 +5857,9 @@ export const PlayerScreen = {
           return {
             id: `subtitle-addon-fallback-${subtitleId}`,
             label: subtitle.lang || subtitleLabel(index),
+            language: subtitle.lang || "",
             secondary: subtitle.addonName || t("nav_addons", {}, "Addon"),
+            isForced: isForcedSubtitleTrack(subtitle),
             selected: this.selectedAddonSubtitleId === subtitleId
               || (this.selectedAddonSubtitleId == null && absoluteIndex === this.selectedSubtitleTrackIndex),
             trackIndex: null,
@@ -5727,7 +5874,9 @@ export const PlayerScreen = {
           return {
             id: `subtitle-addon-${absoluteIndex}`,
             label: track.label || subtitleLabel(relativeIndex),
+            language: getTrackLanguageValue(track),
             secondary: String(track.language || "").toUpperCase(),
+            isForced: isForcedSubtitleTrack(track),
             selected: absoluteIndex === this.selectedSubtitleTrackIndex,
             trackIndex: absoluteIndex
           };
@@ -5809,10 +5958,10 @@ export const PlayerScreen = {
         });
         return;
       }
-      const languageSource = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : entry.label;
+      const languageSource = getSubtitleEntryLanguageSource(entry);
       const languageKey = normalizeSubtitleLanguageKey(languageSource);
       const languageLabel = subtitleLanguageLabel(languageKey);
-      const isForced = /\bforced\b/i.test(`${entry.label || ""} ${entry.secondary || ""}`);
+      const isForced = Boolean(entry.isForced) || isForcedSubtitleTrack(entry);
       options.push({
         id: entry.id,
         languageKey,
@@ -5830,10 +5979,10 @@ export const PlayerScreen = {
       if (!entry) {
         return;
       }
-      const languageSource = normalizeTrackLanguageCode(entry.secondary) ? entry.secondary : entry.label;
+      const languageSource = getSubtitleEntryLanguageSource(entry);
       const languageKey = normalizeSubtitleLanguageKey(languageSource);
       const languageLabel = subtitleLanguageLabel(languageKey);
-      const isForced = /\bforced\b/i.test(`${entry.title || ""} ${entry.label || ""} ${entry.secondary || ""}`);
+      const isForced = Boolean(entry.isForced) || isForcedSubtitleTrack(entry);
       options.push({
         id: entry.id,
         languageKey,
@@ -6234,6 +6383,12 @@ export const PlayerScreen = {
       if (forcedInternal) return forcedInternal;
       const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
       if (forcedAddon) return forcedAddon;
+    }
+
+    if (mode === "audio-forced") {
+      return options.find((entry) => entry.sourceType === "internal" && entry.isForced)
+        || options.find((entry) => entry.sourceType === "addon" && entry.isForced)
+        || null;
     }
 
     return null;

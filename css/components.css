@@ -7116,6 +7116,16 @@
   color: rgba(242, 247, 254, 0.9);
 }
 
+/* Seek-only loading: show only the pulsing logo (hide backdrop and text) */
+.player-loading-overlay.seek-only .player-loading-backdrop,
+.player-loading-overlay.seek-only .player-loading-gradient {
+  display: none;
+}
+.player-loading-overlay.seek-only .player-loading-title,
+.player-loading-overlay.seek-only .player-loading-subtitle {
+  display: none;
+}
+
 @keyframes playerLoadingIdentityFade {
   from {
     opacity: 0;

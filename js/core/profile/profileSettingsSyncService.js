@@ -8,6 +8,10 @@ import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
 import { MdbListSettingsStore } from "../../data/local/mdbListSettingsStore.js";
 import { AnimeSkipSettingsStore } from "../../data/local/animeSkipSettingsStore.js";
 import { ProfileManager } from "./profileManager.js";
+import {
+  clearProfileSettingsCloudSyncPending,
+  hasProfileSettingsCloudSyncPending
+} from "../../data/local/profileScopedStore.js";
 
 const PULL_RPC = "sync_pull_profile_settings_blob";
 const PUSH_RPC = "sync_push_profile_settings_blob";
@@ -754,6 +758,10 @@ export const ProfileSettingsSyncService = {
         return false;
       }
       const resolvedProfileId = resolveProfileId(profileId);
+      if (hasProfileSettingsCloudSyncPending(resolvedProfileId)) {
+        await this.push(resolvedProfileId);
+        return false;
+      }
       const response = await SupabaseApi.rpc(PULL_RPC, {
         p_profile_id: resolvedProfileId,
         p_platform: SETTINGS_SYNC_PLATFORM
@@ -794,6 +802,7 @@ export const ProfileSettingsSyncService = {
         p_platform: SETTINGS_SYNC_PLATFORM
       }, true);
       setCachedBlob(resolvedProfileId, blob);
+      clearProfileSettingsCloudSyncPending(resolvedProfileId);
       return true;
     } catch (error) {
       if (shouldTreatAsMissingResource(error)) {

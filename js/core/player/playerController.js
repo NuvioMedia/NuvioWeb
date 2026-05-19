@@ -398,6 +398,56 @@ export const PlayerController = {
     }
   },
 
+  pauseNativePlaybackForStartupGate() {
+    if (!this.video || this.isUsingAvPlay() || !this.startupAudioGateActive) {
+      return;
+    }
+    try {
+      this.video.pause();
+      this.isPlaying = false;
+    } catch (_) {
+      // Ignore pause failures while the media element is still loading.
+    }
+  },
+
+  resumeNativePlaybackAfterStartupGate() {
+    if (!this.video || this.isUsingAvPlay()) {
+      return;
+    }
+    try {
+      const playPromise = this.video.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch((error) => {
+          if (this.isExpectedPlayInterruption(error)) {
+            return;
+          }
+          console.warn("Playback start after startup gate rejected", error);
+        });
+      }
+      this.isPlaying = true;
+    } catch (error) {
+      if (!this.isExpectedPlayInterruption(error)) {
+        console.warn("Playback start after startup gate rejected", error);
+      }
+    }
+  },
+
+  handleNativePlayStartedUnderStartupGate(playPromise = null) {
+    if (!this.startupAudioGateActive || this.isUsingAvPlay()) {
+      return playPromise;
+    }
+    if (playPromise && typeof playPromise.then === "function") {
+      playPromise.then(() => {
+        this.pauseNativePlaybackForStartupGate();
+      }).catch(() => {
+        // The normal playback-start rejection handler reports real failures.
+      });
+      return playPromise;
+    }
+    this.pauseNativePlaybackForStartupGate();
+    return playPromise;
+  },
+
   setStartupAudioGate(active, { resume = true } = {}) {
     const shouldGate = Boolean(active);
     const wasGated = Boolean(this.startupAudioGateActive);
@@ -418,10 +468,16 @@ export const PlayerController = {
       return;
     }
 
-    if (!resume || !wasGated || !this.isUsingAvPlay() || !this.avplayReady) {
+    if (!resume || !wasGated) {
       return;
     }
-    this.startPreparedAvPlayPlayback();
+    if (this.isUsingAvPlay()) {
+      if (this.avplayReady) {
+        this.startPreparedAvPlayPlayback();
+      }
+      return;
+    }
+    this.resumeNativePlaybackAfterStartupGate();
   },
 
   startPreparedAvPlayPlayback({ syncTracks = true } = {}) {
@@ -643,10 +699,17 @@ export const PlayerController = {
       .map((track, index) => {
         const trackIndex = Number(track?.index);
         const normalizedTrackIndex = Number.isFinite(trackIndex) ? trackIndex : index;
+        const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
+        const forcedValue = this.pickAvPlayExtraValue(extraInfo, [
+          "forced",
+          "is_forced"
+        ]);
         return {
           id: `avplay-sub-${normalizedTrackIndex}`,
           label: this.pickAvPlayTrackLabel(track, index, "Subtitle"),
           language: this.pickAvPlayTrackLanguage(track),
+          forced: /^(1|true|yes)$/i.test(forcedValue),
+          extraInfo,
           avplayTrackIndex: normalizedTrackIndex
         };
       });
@@ -1596,6 +1659,7 @@ export const PlayerController = {
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       this.applyStartupAudioGateToVideo();
       const playPromise = this.video.play();
+      this.handleNativePlayStartedUnderStartupGate(playPromise);
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch((error) => {
           if (this.isExpectedPlayInterruption(error)) {
@@ -2120,7 +2184,8 @@ export const PlayerController = {
           return null;
         }
         this.applyStartupAudioGateToVideo();
-        return this.video.play();
+        const playPromise = this.video.play();
+        return this.handleNativePlayStartedUnderStartupGate(playPromise);
       })
       .then((playPromise) => {
         if (!playPromise || typeof playPromise.catch !== "function") {
