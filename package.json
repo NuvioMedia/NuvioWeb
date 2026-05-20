@@ -9,7 +9,7 @@
     "install:webos": "node ./scripts/ares-install-webos.mjs",
     "inspect:webos": "node ./scripts/ares-inspect-webos.mjs",
     "logs:webos": "node ./scripts/ares-logs-webos.mjs",
-    "media:webos-sim": "node --require ./scripts/localhost-listen-patch.cjs ./services/com.nuvio.lg.service/runtime/media-http.cjs",
+    "media:webos-sim": "node --require ./scripts/localhost-listen-patch.cjs ./services/space.nuvio.webos.service/runtime/media-http.cjs",
     "package:webos": "npm run build && node ./scripts/package-webos.mjs",
     "serve": "node ./scripts/serve.mjs",
     "sync": "node ./scripts/sync-wrapper.mjs",

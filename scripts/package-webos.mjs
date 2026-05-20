@@ -13,11 +13,11 @@ const distDir = path.join(rootDir, "dist");
 const cacheDir = path.join(rootDir, ".cache");
 const stagingDir = path.join(cacheDir, "webos-package");
 const appStageDir = path.join(stagingDir, "app");
-const serviceStageDir = path.join(stagingDir, "com.nuvio.lg.service");
+const serviceStageDir = path.join(stagingDir, "space.nuvio.webos.service");
 const serviceTempBundlePath = path.join(stagingDir, "__webos-service.bundle.js");
 
 const appName = "Nuvio TV";
-const webOsServiceId = "com.nuvio.lg.service";
+const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceSourceDir = path.join(rootDir, "services", webOsServiceId);
 
 async function assertDistExists() {

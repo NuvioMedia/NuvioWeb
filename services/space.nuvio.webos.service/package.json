@@ -1,5 +1,5 @@
 {
-  "name": "com.nuvio.lg.service",
+  "name": "space.nuvio.webos.service",
   "version": "0.1.7",
   "private": true,
   "main": "src/index.js"

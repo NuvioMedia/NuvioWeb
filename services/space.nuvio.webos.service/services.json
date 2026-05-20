@@ -1,9 +1,9 @@
 {
-  "id": "com.nuvio.lg.service",
+  "id": "space.nuvio.webos.service",
   "description": "Local media helper service for webOS playback",
   "services": [
     {
-      "name": "com.nuvio.lg.service",
+      "name": "space.nuvio.webos.service",
       "description": "Boots the local media runtime and exposes health checks",
       "commands": [
         {
