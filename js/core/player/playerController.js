@@ -975,23 +975,65 @@ export const PlayerController = {
     return 4;
   },
 
+  getPlayerViewportSize() {
+    const playerRect = this.video?.parentElement?.getBoundingClientRect?.()
+      || document.getElementById("player")?.getBoundingClientRect?.()
+      || null;
+    const playerWidth = Number(playerRect?.width || 0);
+    const playerHeight = Number(playerRect?.height || 0);
+    if (Number.isFinite(playerWidth) && playerWidth > 0 && Number.isFinite(playerHeight) && playerHeight > 0) {
+      return {
+        width: Math.max(1, Math.round(playerWidth)),
+        height: Math.max(1, Math.round(playerHeight))
+      };
+    }
+    const windowWidth = Number(window.innerWidth || 0);
+    const windowHeight = Number(window.innerHeight || 0);
+    const documentWidth = Number(document.documentElement?.clientWidth || 0);
+    const documentHeight = Number(document.documentElement?.clientHeight || 0);
+    const visualViewportWidth = Number(globalThis.visualViewport?.width || 0);
+    const visualViewportHeight = Number(globalThis.visualViewport?.height || 0);
+    const screenWidth = Number(globalThis.screen?.width || 0);
+    const screenHeight = Number(globalThis.screen?.height || 0);
+    const width = [windowWidth, documentWidth, visualViewportWidth, screenWidth]
+      .find((value) => Number.isFinite(value) && value > 0);
+    const height = [windowHeight, documentHeight, visualViewportHeight, screenHeight]
+      .find((value) => Number.isFinite(value) && value > 0);
+    return {
+      width: Math.max(1, Math.round(width || 1920)),
+      height: Math.max(1, Math.round(height || 1080))
+    };
+  },
+
+  getAvPlayViewportSize() {
+    const documentWidth = Number(document.documentElement?.clientWidth || 0);
+    const documentHeight = Number(document.documentElement?.clientHeight || 0);
+    const screenWidth = Number(globalThis.screen?.width || 0);
+    const screenHeight = Number(globalThis.screen?.height || 0);
+    const windowWidth = Number(window.innerWidth || 0);
+    const windowHeight = Number(window.innerHeight || 0);
+    const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
+    if (webOsMajorVersion > 0 && webOsMajorVersion <= 6) {
+      return this.getPlayerViewportSize();
+    }
+    return {
+      width: Math.max(1, Math.round(Math.max(windowWidth, documentWidth, screenWidth, 1920))),
+      height: Math.max(1, Math.round(Math.max(windowHeight, documentHeight, screenHeight, 1080)))
+    };
+  },
+
   setAvPlayDisplayRect(rect = null, displayMethod = null) {
     const avplay = this.getAvPlay();
     if (!avplay) {
       return;
     }
-    const documentWidth = Number(document.documentElement?.clientWidth || 0);
-    const documentHeight = Number(document.documentElement?.clientHeight || 0);
-    const screenWidth = Number(globalThis.screen?.width || 0);
-    const screenHeight = Number(globalThis.screen?.height || 0);
-    const fallbackWidth = Math.max(1, Math.round(Math.max(Number(window.innerWidth || 0), documentWidth, screenWidth, 1920)));
-    const fallbackHeight = Math.max(1, Math.round(Math.max(Number(window.innerHeight || 0), documentHeight, screenHeight, 1080)));
+    const viewport = this.getAvPlayViewportSize();
     if (rect) {
       this.avplayDisplayRect = {
         x: Math.round(Number(rect.x || 0)),
         y: Math.round(Number(rect.y || 0)),
-        width: Math.max(1, Math.round(Number(rect.width || fallbackWidth))),
-        height: Math.max(1, Math.round(Number(rect.height || fallbackHeight)))
+        width: Math.max(1, Math.round(Number(rect.width || viewport.width))),
+        height: Math.max(1, Math.round(Number(rect.height || viewport.height)))
       };
     }
     if (displayMethod) {
@@ -1000,8 +1042,8 @@ export const PlayerController = {
     const targetRect = this.avplayDisplayRect || {
       x: 0,
       y: 0,
-      width: fallbackWidth,
-      height: fallbackHeight
+      width: viewport.width,
+      height: viewport.height
     };
     try {
       avplay.setDisplayRect?.(targetRect.x, targetRect.y, targetRect.width, targetRect.height);

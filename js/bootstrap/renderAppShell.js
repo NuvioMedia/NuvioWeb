@@ -14,7 +14,7 @@ const APP_SHELL = `
     <div id="plugin" class="screen"></div>
     <div id="catalogOrder" class="screen"></div>
     <div id="player" class="screen">
-      <video id="videoPlayer" autoplay playsinline webkit-playsinline preload="auto" style="width:100vw;height:100vh;background:black"></video>
+      <video id="videoPlayer" autoplay playsinline webkit-playsinline preload="auto"></video>
     </div>
   </div>
 `;

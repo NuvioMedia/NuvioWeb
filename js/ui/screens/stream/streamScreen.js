@@ -889,10 +889,27 @@ export const StreamScreen = {
 
     const listNode = target.closest(".stream-route-list");
     if (listNode) {
-      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this.ensureListItemVisible(listNode, target);
       this.listScrollTop = Number(listNode.scrollTop || 0);
     }
     return true;
+  },
+
+  ensureListItemVisible(listNode, target) {
+    if (!listNode || !target) {
+      return;
+    }
+    const itemTop = Number(target.offsetTop || 0);
+    const itemBottom = itemTop + Number(target.offsetHeight || 0);
+    const viewTop = Number(listNode.scrollTop || 0);
+    const viewHeight = Number(listNode.clientHeight || 0);
+    const viewBottom = viewTop + viewHeight;
+    const pad = 16;
+    if (itemBottom > viewBottom - pad) {
+      listNode.scrollTop = Math.max(0, itemBottom - viewHeight + pad);
+    } else if (itemTop < viewTop + pad) {
+      listNode.scrollTop = Math.max(0, itemTop - pad);
+    }
   },
 
   getFocusLists() {
@@ -1069,6 +1086,17 @@ export const StreamScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.restoreScrollPosition();
     this.applyFocus();
+    this.bindListScrollState();
+  },
+
+  bindListScrollState() {
+    const list = this.container?.querySelector(".stream-route-list");
+    if (!list) {
+      return;
+    }
+    list.addEventListener("scroll", () => {
+      this.listScrollTop = Number(list.scrollTop || 0);
+    }, { passive: true });
   },
 
   bindAddonLogoFallbacks() {

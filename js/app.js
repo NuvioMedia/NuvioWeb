@@ -63,8 +63,12 @@ function isLowEndDevice() {
 
 function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
+  const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
+  const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
+  document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
+  document.body.classList.toggle("legacy-webos", legacyWebOs);
 }
 
 function isAddonRemoteMode() {

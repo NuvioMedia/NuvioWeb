@@ -7880,8 +7880,14 @@ export const PlayerScreen = {
   },
 
   calculateAspectRect(objectFit = "contain", video = PlayerController.video) {
-    const viewportWidth = Math.max(1, Number(window.innerWidth || document.documentElement?.clientWidth || globalThis.screen?.width || 1920));
-    const viewportHeight = Math.max(1, Number(window.innerHeight || document.documentElement?.clientHeight || globalThis.screen?.height || 1080));
+    const viewport = typeof PlayerController.getPlayerViewportSize === "function"
+      ? PlayerController.getPlayerViewportSize()
+      : {
+        width: Math.max(1, Number(window.innerWidth || document.documentElement?.clientWidth || globalThis.screen?.width || 1920)),
+        height: Math.max(1, Number(window.innerHeight || document.documentElement?.clientHeight || globalThis.screen?.height || 1080))
+      };
+    const viewportWidth = viewport.width;
+    const viewportHeight = viewport.height;
     if (objectFit === "fill") {
       return {
         x: 0,
