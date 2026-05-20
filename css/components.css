@@ -4588,6 +4588,10 @@
 .home-screen-shell.home-layout-modern .home-hero,
 .home-screen-shell.home-layout-modern .home-modern-hero-card {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 1;
 }
@@ -4605,6 +4609,10 @@
 .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
   content: "";
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   pointer-events: none;
   z-index: 1;
@@ -4646,6 +4654,10 @@
 .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop-wrap,
 .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -4664,6 +4676,10 @@
 
 .home-screen-shell.home-layout-modern .home-hero-trailer-layer {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 0;
   opacity: 0;
@@ -4675,6 +4691,10 @@
 .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-frame,
 .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-video {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -4711,6 +4731,8 @@
   justify-content: flex-end;
   align-items: flex-start;
   gap: 16px;
+  width: 42%;
+  max-width: calc(100% - var(--home-content-start) - var(--modern-hero-copy-right));
   width: min(var(--modern-hero-copy-max-width), calc(100% - var(--home-content-start) - var(--modern-hero-copy-right)));
   max-width: calc(100% - var(--home-content-start) - var(--modern-hero-copy-right));
   overflow: hidden;
@@ -4718,6 +4740,7 @@
 
 .home-screen-shell.home-layout-modern .home-hero-logo {
   width: auto;
+  max-width: var(--modern-hero-logo-max-width);
   max-width: min(100%, var(--modern-hero-logo-max-width));
   max-height: var(--modern-hero-logo-max-height);
   height: auto;
@@ -4725,6 +4748,7 @@
 }
 
 .home-screen-shell.home-layout-modern .home-hero-title-text {
+  max-width: var(--modern-hero-title-max-width);
   max-width: min(100%, var(--modern-hero-title-max-width));
   font-size: var(--modern-hero-title-size);
   line-height: 0.94;
@@ -4749,6 +4773,8 @@
   flex-wrap: wrap;
   gap: 14px;
   margin-top: 0;
+  width: 100%;
+  max-width: var(--modern-hero-meta-max-width);
   width: min(100%, var(--modern-hero-meta-max-width));
   max-width: min(100%, var(--modern-hero-meta-max-width));
   color: rgba(255, 255, 255, 0.84);
@@ -4826,6 +4852,7 @@
   flex: 0 1 auto;
   min-height: 0;
   margin-top: 0;
+  max-width: var(--modern-hero-description-max-width);
   max-width: min(100%, var(--modern-hero-description-max-width));
   display: block;
   overflow: hidden;

@@ -4710,79 +4710,8 @@ export const PlayerScreen = {
   },
 
   attemptSilentAudioRecovery(reason = "silent-audio") {
-    if (!Environment.isWebOS()) {
-      return false;
-    }
-    if (this.sourcesPanelVisible || this.subtitleDialogVisible || this.audioDialogVisible) {
-      return false;
-    }
-    const usingNativePlayback = typeof PlayerController.isUsingNativePlayback === "function"
-      ? PlayerController.isUsingNativePlayback()
-      : String(PlayerController.playbackEngine || "").startsWith("native");
-    if (!usingNativePlayback) {
-      return false;
-    }
-    if (typeof PlayerController.canUseAvPlay === "function" && PlayerController.canUseAvPlay()) {
-      return false;
-    }
-
-    const currentUrl = String(this.activePlaybackUrl || "").trim();
-    if (!currentUrl || this.silentAudioFallbackAttempts.has(currentUrl)) {
-      return false;
-    }
-    if (Number(this.silentAudioFallbackCount || 0) >= Number(this.maxSilentAudioFallbackCount || 0)) {
-      return false;
-    }
-
-    const nativeAudioCount = this.getAudioTracks().length;
-    const dashAudioCount = typeof PlayerController.getDashAudioTracks === "function"
-      ? PlayerController.getDashAudioTracks().length
-      : 0;
-    const hlsAudioCount = typeof PlayerController.getHlsAudioTracks === "function"
-      ? PlayerController.getHlsAudioTracks().length
-      : 0;
-    const hasAudio = nativeAudioCount > 0 || dashAudioCount > 0 || hlsAudioCount > 0;
-    if (hasAudio) {
-      return false;
-    }
-
-    const currentCandidate = this.getStreamCandidateByUrl(currentUrl) || this.getCurrentStreamCandidate();
-    const currentScore = this.getWebOsAudioCompatibilityScore(currentCandidate);
-    const currentText = this.getStreamSearchText(currentCandidate);
-    const clearlyUnsupportedAudio = /\b(eac3|ec-3|ddp|atmos)\b/.test(currentText)
-      || (typeof PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription === "function"
-        ? PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription(currentText)
-        : /\b(truehd|dts-hd|dts:x|dts)\b/.test(currentText));
-    if (!clearlyUnsupportedAudio && currentScore >= 0) {
-      return false;
-    }
-
-    this.silentAudioFallbackAttempts.add(currentUrl);
-    const fallback = this.findNextRecoverableStream({ preferAudioCompatible: true });
-    if (!fallback?.stream?.url) {
-      this.sourcesError = "Audio codec not supported on this TV for this source.";
-      this.renderSourcesPanel();
-      return false;
-    }
-    const fallbackScore = this.getWebOsAudioCompatibilityScore(fallback.stream);
-    if (fallbackScore <= currentScore) {
-      return false;
-    }
-
-    this.silentAudioFallbackCount = Number(this.silentAudioFallbackCount || 0) + 1;
-    this.currentStreamIndex = fallback.index;
-    this.sourcesError = "Audio unavailable on this source, trying a compatible one...";
-    console.warn("Silent audio fallback", {
-      reason,
-      currentUrl,
-      nextUrl: fallback.stream.url
-    });
-    this.playStreamByUrl(fallback.stream.url, {
-      preservePanel: false,
-      resetSilentAudioState: false,
-      preservePlaybackState: true
-    });
-    return true;
+    void reason;
+    return false;
   },
 
   recoverFromPlaybackError(errorCode = 0) {
@@ -4801,24 +4730,7 @@ export const PlayerScreen = {
       return true;
     }
 
-    if (currentUrl) {
-      this.failedStreamUrls.add(currentUrl);
-    }
-
-    const fallback = this.findNextRecoverableStream({
-      preferAudioCompatible: Environment.isWebOS()
-    });
-    if (!fallback?.stream?.url) {
-      return false;
-    }
-
-    this.currentStreamIndex = fallback.index;
-    this.sourcesError = `${this.mediaErrorMessage(errorCode)}. Trying next source...`;
-    this.playStreamByUrl(fallback.stream.url, {
-      preservePanel: false,
-      preservePlaybackState: true
-    });
-    return true;
+    return false;
   },
 
   clearPlaybackStallGuard() {
@@ -4851,43 +4763,6 @@ export const PlayerScreen = {
 
   schedulePlaybackStallGuard() {
     this.clearPlaybackStallGuard();
-    const startupBuffering = !this.hasPresentedPlaybackFrame && this.getPlaybackCurrentSeconds() < 0.5;
-    const stallTimeoutMs = this.getPlaybackStallTimeoutMs({ startup: startupBuffering });
-    this.playbackStallTimer = setTimeout(() => {
-      const video = PlayerController.video;
-      const ended = typeof PlayerController.isPlaybackEnded === "function"
-        ? PlayerController.isPlaybackEnded()
-        : Boolean(video?.ended);
-      if (!video || ended || this.paused || this.sourcesPanelVisible) {
-        return;
-      }
-
-      const readyState = typeof PlayerController.getPlaybackReadyState === "function"
-        ? Number(PlayerController.getPlaybackReadyState() || 0)
-        : Number(video.readyState || 0);
-      const currentTime = this.getPlaybackCurrentSeconds();
-      const elapsedFromProgress = Date.now() - Number(this.lastPlaybackProgressAt || 0);
-      const stalledAtStart = !this.hasPresentedPlaybackFrame && currentTime < 0.5 && readyState < 2;
-      const stalledWhilePlaying = elapsedFromProgress >= stallTimeoutMs && readyState < 3;
-      if (!stalledAtStart && !stalledWhilePlaying) {
-        return;
-      }
-
-      if (this.recoverFromPlaybackError(2)) {
-        return;
-      }
-
-      this.loadingVisible = false;
-      this.paused = true;
-      this.updateLoadingVisibility();
-      this.setControlsVisible(true, { focus: false });
-      this.sourcesError = "Stream stalled while buffering. Try another source.";
-      if (this.streamCandidates.length > 1) {
-        this.openSourcesPanel();
-      } else {
-        this.renderSourcesPanel();
-      }
-    }, stallTimeoutMs);
   },
 
   getSubtitleTabs() {

@@ -524,10 +524,41 @@ function resolveYoutubeId(value = "") {
   return "";
 }
 
+function shouldUseDirectYoutubeEmbedOnTv() {
+  return Platform.isWebOS() || Platform.isTizen();
+}
+
+function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
+  const videoId = String(cleanId || "").trim();
+  if (!videoId || !Environment.isBrowser()) {
+    return "";
+  }
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: muted ? "1" : "0",
+    controls: "0",
+    loop: "1",
+    playlist: videoId,
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1",
+    iv_load_policy: "3"
+  });
+  const origin = String(globalThis?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) {
+    params.set("origin", origin);
+  }
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+}
+
 function buildYoutubeEmbedUrl(ytId = "") {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
+  }
+  if (shouldUseDirectYoutubeEmbedOnTv()) {
+    return buildDirectYoutubeEmbedUrl(cleanId, { muted: true });
   }
   const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
   if (proxyBase) {
@@ -572,6 +603,9 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
+  }
+  if (shouldUseDirectYoutubeEmbedOnTv()) {
+    return buildDirectYoutubeEmbedUrl(cleanId, { muted });
   }
   const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
   if (proxyBase) {

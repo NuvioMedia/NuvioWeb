@@ -2191,7 +2191,7 @@ export const HomeScreen = {
   },
 
   shouldSuppressAutomaticTrailerPlayback() {
-    return false;
+    return Platform.isWebOS() || Platform.isTizen();
   },
 
   getFocusedPosterTrailerDelayMs() {
