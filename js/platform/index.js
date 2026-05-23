@@ -55,6 +55,10 @@ function detectPlatformName() {
   if (override && ADAPTERS[override]) {
     return override;
   }
+  const searchParams = String(globalThis.location?.search || "").toLowerCase();
+  if (searchParams.includes("wrapper=tizen") || searchParams.includes("source=tizenbrew")) {
+    return "tizen";
+  }
   const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
   if (globalThis.webOS || globalThis.PalmSystem || globalThis.webOSSystem) {
     return "webos";

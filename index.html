@@ -4,6 +4,33 @@
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <script>
+    (function configureTizenLaunch() {
+      var root = typeof globalThis !== "undefined" ? globalThis : window;
+      var search = String((window.location && window.location.search) || "").toLowerCase();
+      var userAgent = String((window.navigator && window.navigator.userAgent) || "").toLowerCase();
+      var isTizenLaunch = Boolean(
+        root.__NUVIO_PLATFORM__ === "tizen"
+        || root.tizen
+        || search.indexOf("wrapper=tizen") !== -1
+        || search.indexOf("source=tizenbrew") !== -1
+        || userAgent.indexOf("tizen") !== -1
+      );
+
+      if (!isTizenLaunch) {
+        return;
+      }
+
+      root.__NUVIO_PLATFORM__ = "tizen";
+      var viewport = document.querySelector("meta[name='viewport']");
+      if (!viewport) {
+        viewport = document.createElement("meta");
+        viewport.name = "viewport";
+        document.head.appendChild(viewport);
+      }
+      viewport.setAttribute("content", "width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
+    }());
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>Nuvio TV</title>
   

@@ -50,26 +50,6 @@ async function requestTracksViaLuna(mediaUrl) {
   return Array.isArray(payload?.tracks) ? payload.tracks : [];
 }
 
-async function waitForTizenMediaService() {
-  if (!Platform.isTizen()) {
-    return;
-  }
-
-  const readiness = globalThis.__NUVIO_TIZEN_MEDIA_SERVICE_READY__;
-  if (!readiness || typeof readiness.then !== "function") {
-    return;
-  }
-
-  try {
-    await Promise.race([
-      readiness,
-      new Promise((resolve) => setTimeout(resolve, REQUEST_TIMEOUT_MS))
-    ]);
-  } catch (_) {
-    // Fall back to direct probing even if the readiness promise rejects.
-  }
-}
-
 async function fetchJson(url) {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timeoutId = controller
@@ -126,7 +106,11 @@ export const localMediaTracksRepository = {
       }
 
       if (Platform.isTizen()) {
-        await waitForTizenMediaService();
+        tracksCache.set(targetUrl, {
+          tracks: [],
+          expiresAt: Date.now() + Math.min(TRACK_CACHE_TTL_MS, 5000)
+        });
+        return [];
       }
 
       if (Platform.isBrowser()) {

@@ -7,8 +7,7 @@ const rootDir = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(rootDir, "package.json");
 const versionManagedJsonPaths = [
   path.join(rootDir, "appinfo.json"),
-  path.join(rootDir, "services", "space.nuvio.webos.service", "package.json"),
-  path.join(rootDir, "services", "com.nuvio.tizen.service", "package.json")
+  path.join(rootDir, "services", "space.nuvio.webos.service", "package.json")
 ];
 
 async function readJson(filePath) {

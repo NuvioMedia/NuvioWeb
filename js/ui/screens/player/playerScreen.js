@@ -121,6 +121,7 @@ const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 const NEXT_EPISODE_THRESHOLD_PERCENT = 0.97;
+const NEXT_EPISODE_PREFETCH_PERCENT = 0.9;
 const SKIP_INTERVAL_CHECK_MS = 250;
 const PAUSE_OVERLAY_DELAY_MS = 5000;
 const MAX_PAUSE_OVERLAY_CAST = 8;
@@ -1013,8 +1014,6 @@ export const PlayerScreen = {
     this.container.style.display = "block";
     this.params = params;
     this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
-    this.fallbackExternalFrameUrl = String(params.fallbackExternalFrameUrl || "").trim();
-    this.externalFrameFallbackUsed = false;
 
     this.aspectModes = [
       { objectFit: "contain", label: "Fit" },
@@ -1080,6 +1079,7 @@ export const PlayerScreen = {
     this.sourcesFocus = { zone: "filter", index: 0 };
     this.sourceLoadToken = 0;
     this.streamCandidatesByVideoId = new Map();
+    this.streamCandidatesLoadPromises = new Map();
 
     this.aspectModeIndex = 0;
     this.aspectToastTimer = null;
@@ -1155,7 +1155,6 @@ export const PlayerScreen = {
     this.trackDiscoveryStartedAt = 0;
     this.trackDiscoveryDeadline = 0;
     this.lastTrackWarmupAt = 0;
-    this.failedStreamUrls = new Set();
     this.silentAudioFallbackAttempts = new Set();
     this.silentAudioFallbackCount = 0;
     this.maxSilentAudioFallbackCount = 1;
@@ -1243,37 +1242,6 @@ export const PlayerScreen = {
 
   isExternalFrameMode() {
     return Boolean(this.externalFrameUrl);
-  },
-
-  attemptExternalFrameFallback(mediaErrorCode = 0) {
-    if (!this.fallbackExternalFrameUrl || this.isExternalFrameMode() || this.externalFrameFallbackUsed) {
-      return false;
-    }
-    if (Number(mediaErrorCode || 0) && Number(mediaErrorCode || 0) !== 4) {
-      return false;
-    }
-    this.externalFrameFallbackUsed = true;
-    this.externalFrameUrl = this.fallbackExternalFrameUrl;
-    this.dismissPauseOverlay();
-    this.clearPlaybackStallGuard();
-    this.unbindVideoEvents();
-    if (this.endedHandler && PlayerController.video) {
-      PlayerController.video.removeEventListener("ended", this.endedHandler);
-      this.endedHandler = null;
-    }
-    if (this.tickTimer) {
-      clearInterval(this.tickTimer);
-      this.tickTimer = null;
-    }
-
-    this.clearLoadingCompletionTimer();
-    this.releaseStartupAudioGate({ resume: false });
-    PlayerController.stop();
-    this.loadingVisible = false;
-    this.updateLoadingVisibility();
-    this.setControlsVisible(false);
-    this.renderPlayerUi();
-    return true;
   },
 
   buildPlaybackContext(streamCandidate = this.getCurrentStreamCandidate()) {
@@ -1617,11 +1585,8 @@ export const PlayerScreen = {
       return true;
     }
 
-    const usingAvPlay = typeof PlayerController.isUsingAvPlay === "function"
-      ? PlayerController.isUsingAvPlay()
-      : false;
-    if (usingAvPlay && Environment.isTizen()) {
-      return true;
+    if (Environment.isTizen()) {
+      return false;
     }
 
     return typeof PlayerController.isLikelyDirectFileUrl === "function"
@@ -2816,11 +2781,6 @@ export const PlayerScreen = {
       }
     }
 
-    if (!nextEpisode && this.episodes.length > 1) {
-      const fallbackIndex = clamp(Number(this.episodePanelIndex || 0), 0, Math.max(0, this.episodes.length - 1));
-      nextEpisode = this.episodes[fallbackIndex + 1] || null;
-    }
-
     const nextVideoId = String(nextEpisode?.id || explicitVideoId || "").trim();
     if (!nextVideoId) {
       return null;
@@ -2937,6 +2897,71 @@ export const PlayerScreen = {
     return (currentSeconds / durationSeconds) >= NEXT_EPISODE_THRESHOLD_PERCENT;
   },
 
+  hasPlaybackReachedNaturalEnd() {
+    const durationSeconds = Number(this.getPlaybackDurationSeconds() || 0);
+    const currentSeconds = Number(this.getPlaybackCurrentSeconds() || 0);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(currentSeconds) || currentSeconds < 0) {
+      return false;
+    }
+    const remainingSeconds = durationSeconds - currentSeconds;
+    const progress = currentSeconds / durationSeconds;
+    return remainingSeconds <= 8 || progress >= 0.985;
+  },
+
+  shouldPrefetchNextEpisodeStreams() {
+    const durationSeconds = Number(this.getPlaybackDurationSeconds() || 0);
+    const currentSeconds = Number(this.getPlaybackCurrentSeconds() || 0);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(currentSeconds) || currentSeconds < 0) {
+      return false;
+    }
+    return (currentSeconds / durationSeconds) >= NEXT_EPISODE_PREFETCH_PERCENT;
+  },
+
+  getStreamCacheKey(videoId, itemType) {
+    const normalizedVideoId = String(videoId || "").trim();
+    if (!normalizedVideoId) {
+      return "";
+    }
+    return `${normalizeItemType(itemType || this.params?.itemType || "movie")}:${normalizedVideoId}`;
+  },
+
+  getCachedPlayableStreamsForVideo(videoId, itemType) {
+    const cacheKey = this.getStreamCacheKey(videoId, itemType);
+    const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
+    if (!cacheKey || !cache.has(cacheKey)) {
+      return null;
+    }
+    const cached = cache.get(cacheKey);
+    return Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [];
+  },
+
+  hasCachedPlayableStreamsForNextEpisode(nextEpisode = this.resolveNextEpisodeInfo()) {
+    if (!nextEpisode?.videoId || nextEpisode.hasAired === false) {
+      return false;
+    }
+    const cached = this.getCachedPlayableStreamsForVideo(nextEpisode.videoId, this.params?.itemType || "series");
+    return Array.isArray(cached) && cached.length > 0;
+  },
+
+  ensureNextEpisodeStreamsPrefetch({ force = false } = {}) {
+    const nextEpisode = this.resolveNextEpisodeInfo();
+    const itemType = normalizeItemType(this.params?.itemType || "movie");
+    if (!nextEpisode?.videoId || itemType !== "series" || nextEpisode.hasAired === false) {
+      return;
+    }
+    if (!force && !this.shouldPrefetchNextEpisodeStreams()) {
+      return;
+    }
+    const cacheKey = this.getStreamCacheKey(nextEpisode.videoId, itemType);
+    const loadPromises = this.streamCandidatesLoadPromises || (this.streamCandidatesLoadPromises = new Map());
+    if (this.getCachedPlayableStreamsForVideo(nextEpisode.videoId, itemType) || loadPromises.has(cacheKey)) {
+      return;
+    }
+    void this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType)
+      .then(() => this.renderNextEpisodeCard())
+      .catch((error) => console.warn("Next episode stream prefetch failed", error));
+  },
+
   dismissNextEpisodeCard({ revealControls = false, armExitOnNextBack = false } = {}) {
     this.nextEpisodeCardDismissed = true;
     this.nextEpisodeBackExitArmed = Boolean(armExitOnNextBack);
@@ -2958,9 +2983,11 @@ export const PlayerScreen = {
 
   isNextEpisodeCardVisible() {
     const nextEpisode = this.resolveNextEpisodeInfo();
+    const playableStreamsReady = nextEpisode?.hasAired === false || this.hasCachedPlayableStreamsForNextEpisode(nextEpisode);
     return Boolean(
       nextEpisode
       && this.shouldShowNextEpisodeCard()
+      && playableStreamsReady
       && !this.nextEpisodeCardDismissed
       && !this.loadingVisible
       && !this.subtitleDialogVisible
@@ -2979,20 +3006,32 @@ export const PlayerScreen = {
     if (!normalizedVideoId) {
       return [];
     }
-    const cacheKey = `${normalizedType}:${normalizedVideoId}`;
+    const cacheKey = this.getStreamCacheKey(normalizedVideoId, normalizedType);
     const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
     if (cache.has(cacheKey)) {
       const cached = cache.get(cacheKey);
       return Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [];
     }
-
-    const streamResult = await streamRepository.getStreamsFromAllAddons(normalizedType, normalizedVideoId);
-    const streamItems = (streamResult?.status === "success")
-      ? flattenStreamGroups(streamResult)
-      : [];
-    if (streamItems.length) {
-      cache.set(cacheKey, streamItems.map((stream) => ({ ...stream })));
+    const loadPromises = this.streamCandidatesLoadPromises || (this.streamCandidatesLoadPromises = new Map());
+    if (loadPromises.has(cacheKey)) {
+      const loaded = await loadPromises.get(cacheKey);
+      return Array.isArray(loaded) ? loaded.map((stream) => ({ ...stream })) : [];
     }
+
+    const loadPromise = streamRepository.getStreamsFromAllAddons(normalizedType, normalizedVideoId)
+      .then((streamResult) => {
+        const streamItems = (streamResult?.status === "success")
+          ? flattenStreamGroups(streamResult)
+          : [];
+        cache.set(cacheKey, streamItems.map((stream) => ({ ...stream })));
+        return streamItems;
+      })
+      .finally(() => {
+        loadPromises.delete(cacheKey);
+      });
+    loadPromises.set(cacheKey, loadPromise);
+
+    const streamItems = await loadPromise;
     return streamItems;
   },
 
@@ -3012,6 +3051,11 @@ export const PlayerScreen = {
     try {
       const streamItems = await this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType);
       if (!streamItems.length) {
+        this.nextEpisodeLaunching = false;
+        this.loadingVisible = false;
+        this.updateLoadingVisibility();
+        this.setControlsVisible(true, { focus: false });
+        this.renderNextEpisodeCard();
         return;
       }
       const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
@@ -3488,7 +3532,6 @@ export const PlayerScreen = {
         this.scheduleLoadingCompletionCheck(250);
         return;
       }
-      this.failedStreamUrls.clear();
       this.lastPlaybackErrorAt = 0;
       this.sourcesError = "";
       this.hasPresentedPlaybackFrame = true;
@@ -3596,12 +3639,6 @@ export const PlayerScreen = {
         ? Number(PlayerController.getLastPlaybackErrorCode() || 0)
         : 0;
       const mediaErrorCode = detailErrorCode || Number(video?.error?.code || 0) || controllerErrorCode;
-      if (this.attemptExternalFrameFallback(mediaErrorCode)) {
-        return;
-      }
-      if (this.recoverFromPlaybackError(mediaErrorCode)) {
-        return;
-      }
 
       this.clearPlaybackStallGuard();
       this.releaseStartupAudioGate({ resume: false });
@@ -3610,7 +3647,7 @@ export const PlayerScreen = {
       this.dismissPauseOverlay();
       this.updateLoadingVisibility();
       this.setControlsVisible(true, { focus: false });
-      this.sourcesError = `${this.mediaErrorMessage(mediaErrorCode)}. Try another source.`;
+      this.sourcesError = `${this.mediaErrorMessage(mediaErrorCode)}. Choose another source manually.`;
       if (this.streamCandidates.length > 1) {
         this.openSourcesPanel();
       } else {
@@ -4088,6 +4125,7 @@ export const PlayerScreen = {
       return;
     }
 
+    this.ensureNextEpisodeStreamsPrefetch();
     const nextEpisode = this.resolveNextEpisodeInfo();
     const hidden = !this.isNextEpisodeCardVisible();
 
@@ -4125,6 +4163,7 @@ export const PlayerScreen = {
     if (this.isExternalFrameMode()) {
       return;
     }
+    this.ensureNextEpisodeStreamsPrefetch();
     if (!this.shouldShowNextEpisodeCard()) {
       this.resetNextEpisodeCardDismissal();
     }
@@ -4674,62 +4713,8 @@ export const PlayerScreen = {
     return "Playback error";
   },
 
-  findNextRecoverableStream({ preferAudioCompatible = false } = {}) {
-    if (!this.streamCandidates.length) {
-      return null;
-    }
-
-    const candidates = [];
-    for (let offset = 1; offset < this.streamCandidates.length; offset += 1) {
-      const index = (this.currentStreamIndex + offset) % this.streamCandidates.length;
-      const candidate = this.streamCandidates[index];
-      const candidateUrl = String(candidate?.url || "").trim();
-      if (!candidateUrl || this.failedStreamUrls.has(candidateUrl)) {
-        continue;
-      }
-      candidates.push({ index, offset, stream: candidate });
-    }
-
-    if (!candidates.length) {
-      return null;
-    }
-
-    if (!preferAudioCompatible) {
-      return candidates[0];
-    }
-
-    return candidates
-      .slice()
-      .sort((left, right) => {
-        const scoreDelta = this.getWebOsAudioCompatibilityScore(right.stream) - this.getWebOsAudioCompatibilityScore(left.stream);
-        if (scoreDelta !== 0) {
-          return scoreDelta;
-        }
-        return left.offset - right.offset;
-      })[0] || candidates[0];
-  },
-
   attemptSilentAudioRecovery(reason = "silent-audio") {
     void reason;
-    return false;
-  },
-
-  recoverFromPlaybackError(errorCode = 0) {
-    const currentUrl = String(this.activePlaybackUrl || "").trim();
-    const alternativeEngine = currentUrl && typeof PlayerController.getAlternativePlaybackEngine === "function"
-      ? PlayerController.getAlternativePlaybackEngine(currentUrl)
-      : null;
-    if (currentUrl && alternativeEngine) {
-      this.sourcesError = `${this.mediaErrorMessage(errorCode)}. Retrying current source...`;
-      this.playStreamByUrl(currentUrl, {
-        preservePanel: false,
-        preservePlaybackState: true,
-        resetSilentAudioState: false,
-        forceEngine: alternativeEngine
-      });
-      return true;
-    }
-
     return false;
   },
 
@@ -8575,43 +8560,26 @@ export const PlayerScreen = {
   },
 
   async handlePlaybackEnded() {
-    const nextEpisode = this.resolveNextEpisodeInfo();
-    const itemType = normalizeItemType(this.params?.itemType || "movie");
-    if (!nextEpisode?.videoId || itemType !== "series") {
-      return;
-    }
-
-    try {
-      const streamItems = await this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType);
-      if (!streamItems.length) {
+    this.clearPlaybackStallGuard();
+    this.releaseStartupAudioGate({ resume: false });
+    const autoplayEnabled = Boolean(PlayerSettingsStore.get().autoplayNextEpisode);
+    const canAutoplayNext = autoplayEnabled && this.hasPlaybackReachedNaturalEnd();
+    if (canAutoplayNext) {
+      await this.playNextEpisode();
+      if (this.nextEpisodeLaunching) {
         return;
       }
-      const bestStream = this.selectBestStreamUrl(streamItems) || streamItems[0].url;
-      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
-      Router.navigate("player", {
-        streamUrl: bestStream,
-        itemId: this.params?.itemId,
-        itemType,
-        imdbId: this.params?.imdbId || null,
-        videoId: nextEpisode.videoId,
-        season: nextEpisode.season,
-        episode: nextEpisode.episode,
-        episodeLabel: nextEpisode.episodeLabel || null,
-        playerTitle: this.params?.playerTitle || this.params?.itemId,
-        playerSubtitle: nextEpisode.episodeTitle || nextEpisode.episodeLabel || "",
-        playerEpisodeTitle: nextEpisode.episodeTitle || "",
-        playerBackdropUrl: this.params?.playerBackdropUrl || null,
-        playerLogoUrl: this.params?.playerLogoUrl || null,
-        episodes: this.episodes || [],
-        streamCandidates: streamItems,
-        nextEpisodeVideoId: null,
-        nextEpisodeLabel: null
-      }, {
-        replaceHistory: true
-      });
-    } catch (error) {
-      console.warn("Next episode auto-play failed", error);
     }
+
+    this.loadingVisible = false;
+    this.paused = true;
+    this.dismissPauseOverlay();
+    this.updateLoadingVisibility();
+    this.updateMediaSessionPlaybackState();
+    this.setControlsVisible(true, { focus: false });
+    this.renderControlButtons();
+    this.renderNextEpisodeCard();
+    this.updateUiTick();
   },
 
   cleanup() {
@@ -8619,6 +8587,7 @@ export const PlayerScreen = {
     this.dismissPauseOverlay();
     this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0) + 1;
     this.streamCandidatesByVideoId?.clear?.();
+    this.streamCandidatesLoadPromises?.clear?.();
     this.skipIntervalsRequestToken = Number(this.skipIntervalsRequestToken || 0) + 1;
     this.subtitleLoadToken = (this.subtitleLoadToken || 0) + 1;
     this.manifestLoadToken = (this.manifestLoadToken || 0) + 1;

@@ -11,9 +11,6 @@ const appName = "Nuvio TV";
 const webOsServiceSourceDirName = "space.nuvio.webos.service";
 const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceDirName = webOsServiceId;
-const tizenServiceDirName = "com.nuvio.tizen.service";
-const tizenServiceIdSuffix = ".NuvioMediaService";
-const tizenServiceEntryPath = `services/${tizenServiceDirName}/src/service.js`;
 const defaultEnvFileContents = `(function defineNuvioEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
   root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
@@ -133,7 +130,6 @@ async function syncServiceFolder(targetDir, serviceDirName, { targetServiceDirNa
   await mkdir(targetServicesDir, { recursive: true });
   await rm(path.join(targetServicesDir, webOsServiceSourceDirName), { recursive: true, force: true });
   await rm(path.join(targetServicesDir, webOsServiceDirName), { recursive: true, force: true });
-  await rm(path.join(targetServicesDir, tizenServiceDirName), { recursive: true, force: true });
   await cp(
     path.join(rootDir, "services", serviceDirName),
     path.join(targetServicesDir, targetServiceDirName),
@@ -203,7 +199,7 @@ function buildTizenIndexHtml() {
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
   <link rel="stylesheet" href="css/base.css" />
@@ -279,64 +275,21 @@ function buildTizenMainJs() {
       return;
     }
 
-    ["MediaPlay", "MediaPause", "MediaPlayPause", "MediaFastForward", "MediaRewind"].forEach(function registerKey(keyName) {
+    [
+      "Back",
+      "Return",
+      "MediaPlay",
+      "MediaPause",
+      "MediaPlayPause",
+      "MediaStop",
+      "MediaFastForward",
+      "MediaRewind",
+      "MediaTrackPrevious",
+      "MediaTrackNext"
+    ].forEach(function registerKey(keyName) {
       try {
         tvInput.registerKey(keyName);
       } catch (ignored) {}
-    });
-  }
-
-  function getTizenPackageId() {
-    try {
-      var appApi = window.tizen && window.tizen.application;
-      var currentApp = appApi && typeof appApi.getCurrentApplication === "function"
-        ? appApi.getCurrentApplication()
-        : null;
-      return String(currentApp && currentApp.appInfo && currentApp.appInfo.packageId || "").trim();
-    } catch (ignored) {
-      return "";
-    }
-  }
-
-  function startLocalMediaService() {
-    var appApi = window.tizen && window.tizen.application;
-    var packageId = getTizenPackageId();
-    var serviceId = packageId ? packageId + "${tizenServiceIdSuffix}" : "";
-
-    if (!serviceId || !appApi || typeof appApi.launch !== "function") {
-      return Promise.resolve(false);
-    }
-
-    return new Promise(function(resolve) {
-      var settled = false;
-
-      function finish(value) {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        resolve(Boolean(value));
-      }
-
-      try {
-        appApi.launch(
-          serviceId,
-          function() {
-            finish(true);
-          },
-          function(error) {
-            console.warn("[tizen-service] Failed to launch local media service", serviceId, error);
-            finish(false);
-          }
-        );
-      } catch (error) {
-        console.warn("[tizen-service] Failed to request local media service", serviceId, error);
-        finish(false);
-      }
-
-      setTimeout(function() {
-        finish(false);
-      }, 2500);
     });
   }
 
@@ -350,8 +303,6 @@ function buildTizenMainJs() {
 
   ensureRuntimeCompatibility();
   registerRemoteKeys();
-
-  window.__NUVIO_TIZEN_MEDIA_SERVICE_READY__ = startLocalMediaService();
 
   loadScript("nuvio.env.js");
   loadScript("assets/libs/qrcode-generator.js");
@@ -470,47 +421,12 @@ function insertIntoWidget(xml, snippet) {
   return xml.replace(widgetOpenTagPattern, (match) => `${match}\n    ${snippet}`);
 }
 
-function escapeRegExp(value) {
-  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function upsertTizenFeature(xml, featureName) {
-  const escapedFeatureName = escapeRegExp(featureName);
-  const featurePattern = new RegExp(`<feature\\b[^>]*name="${escapedFeatureName}"[^>]*/>`);
-  if (featurePattern.test(xml)) {
-    return xml;
-  }
-  return insertIntoWidget(xml, `<feature name="${featureName}"/>`);
-}
-
-function extractTizenPackageId(xml) {
-  const match = xml.match(/<tizen:application\b[^>]*package="([^"]+)"/);
-  return String(match?.[1] || "").trim();
-}
-
 function upsertTizenWidgetVersion(xml, version) {
   const widgetPattern = /<widget\b([^>]*?)\bversion="[^"]*"([^>]*)>/;
   if (widgetPattern.test(xml)) {
     return xml.replace(widgetPattern, `<widget$1version="${version}"$2>`);
   }
   return xml;
-}
-
-function upsertTizenService(xml, { serviceId, contentSrc, name, description }) {
-  const contentPattern = escapeRegExp(contentSrc);
-  const servicePattern = new RegExp(
-    `\\s*<tizen:service\\b[^>]*>[\\s\\S]*?<tizen:content\\s+src="${contentPattern}"\\s*/>[\\s\\S]*?<\\/tizen:service>`,
-    "m"
-  );
-  const snippet = `<tizen:service id="${serviceId}" type="ui">
-      <tizen:content src="${contentSrc}"/>
-      <tizen:name>${name}</tizen:name>
-      <tizen:description>${description}</tizen:description>
-    </tizen:service>`;
-  if (servicePattern.test(xml)) {
-    return xml.replace(servicePattern, `\n    ${snippet}`);
-  }
-  return insertIntoWidget(xml, snippet);
 }
 
 async function updateTizenMetadata(targetDir) {
@@ -521,25 +437,13 @@ async function updateTizenMetadata(targetDir) {
     `Tizen wrapper metadata not found at ${configPath}. Expected config.xml in the wrapper root.`
   );
   let configXml = configRaw;
-  const packageId = extractTizenPackageId(configXml);
-  if (!packageId) {
-    throw new Error(`Unable to resolve Tizen package ID from ${configPath}.`);
-  }
 
   configXml = upsertTizenIcon(configXml, wrapperIconFiles.tizenIcon.target);
   configXml = upsertXmlTag(configXml, "name", appName);
   configXml = upsertTizenWidgetVersion(configXml, appVersion);
-  configXml = upsertTizenFeature(configXml, "http://tizen.org/feature/web.service");
-  configXml = upsertTizenService(configXml, {
-    serviceId: `${packageId}${tizenServiceIdSuffix}`,
-    contentSrc: tizenServiceEntryPath,
-    name: `${appName} Media Service`,
-    description: "Local media helper service for Tizen playback"
-  });
 
   await writeTextFile(configPath, configXml);
   await syncTizenIcon(targetDir);
-  await syncServiceFolder(targetDir, tizenServiceDirName);
   await writeTextFile(path.join(targetDir, "index.html"), buildTizenIndexHtml());
   await writeTextFile(path.join(targetDir, "main.js"), buildTizenMainJs());
 }

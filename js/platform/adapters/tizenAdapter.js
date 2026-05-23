@@ -9,16 +9,47 @@ function getAvplayApi() {
   return avplay;
 }
 
+function applyTizenViewport() {
+  const documentRef = globalThis.document;
+  if (!documentRef?.head) {
+    return;
+  }
+
+  let viewport = documentRef.querySelector("meta[name='viewport']");
+  if (!viewport) {
+    viewport = documentRef.createElement("meta");
+    viewport.name = "viewport";
+    documentRef.head.appendChild(viewport);
+  }
+
+  viewport.setAttribute(
+    "content",
+    "width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+  );
+  documentRef.documentElement?.classList?.add("tizen-tv");
+  documentRef.body?.classList?.add("tizen-tv");
+
+  try {
+    globalThis.dispatchEvent?.(new Event("resize"));
+  } catch (_) {
+    // Ignore resize dispatch failures on older Tizen engines.
+  }
+}
+
 export const tizenAdapter = {
   name: "tizen",
 
   init() {
+    applyTizenViewport();
+
     const tvInputDevice = globalThis.tizen?.tvinputdevice || null;
     if (!tvInputDevice) {
       return;
     }
 
     const mediaKeys = [
+      "Back",
+      "Return",
       "MediaPlayPause",
       "MediaPlay",
       "MediaPause",
