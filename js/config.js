@@ -24,3 +24,7 @@ export const DEBUG_LOG_ENDPOINT = String(runtimeEnv.DEBUG_LOG_ENDPOINT || "").tr
 export const ENABLE_REMOTE_WRAPPER_MODE = Boolean(runtimeEnv.ENABLE_REMOTE_WRAPPER_MODE);
 export const PREFERRED_PLAYBACK_ORDER = normalizePlaybackOrder(runtimeEnv.PREFERRED_PLAYBACK_ORDER);
 export const TMDB_API_KEY = String(runtimeEnv.TMDB_API_KEY || "").trim();
+export const TRAKT_CLIENT_ID = String(runtimeEnv.TRAKT_CLIENT_ID || "").trim();
+export const TRAKT_CLIENT_SECRET = String(runtimeEnv.TRAKT_CLIENT_SECRET || "").trim();
+export const TRAKT_API_URL = String(runtimeEnv.TRAKT_API_URL || "https://api.trakt.tv").trim();
+export const TRAKT_REDIRECT_URI = String(runtimeEnv.TRAKT_REDIRECT_URI || "urn:ietf:wg:oauth:2.0:oob").trim();
