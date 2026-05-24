@@ -1161,6 +1161,45 @@ export const StreamScreen = {
     });
   },
 
+  onPointerFocus(target) {
+    if (!target || !this.container?.contains(target)) {
+      return false;
+    }
+    const { chips, cards } = this.getFocusLists();
+    const chipIndex = chips.indexOf(target);
+    if (chipIndex >= 0) {
+      this.focusState = { zone: "filter", index: chipIndex };
+      this.focusList(chips, chipIndex);
+      return true;
+    }
+    const cardIndex = cards.indexOf(target);
+    if (cardIndex >= 0) {
+      this.focusState = { zone: "card", index: cardIndex };
+      this.focusList(cards, cardIndex);
+      return true;
+    }
+    return false;
+  },
+
+  onPointerActivate(target) {
+    if (!target || !this.container?.contains(target)) {
+      return false;
+    }
+    this.onPointerFocus(target);
+    const action = String(target.dataset.action || "");
+    if (action === "setFilter") {
+      const addon = String(target.dataset.addon || "all");
+      const { chips } = this.getFocusLists();
+      this.setAddonFilter(addon, "filter", Math.max(0, chips.indexOf(target)));
+      return true;
+    }
+    if (action === "playStream") {
+      this.playStream(target.dataset.streamId);
+      return true;
+    }
+    return false;
+  },
+
   onKeyDown(event) {
     if (isBackEvent(event)) {
       event?.preventDefault?.();

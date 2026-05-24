@@ -7002,6 +7002,10 @@
   color: var(--text-secondary);
 }
 
+.webos-pointer-remote .focusable {
+  cursor: pointer;
+}
+
 #player {
   position: fixed;
   top: 0;

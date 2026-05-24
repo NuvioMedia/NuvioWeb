@@ -2295,6 +2295,69 @@ export const SettingsScreen = {
     }
   },
 
+  onPointerFocus(target) {
+    if (!target || !this.container?.contains(target)) {
+      return false;
+    }
+
+    if (this.optionDialog) {
+      const dialogOption = target.closest?.(".settings-dialog-option");
+      if (dialogOption) {
+        this.dialogFocusIndex = clamp(
+          Number(dialogOption.dataset.dialogIndex || 0),
+          0,
+          Math.max(0, this.optionDialog.options.length - 1)
+        );
+        return true;
+      }
+      return false;
+    }
+
+    if (isRootSidebarNode(target)) {
+      const sidebarNodes = getRootSidebarNodes(this.container, this.layoutPrefs);
+      this.focusZone = "sidebar";
+      this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(target));
+      if (this.layoutPrefs?.modernSidebar) {
+        this.sidebarExpanded = true;
+        setModernSidebarExpanded(this.container, true);
+      } else {
+        setLegacySidebarExpanded(this.container, true);
+      }
+      return true;
+    }
+
+    const zone = String(target.dataset.zone || "");
+    if (zone === "nav") {
+      this.focusZone = "nav";
+      this.navIndex = clamp(
+        Number(target.dataset.navIndex || 0),
+        0,
+        Math.max(0, this.visibleSections.length - 1)
+      );
+      scrollSettingsRailItem(target);
+      return true;
+    }
+
+    if (target.matches?.(".settings-content-focusable")) {
+      this.focusZone = "content";
+      this.contentFocusKey = String(target.dataset.focusKey || "");
+      this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
+      scrollIntoNearestView(target);
+      return true;
+    }
+
+    return false;
+  },
+
+  async onPointerActivate(target) {
+    if (!target || !this.container?.contains(target)) {
+      return false;
+    }
+    this.onPointerFocus(target);
+    await this.activateFocused();
+    return true;
+  },
+
   async onKeyDown(event) {
     if (Platform.isBackEvent(event)) {
       event?.preventDefault?.();
