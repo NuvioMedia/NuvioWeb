@@ -281,7 +281,13 @@ export const LibraryScreen = {
     const state = this.controller.getState();
     const currentValue = picker === "list"
       ? state.selectedListKey
-      : (picker === "type" ? state.selectedTypeKey : state.selectedSortKey);
+      : picker === "type"
+        ? state.selectedTypeKey
+        : picker === "genre"
+          ? (state.selectedGenre || "__all__")
+          : picker === "year"
+            ? (state.selectedYear || "__all__")
+            : state.selectedSortKey;
     const selectedIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
     return renderContentFilterPicker({
       variant: "library",
@@ -298,12 +304,15 @@ export const LibraryScreen = {
   },
 
   renderGrid(items) {
+    const state = this.controller.getState();
     return `
       <section class="library-grid-wrap">
         <div class="library-grid">
           ${items.map((item) => {
             const focusKey = `${item.type}:${item.id}`;
-            const year = extractReleaseYear(item);
+            const isSeries = String(item.type || "").toLowerCase() === "series" || String(item.type || "").toLowerCase() === "tv";
+            const watchedIds = isSeries ? state.watchedSeriesIds : state.watchedMovieIds;
+            const isWatched = watchedIds?.has?.(String(item.id || ""));
             return `
               <article class="library-grid-card focusable"
                        data-action="openDetail"
@@ -313,9 +322,10 @@ export const LibraryScreen = {
                        data-poster-src="${escapeHtml(item.poster || "")}"
                        data-backdrop-src="${escapeHtml(item.background || "")}"
                        data-focus-key="${escapeHtml(focusKey)}">
-                <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml(item.poster)}')"` : ""}></div>
+                <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml(item.poster)}')"` : ""}>
+                  ${isWatched ? `<span class="library-watched-badge" aria-label="${escapeHtml(t("episodes_cd_watched", {}, "Watched"))}">✓</span>` : ""}
+                </div>
                 <div class="library-grid-title">${escapeHtml(item.name || item.id || "Untitled")}</div>
-                ${year ? `<div class="library-grid-year">${escapeHtml(year)}</div>` : ""}
               </article>
             `;
           }).join("")}
@@ -334,6 +344,30 @@ export const LibraryScreen = {
     `;
   },
 
+  applyOpenPickerOptionFocus() {
+    const state = this.controller.getState();
+    const picker = state.expandedPicker;
+    if (!picker) {
+      return false;
+    }
+    const options = Array.from(this.container?.querySelectorAll(`.library-picker.open .library-picker-option.focusable[data-picker="${selectorValue(picker)}"]`) || []);
+    if (!options.length) {
+      return false;
+    }
+    const focusIndex = Math.max(0, Math.min(options.length - 1, Number(state.pickerFocusIndex || 0)));
+    options.forEach((node, index) => {
+      const focused = index === focusIndex;
+      node.classList.toggle("focused", focused);
+      node.classList.toggle("library-picker-option-target", focused);
+    });
+    const target = options[focusIndex] || options[0] || null;
+    if (!target) {
+      return false;
+    }
+    this.setFocusedNode(target);
+    return true;
+  },
+
   renderActions(state) {
     if (state.sourceMode !== "trakt") {
       return "";
@@ -343,49 +377,51 @@ export const LibraryScreen = {
         <button class="library-action-button focusable library-primary"
                 data-action="openManageLists"
                 ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
-          Manage Lists
+          ${escapeHtml(t("library_manage_lists", {}, "Manage Lists"))}
         </button>
         <button class="library-action-button focusable library-primary"
                 data-action="refreshLibrary"
                 ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
-          ${state.isSyncing ? "Syncing..." : "Sync"}
+          ${escapeHtml(state.isSyncing ? t("library_syncing_btn", {}, "Syncing…") : t("library_sync_btn", {}, "Sync"))}
         </button>
       </section>
     `;
   },
 
   renderManageListsDialog(state) {
-    if (!state.showManageDialog) {
+    if (!state.showManageDialog || state.listEditorState || state.showDeleteConfirm) {
       return "";
     }
     const personalTabs = state.listTabs.filter((item) => item.type === "personal");
     return `
       <div class="library-overlay">
         <section class="library-dialog library-manage-dialog">
-          <h3 class="library-dialog-title">Manage Lists</h3>
-          ${state.errorMessage ? `<p class="library-dialog-error">${escapeHtml(state.errorMessage)}</p>` : ""}
-          <div class="library-manage-list">
-            ${personalTabs.length
-              ? personalTabs.map((tab) => `
-                  <button class="library-manage-list-button focusable${tab.key === state.manageSelectedListKey ? " selected" : ""}"
-                          data-action="selectManageList"
-                          data-list-key="${escapeHtml(tab.key)}"
-                          ${state.pendingOperation ? "disabled" : ""}>
-                    ${escapeHtml(tab.title)}
-                  </button>
-                `).join("")
-              : `<div class="library-manage-empty">No lists yet.</div>`
-            }
-          </div>
-          <div class="library-dialog-actions">
-            <button class="library-action-button focusable" data-action="createList" ${state.pendingOperation ? "disabled" : ""}>Create</button>
-            <button class="library-action-button focusable" data-action="editList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Edit</button>
-            <button class="library-action-button focusable" data-action="moveListUp" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Move Up</button>
-            <button class="library-action-button focusable" data-action="moveListDown" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Move Down</button>
-          </div>
-          <div class="library-dialog-actions">
-            <button class="library-action-button focusable danger" data-action="deleteList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>Delete</button>
-            <button class="library-action-button focusable" data-action="closeManageLists" ${state.pendingOperation ? "disabled" : ""}>Close</button>
+          <div class="library-manage-stack">
+            <h3 class="library-dialog-title library-manage-title">${escapeHtml(t("library_manage_trakt_lists", {}, "Manage Trakt Lists"))}</h3>
+            ${state.errorMessage ? `<p class="library-dialog-error library-manage-error">${escapeHtml(state.errorMessage)}</p>` : ""}
+            <div class="library-manage-list${personalTabs.length ? " has-items" : ""}">
+              ${personalTabs.length
+                ? personalTabs.map((tab) => `
+                    <button class="library-manage-list-button focusable${tab.key === state.manageSelectedListKey ? " selected" : ""}"
+                            data-action="selectManageList"
+                            data-list-key="${escapeHtml(tab.key)}"
+                            ${state.pendingOperation ? "disabled" : ""}>
+                      <span class="library-manage-list-label">${escapeHtml(tab.title)}</span>
+                    </button>
+                  `).join("")
+                : `<div class="library-manage-empty">${escapeHtml(t("library_no_lists", {}, "No personal lists yet."))}</div>`
+              }
+            </div>
+            <div class="library-manage-actions-row">
+              <button class="library-action-button focusable" data-action="createList" ${state.pendingOperation ? "disabled" : ""}>${escapeHtml(t("library_list_create", {}, "Create"))}</button>
+              <button class="library-action-button focusable" data-action="editList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_edit", {}, "Edit"))}</button>
+              <button class="library-action-button focusable" data-action="moveListUp" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_move_up", {}, "Move Up"))}</button>
+              <button class="library-action-button focusable" data-action="moveListDown" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_move_down", {}, "Move Down"))}</button>
+            </div>
+            <div class="library-manage-actions-row">
+              <button class="library-action-button focusable danger" data-action="deleteList" ${state.pendingOperation || !state.manageSelectedListKey ? "disabled" : ""}>${escapeHtml(t("library_list_delete", {}, "Delete"))}</button>
+              <button class="library-action-button focusable" data-action="closeManageLists" ${state.pendingOperation ? "disabled" : ""}>${escapeHtml(t("library_list_close", {}, "Close"))}</button>
+            </div>
           </div>
         </section>
       </div>
@@ -400,22 +436,26 @@ export const LibraryScreen = {
     return `
       <div class="library-overlay">
         <section class="library-dialog library-list-editor">
-          <h3 class="library-dialog-title">${editor.mode === "create" ? "Create List" : "Edit List"}</h3>
-          <label class="library-dialog-field">
-            <span class="library-dialog-field-label">Name</span>
+          <h3 class="library-dialog-title">${escapeHtml(editor.mode === "create" ? t("library_list_create_dialog_title", {}, "Create List") : t("library_list_edit_dialog_title", {}, "Edit List"))}</h3>
+          <label class="library-dialog-field library-outlined-field">
             <input class="library-dialog-input focusable"
                    data-editor-field="name"
+                   aria-label="${escapeHtml(t("library_list_name_label", {}, "Name"))}"
+                   placeholder=" "
                    value="${escapeHtml(editor.name)}"
                    ${state.pendingOperation ? "disabled" : ""} />
+            <span class="library-dialog-field-label">${escapeHtml(t("library_list_name_label", {}, "Name"))}</span>
           </label>
-          <label class="library-dialog-field">
-            <span class="library-dialog-field-label">Description</span>
+          <label class="library-dialog-field library-outlined-field">
             <textarea class="library-dialog-textarea focusable"
                       data-editor-field="description"
+                      aria-label="${escapeHtml(t("library_list_description_label", {}, "Description"))}"
+                      placeholder=" "
                       ${state.pendingOperation ? "disabled" : ""}>${escapeHtml(editor.description)}</textarea>
+            <span class="library-dialog-field-label">${escapeHtml(t("library_list_description_label", {}, "Description"))}</span>
           </label>
-          <div class="library-dialog-field">
-            <span class="library-dialog-field-label">Privacy</span>
+          <div class="library-dialog-field library-privacy-field">
+            <span class="library-privacy-label">${escapeHtml(t("library_list_privacy", {}, "Privacy"))}</span>
             <div class="library-privacy-row">
               ${LIBRARY_PRIVACY_OPTIONS.map((privacy) => `
                 <button class="library-privacy-button focusable${privacy === editor.privacy ? " selected" : ""}"
@@ -427,16 +467,11 @@ export const LibraryScreen = {
               `).join("")}
             </div>
           </div>
-          <div class="library-dialog-actions stacked">
+          <div class="library-dialog-actions library-editor-actions">
             <button class="library-action-button focusable"
                     data-action="saveListEditor"
                     ${state.pendingOperation ? "disabled" : ""}>
-              ${state.pendingOperation ? "Saving..." : "Save"}
-            </button>
-            <button class="library-action-button focusable"
-                    data-action="cancelListEditor"
-                    ${state.pendingOperation ? "disabled" : ""}>
-              Cancel
+              ${escapeHtml(state.pendingOperation ? t("action_saving", {}, "Saving…") : t("action_save", {}, "Save"))}
             </button>
           </div>
         </section>
@@ -451,18 +486,18 @@ export const LibraryScreen = {
     return `
       <div class="library-overlay">
         <section class="library-dialog library-delete-dialog">
-          <h3 class="library-dialog-title">Delete List</h3>
-          <p class="library-dialog-subtitle">This will permanently delete the selected list.</p>
+          <h3 class="library-dialog-title">${escapeHtml(t("library_delete_title", {}, "Delete this list?"))}</h3>
+          <p class="library-dialog-subtitle">${escapeHtml(t("library_delete_subtitle", {}, "This removes the list and all list items from Trakt."))}</p>
           <div class="library-dialog-actions stacked">
             <button class="library-action-button focusable danger"
                     data-action="confirmDeleteList"
                     ${state.pendingOperation ? "disabled" : ""}>
-              Delete
+              ${escapeHtml(t("library_delete_confirm", {}, "Delete"))}
             </button>
             <button class="library-action-button focusable"
                     data-action="cancelDeleteList"
                     ${state.pendingOperation ? "disabled" : ""}>
-              Cancel
+              ${escapeHtml(t("action_cancel", {}, "Cancel"))}
             </button>
           </div>
         </section>
@@ -475,6 +510,9 @@ export const LibraryScreen = {
     this.layoutPrefs = LayoutPreferences.get();
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     const state = this.controller.getState();
+    const posterWidth = 252;
+    const posterRadius = 24;
+    const libraryStyle = `--library-poster-width:${posterWidth}px;--library-poster-height:${Math.round(posterWidth * 1.5)}px;--library-poster-radius:${posterRadius}px;`;
     if (state.isLoading) {
       this.renderLoading();
       ScreenUtils.indexFocusables(this.container);
@@ -484,26 +522,38 @@ export const LibraryScreen = {
       return;
     }
 
-    const pickerMarkup = [
+    const primaryPickerMarkup = [
       state.sourceMode === "trakt"
-        ? this.renderPicker("list", "List", this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
+        ? this.renderPicker("list", t("library_filter_list", {}, "List"), this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
         : "",
-      this.renderPicker("type", "Type", this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide"),
-      this.renderPicker("sort", "Sort", this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), state.sourceMode === "trakt" ? "library-picker-flex" : "library-picker-wide")
+      this.renderPicker("type", t("library_filter_type", {}, "Type"), this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), "library-picker-flex"),
+      this.renderPicker("sort", t("library_filter_sort", {}, "Sort"), this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), "library-picker-flex")
+    ].filter(Boolean).join("");
+
+    const secondaryPickerMarkup = [
+      state.availableGenres.length
+        ? this.renderPicker("genre", t("library_filter_genre", {}, "Genre"), this.controller.getSelectedGenreLabel(), this.controller.getPickerOptions("genre"), "library-picker-flex")
+        : "",
+      state.availableYears.length
+        ? this.renderPicker("year", t("library_filter_year", {}, "Year"), this.controller.getSelectedYearLabel(), this.controller.getPickerOptions("year"), "library-picker-flex")
+        : ""
     ].filter(Boolean).join("");
 
     this.container.innerHTML = `
-      <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}">
+      <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}" style="${escapeHtml(libraryStyle)}">
         ${this.renderSidebar()}
         <main class="home-main library-main">
           <section class="library-page">
             <header class="library-page-header">
-              <h1 class="library-page-title">Library</h1>
+              <h1 class="library-page-title">${escapeHtml(t("library_title", {}, "Library"))}</h1>
               <div class="library-page-source">${escapeHtml(this.controller.getSourceLabel())}</div>
             </header>
 
-            <section class="library-picker-row">
-              ${pickerMarkup}
+            <section class="library-picker-groups">
+              <div class="library-picker-row">
+                ${primaryPickerMarkup}
+              </div>
+              ${secondaryPickerMarkup ? `<div class="library-picker-row">${secondaryPickerMarkup}</div>` : ""}
             </section>
 
             ${this.renderActions(state)}
@@ -1045,6 +1095,70 @@ export const LibraryScreen = {
     return true;
   },
 
+  handleManageDialogNavigation(event, current) {
+    if (!this.controller.getState().showManageDialog || !current?.closest?.(".library-manage-dialog")) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const direction = code === 37 ? "left"
+      : code === 39 ? "right"
+        : code === 38 ? "up"
+          : code === 40 ? "down"
+            : "";
+    if (!direction) {
+      return false;
+    }
+
+    const listButtons = Array.from(this.container?.querySelectorAll(".library-manage-list-button.focusable") || [])
+      .filter((node) => !node.disabled);
+    const actionRows = Array.from(this.container?.querySelectorAll(".library-manage-actions-row") || []);
+    const rowButtons = actionRows.map((row) => Array.from(row.querySelectorAll(".library-action-button.focusable")).filter((node) => !node.disabled));
+    const firstRow = rowButtons[0] || [];
+    const secondRow = rowButtons[1] || [];
+    const nearestInRow = (row) => findNearestNodeByCenterX(current, row) || row[0] || null;
+    let target = null;
+
+    if (current.matches?.(".library-manage-list-button")) {
+      const index = listButtons.indexOf(current);
+      if (direction === "up") {
+        target = listButtons[index - 1] || current;
+      } else if (direction === "down") {
+        target = listButtons[index + 1] || firstRow[0] || current;
+      } else if (direction === "left" || direction === "right") {
+        target = current;
+      }
+    } else if (current.closest?.(".library-manage-actions-row") === actionRows[0]) {
+      const index = firstRow.indexOf(current);
+      if (direction === "left") {
+        target = firstRow[index - 1] || current;
+      } else if (direction === "right") {
+        target = firstRow[index + 1] || current;
+      } else if (direction === "up") {
+        target = listButtons[listButtons.length - 1] || current;
+      } else if (direction === "down") {
+        target = nearestInRow(secondRow) || current;
+      }
+    } else if (current.closest?.(".library-manage-actions-row") === actionRows[1]) {
+      const index = secondRow.indexOf(current);
+      if (direction === "left") {
+        target = secondRow[index - 1] || current;
+      } else if (direction === "right") {
+        target = secondRow[index + 1] || current;
+      } else if (direction === "up") {
+        target = nearestInRow(firstRow) || current;
+      } else if (direction === "down") {
+        target = current;
+      }
+    }
+
+    if (!target) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.setFocusedNode(target);
+    return true;
+  },
+
   isSidebarNode(node) {
     return isRootSidebarNode(node);
   },
@@ -1119,6 +1233,10 @@ export const LibraryScreen = {
       return true;
     }
     return false;
+  },
+
+  consumeBackRequest() {
+    return this.closeTopOverlay();
   },
 
   async activateNode(node) {
@@ -1345,9 +1463,14 @@ export const LibraryScreen = {
       return;
     }
 
+    if (this.handleManageDialogNavigation(event, current)) {
+      return;
+    }
+
     if (state.expandedPicker && (code === 38 || code === 40)) {
       event?.preventDefault?.();
-      this.controller.movePickerFocus(code === 38 ? "up" : "down");
+      this.controller.movePickerFocus(code === 38 ? "up" : "down", { silent: true });
+      this.applyOpenPickerOptionFocus();
       return;
     }
 

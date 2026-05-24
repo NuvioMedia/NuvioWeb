@@ -4,6 +4,8 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 import { LocalStore } from "../../core/storage/localStore.js";
 import { savedLibraryRepository } from "./savedLibraryRepository.js";
 import { metaRepository } from "./metaRepository.js";
+import { TraktAuthService } from "./traktAuthService.js";
+import { TraktLibrarySourceMode, TraktSettingsStore } from "../local/traktSettingsStore.js";
 
 export const LibrarySourceMode = {
   LOCAL: "local",
@@ -126,6 +128,7 @@ async function resolveRemoteStoreKey() {
 function createEmptyRemoteState() {
   return {
     nextListId: 1,
+    watchlist: [],
     lists: [],
     listItems: {}
   };
@@ -134,6 +137,7 @@ function createEmptyRemoteState() {
 function cloneState(state) {
   return {
     nextListId: Number(state?.nextListId || 1),
+    watchlist: Array.isArray(state?.watchlist) ? state.watchlist.map((entry) => ({ ...entry })) : [],
     lists: Array.isArray(state?.lists) ? state.lists.map((entry) => ({ ...entry })) : [],
     listItems: Object.fromEntries(Object.entries(state?.listItems || {}).map(([key, value]) => [
       key,
@@ -288,13 +292,10 @@ async function getLocalEntries() {
 }
 
 async function getRemoteEntries() {
-  const [watchlistItems, personalState] = await Promise.all([
-    savedLibraryRepository.getAll(1000),
-    readRemoteState()
-  ]);
+  const personalState = await readRemoteState();
   const entriesMap = new Map();
 
-  watchlistItems.forEach((item, index) => {
+  personalState.watchlist.forEach((item, index) => {
     const normalized = normalizeSavedItem(item);
     mergeItemIntoMap(
       entriesMap,
@@ -358,7 +359,11 @@ function removePersonalItem(state, listKey, item) {
 class LibraryRepository {
 
   async getSourceMode() {
-    return AuthManager.isAuthenticated ? LibrarySourceMode.TRAKT : LibrarySourceMode.LOCAL;
+    const selectedMode = TraktSettingsStore.get().librarySourceMode;
+    if (selectedMode !== TraktLibrarySourceMode.TRAKT) {
+      return LibrarySourceMode.LOCAL;
+    }
+    return (AuthManager.isAuthenticated || TraktAuthService.isAuthenticated()) ? LibrarySourceMode.TRAKT : LibrarySourceMode.LOCAL;
   }
 
   async getListTabs() {
@@ -423,11 +428,14 @@ class LibraryRepository {
         continue;
       }
       if (listKey === WATCHLIST_KEY) {
-        if (after) {
-          await savedLibraryRepository.save(normalizeSavedItem(item));
-        } else {
-          await savedLibraryRepository.remove(item.itemId || item.id || "");
-        }
+        remoteState.watchlist = after
+          ? [
+            toRemoteListItem(item, { listedAt: Date.now() }),
+            ...(remoteState.watchlist || []).filter((entry) => !(String(entry.contentId) === String(item.itemId || item.id || "")
+              && String(entry.contentType || "movie") === String(item.itemType || item.type || "movie")))
+          ]
+          : (remoteState.watchlist || []).filter((entry) => !(String(entry.contentId) === String(item.itemId || item.id || "")
+            && String(entry.contentType || "movie") === String(item.itemType || item.type || "movie")));
         continue;
       }
       remoteState = after
@@ -510,6 +518,10 @@ class LibraryRepository {
   }
 
   async refreshNow() {
+    const sourceMode = await this.getSourceMode();
+    if (sourceMode === LibrarySourceMode.TRAKT) {
+      return TraktAuthService.isAuthenticated();
+    }
     if (!AuthManager.isAuthenticated) {
       return false;
     }
