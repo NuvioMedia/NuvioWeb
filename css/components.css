@@ -3471,6 +3471,57 @@ button:focus-visible {
 
 .library-delete-dialog {
   width: min(840px, calc(100vw - 96px));
+  padding: 48px;
+  border: 2px solid var(--border-color);
+  border-radius: 32px;
+  background: var(--bg-elevated);
+  box-shadow: none;
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+}
+
+.library-delete-dialog .library-dialog-title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-delete-dialog .library-dialog-subtitle {
+  margin: 0;
+  font-size: 28px;
+  line-height: 40px;
+  color: var(--text-secondary);
+}
+
+.library-delete-actions {
+  display: block;
+  margin-top: 0;
+  overflow: visible;
+}
+
+.library-delete-actions .library-action-button {
+  width: 100%;
+  min-height: 80px;
+  border: none;
+  border-radius: 999px;
+  background: #4A2323;
+  color: var(--text-color);
+  font-size: 28px;
+  font-weight: 500;
+}
+
+.library-delete-actions .library-action-button.focused {
+  background: var(--secondary-color);
+  color: var(--on-secondary);
+  border-color: transparent;
+  box-shadow: none;
+  transform: scale(1.1);
 }
 
 .library-manage-dialog {
@@ -3560,7 +3611,8 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  margin-bottom: 0;
+  margin: -8px -64px -8px;
+  padding: 8px 64px;
 }
 
 .library-manage-list.has-items {
@@ -3668,6 +3720,10 @@ button:focus-visible {
   margin-bottom: 32px;
 }
 
+.library-list-editor .library-privacy-field {
+  margin-bottom: 48px;
+}
+
 .library-outlined-field {
   position: relative;
   gap: 0;
@@ -3737,7 +3793,7 @@ button:focus-visible {
   display: flex;
   gap: 20px;
   flex-wrap: nowrap;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .library-privacy-row::-webkit-scrollbar {
@@ -3777,6 +3833,11 @@ button:focus-visible {
 .library-editor-actions {
   margin-top: 0;
   display: block;
+  margin-left: -56px;
+  margin-right: -56px;
+  padding-left: 56px;
+  padding-right: 56px;
+  overflow: visible;
 }
 
 .library-editor-actions .library-action-button {

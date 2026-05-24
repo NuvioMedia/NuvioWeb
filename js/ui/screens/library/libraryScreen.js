@@ -488,16 +488,11 @@ export const LibraryScreen = {
         <section class="library-dialog library-delete-dialog">
           <h3 class="library-dialog-title">${escapeHtml(t("library_delete_title", {}, "Delete this list?"))}</h3>
           <p class="library-dialog-subtitle">${escapeHtml(t("library_delete_subtitle", {}, "This removes the list and all list items from Trakt."))}</p>
-          <div class="library-dialog-actions stacked">
+          <div class="library-dialog-actions library-delete-actions">
             <button class="library-action-button focusable danger"
                     data-action="confirmDeleteList"
                     ${state.pendingOperation ? "disabled" : ""}>
-              ${escapeHtml(t("library_delete_confirm", {}, "Delete"))}
-            </button>
-            <button class="library-action-button focusable"
-                    data-action="cancelDeleteList"
-                    ${state.pendingOperation ? "disabled" : ""}>
-              ${escapeHtml(t("action_cancel", {}, "Cancel"))}
+              ${escapeHtml(t("library_list_delete", {}, "Delete"))}
             </button>
           </div>
         </section>
@@ -1079,6 +1074,20 @@ export const LibraryScreen = {
       return false;
     }
     const code = Number(event?.keyCode || 0);
+    if ((code === 37 || code === 39) && current.matches?.(".library-privacy-button.focusable")) {
+      const options = Array.from(this.container?.querySelectorAll(".library-list-editor .library-privacy-button.focusable") || [])
+        .filter((node) => !node.disabled);
+      const currentIndex = options.indexOf(current);
+      if (currentIndex < 0) {
+        return false;
+      }
+      const delta = code === 37 ? -1 : 1;
+      const nextIndex = Math.max(0, Math.min(options.length - 1, currentIndex + delta));
+      const target = options[nextIndex] || current;
+      event?.preventDefault?.();
+      this.setFocusedNode(target);
+      return true;
+    }
     const fromDescription = code === 40
       && current.matches?.(".library-dialog-textarea.focusable[data-editor-field='description']");
     const fromActions = code === 38
