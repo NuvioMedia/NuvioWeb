@@ -66,7 +66,15 @@ function detectPlatformName() {
   if (userAgent.includes("webos") || userAgent.includes("web0s")) {
     return "webos";
   }
-  if (globalThis.tizen || userAgent.includes("tizen")) {
+  const webapis = globalThis.webapis || {};
+  if (
+    globalThis.tizen
+    || globalThis.avplay
+    || webapis.avplay
+    || webapis.avPlay
+    || webapis.productinfo
+    || userAgent.includes("tizen")
+  ) {
     return "tizen";
   }
   return "browser";

@@ -1005,7 +1005,26 @@ export const PlayerController = {
     };
   },
 
+  getCssPlayerViewportSize() {
+    const playerSize = this.getPlayerViewportSize();
+    const documentWidth = Number(document.documentElement?.clientWidth || 0);
+    const documentHeight = Number(document.documentElement?.clientHeight || 0);
+    const windowWidth = Number(window.innerWidth || 0);
+    const windowHeight = Number(window.innerHeight || 0);
+    const widthCandidates = [playerSize.width, documentWidth, windowWidth]
+      .filter((value) => Number.isFinite(value) && value > 0);
+    const heightCandidates = [playerSize.height, documentHeight, windowHeight]
+      .filter((value) => Number.isFinite(value) && value > 0);
+    return {
+      width: Math.max(1, Math.round(widthCandidates[0] || 1920)),
+      height: Math.max(1, Math.round(heightCandidates[0] || 1080))
+    };
+  },
+
   getAvPlayViewportSize() {
+    if (Platform.isTizen()) {
+      return this.getCssPlayerViewportSize();
+    }
     const documentWidth = Number(document.documentElement?.clientWidth || 0);
     const documentHeight = Number(document.documentElement?.clientHeight || 0);
     const screenWidth = Number(globalThis.screen?.width || 0);

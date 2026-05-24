@@ -136,6 +136,49 @@ function firstNonEmpty(...values) {
   return "";
 }
 
+function uniqueNonEmptyValues(values = []) {
+  const seen = new Set();
+  const result = [];
+  values.forEach((value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
+}
+
+function buildHeroBackdropSources(item = null) {
+  return uniqueNonEmptyValues([
+    item?.background,
+    item?.backdrop,
+    item?.backdropUrl,
+    item?.landscapePoster,
+    item?.poster,
+    item?.thumbnail,
+    item?.episodeThumbnail
+  ]);
+}
+
+function encodeHeroBackdropFallbacks(sources = []) {
+  return sources.map((source) => encodeURIComponent(source)).join("|");
+}
+
+function getHeroBackdropErrorHandler() {
+  return "const q=(this.dataset.fallbackSrcs||'').split('|').filter(Boolean);const next=q.shift();if(next){this.dataset.fallbackSrcs=q.join('|');this.src=decodeURIComponent(next);return;}this.removeAttribute('src');this.classList.add('placeholder');";
+}
+
+function renderHeroBackdropImage(display) {
+  if (!display?.backdrop) {
+    return '<div class="home-hero-backdrop placeholder"></div>';
+  }
+  const fallbackQueue = encodeHeroBackdropFallbacks(display.backdropFallbacks || []);
+  const fallbackAttribute = fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : "";
+  return `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}"${fallbackAttribute} alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" onerror="${getHeroBackdropErrorHandler()}" />`;
+}
+
 function limitTextToWordCount(value, maxWords = 0) {
   const text = String(value || "").trim();
   if (!text || !Number.isFinite(maxWords) || maxWords <= 0) {
@@ -977,6 +1020,7 @@ function buildHeroIdentity(item = null) {
 }
 
 function buildHeroDisplayModel(hero, layoutMode) {
+  const backdropSources = buildHeroBackdropSources(hero);
   const year = extractYear(hero);
   const imdb = resolveImdbRating(hero);
   const genres = Array.isArray(hero?.genres) ? hero.genres.filter(Boolean).slice(0, 3) : [];
@@ -1015,7 +1059,8 @@ function buildHeroDisplayModel(hero, layoutMode) {
     title: hero?.name || "Untitled",
     description: firstNonEmpty(hero?.description) || " ",
     logo: firstNonEmpty(hero?.logo),
-    backdrop: firstNonEmpty(hero?.background, hero?.backdrop, hero?.backdropUrl, hero?.poster),
+    backdrop: backdropSources[0] || "",
+    backdropFallbacks: backdropSources.slice(1),
     metaPrimary: metaPrimary.filter(Boolean),
     metaSecondary: metaSecondary.filter(Boolean),
     chips
@@ -1052,19 +1097,14 @@ function buildModernHeroPresentation(hero) {
   const badges = isContinueWatchingHero ? [] : [ageRatingBadge, statusBadge].filter(Boolean);
   const showImdbPrimary = Boolean(imdbText) && !isSeries && !badges.length && !secondaryHighlightText;
   const showImdbSecondary = Boolean(imdbText) && !showImdbPrimary;
+  const backdropSources = buildHeroBackdropSources(normalized);
 
   return {
     title: normalized.name || "Untitled",
     logo: firstNonEmpty(normalized.logo),
     description: firstNonEmpty(normalized.description) || "",
-    backdrop: firstNonEmpty(
-      normalized.background,
-      normalized.backdrop,
-      normalized.backdropUrl,
-      normalized.poster,
-      normalized.thumbnail,
-      normalized.episodeThumbnail
-    ),
+    backdrop: backdropSources[0] || "",
+    backdropFallbacks: backdropSources.slice(1),
     leadingMeta,
     trailingMeta,
     secondaryHighlightText,
@@ -1163,7 +1203,7 @@ function renderHeroMarkup(layoutMode, heroItem, heroCandidates) {
                data-item-type="${escapeAttribute(heroItem?.type || "movie")}"
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}"` : ""}>
         <div class="home-hero-backdrop-wrap">
-          ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" />` : '<div class="home-hero-backdrop placeholder"></div>'}
+          ${renderHeroBackdropImage(display)}
         </div>
         <div class="home-hero-copy">
           <div class="home-hero-brand">
@@ -2754,13 +2794,23 @@ export const HomeScreen = {
     const backdrop = heroNode.querySelector(".home-hero-backdrop");
     if (backdrop) {
       const src = display.backdrop || "";
-      if (src) {
-        backdrop.setAttribute("src", src);
-        backdrop.setAttribute("alt", display.title || "featured");
-        backdrop.classList.remove("placeholder");
+      if (src && backdrop.tagName !== "IMG") {
+        backdrop.outerHTML = renderHeroBackdropImage(display);
       } else {
-        backdrop.removeAttribute("src");
-        backdrop.classList.add("placeholder");
+        const fallbackQueue = encodeHeroBackdropFallbacks(display.backdropFallbacks || []);
+        if (fallbackQueue) {
+          backdrop.dataset.fallbackSrcs = fallbackQueue;
+        } else {
+          delete backdrop.dataset.fallbackSrcs;
+        }
+        if (src) {
+          backdrop.setAttribute("src", src);
+          backdrop.setAttribute("alt", display.title || "featured");
+          backdrop.classList.remove("placeholder");
+        } else {
+          backdrop.removeAttribute("src");
+          backdrop.classList.add("placeholder");
+        }
       }
     }
 
@@ -4043,6 +4093,13 @@ export const HomeScreen = {
     if (shouldExpand) {
       this.expandFocusedPoster(node);
     }
+    if (this.shouldSuppressAutomaticTrailerPlayback()) {
+      this.heroTrailerPlaybackState = null;
+      const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
+      this.clearTrailerLayer(heroLayer);
+      this.container?.querySelector(".home-modern-hero-media")?.classList.remove("trailer-active");
+      return false;
+    }
     if (!shouldPreviewTrailer || trailerTarget !== "hero_media" || !flowKey) {
       return false;
     }
@@ -4072,6 +4129,9 @@ export const HomeScreen = {
       return;
     }
     this.clearTrailerLayer(container);
+    if (this.shouldSuppressAutomaticTrailerPlayback()) {
+      return;
+    }
     if (source.kind === "youtube" && source.embedUrl) {
       suppressBackgroundTrailerMediaControls();
       const frame = document.createElement("iframe");
@@ -4244,6 +4304,12 @@ export const HomeScreen = {
       this.expandFocusedPoster(node);
     }
     if (!shouldPreviewTrailer) {
+      if (this.shouldSuppressAutomaticTrailerPlayback()) {
+        this.heroTrailerPlaybackState = null;
+        const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
+        this.clearTrailerLayer(heroLayer);
+        this.container?.querySelector(".home-modern-hero-media")?.classList.remove("trailer-active");
+      }
       return;
     }
     const trailerDelayMs = this.getFocusedPosterTrailerDelayMs();
@@ -5989,6 +6055,7 @@ export const HomeScreen = {
         focusedItemIndex: Number.isFinite(focusState?.itemIndex) ? focusState.itemIndex : -1,
         expandFocusedPoster,
         buildModernHeroPresentation,
+        renderHeroBackdropImage,
         renderContinueWatchingSection,
         createPosterCardMarkup,
         createSeeAllCardMarkup,

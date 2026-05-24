@@ -9,9 +9,14 @@
       var root = typeof globalThis !== "undefined" ? globalThis : window;
       var search = String((window.location && window.location.search) || "").toLowerCase();
       var userAgent = String((window.navigator && window.navigator.userAgent) || "").toLowerCase();
+      var webapis = root.webapis || {};
       var isTizenLaunch = Boolean(
         root.__NUVIO_PLATFORM__ === "tizen"
         || root.tizen
+        || root.avplay
+        || webapis.avplay
+        || webapis.avPlay
+        || webapis.productinfo
         || search.indexOf("wrapper=tizen") !== -1
         || search.indexOf("source=tizenbrew") !== -1
         || userAgent.indexOf("tizen") !== -1

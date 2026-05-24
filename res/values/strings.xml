@@ -1138,7 +1138,6 @@
     <string name="settings.appearance.themes.violet">Violet</string>
     <string name="settings.appearance.themes.white">White</string>
     <string name="settings.dialogs.playerPreference">Player preference</string>
-    <string name="settings.dialogs.preferredQuality">Preferred quality</string>
     <string name="settings.dialogs.preferredSubtitleLanguage">Preferred subtitle language</string>
     <string name="settings.dialogs.subtitleRenderMode">Subtitle render mode</string>
     <string name="settings.integration.backToIntegrations.subtitle">Return to integration list</string>
@@ -1150,8 +1149,6 @@
     <string name="settings.playback.enableSubtitles.title">Enable Subtitles</string>
     <string name="settings.playback.preferredAudio.subtitle">Choose the default audio language.</string>
     <string name="settings.playback.preferredPlayer.subtitle">Select the playback engine priority.</string>
-    <string name="settings.playback.preferredQuality.subtitle">Choose the default quality target.</string>
-    <string name="settings.playback.preferredQuality.title">Preferred Quality</string>
     <string name="settings.playback.renderMode.subtitle">Choose how subtitles are drawn.</string>
     <string name="settings.playback.renderMode.title">Render Mode</string>
     <string name="settings.playback.subtitleLanguage.subtitle">Preferred subtitle language.</string>

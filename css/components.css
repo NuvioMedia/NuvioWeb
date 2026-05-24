@@ -4714,6 +4714,22 @@
   opacity: 0;
 }
 
+.tizen-tv .home-screen-shell.home-layout-modern .home-hero-trailer-layer {
+  display: none;
+}
+
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
+  background: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.78) 28%, rgba(0, 0, 0, 0.28) 56%, rgba(0, 0, 0, 0) 100%);
+}
+
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
+  background: linear-gradient(180deg, transparent 88%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active .home-hero-backdrop {
+  opacity: 1;
+}
+
 .home-screen-shell.home-layout-modern .home-modern-hero-card::before,
 .home-screen-shell.home-layout-modern .home-modern-hero-card::after {
   content: none;
@@ -6999,6 +7015,13 @@
   overflow: hidden;
 }
 
+.tizen-tv #player {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
 #videoPlayer {
   position: absolute;
   top: 0;
@@ -7010,6 +7033,17 @@
   display: block;
   object-fit: fill;
   background: #000;
+}
+
+.tizen-tv #videoPlayer,
+.tizen-tv .player-ui-root {
+  right: auto;
+  bottom: auto;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  transform: none;
 }
 
 .player-ui-root {
