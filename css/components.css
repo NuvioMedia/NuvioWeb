@@ -3410,27 +3410,37 @@ button:focus-visible {
 }
 
 .library-loading-state {
-  min-height: calc(100vh - 120px);
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: 28px;
   color: var(--text-secondary);
 }
 
 .library-loading-spinner {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  border: 3px solid rgb(var(--focus-color-rgb) / 0.14);
-  border-top-color: var(--text-color);
-  animation: librarySpin 860ms linear infinite;
+  width: 96px;
+  height: 96px;
+  animation: librarySpin 1332ms linear infinite;
+}
+
+.library-loading-spinner-track {
+  fill: none;
+  stroke: #9E9E9E;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-dasharray: 188 252;
+  stroke-dashoffset: 0;
+  transform-origin: center;
+  animation: librarySpinnerDash 1332ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
 }
 
 .library-loading-label {
-  font-size: 22px;
-  line-height: 1.2;
+  font-size: 28px;
+  line-height: 40px;
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 .library-toast {
@@ -3867,6 +3877,21 @@ button:focus-visible {
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes librarySpinnerDash {
+  0% {
+    stroke-dasharray: 1 252;
+    stroke-dashoffset: 0;
+  }
+  50% {
+    stroke-dasharray: 188 252;
+    stroke-dashoffset: -64;
+  }
+  100% {
+    stroke-dasharray: 188 252;
+    stroke-dashoffset: -252;
   }
 }
 
@@ -11114,8 +11139,8 @@ button:focus-visible {
   inset: 0;
   z-index: 0;
   background:
-    linear-gradient(90deg, rgba(13, 13, 13, 1) 0%, rgba(13, 13, 13, 0.95) 10%, rgba(13, 13, 13, 0.84) 22%, rgba(13, 13, 13, 0.7) 36%, rgba(13, 13, 13, 0.52) 52%, rgba(13, 13, 13, 0.34) 66%, rgba(13, 13, 13, 0.18) 78%, rgba(13, 13, 13, 0.07) 90%, rgba(13, 13, 13, 0) 100%),
-    linear-gradient(180deg, rgba(13, 13, 13, 0) 0%, rgba(13, 13, 13, 0.05) 10%, rgba(13, 13, 13, 0.18) 22%, rgba(13, 13, 13, 0.38) 36%, rgba(13, 13, 13, 0.6) 52%, rgba(13, 13, 13, 0.78) 66%, rgba(13, 13, 13, 0.91) 78%, rgba(13, 13, 13, 0.97) 90%, rgba(13, 13, 13, 1) 100%);
+    linear-gradient(90deg, rgba(13, 13, 13, 1) 0%, rgba(13, 13, 13, 0.92) 10%, rgba(13, 13, 13, 0.78) 22%, rgba(13, 13, 13, 0.58) 36%, rgba(13, 13, 13, 0.38) 52%, rgba(13, 13, 13, 0.22) 66%, rgba(13, 13, 13, 0.1) 78%, rgba(13, 13, 13, 0.03) 90%, rgba(13, 13, 13, 0) 100%),
+    linear-gradient(180deg, rgba(13, 13, 13, 0) 0%, rgba(13, 13, 13, 0.03) 10%, rgba(13, 13, 13, 0.1) 22%, rgba(13, 13, 13, 0.24) 36%, rgba(13, 13, 13, 0.44) 52%, rgba(13, 13, 13, 0.68) 66%, rgba(13, 13, 13, 0.86) 78%, rgba(13, 13, 13, 0.96) 90%, rgba(13, 13, 13, 1) 100%);
   transition: opacity 600ms ease;
 }
 
@@ -11748,14 +11773,14 @@ button:focus-visible {
 
 .movie-cast-track,
 .series-cast-track {
-  gap: 12px;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  gap: 16px;
+  padding-top: 12px;
+  padding-bottom: 16px;
 }
 
 .movie-cast-card {
-  flex: 0 0 180px;
-  width: 180px;
+  flex: 0 0 300px;
+  width: 300px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -11763,14 +11788,14 @@ button:focus-visible {
 }
 
 .series-cast-card {
-  width: 180px;
-  flex-basis: 180px;
+  width: 300px;
+  flex-basis: 300px;
 }
 
 .movie-cast-avatar {
-  width: 120px;
-  height: 120px;
-  margin-bottom: 12px;
+  width: 200px;
+  height: 200px;
+  margin-bottom: 20px;
   border-radius: 999px;
   background-color: var(--detail-bg-card);
 }
@@ -11782,18 +11807,19 @@ button:focus-visible {
 
 .movie-cast-card.focused .movie-cast-avatar {
   background-color: var(--focus-bg);
-  box-shadow: 0 0 0 2px var(--focus-color);
+  box-shadow: 0 0 0 4px var(--focus-color);
 }
 
 .movie-cast-name {
-  font-size: var(--tv-caption-text);
+  font-size: 28px;
   line-height: 1.35;
   font-weight: 500;
   color: var(--detail-text-secondary);
 }
 
 .movie-cast-role {
-  font-size: clamp(12px, 0.8vw, 15px);
+  margin-top: 8px;
+  font-size: 24px;
   line-height: 1.35;
   color: var(--detail-text-tertiary);
 }
@@ -11869,7 +11895,7 @@ button:focus-visible {
 }
 
 .detail-company-section {
-  margin-top: 24px;
+  margin-top: 40px;
 }
 
 .detail-company-title {
@@ -11883,25 +11909,31 @@ button:focus-visible {
 
 .detail-company-track {
   display: flex;
-  gap: 14px;
+  gap: 24px;
   overflow-x: auto;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 .detail-company-card {
-  flex: 0 0 176px;
-  width: 176px;
-  height: 68px;
+  flex: 0 0 280px;
+  width: 280px;
+  height: 112px;
   border-radius: 16px;
   background: #fff;
   border: 0;
+  padding: 20px 28px;
   transition: transform 180ms ease;
 }
 
+.detail-company-card.focused {
+  box-shadow: 0 0 0 4px var(--focus-color);
+  transform: scale(1.03);
+}
+
 .detail-company-card img {
-  max-width: calc(100% - 32px);
-  max-height: 42px;
+  max-width: 100%;
+  max-height: 72px;
 }
 
 .detail-company-card span {
@@ -13087,9 +13119,9 @@ button:focus-visible {
 }
 
 .series-detail-logo {
-  max-width: 40vw;
-  max-height: 200px;
-  margin-bottom: 32px;
+  max-width: 37vw;
+  max-height: 180px;
+  margin-bottom: 40px;
 }
 
 .detail-trailer-active .series-detail-logo {
@@ -13110,7 +13142,7 @@ button:focus-visible {
 
 .series-detail-actions {
   gap: var(--detail-action-gap);
-  margin-bottom: 32px;
+  margin-bottom: 36px;
 }
 
 .series-primary-btn {

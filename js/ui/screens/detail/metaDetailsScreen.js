@@ -14,9 +14,11 @@ import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { imdbEpisodeRatingsRepository } from "../../../data/repository/imdbEpisodeRatingsRepository.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import { TraktSettingsStore } from "../../../data/local/traktSettingsStore.js";
+import { TraktAuthService } from "../../../data/repository/traktAuthService.js";
 import { Environment } from "../../../platform/environment.js";
 import { Platform } from "../../../platform/index.js";
-import { YOUTUBE_PROXY_URL } from "../../../config.js";
+import { TRAKT_API_URL, TRAKT_CLIENT_ID, YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import { renderHoldMenuMarkup } from "../../components/holdMenu.js";
 import {
@@ -32,6 +34,7 @@ const EPISODE_HOLD_DELAY_MS = 650;
 const POSTER_HOLD_DELAY_MS = 650;
 const HERO_HOLD_DELAY_MS = 650;
 const DETAIL_PROGRESS_END_THRESHOLD = 0.85;
+const TRAKT_COMMENTS_LIMIT = 100;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -303,15 +306,64 @@ function renderImdbBadge(rating) {
   if (!raw) {
     return "";
   }
-  const normalized = raw.replace(",", ".");
-  const parsed = Number(normalized);
-  const value = Number.isFinite(parsed) ? String(parsed.toFixed(1)).replace(".", ",") : raw;
+  const value = formatRatingValue(raw, { digits: 1 });
   return `
     <span class="series-imdb-badge">
       <img src="assets/icons/imdb_logo_2016.svg" alt="IMDb" />
       <span>${value}</span>
     </span>
   `;
+}
+
+function formatRatingValue(value, { digits = 1, stripTrailingZero = false } = {}) {
+  const raw = String(value ?? "").trim();
+  if (!raw) {
+    return "";
+  }
+  const parsed = Number(raw.replace(",", "."));
+  if (!Number.isFinite(parsed)) {
+    return raw.replace(",", ".");
+  }
+  const fixed = parsed.toFixed(digits);
+  return stripTrailingZero ? fixed.replace(/\.0$/, "") : fixed;
+}
+
+function normalizeGenreList(meta = {}) {
+  const raw = Array.isArray(meta?.genres)
+    ? meta.genres
+    : String(meta?.genres || meta?.genre || "").split(/[•,|/]/);
+  return raw.map((genre) => String(genre || "").trim()).filter(Boolean);
+}
+
+function mergeGenreLists(primary = [], fallback = []) {
+  const seen = new Set();
+  return [...(Array.isArray(primary) ? primary : []), ...(Array.isArray(fallback) ? fallback : [])]
+    .map((genre) => String(genre || "").trim())
+    .filter((genre) => {
+      const key = genre.toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function formatMovieReleaseDate(meta = {}) {
+  const type = String(meta?.type || meta?.apiType || "").toLowerCase();
+  const isMovie = type === "movie";
+  const rawDate = String(meta?.released || meta?.releaseDate || meta?.release_date || "").trim();
+  if (isMovie && rawDate) {
+    const parsed = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+      ? new Date(`${rawDate}T00:00:00`)
+      : new Date(rawDate);
+    if (!Number.isNaN(parsed.getTime())) {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        day: "numeric",
+        year: "numeric"
+      }).format(parsed);
+    }
+  }
+  return String(meta?.releaseInfo || "").trim();
 }
 
 function resolveImdbRating(meta = {}) {
@@ -621,6 +673,33 @@ function resolveTrailerSource(meta = {}) {
   };
 }
 
+function resolveTrailerItems(meta = {}) {
+  const candidates = [
+    ...(Array.isArray(meta?.trailers) ? meta.trailers : []),
+    ...(Array.isArray(meta?.trailerYtIds) ? meta.trailerYtIds.map((ytId) => ({ ytId, name: "Trailer" })) : [])
+  ];
+  const seen = new Set();
+  return candidates.map((entry) => {
+    const ytId = resolveYoutubeId(typeof entry === "string" ? entry : (entry?.ytId || entry?.youtubeId || entry?.source || entry?.url || entry?.link || ""));
+    if (!ytId || seen.has(ytId)) return null;
+    seen.add(ytId);
+    return {
+      ytId,
+      name: typeof entry === "object" ? (entry.name || entry.type || "Trailer") : "Trailer",
+      type: typeof entry === "object" ? (entry.type || "") : "",
+      lang: typeof entry === "object" ? (entry.lang || entry.language || "") : ""
+    };
+  }).filter(Boolean);
+}
+
+function stripTraktSpoilerMarkup(value = "") {
+  return String(value || "").replace(/\[\/?spoiler\]/gi, "").replace(/[\t ]+/g, " ").trim();
+}
+
+function containsTraktInlineSpoiler(value = "") {
+  return /\[spoiler\].*?\[\/spoiler\]/is.test(String(value || ""));
+}
+
 function formatCompactDate(value = "") {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -695,6 +774,7 @@ export const MetaDetailsScreen = {
       castItems: Array.isArray(this.castItems) ? [...this.castItems] : [],
       moreLikeThisItems: Array.isArray(this.moreLikeThisItems) ? [...this.moreLikeThisItems] : [],
       collectionItems: Array.isArray(this.collectionItems) ? [...this.collectionItems] : [],
+      commentsItems: Array.isArray(this.commentsItems) ? [...this.commentsItems] : [],
       collectionName: String(this.collectionName || ""),
       seriesRatingsBySeason: this.seriesRatingsBySeason ? { ...this.seriesRatingsBySeason } : {},
       nextEpisodeToWatch: this.nextEpisodeToWatch ? { ...this.nextEpisodeToWatch } : null,
@@ -703,6 +783,8 @@ export const MetaDetailsScreen = {
       selectedRatingSeason: Number(this.selectedRatingSeason || 0),
       seriesInsightTab: String(this.seriesInsightTab || "cast"),
       movieInsightTab: String(this.movieInsightTab || "cast"),
+      commentsPage: Number(this.commentsPage || 0),
+      commentsPageCount: Number(this.commentsPageCount || 0),
       episodeFocusIndexBySeason: this.episodeFocusIndexBySeason ? { ...this.episodeFocusIndexBySeason } : {},
       railFocusIndexByKey: this.railFocusIndexByKey ? { ...this.railFocusIndexByKey } : {},
       pendingFocusRestore: this.captureDetailFocus(),
@@ -728,6 +810,7 @@ export const MetaDetailsScreen = {
     this.castItems = Array.isArray(snapshot.castItems) ? [...snapshot.castItems] : [];
     this.moreLikeThisItems = Array.isArray(snapshot.moreLikeThisItems) ? [...snapshot.moreLikeThisItems] : [];
     this.collectionItems = Array.isArray(snapshot.collectionItems) ? [...snapshot.collectionItems] : [];
+    this.commentsItems = Array.isArray(snapshot.commentsItems) ? [...snapshot.commentsItems] : [];
     this.collectionName = String(snapshot.collectionName || "");
     this.seriesRatingsBySeason = snapshot.seriesRatingsBySeason ? { ...snapshot.seriesRatingsBySeason } : {};
     this.nextEpisodeToWatch = snapshot.nextEpisodeToWatch ? { ...snapshot.nextEpisodeToWatch } : null;
@@ -736,6 +819,8 @@ export const MetaDetailsScreen = {
     this.selectedRatingSeason = Number(snapshot.selectedRatingSeason || this.selectedSeason || 1);
     this.seriesInsightTab = String(snapshot.seriesInsightTab || "cast");
     this.movieInsightTab = String(snapshot.movieInsightTab || "cast");
+    this.commentsPage = Number(snapshot.commentsPage || 0);
+    this.commentsPageCount = Number(snapshot.commentsPageCount || 0);
     this.episodeFocusIndexBySeason = snapshot.episodeFocusIndexBySeason && typeof snapshot.episodeFocusIndexBySeason === "object"
       ? { ...snapshot.episodeFocusIndexBySeason }
       : {};
@@ -874,6 +959,15 @@ export const MetaDetailsScreen = {
     this.hasManualSeasonSelection = false;
     this.collectionItems = [];
     this.collectionName = "";
+    this.commentsItems = [];
+    this.commentsPage = 0;
+    this.commentsPageCount = 0;
+    this.commentsError = "";
+    this.commentsLoading = false;
+    this.commentsLoadingMore = false;
+    this.commentsMode = "title";
+    this.commentsEpisodeTarget = null;
+    this.selectedCommentIndex = -1;
     this.trailerSource = null;
     this.isTrailerPlaying = false;
     this.trailerMuted = false;
@@ -1001,6 +1095,7 @@ export const MetaDetailsScreen = {
     this.isLoadingDetail = false;
     this.maybeAutoOpenContinueWatchingStream();
     void this.refreshTrailerSource(meta, token);
+    void this.loadTraktComments({ force: true });
 
     // Background enrichments: do not block initial screen rendering.
     (async () => {
@@ -1025,6 +1120,7 @@ export const MetaDetailsScreen = {
       this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
       this.updateRenderedDetailSections(this.meta);
       void this.refreshTrailerSource(this.meta, token);
+      void this.loadTraktComments({ force: true });
 
       const tasks = [
         withTimeout(this.fetchMoreLikeThis(this.meta), 5000, [])
@@ -1127,6 +1223,114 @@ export const MetaDetailsScreen = {
       .map((episode) => Number(episode?.season || 0))
       .filter((season) => Number.isFinite(season) && season > 0)))
       .sort((left, right) => left - right);
+  },
+
+  supportsTraktComments(meta = this.meta) {
+    const type = String(meta?.type || meta?.apiType || this.params?.itemType || "").trim().toLowerCase();
+    return ["movie", "series", "tv", "show"].includes(type) || isSeriesDetailMeta(meta, this.episodes);
+  },
+
+  resolveTraktCommentsTarget(meta = this.meta) {
+    if (!this.supportsTraktComments(meta)) return null;
+    const isEpisode = this.commentsMode === "episode" && this.commentsEpisodeTarget;
+    const directId = resolveMetaImdbId(meta, this.params)
+      || String(meta?.slug || "").trim()
+      || String(meta?.id || this.params?.itemId || "").split(":").find((part) => /^tt\d+$/i.test(part))
+      || String(this.params?.itemId || meta?.id || "").trim();
+    if (!directId) return null;
+    const isSeries = isSeriesDetailMeta(meta, this.episodes);
+    if (isEpisode && isSeries) {
+      const season = Number(this.commentsEpisodeTarget?.season || 0);
+      const episode = Number(this.commentsEpisodeTarget?.episode || 0);
+      if (season > 0 && episode > 0) {
+        return { path: `/shows/${encodeURIComponent(directId)}/seasons/${season}/episodes/${episode}/comments/likes` };
+      }
+    }
+    return {
+      path: `/${isSeries ? "shows" : "movies"}/${encodeURIComponent(directId)}/comments/likes`
+    };
+  },
+
+  async fetchTraktCommentsPage(page = 1) {
+    const target = this.resolveTraktCommentsTarget(this.meta);
+    if (!target || !TRAKT_CLIENT_ID) {
+      return { items: [], page: 0, pageCount: 0 };
+    }
+    const token = await TraktAuthService.getValidAccessToken().catch(() => null);
+    if (!token) {
+      return { items: [], page: 0, pageCount: 0 };
+    }
+    const url = new URL(`${String(TRAKT_API_URL || "https://api.trakt.tv").replace(/\/+$/, "")}${target.path}`);
+    url.searchParams.set("page", String(page));
+    url.searchParams.set("limit", String(TRAKT_COMMENTS_LIMIT));
+    const response = await fetch(url.toString(), {
+      headers: {
+        "Content-Type": "application/json",
+        "trakt-api-version": "2",
+        "trakt-api-key": TRAKT_CLIENT_ID,
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (response.status === 404) {
+      return { items: [], page, pageCount: 0 };
+    }
+    if (!response.ok) {
+      throw new Error(`Trakt comments failed (${response.status})`);
+    }
+    const payload = await response.json();
+    const items = (Array.isArray(payload) ? payload : [])
+      .filter((entry) => String(entry?.comment || "").trim())
+      .map((entry) => ({
+        id: Number(entry.id || 0),
+        authorDisplayName: entry.user?.name || entry.user?.username || "Trakt user",
+        authorUsername: entry.user?.username || "",
+        comment: stripTraktSpoilerMarkup(entry.comment),
+        spoiler: Boolean(entry.spoiler),
+        containsInlineSpoilers: containsTraktInlineSpoiler(entry.comment),
+        review: Boolean(entry.review),
+        likes: Number(entry.likes || 0),
+        rating: entry.user_stats?.rating ?? entry.userStats?.rating ?? null,
+        createdAt: entry.created_at || entry.createdAt || ""
+      }));
+    return {
+      items,
+      page,
+      pageCount: Number(response.headers.get("X-Pagination-Page-Count") || page || 0)
+    };
+  },
+
+  async loadTraktComments({ force = false, append = false } = {}) {
+    if (!TraktSettingsStore.get().showMetaComments || !TraktAuthService.isAuthenticated() || !this.supportsTraktComments(this.meta)) {
+      this.commentsItems = [];
+      this.commentsPage = 0;
+      this.commentsPageCount = 0;
+      this.commentsError = "";
+      this.commentsLoading = false;
+      this.commentsLoadingMore = false;
+      return;
+    }
+    const page = append ? Number(this.commentsPage || 0) + 1 : 1;
+    if (append && this.commentsPageCount > 0 && page > this.commentsPageCount) return;
+    if (append) this.commentsLoadingMore = true;
+    else this.commentsLoading = true;
+    this.commentsError = "";
+    this.updateRenderedDetailSections(this.meta);
+    try {
+      const result = await this.fetchTraktCommentsPage(page);
+      const existingIds = new Set((append ? this.commentsItems : []).map((item) => Number(item.id || 0)));
+      const nextItems = result.items.filter((item) => !existingIds.has(Number(item.id || 0)));
+      this.commentsItems = append ? [...this.commentsItems, ...nextItems] : nextItems;
+      this.commentsPage = result.page;
+      this.commentsPageCount = result.pageCount;
+      this.commentsError = "";
+    } catch (error) {
+      console.warn("Trakt comments load failed", error);
+      this.commentsError = t("detail_comments_error", {}, "Could not load Trakt comments.");
+    } finally {
+      this.commentsLoading = false;
+      this.commentsLoadingMore = false;
+      this.updateRenderedDetailSections(this.meta);
+    }
   },
 
   hasAvailableSeason(season, episodes = this.episodes) {
@@ -1385,8 +1589,9 @@ export const MetaDetailsScreen = {
         background: settings.useArtwork ? (enrichment.backdrop || meta.background) : meta.background,
         poster: settings.useArtwork ? (enrichment.poster || meta.poster) : meta.poster,
         logo: settings.useArtwork ? (enrichment.logo || meta.logo) : meta.logo,
-        genres: settings.useDetails && enrichment.genres?.length ? enrichment.genres : meta.genres,
-        releaseInfo: settings.useDetails ? (enrichment.releaseInfo || meta.releaseInfo) : meta.releaseInfo,
+        genres: settings.useDetails ? mergeGenreLists(meta.genres, enrichment.genres) : meta.genres,
+        releaseInfo: settings.useDetails ? (meta.releaseInfo || enrichment.releaseInfo) : meta.releaseInfo,
+        released: settings.useDetails ? (meta.released || meta.releaseDate || meta.release_date || enrichment.released || null) : (meta.released || meta.releaseDate || meta.release_date || null),
         runtime: settings.useDetails ? (enrichment.runtime || meta.runtime) : meta.runtime,
         country: settings.useDetails ? (enrichment.country || meta.country) : meta.country,
         language: settings.useDetails ? (enrichment.language || meta.language) : meta.language,
@@ -1646,6 +1851,7 @@ export const MetaDetailsScreen = {
             <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
           </div>
           <div id="detailInsightSectionMount">${this.renderSeriesInsightSection()}</div>
+          <div id="detailCommentsSectionMount">${this.renderStandaloneCommentsSection()}</div>
           <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
         </div>
 
@@ -1705,7 +1911,7 @@ export const MetaDetailsScreen = {
             <span class="series-btn-icon">${renderPlayGlyph()}</span>
             <span>${escapeHtml(playLabel)}</span>
           </button>
-          <button class="series-circle-btn focusable" data-action="toggleLibrary">
+          <button class="series-circle-btn focusable${this.isSavedInLibrary ? " is-library-selected" : ""}" data-action="toggleLibrary">
             ${renderLibraryGlyph(this.isSavedInLibrary)}
           </button>
           ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${escapeAttribute(this.isMarkedWatched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched"))}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
@@ -1720,8 +1926,8 @@ export const MetaDetailsScreen = {
   },
 
   renderHeroMetaRows(meta) {
-    const genresText = Array.isArray(meta?.genres) ? meta.genres.filter(Boolean).join(" • ") : "";
-    const yearText = String(meta?.releaseInfo || "").split("-")[0] || "";
+    const genresText = normalizeGenreList(meta).join(" • ");
+    const yearText = formatMovieReleaseDate(meta);
     const imdbValue = resolveImdbRating(meta);
     const imdbText = imdbValue != null && String(imdbValue).trim() !== "" ? String(imdbValue).replace(",", ".") : "";
     const runtimeText = String(meta?.runtime || "").trim()
@@ -1781,7 +1987,7 @@ export const MetaDetailsScreen = {
         ${items.map(([label, icon, value]) => `
           <span class="detail-rating-item">
             <img src="${icon}" alt="${escapeHtml(label)}" />
-            <span>${escapeHtml(Number.isFinite(Number(value)) ? Number(value).toFixed(label === "trakt" || label === "tomatoes" ? 0 : 1).replace(/\.0$/, label === "trakt" || label === "tomatoes" ? "" : ".0") : String(value))}</span>
+            <span>${escapeHtml(formatRatingValue(value, { digits: label === "trakt" || label === "tomatoes" ? 0 : 1, stripTrailingZero: label === "trakt" || label === "tomatoes" }))}</span>
           </span>
         `).join("")}
       </div>
@@ -1878,6 +2084,7 @@ export const MetaDetailsScreen = {
         <div class="series-detail-content movie-detail-content">
           <div id="detailHeroSection">${this.renderMovieHeroMarkup(meta)}</div>
           <div id="detailInsightSectionMount">${this.renderMovieInsightSection(meta)}</div>
+          <div id="detailCommentsSectionMount">${this.renderStandaloneCommentsSection()}</div>
           <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
         </div>
         <div id="movieStreamChooserMount"></div>
@@ -1941,6 +2148,11 @@ export const MetaDetailsScreen = {
       insightMount.innerHTML = isSeries ? this.renderSeriesInsightSection() : this.renderMovieInsightSection(meta);
     }
 
+    const commentsMount = this.container.querySelector("#detailCommentsSectionMount");
+    if (commentsMount) {
+      commentsMount.innerHTML = this.renderStandaloneCommentsSection();
+    }
+
     const companyMount = this.container.querySelector("#detailCompanySectionsMount");
     if (companyMount) {
       companyMount.innerHTML = this.renderCompanySections(meta);
@@ -1951,10 +2163,12 @@ export const MetaDetailsScreen = {
     this.bindDetailChrome();
   },
   renderMovieInsightSection(meta) {
+    const trailerItems = resolveTrailerItems(meta);
     const tabItems = [
       ["cast", t("detail.creatorCast", {}, "Creator and Cast")],
       ["ratings", t("detail.ratings", {}, "Ratings")],
       ...(this.moreLikeThisItems.length ? [["morelike", t("detail.moreLikeThis", {}, "More Like This")]] : []),
+      ...(trailerItems.length ? [["trailer", t("detail_tab_trailer", {}, "Trailer")]] : []),
       ...(this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : [])
     ];
     const tabs = tabItems.length > 1 ? this.renderPeopleTabs("movie", this.movieInsightTab, tabItems) : "";
@@ -1994,8 +2208,16 @@ export const MetaDetailsScreen = {
         </section>
       `;
     }
+    if (this.movieInsightTab === "trailer") {
+      return `
+        <section class="series-insight-section is-switching">
+          ${tabs}
+          ${this.renderTrailerRail(trailerItems, "movie")}
+        </section>
+      `;
+    }
     return `
-      <section class="series-insight-section movie-cast-section">
+      <section class="series-insight-section movie-cast-section is-switching">
         ${tabs}
         ${this.renderSeriesCastTrack("movie")}
       </section>
@@ -2003,15 +2225,17 @@ export const MetaDetailsScreen = {
   },
 
   renderSeriesInsightSection() {
+    const trailerItems = resolveTrailerItems(this.meta);
     const tabItems = [
       ["cast", t("detail.creatorCast", {}, "Creator and Cast")],
       ["ratings", t("detail.ratings", {}, "Ratings")],
       ...(this.moreLikeThisItems.length ? [["morelike", t("detail.moreLikeThis", {}, "More Like This")]] : []),
+      ...(trailerItems.length ? [["trailer", t("detail_tab_trailer", {}, "Trailer")]] : []),
       ...(this.collectionItems.length ? [["collection", this.collectionName || "Collection"]] : [])
     ];
     const tabs = tabItems.length > 1 ? this.renderPeopleTabs("series", this.seriesInsightTab, tabItems) : "";
     return `
-      <section class="series-insight-section">
+      <section class="series-insight-section is-switching">
         ${tabs}
         ${this.seriesInsightTab === "ratings"
           ? this.renderSeriesRatingsPanel()
@@ -2019,6 +2243,8 @@ export const MetaDetailsScreen = {
             ? this.renderPreviewRail(this.collectionItems, "series", "collection:series")
           : this.seriesInsightTab === "morelike"
             ? this.renderPreviewRail(this.moreLikeThisItems, "series", "morelike:series")
+          : this.seriesInsightTab === "trailer"
+            ? this.renderTrailerRail(trailerItems, "series")
             : this.renderSeriesCastTrack("series")}
       </section>
     `;
@@ -3094,6 +3320,104 @@ export const MetaDetailsScreen = {
     `).join("");
   },
 
+  shouldRenderCommentsSection() {
+    return Boolean(TraktSettingsStore.get().showMetaComments && TraktAuthService.isAuthenticated() && this.supportsTraktComments(this.meta));
+  },
+
+  renderStandaloneCommentsSection() {
+    if (!this.shouldRenderCommentsSection()) {
+      return "";
+    }
+    return this.renderCommentsSection();
+  },
+
+  renderTrailerRail(trailerItems = resolveTrailerItems(this.meta), kind = "series") {
+    const items = Array.isArray(trailerItems) ? trailerItems : [];
+    if (!items.length) {
+      return `<div class="series-insight-empty">${escapeHtml(t("detail.noTrailers", {}, "No trailers available."))}</div>`;
+    }
+    const cards = items.map((trailer, index) => {
+      const ytId = String(trailer.ytId || "").trim();
+      const title = trailer.name || trailer.type || t("detail_tab_trailer", {}, "Trailer");
+      const subtitle = [trailer.type, trailer.lang ? String(trailer.lang).toUpperCase() : ""].filter(Boolean).join(" • ");
+      return `
+        <article class="detail-morelike-card detail-trailer-card focusable"
+                 data-action="openSharedTrailer"
+                 data-trailer-index="${index}"
+                 data-trailer-yt-id="${escapeHtml(ytId)}">
+          <div class="detail-morelike-poster-wrap">
+            <img class="detail-morelike-poster-image" src="https://img.youtube.com/vi/${escapeHtml(ytId)}/hqdefault.jpg" alt="${escapeHtml(title)}" loading="lazy" decoding="async" />
+            <span class="detail-trailer-play-badge"><img src="assets/icons/trailer_play_button.svg" alt="" aria-hidden="true" /></span>
+          </div>
+          <div class="detail-morelike-name">${escapeHtml(title)}</div>
+          ${subtitle ? `<div class="detail-morelike-type">${escapeHtml(subtitle)}</div>` : ""}
+        </article>
+      `;
+    }).join("");
+    return `<div class="detail-morelike-track detail-trailer-track" data-scroll-key="trailer:${escapeHtml(kind)}">${cards}</div>`;
+  },
+
+  renderCommentsSection() {
+    if (this.commentsLoading) {
+      const cards = Array.from({ length: 3 }).map(() => `<article class="detail-comment-card is-loading"><span></span><span></span><span></span></article>`).join("");
+      return `<div class="detail-comments-track" data-scroll-key="comments:loading">${cards}</div>`;
+    }
+    if (this.commentsError) {
+      return `
+        <div class="detail-comments-error">
+          <p>${escapeHtml(this.commentsError)}</p>
+          <button class="series-season-btn focusable" data-action="retryComments">${escapeHtml(t("action_retry", {}, "Retry"))}</button>
+        </div>
+      `;
+    }
+    const modeButtons = isSeriesDetailMeta(this.meta, this.episodes)
+      ? `<div class="detail-comments-modes">
+          <button class="detail-comments-mode focusable${this.commentsMode !== "episode" ? " selected" : ""}" data-action="setCommentsMode" data-comments-mode="title">${escapeHtml(t("detail_comments_mode_show", {}, "Show"))}</button>
+          <button class="detail-comments-mode focusable${this.commentsMode === "episode" ? " selected" : ""}" data-action="setCommentsMode" data-comments-mode="episode">${escapeHtml(this.commentsEpisodeTarget ? `S${this.commentsEpisodeTarget.season}E${this.commentsEpisodeTarget.episode}` : t("detail_comments_mode_episode", {}, "Episode"))}</button>
+        </div>`
+      : "";
+    const subtitle = this.commentsMode === "episode" && this.commentsEpisodeTarget
+      ? t("detail_comments_subtitle_episode", { season: this.commentsEpisodeTarget.season, episode: this.commentsEpisodeTarget.episode }, "Reviews for S{{season}}E{{episode}}")
+      : t("detail_comments_subtitle", {}, "Top Trakt reviews");
+    if (!this.commentsItems.length) {
+      return `
+        <div class="detail-comments-section">
+          <div class="detail-comments-heading"><img src="assets/icons/trakt_tv_glyph.svg" alt="" /><span>${escapeHtml(t("detail_comments_title", {}, "Comments"))}</span></div>
+          <p class="detail-comments-subtitle">${escapeHtml(subtitle)}</p>
+          ${modeButtons}
+          <p class="series-insight-empty">${escapeHtml(t("detail_comments_empty", {}, "No Trakt comments yet."))}</p>
+        </div>
+      `;
+    }
+    const cards = this.commentsItems.map((review, index) => {
+      const body = review.spoiler || review.containsInlineSpoilers
+        ? t("detail_comments_spoiler_hidden", {}, "Spoiler review. Press OK to reveal.")
+        : review.comment;
+      const chips = [
+        review.review ? t("detail_comments_badge_review", {}, "Review") : "",
+        (review.spoiler || review.containsInlineSpoilers) ? t("detail_comments_badge_spoiler", {}, "Spoiler") : "",
+        review.rating != null ? t("detail_comments_badge_rating", { rating: formatRatingValue(review.rating, { digits: 0, stripTrailingZero: true }) }, "{{rating}}/10") : ""
+      ].filter(Boolean).map((chip) => `<span>${escapeHtml(chip)}</span>`).join("");
+      return `
+        <article class="detail-comment-card focusable" data-action="openComment" data-comment-index="${index}">
+          <h4>${escapeHtml(review.authorDisplayName || "Trakt user")}</h4>
+          ${chips ? `<div class="detail-comment-chips">${chips}</div>` : ""}
+          <p>${escapeHtml(body)}</p>
+          <small>${escapeHtml(t("detail_comments_likes", { likes: review.likes || 0 }, "{{likes}} likes"))}</small>
+        </article>
+      `;
+    }).join("");
+    const loadingMore = this.commentsLoadingMore ? `<article class="detail-comment-card is-loading"><span></span><span></span><span></span></article>` : "";
+    return `
+      <div class="detail-comments-section">
+        <div class="detail-comments-heading"><img src="assets/icons/trakt_tv_glyph.svg" alt="" /><span>${escapeHtml(t("detail_comments_title", {}, "Comments"))}</span></div>
+        <p class="detail-comments-subtitle">${escapeHtml(subtitle)}</p>
+        ${modeButtons}
+        <div class="detail-comments-track" data-scroll-key="comments:${escapeHtml(this.commentsMode)}">${cards}${loadingMore}</div>
+      </div>
+    `;
+  },
+
   renderPreviewRail(items = [], fallbackType = "movie", railKey = "morelike") {
     if (!Array.isArray(items) || !items.length) {
       return "";
@@ -3205,12 +3529,12 @@ export const MetaDetailsScreen = {
           return;
         }
         if (isSeriesDetailMeta(this.meta, this.episodes) && tab !== this.seriesInsightTab) {
-          this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
+          this.seriesInsightTab = ["cast", "ratings", "morelike", "trailer", "collection"].includes(tab) ? tab : "cast";
           this.updateRenderedDetailSections(this.meta);
           return;
         }
         if (!isSeriesDetailMeta(this.meta, this.episodes) && tab !== this.movieInsightTab) {
-          this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
+          this.movieInsightTab = ["cast", "ratings", "morelike", "trailer", "collection"].includes(tab) ? tab : "cast";
           this.updateRenderedDetailSections(this.meta);
         }
         return;
@@ -3274,6 +3598,7 @@ export const MetaDetailsScreen = {
         return;
       }
       if (node.classList.contains("series-circle-btn")) {
+        node.classList.toggle("is-library-selected", this.isSavedInLibrary);
         node.innerHTML = renderLibraryGlyph(this.isSavedInLibrary);
         node.setAttribute(
           "aria-label",
@@ -3346,6 +3671,18 @@ export const MetaDetailsScreen = {
     if (action === "setSeriesInsightTab" || action === "setMovieInsightTab") {
       const tab = String(target.dataset.tab || "");
       return tab ? { selector: `.series-insight-tab[data-tab="${tab}"]` } : null;
+    }
+    if (action === "setCommentsMode") {
+      const mode = String(target.dataset.commentsMode || "title") === "episode" ? "episode" : "title";
+      return { selector: `.detail-comments-mode[data-comments-mode="${mode}"]` };
+    }
+    if (action === "openComment") {
+      const index = Number(target.dataset.commentIndex || 0);
+      return { selector: `.detail-comment-card[data-comment-index="${index}"]` };
+    }
+    if (action === "openSharedTrailer") {
+      const index = Number(target.dataset.trailerIndex || 0);
+      return { selector: `.detail-trailer-card[data-trailer-index="${index}"]` };
     }
     if (action === "selectRatingSeason") {
       const season = Number(target.dataset.season || 0);
@@ -3433,7 +3770,22 @@ export const MetaDetailsScreen = {
       return;
     }
 
-    const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+    const ease = (t) => {
+      const p1x = 0.4;
+      const p1y = 0;
+      const p2x = 0.2;
+      const p2y = 1;
+      const sampleCurveX = (x) => ((1 - 3 * p2x + 3 * p1x) * x + (3 * p2x - 6 * p1x)) * x * x + (3 * p1x) * x;
+      const sampleCurveY = (x) => ((1 - 3 * p2y + 3 * p1y) * x + (3 * p2y - 6 * p1y)) * x * x + (3 * p1y) * x;
+      const sampleDerivativeX = (x) => (3 * (1 - 3 * p2x + 3 * p1x) * x + 2 * (3 * p2x - 6 * p1x)) * x + (3 * p1x);
+      let x = t;
+      for (let i = 0; i < 4; i += 1) {
+        const derivative = sampleDerivativeX(x);
+        if (Math.abs(derivative) < 0.001) break;
+        x -= (sampleCurveX(x) - t) / derivative;
+      }
+      return sampleCurveY(Math.max(0, Math.min(1, x)));
+    };
     const map = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
     const key = axis === "y" ? "y" : "x";
     const existing = map.get(container) || {};
@@ -3444,7 +3796,7 @@ export const MetaDetailsScreen = {
     const startTime = performance.now();
     const tick = (now) => {
       const progress = Math.min(1, (now - startTime) / effectiveDuration);
-      container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
+      container[property] = Math.round(startValue + ((nextValue - startValue) * ease(progress)));
       if (progress < 1) {
         existing[key] = requestAnimationFrame(tick);
         map.set(container, existing);
@@ -4351,7 +4703,7 @@ export const MetaDetailsScreen = {
     if (!(node instanceof HTMLElement)) {
       return null;
     }
-    return node.closest(".series-detail-actions, .series-season-row, .series-episode-track, .series-insight-tabs, .movie-cast-track, .series-cast-track, .series-rating-seasons, .series-episode-ratings-grid, .detail-morelike-track, .detail-company-track") || node;
+    return node.closest(".series-detail-actions, .series-season-row, .series-episode-track, .series-insight-tabs, .detail-comments-modes, .detail-comments-track, .movie-cast-track, .series-cast-track, .series-rating-seasons, .series-episode-ratings-grid, .detail-morelike-track, .detail-company-track") || node;
   },
 
   getHorizontalTrackScrollLeft(horizontalTrack, target) {
@@ -4515,43 +4867,48 @@ export const MetaDetailsScreen = {
     if (!Array.isArray(list) || !list.length) {
       return false;
     }
-    const preserveVerticalScroll = Boolean(options?.preserveVerticalScroll);
+    let preserveVerticalScroll = Boolean(options?.preserveVerticalScroll);
     const animated = options?.animated !== false;
     const index = Math.max(0, Math.min(list.length - 1, targetIndex));
     const target = list[index];
     if (!target) {
       return false;
     }
+    const previous = this.container.querySelector(".focusable.focused");
     this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     target.focus();
     this.rememberEpisodeFocus(target, list);
     this.rememberRailFocus(target, list);
-    const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons, .detail-morelike-track, .detail-company-track, .series-season-row, .series-insight-tabs");
+    const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons, .detail-morelike-track, .detail-company-track, .series-season-row, .series-insight-tabs, .detail-comments-modes, .detail-comments-track");
     if (horizontalTrack) {
+      if (previous && previous !== target && horizontalTrack.contains(previous)) {
+        preserveVerticalScroll = true;
+      }
       const nextScrollLeft = this.getHorizontalTrackScrollLeft(horizontalTrack, target);
       if (animated) {
-        this.animateScroll(horizontalTrack, "x", nextScrollLeft, 140);
+          this.animateScroll(horizontalTrack, "x", nextScrollLeft, 260);
       } else {
         horizontalTrack.scrollLeft = nextScrollLeft;
       }
       const detailContent = this.getDetailContentScroller();
       if (!preserveVerticalScroll && detailContent && detailContent.contains(horizontalTrack)) {
-        const rect = horizontalTrack.getBoundingClientRect();
+        const verticalTarget = target.closest(".detail-comments-section, .series-insight-section, .detail-company-section") || horizontalTrack;
+        const rect = verticalTarget.getBoundingClientRect();
         const contentRect = detailContent.getBoundingClientRect();
-        const topPad = 72;
-        const bottomPad = 120;
+        const topPad = 96;
+        const bottomPad = 96;
         if (rect.bottom > contentRect.bottom - bottomPad) {
           const nextScrollTop = detailContent.scrollTop + Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
           if (animated) {
-            this.animateScroll(detailContent, "y", nextScrollTop, 150);
+            this.animateScroll(detailContent, "y", nextScrollTop, 280);
           } else {
             detailContent.scrollTop = nextScrollTop;
           }
         } else if (rect.top < contentRect.top + topPad) {
           const nextScrollTop = detailContent.scrollTop - Math.ceil(contentRect.top + topPad - rect.top);
           if (animated) {
-            this.animateScroll(detailContent, "y", nextScrollTop, 150);
+            this.animateScroll(detailContent, "y", nextScrollTop, 280);
           } else {
             detailContent.scrollTop = nextScrollTop;
           }
@@ -4768,10 +5125,34 @@ export const MetaDetailsScreen = {
     const ratingSeasons = Array.from(this.container.querySelectorAll(".series-rating-seasons .series-rating-season.focusable"));
     const ratingChips = Array.from(this.container.querySelectorAll(".series-episode-ratings-grid .series-episode-rating-chip.focusable"));
     const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+    const commentModes = Array.from(this.container.querySelectorAll(".detail-comments-modes .detail-comments-mode.focusable"));
+    const commentCards = Array.from(this.container.querySelectorAll(".detail-comments-track .detail-comment-card.focusable"));
     const moreLikeRememberedIndex = this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards);
     const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
     const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
     const rememberedCompanyIndex = (trackIndex = 0) => this.getRememberedCompanyIndex(companyTracks, companyCards, trackIndex);
+    const focusCommentsEntry = (index = 0, options = {}) => {
+      if (commentModes.length) {
+        return this.focusInList(commentModes, Math.min(index, commentModes.length - 1), options);
+      }
+      if (commentCards.length) {
+        return this.focusInList(commentCards, Math.min(index, commentCards.length - 1), options);
+      }
+      return false;
+    };
+    const focusActiveSectionFromComments = (index = 0) => {
+      if (this.seriesInsightTab === "ratings") {
+        if (ratingChips.length) return this.focusInList(ratingChips, Math.min(index, ratingChips.length - 1), { preserveVerticalScroll: true });
+        if (ratingSeasons.length) return this.focusInList(ratingSeasons, Math.min(index, ratingSeasons.length - 1), { preserveVerticalScroll: true });
+      }
+      if ((this.seriesInsightTab === "morelike" || this.seriesInsightTab === "trailer" || this.seriesInsightTab === "collection") && moreLikeCards.length) {
+        return this.focusInList(moreLikeCards, this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards), { preserveVerticalScroll: true });
+      }
+      if (castCards.length) return this.focusInList(castCards, Math.min(index, castCards.length - 1), { preserveVerticalScroll: true });
+      if (insightTabs.length) return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs), { preserveVerticalScroll: true });
+      if (episodes.length) return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true });
+      return false;
+    };
 
     if (typeof event.preventDefault === "function") {
       event.preventDefault();
@@ -4879,6 +5260,9 @@ export const MetaDetailsScreen = {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
+      if (direction === "down" && focusCommentsEntry(castIndex)) {
+        return true;
+      }
       if (direction === "down" && moreLikeCards.length) {
         return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
@@ -4906,6 +5290,9 @@ export const MetaDetailsScreen = {
       if (direction === "down" && moreLikeCards.length) {
         return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
+      if (direction === "down" && focusCommentsEntry(ratingSeasonIndex)) {
+        return true;
+      }
       return true;
     }
 
@@ -4924,12 +5311,36 @@ export const MetaDetailsScreen = {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
       }
+      if (direction === "down" && focusCommentsEntry(ratingChipIndex)) {
+        return true;
+      }
       if (direction === "down" && moreLikeCards.length) {
         return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
       }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
       }
+      return true;
+    }
+
+    const commentModeIndex = commentModes.indexOf(current);
+    if (commentModeIndex >= 0) {
+      if (direction === "left") return this.focusInList(commentModes, commentModeIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(commentModes, commentModeIndex + 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "up") return focusActiveSectionFromComments(commentModeIndex) || true;
+      if (direction === "down" && commentCards.length) return this.focusInList(commentCards, Math.min(commentModeIndex, commentCards.length - 1)) || true;
+      return true;
+    }
+
+    const commentCardIndex = commentCards.indexOf(current);
+    if (commentCardIndex >= 0) {
+      if (direction === "left") return this.focusInList(commentCards, commentCardIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(commentCards, commentCardIndex + 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "up") {
+        if (commentModes.length) return this.focusInList(commentModes, Math.min(commentCardIndex, commentModes.length - 1), { preserveVerticalScroll: true }) || true;
+        return focusActiveSectionFromComments(commentCardIndex) || true;
+      }
+      if (direction === "down" && companyCards[0]?.length) return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
       return true;
     }
 
@@ -4945,6 +5356,9 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
         }
+      }
+      if (direction === "down" && focusCommentsEntry(moreLikeIndex)) {
+        return true;
       }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
@@ -4963,6 +5377,9 @@ export const MetaDetailsScreen = {
       if (direction === "up") {
         if (trackIndex > 0 && companyCards[trackIndex - 1]?.length) {
           return this.focusInList(companyCards[trackIndex - 1], rememberedCompanyIndex(trackIndex - 1)) || true;
+        }
+        if (commentCards.length || commentModes.length) {
+          return focusCommentsEntry(companyIndex, { preserveVerticalScroll: true }) || true;
         }
         if (moreLikeCards.length) {
           return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
@@ -5011,10 +5428,29 @@ export const MetaDetailsScreen = {
     const tabs = Array.from(this.container.querySelectorAll(".series-insight-tabs .series-insight-tab.focusable"));
     const cast = Array.from(this.container.querySelectorAll(".movie-cast-track .movie-cast-card.focusable"));
     const moreLikeCards = Array.from(this.container.querySelectorAll(".detail-morelike-track .detail-morelike-card.focusable"));
+    const commentModes = Array.from(this.container.querySelectorAll(".detail-comments-modes .detail-comments-mode.focusable"));
+    const commentCards = Array.from(this.container.querySelectorAll(".detail-comments-track .detail-comment-card.focusable"));
     const moreLikeRememberedIndex = this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards);
     const companyTracks = Array.from(this.container.querySelectorAll(".detail-company-track"));
     const companyCards = companyTracks.map((track) => Array.from(track.querySelectorAll(".detail-company-card.focusable")));
     const rememberedCompanyIndex = (trackIndex = 0) => this.getRememberedCompanyIndex(companyTracks, companyCards, trackIndex);
+    const focusCommentsEntry = (index = 0, options = {}) => {
+      if (commentModes.length) {
+        return this.focusInList(commentModes, Math.min(index, commentModes.length - 1), options);
+      }
+      if (commentCards.length) {
+        return this.focusInList(commentCards, Math.min(index, commentCards.length - 1), options);
+      }
+      return false;
+    };
+    const focusActiveSectionFromComments = (index = 0) => {
+      if ((this.movieInsightTab === "morelike" || this.movieInsightTab === "trailer" || this.movieInsightTab === "collection") && moreLikeCards.length) {
+        return this.focusInList(moreLikeCards, this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards), { preserveVerticalScroll: true });
+      }
+      if (cast.length) return this.focusInList(cast, Math.min(index, cast.length - 1), { preserveVerticalScroll: true });
+      if (tabs.length) return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs), { preserveVerticalScroll: true });
+      return this.focusInList(actions, Math.min(index, actions.length - 1), { preserveVerticalScroll: true });
+    };
 
     if (typeof event?.preventDefault === "function") {
       event.preventDefault();
@@ -5049,6 +5485,7 @@ export const MetaDetailsScreen = {
       if (direction === "down") {
         if (cast.length) return this.focusInList(cast, Math.min(tabIndex, cast.length - 1)) || true;
         if (moreLikeCards.length) return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+        if (focusCommentsEntry(tabIndex)) return true;
         if (companyCards[0]?.length) return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
       }
       return true;
@@ -5066,6 +5503,9 @@ export const MetaDetailsScreen = {
       }
       if (direction === "down" && moreLikeCards.length) {
         return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+      }
+      if (direction === "down" && focusCommentsEntry(castIndex)) {
+        return true;
       }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
@@ -5087,9 +5527,33 @@ export const MetaDetailsScreen = {
         }
         return this.focusInList(actions, Math.min(moreLikeIndex, actions.length - 1)) || true;
       }
+      if (direction === "down" && focusCommentsEntry(moreLikeIndex)) {
+        return true;
+      }
       if (direction === "down" && companyCards[0]?.length) {
         return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
       }
+      return true;
+    }
+
+    const commentModeIndex = commentModes.indexOf(current);
+    if (commentModeIndex >= 0) {
+      if (direction === "left") return this.focusInList(commentModes, commentModeIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(commentModes, commentModeIndex + 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "up") return focusActiveSectionFromComments(commentModeIndex) || true;
+      if (direction === "down" && commentCards.length) return this.focusInList(commentCards, Math.min(commentModeIndex, commentCards.length - 1)) || true;
+      return true;
+    }
+
+    const commentCardIndex = commentCards.indexOf(current);
+    if (commentCardIndex >= 0) {
+      if (direction === "left") return this.focusInList(commentCards, commentCardIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusInList(commentCards, commentCardIndex + 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "up") {
+        if (commentModes.length) return this.focusInList(commentModes, Math.min(commentCardIndex, commentModes.length - 1), { preserveVerticalScroll: true }) || true;
+        return focusActiveSectionFromComments(commentCardIndex) || true;
+      }
+      if (direction === "down" && companyCards[0]?.length) return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
       return true;
     }
 
@@ -5104,6 +5568,9 @@ export const MetaDetailsScreen = {
       if (direction === "up") {
         if (trackIndex > 0 && companyCards[trackIndex - 1]?.length) {
           return this.focusInList(companyCards[trackIndex - 1], rememberedCompanyIndex(trackIndex - 1)) || true;
+        }
+        if (commentCards.length || commentModes.length) {
+          return focusCommentsEntry(companyIndex, { preserveVerticalScroll: true }) || true;
         }
         if (moreLikeCards.length) {
           return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
@@ -5370,18 +5837,51 @@ export const MetaDetailsScreen = {
     if (action === "setSeriesInsightTab") {
       const tab = String(current.dataset.tab || "cast");
       if (tab !== this.seriesInsightTab) {
-        this.seriesInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-        this.updateRenderedDetailSections(this.meta);
+          this.seriesInsightTab = ["cast", "ratings", "morelike", "trailer", "collection"].includes(tab) ? tab : "cast";
+          this.updateRenderedDetailSections(this.meta);
+        }
+        return;
       }
-      return;
-    }
 
     if (action === "setMovieInsightTab") {
       const tab = String(current.dataset.tab || "cast");
       if (tab !== this.movieInsightTab) {
-        this.movieInsightTab = ["cast", "ratings", "morelike", "collection"].includes(tab) ? tab : "cast";
-        this.updateRenderedDetailSections(this.meta);
+          this.movieInsightTab = ["cast", "ratings", "morelike", "trailer", "collection"].includes(tab) ? tab : "cast";
+          this.updateRenderedDetailSections(this.meta);
+        }
+        return;
       }
+
+    if (action === "setCommentsMode") {
+      const mode = String(current.dataset.commentsMode || "title") === "episode" ? "episode" : "title";
+      this.commentsMode = mode;
+      if (mode === "episode" && !this.commentsEpisodeTarget) {
+        this.commentsEpisodeTarget = this.nextEpisodeToWatch || this.episodes?.[0] || null;
+      }
+      this.commentsItems = [];
+      this.commentsPage = 0;
+      this.updateRenderedDetailSections(this.meta);
+      void this.loadTraktComments({ force: true });
+      return;
+    }
+
+    if (action === "retryComments") {
+      void this.loadTraktComments({ force: true });
+      return;
+    }
+
+    if (action === "openSharedTrailer") {
+      const ytId = String(current.dataset.trailerYtId || "").trim();
+      if (ytId) {
+        this.trailerSource = { kind: "youtube", ytId, embedUrl: buildYoutubeEmbedUrl(ytId, { muted: false }) };
+        this.playTrailer({ muted: false, restart: true, initiatedByUser: true });
+      }
+      return;
+    }
+
+    if (action === "openComment") {
+      this.selectedCommentIndex = Number(current.dataset.commentIndex || 0);
+      current.classList.toggle("is-expanded");
       return;
     }
 
