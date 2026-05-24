@@ -132,18 +132,17 @@ export async function getSidebarProfileState() {
 export function activateLegacySidebarAction(action, currentRoute = "") {
   const normalizedAction = String(action || "");
   if (!normalizedAction) {
-    return;
+    return null;
   }
   if (normalizedAction === "gotoAccount") {
-    Router.navigate("profileSelection");
-    return;
+    return Router.navigate("profileSelection");
   }
 
   const target = getItemForAction(normalizedAction);
   if (!target || target.route === currentRoute) {
-    return;
+    return null;
   }
-  Router.navigate(target.route);
+  return Router.navigate(target.route);
 }
 
 export function isSelectedSidebarAction(action, selectedRoute = "") {
@@ -274,7 +273,7 @@ export function bindRootSidebarEvents(container, {
       event?.stopPropagation?.();
       event?.stopImmediatePropagation?.();
       const action = String(node.dataset.action || "");
-      activateLegacySidebarAction(action, currentRoute);
+      await activateLegacySidebarAction(action, currentRoute);
       if (isSelectedSidebarAction(action, currentRoute) && typeof onSelectedAction === "function") {
         await onSelectedAction(node);
       }

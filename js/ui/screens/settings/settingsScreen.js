@@ -2257,7 +2257,7 @@ export const SettingsScreen = {
     const zone = String(current.dataset.zone || "");
 
     if (isRootSidebarNode(current)) {
-      activateLegacySidebarAction(String(current.dataset.action || ""), "settings");
+      await activateLegacySidebarAction(String(current.dataset.action || ""), "settings");
       if (isSelectedSidebarAction(String(current.dataset.action || ""), "settings")) {
         await this.closeSidebarToNav();
       }
@@ -2312,6 +2312,15 @@ export const SettingsScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
+    const key = String(event?.key || event?.code || event?.keyName || "").toLowerCase();
+
+    if (this.focusZone === "sidebar" && (code === 36 || key === "home")) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
+      await Router.navigate("home");
+      return;
+    }
 
     if (this.optionDialog) {
       if (code === 38 || code === 40) {
