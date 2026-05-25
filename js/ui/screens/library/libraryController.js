@@ -11,6 +11,7 @@ import { I18n } from "../../../i18n/index.js";
 
 const ALL_KEY = "__all__";
 const MESSAGE_CLEAR_MS = 2400;
+const SYNC_LOADING_MIN_MS = 700;
 const LEADING_ARTICLE_REGEX = /^(the|an|a)\s+/i;
 
 export const LIBRARY_SORT_OPTIONS = [
@@ -66,6 +67,22 @@ function makeInitialState() {
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function nextAnimationFrame() {
+  if (typeof globalThis.requestAnimationFrame !== "function") {
+    return delay(0);
+  }
+  return new Promise((resolve) => globalThis.requestAnimationFrame(() => resolve()));
+}
+
+async function allowLoadingFrame() {
+  await nextAnimationFrame();
+  await nextAnimationFrame();
 }
 
 function optionLabel(option = {}) {
@@ -771,10 +788,15 @@ export class LibraryController {
   }
 
   async refreshNow() {
+    const startedAt = Date.now();
     this.setState({ isSyncing: true, errorMessage: null });
     try {
+      await allowLoadingFrame();
       await libraryRepository.refreshNow();
-      this.setTransientMessage("Library synced");
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < SYNC_LOADING_MIN_MS) {
+        await delay(SYNC_LOADING_MIN_MS - elapsed);
+      }
       await this.reload({ preserveOverlay: true });
       this.setState({ isSyncing: false });
     } catch (error) {

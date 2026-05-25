@@ -34,7 +34,6 @@ function escapeHtml(value) {
 }
 
 const PHONE_MANAGER_URL = "https://nuvioapp.space/account?tab=addons";
-const ROUTE_ACTIVATION_GRACE_MS = 300;
 
 async function getPhoneManagerUrl() {
   return PHONE_MANAGER_URL;
@@ -54,7 +53,6 @@ export const PluginScreen = {
     this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
     this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
     this.qrOverlayOpen = false;
-    this.activationReadyAt = Date.now() + ROUTE_ACTIVATION_GRACE_MS;
     const [sidebarProfile, model] = await Promise.all([
       getSidebarProfileState(),
       this.collectModel()
@@ -144,10 +142,7 @@ export const PluginScreen = {
 
   bindContentEvents() {
     this.container.querySelectorAll(".addons-focusable[data-action-id]").forEach((node) => {
-      node.addEventListener("click", async (event) => {
-        if (event.detail === 0 || Date.now() < Number(this.activationReadyAt || 0)) {
-          return;
-        }
+      node.addEventListener("click", async () => {
         this.focusZone = "content";
         this.contentRow = Number(node.dataset.row || 0);
         this.contentCol = Number(node.dataset.col || 0);
@@ -350,9 +345,6 @@ export const PluginScreen = {
     if (!action) {
       return;
     }
-    if (String(current.dataset.actionId || "") === "manage_from_phone" && Date.now() < Number(this.activationReadyAt || 0)) {
-      return;
-    }
     await action();
     if (Router.getCurrent() === "plugin") {
       this.normalizeFocus();
@@ -369,18 +361,13 @@ export const PluginScreen = {
   },
 
   async onKeyDown(event) {
-    const code = Number(event?.keyCode || 0);
-    if (code === 32) {
-      event?.preventDefault?.();
-      return;
-    }
-
     if (this.qrOverlayOpen) {
       if (Platform.isBackEvent(event)) {
         event?.preventDefault?.();
         await this.closeQrOverlay();
         return;
       }
+      const code = Number(event?.keyCode || 0);
       if (code === 13) {
         event?.preventDefault?.();
         await this.closeQrOverlay();
@@ -398,6 +385,7 @@ export const PluginScreen = {
       return;
     }
 
+    const code = Number(event?.keyCode || 0);
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;
@@ -451,7 +439,6 @@ export const PluginScreen = {
     }
 
     if (code === 13) {
-      event?.preventDefault?.();
       await this.activateFocused();
     }
   },

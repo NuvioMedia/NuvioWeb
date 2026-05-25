@@ -1748,7 +1748,9 @@ export const ProfileSelectionScreen = {
       || this.container.querySelector("[data-overlay-root='editor']");
     const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
 
-    if (!Platform.isTizen() || code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
+    const supportsRemoteEnterHold = Platform.isTizen() || Platform.isWebOS();
+
+    if (!supportsRemoteEnterHold || code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
       this.cancelPendingProfileHold();
     }
 
@@ -1798,7 +1800,7 @@ export const ProfileSelectionScreen = {
       }
     }
 
-    if (Platform.isTizen() && code === 13 && this.canHoldManageProfile(currentProfileCard)) {
+    if (supportsRemoteEnterHold && code === 13 && this.canHoldManageProfile(currentProfileCard)) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingProfileHold(currentProfileCard)) {
         this.startPendingProfileHold(currentProfileCard);
@@ -1823,7 +1825,7 @@ export const ProfileSelectionScreen = {
   },
 
   async onKeyUp(event) {
-    if (!Platform.isTizen()) {
+    if (!Platform.isTizen() && !Platform.isWebOS()) {
       return;
     }
     if (Number(event?.keyCode || 0) !== 13 || this.pinOverlayState || this.optionsProfileId || this.deleteProfileId || this.editorState) {

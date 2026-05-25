@@ -35,6 +35,11 @@ const POSTER_HOLD_DELAY_MS = 650;
 const HERO_HOLD_DELAY_MS = 650;
 const DETAIL_PROGRESS_END_THRESHOLD = 0.85;
 const TRAKT_COMMENTS_LIMIT = 100;
+const DETAIL_SCROLL_STIFFNESS = 180;
+const DETAIL_SCROLL_DAMPING_RATIO = 0.95;
+const DETAIL_TAB_FOCUS_TARGET = 0.40;
+const DETAIL_ROW_FOCUS_TARGET = 0.33;
+const DETAIL_SCROLL_MAX_FRAME_SECONDS = 0.016;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -411,21 +416,23 @@ function resolveEpisodeRuntimeForSeason(episodes = [], season = null) {
 }
 
 function renderPlayGlyph() {
-  return `<img class="series-btn-svg" src="assets/icons/ic_player_play.svg" alt="" aria-hidden="true" />`;
+  return `<svg class="series-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.4086 9.35258C23.5305 10.5065 23.5305 13.4935 21.4086 14.6474L8.59662 21.6145C6.53435 22.736 4 21.2763 4 18.9671L4 5.0329C4 2.72368 6.53435 1.26402 8.59661 2.38548L21.4086 9.35258Z" fill="currentColor"/></svg>`;
 }
 
 function renderTrailerGlyph() {
-  return `<img class="series-btn-svg" src="assets/icons/trailer_play_button.svg" alt="" aria-hidden="true" />`;
+  return `<svg class="series-btn-svg" viewBox="0 0 566.828 566.828" aria-hidden="true"><path d="M563.824,192.783c-1.58-17.399-3.85-32.944-6.801-46.659c-3.371-15.386-10.703-28.36-21.982-38.899c-11.285-10.539-24.412-16.652-39.383-18.348c-46.811-5.275-117.564-7.907-212.247-7.907c-94.688,0-165.436,2.632-212.248,7.907c-14.976,1.695-28.048,7.809-39.223,18.348c-11.181,10.539-18.458,23.513-21.824,38.899c-3.164,13.715-5.533,29.26-7.118,46.659c-1.579,17.399-2.479,31.793-2.687,43.183C0.098,247.343,0,263.163,0,283.414c0,20.238,0.104,36.053,0.312,47.449c0.208,11.377,1.107,25.777,2.687,43.17c1.585,17.398,3.843,32.957,6.799,46.658c3.372,15.41,10.704,28.373,21.983,38.912c11.279,10.551,24.407,16.67,39.382,18.348c46.812,5.275,117.559,7.906,212.248,7.906c94.683,0,165.431-2.631,212.247-7.906c14.971-1.684,28.043-7.797,39.225-18.348c11.174-10.539,18.451-23.502,21.822-38.912c3.164-13.701,5.533-29.26,7.119-46.658c1.578-17.398,2.479-31.793,2.686-43.17c0.209-11.391,0.318-27.211,0.318-47.449c0-20.251-0.109-36.065-0.318-47.448C566.303,224.57,565.402,210.176,563.824,192.783z M395.389,300.488L233.436,401.707c-2.956,2.111-6.537,3.164-10.753,3.164c-3.164,0-6.432-0.838-9.804-2.533c-6.958-3.795-10.441-9.688-10.441-17.705V182.189c0-8.005,3.476-13.923,10.441-17.717c7.167-3.794,14.021-3.568,20.557,0.63l161.953,101.219c6.328,3.599,9.492,9.29,9.492,17.087C404.875,291.223,401.711,296.914,395.389,300.488z" fill="currentColor"/></svg>`;
 }
 
 function renderLibraryGlyph(isSaved = false) {
   return isSaved
-    ? "&#10003;"
-    : `<img class="series-btn-svg" src="assets/icons/library_add_plus.svg" alt="" aria-hidden="true" />`;
+    ? `<svg class="series-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z" fill="currentColor"/></svg>`
+    : `<svg class="series-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12H20M12 4V20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 }
 
 function renderWatchedGlyph(isWatched = false) {
-  return `<img class="series-btn-svg" src="assets/icons/${isWatched ? "visibility" : "visibility_off"}.svg" alt="" aria-hidden="true" />`;
+  return isWatched
+    ? `<svg class="series-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5Zm0 13c-3.04 0-5.5-2.46-5.5-5.5S8.96 6.5 12 6.5s5.5 2.46 5.5 5.5-2.46 5.5-5.5 5.5Zm0-8.8A3.3 3.3 0 0 0 8.7 12a3.3 3.3 0 1 0 6.6 0A3.3 3.3 0 0 0 12 8.7Z" fill="currentColor"/></svg>`
+    : `<svg class="series-btn-svg" viewBox="0 0 24 24" aria-hidden="true"><path d="m2.1 3.51 1.39-1.39 18 18-1.39 1.39-2.94-2.94A10.94 10.94 0 0 1 12 19.5C7 19.5 2.73 16.39 1 12c.8-2.03 2.18-3.79 3.95-5.09L2.1 3.51Zm7.46 7.46 4.92 4.92A3.47 3.47 0 0 1 12 16.5 4.5 4.5 0 0 1 7.5 12c0-.9.27-1.74.73-2.47l1.33 1.44Zm6.05 6.05-1.67-1.67c-.61.41-1.34.65-2.12.65A4.5 4.5 0 0 1 7.33 11.5c0-.78.24-1.51.65-2.12L5.3 6.7A9.65 9.65 0 0 0 2.96 12c1.51 3.52 5.02 6 9.04 6 1.34 0 2.63-.28 3.61-.98ZM12 7.5c2.49 0 4.5 2.01 4.5 4.5 0 .78-.2 1.5-.56 2.13l2.59 2.59A9.77 9.77 0 0 0 21.04 12c-1.51-3.52-5.02-6-9.04-6-1.39 0-2.7.29-3.88 1.02l1.86 1.86c.62-.24 1.3-.38 2.02-.38Zm-.49 1.55 3.44 3.44c.03-.16.05-.32.05-.49A3 3 0 0 0 12 9c-.17 0-.33.02-.49.05Z" fill="currentColor"/></svg>`;
 }
 
 function ratingToneClass(value) {
@@ -2556,7 +2563,7 @@ export const MetaDetailsScreen = {
       return false;
     }
     target.classList.add("focused");
-    target.focus();
+    target.focus({ preventScroll: true });
     return true;
   },
 
@@ -3750,6 +3757,10 @@ export const MetaDetailsScreen = {
     if (!container) {
       return;
     }
+    if (!this.isLegacyTvRuntime()) {
+      this.animateSpringScroll(container, axis, targetValue);
+      return;
+    }
     const property = axis === "y" ? "scrollTop" : "scrollLeft";
     const max = axis === "y"
       ? Math.max(0, container.scrollHeight - container.clientHeight)
@@ -3808,6 +3819,86 @@ export const MetaDetailsScreen = {
 
     existing[key] = requestAnimationFrame(tick);
     map.set(container, existing);
+  },
+
+  animateSpringScroll(container, axis, targetValue, options = {}) {
+    if (!container) {
+      return;
+    }
+    const property = axis === "y" ? "scrollTop" : "scrollLeft";
+    const max = axis === "y"
+      ? Math.max(0, container.scrollHeight - container.clientHeight)
+      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (prefersReducedMotion) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const tweenMap = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
+    const key = axis === "y" ? "y" : "x";
+    const tweenState = tweenMap.get(container);
+    if (tweenState?.[key]) {
+      cancelAnimationFrame(tweenState[key]);
+      tweenState[key] = null;
+      tweenMap.set(container, tweenState);
+    }
+
+    const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
+    const existing = springMap.get(container) || {};
+    const active = existing[key];
+    if (active) {
+      active.target = nextValue;
+      active.stiffness = Number(options?.stiffness ?? active.stiffness ?? DETAIL_SCROLL_STIFFNESS);
+      active.dampingRatio = Number(options?.dampingRatio ?? active.dampingRatio ?? DETAIL_SCROLL_DAMPING_RATIO);
+      active.precision = Number(options?.precision ?? active.precision ?? 0.5);
+      active.velocityEpsilon = Number(options?.velocityEpsilon ?? active.velocityEpsilon ?? 0.5);
+      active.damping = 2 * active.dampingRatio * Math.sqrt(active.stiffness);
+      springMap.set(container, existing);
+      return;
+    }
+
+    const stiffness = Number(options?.stiffness ?? DETAIL_SCROLL_STIFFNESS);
+    const dampingRatio = Number(options?.dampingRatio ?? DETAIL_SCROLL_DAMPING_RATIO);
+    const state = {
+      target: nextValue,
+      position: Number(container[property] || 0),
+      velocity: 0,
+      raf: null,
+      lastTime: performance.now(),
+      stiffness,
+      dampingRatio,
+      damping: 2 * dampingRatio * Math.sqrt(stiffness),
+      precision: Number(options?.precision ?? 0.5),
+      velocityEpsilon: Number(options?.velocityEpsilon ?? 0.5)
+    };
+
+    const tick = (now) => {
+      const deltaSeconds = Math.min(DETAIL_SCROLL_MAX_FRAME_SECONDS, Math.max(0.001, (now - state.lastTime) / 1000));
+      state.lastTime = now;
+      const displacement = state.position - Number(state.target || 0);
+      const acceleration = (-state.stiffness * displacement) - (state.damping * state.velocity);
+      state.velocity += acceleration * deltaSeconds;
+      state.position += state.velocity * deltaSeconds;
+      container[property] = state.position;
+
+      const remaining = Number(state.target || 0) - Number(container[property] || 0);
+      if (Math.abs(remaining) <= state.precision && Math.abs(state.velocity) <= state.velocityEpsilon) {
+        container[property] = state.target;
+        existing[key] = null;
+        springMap.set(container, existing);
+        return;
+      }
+
+      state.raf = requestAnimationFrame(tick);
+      existing[key] = state;
+      springMap.set(container, existing);
+    };
+
+    state.raf = requestAnimationFrame(tick);
+    existing[key] = state;
+    springMap.set(container, existing);
   },
 
   restartTrailerAutoplayTimer() {
@@ -4877,7 +4968,7 @@ export const MetaDetailsScreen = {
     const previous = this.container.querySelector(".focusable.focused");
     this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
-    target.focus();
+    target.focus({ preventScroll: true });
     this.rememberEpisodeFocus(target, list);
     this.rememberRailFocus(target, list);
     const horizontalTrack = target.closest(".series-episode-track, .series-cast-track, .movie-cast-track, .home-track, .series-episode-ratings-grid, .series-rating-seasons, .detail-morelike-track, .detail-company-track, .series-season-row, .series-insight-tabs, .detail-comments-modes, .detail-comments-track");
@@ -4893,25 +4984,21 @@ export const MetaDetailsScreen = {
       }
       const detailContent = this.getDetailContentScroller();
       if (!preserveVerticalScroll && detailContent && detailContent.contains(horizontalTrack)) {
-        const verticalTarget = target.closest(".detail-comments-section, .series-insight-section, .detail-company-section") || horizontalTrack;
+        const verticalTarget = horizontalTrack.matches(".detail-comments-modes, .detail-comments-track")
+          ? (target.closest(".detail-comments-section") || horizontalTrack)
+          : horizontalTrack;
         const rect = verticalTarget.getBoundingClientRect();
         const contentRect = detailContent.getBoundingClientRect();
-        const topPad = 96;
-        const bottomPad = 96;
-        if (rect.bottom > contentRect.bottom - bottomPad) {
-          const nextScrollTop = detailContent.scrollTop + Math.ceil(rect.bottom - contentRect.bottom + bottomPad);
-          if (animated) {
-            this.animateScroll(detailContent, "y", nextScrollTop, 280);
-          } else {
-            detailContent.scrollTop = nextScrollTop;
-          }
-        } else if (rect.top < contentRect.top + topPad) {
-          const nextScrollTop = detailContent.scrollTop - Math.ceil(contentRect.top + topPad - rect.top);
-          if (animated) {
-            this.animateScroll(detailContent, "y", nextScrollTop, 280);
-          } else {
-            detailContent.scrollTop = nextScrollTop;
-          }
+        const focusTarget = horizontalTrack.matches(".series-insight-tabs")
+          ? DETAIL_TAB_FOCUS_TARGET
+          : DETAIL_ROW_FOCUS_TARGET;
+        const targetTop = contentRect.top + (detailContent.clientHeight * focusTarget);
+        const nextScrollTop = detailContent.scrollTop + rect.top - targetTop;
+        if (animated) {
+          this.animateScroll(detailContent, "y", nextScrollTop, 280);
+        } else {
+          const maxScrollTop = Math.max(0, detailContent.scrollHeight - detailContent.clientHeight);
+          detailContent.scrollTop = Math.max(0, Math.min(maxScrollTop, Math.round(nextScrollTop)));
         }
       }
     } else if (typeof target.scrollIntoView === "function") {
@@ -5142,15 +5229,15 @@ export const MetaDetailsScreen = {
     };
     const focusActiveSectionFromComments = (index = 0) => {
       if (this.seriesInsightTab === "ratings") {
-        if (ratingChips.length) return this.focusInList(ratingChips, Math.min(index, ratingChips.length - 1), { preserveVerticalScroll: true });
-        if (ratingSeasons.length) return this.focusInList(ratingSeasons, Math.min(index, ratingSeasons.length - 1), { preserveVerticalScroll: true });
+        if (ratingChips.length) return this.focusInList(ratingChips, Math.min(index, ratingChips.length - 1));
+        if (ratingSeasons.length) return this.focusInList(ratingSeasons, Math.min(index, ratingSeasons.length - 1));
       }
       if ((this.seriesInsightTab === "morelike" || this.seriesInsightTab === "trailer" || this.seriesInsightTab === "collection") && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards), { preserveVerticalScroll: true });
+        return this.focusInList(moreLikeCards, this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards));
       }
-      if (castCards.length) return this.focusInList(castCards, Math.min(index, castCards.length - 1), { preserveVerticalScroll: true });
-      if (insightTabs.length) return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs), { preserveVerticalScroll: true });
-      if (episodes.length) return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true });
+      if (castCards.length) return this.focusInList(castCards, Math.min(index, castCards.length - 1));
+      if (insightTabs.length) return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs));
+      if (episodes.length) return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes));
       return false;
     };
 
@@ -5254,7 +5341,7 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(castCards, castIndex + 1) || true;
       if (direction === "up") {
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs), { preserveVerticalScroll: true }) || true;
+          return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs)) || true;
         }
         if (episodes.length) {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
@@ -5278,7 +5365,7 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(ratingSeasons, ratingSeasonIndex + 1) || true;
       if (direction === "up") {
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1), { preserveVerticalScroll: true }) || true;
+          return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1)) || true;
         }
         if (episodes.length) {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
@@ -5305,7 +5392,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(ratingSeasons, Math.min(ratingChipIndex, ratingSeasons.length - 1)) || true;
         }
         if (insightTabs.length) {
-          return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1), { preserveVerticalScroll: true }) || true;
+          return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1)) || true;
         }
         if (episodes.length) {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
@@ -5351,7 +5438,7 @@ export const MetaDetailsScreen = {
       if (direction === "up") {
         if (insightTabs.length) {
           const moreLikeTabIndex = Math.max(0, insightTabs.findIndex((node) => String(node?.dataset?.tab || "") === "morelike"));
-          return this.focusInList(insightTabs, moreLikeTabIndex, { preserveVerticalScroll: true }) || true;
+          return this.focusInList(insightTabs, moreLikeTabIndex) || true;
         }
         if (episodes.length) {
           return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
@@ -5379,7 +5466,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(companyCards[trackIndex - 1], rememberedCompanyIndex(trackIndex - 1)) || true;
         }
         if (commentCards.length || commentModes.length) {
-          return focusCommentsEntry(companyIndex, { preserveVerticalScroll: true }) || true;
+          return focusCommentsEntry(companyIndex) || true;
         }
         if (moreLikeCards.length) {
           return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
@@ -5445,11 +5532,11 @@ export const MetaDetailsScreen = {
     };
     const focusActiveSectionFromComments = (index = 0) => {
       if ((this.movieInsightTab === "morelike" || this.movieInsightTab === "trailer" || this.movieInsightTab === "collection") && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards), { preserveVerticalScroll: true });
+        return this.focusInList(moreLikeCards, this.getRememberedRailIndex(this.getMoreLikeRailKey(), moreLikeCards));
       }
-      if (cast.length) return this.focusInList(cast, Math.min(index, cast.length - 1), { preserveVerticalScroll: true });
-      if (tabs.length) return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs), { preserveVerticalScroll: true });
-      return this.focusInList(actions, Math.min(index, actions.length - 1), { preserveVerticalScroll: true });
+      if (cast.length) return this.focusInList(cast, Math.min(index, cast.length - 1));
+      if (tabs.length) return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs));
+      return this.focusInList(actions, Math.min(index, actions.length - 1));
     };
 
     if (typeof event?.preventDefault === "function") {
@@ -5462,7 +5549,7 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(actions, actionIndex + 1) || true;
       if (direction === "down") {
         if (tabs.length) {
-          return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs), { preserveVerticalScroll: true }) || true;
+          return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs)) || true;
         }
         if (cast.length) {
           return this.focusInList(cast, actionIndex) || true;
@@ -5497,7 +5584,7 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(cast, castIndex + 1) || true;
       if (direction === "up") {
         if (tabs.length) {
-          return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs), { preserveVerticalScroll: true }) || true;
+          return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs)) || true;
         }
         return this.focusInList(actions, Math.min(castIndex, actions.length - 1)) || true;
       }
@@ -5520,7 +5607,7 @@ export const MetaDetailsScreen = {
       if (direction === "up") {
         if (tabs.length) {
           const moreLikeTabIndex = Math.max(0, tabs.findIndex((node) => String(node?.dataset?.tab || "") === "morelike"));
-          return this.focusInList(tabs, moreLikeTabIndex, { preserveVerticalScroll: true }) || true;
+          return this.focusInList(tabs, moreLikeTabIndex) || true;
         }
         if (cast.length) {
           return this.focusInList(cast, Math.min(moreLikeIndex, cast.length - 1)) || true;
@@ -5570,7 +5657,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(companyCards[trackIndex - 1], rememberedCompanyIndex(trackIndex - 1)) || true;
         }
         if (commentCards.length || commentModes.length) {
-          return focusCommentsEntry(companyIndex, { preserveVerticalScroll: true }) || true;
+          return focusCommentsEntry(companyIndex) || true;
         }
         if (moreLikeCards.length) {
           return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
@@ -5579,7 +5666,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(cast, Math.min(companyIndex, cast.length - 1)) || true;
         }
         if (tabs.length) {
-          return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs), { preserveVerticalScroll: true }) || true;
+          return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs)) || true;
         }
         return this.focusInList(actions, Math.min(companyIndex, actions.length - 1)) || true;
       }

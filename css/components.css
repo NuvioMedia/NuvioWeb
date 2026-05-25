@@ -3370,7 +3370,8 @@ button:focus-visible {
   transform: scale(1.1);
 }
 
-.library-actions-row .library-action-button.focused {
+.library-actions-row .library-action-button.focused,
+.library-actions-row .library-action-button.background-focused {
   background: var(--secondary-color);
   color: var(--on-secondary);
   border-color: transparent;
@@ -3436,9 +3437,9 @@ button:focus-visible {
   border-radius: var(--library-poster-radius, 24px);
   border: 4px solid transparent;
   background: var(--card-bg) center center / cover no-repeat;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
   background-origin: border-box;
   background-clip: border-box;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
 .library-grid-poster.placeholder {
@@ -5998,10 +5999,10 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-frame {
   height: var(--home-poster-height);
 }
+
 .home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-poster-card.is-landscape.is-expanded .home-poster-frame {
   height: var(--home-landscape-poster-height);
 }
-
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-expanded-gradient {
   height: 40%;
@@ -11102,6 +11103,12 @@ button:focus-visible {
   inset: 0;
   background: var(--detail-bg) center center / cover no-repeat;
   transform: scale(1.02);
+  opacity: 1;
+  transition: opacity 300ms ease;
+}
+
+.series-detail-shell.detail-scrolled .series-detail-backdrop {
+  opacity: 0.15;
 }
 
 .detail-trailer-layer {
@@ -11329,6 +11336,10 @@ button:focus-visible {
   opacity: 0;
 }
 
+.series-detail-shell.detail-scrolled .series-detail-vignette {
+  opacity: 0;
+}
+
 .detail-bottom-shadow {
   position: absolute;
   inset: auto 0 0;
@@ -11478,13 +11489,8 @@ button:focus-visible {
 }
 
 .series-circle-btn.is-selected {
-  background: #ffffff;
+  background: #7cff9b;
   color: #000000;
-}
-
-.series-circle-btn.is-library-selected .series-btn-svg,
-.series-circle-btn.is-selected .series-btn-svg {
-  filter: none;
 }
 
 .series-primary-btn.focused,
@@ -11521,11 +11527,6 @@ button:focus-visible {
 .series-primary-btn .series-btn-svg {
   width: 36px;
   height: 36px;
-  filter: none;
-}
-
-.series-circle-btn .series-btn-svg {
-  filter: brightness(0) invert(1);
 }
 
 .series-primary-btn.focused {
@@ -11535,10 +11536,6 @@ button:focus-visible {
   transform: none;
 }
 
-.series-primary-btn.focused .series-btn-svg {
-  filter: none;
-}
-
 .series-circle-btn.focused {
   background: var(--secondary-color);
   color: var(--on-secondary);
@@ -11546,19 +11543,10 @@ button:focus-visible {
   transform: none;
 }
 
-.series-circle-btn.focused .series-btn-svg {
-  filter: none;
-}
-
 .series-circle-btn.is-library-selected.focused,
 .series-circle-btn.is-selected.focused {
   background: #ffffff;
   color: #000000;
-}
-
-.series-circle-btn.is-library-selected.focused .series-btn-svg,
-.series-circle-btn.is-selected.focused .series-btn-svg {
-  filter: none;
 }
 
 .detail-morelike-card.focused {
