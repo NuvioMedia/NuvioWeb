@@ -21,11 +21,8 @@ import {
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
 import {
-  activatePosterOption,
-  createPosterOptionsState,
-  getPosterOptions,
-  posterItemFromNode,
-  renderPosterOptionsMenu
+  PosterOptionsDialogController,
+  posterItemFromNode
 } from "../../components/posterOptionsMenu.js";
 
 const POSTER_HOLD_DELAY_MS = 650;
@@ -381,6 +378,8 @@ export const SearchScreen = {
     this.searchToastTimer = null;
     this.inputSearchTimer = null;
     this.posterOptionsMenu = null;
+    this.posterOptionsController = null;
+    this.pendingPosterOptionsFocusId = "";
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
     this.hydrateFromRouteState(navigationContext?.restoredState || null, params);
@@ -671,7 +670,6 @@ export const SearchScreen = {
           ${this.renderRows()}
         </main>
       </div>
-      ${renderPosterOptionsMenu(this.posterOptionsMenu)}
     `;
     this.searchRouteEnterPending = false;
 
@@ -749,84 +747,43 @@ export const SearchScreen = {
       return false;
     }
     this.captureLiveViewState();
-    this.posterOptionsMenu = await createPosterOptionsState(item);
+    this.pendingPosterOptionsFocusId = String(item.id || "");
+    if (!this.posterOptionsController) {
+      this.posterOptionsController = new PosterOptionsDialogController({
+        onDetails: (target) => {
+          this.openDetailFromNode({
+            dataset: {
+              itemId: target.id,
+              itemType: target.type || "movie",
+              itemTitle: target.title || "Untitled"
+            }
+          });
+        },
+        onDismiss: () => {
+          const itemId = this.pendingPosterOptionsFocusId;
+          this.pendingPosterOptionsFocusId = "";
+          const target = itemId
+            ? this.container?.querySelector(`.search-result-card.focusable[data-item-id="${escapeSelectorValue(itemId)}"]`)
+            : null;
+          if (target) {
+            this.focusNode(this.container?.querySelector(".focusable.focused"), target);
+          }
+        },
+        onChanged: () => {
+          this.render();
+        }
+      });
+    }
     this.suppressHoldMenuEnterUntilKeyUp = true;
-    this.render();
-    this.applyPosterOptionsFocus();
-    return true;
+    return this.posterOptionsController.open(item);
   },
 
   closePosterOptionsMenu() {
-    if (!this.posterOptionsMenu) {
+    if (!this.posterOptionsController?.dialog) {
       return false;
     }
-    const itemId = String(this.posterOptionsMenu.item?.id || "");
-    this.posterOptionsMenu = null;
-    this.render();
-    const target = itemId
-      ? this.container?.querySelector(`.search-result-card.focusable[data-item-id="${escapeSelectorValue(itemId)}"]`)
-      : null;
-    if (target) {
-      this.focusNode(this.container?.querySelector(".focusable.focused"), target);
-    }
+    this.posterOptionsController.destroy();
     return true;
-  },
-
-  applyPosterOptionsFocus() {
-    const button = this.container?.querySelector(".hold-menu-button.focusable");
-    if (!button) {
-      return false;
-    }
-    this.container.querySelectorAll(".focusable.focused").forEach((node) => {
-      if (node !== button) node.classList.remove("focused");
-    });
-    button.classList.add("focused");
-    focusWithoutAutoScroll(button);
-    return true;
-  },
-
-  movePosterOptionsFocus(delta) {
-    if (!this.posterOptionsMenu) {
-      return false;
-    }
-    const options = getPosterOptions(this.posterOptionsMenu);
-    if (!options.length) {
-      return false;
-    }
-    const currentIndex = Number(this.posterOptionsMenu.optionIndex || 0);
-    this.posterOptionsMenu.optionIndex = Math.max(0, Math.min(options.length - 1, currentIndex + delta));
-    this.render();
-    this.applyPosterOptionsFocus();
-    return true;
-  },
-
-  async activatePosterOptionsMenu() {
-    if (!this.posterOptionsMenu) {
-      return false;
-    }
-    const options = getPosterOptions(this.posterOptionsMenu);
-    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0)))];
-    if (!option) {
-      return false;
-    }
-    const result = await activatePosterOption(this.posterOptionsMenu, option.action);
-    if (result?.type === "details") {
-      this.openDetailFromNode({
-        dataset: {
-          itemId: result.item.id,
-          itemType: result.item.type || "movie",
-          itemTitle: result.item.title || "Untitled"
-        }
-      });
-      return true;
-    }
-    if (result?.type === "updated") {
-      this.posterOptionsMenu = result.state;
-      this.render();
-      this.applyPosterOptionsFocus();
-      return true;
-    }
-    return false;
   },
 
   buildNavigationModel() {
@@ -1541,28 +1498,6 @@ export const SearchScreen = {
       this.cancelPendingPosterHold();
     }
 
-    if (this.posterOptionsMenu) {
-      if (Platform.isBackEvent(event)) {
-        event.preventDefault?.();
-        this.closePosterOptionsMenu();
-        return;
-      }
-      if (code === 38 || code === 40) {
-        event.preventDefault?.();
-        this.movePosterOptionsFocus(code === 38 ? -1 : 1);
-        return;
-      }
-      if (code === 13) {
-        event.preventDefault?.();
-        if (this.suppressHoldMenuEnterUntilKeyUp) {
-          return;
-        }
-        await this.activatePosterOptionsMenu();
-        return;
-      }
-      return;
-    }
-
     if (Platform.isBackEvent(event)) {
       event.preventDefault?.();
       if (this.focusZone === "sidebar") {
@@ -1690,6 +1625,9 @@ export const SearchScreen = {
     this.cancelScheduledRender();
     this.cancelPendingPosterHold();
     this.posterOptionsMenu = null;
+    this.posterOptionsController?.destroy?.({ restoreFocus: false });
+    this.posterOptionsController = null;
+    this.pendingPosterOptionsFocusId = "";
     this.suppressHoldMenuEnterUntilKeyUp = false;
     if (this.searchToastTimer) {
       clearTimeout(this.searchToastTimer);

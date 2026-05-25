@@ -8,14 +8,12 @@ function escapeHtml(value) {
 }
 
 function chevronSvg(open, className) {
+  const path = open
+    ? "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"
+    : "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
   return `
     <svg viewBox="0 0 24 24" class="${className}" aria-hidden="true" focusable="false">
-      <path d="${open ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.75"
-            stroke-linecap="round"
-            stroke-linejoin="round" />
+      <path d="${path}" fill="currentColor" />
     </svg>
   `;
 }

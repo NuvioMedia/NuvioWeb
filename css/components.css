@@ -3202,7 +3202,8 @@ button:focus-visible {
 
 .library-picker-anchor {
   width: 100%;
-  min-height: 124px;
+  min-height: 84px;
+  box-sizing: border-box;
   padding: 20px 28px;
   border-radius: 28px;
   border: 2px solid var(--border-color);
@@ -3218,8 +3219,8 @@ button:focus-visible {
 
 .library-picker-anchor.focused,
 .library-picker.open .library-picker-anchor {
+  border-width: 4px;
   border-color: var(--secondary-color);
-  box-shadow: 0 0 0 2px var(--secondary-color);
   background: var(--focus-bg);
 }
 
@@ -3274,7 +3275,7 @@ button:focus-visible {
   left: 0;
   right: 0;
   max-height: 640px;
-  padding: 8px 12px 12px;
+  padding: 4px 12px;
   border-radius: 28px;
   border: 2px solid var(--border-color);
   background: var(--card-bg);
@@ -3436,6 +3437,8 @@ button:focus-visible {
   border: 4px solid transparent;
   background: var(--card-bg) center center / cover no-repeat;
   transition: border-color 120ms ease, box-shadow 120ms ease;
+  background-origin: border-box;
+  background-clip: border-box;
 }
 
 .library-grid-poster.placeholder {

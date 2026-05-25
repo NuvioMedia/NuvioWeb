@@ -7,11 +7,8 @@ import { I18n } from "../../../i18n/index.js";
 import { LibraryController, LIBRARY_PRIVACY_OPTIONS } from "./libraryController.js";
 import { renderContentFilterPicker } from "../../components/filterPicker.js";
 import {
-  activatePosterOption,
-  createPosterOptionsState,
-  getPosterOptions,
-  posterItemFromNode,
-  renderPosterOptionsMenu
+  PosterOptionsDialogController,
+  posterItemFromNode
 } from "../../components/posterOptionsMenu.js";
 import {
   activateLegacySidebarAction,
@@ -181,8 +178,11 @@ export const LibraryScreen = {
     this.focusZone = "content";
     this.lastMainFocus = null;
     this.lastActionsRowAction = "openManageLists";
+    this.pendingActionRestore = null;
     this.pendingPickerRestore = null;
     this.posterOptionsMenu = null;
+    this.posterOptionsController = null;
+    this.pendingPosterOptionsFocusKey = "";
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
     this.lastPrivacyFocus = "private";
@@ -258,7 +258,9 @@ export const LibraryScreen = {
         ${this.renderSidebar()}
         <main class="home-main library-main">
           <section class="library-loading-state">
-            <div class="library-loading-spinner" aria-hidden="true"></div>
+            <svg class="library-loading-spinner" viewBox="0 0 96 96" aria-hidden="true" focusable="false">
+              <circle class="library-loading-spinner-track" cx="48" cy="48" r="40"></circle>
+            </svg>
             <div class="library-loading-label">${escapeHtml(t("library_syncing", {}, "Syncing library..."))}</div>
           </section>
         </main>
@@ -374,7 +376,7 @@ export const LibraryScreen = {
     }
     return `
       <section class="library-actions-row">
-        <button class="library-action-button focusable library-primary"
+        <button class="library-action-button focusable library-primary${state.showManageDialog ? " background-focused" : ""}"
                 data-action="openManageLists"
                 ${state.pendingOperation || state.isSyncing ? "disabled" : ""}>
           ${escapeHtml(t("library_manage_lists", {}, "Manage Lists"))}
@@ -508,7 +510,7 @@ export const LibraryScreen = {
     const posterWidth = 252;
     const posterRadius = 24;
     const libraryStyle = `--library-poster-width:${posterWidth}px;--library-poster-height:${Math.round(posterWidth * 1.5)}px;--library-poster-radius:${posterRadius}px;`;
-    if (state.isLoading) {
+    if (state.isLoading || state.isSyncing) {
       this.renderLoading();
       ScreenUtils.indexFocusables(this.container);
       if (!this.layoutPrefs?.modernSidebar) {
@@ -561,7 +563,6 @@ export const LibraryScreen = {
         ${this.renderManageListsDialog(state)}
         ${this.renderListEditorDialog(state)}
         ${this.renderDeleteDialog(state)}
-        ${renderPosterOptionsMenu(this.posterOptionsMenu)}
       </div>
     `;
     this.libraryRouteEnterPending = false;
@@ -640,74 +641,40 @@ export const LibraryScreen = {
     if (node.dataset.focusKey) {
       this.controller.setFocusedPosterKey(node.dataset.focusKey);
     }
-    this.posterOptionsMenu = await createPosterOptionsState(item, {
+    this.pendingPosterOptionsFocusKey = node.dataset.focusKey || "";
+    if (!this.posterOptionsController) {
+      this.posterOptionsController = new PosterOptionsDialogController({
+        onDetails: (target) => {
+          Router.navigate("detail", {
+            itemId: target.id,
+            itemType: target.type || "movie",
+            fallbackTitle: target.title || "Untitled"
+          });
+        },
+        onDismiss: () => {
+          if (this.pendingPosterOptionsFocusKey) {
+            this.controller.setFocusedPosterKey(this.pendingPosterOptionsFocusKey);
+          }
+          this.pendingPosterOptionsFocusKey = "";
+          this.render();
+        },
+        onChanged: () => {
+          void this.controller.reload({ preserveOverlay: true });
+        }
+      });
+    }
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    return this.posterOptionsController.open(item, {
       focusKey: node.dataset.focusKey || ""
     });
-    this.suppressHoldMenuEnterUntilKeyUp = true;
-    this.render();
-    return true;
   },
 
   closePosterOptionsMenu() {
-    if (!this.posterOptionsMenu) {
+    if (!this.posterOptionsController?.dialog) {
       return false;
     }
-    const focusKey = String(this.posterOptionsMenu.focusKey || "");
-    this.posterOptionsMenu = null;
-    if (focusKey) {
-      this.controller.setFocusedPosterKey(focusKey);
-    }
-    this.render();
+    this.posterOptionsController.destroy();
     return true;
-  },
-
-  applyPosterOptionsFocus() {
-    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
-    if (!buttons.length) {
-      return false;
-    }
-    const index = Math.max(0, Math.min(buttons.length - 1, Number(this.posterOptionsMenu?.optionIndex || 0)));
-    buttons.forEach((node, buttonIndex) => node.classList.toggle("focused", buttonIndex === index));
-    const target = buttons[index] || buttons[0] || null;
-    if (!target) {
-      return false;
-    }
-    this.setFocusedNode(target);
-    return true;
-  },
-
-  movePosterOptionsFocus(delta) {
-    if (!this.posterOptionsMenu) {
-      return false;
-    }
-    const options = getPosterOptions(this.posterOptionsMenu);
-    this.posterOptionsMenu = {
-      ...this.posterOptionsMenu,
-      optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0) + delta))
-    };
-    this.applyPosterOptionsFocus();
-    return true;
-  },
-
-  async activatePosterOptionsMenu() {
-    const options = getPosterOptions(this.posterOptionsMenu);
-    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu?.optionIndex || 0)))];
-    const result = await activatePosterOption(this.posterOptionsMenu, option?.action);
-    if (result.type === "details") {
-      this.posterOptionsMenu = null;
-      Router.navigate("detail", {
-        itemId: result.item.id,
-        itemType: result.item.type || "movie",
-        fallbackTitle: result.item.title || "Untitled"
-      });
-      return true;
-    }
-    if (result.type === "updated") {
-      this.posterOptionsMenu = result.state;
-      this.render();
-      return true;
-    }
-    return false;
   },
 
   getMainFocusSelector(node) {
@@ -749,8 +716,6 @@ export const LibraryScreen = {
       selector = '.library-list-editor .focusable';
     } else if (state.showDeleteConfirm) {
       selector = '.library-delete-dialog .focusable';
-    } else if (this.posterOptionsMenu) {
-      selector = '.hold-menu-button.focusable';
     } else if (state.showManageDialog) {
       selector = state.manageSelectedListKey
         ? `.library-manage-list-button[data-list-key="${selectorValue(state.manageSelectedListKey)}"]`
@@ -765,7 +730,11 @@ export const LibraryScreen = {
       selector = null;
     }
 
+    const actionRestoreTarget = this.pendingActionRestore
+      ? this.container?.querySelector(`.focusable[data-action="${selectorValue(this.pendingActionRestore)}"]`)
+      : null;
     const target = (selector ? this.container?.querySelector(selector) : null)
+      || actionRestoreTarget
       || (this.focusZone === "sidebar" ? getRootSidebarSelectedNode(this.container, this.layoutPrefs) : null)
       || (this.focusZone === "content" ? this.resolveLastMainFocus() : null)
       || this.container?.querySelector('.library-primary.focusable')
@@ -777,6 +746,9 @@ export const LibraryScreen = {
     this.setFocusedNode(target);
     if (this.pendingPickerRestore) {
       this.pendingPickerRestore = null;
+    }
+    if (this.pendingActionRestore && target === actionRestoreTarget) {
+      this.pendingActionRestore = null;
     }
   },
 
@@ -790,9 +762,6 @@ export const LibraryScreen = {
     }
     if (state.showManageDialog) {
       return ".library-manage-dialog .focusable";
-    }
-    if (this.posterOptionsMenu) {
-      return ".hold-menu-button.focusable";
     }
     if (state.expandedPicker) {
       return ".library-picker.open .focusable";
@@ -1230,6 +1199,8 @@ export const LibraryScreen = {
       return true;
     }
     if (state.showManageDialog) {
+      this.lastActionsRowAction = "openManageLists";
+      this.pendingActionRestore = "openManageLists";
       this.controller.closeManageLists();
       return true;
     }
@@ -1295,17 +1266,6 @@ export const LibraryScreen = {
       }
       return;
     }
-    if (action === "holdMenuAction") {
-      const optionIndex = Number(node.dataset.holdIndex || 0);
-      if (this.posterOptionsMenu) {
-        this.posterOptionsMenu = {
-          ...this.posterOptionsMenu,
-          optionIndex
-        };
-        await this.activatePosterOptionsMenu();
-      }
-      return;
-    }
     if (action === "openDetail") {
       const focusKey = String(node.dataset.focusKey || "");
       if (focusKey) {
@@ -1319,6 +1279,7 @@ export const LibraryScreen = {
       return;
     }
     if (action === "openManageLists") {
+      this.lastActionsRowAction = "openManageLists";
       this.controller.openManageLists();
       return;
     }
@@ -1355,6 +1316,8 @@ export const LibraryScreen = {
       return;
     }
     if (action === "closeManageLists") {
+      this.lastActionsRowAction = "openManageLists";
+      this.pendingActionRestore = "openManageLists";
       this.controller.closeManageLists();
       return;
     }
@@ -1412,23 +1375,6 @@ export const LibraryScreen = {
 
     const current = this.container?.querySelector(".focusable.focused") || activeNode || null;
     const sidebarLocked = state.listEditorState || state.showDeleteConfirm || state.showManageDialog || state.expandedPicker;
-
-    if (this.posterOptionsMenu) {
-      if (code === 38 || code === 40) {
-        event?.preventDefault?.();
-        this.movePosterOptionsFocus(code === 38 ? -1 : 1);
-        return;
-      }
-      if (code === 13) {
-        event?.preventDefault?.();
-        if (this.suppressHoldMenuEnterUntilKeyUp) {
-          return;
-        }
-        await this.activatePosterOptionsMenu();
-        return;
-      }
-      return;
-    }
 
     if (!sidebarLocked && this.isPosterHoldTarget(current) && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93)) {
       event?.preventDefault?.();
@@ -1527,6 +1473,9 @@ export const LibraryScreen = {
     this.cancelScheduledRender();
     this.cancelPendingPosterHold();
     this.posterOptionsMenu = null;
+    this.posterOptionsController?.destroy?.({ restoreFocus: false });
+    this.posterOptionsController = null;
+    this.pendingPosterOptionsFocusKey = "";
     this.suppressHoldMenuEnterUntilKeyUp = false;
     this.controller?.dispose?.();
     this.controller = null;

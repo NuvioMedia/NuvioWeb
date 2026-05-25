@@ -7,11 +7,8 @@ import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
 import { renderContentFilterPicker } from "../../components/filterPicker.js";
 import {
-  activatePosterOption,
-  createPosterOptionsState,
-  getPosterOptions,
-  posterItemFromNode,
-  renderPosterOptionsMenu
+  PosterOptionsDialogController,
+  posterItemFromNode
 } from "../../components/posterOptionsMenu.js";
 import {
   focusWithoutAutoScroll,
@@ -239,6 +236,8 @@ export const DiscoverScreen = {
 
     this.openPicker = null;
     this.posterOptionsMenu = null;
+    this.posterOptionsController = null;
+    this.pendingPosterOptionsFocusKey = "";
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
     this.pickerOptionIndex = 0;
@@ -581,76 +580,40 @@ export const DiscoverScreen = {
     this.captureViewState();
     this.lastFocusedKey = String(node.dataset.focusKey || this.lastFocusedKey || "");
     this.lastFocusedDiscoverItemId = String(node.dataset.itemId || "");
-    this.posterOptionsMenu = await createPosterOptionsState(item, {
+    this.pendingPosterOptionsFocusKey = String(node.dataset.focusKey || "");
+    if (!this.posterOptionsController) {
+      this.posterOptionsController = new PosterOptionsDialogController({
+        onDetails: (target) => {
+          Router.navigate("detail", {
+            itemId: target.id,
+            itemType: target.type || "movie",
+            fallbackTitle: target.title || "Untitled"
+          });
+        },
+        onDismiss: () => {
+          this.lastFocusedKey = this.pendingPosterOptionsFocusKey || this.lastFocusedKey;
+          this.pendingPosterOptionsFocusKey = "";
+          this.pendingRestoreFocus = true;
+          this.preserveViewportOnNextRender = true;
+          this.render();
+        },
+        onChanged: () => {
+          this.render();
+        }
+      });
+    }
+    this.suppressHoldMenuEnterUntilKeyUp = true;
+    return this.posterOptionsController.open(item, {
       focusKey: node.dataset.focusKey || "",
       itemIndex: Number(node.dataset.itemIndex || -1)
     });
-    this.suppressHoldMenuEnterUntilKeyUp = true;
-    this.render();
-    return true;
   },
 
   closePosterOptionsMenu() {
-    if (!this.posterOptionsMenu) {
+    if (!this.posterOptionsController?.dialog) {
       return false;
     }
-    this.lastFocusedKey = this.posterOptionsMenu.focusKey || this.lastFocusedKey;
-    this.posterOptionsMenu = null;
-    this.pendingRestoreFocus = true;
-    this.preserveViewportOnNextRender = true;
-    this.render();
-    return true;
-  },
-
-  applyPosterOptionsFocus() {
-    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
-    if (!buttons.length) {
-      return false;
-    }
-    const index = Math.max(0, Math.min(buttons.length - 1, Number(this.posterOptionsMenu?.optionIndex || 0)));
-    buttons.forEach((node, buttonIndex) => node.classList.toggle("focused", buttonIndex === index));
-    const target = buttons[index] || buttons[0] || null;
-    if (!target) {
-      return false;
-    }
-    target.classList.add("focused");
-    focusWithoutAutoScroll(target);
-    return true;
-  },
-
-  refreshPosterOptionsMenuState() {
-    if (!this.posterOptionsMenu) {
-      return false;
-    }
-    const options = getPosterOptions(this.posterOptionsMenu);
-    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
-    if (!options.length || buttons.length !== options.length) {
-      this.render();
-      return true;
-    }
-    const focusedIndex = Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0)));
-    buttons.forEach((node, index) => {
-      const option = options[index] || null;
-      node.textContent = option?.label || option?.action || "Option";
-      node.dataset.holdAction = option?.action || "";
-      node.dataset.holdIndex = String(index);
-      node.classList.toggle("danger", Boolean(option?.danger));
-      node.classList.toggle("focused", index === focusedIndex);
-    });
-    this.applyPosterOptionsFocus();
-    return true;
-  },
-
-  movePosterOptionsFocus(delta) {
-    if (!this.posterOptionsMenu) {
-      return false;
-    }
-    const options = getPosterOptions(this.posterOptionsMenu);
-    this.posterOptionsMenu = {
-      ...this.posterOptionsMenu,
-      optionIndex: Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0) + delta))
-    };
-    this.applyPosterOptionsFocus();
+    this.posterOptionsController.destroy();
     return true;
   },
 
@@ -667,27 +630,6 @@ export const DiscoverScreen = {
       fallbackTitle: node.dataset.itemTitle || "Untitled"
     });
     return true;
-  },
-
-  async activatePosterOptionsMenu() {
-    const options = getPosterOptions(this.posterOptionsMenu);
-    const option = options[Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu?.optionIndex || 0)))];
-    const result = await activatePosterOption(this.posterOptionsMenu, option?.action);
-    if (result.type === "details") {
-      this.posterOptionsMenu = null;
-      Router.navigate("detail", {
-        itemId: result.item.id,
-        itemType: result.item.type || "movie",
-        fallbackTitle: result.item.title || "Untitled"
-      });
-      return true;
-    }
-    if (result.type === "updated") {
-      this.posterOptionsMenu = result.state;
-      this.refreshPosterOptionsMenuState();
-      return true;
-    }
-    return false;
   },
 
   movePickerIndex(delta) {
@@ -1144,7 +1086,6 @@ export const DiscoverScreen = {
           </div>
         </main>
       </div>
-      ${renderPosterOptionsMenu(this.posterOptionsMenu)}
     `;
 
     ScreenUtils.indexFocusables(this.container);
@@ -1152,10 +1093,6 @@ export const DiscoverScreen = {
     this.bindCardEvents();
     this.bindShellEvents();
     this.bindPointerEvents();
-    if (this.posterOptionsMenu) {
-      this.applyPosterOptionsFocus();
-      return;
-    }
     if (this.pendingRestoreFocus) {
       const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
       this.pendingRestoreFocus = false;
@@ -1259,22 +1196,6 @@ export const DiscoverScreen = {
       return;
     }
 
-    if (this.posterOptionsMenu) {
-      if (code === 38 || code === 40) {
-        event?.preventDefault?.();
-        this.movePosterOptionsFocus(code === 38 ? -1 : 1);
-        return;
-      }
-      if (code === 13) {
-        event?.preventDefault?.();
-        if (this.suppressHoldMenuEnterUntilKeyUp) {
-          return;
-        }
-        await this.activatePosterOptionsMenu();
-        return;
-      }
-      return;
-    }
     if (this.isPosterHoldTarget(current) && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93)) {
       event?.preventDefault?.();
       this.cancelPendingPosterHold();
@@ -1409,6 +1330,9 @@ export const DiscoverScreen = {
     this.loadToken = (this.loadToken || 0) + 1;
     this.cancelPendingPosterHold();
     this.posterOptionsMenu = null;
+    this.posterOptionsController?.destroy?.({ restoreFocus: false });
+    this.posterOptionsController = null;
+    this.pendingPosterOptionsFocusKey = "";
     this.suppressHoldMenuEnterUntilKeyUp = false;
     ScreenUtils.hide(this.container);
   }
