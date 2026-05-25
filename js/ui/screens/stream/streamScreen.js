@@ -1,6 +1,8 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
+import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { I18n } from "../../../i18n/index.js";
@@ -58,6 +60,78 @@ function detectQuality(text = "") {
   return "Auto";
 }
 
+function isMagnetUrl(value = "") {
+  return String(value || "").trim().toLowerCase().startsWith("magnet:");
+}
+
+function streamDebridIdentity(item = {}) {
+  const resolve = item.clientResolve || item.raw?.clientResolve || {};
+  const behaviorHints = item.behaviorHints || item.raw?.behaviorHints || {};
+  const infoHash = item.infoHash || item.raw?.infoHash || resolve.infoHash || "";
+  const magnetUri = resolve.magnetUri
+    || (isMagnetUrl(item.url) ? item.url : "")
+    || (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
+  const hasDebridMarker = Boolean(
+    item.clientResolve
+      || item.raw?.clientResolve
+      || item.debridCacheStatus
+      || item.raw?.debridCacheStatus
+      || infoHash
+      || magnetUri
+  );
+  if (!hasDebridMarker) {
+    return "";
+  }
+  const locator = infoHash || magnetUri || item.url || item.externalUrl || item.ytId || "";
+  if (!locator) {
+    return "";
+  }
+  return [
+    String(item.addonName || "Addon"),
+    String(resolve.service || item.debridCacheStatus?.providerId || item.raw?.debridCacheStatus?.providerId || ""),
+    String(locator),
+    String(resolve.fileIdx ?? item.fileIdx ?? item.raw?.fileIdx ?? ""),
+    String(behaviorHints.filename || resolve.filename || ""),
+    String(resolve.torrentName || "")
+  ].join("::");
+}
+
+function streamMergeKey(item = {}) {
+  const debridIdentity = streamDebridIdentity(item);
+  if (debridIdentity) {
+    return `debrid::${debridIdentity}`;
+  }
+  const locator = item.url || item.externalUrl || item.ytId || "";
+  if (!locator) {
+    return "";
+  }
+  return [
+    String(item.addonName || "Addon"),
+    String(locator),
+    String(item.sourceType || ""),
+    String(item.fileIdx ?? ""),
+    String(item.behaviorHints?.filename || "")
+  ].join("::");
+}
+
+function mergeStreamItem(previous = {}, next = {}) {
+  const behaviorHints = {
+    ...(previous.behaviorHints || {}),
+    ...(next.behaviorHints || {})
+  };
+  return {
+    ...previous,
+    ...next,
+    id: previous.id || next.id,
+    url: next.url || previous.url || null,
+    externalUrl: next.externalUrl || previous.externalUrl || null,
+    ytId: next.ytId || previous.ytId || null,
+    behaviorHints: Object.keys(behaviorHints).length ? behaviorHints : null,
+    subtitles: Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
+    sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources
+  };
+}
+
 function formatBytes(value) {
   const size = Number(value || 0);
   if (!Number.isFinite(size) || size <= 0) {
@@ -103,13 +177,20 @@ function flattenStreams(streamResult) {
         externalUrl: stream.externalUrl || null,
         behaviorHints: stream.behaviorHints || null,
         sources: Array.isArray(stream.sources) ? stream.sources : [],
+        quality: stream.quality || null,
+        qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+        clientResolve: stream.clientResolve || null,
+        debridCacheStatus: stream.debridCacheStatus || null,
         subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
         addonName: stream.addonName || groupName,
         addonLogo: stream.addonLogo || group.addonLogo || null,
+        addonOrderIndex: Number.isFinite(Number(stream.addonOrderIndex))
+          ? Number(stream.addonOrderIndex)
+          : Number(group.addonOrderIndex ?? Number.MAX_SAFE_INTEGER),
         sourceType: stream.type || stream.source || "",
         raw: stream
       };
-      if (entry.url || entry.externalUrl || entry.ytId) {
+      if (DirectDebridResolver.shouldListStream(entry)) {
         flattened.push(entry);
       }
     });
@@ -118,33 +199,26 @@ function flattenStreams(streamResult) {
 }
 
 function mergeStreamItems(existing = [], incoming = []) {
-  const byKey = new Set();
-  const merged = [];
+  const order = [];
+  const byKey = new Map();
   const push = (item) => {
     if (!item) {
       return;
     }
-    const url = String(item.url || item.externalUrl || item.ytId || "").trim();
-    if (!url) {
+    const key = streamMergeKey(item);
+    if (!key) {
       return;
     }
-    const key = [
-      String(item.addonName || "Addon"),
-      url,
-      String(item.infoHash || ""),
-      String(item.fileIdx ?? ""),
-      String(item.behaviorHints?.filename || ""),
-      String(item.name || item.title || item.description || "")
-    ].join("::");
-    if (byKey.has(key)) {
+    if (!byKey.has(key)) {
+      order.push(key);
+      byKey.set(key, item);
       return;
     }
-    byKey.add(key);
-    merged.push(item);
+    byKey.set(key, mergeStreamItem(byKey.get(key), item));
   };
   (existing || []).forEach(push);
   (incoming || []).forEach(push);
-  return merged;
+  return order.map((key) => byKey.get(key));
 }
 
 function iconSvg(kind) {
@@ -520,12 +594,26 @@ function getStreamDescriptionLines(stream = {}) {
 
 function getOrderedFilterNames(sourceChips = [], streams = []) {
   const ordered = [];
-  sourceChips.forEach((chip) => {
+  const sortedChips = (sourceChips || [])
+    .slice()
+    .sort((left, right) => Number(left?.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right?.orderIndex ?? Number.MAX_SAFE_INTEGER));
+  sortedChips.forEach((chip) => {
     if (chip?.name && !ordered.includes(chip.name)) {
       ordered.push(chip.name);
     }
   });
-  streams.forEach((stream) => {
+  const sortedStreams = (streams || [])
+    .map((stream, index) => ({ stream, index }))
+    .sort((left, right) => {
+      const leftOrder = Number(left.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      const rightOrder = Number(right.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.stream);
+  sortedStreams.forEach((stream) => {
     const addonName = String(stream?.addonName || "").trim();
     if (addonName && !ordered.includes(addonName)) {
       ordered.push(addonName);
@@ -545,8 +633,12 @@ function sortStreamsByAddonOrder(streams = [], sourceChips = []) {
   return (streams || [])
     .map((stream, index) => ({ stream, index }))
     .sort((left, right) => {
-      const leftOrder = order.has(left.stream?.addonName) ? order.get(left.stream.addonName) : Number.MAX_SAFE_INTEGER;
-      const rightOrder = order.has(right.stream?.addonName) ? order.get(right.stream.addonName) : Number.MAX_SAFE_INTEGER;
+      const leftOrder = order.has(left.stream?.addonName)
+        ? order.get(left.stream.addonName)
+        : Number(left.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      const rightOrder = order.has(right.stream?.addonName)
+        ? order.get(right.stream.addonName)
+        : Number(right.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
       if (leftOrder !== rightOrder) {
         return leftOrder - rightOrder;
       }
@@ -590,6 +682,44 @@ export const StreamScreen = {
       const addonLogo = resolveAddonLogo(stream?.addonName, lookup);
       return addonLogo ? { ...stream, addonLogo } : stream;
     });
+  },
+
+  scheduleDebridPreparation() {
+    const token = this.loadToken || 0;
+    if (this.debridPreparationScheduled) {
+      return;
+    }
+    this.debridPreparationScheduled = true;
+    setTimeout(() => {
+      this.debridPreparationScheduled = false;
+      if (!this.container || Router.getCurrent() !== "stream" || token !== this.loadToken) {
+        return;
+      }
+      const season = this.params?.season == null ? null : Number(this.params.season);
+      const episode = this.params?.episode == null ? null : Number(this.params.episode);
+      void DirectDebridStreamPreparer.prepare(this.streams, {
+        season,
+        episode,
+        onPrepared: (original, prepared) => {
+          if (!this.container || Router.getCurrent() !== "stream" || token !== this.loadToken) {
+            return;
+          }
+          const keyFor = (stream) => [
+            stream.clientResolve?.service || "",
+            stream.clientResolve?.infoHash || stream.infoHash || "",
+            stream.clientResolve?.fileIdx ?? stream.fileIdx ?? "",
+            stream.clientResolve?.filename || stream.behaviorHints?.filename || "",
+            stream.name || "",
+            stream.title || ""
+          ].join("|");
+          const originalKey = keyFor(original);
+          this.streams = this.streams.map((stream) => (
+            keyFor(stream) === originalKey ? { ...stream, ...prepared } : stream
+          ));
+          this.requestRender();
+        }
+      });
+    }, 0);
   },
 
   getBackdropUrl() {
@@ -731,16 +861,43 @@ export const StreamScreen = {
       if (!Array.isArray(names) || !names.length) {
         return;
       }
-      const successSet = new Set(names.map((name) => String(name || "").trim()).filter(Boolean));
+      const entries = names
+        .map((entry) => {
+          if (entry && typeof entry === "object") {
+            return {
+              name: String(entry.name || entry.addonName || "").trim(),
+              logo: normalizeAddonLogoUrl(entry.logo || entry.addonLogo),
+              orderIndex: Number(entry.orderIndex ?? entry.addonOrderIndex)
+            };
+          }
+          const name = String(entry || "").trim();
+          const existingStream = this.streams.find((stream) => stream.addonName === name);
+          return {
+            name,
+            logo: resolveAddonLogo(name, this.addonLogoLookup),
+            orderIndex: Number(existingStream?.addonOrderIndex)
+          };
+        })
+        .filter((entry) => entry.name);
+      const successSet = new Set(entries.map((entry) => entry.name));
       const known = new Set(this.sourceChips.map((chip) => chip.name));
       this.sourceChips = this.sourceChips.map((chip) => (
         successSet.has(chip.name) ? { ...chip, status: "success" } : chip
       ));
-      successSet.forEach((name) => {
-        if (!known.has(name)) {
-          this.sourceChips.push({ name, logo: resolveAddonLogo(name, this.addonLogoLookup), status: "success", orderIndex: Number.MAX_SAFE_INTEGER });
+      entries.forEach((entry) => {
+        if (!known.has(entry.name)) {
+          const orderIndex = Number.isFinite(entry.orderIndex) ? entry.orderIndex : Number.MAX_SAFE_INTEGER;
+          this.sourceChips.push({
+            name: entry.name,
+            logo: entry.logo || resolveAddonLogo(entry.name, this.addonLogoLookup),
+            status: "success",
+            orderIndex
+          });
         }
       });
+      this.sourceChips = this.sourceChips
+        .slice()
+        .sort((left, right) => Number(left.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right.orderIndex ?? Number.MAX_SAFE_INTEGER));
     };
 
     const options = {
@@ -759,13 +916,18 @@ export const StreamScreen = {
           return;
         }
         const groups = Array.isArray(chunkResult.data) ? chunkResult.data : [];
-        markSuccessfulSources(groups.map((group) => group?.addonName || ""));
+        markSuccessfulSources(groups.map((group) => ({
+          name: group?.addonName || "",
+          logo: group?.addonLogo || "",
+          orderIndex: group?.addonOrderIndex
+        })));
         const chunkItems = this.applyAddonLogos(flattenStreams(chunkResult));
         if (!chunkItems.length) {
           this.requestRender();
           return;
         }
         this.streams = mergeStreamItems(this.streams, chunkItems);
+        this.scheduleDebridPreparation();
         this.loading = false;
         if (this.focusState.zone !== "card") {
           this.focusState = { zone: "card", index: 0 };
@@ -780,6 +942,7 @@ export const StreamScreen = {
         return;
       }
       this.streams = mergeStreamItems(this.streams, this.applyAddonLogos(flattenStreams(streamResult)));
+      this.scheduleDebridPreparation();
       markSuccessfulSources(this.streams.map((stream) => stream.addonName));
       this.sourceChips = this.sourceChips.map((chip) => (
         chip.status === "loading" ? { ...chip, status: "error" } : chip
@@ -988,6 +1151,7 @@ export const StreamScreen = {
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
       renderMetaItem("source", extractIndexerName(stream))
     ].filter(Boolean).join("");
+    const isResolving = this.resolvingStreamId === stream.id;
     const addonBadge = displayAddonLogoUrl
       ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
@@ -1005,6 +1169,7 @@ export const StreamScreen = {
         <div class="stream-route-card-side">
           <div class="stream-route-addon-badge">${addonBadge}</div>
           <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
+          ${isResolving ? `<div class="stream-route-addon-name">${escapeHtml(t("stream.debrid.resolving", {}, "Resolving"))}</div>` : ""}
         </div>
       </article>
     `;
@@ -1120,12 +1285,50 @@ export const StreamScreen = {
     });
   },
 
-  playStream(streamId) {
+  async playStream(streamId) {
     const filtered = this.getFilteredStreams();
     const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
-    const targetUrl = selected?.url || selected?.externalUrl || "";
-    if (!targetUrl) {
+    if (!selected) {
       return;
+    }
+    let targetUrl = selected.url || selected.externalUrl || "";
+    if (!targetUrl) {
+      if (!DirectDebridResolver.canResolveStream(selected, {
+        season: this.params?.season == null ? null : Number(this.params.season),
+        episode: this.params?.episode == null ? null : Number(this.params.episode)
+      })) {
+        window.alert?.(t("stream.debrid.unavailable", {}, "This Debrid source needs a configured Debrid account."));
+        return;
+      }
+      this.resolvingStreamId = selected.id;
+      this.requestRender();
+      const result = await DirectDebridResolver.resolve(selected, {
+        season: this.params?.season == null ? null : Number(this.params.season),
+        episode: this.params?.episode == null ? null : Number(this.params.episode)
+      });
+      this.resolvingStreamId = null;
+      if (result.status !== "success" || !result.stream?.url) {
+        this.requestRender();
+        const messageKey = result.status === "not_cached"
+          ? "stream.debrid.notCached"
+          : result.status === "stale"
+              ? "stream.debrid.stale"
+              : "stream.debrid.failed";
+        const fallback = result.status === "not_cached"
+          ? "Not cached on this service."
+          : result.status === "stale"
+              ? "This Debrid result expired. Refreshing streams."
+              : "Could not resolve this Debrid stream.";
+        window.alert?.(t(messageKey, {}, fallback));
+        return;
+      }
+      selected.url = result.stream.url;
+      selected.externalUrl = null;
+      selected.behaviorHints = result.stream.behaviorHints || selected.behaviorHints;
+      selected.raw = result.stream.raw || selected.raw;
+      this.streams = this.streams.map((stream) => stream.id === selected.id ? { ...stream, ...selected } : stream);
+      targetUrl = selected.url || selected.externalUrl || "";
+      this.requestRender();
     }
     const itemType = normalizeType(this.params?.itemType);
     Router.navigate("player", {

@@ -4,6 +4,8 @@ import { StreamApi } from "../remote/api/streamApi.js";
 import { MetaApi } from "../remote/api/metaApi.js";
 import { PluginManager } from "../../core/player/pluginManager.js";
 import { TmdbService } from "../../core/tmdb/tmdbService.js";
+import { LocalDebridAvailabilityService } from "../../core/debrid/localDebridAvailabilityService.js";
+import { DebridStreamPresentation } from "../../core/debrid/directDebridStreamPresentation.js";
 
 class StreamRepository {
 
@@ -19,7 +21,8 @@ class StreamRepository {
   }
 
   async getStreamsFromAllAddons(type, videoId, options = {}) {
-    const addonUrls = addonRepository.getInstalledAddonUrls();
+    const installedAddons = (await addonRepository.getInstalledAddons())
+      .map((addon, index) => ({ ...addon, orderIndex: index }));
     const onAddon = typeof options?.onAddon === "function" ? options.onAddon : null;
 
     const onChunk = typeof options?.onChunk === "function" ? options.onChunk : null;
@@ -58,16 +61,22 @@ class StreamRepository {
       }
     };
 
-    const addonTasks = addonUrls.map(async (addonUrl, orderIndex) => {
+    const prepareDebridGroup = async (group) => {
+      const checkingGroup = DebridStreamPresentation.apply(
+        LocalDebridAvailabilityService.markChecking([group])
+      )[0] || group;
+      const checkedGroup = (await LocalDebridAvailabilityService.annotateCachedAvailability([checkingGroup]))[0] || checkingGroup;
+      const presentedGroup = DebridStreamPresentation.apply([checkedGroup])[0] || checkedGroup;
+      notifyChunk(presentedGroup);
+      return presentedGroup;
+    };
+
+    const addonTasks = installedAddons.map(async (addon) => {
       try {
-        const addonResult = await addonRepository.fetchAddon(addonUrl, { preferCache: true });
-        if (addonResult.status !== "success" || !supportsStreamType(addonResult.data)) {
+        if (!supportsStreamType(addon)) {
           return null;
         }
-        const addon = {
-          ...addonResult.data,
-          orderIndex
-        };
+        const orderIndex = Number(addon.orderIndex ?? Number.MAX_SAFE_INTEGER);
         notifyAddon(addon, orderIndex);
         const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
         if (streamsResult.status !== "success") {
@@ -91,8 +100,7 @@ class StreamRepository {
             addonOrderIndex: orderIndex
           }))
         };
-        notifyChunk(group);
-        return group;
+        return prepareDebridGroup(group);
       } catch (_) {
         return null;
       }
@@ -101,8 +109,11 @@ class StreamRepository {
     const pluginTask = (async () => {
       try {
         const pluginStreams = await this.getPluginStreams(type, videoId, options);
-        pluginStreams.forEach((group) => notifyChunk(group));
-        return pluginStreams;
+        const preparedPluginStreams = [];
+        for (const group of pluginStreams) {
+          preparedPluginStreams.push(await prepareDebridGroup(group));
+        }
+        return preparedPluginStreams;
       } catch (error) {
         console.warn("Plugin stream fetch failed", error);
         return [];
@@ -185,6 +196,10 @@ class StreamRepository {
       externalUrl: stream.externalUrl || null,
       behaviorHints: stream.behaviorHints || null,
       sources: Array.isArray(stream.sources) ? stream.sources : [],
+      quality: stream.quality || null,
+      qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+      clientResolve: stream.clientResolve || null,
+      debridCacheStatus: stream.debridCacheStatus || null,
       subtitles: sidecarSubtitles
     };
   }
@@ -206,7 +221,7 @@ class StreamRepository {
     const videos = Array.isArray(meta?.videos) ? meta.videos : [];
     const matchingVideo = videos.find((video) => String(video?.id || "") === rawVideoId);
     const streams = Array.isArray(matchingVideo?.streams) ? matchingVideo.streams : [];
-    return streams.map((stream) => this.mapStream(stream)).filter((stream) => stream.url || stream.externalUrl || stream.ytId);
+    return streams.map((stream) => this.mapStream(stream)).filter((stream) => stream.url || stream.externalUrl || stream.ytId || stream.clientResolve || stream.infoHash);
   }
 
   buildContentLevelMetaId(videoId) {

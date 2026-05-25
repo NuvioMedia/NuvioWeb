@@ -6252,6 +6252,53 @@
   line-height: 1.15;
 }
 
+.settings-text-dialog {
+  width: min(720px, calc(100vw - 80px));
+  max-height: min(560px, calc(100vh - 96px));
+}
+
+.settings-text-dialog-field {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  font: inherit;
+  font-size: 20px;
+  line-height: 1.35;
+  outline: none;
+}
+
+.settings-text-dialog-input {
+  min-height: 64px;
+  padding: 0 18px;
+}
+
+.settings-text-dialog-textarea {
+  min-height: 220px;
+  padding: 16px 18px;
+  resize: none;
+  white-space: pre-wrap;
+}
+
+.settings-text-dialog-field.focused,
+.settings-text-dialog-field:focus {
+  border: 2px solid var(--focus-color);
+  background: var(--secondary-color);
+  color: var(--on-secondary);
+}
+
+.settings-text-dialog-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-text-dialog-button {
+  justify-content: center;
+  text-align: center;
+}
+
 .settings-language-dialog {
   width: min(400px, calc(100vw - 80px));
   max-height: min(480px, calc(100vh - 120px));

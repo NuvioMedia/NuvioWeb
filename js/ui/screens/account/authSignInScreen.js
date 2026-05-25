@@ -3,6 +3,14 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
 import { I18n } from "../../../i18n/index.js";
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export const AuthSignInScreen = {
 
   async mount() {
@@ -24,13 +32,115 @@ export const AuthSignInScreen = {
           <div class="auth-simple-card focusable" data-action="back">${I18n.t("auth.signIn.back")}</div>
         </div>
       </div>
+      ${this.textDialog ? `
+        <div class="settings-dialog-backdrop">
+          <div class="settings-dialog settings-text-dialog">
+            <div class="settings-dialog-title">${escapeHtml(this.textDialog.title || "")}</div>
+            <input class="settings-text-dialog-field settings-text-dialog-input focusable"
+                   data-action="textInput"
+                   type="${this.textDialog.type === "password" ? "password" : "text"}"
+                   autocomplete="off"
+                   autocapitalize="none"
+                   spellcheck="false"
+                   value="${escapeHtml(this.textDialog.value || "")}" />
+            <div class="settings-text-dialog-actions">
+              <button class="settings-dialog-option settings-text-dialog-button focusable" data-action="saveText">
+                <span class="settings-dialog-option-label">${escapeHtml(I18n.t("common.save", {}, { fallback: "Save" }))}</span>
+              </button>
+              <button class="settings-dialog-option settings-text-dialog-button focusable" data-action="cancelText">
+                <span class="settings-dialog-option-label">${escapeHtml(I18n.t("common.cancel", {}, { fallback: "Cancel" }))}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ` : ""}
     `;
 
     ScreenUtils.indexFocusables(this.container);
-    ScreenUtils.setInitialFocus(this.container);
+    if (this.textDialog) {
+      const input = this.container.querySelector("[data-action='textInput']");
+      input?.focus?.();
+      input?.classList?.add("focused");
+    } else {
+      ScreenUtils.setInitialFocus(this.container);
+    }
+  },
+
+  openEmailDialog() {
+    this.textDialog = {
+      step: "email",
+      title: I18n.t("auth.signIn.emailPrompt"),
+      value: this.pendingEmail || "",
+      type: "text"
+    };
+    this.render();
+  },
+
+  openPasswordDialog(email) {
+    this.pendingEmail = String(email || "").trim();
+    this.textDialog = {
+      step: "password",
+      title: I18n.t("auth.signIn.passwordPrompt"),
+      value: "",
+      type: "password"
+    };
+    this.render();
+  },
+
+  async submitTextDialog() {
+    const input = this.container.querySelector("[data-action='textInput']");
+    const value = String(input?.value || "");
+    if (this.textDialog?.step === "email") {
+      if (value.trim()) {
+        this.openPasswordDialog(value);
+      }
+      return;
+    }
+    if (this.textDialog?.step === "password") {
+      const email = String(this.pendingEmail || "").trim();
+      const password = value;
+      this.textDialog = null;
+      this.pendingEmail = "";
+      this.render();
+      if (email && password) {
+        try {
+          await AuthManager.signInWithEmail(email, password);
+          Router.navigate("profileSelection");
+        } catch (error) {
+          console.error("SignIn failed", error);
+        }
+      }
+    }
   },
 
   async onKeyDown(event) {
+    if (this.textDialog) {
+      if (event.keyCode === 27 || event.keyCode === 461) {
+        this.textDialog = null;
+        this.pendingEmail = "";
+        this.render();
+        return;
+      }
+      if (ScreenUtils.handleDpadNavigation(event, this.container)) {
+        return;
+      }
+      if (event.keyCode !== 13) {
+        return;
+      }
+      const current = this.container.querySelector(".focusable.focused");
+      const action = current?.dataset?.action || "";
+      if (action === "cancelText") {
+        this.textDialog = null;
+        this.pendingEmail = "";
+        this.render();
+        return;
+      }
+      if (action === "saveText" || action === "textInput") {
+        await this.submitTextDialog();
+      }
+      return;
+    }
+
     if (ScreenUtils.handleDpadNavigation(event, this.container)) {
       return;
     }
@@ -48,16 +158,7 @@ export const AuthSignInScreen = {
       return;
     }
     if (action === "devLogin") {
-      const email = window.prompt(I18n.t("auth.signIn.emailPrompt"));
-      const password = window.prompt(I18n.t("auth.signIn.passwordPrompt"));
-      if (email && password) {
-        try {
-          await AuthManager.signInWithEmail(email, password);
-          Router.navigate("profileSelection");
-        } catch (error) {
-          console.error("SignIn failed", error);
-        }
-      }
+      this.openEmailDialog();
       return;
     }
     if (action === "back") {
@@ -66,6 +167,8 @@ export const AuthSignInScreen = {
   },
 
   cleanup() {
+    this.textDialog = null;
+    this.pendingEmail = "";
     ScreenUtils.hide(this.container);
   }
 

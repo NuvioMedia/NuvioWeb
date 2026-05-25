@@ -9,6 +9,7 @@ import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
 import { Router } from "../../navigation/router.js";
+import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -803,6 +804,78 @@ function supportsTvWebAudioAmplification() {
   return !Environment.isWebOS() && !Environment.isTizen();
 }
 
+function isMagnetUrl(value = "") {
+  return String(value || "").trim().toLowerCase().startsWith("magnet:");
+}
+
+function streamDebridIdentity(item = {}) {
+  const resolve = item.clientResolve || item.raw?.clientResolve || {};
+  const behaviorHints = item.behaviorHints || item.raw?.behaviorHints || {};
+  const infoHash = item.infoHash || item.raw?.infoHash || resolve.infoHash || "";
+  const magnetUri = resolve.magnetUri
+    || (isMagnetUrl(item.url) ? item.url : "")
+    || (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
+  const hasDebridMarker = Boolean(
+    item.clientResolve
+      || item.raw?.clientResolve
+      || item.debridCacheStatus
+      || item.raw?.debridCacheStatus
+      || infoHash
+      || magnetUri
+  );
+  if (!hasDebridMarker) {
+    return "";
+  }
+  const locator = infoHash || magnetUri || item.url || item.externalUrl || item.ytId || "";
+  if (!locator) {
+    return "";
+  }
+  return [
+    String(item.addonName || "Addon"),
+    String(resolve.service || item.debridCacheStatus?.providerId || item.raw?.debridCacheStatus?.providerId || ""),
+    String(locator),
+    String(resolve.fileIdx ?? item.fileIdx ?? item.raw?.fileIdx ?? ""),
+    String(behaviorHints.filename || resolve.filename || ""),
+    String(resolve.torrentName || "")
+  ].join("::");
+}
+
+function streamMergeKey(item = {}) {
+  const debridIdentity = streamDebridIdentity(item);
+  if (debridIdentity) {
+    return `debrid::${debridIdentity}`;
+  }
+  const locator = item.url || item.externalUrl || item.ytId || "";
+  if (!locator) {
+    return "";
+  }
+  return [
+    String(item.addonName || "Addon"),
+    String(locator),
+    String(item.sourceType || ""),
+    String(item.fileIdx ?? ""),
+    String(item.behaviorHints?.filename || "")
+  ].join("::");
+}
+
+function mergeStreamItem(previous = {}, next = {}) {
+  const behaviorHints = {
+    ...(previous.behaviorHints || {}),
+    ...(next.behaviorHints || {})
+  };
+  return {
+    ...previous,
+    ...next,
+    id: previous.id || next.id,
+    url: next.url || previous.url || "",
+    externalUrl: next.externalUrl || previous.externalUrl || null,
+    ytId: next.ytId || previous.ytId || null,
+    behaviorHints: Object.keys(behaviorHints).length ? behaviorHints : null,
+    subtitles: Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
+    sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources
+  };
+}
+
 function flattenStreamGroups(streamResult) {
   if (!streamResult || streamResult.status !== "success") {
     return [];
@@ -811,9 +884,12 @@ function flattenStreamGroups(streamResult) {
   (streamResult.data || []).forEach((group) => {
     const addonName = group.addonName || "Addon";
     (group.streams || []).forEach((stream, index) => {
+      const resolve = stream.clientResolve || stream.raw?.clientResolve || {};
       const entry = {
-        id: `${addonName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
-        label: stream.title || stream.name || `${addonName} stream`,
+        id: stream.id || `${addonName}-${index}-${stream.url || stream.externalUrl || stream.ytId || stream.infoHash || resolve.infoHash || resolve.magnetUri || ""}`,
+        label: stream.name || stream.title || `${addonName} stream`,
+        name: stream.name || null,
+        title: stream.title || null,
         description: stream.description || stream.name || "",
         addonName,
         addonLogo: group.addonLogo || stream.addonLogo || null,
@@ -824,10 +900,18 @@ function flattenStreamGroups(streamResult) {
         fileIdx: stream.fileIdx ?? null,
         externalUrl: stream.externalUrl || null,
         behaviorHints: stream.behaviorHints || null,
+        sources: Array.isArray(stream.sources) ? stream.sources : [],
+        quality: stream.quality || null,
+        qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+        clientResolve: stream.clientResolve || null,
+        debridCacheStatus: stream.debridCacheStatus || null,
         subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
+        addonOrderIndex: Number.isFinite(Number(stream.addonOrderIndex))
+          ? Number(stream.addonOrderIndex)
+          : Number(group.addonOrderIndex ?? Number.MAX_SAFE_INTEGER),
         raw: stream
       };
-      if (entry.url) {
+      if (DirectDebridResolver.shouldListStream(entry)) {
         flattened.push(entry);
       }
     });
@@ -836,27 +920,23 @@ function flattenStreamGroups(streamResult) {
 }
 
 function mergeStreamItems(existing = [], incoming = []) {
-  const byKey = new Set();
-  const merged = [];
+  const order = [];
+  const byKey = new Map();
   const push = (item) => {
-    if (!item?.url) {
+    const key = streamMergeKey(item);
+    if (!key) {
       return;
     }
-    const key = [
-      String(item.addonName || "Addon"),
-      String(item.url || ""),
-      String(item.sourceType || ""),
-      String(item.label || "")
-    ].join("::");
-    if (byKey.has(key)) {
+    if (!byKey.has(key)) {
+      order.push(key);
+      byKey.set(key, item);
       return;
     }
-    byKey.add(key);
-    merged.push(item);
+    byKey.set(key, mergeStreamItem(byKey.get(key), item));
   };
   (existing || []).forEach(push);
   (incoming || []).forEach(push);
-  return merged;
+  return order.map((key) => byKey.get(key));
 }
 
 function normalizeParentalWarnings(source) {
@@ -1459,12 +1539,11 @@ export const PlayerScreen = {
   normalizeStreamCandidates(streams = []) {
     return (streams || []).map((stream, index) => {
       const streamUrl = stream?.url || stream?.externalUrl || "";
-      if (!streamUrl) {
-        return null;
-      }
-      return {
+      const entry = {
         id: stream.id || `stream-${index}-${streamUrl}`,
-        label: stream.title || stream.name || stream.label || `Source ${index + 1}`,
+        label: stream.name || stream.title || stream.label || `Source ${index + 1}`,
+        name: stream.name || null,
+        title: stream.title || stream.label || null,
         description: stream.description || stream.name || "",
         addonName: stream.addonName || stream.sourceName || "Addon",
         addonLogo: stream.addonLogo || null,
@@ -1475,9 +1554,15 @@ export const PlayerScreen = {
         fileIdx: stream.fileIdx ?? null,
         externalUrl: stream.externalUrl || null,
         behaviorHints: stream.behaviorHints || null,
+        sources: Array.isArray(stream.sources) ? stream.sources : [],
+        quality: stream.quality || null,
+        qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+        clientResolve: stream.clientResolve || stream.raw?.clientResolve || null,
+        debridCacheStatus: stream.debridCacheStatus || null,
         subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
         raw: stream
       };
+      return DirectDebridResolver.shouldListStream(entry) ? entry : null;
     }).filter(Boolean);
   },
 
@@ -4684,7 +4769,40 @@ export const PlayerScreen = {
     this.schedulePlaybackStallGuard();
   },
 
-  switchStream(direction) {
+  async playStreamCandidate(streamCandidate, options = {}) {
+    if (!streamCandidate) {
+      return;
+    }
+    let targetUrl = streamCandidate.url || streamCandidate.externalUrl || "";
+    if (!targetUrl) {
+      const result = await DirectDebridResolver.resolve(streamCandidate, {
+        season: this.params?.season == null ? null : Number(this.params.season),
+        episode: this.params?.episode == null ? null : Number(this.params.episode)
+      });
+      if (result.status !== "success" || !result.stream?.url) {
+        this.sourcesError = result.status === "not_cached"
+          ? t("stream.debrid.notCached", {}, "Not cached on this service.")
+          : result.status === "stale"
+              ? t("stream.debrid.stale", {}, "This Debrid result expired. Refreshing streams.")
+              : t("stream.debrid.failed", {}, "Could not resolve this Debrid stream.");
+        this.renderSourcesPanel();
+        return;
+      }
+      targetUrl = result.stream.url;
+      Object.assign(streamCandidate, {
+        url: targetUrl,
+        externalUrl: null,
+        behaviorHints: result.stream.behaviorHints || streamCandidate.behaviorHints,
+        raw: result.stream.raw || streamCandidate.raw
+      });
+      this.streamCandidates = this.streamCandidates.map((entry) => (
+        entry.id === streamCandidate.id ? { ...entry, ...streamCandidate } : entry
+      ));
+    }
+    await this.playStreamByUrl(targetUrl, options);
+  },
+
+  async switchStream(direction) {
     if (!this.streamCandidates.length) {
       return;
     }
@@ -4698,10 +4816,10 @@ export const PlayerScreen = {
     }
 
     const selected = this.streamCandidates[this.currentStreamIndex];
-    if (!selected?.url) {
+    if (!selected) {
       return;
     }
-    this.playStreamByUrl(selected.url, { preservePlaybackState: true });
+    await this.playStreamCandidate(selected, { preservePlaybackState: true });
   },
 
   mediaErrorMessage(errorCode = 0) {
@@ -7366,15 +7484,36 @@ export const PlayerScreen = {
   },
 
   getSourceFilters() {
-    const addons = Array.from(new Set(this.streamCandidates.map((stream) => stream.addonName).filter(Boolean)));
+    const addons = [];
+    this.getOrderedStreamCandidates().forEach((stream) => {
+      const addonName = String(stream?.addonName || "").trim();
+      if (addonName && !addons.includes(addonName)) {
+        addons.push(addonName);
+      }
+    });
     return ["all", ...addons];
   },
 
+  getOrderedStreamCandidates() {
+    return (this.streamCandidates || [])
+      .map((stream, index) => ({ stream, index }))
+      .sort((left, right) => {
+        const leftOrder = Number(left.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+        const rightOrder = Number(right.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+        if (leftOrder !== rightOrder) {
+          return leftOrder - rightOrder;
+        }
+        return left.index - right.index;
+      })
+      .map((entry) => entry.stream);
+  },
+
   getFilteredSources() {
+    const ordered = this.getOrderedStreamCandidates();
     if (this.sourceFilter === "all") {
-      return this.streamCandidates;
+      return ordered;
     }
-    return this.streamCandidates.filter((stream) => stream.addonName === this.sourceFilter);
+    return ordered.filter((stream) => stream.addonName === this.sourceFilter);
   },
 
   ensureSourcesFocus() {
@@ -7658,8 +7797,8 @@ export const PlayerScreen = {
     }
 
     const selectedStream = list[clamp(index, 0, Math.max(0, list.length - 1))] || null;
-    if (selectedStream?.url) {
-      await this.playStreamByUrl(selectedStream.url, { preservePlaybackState: true });
+    if (selectedStream) {
+      await this.playStreamCandidate(selectedStream, { preservePlaybackState: true });
     }
   },
 

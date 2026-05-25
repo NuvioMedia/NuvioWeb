@@ -2709,7 +2709,7 @@ export const PlayerController = {
     const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
     const hasReachedMinimumSyncPosition = Number.isFinite(safePosition)
       && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
-    const isCompleted = hasFiniteDuration && safePosition / safeDuration > 0.95;
+    const isCompleted = hasFiniteDuration && safePosition / safeDuration >= 0.90;
     if (!clear && !isCompleted) {
       if (hasFiniteDuration && safeDuration < MIN_PROGRESS_SYNC_DURATION_MS) {
         return false;

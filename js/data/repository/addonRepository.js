@@ -3,6 +3,7 @@ import { LocalStore } from "../../core/storage/localStore.js";
 import { AddonApi } from "../remote/api/addonApi.js";
 
 const ADDON_URLS_KEY = "installedAddonUrls";
+const ADDON_DISPLAY_NAMES_KEY = "installedAddonDisplayNames";
 const MANIFEST_SUFFIX = "/manifest.json";
 const DEFAULT_ADDON_URLS = [
   "https://v3-cinemeta.strem.io",
@@ -76,6 +77,55 @@ class AddonRepository {
     return [...DEFAULT_ADDON_URLS];
   }
 
+  getAddonDisplayNameOverrides() {
+    const stored = LocalStore.get(ADDON_DISPLAY_NAMES_KEY, {}) || {};
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
+      return {};
+    }
+    return Object.entries(stored).reduce((accumulator, [url, name]) => {
+      const cleanUrl = this.canonicalizeUrl(url);
+      const cleanName = String(name || "").trim();
+      if (cleanUrl && cleanName) {
+        accumulator[cleanUrl] = cleanName;
+      }
+      return accumulator;
+    }, {});
+  }
+
+  getAddonDisplayNameOverride(url) {
+    const cleanUrl = this.canonicalizeUrl(url);
+    return cleanUrl ? this.getAddonDisplayNameOverrides()[cleanUrl] || "" : "";
+  }
+
+  setAddonDisplayNameOverrides(entries = [], options = {}) {
+    const replace = options?.replace !== false;
+    const current = replace ? {} : this.getAddonDisplayNameOverrides();
+    const next = { ...current };
+    (entries || []).forEach((entry) => {
+      const cleanUrl = this.canonicalizeUrl(entry?.url || entry?.baseUrl || entry?.base_url || "");
+      if (!cleanUrl) {
+        return;
+      }
+      const displayName = String(entry?.name || "").trim();
+      if (displayName) {
+        next[cleanUrl] = displayName;
+      } else if (replace) {
+        delete next[cleanUrl];
+      }
+    });
+    const changed = JSON.stringify(this.getAddonDisplayNameOverrides()) !== JSON.stringify(next);
+    if (changed) {
+      LocalStore.set(ADDON_DISPLAY_NAMES_KEY, next);
+      this.invalidateInstalledAddonsCache();
+    }
+    return changed;
+  }
+
+  withDisplayNameOverride(addon = {}) {
+    const override = this.getAddonDisplayNameOverride(addon.baseUrl);
+    return override && override !== addon.name ? { ...addon, displayName: override } : addon;
+  }
+
   async fetchAddon(baseUrl, options = {}) {
     const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
     const manifestUrl = this.buildManifestUrl(cleanBaseUrl);
@@ -85,7 +135,7 @@ class AddonRepository {
     if (!force && preferCache) {
       const cached = this.manifestCache.get(cleanBaseUrl);
       if (cached) {
-        return { status: "success", data: cached };
+        return { status: "success", data: this.withDisplayNameOverride(cached) };
       }
       const cachedError = this.manifestErrorCache.get(cleanBaseUrl);
       if (cachedError) {
@@ -103,19 +153,19 @@ class AddonRepository {
         const addon = this.mapManifest(result.data, cleanBaseUrl);
         this.manifestCache.set(cleanBaseUrl, addon);
         this.manifestErrorCache.delete(cleanBaseUrl);
-        return { status: "success", data: addon };
+        return { status: "success", data: this.withDisplayNameOverride(addon) };
       }
 
       const cached = this.manifestCache.get(cleanBaseUrl);
       if (cached) {
-        return { status: "success", data: cached };
+        return { status: "success", data: this.withDisplayNameOverride(cached) };
       }
 
       const fallback = this.getBuiltinFallbackManifest(cleanBaseUrl);
       if (fallback) {
         this.manifestCache.set(cleanBaseUrl, fallback);
         this.manifestErrorCache.delete(cleanBaseUrl);
-        return { status: "success", data: fallback };
+        return { status: "success", data: this.withDisplayNameOverride(fallback) };
       }
 
       this.manifestErrorCache.set(cleanBaseUrl, result);
@@ -287,13 +337,18 @@ class AddonRepository {
   }
 
   applyDisplayNames(addons) {
+    const decoratedAddons = (addons || []).map((addon) => this.withDisplayNameOverride(addon));
+    const unrenamed = decoratedAddons.filter((addon) => addon.displayName === addon.name);
     const nameCount = {};
-    addons.forEach((addon) => {
+    unrenamed.forEach((addon) => {
       nameCount[addon.name] = (nameCount[addon.name] || 0) + 1;
     });
 
     const counters = {};
-    return addons.map((addon) => {
+    return decoratedAddons.map((addon) => {
+      if (addon.displayName !== addon.name) {
+        return addon;
+      }
       if ((nameCount[addon.name] || 0) <= 1) {
         return addon;
       }

@@ -47,6 +47,30 @@ function isSeriesType(type) {
   return normalized === "series";
 }
 
+function matchesProgressTarget(item = {}, contentId, videoId = null) {
+  const wantedContentId = String(contentId || "").trim();
+  if (!wantedContentId || String(item.contentId || "").trim() !== wantedContentId) {
+    return false;
+  }
+  if (videoId == null) {
+    return true;
+  }
+  return String(item.videoId || "") === String(videoId);
+}
+
+async function deleteWatchProgressFromCloud(items = []) {
+  if (!items.length) {
+    return false;
+  }
+  try {
+    const { WatchProgressSyncService } = await import("../../core/profile/watchProgressSyncService.js");
+    return WatchProgressSyncService.deleteItems(items);
+  } catch (error) {
+    console.warn("Watch progress cloud delete failed", error);
+    return false;
+  }
+}
+
 function progressFractionForContinueWatching(item = {}) {
   const durationMs = Number(item.durationMs || 0);
   const positionMs = Number(item.positionMs || 0);
@@ -133,7 +157,11 @@ class WatchProgressRepository {
   }
 
   async removeProgress(contentId, videoId = null) {
-    WatchProgressStore.remove(contentId, videoId, activeProfileId());
+    const pid = activeProfileId();
+    const removedItems = WatchProgressStore.listForProfile(pid)
+      .filter((item) => matchesProgressTarget(item, contentId, videoId));
+    WatchProgressStore.remove(contentId, videoId, pid);
+    await deleteWatchProgressFromCloud(removedItems);
     queueWatchProgressCloudSync();
   }
 
