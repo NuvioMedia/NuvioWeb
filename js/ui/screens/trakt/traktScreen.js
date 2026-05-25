@@ -2,7 +2,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { Router } from "../../navigation/router.js";
 import { Platform } from "../../../platform/index.js";
 import { TraktAuthService } from "../../../data/repository/traktAuthService.js";
-import { SettingsScreen } from "../settings/settingsScreen.js";
+import { SettingsScreen, bindSettingsScrollIndicators, scrollSettingsContentItem } from "../settings/settingsScreen.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -19,28 +19,6 @@ function focusNode(node) {
   }
 }
 
-function scrollIntoView(node) {
-  if (!node || typeof node.scrollIntoView !== "function") {
-    return;
-  }
-
-  const scroller = node.closest?.(".settings-trakt-scroll-area, .settings-dialog-list");
-  if (scroller) {
-    animateNodeIntoScroller(node, scroller);
-    return;
-  }
-
-  try {
-    node.scrollIntoView({ block: "nearest", inline: "nearest" });
-  } catch (_) {
-    node.scrollIntoView();
-  }
-}
-
-function easeOutCubic(value) {
-  return 1 - Math.pow(1 - value, 3);
-}
-
 function formatCountdown(valueMs) {
   const totalSeconds = Math.max(0, Math.floor(Number(valueMs || 0) / 1000));
   const days = Math.floor(totalSeconds / 86400);
@@ -51,50 +29,6 @@ function formatCountdown(valueMs) {
   if (hours > 0) return `${hours}h ${minutes}m`;
   if (minutes > 0) return `${minutes}m ${seconds}s`;
   return `${seconds}s`;
-}
-
-function animateNodeIntoScroller(node, scroller) {
-  const maxScroll = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-  if (maxScroll <= 0) {
-    return;
-  }
-
-  const scrollerRect = scroller.getBoundingClientRect();
-  const nodeRect = node.getBoundingClientRect();
-  const topInset = Math.max(16, scroller.clientHeight * 0.08);
-  const bottomInset = Math.max(16, scroller.clientHeight * 0.16);
-  let target = Number(scroller.scrollTop || 0);
-
-  if (nodeRect.top < scrollerRect.top + topInset) {
-    target += nodeRect.top - scrollerRect.top - topInset;
-  } else if (nodeRect.bottom > scrollerRect.bottom - bottomInset) {
-    target += nodeRect.bottom - scrollerRect.bottom + bottomInset;
-  }
-
-  target = clamp(target, 0, maxScroll);
-  const start = Number(scroller.scrollTop || 0);
-  if (Math.abs(target - start) < 1) {
-    return;
-  }
-
-  if (scroller.traktScrollFrame) {
-    cancelAnimationFrame(scroller.traktScrollFrame);
-    scroller.traktScrollFrame = null;
-  }
-
-  const startedAt = performance.now();
-  const duration = 320;
-  const step = (now) => {
-    const progress = clamp((now - startedAt) / duration, 0, 1);
-    scroller.scrollTop = start + ((target - start) * easeOutCubic(progress));
-    if (progress < 1) {
-      scroller.traktScrollFrame = requestAnimationFrame(step);
-      return;
-    }
-    scroller.scrollTop = target;
-    scroller.traktScrollFrame = null;
-  };
-  scroller.traktScrollFrame = requestAnimationFrame(step);
 }
 
 export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
@@ -134,6 +68,7 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
       </div>
     `;
     ScreenUtils.indexFocusables(this.container);
+    bindSettingsScrollIndicators(this.container);
     this.traktRouteEnterPending = false;
     this.applyFocus();
     this.updateTraktCountdowns();
@@ -186,7 +121,7 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
       if (dialogNode) {
         dialogNode.classList.add("focused");
         focusNode(dialogNode);
-        scrollIntoView(dialogNode);
+        scrollSettingsContentItem(dialogNode);
       }
       return;
     }
@@ -201,7 +136,7 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
     }
     fallback.classList.add("focused");
     focusNode(fallback);
-    scrollIntoView(fallback);
+    scrollSettingsContentItem(fallback);
     this.contentFocusKey = String(fallback.dataset.focusKey || "");
   },
 
@@ -253,9 +188,35 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
     }
   },
 
+  focusContentByKey(focusKey) {
+    const target = this.container?.querySelector(
+      `.settings-content-focusable[data-focus-key="${String(focusKey || "").replace(/["\\]/g, "\\$&")}"]`
+    );
+    if (!target) {
+      return false;
+    }
+    this.container?.querySelectorAll?.(".focusable.focused")?.forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    focusNode(target);
+    scrollSettingsContentItem(target);
+    this.contentFocusKey = String(target.dataset.focusKey || focusKey || "");
+    return true;
+  },
+
   moveFocus(direction) {
     const selector = this.optionDialog ? ".settings-dialog-option" : ".settings-content-focusable";
     const before = this.container.querySelector(`${selector}.focused`);
+    const beforeFocusKey = String(before?.dataset?.focusKey || "");
+
+    if (!this.optionDialog) {
+      if (direction === "up" && beforeFocusKey === "trakt:librarySource" && this.focusContentByKey("trakt:disconnect")) {
+        return;
+      }
+      if (direction === "down" && beforeFocusKey === "trakt:disconnect" && this.focusContentByKey("trakt:librarySource")) {
+        return;
+      }
+    }
+
     ScreenUtils.moveFocusDirectional(this.container, direction, selector);
     const after = this.container.querySelector(`${selector}.focused`);
     if (after && after !== before) {
@@ -267,7 +228,7 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
       } else {
         this.contentFocusKey = String(after.dataset.focusKey || "");
       }
-      scrollIntoView(after);
+      scrollSettingsContentItem(after);
     }
   },
 

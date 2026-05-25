@@ -688,7 +688,7 @@ function scrollSettingsNodeIntoContainer(node, container, axis = "y") {
   animateSettingsScroll(container, nextPosition, axis);
 }
 
-function scrollSettingsContentItem(node) {
+export function scrollSettingsContentItem(node) {
   if (!node) {
     return;
   }
@@ -704,7 +704,7 @@ function scrollSettingsContentItem(node) {
     scrollSettingsNodeIntoContainer(node, horizontalContainer, "x");
   }
 
-  const verticalContainer = node.closest?.(".settings-content, .settings-group-card-fill");
+  const verticalContainer = node.closest?.(".settings-content, .settings-group-card-fill, .settings-trakt-scroll-area");
   if (verticalContainer) {
     scrollSettingsNodeIntoContainer(node, verticalContainer, "y");
     return;
@@ -718,8 +718,15 @@ function updateSettingsScrollIndicators(container) {
     return;
   }
 
-  const verticalFrame = container.closest?.(".settings-content-frame, .settings-sidebar-frame");
-  if (verticalFrame && (container.classList?.contains("settings-content") || container.classList?.contains("settings-sidebar"))) {
+  const verticalFrame = container.closest?.(".settings-content-frame, .settings-sidebar-frame, .settings-trakt-scroll-frame");
+  if (
+    verticalFrame
+    && (
+      container.classList?.contains("settings-content")
+      || container.classList?.contains("settings-sidebar")
+      || container.classList?.contains("settings-trakt-scroll-area")
+    )
+  ) {
     const maxScroll = getScrollMax(container, "y");
     const scrollTop = getScrollPosition(container, "y");
     verticalFrame.classList.toggle("can-scroll-backward", scrollTop > 1);
@@ -742,12 +749,12 @@ function updateSettingsScrollIndicatorsSoon(container) {
   requestAnimationFrame(() => updateSettingsScrollIndicators(container));
 }
 
-function bindSettingsScrollIndicators(root) {
+export function bindSettingsScrollIndicators(root) {
   if (!root) {
     return;
   }
 
-  root.querySelectorAll?.(".settings-sidebar, .settings-content, .settings-theme-row").forEach((container) => {
+  root.querySelectorAll?.(".settings-sidebar, .settings-content, .settings-theme-row, .settings-trakt-scroll-area").forEach((container) => {
     if (!container.settingsScrollIndicatorBound) {
       container.settingsScrollIndicatorBound = true;
       container.addEventListener("scroll", () => updateSettingsScrollIndicators(container), { passive: true });
@@ -756,7 +763,7 @@ function bindSettingsScrollIndicators(root) {
   });
 }
 
-function settingsScrollIndicatorMarkup(axis = "vertical") {
+export function settingsScrollIndicatorMarkup(axis = "vertical") {
   if (axis === "horizontal") {
     return `
       <span class="settings-scroll-indicator settings-scroll-indicator-left" aria-hidden="true">
@@ -2727,17 +2734,20 @@ export const SettingsScreen = {
           ${isConnected ? `<p class="settings-trakt-connected">${escapeHtml(t("trakt_connected_as", [auth.username || "Trakt user"], `Connected as ${auth.username || "Trakt user"}`))}</p>` : ""}
         </div>
         <div class="settings-trakt-card">
-          <div class="settings-trakt-scroll-area">
-            <div class="settings-trakt-header-row">
-              <div class="settings-trakt-card-title">${escapeHtml(t("trakt_account_login", {}, "Account Login"))}</div>
-              ${isAwaitingApproval ? `<button class="settings-trakt-small-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:cancel", this.actionMap.get("trakt:cancel"))}>${escapeHtml(t("action_cancel", {}, "Cancel"))}</button>` : ""}
+          <div class="settings-trakt-scroll-frame settings-content-frame">
+            <div class="settings-trakt-scroll-area">
+              <div class="settings-trakt-header-row">
+                <div class="settings-trakt-card-title">${escapeHtml(t("trakt_account_login", {}, "Account Login"))}</div>
+                ${isAwaitingApproval ? `<button class="settings-trakt-small-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:cancel", this.actionMap.get("trakt:cancel"))}>${escapeHtml(t("action_cancel", {}, "Cancel"))}</button>` : ""}
+              </div>
+              ${isAwaitingApproval ? this.renderTraktAwaitingApproval(userCode, remaining) : ""}
+              ${isConnected ? this.renderTraktConnected(auth, tokenRemaining, trakt) : ""}
+              ${!isAwaitingApproval && !isConnected ? this.renderTraktDisconnected(trakt) : ""}
+              ${isConnected ? this.renderTraktOptions(settings) : ""}
+              ${!isConnected && trakt.statusMessage ? `<p class="settings-trakt-message">${escapeHtml(trakt.statusMessage)}</p>` : ""}
+              ${trakt.errorMessage ? `<p class="settings-trakt-error">${escapeHtml(trakt.errorMessage)}</p>` : ""}
             </div>
-            ${isAwaitingApproval ? this.renderTraktAwaitingApproval(userCode, remaining) : ""}
-            ${isConnected ? this.renderTraktConnected(auth, tokenRemaining, trakt) : ""}
-            ${!isAwaitingApproval && !isConnected ? this.renderTraktDisconnected(trakt) : ""}
-            ${isConnected ? this.renderTraktOptions(settings) : ""}
-            ${!isConnected && trakt.statusMessage ? `<p class="settings-trakt-message">${escapeHtml(trakt.statusMessage)}</p>` : ""}
-            ${trakt.errorMessage ? `<p class="settings-trakt-error">${escapeHtml(trakt.errorMessage)}</p>` : ""}
+            ${settingsScrollIndicatorMarkup("vertical")}
           </div>
           <div class="settings-trakt-footer-row">
             ${isAwaitingApproval ? `<button class="settings-trakt-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:retry", this.actionMap.get("trakt:retry"))}>${escapeHtml(t("trakt_retry", {}, "Retry"))}</button>` : ""}

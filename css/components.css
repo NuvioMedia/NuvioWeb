@@ -6136,6 +6136,8 @@ button:focus-visible {
 .settings-sidebar-frame.can-scroll-forward .settings-scroll-indicator-down,
 .settings-content-frame.can-scroll-backward .settings-scroll-indicator-up,
 .settings-content-frame.can-scroll-forward .settings-scroll-indicator-down,
+.settings-trakt-scroll-frame.can-scroll-backward .settings-scroll-indicator-up,
+.settings-trakt-scroll-frame.can-scroll-forward .settings-scroll-indicator-down,
 .settings-horizontal-scroll-frame.can-scroll-backward .settings-scroll-indicator-left,
 .settings-horizontal-scroll-frame.can-scroll-forward .settings-scroll-indicator-right {
   opacity: 0.55;
@@ -7193,6 +7195,17 @@ button:focus-visible {
 
 .settings-trakt-scroll-area::-webkit-scrollbar {
   display: none;
+}
+
+.settings-trakt-scroll-frame {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.settings-trakt-scroll-frame .settings-trakt-scroll-area {
+  height: 100%;
 }
 
 .settings-trakt-header-row,
