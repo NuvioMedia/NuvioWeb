@@ -3231,9 +3231,11 @@ export const HomeScreen = {
     return [
       ...tabs.map((tab) => ({
         action: `toggleLibraryList:${tab.key}`,
-        label: `${membership[tab.key] ? "[x]" : "[ ]"} ${tab.title || tab.key}`
+        label: tab.title || tab.key,
+        selected: membership[tab.key] === true,
+        className: "poster-list-picker-list-button"
       })),
-      { action: "saveLibraryLists", label: t("action_save", {}, "Save") }
+      { action: "saveLibraryLists", label: t("action_save", {}, "Save"), className: "poster-list-picker-save-button" }
     ];
   },
 
@@ -3245,15 +3247,20 @@ export const HomeScreen = {
     const item = this.posterListPicker.item || {};
     this._homeHoldDialog = new NuvioDialog({
       title: item.name || item.title || item.id || "Untitled",
-      subtitle: this.posterListPicker.error || t("detail_lists_subtitle", {}, "Choose which lists should include this title"),
+      subtitle: t("detail_lists_subtitle", {}, "Choose which lists should include this title"),
+      error: this.posterListPicker.error || null,
       widthVw: 52,
       buttons: this.getPosterListPickerOptions().map((option) => ({
         label: option.label,
         key: option.action,
+        selected: option.selected,
+        className: option.className,
         onAction: () => {
           void this.activatePosterListPickerOption(option.action);
         }
       })),
+      panelClassName: "poster-list-picker-dialog-panel",
+      actionsClassName: "poster-list-picker-actions",
       onDismiss: () => {
         this._homeHoldDialog = null;
         this.posterListPicker = null;
@@ -3312,7 +3319,7 @@ export const HomeScreen = {
         ...(this.posterListPicker.membership || {}),
         [key]: !this.posterListPicker.membership?.[key]
       };
-      this.mountPosterListPickerDialog();
+      this._homeHoldDialog?.setButtonSelected?.(normalizedAction, Boolean(this.posterListPicker.membership[key]));
       return true;
     }
     if (normalizedAction === "saveLibraryLists") {
