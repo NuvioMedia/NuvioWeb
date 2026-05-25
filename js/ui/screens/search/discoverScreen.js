@@ -14,17 +14,7 @@ import {
   renderPosterOptionsMenu
 } from "../../components/posterOptionsMenu.js";
 import {
-  activateLegacySidebarAction,
-  bindRootSidebarEvents,
   focusWithoutAutoScroll,
-  getRootSidebarNodes,
-  getRootSidebarSelectedNode,
-  getSidebarProfileState,
-  isSelectedSidebarAction,
-  isRootSidebarNode,
-  renderRootSidebar,
-  setModernSidebarExpanded,
-  setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
 
@@ -230,15 +220,11 @@ export const DiscoverScreen = {
   async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("discover");
     ScreenUtils.show(this.container);
-    try {
-      this.sidebarProfile = await getSidebarProfileState();
-    } catch (err) {
-      console.warn("debug: fail on load", err);
-      this.sidebarProfile = null;
-    }
     this.layoutPrefs = LayoutPreferences.get();
-    this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
-    this.focusZone = this.focusZone || "content";
+    this.sidebarExpanded = false;
+    this.focusZone = "content";
+    this.discoverRouteEnterPending = true;
+    this.suppressInitialLoadingRenders = true;
     this.loadToken = (this.loadToken || 0) + 1;
 
     this.typeOptions = [];
@@ -270,14 +256,16 @@ export const DiscoverScreen = {
       return;
     }
 
-    this.render();
     try {
       await this.loadCatalogsAndContent();
     } catch (err) {
       console.error("discoverScreen: Failed to load content", err);
       this.loading = false;
       this.items = [];
+      this.suppressInitialLoadingRenders = false;
       this.render();
+    } finally {
+      this.suppressInitialLoadingRenders = false;
     }
   },
 
@@ -347,10 +335,13 @@ export const DiscoverScreen = {
     this.lastFocusedDiscoverItemId = "";
     this.pendingRestoreFocus = false;
     this.savedScrollTop = 0;
-    this.render();
+    if (!this.suppressInitialLoadingRenders) {
+      this.render();
+    }
     if (!selectedCatalog) {
       this.loading = false;
       this.hasMore = false;
+      this.suppressInitialLoadingRenders = false;
       this.render();
       return;
     }
@@ -376,7 +367,7 @@ export const DiscoverScreen = {
     this.captureViewState();
     this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
     this.preserveViewportOnNextRender = Boolean(preserveViewport);
-    if (!preserveViewport) {
+    if (!preserveViewport && !this.suppressInitialLoadingRenders) {
       this.render();
     }
 
@@ -402,6 +393,7 @@ export const DiscoverScreen = {
       this.loading = false;
       this.hasMore = false;
       this.preserveViewportOnNextRender = false;
+      this.suppressInitialLoadingRenders = false;
       this.render();
       return;
     }
@@ -431,6 +423,7 @@ export const DiscoverScreen = {
     }
     this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
     this.preserveViewportOnNextRender = Boolean(preserveViewport && addedCount > 0);
+    this.suppressInitialLoadingRenders = false;
     this.render();
   },
 
@@ -518,7 +511,9 @@ export const DiscoverScreen = {
   closePickerMenu() {
     if (!this.openPicker) return;
     this.openPicker = null;
-    this.render();
+    if (!this.suppressInitialLoadingRenders) {
+      this.render();
+    }
   },
 
   isPosterHoldTarget(node) {
@@ -956,32 +951,6 @@ export const DiscoverScreen = {
     return this.focusNode(target);
   },
 
-  focusSidebarNode() {
-    const target = getRootSidebarSelectedNode(this.container, this.layoutPrefs)
-      || getRootSidebarNodes(this.container, this.layoutPrefs)[0]
-      || null;
-    if (!target) {
-      return false;
-    }
-    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
-    target.classList.add("focused");
-    this.focusZone = "sidebar";
-    focusWithoutAutoScroll(target);
-    if (!this.layoutPrefs?.modernSidebar) {
-      setLegacySidebarExpanded(this.container, true);
-    }
-    return true;
-  },
-
-  async openSidebar() {
-    this.focusZone = "sidebar";
-    if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
-      this.sidebarExpanded = true;
-      setModernSidebarExpanded(this.container, true);
-    }
-    return this.focusSidebarNode();
-  },
-
   restoreContentFocus({ scrollMode = "center" } = {}) {
     const selector = this.lastFocusedAction && this.lastFocusedAction !== "openDetail"
       ? `.focusable[data-action="${this.lastFocusedAction}"]`
@@ -1020,10 +989,6 @@ export const DiscoverScreen = {
 
   async closeSidebarToContent() {
     this.focusZone = "content";
-    if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
-      this.sidebarExpanded = false;
-      setModernSidebarExpanded(this.container, false);
-    }
     return this.restoreContentFocus() || true;
   },
 
@@ -1058,7 +1023,7 @@ export const DiscoverScreen = {
 
   render() {
     this.layoutPrefs = LayoutPreferences.get();
-    this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
+    this.sidebarExpanded = false;
     const currentFocused = this.container?.querySelector(".focusable.focused");
     if (currentFocused?.dataset?.action) {
       this.lastFocusedAction = String(currentFocused.dataset.action);
@@ -1092,16 +1057,12 @@ export const DiscoverScreen = {
              `).join("")
       : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
 
+    const enterClass = this.discoverRouteEnterPending ? " nuvio-route-slide-enter" : "";
+    this.discoverRouteEnterPending = false;
+
     this.container.innerHTML = `
       <div class="home-shell search-screen-shell discover-shell">
-        ${renderRootSidebar({
-          selectedRoute: "search",
-          profile: this.sidebarProfile,
-          layout: this.layoutPrefs,
-          expanded: Boolean(this.sidebarExpanded),
-          pillIconOnly: Boolean(this.pillIconOnly)
-        })}
-        <main class="home-main discover-main">
+        <main class="home-main discover-main${enterClass}">
           <div class="seeall-shell discover-seeall-shell">
             <header class="seeall-header discover-header">
               <h2 class="seeall-title">Discover</h2>
@@ -1126,11 +1087,6 @@ export const DiscoverScreen = {
     this.buildNavigationModel();
     this.bindCardEvents();
     this.bindShellEvents();
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "search",
-      onSelectedAction: () => this.closeSidebarToContent(),
-      onExpandSidebar: () => this.openSidebar()
-    });
     this.bindPointerEvents();
     if (this.posterOptionsMenu) {
       this.applyPosterOptionsFocus();
@@ -1145,13 +1101,9 @@ export const DiscoverScreen = {
       return;
     }
     this.restoreScrollState();
-    if (this.focusZone === "sidebar") {
-      this.focusSidebarNode();
-    } else {
-      const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
-      this.preserveViewportOnNextRender = false;
-      this.restoreContentFocus({ scrollMode });
-    }
+    const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
+    this.preserveViewportOnNextRender = false;
+    this.restoreContentFocus({ scrollMode });
     this.syncOpenPickerScroll();
   },
 
@@ -1227,11 +1179,7 @@ export const DiscoverScreen = {
         this.closePickerMenu();
         return;
       }
-      if (this.focusZone === "sidebar") {
-        Platform.exitApp();
-      } else {
-        await this.openSidebar();
-      }
+      await Router.back();
       return;
     }
 
@@ -1267,45 +1215,6 @@ export const DiscoverScreen = {
       }
       return;
     }
-    if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
-      if (code === 40) {
-        this.pillIconOnly = true;
-        setModernSidebarPillIconOnly(this.container, true);
-      } else if (code === 38) {
-        this.pillIconOnly = false;
-        setModernSidebarPillIconOnly(this.container, false);
-      }
-    }
-    if (this.focusZone === "sidebar") {
-      if (isUpKey(event) || isDownKey(event) || isRightKey(event)) {
-        event?.preventDefault?.();
-      }
-      if (isUpKey(event) || isDownKey(event)) {
-        const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
-        const focusedIndex = Math.max(0, nodes.indexOf(current));
-        const nextIndex = Math.max(0, Math.min(nodes.length - 1, focusedIndex + (isUpKey(event) ? -1 : 1)));
-        const nextNode = nodes[nextIndex] || null;
-        if (nextNode) {
-          this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
-          nextNode.classList.add("focused");
-          focusWithoutAutoScroll(nextNode);
-        }
-        return;
-      }
-      if (isRightKey(event)) {
-        await this.closeSidebarToContent();
-        return;
-      }
-      if (isEnterKey(event) && current && isRootSidebarNode(current)) {
-        event?.preventDefault?.();
-        activateLegacySidebarAction(String(current.dataset.action || ""), "search");
-        if (isSelectedSidebarAction(String(current.dataset.action || ""), "search")) {
-          await this.closeSidebarToContent();
-        }
-        return;
-      }
-    }
-
     if (isUpKey(event) || isDownKey(event) || isLeftKey(event) || isRightKey(event)) {
       event?.preventDefault?.();
     }
@@ -1350,7 +1259,6 @@ export const DiscoverScreen = {
     if (focusedFilterKind) {
       if (isLeftKey(event)) {
         if (currentAction === "discoverFilterType") {
-          await this.openSidebar();
           return;
         }
         this.moveFilterFocus(-1);
@@ -1369,7 +1277,6 @@ export const DiscoverScreen = {
     if (currentAction === "openDetail") {
       if (isLeftKey(event) && Number(current.dataset.navCol || 0) === 0) {
         event?.preventDefault?.();
-        await this.openSidebar();
         return;
       }
       if (isUpKey(event) && Number(current.dataset.navRow || 0) === 0) {
@@ -1391,13 +1298,6 @@ export const DiscoverScreen = {
     const action = String(current.dataset.action || "");
     this.lastFocusedAction = action;
 
-    if (isRootSidebarNode(current)) {
-      activateLegacySidebarAction(action, "search");
-      if (isSelectedSidebarAction(action, "search")) {
-        await this.closeSidebarToContent();
-      }
-      return;
-    }
     if (action === "discoverFilterType") this.openPickerMenu("type");
     if (action === "discoverFilterCatalog") this.openPickerMenu("catalog");
     if (action === "discoverFilterGenre") this.openPickerMenu("genre");
