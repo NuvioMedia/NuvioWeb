@@ -5,6 +5,7 @@ import { catalogRepository } from "../../../data/repository/catalogRepository.js
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
+import { MODERN_HOME_CONSTANTS } from "../home/modernHomeLayout.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -275,6 +276,13 @@ export const SearchScreen = {
     }
   },
 
+  cancelScheduledInputSearch() {
+    if (this.inputSearchTimer) {
+      clearTimeout(this.inputSearchTimer);
+      this.inputSearchTimer = null;
+    }
+  },
+
   requestRender() {
     if (!this.container || Router.getCurrent() !== "search") {
       return;
@@ -338,6 +346,7 @@ export const SearchScreen = {
     this.voiceSearchActive = false;
     this.voiceRecognition = this.voiceRecognition || null;
     this.searchToastTimer = null;
+    this.inputSearchTimer = null;
     this.posterOptionsMenu = null;
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
@@ -837,8 +846,8 @@ export const SearchScreen = {
   },
 
   getDefaultHeaderFocusTarget() {
-    return this.container?.querySelector(".search-discover-btn.focusable")
-      || this.container?.querySelector("#searchInput.focusable")
+    return this.container?.querySelector("#searchInput.focusable")
+      || this.container?.querySelector(".search-discover-btn.focusable")
       || this.container?.querySelector(".search-voice-btn.focusable")
       || null;
   },
@@ -1012,10 +1021,21 @@ export const SearchScreen = {
       cancelAnimationFrame(state[key]);
       state[key] = null;
     }
+    const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
+    const springState = springMap.get(container);
+    if (springState?.[key]?.raf) {
+      cancelAnimationFrame(springState[key].raf);
+      springState[key] = null;
+      springMap.set(container, springState);
+    }
   },
 
-  animateScroll(container, axis, targetValue, duration = 150) {
+  animateScroll(container, axis, targetValue, duration = 150, options = {}) {
     if (!container) {
+      return;
+    }
+    if (options?.mode === "spring") {
+      this.animateSpringScroll(container, axis, targetValue, options?.spring || {});
       return;
     }
     const property = axis === "y" ? "scrollTop" : "scrollLeft";
@@ -1060,6 +1080,86 @@ export const SearchScreen = {
     map.set(container, existing);
   },
 
+  animateSpringScroll(container, axis, targetValue, options = {}) {
+    if (!container) {
+      return;
+    }
+    const property = axis === "y" ? "scrollTop" : "scrollLeft";
+    const max = axis === "y"
+      ? Math.max(0, container.scrollHeight - container.clientHeight)
+      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    if (prefersReducedMotion) {
+      container[property] = nextValue;
+      return;
+    }
+
+    const tweenMap = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
+    const tweenState = tweenMap.get(container);
+    const key = axis === "y" ? "y" : "x";
+    if (tweenState?.[key]) {
+      cancelAnimationFrame(tweenState[key]);
+      tweenState[key] = null;
+      tweenMap.set(container, tweenState);
+    }
+
+    const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
+    const existing = springMap.get(container) || {};
+    const active = existing[key];
+    if (active) {
+      active.target = nextValue;
+      active.stiffness = Number(options?.stiffness ?? active.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness);
+      active.dampingRatio = Number(options?.dampingRatio ?? active.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio);
+      active.precision = Number(options?.precision ?? active.precision ?? 0.5);
+      active.velocityEpsilon = Number(options?.velocityEpsilon ?? active.velocityEpsilon ?? 0.5);
+      active.damping = 2 * active.dampingRatio * Math.sqrt(active.stiffness);
+      springMap.set(container, existing);
+      return;
+    }
+
+    const stiffness = Number(options?.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness);
+    const dampingRatio = Number(options?.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio);
+    const state = {
+      target: nextValue,
+      position: Number(container[property] || 0),
+      velocity: 0,
+      raf: null,
+      lastTime: performance.now(),
+      stiffness,
+      dampingRatio,
+      damping: 2 * dampingRatio * Math.sqrt(stiffness),
+      precision: Number(options?.precision ?? 0.5),
+      velocityEpsilon: Number(options?.velocityEpsilon ?? 0.5)
+    };
+
+    const tick = (now) => {
+      const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - state.lastTime) / 1000));
+      state.lastTime = now;
+      const displacement = state.position - Number(state.target || 0);
+      const acceleration = (-state.stiffness * displacement) - (state.damping * state.velocity);
+      state.velocity += acceleration * deltaSeconds;
+      state.position += state.velocity * deltaSeconds;
+      container[property] = state.position;
+
+      const remaining = Number(state.target || 0) - Number(container[property] || 0);
+      if (Math.abs(remaining) <= state.precision && Math.abs(state.velocity) <= state.velocityEpsilon) {
+        container[property] = state.target;
+        existing[key] = null;
+        springMap.set(container, existing);
+        return;
+      }
+
+      state.raf = requestAnimationFrame(tick);
+      existing[key] = state;
+      springMap.set(container, existing);
+    };
+
+    state.raf = requestAnimationFrame(tick);
+    existing[key] = state;
+    springMap.set(container, existing);
+  },
+
   ensureResultsRowVisible(target) {
     const content = this.container?.querySelector(".search-content");
     const row = target?.closest?.(".search-results-row");
@@ -1077,12 +1177,12 @@ export const SearchScreen = {
     const visibleBottom = contentRect.bottom - bottomInset;
 
     if (rowRect.top < visibleTop) {
-      this.animateScroll(content, "y", rowTop - topInset, 150);
+      this.animateScroll(content, "y", rowTop - topInset, MODERN_HOME_CONSTANTS.cameraFollowDurationYMs, { mode: "spring" });
       return;
     }
 
     if (rowRect.bottom > visibleBottom) {
-      this.animateScroll(content, "y", rowBottom - content.clientHeight + bottomInset, 150);
+      this.animateScroll(content, "y", rowBottom - content.clientHeight + bottomInset, MODERN_HOME_CONSTANTS.cameraFollowDurationYMs, { mode: "spring" });
     }
   },
 
@@ -1098,7 +1198,7 @@ export const SearchScreen = {
     const targetRect = target.getBoundingClientRect();
     const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
     const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
-    this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), 140);
+    this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), MODERN_HOME_CONSTANTS.cameraFollowDurationXMs, { mode: "spring" });
   },
 
   ensureHeaderVisible() {
@@ -1112,7 +1212,7 @@ export const SearchScreen = {
     const visibleTop = contentRect.top + topInset;
 
     if (headerRect.top < visibleTop) {
-      this.animateScroll(content, "y", content.scrollTop + (headerRect.top - visibleTop), 150);
+      this.animateScroll(content, "y", content.scrollTop + (headerRect.top - visibleTop), MODERN_HOME_CONSTANTS.cameraFollowDurationYMs, { mode: "spring" });
     }
   },
 
@@ -1197,6 +1297,40 @@ export const SearchScreen = {
     return false;
   },
 
+  async runSearchFromInput(input, { autoFocusResults = false } = {}) {
+    const nextQuery = trimLeadingWhitespace(input?.value || "").trim();
+    this.query = nextQuery;
+    const nextMode = nextQuery.length >= 2 ? "search" : "idle";
+    if (nextMode === "idle" && this.mode === "idle" && !(this.rows || []).length) {
+      this.lastSubmittedQuery = nextQuery;
+      this.captureLiveViewState();
+      return;
+    }
+    if (this.mode === nextMode && this.lastSubmittedQuery === nextQuery) {
+      return;
+    }
+    this.mode = nextMode;
+    this.pendingAutoFocusResults = Boolean(autoFocusResults && nextMode === "search");
+    this.lastSubmittedQuery = nextQuery;
+    this.loadToken = (this.loadToken || 0) + 1;
+    this.captureLiveViewState();
+    await this.reloadRows();
+  },
+
+  scheduleSearchFromInput(input) {
+    this.cancelScheduledInputSearch();
+    const nextQuery = trimLeadingWhitespace(input?.value || "");
+    if (input && input.value !== nextQuery) {
+      input.value = nextQuery;
+    }
+    this.query = nextQuery.trim();
+    const delay = this.query.length >= 2 ? 320 : 120;
+    this.inputSearchTimer = setTimeout(() => {
+      this.inputSearchTimer = null;
+      void this.runSearchFromInput(input, { autoFocusResults: false });
+    }, delay);
+  },
+
   bindSearchInputEvents() {
     const input = this.container?.querySelector("#searchInput");
     if (!input || input.__boundSearchListeners) return;
@@ -1204,25 +1338,21 @@ export const SearchScreen = {
 
     input.addEventListener("input", (event) => {
       this.query = trimLeadingWhitespace(event.target?.value || "");
-      if (this.query.length === 0 && this.mode !== "idle") {
-        this.mode = "idle";
-        this.loadToken = (this.loadToken || 0) + 1;
-        this.captureLiveViewState();
-        this.renderLoading();
-        this.reloadRows();
+      this.scheduleSearchFromInput(input);
+    });
+
+    input.addEventListener("focus", () => {
+      const current = this.container?.querySelector(".focusable.focused") || null;
+      if (current !== input) {
+        this.focusNode(current, input);
       }
     });
 
     input.addEventListener("keydown", async (event) => {
       if (event.keyCode !== 13) return;
       event.preventDefault();
-      this.query = String(input.value || "").trim();
-      this.mode = this.query.length >= 2 ? "search" : "idle";
-      this.pendingAutoFocusResults = this.mode === "search";
-      this.loadToken = (this.loadToken || 0) + 1;
-      this.captureLiveViewState();
-      this.renderLoading();
-      await this.reloadRows();
+      this.cancelScheduledInputSearch();
+      await this.runSearchFromInput(input, { autoFocusResults: true });
     });
   },
 
@@ -1424,7 +1554,7 @@ export const SearchScreen = {
     }
 
     if (this.isSearchInputEditingActive()) {
-      const navigationKeys = [35, 36, 37, 39];
+      const navigationKeys = [35, 36];
       if (navigationKeys.indexOf(code) !== -1) {
         event.stopPropagation?.();
         return;
@@ -1545,6 +1675,7 @@ export const SearchScreen = {
       clearTimeout(this.searchToastTimer);
       this.searchToastTimer = null;
     }
+    this.cancelScheduledInputSearch();
     if (this.voiceRecognition) {
       try {
         this.voiceRecognition.onresult = null;
