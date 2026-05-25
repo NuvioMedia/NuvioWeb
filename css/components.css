@@ -2938,7 +2938,7 @@ button:focus-visible {
 .search-result-card {
   flex: 0 0 248px;
   width: 248px;
-  border-radius: 12px;
+  border-radius: var(--home-poster-radius, 24px);
   background: transparent;
   border: none;
   overflow: visible;
@@ -2958,7 +2958,7 @@ button:focus-visible {
   width: 100%;
   height: 372px;
   border: 2px solid transparent;
-  border-radius: 12px;
+  border-radius: calc(var(--home-poster-radius, 24px) - 2px);
   overflow: hidden;
   background: var(--card-bg);
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
@@ -2973,6 +2973,7 @@ button:focus-visible {
 .search-result-poster {
   width: 100%;
   height: 100%;
+  border-radius: calc(var(--home-poster-radius, 24px) - 2px);
   object-fit: cover;
 }
 
@@ -3011,7 +3012,7 @@ button:focus-visible {
   justify-content: center;
   gap: 14px;
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: calc(var(--home-poster-radius, 24px) - 2px);
   background: var(--card-bg);
   transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
 }
