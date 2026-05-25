@@ -1,11 +1,19 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
-import { addonRepository } from "../../../data/repository/addonRepository.js";
+import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
+import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
+import { LocalStore } from "../../../core/storage/localStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { I18n } from "../../../i18n/index.js";
 
 const failedAddonLogoUrls = new Set();
+const addonLogoCache = new Map();
+const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
+const ADDON_LOGO_CACHE_LIMIT = 36;
+const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
+let addonLogoCacheHydrated = false;
+let addonLogoCachePersistTimer = null;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -43,18 +51,6 @@ function normalizeType(itemType) {
   return normalized || "movie";
 }
 
-function supportsStreamResource(addon, type) {
-  return (addon?.resources || []).some((resource) => {
-    if (resource?.name !== "stream") {
-      return false;
-    }
-    if (!Array.isArray(resource.types) || !resource.types.length) {
-      return true;
-    }
-    return resource.types.some((resourceType) => String(resourceType || "").toLowerCase() === String(type || "").toLowerCase());
-  });
-}
-
 function detectQuality(text = "") {
   const value = String(text).toLowerCase();
   if (value.includes("2160") || value.includes("4k")) return "4k";
@@ -62,6 +58,78 @@ function detectQuality(text = "") {
   if (value.includes("720")) return "720p";
   if (value.includes("480")) return "480p";
   return "Auto";
+}
+
+function isMagnetUrl(value = "") {
+  return String(value || "").trim().toLowerCase().startsWith("magnet:");
+}
+
+function streamDebridIdentity(item = {}) {
+  const resolve = item.clientResolve || item.raw?.clientResolve || {};
+  const behaviorHints = item.behaviorHints || item.raw?.behaviorHints || {};
+  const infoHash = item.infoHash || item.raw?.infoHash || resolve.infoHash || "";
+  const magnetUri = resolve.magnetUri
+    || (isMagnetUrl(item.url) ? item.url : "")
+    || (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
+  const hasDebridMarker = Boolean(
+    item.clientResolve
+      || item.raw?.clientResolve
+      || item.debridCacheStatus
+      || item.raw?.debridCacheStatus
+      || infoHash
+      || magnetUri
+  );
+  if (!hasDebridMarker) {
+    return "";
+  }
+  const locator = infoHash || magnetUri || item.url || item.externalUrl || item.ytId || "";
+  if (!locator) {
+    return "";
+  }
+  return [
+    String(item.addonName || "Addon"),
+    String(resolve.service || item.debridCacheStatus?.providerId || item.raw?.debridCacheStatus?.providerId || ""),
+    String(locator),
+    String(resolve.fileIdx ?? item.fileIdx ?? item.raw?.fileIdx ?? ""),
+    String(behaviorHints.filename || resolve.filename || ""),
+    String(resolve.torrentName || "")
+  ].join("::");
+}
+
+function streamMergeKey(item = {}) {
+  const debridIdentity = streamDebridIdentity(item);
+  if (debridIdentity) {
+    return `debrid::${debridIdentity}`;
+  }
+  const locator = item.url || item.externalUrl || item.ytId || "";
+  if (!locator) {
+    return "";
+  }
+  return [
+    String(item.addonName || "Addon"),
+    String(locator),
+    String(item.sourceType || ""),
+    String(item.fileIdx ?? ""),
+    String(item.behaviorHints?.filename || "")
+  ].join("::");
+}
+
+function mergeStreamItem(previous = {}, next = {}) {
+  const behaviorHints = {
+    ...(previous.behaviorHints || {}),
+    ...(next.behaviorHints || {})
+  };
+  return {
+    ...previous,
+    ...next,
+    id: previous.id || next.id,
+    url: next.url || previous.url || null,
+    externalUrl: next.externalUrl || previous.externalUrl || null,
+    ytId: next.ytId || previous.ytId || null,
+    behaviorHints: Object.keys(behaviorHints).length ? behaviorHints : null,
+    subtitles: Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
+    sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources
+  };
 }
 
 function formatBytes(value) {
@@ -105,17 +173,24 @@ function flattenStreams(streamResult) {
         url: stream.url || null,
         ytId: stream.ytId || null,
         infoHash: stream.infoHash || null,
-        fileIdx: stream.fileIdx || null,
+        fileIdx: stream.fileIdx ?? null,
         externalUrl: stream.externalUrl || null,
         behaviorHints: stream.behaviorHints || null,
         sources: Array.isArray(stream.sources) ? stream.sources : [],
+        quality: stream.quality || null,
+        qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+        clientResolve: stream.clientResolve || null,
+        debridCacheStatus: stream.debridCacheStatus || null,
         subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
         addonName: stream.addonName || groupName,
         addonLogo: stream.addonLogo || group.addonLogo || null,
+        addonOrderIndex: Number.isFinite(Number(stream.addonOrderIndex))
+          ? Number(stream.addonOrderIndex)
+          : Number(group.addonOrderIndex ?? Number.MAX_SAFE_INTEGER),
         sourceType: stream.type || stream.source || "",
         raw: stream
       };
-      if (entry.url || entry.externalUrl || entry.ytId) {
+      if (DirectDebridResolver.shouldListStream(entry)) {
         flattened.push(entry);
       }
     });
@@ -124,33 +199,26 @@ function flattenStreams(streamResult) {
 }
 
 function mergeStreamItems(existing = [], incoming = []) {
-  const byKey = new Set();
-  const merged = [];
+  const order = [];
+  const byKey = new Map();
   const push = (item) => {
     if (!item) {
       return;
     }
-    const url = String(item.url || item.externalUrl || item.ytId || "").trim();
-    if (!url) {
+    const key = streamMergeKey(item);
+    if (!key) {
       return;
     }
-    const key = [
-      String(item.addonName || "Addon"),
-      url,
-      String(item.infoHash || ""),
-      String(item.fileIdx ?? ""),
-      String(item.behaviorHints?.filename || ""),
-      String(item.name || item.title || item.description || "")
-    ].join("::");
-    if (byKey.has(key)) {
+    if (!byKey.has(key)) {
+      order.push(key);
+      byKey.set(key, item);
       return;
     }
-    byKey.add(key);
-    merged.push(item);
+    byKey.set(key, mergeStreamItem(byKey.get(key), item));
   };
   (existing || []).forEach(push);
   (incoming || []).forEach(push);
-  return merged;
+  return order.map((key) => byKey.get(key));
 }
 
 function iconSvg(kind) {
@@ -228,7 +296,7 @@ function extractIndexerName(stream = {}) {
 function getAddonBadgeLabel(name = "") {
   const cleaned = String(name || "").trim();
   if (!cleaned) {
-    return "?";
+    return "A";
   }
   if (/torrentio|torbox|torrent/i.test(cleaned)) {
     return "µ";
@@ -243,6 +311,194 @@ function getAddonBadgeLabel(name = "") {
 
 function normalizeAddonLogoUrl(value = "") {
   return String(value || "").trim();
+}
+
+function isImgurLogoUrl(value = "") {
+  const url = normalizeAddonLogoUrl(value);
+  if (!url) {
+    return false;
+  }
+  try {
+    const host = new URL(url, globalThis.location?.href || "https://nuvio.local/").hostname.toLowerCase();
+    return host === "i.imgur.com" || host === "imgur.com" || host.endsWith(".imgur.com");
+  } catch (_) {
+    return /(^|\/\/)(?:i\.)?imgur\.com\//i.test(url);
+  }
+}
+
+function hydrateAddonLogoCache() {
+  if (addonLogoCacheHydrated) {
+    return;
+  }
+  addonLogoCacheHydrated = true;
+  const cached = LocalStore.get(ADDON_LOGO_CACHE_KEY, {});
+  const entries = cached && typeof cached === "object" && !Array.isArray(cached)
+    ? cached
+    : {};
+  Object.keys(entries).forEach((url) => {
+    const entry = entries[url];
+    const dataUrl = String(entry?.dataUrl || "").trim();
+    if (!url || !dataUrl.startsWith("data:image/")) {
+      return;
+    }
+    addonLogoCache.set(url, {
+      status: "ready",
+      displayUrl: dataUrl,
+      updatedAt: Number(entry?.updatedAt || Date.now())
+    });
+  });
+}
+
+function persistAddonLogoCache() {
+  addonLogoCachePersistTimer = null;
+  const entries = Array.from(addonLogoCache.entries())
+    .filter(([, entry]) => (
+      entry?.status === "ready"
+      && String(entry.displayUrl || "").startsWith("data:image/")
+      && String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
+    ))
+    .sort((left, right) => Number(right[1].updatedAt || 0) - Number(left[1].updatedAt || 0))
+    .slice(0, ADDON_LOGO_CACHE_LIMIT);
+  const payload = {};
+  entries.forEach(([url, entry]) => {
+    payload[url] = {
+      dataUrl: entry.displayUrl,
+      updatedAt: Number(entry.updatedAt || Date.now())
+    };
+  });
+  LocalStore.set(ADDON_LOGO_CACHE_KEY, payload);
+}
+
+function scheduleAddonLogoCachePersist() {
+  if (addonLogoCachePersistTimer) {
+    return;
+  }
+  addonLogoCachePersistTimer = setTimeout(persistAddonLogoCache, 800);
+}
+
+function imageToDataUrl(image) {
+  const naturalWidth = Math.max(1, Number(image?.naturalWidth || image?.width || 1));
+  const naturalHeight = Math.max(1, Number(image?.naturalHeight || image?.height || 1));
+  const maxSize = 144;
+  const ratio = Math.min(1, maxSize / Math.max(naturalWidth, naturalHeight));
+  const width = Math.max(1, Math.round(naturalWidth * ratio));
+  const height = Math.max(1, Math.round(naturalHeight * ratio));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Canvas unavailable");
+  }
+  context.clearRect(0, 0, width, height);
+  context.drawImage(image, 0, 0, width, height);
+  return canvas.toDataURL("image/png");
+}
+
+function requestAddonLogo(url = "", onSettled = null) {
+  const normalized = normalizeAddonLogoUrl(url);
+  if (!normalized || failedAddonLogoUrls.has(normalized)) {
+    return;
+  }
+  hydrateAddonLogoCache();
+  const cached = addonLogoCache.get(normalized);
+  if (cached?.status === "ready" || cached?.status === "loading" || cached?.status === "direct") {
+    return;
+  }
+
+  addonLogoCache.set(normalized, { status: "loading", updatedAt: Date.now() });
+
+  const fail = () => {
+    failedAddonLogoUrls.add(normalized);
+    addonLogoCache.set(normalized, { status: "failed", updatedAt: Date.now() });
+    if (typeof onSettled === "function") {
+      onSettled();
+    }
+  };
+  const image = new Image();
+  const shouldTryDataCache = !isImgurLogoUrl(normalized);
+  if (shouldTryDataCache) {
+    image.crossOrigin = "anonymous";
+  }
+  image.decoding = "async";
+  try {
+    image.referrerPolicy = "no-referrer";
+  } catch (_) {
+    // Some TV browsers expose referrerPolicy as read-only.
+  }
+  image.onload = () => {
+    if (!shouldTryDataCache) {
+      addonLogoCache.set(normalized, {
+        status: "direct",
+        displayUrl: normalized,
+        updatedAt: Date.now()
+      });
+      if (typeof onSettled === "function") {
+        onSettled();
+      }
+      return;
+    }
+    try {
+      const dataUrl = imageToDataUrl(image);
+      addonLogoCache.set(normalized, {
+        status: "ready",
+        displayUrl: dataUrl,
+        updatedAt: Date.now()
+      });
+      scheduleAddonLogoCachePersist();
+    } catch (_) {
+      fail();
+      return;
+    }
+    if (typeof onSettled === "function") {
+      onSettled();
+    }
+  };
+  image.onerror = fail;
+  image.src = normalized;
+}
+
+function getCachedAddonLogoDisplayUrl(url = "") {
+  const normalized = normalizeAddonLogoUrl(url);
+  if (!normalized || failedAddonLogoUrls.has(normalized)) {
+    return "";
+  }
+  hydrateAddonLogoCache();
+  const cached = addonLogoCache.get(normalized);
+  return cached?.status === "ready" || cached?.status === "direct"
+    ? String(cached.displayUrl || "")
+    : "";
+}
+
+function normalizeAddonLookupKey(value = "") {
+  return String(value || "").trim().toLowerCase();
+}
+
+function buildAddonLogoLookup(addons = []) {
+  const lookup = {};
+  (addons || []).forEach((addon) => {
+    const logo = normalizeAddonLogoUrl(addon?.logo);
+    if (!logo) {
+      return;
+    }
+    [
+      addon?.displayName,
+      addon?.name,
+      addon?.id,
+      addon?.baseUrl
+    ].forEach((key) => {
+      const normalized = normalizeAddonLookupKey(key);
+      if (normalized && !lookup[normalized]) {
+        lookup[normalized] = logo;
+      }
+    });
+  });
+  return lookup;
+}
+
+function resolveAddonLogo(addonName = "", lookup = {}) {
+  const key = normalizeAddonLookupKey(addonName);
+  return key ? normalizeAddonLogoUrl(lookup?.[key]) : "";
 }
 
 function rememberFailedAddonLogo(url = "") {
@@ -338,18 +594,57 @@ function getStreamDescriptionLines(stream = {}) {
 
 function getOrderedFilterNames(sourceChips = [], streams = []) {
   const ordered = [];
-  sourceChips.forEach((chip) => {
+  const sortedChips = (sourceChips || [])
+    .slice()
+    .sort((left, right) => Number(left?.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right?.orderIndex ?? Number.MAX_SAFE_INTEGER));
+  sortedChips.forEach((chip) => {
     if (chip?.name && !ordered.includes(chip.name)) {
       ordered.push(chip.name);
     }
   });
-  streams.forEach((stream) => {
+  const sortedStreams = (streams || [])
+    .map((stream, index) => ({ stream, index }))
+    .sort((left, right) => {
+      const leftOrder = Number(left.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      const rightOrder = Number(right.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.stream);
+  sortedStreams.forEach((stream) => {
     const addonName = String(stream?.addonName || "").trim();
     if (addonName && !ordered.includes(addonName)) {
       ordered.push(addonName);
     }
   });
   return ordered;
+}
+
+function sortStreamsByAddonOrder(streams = [], sourceChips = []) {
+  const order = new Map();
+  (sourceChips || []).forEach((chip, index) => {
+    const name = String(chip?.name || "").trim();
+    if (name && !order.has(name)) {
+      order.set(name, index);
+    }
+  });
+  return (streams || [])
+    .map((stream, index) => ({ stream, index }))
+    .sort((left, right) => {
+      const leftOrder = order.has(left.stream?.addonName)
+        ? order.get(left.stream.addonName)
+        : Number(left.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      const rightOrder = order.has(right.stream?.addonName)
+        ? order.get(right.stream.addonName)
+        : Number(right.stream?.addonOrderIndex ?? Number.MAX_SAFE_INTEGER);
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+      return left.index - right.index;
+    })
+    .map((entry) => entry.stream);
 }
 
 export const StreamScreen = {
@@ -375,6 +670,56 @@ export const StreamScreen = {
       }
       this.render();
     });
+  },
+
+  applyAddonLogos(streams = []) {
+    const lookup = this.addonLogoLookup || {};
+    return (streams || []).map((stream) => {
+      const currentLogo = normalizeAddonLogoUrl(stream?.addonLogo);
+      if (currentLogo) {
+        return stream;
+      }
+      const addonLogo = resolveAddonLogo(stream?.addonName, lookup);
+      return addonLogo ? { ...stream, addonLogo } : stream;
+    });
+  },
+
+  scheduleDebridPreparation() {
+    const token = this.loadToken || 0;
+    if (this.debridPreparationScheduled) {
+      return;
+    }
+    this.debridPreparationScheduled = true;
+    setTimeout(() => {
+      this.debridPreparationScheduled = false;
+      if (!this.container || Router.getCurrent() !== "stream" || token !== this.loadToken) {
+        return;
+      }
+      const season = this.params?.season == null ? null : Number(this.params.season);
+      const episode = this.params?.episode == null ? null : Number(this.params.episode);
+      void DirectDebridStreamPreparer.prepare(this.streams, {
+        season,
+        episode,
+        onPrepared: (original, prepared) => {
+          if (!this.container || Router.getCurrent() !== "stream" || token !== this.loadToken) {
+            return;
+          }
+          const keyFor = (stream) => [
+            stream.clientResolve?.service || "",
+            stream.clientResolve?.infoHash || stream.infoHash || "",
+            stream.clientResolve?.fileIdx ?? stream.fileIdx ?? "",
+            stream.clientResolve?.filename || stream.behaviorHints?.filename || "",
+            stream.name || "",
+            stream.title || ""
+          ].join("|");
+          const originalKey = keyFor(original);
+          this.streams = this.streams.map((stream) => (
+            keyFor(stream) === originalKey ? { ...stream, ...prepared } : stream
+          ));
+          this.requestRender();
+        }
+      });
+    }, 0);
   },
 
   getBackdropUrl() {
@@ -426,6 +771,7 @@ export const StreamScreen = {
       addonFilter: String(this.addonFilter || "all"),
       focusState: this.focusState ? { ...this.focusState } : { zone: "filter", index: 0 },
       sourceChips: Array.isArray(this.sourceChips) ? this.sourceChips.map((chip) => ({ ...chip })) : [],
+      addonLogoLookup: this.addonLogoLookup ? { ...this.addonLogoLookup } : {},
       listScrollTop: Number(list?.scrollTop || 0)
     };
   },
@@ -441,6 +787,7 @@ export const StreamScreen = {
     this.loading = true;
     this.streams = [];
     this.sourceChips = [];
+    this.addonLogoLookup = {};
     this.addonFilter = "all";
 
     const restored = navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
@@ -453,6 +800,9 @@ export const StreamScreen = {
       this.addonFilter = String(restored.addonFilter || "all");
       this.focusState = restored.focusState ? { ...restored.focusState } : { zone: "filter", index: 0 };
       this.sourceChips = Array.isArray(restored.sourceChips) ? restored.sourceChips.map((chip) => ({ ...chip })) : [];
+      this.addonLogoLookup = restored.addonLogoLookup && typeof restored.addonLogoLookup === "object"
+        ? { ...restored.addonLogoLookup }
+        : {};
       this.listScrollTop = Number(restored.listScrollTop || 0);
     }
 
@@ -478,52 +828,107 @@ export const StreamScreen = {
     this.addonFilter = "all";
     this.focusState = { zone: "filter", index: 0 };
     this.listScrollTop = 0;
+    this.addonLogoLookup = {};
 
-    try {
-      const addons = await addonRepository.getInstalledAddons();
-      if (token !== this.loadToken) {
+    this.sourceChips = [];
+    this.requestRender();
+
+    const upsertSourceChip = (addon, status = "loading") => {
+      const name = String(addon?.displayName || addon?.name || "").trim();
+      if (!name) {
         return;
       }
-      this.sourceChips = addons
-        .filter((addon) => supportsStreamResource(addon, itemType))
-        .map((addon) => ({ name: addon.displayName, status: "loading" }));
-      this.requestRender();
-    } catch (error) {
-      console.warn("Failed to resolve stream addons", error);
-    }
+      const orderIndex = Number(addon?.orderIndex);
+      const nextChip = {
+        name,
+        logo: normalizeAddonLogoUrl(addon.logo),
+        status,
+        orderIndex: Number.isFinite(orderIndex) ? orderIndex : Number.MAX_SAFE_INTEGER
+      };
+      const existingIndex = this.sourceChips.findIndex((chip) => chip.name === name);
+      if (existingIndex >= 0) {
+        this.sourceChips[existingIndex] = { ...this.sourceChips[existingIndex], ...nextChip };
+      } else {
+        this.sourceChips.push(nextChip);
+      }
+      this.addonLogoLookup[name] = nextChip.logo;
+      this.sourceChips = this.sourceChips
+        .slice()
+        .sort((left, right) => Number(left.orderIndex || 0) - Number(right.orderIndex || 0));
+    };
 
     const markSuccessfulSources = (names = []) => {
       if (!Array.isArray(names) || !names.length) {
         return;
       }
-      const successSet = new Set(names.map((name) => String(name || "").trim()).filter(Boolean));
+      const entries = names
+        .map((entry) => {
+          if (entry && typeof entry === "object") {
+            return {
+              name: String(entry.name || entry.addonName || "").trim(),
+              logo: normalizeAddonLogoUrl(entry.logo || entry.addonLogo),
+              orderIndex: Number(entry.orderIndex ?? entry.addonOrderIndex)
+            };
+          }
+          const name = String(entry || "").trim();
+          const existingStream = this.streams.find((stream) => stream.addonName === name);
+          return {
+            name,
+            logo: resolveAddonLogo(name, this.addonLogoLookup),
+            orderIndex: Number(existingStream?.addonOrderIndex)
+          };
+        })
+        .filter((entry) => entry.name);
+      const successSet = new Set(entries.map((entry) => entry.name));
       const known = new Set(this.sourceChips.map((chip) => chip.name));
       this.sourceChips = this.sourceChips.map((chip) => (
         successSet.has(chip.name) ? { ...chip, status: "success" } : chip
       ));
-      successSet.forEach((name) => {
-        if (!known.has(name)) {
-          this.sourceChips.push({ name, status: "success" });
+      entries.forEach((entry) => {
+        if (!known.has(entry.name)) {
+          const orderIndex = Number.isFinite(entry.orderIndex) ? entry.orderIndex : Number.MAX_SAFE_INTEGER;
+          this.sourceChips.push({
+            name: entry.name,
+            logo: entry.logo || resolveAddonLogo(entry.name, this.addonLogoLookup),
+            status: "success",
+            orderIndex
+          });
         }
       });
+      this.sourceChips = this.sourceChips
+        .slice()
+        .sort((left, right) => Number(left.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right.orderIndex ?? Number.MAX_SAFE_INTEGER));
     };
 
     const options = {
       itemId: String(this.params?.itemId || ""),
       season: this.params?.season ?? null,
       episode: this.params?.episode ?? null,
+      onAddon: (addon) => {
+        if (token !== this.loadToken) {
+          return;
+        }
+        upsertSourceChip(addon, "loading");
+        this.requestRender();
+      },
       onChunk: (chunkResult) => {
         if (token !== this.loadToken || chunkResult?.status !== "success") {
           return;
         }
         const groups = Array.isArray(chunkResult.data) ? chunkResult.data : [];
-        markSuccessfulSources(groups.map((group) => group?.addonName || ""));
-        const chunkItems = flattenStreams(chunkResult);
+        markSuccessfulSources(groups.map((group) => ({
+          name: group?.addonName || "",
+          logo: group?.addonLogo || "",
+          orderIndex: group?.addonOrderIndex
+        })));
+        const chunkItems = this.applyAddonLogos(flattenStreams(chunkResult));
         if (!chunkItems.length) {
           this.requestRender();
           return;
         }
         this.streams = mergeStreamItems(this.streams, chunkItems);
+        this.scheduleDebridPreparation();
+        this.loading = false;
         if (this.focusState.zone !== "card") {
           this.focusState = { zone: "card", index: 0 };
         }
@@ -536,7 +941,8 @@ export const StreamScreen = {
       if (token !== this.loadToken) {
         return;
       }
-      this.streams = mergeStreamItems(this.streams, flattenStreams(streamResult));
+      this.streams = mergeStreamItems(this.streams, this.applyAddonLogos(flattenStreams(streamResult)));
+      this.scheduleDebridPreparation();
       markSuccessfulSources(this.streams.map((stream) => stream.addonName));
       this.sourceChips = this.sourceChips.map((chip) => (
         chip.status === "loading" ? { ...chip, status: "error" } : chip
@@ -582,10 +988,11 @@ export const StreamScreen = {
   },
 
   getFilteredStreams(filter = this.addonFilter) {
+    const orderedStreams = sortStreamsByAddonOrder(this.streams, this.sourceChips);
     if (filter === "all") {
-      return this.streams;
+      return orderedStreams;
     }
-    return this.streams.filter((stream) => stream.addonName === filter);
+    return orderedStreams.filter((stream) => stream.addonName === filter);
   },
 
   hasPendingSourceLoads(filter = this.addonFilter) {
@@ -645,10 +1052,27 @@ export const StreamScreen = {
 
     const listNode = target.closest(".stream-route-list");
     if (listNode) {
-      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      this.ensureListItemVisible(listNode, target);
       this.listScrollTop = Number(listNode.scrollTop || 0);
     }
     return true;
+  },
+
+  ensureListItemVisible(listNode, target) {
+    if (!listNode || !target) {
+      return;
+    }
+    const itemTop = Number(target.offsetTop || 0);
+    const itemBottom = itemTop + Number(target.offsetHeight || 0);
+    const viewTop = Number(listNode.scrollTop || 0);
+    const viewHeight = Number(listNode.clientHeight || 0);
+    const viewBottom = viewTop + viewHeight;
+    const pad = 16;
+    if (itemBottom > viewBottom - pad) {
+      listNode.scrollTop = Math.max(0, itemBottom - viewHeight + pad);
+    } else if (itemTop < viewTop + pad) {
+      listNode.scrollTop = Math.max(0, itemTop - pad);
+    }
   },
 
   getFocusLists() {
@@ -715,15 +1139,21 @@ export const StreamScreen = {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
     const descriptionLines = getStreamDescriptionLines(stream);
-    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo);
+    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
+    const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
+    const displayAddonLogoUrl = cachedAddonLogoUrl || "";
+    if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
+      requestAddonLogo(addonLogoUrl, () => this.requestRender());
+    }
     const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
     const meta = [
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
       renderMetaItem("source", extractIndexerName(stream))
     ].filter(Boolean).join("");
-    const addonBadge = addonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)
-      ? `<img src="${escapeHtml(addonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" /><span hidden>${addonBadgeLabel}</span>`
+    const isResolving = this.resolvingStreamId === stream.id;
+    const addonBadge = displayAddonLogoUrl
+      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
 
     return `
@@ -739,6 +1169,7 @@ export const StreamScreen = {
         <div class="stream-route-card-side">
           <div class="stream-route-addon-badge">${addonBadge}</div>
           <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
+          ${isResolving ? `<div class="stream-route-addon-name">${escapeHtml(t("stream.debrid.resolving", {}, "Resolving"))}</div>` : ""}
         </div>
       </article>
     `;
@@ -820,6 +1251,17 @@ export const StreamScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.restoreScrollPosition();
     this.applyFocus();
+    this.bindListScrollState();
+  },
+
+  bindListScrollState() {
+    const list = this.container?.querySelector(".stream-route-list");
+    if (!list) {
+      return;
+    }
+    list.addEventListener("scroll", () => {
+      this.listScrollTop = Number(list.scrollTop || 0);
+    }, { passive: true });
   },
 
   bindAddonLogoFallbacks() {
@@ -843,12 +1285,50 @@ export const StreamScreen = {
     });
   },
 
-  playStream(streamId) {
+  async playStream(streamId) {
     const filtered = this.getFilteredStreams();
     const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
-    const targetUrl = selected?.url || selected?.externalUrl || "";
-    if (!targetUrl) {
+    if (!selected) {
       return;
+    }
+    let targetUrl = selected.url || selected.externalUrl || "";
+    if (!targetUrl) {
+      if (!DirectDebridResolver.canResolveStream(selected, {
+        season: this.params?.season == null ? null : Number(this.params.season),
+        episode: this.params?.episode == null ? null : Number(this.params.episode)
+      })) {
+        window.alert?.(t("stream.debrid.unavailable", {}, "This Debrid source needs a configured Debrid account."));
+        return;
+      }
+      this.resolvingStreamId = selected.id;
+      this.requestRender();
+      const result = await DirectDebridResolver.resolve(selected, {
+        season: this.params?.season == null ? null : Number(this.params.season),
+        episode: this.params?.episode == null ? null : Number(this.params.episode)
+      });
+      this.resolvingStreamId = null;
+      if (result.status !== "success" || !result.stream?.url) {
+        this.requestRender();
+        const messageKey = result.status === "not_cached"
+          ? "stream.debrid.notCached"
+          : result.status === "stale"
+              ? "stream.debrid.stale"
+              : "stream.debrid.failed";
+        const fallback = result.status === "not_cached"
+          ? "Not cached on this service."
+          : result.status === "stale"
+              ? "This Debrid result expired. Refreshing streams."
+              : "Could not resolve this Debrid stream.";
+        window.alert?.(t(messageKey, {}, fallback));
+        return;
+      }
+      selected.url = result.stream.url;
+      selected.externalUrl = null;
+      selected.behaviorHints = result.stream.behaviorHints || selected.behaviorHints;
+      selected.raw = result.stream.raw || selected.raw;
+      this.streams = this.streams.map((stream) => stream.id === selected.id ? { ...stream, ...selected } : stream);
+      targetUrl = selected.url || selected.externalUrl || "";
+      this.requestRender();
     }
     const itemType = normalizeType(this.params?.itemType);
     Router.navigate("player", {
@@ -882,6 +1362,45 @@ export const StreamScreen = {
       nextEpisodeTitle: this.params?.nextEpisodeTitle || "",
       nextEpisodeReleased: this.params?.nextEpisodeReleased || ""
     });
+  },
+
+  onPointerFocus(target) {
+    if (!target || !this.container?.contains(target)) {
+      return false;
+    }
+    const { chips, cards } = this.getFocusLists();
+    const chipIndex = chips.indexOf(target);
+    if (chipIndex >= 0) {
+      this.focusState = { zone: "filter", index: chipIndex };
+      this.focusList(chips, chipIndex);
+      return true;
+    }
+    const cardIndex = cards.indexOf(target);
+    if (cardIndex >= 0) {
+      this.focusState = { zone: "card", index: cardIndex };
+      this.focusList(cards, cardIndex);
+      return true;
+    }
+    return false;
+  },
+
+  onPointerActivate(target) {
+    if (!target || !this.container?.contains(target)) {
+      return false;
+    }
+    this.onPointerFocus(target);
+    const action = String(target.dataset.action || "");
+    if (action === "setFilter") {
+      const addon = String(target.dataset.addon || "all");
+      const { chips } = this.getFocusLists();
+      this.setAddonFilter(addon, "filter", Math.max(0, chips.indexOf(target)));
+      return true;
+    }
+    if (action === "playStream") {
+      this.playStream(target.dataset.streamId);
+      return true;
+    }
+    return false;
   },
 
   onKeyDown(event) {

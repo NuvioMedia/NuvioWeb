@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const compatPath = path.join(__dirname, "node24-ares-compat.cjs");
-const defaultAppId = "com.nuvio.lg";
+const defaultAppId = "space.nuvio.webos";
 
 function findExecutable(command) {
   const result = spawnSync("which", [command], {

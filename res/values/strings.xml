@@ -866,6 +866,8 @@
     <string name="library_list_edit_dialog_title">Edit List</string>
     <string name="library_sync_btn">Sync</string>
     <string name="library_syncing_btn">Syncing…</string>
+    <string name="library_message_synced">Library synced</string>
+    <string name="library_error_refresh_failed">Failed to refresh library</string>
 
     <!-- AccountSettingsContent -->
     <string name="account_loading">Loading…</string>

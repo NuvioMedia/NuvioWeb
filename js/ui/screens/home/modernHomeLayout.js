@@ -32,6 +32,7 @@ export function renderModernHomeLayout({
   focusedItemIndex = -1,
   expandFocusedPoster = false,
   buildModernHeroPresentation,
+  renderHeroBackdropImage,
   renderContinueWatchingSection,
   createPosterCardMarkup,
   createSeeAllCardMarkup,
@@ -166,6 +167,7 @@ function renderModernHeroMarkup({
   heroItem,
   heroCandidates,
   buildModernHeroPresentation,
+  renderHeroBackdropImage,
   escapeHtml,
   escapeAttribute
 }) {
@@ -213,11 +215,11 @@ function renderModernHeroMarkup({
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}">
         <div class="home-modern-hero-media">
           <div class="home-hero-backdrop-wrap">
-          <img class="home-hero-backdrop${display.backdrop ? "" : " placeholder"}"
-               ${display.backdrop ? `src="${escapeAttribute(display.backdrop)}"` : ""}
-               alt="${escapeAttribute(display.title)}"
-               decoding="async"
-               fetchpriority="high" />
+          ${typeof renderHeroBackdropImage === "function"
+              ? renderHeroBackdropImage(display)
+              : (display.backdrop
+                ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" />`
+                : '<div class="home-hero-backdrop placeholder"></div>')}
           </div>
           <div class="home-hero-trailer-layer"></div>
         </div>

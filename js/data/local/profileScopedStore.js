@@ -4,6 +4,7 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 const PROFILE_SCOPED_VERSION = 1;
 const PROFILES_KEY = "profiles";
 const SETTINGS_SYNC_DEBOUNCE_MS = 1500;
+const SETTINGS_SYNC_PENDING_KEY = "profileSettingsSyncPendingProfiles";
 
 const scheduledSettingsSyncTimers = new Map();
 const settingsSyncInFlightByProfile = new Map();
@@ -92,6 +93,34 @@ function persistEnvelope(key, envelope) {
   LocalStore.set(key, envelope);
 }
 
+function readPendingSettingsSyncProfiles() {
+  const value = LocalStore.get(SETTINGS_SYNC_PENDING_KEY, {}) || {};
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+export function markProfileSettingsCloudSyncPending(profileId = null) {
+  const normalizedProfileId = normalizeProfileId(profileId);
+  const pending = readPendingSettingsSyncProfiles();
+  pending[normalizedProfileId] = Date.now();
+  LocalStore.set(SETTINGS_SYNC_PENDING_KEY, pending);
+}
+
+export function clearProfileSettingsCloudSyncPending(profileId = null) {
+  const normalizedProfileId = normalizeProfileId(profileId);
+  const pending = readPendingSettingsSyncProfiles();
+  if (!Object.prototype.hasOwnProperty.call(pending, normalizedProfileId)) {
+    return;
+  }
+  delete pending[normalizedProfileId];
+  LocalStore.set(SETTINGS_SYNC_PENDING_KEY, pending);
+}
+
+export function hasProfileSettingsCloudSyncPending(profileId = null) {
+  const normalizedProfileId = normalizeProfileId(profileId);
+  const pending = readPendingSettingsSyncProfiles();
+  return Object.prototype.hasOwnProperty.call(pending, normalizedProfileId);
+}
+
 function ensureProfileValue(key, envelope, normalize, profileId) {
   const normalizedProfileId = normalizeProfileId(profileId);
   if (Object.prototype.hasOwnProperty.call(envelope.profiles, normalizedProfileId)) {
@@ -109,6 +138,7 @@ function ensureProfileValue(key, envelope, normalize, profileId) {
 
 export function queueProfileSettingsCloudSync(profileId = null, delayMs = SETTINGS_SYNC_DEBOUNCE_MS) {
   const normalizedProfileId = normalizeProfileId(profileId);
+  markProfileSettingsCloudSyncPending(normalizedProfileId);
   if (scheduledSettingsSyncTimers.has(normalizedProfileId)) {
     clearTimeout(scheduledSettingsSyncTimers.get(normalizedProfileId));
   }

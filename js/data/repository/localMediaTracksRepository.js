@@ -1,5 +1,8 @@
 import { Platform } from "../../platform/index.js";
-import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
+import {
+  isWebOsCompanionServiceAvailable,
+  requestWebOsCompanionService
+} from "../../platform/webos/webosCompanionService.js";
 
 const LOCAL_MEDIA_SERVER_PORT_CANDIDATES = [2710, 2711, 2712, 2713, 2714];
 const REQUEST_TIMEOUT_MS = 4000;
@@ -18,35 +21,33 @@ function buildTracksUrl(port, mediaUrl) {
   return `http://127.0.0.1:${port}/tracks/${encodeURIComponent(String(mediaUrl || "").trim())}`;
 }
 
+function buildSameOriginTracksUrl(mediaUrl) {
+  return `/tracks/${encodeURIComponent(String(mediaUrl || "").trim())}`;
+}
+
+function rememberLocalMediaServerUrl(value) {
+  try {
+    const parsed = new URL(String(value || ""));
+    const port = Number(parsed.port || 0);
+    if (Number.isFinite(port) && port > 0) {
+      cachedLocalMediaServerPort = port;
+    }
+  } catch (_) {
+    // Ignore malformed service URLs.
+  }
+}
+
 async function requestTracksViaLuna(mediaUrl) {
-  const payload = await WebOsLunaService.request("luna://com.nuvio.lg.service", {
+  const result = await requestWebOsCompanionService({
     method: "tracks",
     parameters: {
       url: String(mediaUrl || "").trim()
     }
   });
+  const payload = result?.payload || {};
+  rememberLocalMediaServerUrl(payload?.url);
 
   return Array.isArray(payload?.tracks) ? payload.tracks : [];
-}
-
-async function waitForTizenMediaService() {
-  if (!Platform.isTizen()) {
-    return;
-  }
-
-  const readiness = globalThis.__NUVIO_TIZEN_MEDIA_SERVICE_READY__;
-  if (!readiness || typeof readiness.then !== "function") {
-    return;
-  }
-
-  try {
-    await Promise.race([
-      readiness,
-      new Promise((resolve) => setTimeout(resolve, REQUEST_TIMEOUT_MS))
-    ]);
-  } catch (_) {
-    // Fall back to direct probing even if the readiness promise rejects.
-  }
 }
 
 async function fetchJson(url) {
@@ -91,7 +92,7 @@ export const localMediaTracksRepository = {
     }
 
     const requestPromise = (async () => {
-      if (Platform.isWebOS() && WebOsLunaService.isAvailable()) {
+      if (Platform.isWebOS() && isWebOsCompanionServiceAvailable()) {
         try {
           const lunaTracks = await requestTracksViaLuna(targetUrl);
           tracksCache.set(targetUrl, {
@@ -105,7 +106,25 @@ export const localMediaTracksRepository = {
       }
 
       if (Platform.isTizen()) {
-        await waitForTizenMediaService();
+        tracksCache.set(targetUrl, {
+          tracks: [],
+          expiresAt: Date.now() + Math.min(TRACK_CACHE_TTL_MS, 5000)
+        });
+        return [];
+      }
+
+      if (Platform.isBrowser()) {
+        try {
+          const payload = await fetchJson(buildSameOriginTracksUrl(targetUrl));
+          const tracks = Array.isArray(payload) ? payload : [];
+          tracksCache.set(targetUrl, {
+            tracks,
+            expiresAt: Date.now() + TRACK_CACHE_TTL_MS
+          });
+          return tracks;
+        } catch (_) {
+          // Fall back to direct localhost probing below.
+        }
       }
 
       for (const port of getCandidatePorts()) {

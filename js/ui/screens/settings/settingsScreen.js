@@ -49,9 +49,9 @@ const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
 const SETTINGS_RAIL_SCROLL_TARGET_RATIO = 0.42;
 const SETTINGS_RAIL_SCROLL_STIFFNESS = 180;
 const SETTINGS_RAIL_SCROLL_DAMPING_RATIO = 0.95;
-const SETTINGS_VERSION_LABEL = typeof __NUVIO_APP_VERSION__ !== "undefined"
+const SETTINGS_VERSION_LABEL = formatSettingsVersionLabel(typeof __NUVIO_APP_VERSION__ !== "undefined"
   ? __NUVIO_APP_VERSION__
-  : "0.0.0";
+  : "0.0.0");
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
@@ -279,6 +279,15 @@ const ROW_ICONS = {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function formatSettingsVersionLabel(value) {
+  const normalized = String(value || "").trim();
+  const shortMatch = normalized.match(/^(\d+\.\d+)\.0$/);
+  if (shortMatch) {
+    return shortMatch[1];
+  }
+  return normalized || "0.0.0";
 }
 
 function t(key, params = {}, fallback = key) {

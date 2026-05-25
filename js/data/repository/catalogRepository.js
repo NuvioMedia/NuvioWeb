@@ -1,5 +1,6 @@
 import { safeApiCall } from "../../core/network/safeApiCall.js";
 import { CatalogApi } from "../remote/api/catalogApi.js";
+import { addonRepository } from "./addonRepository.js";
 
 class CatalogRepository {
 
@@ -67,13 +68,16 @@ class CatalogRepository {
   }
 
   buildCatalogUrl({ baseUrl, type, catalogId, skip = 0, extraArgs = {} }) {
-    const cleanBaseUrl = String(baseUrl || "").replace(/\/+$/, "");
+    const cleanBaseUrl = addonRepository.canonicalizeUrl(baseUrl);
+    const queryStart = cleanBaseUrl.indexOf("?");
+    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
     const args = { ...extraArgs };
 
     if (Object.keys(args).length === 0) {
       return skip > 0
-        ? `${cleanBaseUrl}/catalog/${type}/${catalogId}/skip=${skip}.json`
-        : `${cleanBaseUrl}/catalog/${type}/${catalogId}.json`;
+        ? `${basePath}/catalog/${type}/${catalogId}/skip=${skip}.json${baseQuery}`
+        : `${basePath}/catalog/${type}/${catalogId}.json${baseQuery}`;
     }
 
     if (skip > 0 && !Object.prototype.hasOwnProperty.call(args, "skip")) {
@@ -84,7 +88,7 @@ class CatalogRepository {
       .map(([key, value]) => `${this.encodeArg(key)}=${this.encodeArg(String(value))}`)
       .join("&");
 
-    return `${cleanBaseUrl}/catalog/${type}/${catalogId}/${query}.json`;
+    return `${basePath}/catalog/${type}/${catalogId}/${query}.json${baseQuery}`;
   }
 
   buildCacheKey({ addonId, type, catalogId, skip = 0, extraArgs = {} }) {

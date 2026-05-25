@@ -798,10 +798,11 @@ export class LibraryController {
         await delay(SYNC_LOADING_MIN_MS - elapsed);
       }
       await this.reload({ preserveOverlay: true });
+      this.setTransientMessage(t("library_message_synced", {}, "Library synced"));
       this.setState({ isSyncing: false });
     } catch (error) {
       this.setState({ isSyncing: false });
-      this.setError(error?.message || "Failed to refresh library");
+      this.setError(error?.message || t("library_error_refresh_failed", {}, "Failed to refresh library"));
     }
   }
 

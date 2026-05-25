@@ -55,10 +55,26 @@ function detectPlatformName() {
   if (override && ADAPTERS[override]) {
     return override;
   }
+  const searchParams = String(globalThis.location?.search || "").toLowerCase();
+  if (searchParams.includes("wrapper=tizen") || searchParams.includes("source=tizenbrew")) {
+    return "tizen";
+  }
+  const userAgent = String(globalThis.navigator?.userAgent || "").toLowerCase();
   if (globalThis.webOS || globalThis.PalmSystem || globalThis.webOSSystem) {
     return "webos";
   }
-  if (globalThis.tizen || String(globalThis.navigator?.userAgent || "").toLowerCase().includes("tizen")) {
+  if (userAgent.includes("webos") || userAgent.includes("web0s")) {
+    return "webos";
+  }
+  const webapis = globalThis.webapis || {};
+  if (
+    globalThis.tizen
+    || globalThis.avplay
+    || webapis.avplay
+    || webapis.avPlay
+    || webapis.productinfo
+    || userAgent.includes("tizen")
+  ) {
     return "tizen";
   }
   return "browser";

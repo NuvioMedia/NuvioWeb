@@ -69,9 +69,37 @@ async function resolveAddonProfileId() {
 }
 
 function extractAddonUrls(rows = []) {
-  return (rows || [])
-    .map((row) => row?.url || row?.base_url || null)
+  return extractAddonEntries(rows)
+    .map((entry) => entry.url)
     .filter(Boolean);
+}
+
+function extractAddonEntries(rows = []) {
+  return (rows || [])
+    .map((row) => ({
+      url: row?.url || row?.base_url || null,
+      displayName: row?.display_name
+        || row?.displayName
+        || row?.custom_name
+        || row?.customName
+        || row?.alias
+        || row?.name
+        || null,
+      name: row?.name || null
+    }))
+    .filter((entry) => entry.url);
+}
+
+function applyPulledAddons(rows = []) {
+  const entries = extractAddonEntries(rows);
+  const urls = entries
+    .map((entry) => entry.url)
+    .filter(Boolean);
+  addonRepository.setAddonDisplayNameOverrides(
+    entries.map((entry) => ({ url: entry.url, name: entry.name })),
+    { replace: true }
+  );
+  return urls;
 }
 
 export const LibrarySyncService = {
@@ -89,10 +117,10 @@ export const LibrarySyncService = {
       try {
         const addonRows = await SupabaseApi.select(
           ADDONS_TABLE,
-          `user_id=eq.${encodeURIComponent(ownerId)}&profile_id=eq.${profileId}&select=url,sort_order&order=sort_order.asc`,
+          `user_id=eq.${encodeURIComponent(ownerId)}&profile_id=eq.${profileId}&select=*&order=sort_order.asc`,
           true
         );
-        const addonUrls = extractAddonUrls(addonRows);
+        const addonUrls = applyPulledAddons(addonRows);
         await addonRepository.setAddonOrder(addonUrls, { silent: true });
         return addonUrls;
       } catch (addonsTableError) {
@@ -104,10 +132,10 @@ export const LibrarySyncService = {
       try {
         const rows = await SupabaseApi.select(
           TABLE,
-          `owner_id=eq.${encodeURIComponent(ownerId)}&select=base_url,position&order=position.asc`,
+          `owner_id=eq.${encodeURIComponent(ownerId)}&select=*&order=position.asc`,
           true
         );
-        const urls = extractAddonUrls(rows);
+        const urls = applyPulledAddons(rows);
         await addonRepository.setAddonOrder(urls, { silent: true });
         return urls;
       } catch (tvTableError) {
@@ -122,7 +150,7 @@ export const LibrarySyncService = {
             { p_profile_id: profileId },
             true
           );
-          const urls = extractAddonUrls(rpcRows);
+          const urls = applyPulledAddons(rpcRows);
           await addonRepository.setAddonOrder(urls, { silent: true });
           return urls;
         } catch (rpcError) {
@@ -155,7 +183,10 @@ export const LibrarySyncService = {
             p_profile_id: profileId,
             p_addons: urls.map((url, index) => ({
               url,
-              sort_order: index
+              sort_order: index,
+              ...(addonRepository.getAddonDisplayNameOverride(url)
+                ? { name: addonRepository.getAddonDisplayNameOverride(url) }
+                : {})
             }))
           },
           true

@@ -13,11 +13,11 @@ const distDir = path.join(rootDir, "dist");
 const cacheDir = path.join(rootDir, ".cache");
 const stagingDir = path.join(cacheDir, "webos-package");
 const appStageDir = path.join(stagingDir, "app");
-const serviceStageDir = path.join(stagingDir, "com.nuvio.lg.service");
+const serviceStageDir = path.join(stagingDir, "space.nuvio.webos.service");
 const serviceTempBundlePath = path.join(stagingDir, "__webos-service.bundle.js");
 
 const appName = "Nuvio TV";
-const webOsServiceId = "com.nuvio.lg.service";
+const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceSourceDir = path.join(rootDir, "services", webOsServiceId);
 
 async function assertDistExists() {
@@ -76,23 +76,19 @@ ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
 `;
 }
 
-async function injectDebugLogEndpoint(targetDir) {
-  const endpoint = String(process.env.NUVIO_DEBUG_LOG_ENDPOINT || "").trim();
-  if (!endpoint) {
-    return;
-  }
+async function injectWebOsRuntimeEnv(targetDir) {
+  const values = {
+    WEBOS_SERVICE_ID: webOsServiceId
+  };
   const envPath = path.join(targetDir, "nuvio.env.js");
   const injection = `
-(function configureNuvioDebugLogEndpoint() {
+(function configureNuvioWebOsRuntimeEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
-    DEBUG_LOG_ENDPOINT: ${JSON.stringify(endpoint)}
-  });
+  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, ${JSON.stringify(values, null, 2)});
 }());
 `;
   const existing = await readFile(envPath, "utf8").catch(() => "");
   await writeFile(envPath, `${existing.trim()}\n${injection}`, "utf8");
-  console.log(`remote console endpoint: ${endpoint}`);
 }
 
 async function stageApp() {
@@ -115,7 +111,7 @@ async function stageApp() {
 
   const webOsScriptPath = await resolveWebOsScriptPath(appStageDir);
   await writeFile(path.join(appStageDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }), "utf8");
-  await injectDebugLogEndpoint(appStageDir);
+  await injectWebOsRuntimeEnv(appStageDir);
 }
 
 async function stageService() {

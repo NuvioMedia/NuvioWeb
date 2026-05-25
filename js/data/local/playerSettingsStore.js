@@ -8,7 +8,6 @@ const DEFAULTS = {
   subtitleLanguage: "off",
   secondarySubtitleLanguage: "off",
   preferredAudioLanguage: "system",
-  preferredQuality: "auto",
   trailerAutoplay: false,
   skipIntroEnabled: true,
   subtitleRenderMode: "native",
@@ -56,7 +55,7 @@ function normalizeSelectableSubtitleLanguageCode(language, fallback = "off") {
     case "forced":
     case "force":
     case "forc":
-      return "off";
+      return "forced";
     case "none":
     case "off":
       return "off";
@@ -74,6 +73,10 @@ function normalizePlayerSettings(settings = {}) {
     subtitleStyle.preferredLanguage ?? settings.subtitleLanguage,
     DEFAULTS.subtitleStyle.preferredLanguage
   );
+  const subtitlesEnabled = settings.subtitlesEnabled ?? DEFAULTS.subtitlesEnabled;
+  const normalizedPreferredLanguage = preferredLanguage === "off" && subtitlesEnabled !== false
+    ? "forced"
+    : preferredLanguage;
   const secondaryPreferredLanguage = normalizeSelectableSubtitleLanguageCode(
     subtitleStyle.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
     DEFAULTS.subtitleStyle.secondaryPreferredLanguage
@@ -81,11 +84,12 @@ function normalizePlayerSettings(settings = {}) {
   return {
     ...DEFAULTS,
     ...settings,
-    subtitleLanguage: preferredLanguage,
+    subtitlesEnabled,
+    subtitleLanguage: normalizedPreferredLanguage,
     secondarySubtitleLanguage: secondaryPreferredLanguage,
     subtitleStyle: {
       ...subtitleStyle,
-      preferredLanguage,
+      preferredLanguage: normalizedPreferredLanguage,
       secondaryPreferredLanguage
     }
   };

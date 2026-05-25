@@ -1,6 +1,7 @@
 import { LocalStore } from "../../core/storage/localStore.js";
 
 const WATCH_PROGRESS_KEY = "watchProgressItems";
+const MAX_REASONABLE_PROGRESS_DURATION_MS = 24 * 60 * 60 * 1000;
 
 function normalizeProgress(progress = {}, profileId = 1) {
   const updatedAt = Number(progress.updatedAt || Date.now());
@@ -9,6 +10,9 @@ function normalizeProgress(progress = {}, profileId = 1) {
   const normalizedProfileId = String(progress.profileId || profileId || "1");
   const contentId = String(progress.contentId || "").trim();
   const rawVideoId = progress.videoId == null ? null : String(progress.videoId).trim();
+  const rawDurationMs = normalizeDurationMs(progress.durationMs);
+  const rawPositionMs = normalizePositionMs(progress.positionMs, rawDurationMs);
+  const { positionMs, durationMs } = normalizeInflatedMilliseconds(rawPositionMs, rawDurationMs);
   return {
     ...progress,
     profileId: normalizedProfileId,
@@ -17,7 +21,53 @@ function normalizeProgress(progress = {}, profileId = 1) {
     videoId: rawVideoId && rawVideoId !== contentId ? rawVideoId : null,
     season: Number.isFinite(season) ? season : null,
     episode: Number.isFinite(episode) ? episode : null,
+    positionMs,
+    durationMs,
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()
+  };
+}
+
+function normalizeDurationMs(value) {
+  const durationMs = Number(value || 0);
+  return Number.isFinite(durationMs) && durationMs > 0 ? Math.trunc(durationMs) : 0;
+}
+
+function normalizePositionMs(value, durationMs = 0) {
+  const positionMs = Number(value || 0);
+  if (!Number.isFinite(positionMs) || positionMs <= 0) {
+    return 0;
+  }
+  const normalizedPosition = Math.trunc(positionMs);
+  const normalizedDuration = Number(durationMs || 0);
+  if (
+    Number.isFinite(normalizedDuration)
+    && normalizedDuration > 0
+    && normalizedPosition > normalizedDuration
+    && (normalizedPosition / 1000) <= normalizedDuration
+  ) {
+    return Math.trunc(normalizedPosition / 1000);
+  }
+  return normalizedPosition;
+}
+
+function normalizeInflatedMilliseconds(positionMs = 0, durationMs = 0) {
+  const normalizedPosition = Number(positionMs || 0);
+  const normalizedDuration = Number(durationMs || 0);
+  if (
+    Number.isFinite(normalizedDuration)
+    && normalizedDuration > MAX_REASONABLE_PROGRESS_DURATION_MS
+    && (normalizedDuration / 1000) <= MAX_REASONABLE_PROGRESS_DURATION_MS
+  ) {
+    return {
+      positionMs: Number.isFinite(normalizedPosition) && normalizedPosition > 0
+        ? Math.trunc(normalizedPosition / 1000)
+        : 0,
+      durationMs: Math.trunc(normalizedDuration / 1000)
+    };
+  }
+  return {
+    positionMs: Number.isFinite(normalizedPosition) && normalizedPosition > 0 ? Math.trunc(normalizedPosition) : 0,
+    durationMs: Number.isFinite(normalizedDuration) && normalizedDuration > 0 ? Math.trunc(normalizedDuration) : 0
   };
 }
 

@@ -79,18 +79,18 @@ function normalizeEpisodes(videos = []) {
 }
 
 function detailProgressFraction(progress = {}) {
+  const position = Number(progress?.positionMs || 0);
+  const duration = Number(progress?.durationMs || 0);
+  if (Number.isFinite(position) && Number.isFinite(duration) && position > 0 && duration > 0) {
+    return Math.max(0, Math.min(1, position / duration));
+  }
   if (progress?.progressPercent != null && progress.progressPercent !== "") {
     const explicitPercent = Number(progress.progressPercent);
     if (Number.isFinite(explicitPercent)) {
       return Math.max(0, Math.min(1, explicitPercent / 100));
     }
   }
-  const position = Number(progress?.positionMs || 0);
-  const duration = Number(progress?.durationMs || 0);
-  if (!Number.isFinite(position) || !Number.isFinite(duration) || position <= 0 || duration <= 0) {
-    return 0;
-  }
-  return Math.max(0, Math.min(1, position / duration));
+  return 0;
 }
 
 function isSeriesDetailMeta(meta = {}, episodes = null) {
@@ -469,6 +469,35 @@ function getAddonIconPath(addonName = "") {
   return "";
 }
 
+function getAddonBadgeLabel(name = "") {
+  const cleaned = String(name || "").trim();
+  if (!cleaned) {
+    return "A";
+  }
+  if (/torrentio|torbox|torrent/i.test(cleaned)) {
+    return "µ";
+  }
+  return cleaned
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("")
+    .slice(0, 2) || cleaned.charAt(0).toUpperCase();
+}
+
+function renderStreamAddonIcon(addonName = "") {
+  const iconPath = getAddonIconPath(addonName);
+  const fallback = escapeHtml(getAddonBadgeLabel(addonName));
+  if (!iconPath) {
+    return `<span class="series-stream-addon-fallback" aria-hidden="true">${fallback}</span>`;
+  }
+  return `
+    <span class="series-stream-addon-badge" aria-hidden="true">
+      <img class="series-stream-addon-icon" src="${escapeHtml(iconPath)}" alt="" decoding="async" onerror="this.hidden=true;const fallback=this.nextElementSibling;if(fallback){fallback.hidden=false;}" />
+      <span class="series-stream-addon-fallback" hidden>${fallback}</span>
+    </span>
+  `;
+}
+
 function escapeHtml(value = "") {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -554,10 +583,41 @@ function resolveYoutubeId(value = "") {
   return "";
 }
 
+function shouldUseDirectYoutubeEmbedOnTv() {
+  return Platform.isWebOS() || Platform.isTizen();
+}
+
+function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
+  const videoId = String(cleanId || "").trim();
+  if (!videoId || !Environment.isBrowser()) {
+    return "";
+  }
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: muted ? "1" : "0",
+    controls: "0",
+    loop: "1",
+    playlist: videoId,
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1",
+    iv_load_policy: "3"
+  });
+  const origin = String(globalThis?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) {
+    params.set("origin", origin);
+  }
+  return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
+}
+
 function buildYoutubeEmbedUrl(ytId = "") {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
+  }
+  if (shouldUseDirectYoutubeEmbedOnTv()) {
+    return buildDirectYoutubeEmbedUrl(cleanId, { muted: true });
   }
   const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
   if (proxyBase) {
@@ -602,6 +662,9 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
+  }
+  if (shouldUseDirectYoutubeEmbedOnTv()) {
+    return buildDirectYoutubeEmbedUrl(cleanId, { muted });
   }
   const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
   if (proxyBase) {
@@ -1736,13 +1799,19 @@ export const MetaDetailsScreen = {
       const groupName = group.addonName || "Addon";
       (group.streams || []).forEach((stream, index) => {
         const entry = {
-          id: `${groupName}-${index}-${stream.url || ""}`,
+          id: `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
           label: stream.title || stream.name || `${groupName} stream`,
           description: stream.description || stream.name || "",
           addonName: groupName,
           addonLogo: group.addonLogo || stream.addonLogo || null,
           sourceType: stream.type || stream.source || "",
-          url: stream.url,
+          url: stream.url || stream.externalUrl || "",
+          ytId: stream.ytId || null,
+          infoHash: stream.infoHash || null,
+          fileIdx: stream.fileIdx ?? null,
+          externalUrl: stream.externalUrl || null,
+          behaviorHints: stream.behaviorHints || null,
+          subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
           raw: stream
         };
         if (entry.url) {
@@ -4498,7 +4567,7 @@ export const MetaDetailsScreen = {
             <div class="series-stream-title">${stream.label || "Stream"}</div>
             <div class="series-stream-desc">${stream.description || ""}</div>
             <div class="series-stream-meta">
-              ${getAddonIconPath(stream.addonName) ? `<img class="series-stream-addon-icon" src="${getAddonIconPath(stream.addonName)}" alt="" aria-hidden="true" />` : ""}
+              ${renderStreamAddonIcon(stream.addonName)}
               <span>${stream.addonName || "Addon"}${stream.sourceType ? ` - ${stream.sourceType}` : ""}</span>
             </div>
             <div class="series-stream-tags">
@@ -4562,7 +4631,7 @@ export const MetaDetailsScreen = {
             <div class="series-stream-title">${stream.label || "Stream"}</div>
             <div class="series-stream-desc">${stream.description || ""}</div>
             <div class="series-stream-meta">
-              ${getAddonIconPath(stream.addonName) ? `<img class="series-stream-addon-icon" src="${getAddonIconPath(stream.addonName)}" alt="" aria-hidden="true" />` : ""}
+              ${renderStreamAddonIcon(stream.addonName)}
               <span>${stream.addonName || "Addon"}${stream.sourceType ? ` - ${stream.sourceType}` : ""}</span>
             </div>
             <div class="series-stream-tags">

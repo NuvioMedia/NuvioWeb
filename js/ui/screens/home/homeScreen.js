@@ -149,6 +149,49 @@ function firstNonEmpty(...values) {
   return "";
 }
 
+function uniqueNonEmptyValues(values = []) {
+  const seen = new Set();
+  const result = [];
+  values.forEach((value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    result.push(normalized);
+  });
+  return result;
+}
+
+function buildHeroBackdropSources(item = null) {
+  return uniqueNonEmptyValues([
+    item?.background,
+    item?.backdrop,
+    item?.backdropUrl,
+    item?.landscapePoster,
+    item?.poster,
+    item?.thumbnail,
+    item?.episodeThumbnail
+  ]);
+}
+
+function encodeHeroBackdropFallbacks(sources = []) {
+  return sources.map((source) => encodeURIComponent(source)).join("|");
+}
+
+function getHeroBackdropErrorHandler() {
+  return "const q=(this.dataset.fallbackSrcs||'').split('|').filter(Boolean);const next=q.shift();if(next){this.dataset.fallbackSrcs=q.join('|');this.src=decodeURIComponent(next);return;}this.removeAttribute('src');this.classList.add('placeholder');";
+}
+
+function renderHeroBackdropImage(display) {
+  if (!display?.backdrop) {
+    return '<div class="home-hero-backdrop placeholder"></div>';
+  }
+  const fallbackQueue = encodeHeroBackdropFallbacks(display.backdropFallbacks || []);
+  const fallbackAttribute = fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : "";
+  return `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}"${fallbackAttribute} alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" onerror="${getHeroBackdropErrorHandler()}" />`;
+}
+
 function limitTextToWordCount(value, maxWords = 0) {
   const text = String(value || "").trim();
   if (!text || !Number.isFinite(maxWords) || maxWords <= 0) {
@@ -992,12 +1035,17 @@ function buildProgressStatus(item) {
     return t("home.continueStatusNextUp", {}, "Next Up");
   }
   const durationMs = Number(item?.durationMs || 0);
-  const positionMs = Number(item?.positionMs || 0);
+  const rawPositionMs = Number(item?.positionMs || 0);
+  const progressPercent = Number(item?.progressPercent);
+  const positionMs = rawPositionMs > 0
+    ? rawPositionMs
+    : (durationMs > 0 && Number.isFinite(progressPercent) ? durationMs * Math.max(0, Math.min(100, progressPercent)) / 100 : 0);
   if (!durationMs || !positionMs) {
     return t("home.continueStatusContinue", {}, "Continue");
   }
-  const remainingMinutes = Math.max(0, Math.round((durationMs - positionMs) / 60000));
-  const progress = Math.max(0, Math.min(1, positionMs / durationMs));
+  const effectivePositionMs = Math.max(0, Math.min(durationMs, positionMs));
+  const remainingMinutes = Math.max(0, Math.round((durationMs - effectivePositionMs) / 60000));
+  const progress = Math.max(0, Math.min(1, effectivePositionMs / durationMs));
   if (progress >= 0.85 || remainingMinutes <= 10) {
     return t("home.continueStatusAlmostDone", {}, "Almost done");
   }
@@ -1299,6 +1347,7 @@ function buildHeroDisplayModel(hero, layoutMode) {
       description: " ",
       logo: firstNonEmpty(normalized?.titleLogoUrl, normalized?.logo),
       backdrop: firstNonEmpty(normalized?.heroBackdropUrl, normalized?.background, normalized?.backdrop, normalized?.poster),
+      backdropFallbacks: buildHeroBackdropSources(normalized).slice(1),
       metaPrimary: [],
       metaSecondary: [],
       chips: []
@@ -1342,7 +1391,8 @@ function buildHeroDisplayModel(hero, layoutMode) {
     title: hero?.name || "Untitled",
     description: firstNonEmpty(hero?.description) || " ",
     logo: firstNonEmpty(hero?.logo),
-    backdrop: firstNonEmpty(hero?.background, hero?.backdrop, hero?.backdropUrl, hero?.poster),
+    backdrop: buildHeroBackdropSources(hero)[0] || "",
+    backdropFallbacks: buildHeroBackdropSources(hero).slice(1),
     metaPrimary: metaPrimary.filter(Boolean),
     metaSecondary: metaSecondary.filter(Boolean),
     chips
@@ -1359,12 +1409,8 @@ export function buildModernHeroPresentation(hero) {
       title: normalizedCollection.heroTitle || normalizedCollection.name || normalizedCollection.rawTitle || "",
       logo: firstNonEmpty(normalizedCollection.titleLogoUrl, normalizedCollection.logo),
       description: "",
-      backdrop: firstNonEmpty(
-        normalizedCollection.heroBackdropUrl,
-        normalizedCollection.background,
-        normalizedCollection.backdrop,
-        normalizedCollection.poster
-      ),
+      backdrop: buildHeroBackdropSources(normalizedCollection)[0] || "",
+      backdropFallbacks: buildHeroBackdropSources(normalizedCollection).slice(1),
       leadingMeta: [],
       trailingMeta: [],
       secondaryHighlightText: "",
@@ -1412,14 +1458,8 @@ export function buildModernHeroPresentation(hero) {
       isContinueWatchingHero ? normalized.episodeDescription : null,
       normalized.description
     ) || "",
-    backdrop: firstNonEmpty(
-      normalized.background,
-      normalized.backdrop,
-      normalized.backdropUrl,
-      normalized.poster,
-      normalized.thumbnail,
-      normalized.episodeThumbnail
-    ),
+    backdrop: buildHeroBackdropSources(normalized)[0] || "",
+    backdropFallbacks: buildHeroBackdropSources(normalized).slice(1),
     leadingMeta,
     trailingMeta,
     secondaryHighlightText,
@@ -1518,7 +1558,7 @@ function renderHeroMarkup(layoutMode, heroItem, heroCandidates) {
                data-item-type="${escapeAttribute(heroItem?.type || "movie")}"
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}"` : ""}>
         <div class="home-hero-backdrop-wrap">
-          ${display.backdrop ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" />` : '<div class="home-hero-backdrop placeholder"></div>'}
+          ${renderHeroBackdropImage(display)}
         </div>
         <div class="home-hero-copy">
           <div class="home-hero-brand">
@@ -6261,6 +6301,7 @@ export const HomeScreen = {
         focusedItemIndex: Number.isFinite(focusState?.itemIndex) ? focusState.itemIndex : -1,
         expandFocusedPoster,
         buildModernHeroPresentation,
+        renderHeroBackdropImage,
         renderContinueWatchingSection,
         createPosterCardMarkup,
         createSeeAllCardMarkup,
