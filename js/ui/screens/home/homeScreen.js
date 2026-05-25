@@ -5,6 +5,7 @@ import { catalogRepository } from "../../../data/repository/catalogRepository.js
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
+import { libraryRepository, LibrarySourceMode } from "../../../data/repository/libraryRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { CollectionsStore, buildCollectionHomeKey } from "../../../data/local/collectionsStore.js";
@@ -2758,13 +2759,16 @@ export const HomeScreen = {
       return [];
     }
     const isMovie = !isSeriesTypeForContinueWatching(item.type || "movie");
+    const isTraktLibrary = this.posterHoldMenu?.librarySourceMode === LibrarySourceMode.TRAKT;
     const options = [
       { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") },
       {
-        action: "toggleLibrary",
-        label: this.posterHoldMenu?.isSaved
+        action: isTraktLibrary ? "manageLists" : "toggleLibrary",
+        label: isTraktLibrary
+          ? t("library_manage_lists", {}, "Manage Lists")
+          : (this.posterHoldMenu?.isSaved
           ? t("hero_remove_from_library", {}, "Remove from library")
-          : t("hero_add_to_library", {}, "Add to library")
+          : t("hero_add_to_library", {}, "Add to library"))
       }
     ];
     if (isMovie) {
@@ -3021,6 +3025,118 @@ export const HomeScreen = {
     return true;
   },
 
+  getPosterListPickerOptions() {
+    if (!this.posterListPicker) {
+      return [];
+    }
+    const membership = this.posterListPicker.membership || {};
+    const tabs = Array.isArray(this.posterListPicker.tabs) ? this.posterListPicker.tabs : [];
+    return [
+      ...tabs.map((tab) => ({
+        action: `toggleLibraryList:${tab.key}`,
+        label: `${membership[tab.key] ? "[x]" : "[ ]"} ${tab.title || tab.key}`
+      })),
+      { action: "saveLibraryLists", label: t("action_save", {}, "Save") }
+    ];
+  },
+
+  mountPosterListPickerDialog() {
+    if (!this.posterListPicker) {
+      return false;
+    }
+    this.destroyHomeHoldDialog();
+    const item = this.posterListPicker.item || {};
+    this._homeHoldDialog = new NuvioDialog({
+      title: item.name || item.title || item.id || "Untitled",
+      subtitle: this.posterListPicker.error || t("detail_lists_subtitle", {}, "Choose which lists should include this title"),
+      widthVw: 52,
+      buttons: this.getPosterListPickerOptions().map((option) => ({
+        label: option.label,
+        key: option.action,
+        onAction: () => {
+          void this.activatePosterListPickerOption(option.action);
+        }
+      })),
+      onDismiss: () => {
+        this._homeHoldDialog = null;
+        this.posterListPicker = null;
+        this.restorePosterHoldMenuFocus();
+        this.holdMenuScrollState = null;
+      }
+    }).mount(document.body);
+    this.scheduleHoldMenuScrollRestore();
+    return true;
+  },
+
+  async openPosterListPicker(item) {
+    if (!item?.id) {
+      return false;
+    }
+    const tabs = await libraryRepository.getListTabs().catch(() => []);
+    const resolvedTabs = Array.isArray(tabs) && tabs.length
+      ? tabs
+      : [{ key: "local", title: t("detail.library", {}, "Library"), type: "local" }];
+    const libraryItem = {
+      itemId: item.id,
+      itemType: item.type || "movie",
+      title: item.name || item.title || item.id || "Untitled",
+      poster: item.poster || null,
+      background: item.background || item.backdrop || null,
+      description: item.description || "",
+      releaseInfo: item.releaseInfo || "",
+      imdbRating: item.imdbRating == null ? null : Number(item.imdbRating),
+      genres: Array.isArray(item.genres) ? item.genres : []
+    };
+    const snapshot = await libraryRepository.getMembershipSnapshot(libraryItem).catch(() => ({ listMembership: {} }));
+    if (this.posterHoldMenu) {
+      this.pendingPosterHoldFocus = {
+        rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
+        index: Number(this.posterHoldMenu.index || 0)
+      };
+    }
+    this.posterHoldMenu = null;
+    this.posterListPicker = {
+      item: libraryItem,
+      tabs: resolvedTabs,
+      membership: Object.fromEntries(resolvedTabs.map((tab) => [tab.key, Boolean(snapshot?.listMembership?.[tab.key])])),
+      error: ""
+    };
+    return this.mountPosterListPickerDialog();
+  },
+
+  async activatePosterListPickerOption(action) {
+    if (!this.posterListPicker) {
+      return false;
+    }
+    const normalizedAction = String(action || "");
+    if (normalizedAction.startsWith("toggleLibraryList:")) {
+      const key = normalizedAction.slice("toggleLibraryList:".length);
+      this.posterListPicker.membership = {
+        ...(this.posterListPicker.membership || {}),
+        [key]: !this.posterListPicker.membership?.[key]
+      };
+      this.mountPosterListPickerDialog();
+      return true;
+    }
+    if (normalizedAction === "saveLibraryLists") {
+      try {
+        await libraryRepository.applyMembershipChanges(this.posterListPicker.item, {
+          desiredMembership: this.posterListPicker.membership || {}
+        });
+        this.posterListPicker = null;
+        this.destroyHomeHoldDialog();
+        this.restorePosterHoldMenuFocus();
+        this.holdMenuScrollState = null;
+      } catch (error) {
+        console.warn("Failed to update library lists", error);
+        this.posterListPicker.error = t("detail_lists_save_failed", {}, "Could not save list changes.");
+        this.mountPosterListPickerDialog();
+      }
+      return true;
+    }
+    return false;
+  },
+
   getPosterItemFromNode(node) {
     if (!node?.matches?.(".home-poster-card.focusable")) {
       return null;
@@ -3052,13 +3168,15 @@ export const HomeScreen = {
       savedLibraryRepository.isSaved(item.id).catch(() => false),
       watchedItemsRepository.isWatched(item.id).catch(() => false)
     ]);
+    const librarySourceMode = await libraryRepository.getSourceMode().catch(() => LibrarySourceMode.LOCAL);
     this.posterHoldMenu = {
       item,
       index: Number(node?.dataset?.itemIndex || 0),
       rowIndex: Number(node?.dataset?.rowIndex || 0),
       optionIndex: 0,
       isSaved: Boolean(isSaved),
-      isWatched: Boolean(isWatched)
+      isWatched: Boolean(isWatched),
+      librarySourceMode
     };
     return this.mountPosterHoldDialog();
   },
@@ -3485,6 +3603,8 @@ export const HomeScreen = {
     }
     if (option.action === "toggleLibrary") {
       await this.togglePosterLibrary(item);
+    } else if (option.action === "manageLists") {
+      return this.openPosterListPicker(item);
     } else if (option.action === "toggleWatched") {
       await this.togglePosterWatched(item);
     } else {
@@ -5336,6 +5456,7 @@ export const HomeScreen = {
     this.destroyHomeHoldDialog();
     this.continueWatchingMenu = null;
     this.posterHoldMenu = null;
+    this.posterListPicker = null;
     this.pendingContinueWatchingFocusIndex = null;
     this.cancelPendingContinueWatchingEnter();
     this.forceInitialContinueWatchingFocus = false;
@@ -6892,6 +7013,7 @@ export const HomeScreen = {
     this.destroyHomeHoldDialog();
     this.continueWatchingMenu = null;
     this.posterHoldMenu = null;
+    this.posterListPicker = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
     this.cancelScheduledRender();
