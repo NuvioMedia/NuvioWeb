@@ -618,6 +618,29 @@ export const DiscoverScreen = {
     return true;
   },
 
+  refreshPosterOptionsMenuState() {
+    if (!this.posterOptionsMenu) {
+      return false;
+    }
+    const options = getPosterOptions(this.posterOptionsMenu);
+    const buttons = Array.from(this.container?.querySelectorAll(".hold-menu-button.focusable") || []);
+    if (!options.length || buttons.length !== options.length) {
+      this.render();
+      return true;
+    }
+    const focusedIndex = Math.max(0, Math.min(options.length - 1, Number(this.posterOptionsMenu.optionIndex || 0)));
+    buttons.forEach((node, index) => {
+      const option = options[index] || null;
+      node.textContent = option?.label || option?.action || "Option";
+      node.dataset.holdAction = option?.action || "";
+      node.dataset.holdIndex = String(index);
+      node.classList.toggle("danger", Boolean(option?.danger));
+      node.classList.toggle("focused", index === focusedIndex);
+    });
+    this.applyPosterOptionsFocus();
+    return true;
+  },
+
   movePosterOptionsFocus(delta) {
     if (!this.posterOptionsMenu) {
       return false;
@@ -661,7 +684,7 @@ export const DiscoverScreen = {
     }
     if (result.type === "updated") {
       this.posterOptionsMenu = result.state;
-      this.render();
+      this.refreshPosterOptionsMenuState();
       return true;
     }
     return false;
@@ -1227,6 +1250,15 @@ export const DiscoverScreen = {
     const current = this.container.querySelector(".focusable.focused");
     const code = Number(event?.keyCode || 0);
     const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    const currentAction = String(current?.dataset?.action || "");
+    const focusedFilterKind = this.getKindFromFilterAction(currentAction);
+    if (isEnterKey(event) && focusedFilterKind) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      this.openPickerMenu(focusedFilterKind);
+      return;
+    }
+
     if (this.posterOptionsMenu) {
       if (code === 38 || code === 40) {
         event?.preventDefault?.();
@@ -1290,12 +1322,10 @@ export const DiscoverScreen = {
       return;
     }
 
-    const currentAction = String(current?.dataset?.action || "");
     if (currentAction === "openDetail" && current?.dataset?.itemId) {
       this.lastFocusedKey = String(current.dataset.focusKey || this.lastFocusedKey || "");
       this.lastFocusedDiscoverItemId = String(current.dataset.itemId || "");
     }
-    const focusedFilterKind = this.getKindFromFilterAction(currentAction);
 
     if (focusedFilterKind) {
       if (isLeftKey(event)) {
