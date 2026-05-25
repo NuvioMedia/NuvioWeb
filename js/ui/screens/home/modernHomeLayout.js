@@ -1,7 +1,7 @@
 export const MODERN_HOME_CONSTANTS = {
-  heroFocusDelayMs: 90,
+  heroFocusDelayMs: 450,
   heroRapidNavThresholdMs: 130,
-  heroRapidSettleMs: 170,
+  heroRapidSettleMs: 400,
   keyRepeatThrottleMs: 80,
   cameraFollowDelayMs: 140,
   cameraFollowDurationXMs: 440,
@@ -43,6 +43,7 @@ export function renderModernHomeLayout({
   const sectionsMarkup = [];
 
   rows.forEach((rowData, rowIndex) => {
+    const isCollectionRow = rowData?.rowKind === "collection";
     const items = Array.isArray(rowData?.result?.data?.items) ? rowData.result.data.items : [];
     const isLoading = rowData?.result?.status === "loading";
     const rowItems = items.length ? items : (rowData.loadingItems || []);
@@ -50,9 +51,9 @@ export function renderModernHomeLayout({
       return;
     }
 
-    const rowKey = buildModernRowKey(rowData);
+    const rowKey = String(rowData?.homeCatalogKey || buildModernRowKey(rowData));
     const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-    if (!isLoading) {
+    if (!isLoading && !isCollectionRow) {
       catalogSeeAllMap.set(seeAllId, {
         addonBaseUrl: rowData.addonBaseUrl || "",
         addonId: rowData.addonId || "",
@@ -66,12 +67,15 @@ export function renderModernHomeLayout({
 
     const maxItems = Math.max(1, Number(rowItemLimit || 15));
     const visibleItems = rowItems.slice(0, maxItems);
-    const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+    const rowTitle = isCollectionRow
+      ? String(rowData.collectionTitle || rowData.collection?.title || "Collection")
+      : formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
     const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
       item,
       rowIndex,
       itemIndex,
       rowData.type,
+      rowData,
       showPosterLabels,
       "modern",
       expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex,
