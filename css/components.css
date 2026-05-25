@@ -6302,8 +6302,10 @@ button:focus-visible {
   max-height: 100%;
 }
 
+.nuvio-route-slide-enter,
 .trakt-route-shell.trakt-route-enter .settings-trakt-panel {
-  animation: traktRouteEnter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --nuvio-route-slide-distance: 8.333vw;
+  animation: nuvioRouteSlideEnter 350ms cubic-bezier(0.4, 0, 0.2, 1) both;
   will-change: opacity, transform;
 }
 
@@ -6498,13 +6500,10 @@ button:focus-visible {
   }
 }
 
-@keyframes traktRouteEnter {
+@keyframes nuvioRouteSlideEnter {
   0% {
     opacity: 0;
-    transform: translateX(8.333vw);
-  }
-  75% {
-    opacity: 1;
+    transform: translateX(var(--nuvio-route-slide-distance, 8.333vw));
   }
   100% {
     opacity: 1;
