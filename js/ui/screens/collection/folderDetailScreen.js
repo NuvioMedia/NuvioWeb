@@ -73,6 +73,11 @@ function toImageUrl(path) {
   return /^https?:\/\//i.test(String(path)) ? String(path) : `${TMDB_IMAGE_BASE_URL}${path}`;
 }
 
+function buildPlaceholderPosterDataUrl() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="500" height="750" viewBox="0 0 500 750"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1f2430" stop-opacity="0.92"/><stop offset="1" stop-color="#1f2430" stop-opacity="0.98"/></linearGradient></defs><rect width="500" height="750" fill="url(#g)"/><circle cx="250" cy="375" r="46" fill="none" stroke="#9ca3af" stroke-opacity="0.28" stroke-width="4"/><circle cx="250" cy="375" r="42" fill="#ffffff" fill-opacity="0.92" stroke="#9ca3af" stroke-opacity="0.18" stroke-width="3"/><path d="M240 352 L240 398 L278 375 Z" fill="#1f2430" fill-opacity="0.8"/></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
 function normalizeItem(item = {}, fallbackType = "movie") {
   const source = item && typeof item === "object" ? item : {};
   const type = String(source.type || source.apiType || fallbackType).toLowerCase() === "tv" ? "series" : String(source.type || source.apiType || fallbackType || "movie").toLowerCase();
@@ -83,7 +88,7 @@ function normalizeItem(item = {}, fallbackType = "movie") {
     type,
     apiType: type,
     name: firstNonEmpty(source.name, source.title, source.id),
-    poster: firstNonEmpty(source.poster, source.thumbnail),
+    poster: firstNonEmpty(source.poster, source.thumbnail, source.background, source.backdrop, source.backdropUrl, source.landscapePoster),
     landscapePoster: firstNonEmpty(source.landscapePoster, source.backdrop, source.backdropUrl, source.background),
     backdrop: firstNonEmpty(source.backdrop, source.backdropUrl, source.background, source.landscapePoster),
     background: firstNonEmpty(source.background, source.backdrop, source.backdropUrl, source.landscapePoster, source.poster),
@@ -149,9 +154,11 @@ function buildFolderSourceRows(tabs = []) {
   return tabs
     .filter((tab) => !tab.isAllTab)
     .map((tab, index) => {
+      const sourceTabIndex = tabs.indexOf(tab);
       const type = sourceType(tab.source || {});
       return {
         homeCatalogKey: tab.key || `folder_source_${index}`,
+        folderTabIndex: sourceTabIndex >= 0 ? sourceTabIndex : index,
         addonId: tab.source?.addonId || tab.source?.provider || "collection",
         addonBaseUrl: tab.source?.addonBaseUrl || "",
         addonName: tab.source?.provider || "Collection",
@@ -304,21 +311,23 @@ function mapTmdbListItem(item = {}, mediaType = "movie") {
   if (!item?.id || !title) {
     return null;
   }
-    return normalizeItem({
-      id: `tmdb:${item.id}`,
-      type,
-      name: title,
-      poster: toImageUrl(item.poster_path || item.posterPath),
-      landscapePoster: toImageUrl(item.backdrop_path || item.backdropPath),
-      background: toImageUrl(item.backdrop_path || item.backdropPath),
-      description: firstNonEmpty(item.overview, item.description),
-      releaseInfo: String(item.release_date || item.first_air_date || "").slice(0, 4),
-      released: item.release_date || item.first_air_date || "",
-      releaseDate: item.release_date || item.first_air_date || "",
-      rating: typeof item.vote_average === "number" ? item.vote_average : null,
-      imdbRating: typeof item.vote_average === "number" ? item.vote_average : null,
-      tmdbId: String(item.id)
-    }, type);
+  const posterUrl = toImageUrl(item.poster_path || item.posterPath);
+  const backdropUrl = toImageUrl(item.backdrop_path || item.backdropPath);
+  return normalizeItem({
+    id: `tmdb:${item.id}`,
+    type,
+    name: title,
+    poster: firstNonEmpty(posterUrl, backdropUrl, buildPlaceholderPosterDataUrl()),
+    landscapePoster: backdropUrl,
+    background: backdropUrl,
+    description: firstNonEmpty(item.overview, item.description),
+    releaseInfo: String(item.release_date || item.first_air_date || "").slice(0, 4),
+    released: item.release_date || item.first_air_date || "",
+    releaseDate: item.release_date || item.first_air_date || "",
+    rating: typeof item.vote_average === "number" ? item.vote_average : null,
+    imdbRating: typeof item.vote_average === "number" ? item.vote_average : null,
+    tmdbId: String(item.id)
+  }, type);
 }
 
 function hasTmdbItemId(item = {}) {
@@ -916,7 +925,7 @@ export const FolderDetailScreen = {
       continueWatchingItems: [],
       continueWatchingLoading: false,
       continueWatchingLoadingCount: 0,
-      rowItemLimit: 15,
+      rowItemLimit: 50,
       showHeroSection: Boolean(heroItem),
       showPosterLabels: false,
       showCatalogTypeSuffix: this.layoutPrefs?.catalogTypeSuffixEnabled !== false,
@@ -952,10 +961,117 @@ export const FolderDetailScreen = {
       HomeScreen.applyCachedModernPortraitPosterMetrics.call(this, this.container.querySelector(".home-screen-shell.home-layout-modern:not(.home-modern-landscape-posters)"));
     }
     this.restoreFocus();
-    HomeScreen.setupModernTrackScrollPagination.call(this);
+    this.setupModernTrackScrollPagination();
     HomeScreen.applyHeroToDom.call(this);
     HomeScreen.ensureHomeTruncationObservers.call(this);
     HomeScreen.scheduleHomeTruncationUpdate.call(this);
+  },
+
+  setupModernTrackScrollPagination() {
+    HomeScreen.teardownModernTrackScrollPagination.call(this);
+    if (!this.useHomeFollowLayout || !this.container) {
+      return;
+    }
+    const tracks = Array.from(this.container.querySelectorAll(".home-modern-row .home-track"));
+    this._trackScrollHandlers = this._trackScrollHandlers || new Map();
+    tracks.forEach((track) => {
+      const rowKey = String(track.dataset.trackRowKey || "");
+      if (!rowKey || this._trackScrollHandlers.has(track)) {
+        return;
+      }
+      const handler = () => {
+        if (this._trackPaginationInFlight?.has(rowKey)) {
+          return;
+        }
+        const cards = track.querySelectorAll(".home-content-card:not(.home-poster-card-loading)");
+        const firstCard = cards[0];
+        const cardWidth = firstCard ? firstCard.offsetWidth : 230;
+        const nearEndThreshold = (cardWidth + 24) * 4;
+        const distanceFromEnd = track.scrollWidth - (track.scrollLeft + track.clientWidth);
+        if (distanceFromEnd > nearEndThreshold) {
+          return;
+        }
+        void this.loadMoreFollowLayoutRow(rowKey, track);
+      };
+      this._trackScrollHandlers.set(track, handler);
+      track.addEventListener("scroll", handler, { passive: true });
+      handler();
+    });
+  },
+
+  async loadMoreFollowLayoutRow(rowKey, track) {
+    const rowIndex = (this.rows || []).findIndex((row) => String(row?.homeCatalogKey || "") === String(rowKey || ""));
+    const rowData = rowIndex >= 0 ? this.rows[rowIndex] : null;
+    const tabIndex = Number(rowData?.folderTabIndex ?? -1);
+    const tab = this.tabs?.[tabIndex] || null;
+    if (!rowData || !tab || tab.isAllTab || tab.loading || !tab.hasMore) {
+      return;
+    }
+    this._trackPaginationInFlight = this._trackPaginationInFlight || new Set();
+    this._trackPaginationInFlight.add(rowKey);
+    this.tabs[tabIndex] = { ...tab, loading: true, error: "" };
+    try {
+      const nextPage = Math.max(1, Number(tab.page || 1) + 1);
+      const result = await fetchSourceItems(tab.source, nextPage);
+      const existing = Array.isArray(tab.items) ? tab.items : [];
+      const seen = new Set(existing.map((item) => `${item.type}:${item.id}`));
+      const incoming = (result.items || []).filter((item) => {
+        const key = `${item.type}:${item.id}`;
+        if (!item.id || seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+      const merged = [...existing, ...incoming];
+      const hasMore = Boolean(result.hasMore && incoming.length);
+      this.tabs[tabIndex] = {
+        ...this.tabs[tabIndex],
+        items: merged,
+        hasMore,
+        page: Number(result.page || nextPage),
+        loading: false,
+        error: ""
+      };
+      this.rebuildAllTab();
+      if (rowData?.result?.data) {
+        rowData.result.data.items = merged;
+        rowData.result.data.hasMore = hasMore;
+        rowData.result.data.currentPage = Number(result.page || nextPage);
+      }
+      if (incoming.length && track?.isConnected) {
+        const modernLandscapePostersEnabled = Boolean(this.layoutPrefs?.modernLandscapePostersEnabled);
+        const startIndex = existing.length;
+        const newMarkup = incoming.map((item, index) => createPosterCardMarkup(
+          item,
+          rowIndex,
+          startIndex + index,
+          rowData.type || "movie",
+          rowData,
+          false,
+          "modern",
+          false,
+          modernLandscapePostersEnabled
+        )).join("");
+        const fragment = document.createRange().createContextualFragment(newMarkup);
+        track.appendChild(fragment);
+        ScreenUtils.indexFocusables(track);
+        HomeScreen.buildNavigationModel.call(this);
+        this.heroCandidates = [this.heroItem, ...(this.rows || []).flatMap((row) => row?.result?.data?.items || [])].filter((item) => item?.id);
+      }
+    } catch (error) {
+      this.tabs[tabIndex] = {
+        ...this.tabs[tabIndex],
+        loading: false,
+        error: String(error?.message || "Could not load source")
+      };
+      if (rowData?.result) {
+        rowData.result.status = "error";
+      }
+      console.warn("Folder track pagination failed", rowKey, error);
+    } finally {
+      this._trackPaginationInFlight?.delete(rowKey);
+    }
   },
 
   mergeHeroIntoFolderTabs(itemId, mergedHero) {
@@ -1024,28 +1140,62 @@ export const FolderDetailScreen = {
     }
   },
 
+  startPendingContinueWatchingHold(node) {
+    if (!this.useHomeFollowLayout) {
+      return HomeScreen.startPendingContinueWatchingHold.call(this, node);
+    }
+    if (!this.isHomeHoldTarget(node)) {
+      return false;
+    }
+    this.cancelPendingContinueWatchingEnter();
+    this.cancelPendingContinueWatchingHold();
+    const isPoster = this.isPosterHoldTarget(node);
+    const item = isPoster ? this.getPosterItemFromNode(node) : this.getContinueWatchingItemFromNode(node);
+    if (isPoster && !item?.id) {
+      return false;
+    }
+    if (!isPoster && !item?.contentId) {
+      return false;
+    }
+    this.pendingContinueWatchingHoldTarget = {
+      kind: isPoster ? "poster" : "continueWatching",
+      itemId: String(isPoster ? item.id : item.contentId || ""),
+      itemType: String(isPoster ? item.type : ""),
+      videoId: String(isPoster ? "" : item.videoId || ""),
+      holdTriggered: false
+    };
+    this.pendingContinueWatchingHoldTimer = setTimeout(() => {
+      this.pendingContinueWatchingHoldTimer = null;
+      const pending = this.pendingContinueWatchingHoldTarget;
+      if (!pending || Router.getCurrent() !== "folderDetail") {
+        return;
+      }
+      const current = this.container?.querySelector(".home-continue-card.focusable.focused, .home-poster-card.focusable.focused") || null;
+      if (!this.hasPendingContinueWatchingHold(current)) {
+        return;
+      }
+      pending.holdTriggered = true;
+      this.openHoldMenuForNode(current);
+    }, 650);
+    return true;
+  },
+
   async onKeyDown(event) {
     if (isBackEvent(event)) {
       event?.preventDefault?.();
+      if (this.useHomeFollowLayout && (this.continueWatchingMenu || this.posterHoldMenu)) {
+        if (this.continueWatchingMenu) {
+          HomeScreen.closeContinueWatchingMenu.call(this);
+        } else {
+          HomeScreen.closePosterHoldMenu.call(this);
+        }
+        return;
+      }
       Router.back();
       return;
     }
     if (this.useHomeFollowLayout) {
-      const code = Number(event?.keyCode || 0);
-      if ([37, 38, 39, 40].includes(code)) {
-        HomeScreen.cancelFocusedPosterFlow.call(this);
-        HomeScreen.handleHomeDpad.call(this, event);
-        return;
-      }
-      if (code === 13) {
-        event?.preventDefault?.();
-        const current = this.container?.querySelector(".focusable.focused") || null;
-        const action = String(current?.dataset?.action || "");
-        if (action === "openDetail" || action === "openCollectionFolder") {
-          HomeScreen.openDetailFromNode.call(this, current);
-        }
-        return;
-      }
+      HomeScreen.onKeyDown.call(this, event);
       return;
     }
     const current = this.container?.querySelector(".focusable.focused") || null;
@@ -1115,6 +1265,12 @@ export const FolderDetailScreen = {
           await this.loadTab(currentRowIndex, { append: true });
         }
       }
+    }
+  },
+
+  onKeyUp(event) {
+    if (this.useHomeFollowLayout) {
+      HomeScreen.onKeyUp.call(this, event);
     }
   },
 
