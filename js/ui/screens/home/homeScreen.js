@@ -3675,7 +3675,7 @@ export const HomeScreen = {
       if (!this.isCollectionFolderNode(node)) {
         return;
       }
-      this.hydrateCollectionFocusGif(node, false);
+      this.hydrateCollectionFocusGif(node, node.classList.contains("focused"));
     });
   },
 
@@ -6064,6 +6064,7 @@ export const HomeScreen = {
     if (!this.container?.querySelector(".home-poster-card.focused")) {
       this.clearFocusedPosterFlowState();
     }
+    this.syncFocusedCollectionCardState();
     if (!this.layoutPrefs?.modernSidebar) {
       this.setSidebarExpanded(false);
     }
