@@ -16,6 +16,7 @@ import { CatalogOrderScreen } from "../screens/plugin/catalogOrderScreen.js";
 import { StreamScreen } from "../screens/stream/streamScreen.js";
 import { CastDetailScreen } from "../screens/cast/castDetailScreen.js";
 import { CatalogSeeAllScreen } from "../screens/catalog/catalogSeeAllScreen.js";
+import { FolderDetailScreen } from "../screens/collection/folderDetailScreen.js";
 import { Platform } from "../../platform/index.js";
 import { RouteStateStore } from "./routeStateStore.js";
 
@@ -55,7 +56,8 @@ export const Router = {
     catalogOrder: CatalogOrderScreen,
     stream: StreamScreen,
     castDetail: CastDetailScreen,
-    catalogSeeAll: CatalogSeeAllScreen
+    catalogSeeAll: CatalogSeeAllScreen,
+    folderDetail: FolderDetailScreen
   },
 
   getRouteStateKey(routeName, params = {}) {

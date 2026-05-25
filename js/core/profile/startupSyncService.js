@@ -7,6 +7,7 @@ import { SavedLibrarySyncService } from "./savedLibrarySyncService.js";
 import { WatchedItemsSyncService } from "./watchedItemsSyncService.js";
 import { PluginSyncService } from "./pluginSyncService.js";
 import { ProfileSettingsSyncService } from "./profileSettingsSyncService.js";
+import { CollectionSyncService } from "./collectionSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
 
@@ -74,6 +75,7 @@ export const StartupSyncService = {
           ThemeManager.apply();
           I18n.apply();
         }
+        await CollectionSyncService.pull();
         await PluginSyncService.pull();
         await LibrarySyncService.pull();
         await SavedLibrarySyncService.pull();
@@ -97,6 +99,7 @@ export const StartupSyncService = {
     try {
       await ProfileSyncService.push();
       await ProfileSettingsSyncService.push();
+      await CollectionSyncService.push();
       await PluginSyncService.push();
       await LibrarySyncService.push();
       await SavedLibrarySyncService.push();

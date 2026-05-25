@@ -5324,8 +5324,6 @@ button:focus-visible {
   --home-row-gap: 24px;
   --modern-rows-viewport-height: 49%;
   --modern-rows-viewport-padding-bottom: 49vh;
-  --home-landscape-poster-width: 419px;
-  --home-landscape-poster-height: 236px;
   --home-poster-radius: 24px;
 }
 
@@ -5609,6 +5607,10 @@ button:focus-visible {
   scroll-padding-top: 0;
 }
 
+.folder-detail-home-shell .home-main {
+  margin-left: 0;
+}
+
 .home-screen-shell.home-layout-modern .home-modern-rows-viewport::-webkit-scrollbar {
   display: none;
 }
@@ -5830,9 +5832,19 @@ button:focus-visible {
   max-width: var(--home-poster-expanded-width);
 }
 
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-poster-card.is-landscape.is-expanded {
+  flex-basis: var(--home-landscape-poster-width);
+  min-width: var(--home-landscape-poster-width);
+  max-width: var(--home-landscape-poster-width);
+}
+
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-frame {
   height: var(--home-poster-height);
 }
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-poster-card.is-landscape.is-expanded .home-poster-frame {
+  height: var(--home-landscape-poster-height);
+}
+
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-expanded-gradient {
   height: 40%;

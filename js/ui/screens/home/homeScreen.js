@@ -93,7 +93,7 @@ async function getLocalSidebarProfileState() {
   };
 }
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -101,7 +101,7 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function escapeAttribute(value) {
+export function escapeAttribute(value) {
   return escapeHtml(value).replace(/'/g, "&#39;");
 }
 
@@ -113,7 +113,7 @@ function toTitleCase(value) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
-function formatCatalogRowTitle(catalogName, type, showTypeSuffix = true) {
+export function formatCatalogRowTitle(catalogName, type, showTypeSuffix = true) {
   const rawBase = String(catalogName || "").trim();
   const base = rawBase ? rawBase.charAt(0).toUpperCase() + rawBase.slice(1) : "";
   const typeLabel = toTitleCase(type || "movie") || "Movie";
@@ -165,6 +165,29 @@ function limitTextToWordCount(value, maxWords = 0) {
 function parseCssPx(value, fallback = 0) {
   const parsed = parseFloat(String(value || "").trim());
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+export function buildModernHomeSizingStyle(layoutPrefs = {}) {
+  const baseWidthDp = Math.max(72, Number(layoutPrefs?.posterCardWidthDp ?? 126) || 126);
+  const radiusDp = Math.max(0, Number(layoutPrefs?.posterCardCornerRadiusDp ?? 12) || 12);
+  const dpToPx = 2;
+  const portraitWidth = Math.round(baseWidthDp * 0.84 * 1.08 * dpToPx);
+  const portraitHeight = Math.round(baseWidthDp * 1.5 * 0.84 * 1.08 * dpToPx);
+  const portraitExpandedWidth = Math.round(portraitHeight * (16 / 9));
+  const landscapeWidth = Math.round(baseWidthDp * 1.24 * 1.34 * dpToPx);
+  const landscapeHeight = Math.round(landscapeWidth / 1.77);
+  const radius = Math.round(radiusDp * dpToPx);
+  return [
+    `--home-poster-width:${portraitWidth}px`,
+    `--home-poster-height:${portraitHeight}px`,
+    `--home-modern-portrait-poster-width:${portraitWidth}px`,
+    `--home-modern-portrait-poster-height:${portraitHeight}px`,
+    `--home-modern-portrait-expanded-width:${portraitExpandedWidth}px`,
+    `--home-landscape-poster-width:${landscapeWidth}px`,
+    `--home-landscape-poster-height:${landscapeHeight}px`,
+    `--home-poster-expanded-width:${portraitExpandedWidth}px`,
+    `--home-poster-radius:${radius}px`
+  ].join(";");
 }
 
 function createCubicBezierEasing(x1, y1, x2, y2) {
@@ -394,25 +417,36 @@ function normalizeCollectionPosterShape(value) {
   return "SQUARE";
 }
 
+function normalizeAnimatedCollectionAssetUrl(value) {
+  const normalized = String(value || "").trim();
+  if (!normalized) {
+    return "";
+  }
+  if (/\.gifv(?:$|[?#])/i.test(normalized)) {
+    return normalized.replace(/\.gifv(?=($|[?#]))/i, ".gif");
+  }
+  return normalized;
+}
+
 function isCollectionFolderItem(item = {}) {
   return String(item?.heroSource || "").toLowerCase() === "collection"
     || String(item?.type || item?.apiType || "").toLowerCase() === "collection_folder"
     || Boolean(item?.collectionId && item?.folderId);
 }
 
-function normalizeCollectionFolderItem(item, collectionMeta = null) {
+export function normalizeCollectionFolderItem(item, collectionMeta = null) {
   if (!item) {
     return null;
   }
   const collectionId = firstNonEmpty(item.collectionId, collectionMeta?.id);
   const folderId = firstNonEmpty(item.folderId, item.id);
-  const title = firstNonEmpty(item.title, item.name);
+  const title = firstNonEmpty(item.rawTitle, item.folderTitle, item.title, item.name, item.heroTitle);
   if (!collectionId || !folderId || !title) {
     return null;
   }
   const collectionTitle = firstNonEmpty(item.collectionTitle, collectionMeta?.title);
   const coverImageUrl = firstNonEmpty(item.coverImageUrl, item.coverImage);
-  const focusGifUrl = firstNonEmpty(item.focusGifUrl);
+  const focusGifUrl = normalizeAnimatedCollectionAssetUrl(firstNonEmpty(item.focusGifUrl));
   const focusGifEnabled = item.focusGifEnabled !== false;
   const hideTitle = Boolean(item.hideTitle);
   const tileShape = normalizeCollectionPosterShape(item.tileShape || item.posterShape);
@@ -427,6 +461,7 @@ function normalizeCollectionFolderItem(item, collectionMeta = null) {
     type: "collection_folder",
     apiType: "collection_folder",
     heroSource: "collection",
+    rawTitle: title,
     name: hideTitle ? "" : title,
     title: hideTitle ? "" : title,
     heroTitle: hideTitle ? "" : (coverEmoji ? `${coverEmoji}  ${title}` : title),
@@ -1128,14 +1163,14 @@ function buildHeroDisplayModel(hero, layoutMode) {
   };
 }
 
-function buildModernHeroPresentation(hero) {
+export function buildModernHeroPresentation(hero) {
   if (isCollectionFolderItem(hero)) {
     const normalizedCollection = normalizeCollectionFolderItem(hero);
     if (!normalizedCollection) {
       return null;
     }
     return {
-      title: normalizedCollection.heroTitle || normalizedCollection.name || "",
+      title: normalizedCollection.heroTitle || normalizedCollection.name || normalizedCollection.rawTitle || "",
       logo: firstNonEmpty(normalizedCollection.titleLogoUrl, normalizedCollection.logo),
       description: "",
       backdrop: firstNonEmpty(
@@ -1413,7 +1448,7 @@ function renderContinueWatchingLoadingCard(index = 0) {
   `;
 }
 
-function renderContinueWatchingSection(items = [], options = {}) {
+export function renderContinueWatchingSection(items = [], options = {}) {
   const loading = Boolean(options?.loading);
   if (!items.length && !loading) {
     return "";
@@ -1516,6 +1551,7 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
       rowIndex,
       itemIndex,
       rowData.type,
+      rowData,
       showPosterLabels,
       layoutMode,
       expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex
@@ -1556,7 +1592,7 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
   };
 }
 
-function createSeeAllCardMarkup(seeAllId, rowData) {
+export function createSeeAllCardMarkup(seeAllId, rowData) {
   return `
     <article class="home-content-card home-seeall-card focusable"
              data-action="openCatalogSeeAll"
@@ -1590,12 +1626,22 @@ function groupNodesByOffsetTop(nodes = []) {
   return grouped.map((entry) => entry.nodes);
 }
 
-function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels = true, layoutMode = "classic", isExpanded = false, preferLandscapePoster = false) {
-  const collectionItem = isCollectionFolderItem(item) ? normalizeCollectionFolderItem(item) : null;
+export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowData = null, showLabels = true, layoutMode = "classic", isExpanded = false, preferLandscapePoster = false) {
+  const suppressPosterText = Boolean(rowData?.suppressPosterText);
+  const collectionSeed = rowData?.rowKind === "collection"
+    ? {
+      ...(item || {}),
+      collectionId: item?.collectionId || rowData?.collectionId || rowData?.collection?.id,
+      collectionTitle: item?.collectionTitle || rowData?.collectionTitle || rowData?.collection?.title
+    }
+    : item;
+  const collectionItem = rowData?.rowKind === "collection"
+    ? normalizeCollectionFolderItem(collectionSeed, rowData?.collection || null)
+    : (isCollectionFolderItem(item) ? normalizeCollectionFolderItem(item) : null);
   if (collectionItem) {
     const visualSrc = firstNonEmpty(collectionItem.poster, collectionItem.coverImageUrl, collectionItem.backdrop);
     const subtitle = buildPosterSubtitle(collectionItem, layoutMode);
-    const shapeClass = " is-collection-landscape";
+    const shapeClass = " is-landscape is-collection-landscape";
     const focusGifOverlay = collectionItem.focusGifEnabled && collectionItem.focusGifUrl
       ? `<img class="home-poster-focus-gif" data-src="${escapeAttribute(collectionItem.focusGifUrl)}" alt="" aria-hidden="true" />`
       : "";
@@ -1664,7 +1710,7 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
   const landscapeClass = useLandscapePoster ? " is-landscape" : "";
   const focusableClass = isLoading ? "" : " focusable";
   const loadingClass = isLoading ? " home-poster-card-loading" : "";
-  const shouldShowLabels = showLabels && !isLoading;
+  const shouldShowLabels = showLabels && !isLoading && !suppressPosterText;
   const titleWidths = [116, 128, 104, 132, 120, 140, 110, 124, 136, 112];
   const subtitleWidths = [82, 96, 74, 90, 88, 100, 80, 94, 86, 92];
   const safeIndex = Math.max(0, Number(itemIndex) || 0);
@@ -1695,7 +1741,7 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
       ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" loading="lazy" alt="${escapeAttribute(normalized.name || "content")}" />`
       : `<div class="home-poster-expanded-title">${escapeHtml(normalized.name || "Untitled")}</div>`}
         </div>
-        ${(!isLoading && useLandscapePoster) ? `
+        ${(!isLoading && useLandscapePoster && !suppressPosterText) ? `
           <div class="home-poster-landscape-copy" aria-hidden="true">
             ${normalized.logo
       ? `<img class="home-poster-landscape-logo" src="${escapeAttribute(normalized.logo)}" decoding="async" loading="lazy" alt="" />`
@@ -1704,10 +1750,12 @@ function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, showLabels 
           </div>
         ` : ""}
       </div>
-      <div class="home-poster-expanded-copy">
-        ${(!isLoading && expandedMeta) ? `<div class="home-poster-expanded-meta">${escapeHtml(expandedMeta)}</div>` : ""}
-        ${(!isLoading && normalized.description) ? `<div class="home-poster-expanded-description">${escapeHtml(normalized.description)}</div>` : ""}
-      </div>
+      ${suppressPosterText ? "" : `
+        <div class="home-poster-expanded-copy">
+          ${(!isLoading && expandedMeta) ? `<div class="home-poster-expanded-meta">${escapeHtml(expandedMeta)}</div>` : ""}
+          ${(!isLoading && normalized.description) ? `<div class="home-poster-expanded-description">${escapeHtml(normalized.description)}</div>` : ""}
+        </div>
+      `}
       ${shouldShowLabels ? `
         <div class="home-poster-copy">
           <div class="home-poster-title">${escapeHtml(normalized.name || "Untitled")}</div>
@@ -2541,6 +2589,7 @@ export const HomeScreen = {
     const descriptionNode = heroNode.querySelector(".home-hero-description");
     if (descriptionNode) {
       descriptionNode.textContent = display.description || " ";
+      descriptionNode.classList.toggle("is-empty", !display.description);
     }
     this.scheduleHomeTruncationUpdate({ scope: heroNode });
     this.syncCollectionHeroMedia(hero);
@@ -2976,7 +3025,7 @@ export const HomeScreen = {
     if (!node?.matches?.(".home-poster-card.focusable")) {
       return null;
     }
-    if (String(node.dataset.action || "") === "openCollectionFolder") {
+    if (this.resolveCollectionFolderTargetFromNode(node)) {
       return null;
     }
     return normalizeCatalogItem({
@@ -3061,6 +3110,7 @@ export const HomeScreen = {
 
   isPosterHoldTarget(node) {
     return Boolean(node?.matches?.(".home-poster-card.focusable"))
+      && !this.resolveCollectionFolderTargetFromNode(node)
       && String(node?.dataset?.action || "") === "openDetail";
   },
 
@@ -3555,8 +3605,53 @@ export const HomeScreen = {
     return this.layoutMode === "modern" && Boolean(node?.classList?.contains("home-poster-card"));
   },
 
+  resolveCollectionFolderTargetFromNode(node) {
+    if (!(node instanceof HTMLElement)) {
+      return null;
+    }
+    const directCollectionId = String(node.dataset.collectionId || "").trim();
+    const directFolderId = String(node.dataset.folderId || "").trim();
+    if (directCollectionId && directFolderId) {
+      return {
+        collectionId: directCollectionId,
+        folderId: directFolderId
+      };
+    }
+
+    const itemId = String(node.dataset.itemId || "").trim();
+    const itemType = String(node.dataset.itemType || "").trim().toLowerCase();
+    const encodedMatch = itemType === "collection_folder"
+      ? itemId.match(/^collection:([^:]+):(.+)$/i)
+      : null;
+    if (encodedMatch?.[1] && encodedMatch?.[2]) {
+      return {
+        collectionId: encodedMatch[1],
+        folderId: encodedMatch[2]
+      };
+    }
+
+    const rowIndex = Number(node.dataset.rowIndex || -1);
+    const itemIndex = Number(node.dataset.itemIndex || -1);
+    if (!Number.isFinite(rowIndex) || rowIndex < 0 || !Number.isFinite(itemIndex) || itemIndex < 0) {
+      return null;
+    }
+    const row = this.rows?.[rowIndex] || null;
+    if (row?.rowKind !== "collection") {
+      return null;
+    }
+    const item = row?.result?.data?.items?.[itemIndex] || null;
+    const normalized = normalizeCollectionFolderItem(item, row.collection || null);
+    if (!normalized?.collectionId || !normalized?.folderId) {
+      return null;
+    }
+    return {
+      collectionId: normalized.collectionId,
+      folderId: normalized.folderId
+    };
+  },
+
   isCollectionFolderNode(node) {
-    return Boolean(node?.matches?.('.home-poster-card[data-action="openCollectionFolder"]'));
+    return Boolean(this.resolveCollectionFolderTargetFromNode(node));
   },
 
   hydrateCollectionFocusGif(node, active = false) {
@@ -3576,7 +3671,10 @@ export const HomeScreen = {
   },
 
   syncFocusedCollectionCardState() {
-    Array.from(this.container?.querySelectorAll('.home-poster-card[data-action="openCollectionFolder"]') || []).forEach((node) => {
+    Array.from(this.container?.querySelectorAll('.home-poster-card') || []).forEach((node) => {
+      if (!this.isCollectionFolderNode(node)) {
+        return;
+      }
       this.hydrateCollectionFocusGif(node, false);
     });
   },
@@ -5790,6 +5888,7 @@ export const HomeScreen = {
       ? " home-modern-landscape-posters"
       : "";
     const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}`;
+    const sizingStyle = this.layoutMode === "modern" ? buildModernHomeSizingStyle(this.layoutPrefs) : "";
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
     const showCatalogTypeSuffix = this.layoutPrefs?.catalogTypeSuffixEnabled !== false;
@@ -5872,7 +5971,7 @@ export const HomeScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="home-shell home-screen-shell ${layoutClass}">
+      <div class="home-shell home-screen-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
         ${renderRootSidebar({
       selectedRoute: "home",
       profile: this.sidebarProfile,
@@ -6463,7 +6562,7 @@ export const HomeScreen = {
   },
 
   openDetailFromNode(node) {
-    if (String(node?.dataset?.action || "") === "openCollectionFolder") {
+    if (this.resolveCollectionFolderTargetFromNode(node)) {
       this.openCollectionFolderFromNode(node);
       return;
     }
@@ -6479,8 +6578,9 @@ export const HomeScreen = {
   },
 
   openCollectionFolderFromNode(node) {
-    const collectionId = String(node?.dataset?.collectionId || "").trim();
-    const folderId = String(node?.dataset?.folderId || "").trim();
+    const target = this.resolveCollectionFolderTargetFromNode(node);
+    const collectionId = String(target?.collectionId || "").trim();
+    const folderId = String(target?.folderId || "").trim();
     if (!collectionId || !folderId) {
       return;
     }
@@ -6744,6 +6844,7 @@ export const HomeScreen = {
               rowIndex,
               startIndex + i,
               rowData.type || "movie",
+              rowData,
               showPosterLabels,
               "modern",
               false,
