@@ -98,6 +98,39 @@ function formatCatalogRowTitle(catalogName, addonName, type) {
   return endsWithType ? base : `${base} - ${typeLabel}`;
 }
 
+function catalogSupportsExtra(catalog = {}, name = "") {
+  const target = String(name || "").trim().toLowerCase();
+  if (!target) return false;
+  return Array.isArray(catalog.extra) && catalog.extra.some((entry) =>
+    String(entry?.name || "").trim().toLowerCase() === target
+  );
+}
+
+function isSearchableCatalogType(type) {
+  const normalized = String(type || "").trim().toLowerCase();
+  return normalized === "movie" || normalized === "series" || normalized === "tv";
+}
+
+function buildSearchTargets(addons = []) {
+  const targets = [];
+  addons.forEach((addon) => {
+    (addon.catalogs || []).forEach((catalog) => {
+      if (!catalogSupportsExtra(catalog, "search")) return;
+      if (!isSearchableCatalogType(catalog.apiType)) return;
+      targets.push({
+        addonBaseUrl: addon.baseUrl,
+        addonId: addon.id,
+        addonName: addon.displayName,
+        catalogId: catalog.id,
+        catalogName: catalog.name,
+        type: catalog.apiType,
+        supportsSkip: catalogSupportsExtra(catalog, "skip")
+      });
+    });
+  });
+  return targets;
+}
+
 function formatDateLabel(item = {}) {
   const candidates = [
     item.released,
@@ -414,9 +447,11 @@ export const SearchScreen = {
     const sections = [];
     addons.forEach((addon) => {
       addon.catalogs.forEach((catalog) => {
-        const requiresSearch = (catalog.extra || []).some((extra) => extra.name === "search");
+        const requiresSearch = Array.isArray(catalog.extra) && catalog.extra.some((extra) =>
+          String(extra?.name || "").trim().toLowerCase() === "search" && Boolean(extra?.isRequired)
+        );
         if (requiresSearch) return;
-        if (catalog.apiType !== "movie" && catalog.apiType !== "series" && catalog.apiType !== "tv") return;
+        if (!isSearchableCatalogType(catalog.apiType)) return;
         sections.push({
           addonBaseUrl: addon.baseUrl,
           addonId: addon.id,
@@ -477,25 +512,10 @@ export const SearchScreen = {
 
   async searchRows(query) {
     const addons = await addonRepository.getInstalledAddons();
-    const searchableCatalogs = [];
-    addons.forEach((addon) => {
-      addon.catalogs.forEach((catalog) => {
-        const requiresSearch = (catalog.extra || []).some((extra) => extra.name === "search");
-        if (!requiresSearch) return;
-        if (catalog.apiType !== "movie" && catalog.apiType !== "series" && catalog.apiType !== "tv") return;
-        searchableCatalogs.push({
-          addonBaseUrl: addon.baseUrl,
-          addonId: addon.id,
-          addonName: addon.displayName,
-          catalogId: catalog.id,
-          catalogName: catalog.name,
-          type: catalog.apiType
-        });
-      });
-    });
+    const searchableCatalogs = buildSearchTargets(addons);
 
     const responses = await Promise.all(
-      searchableCatalogs.slice(0, 14).map(async (catalog) => {
+      searchableCatalogs.map(async (catalog) => {
         try {
           const result = await withTimeout(
             catalogRepository.getCatalog({
@@ -507,7 +527,7 @@ export const SearchScreen = {
               type: catalog.type,
               skip: 0,
               extraArgs: { search: query },
-              supportsSkip: true,
+              supportsSkip: catalog.supportsSkip,
             }),
             3500,
             { status: "error", message: "timeout" },
