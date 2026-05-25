@@ -5570,6 +5570,10 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-meta-enriching .home-modern-hero-copy {
+  visibility: hidden;
+}
+
 .home-screen-shell.home-layout-modern .home-hero-logo {
   width: min(100%, var(--modern-hero-logo-max-width));
   max-width: min(100%, var(--modern-hero-logo-max-width));
@@ -5636,6 +5640,8 @@ button:focus-visible {
   font-size: var(--modern-hero-meta-size);
   line-height: 1.25;
   font-weight: 500;
+  opacity: 1;
+  transition: opacity 480ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-group {
@@ -5716,12 +5722,20 @@ button:focus-visible {
   font-size: var(--modern-hero-description-size);
   line-height: 1.35;
   letter-spacing: 0.5px;
+  opacity: 1;
+  transition: opacity 480ms ease;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active + .home-modern-hero-copy .home-modern-hero-meta-line,
+.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active + .home-modern-hero-copy .home-modern-hero-secondary,
+.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active + .home-modern-hero-copy .home-hero-description {
+  opacity: 0;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line .home-hero-imdb,
 .home-screen-shell.home-layout-modern .home-modern-hero-secondary .home-hero-imdb {
   gap: 10px;
-  color: inherit;
+  color: #b3b3b3;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line .home-hero-imdb img,
