@@ -213,9 +213,11 @@ function renderModernHeroMarkup({
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}">
         <div class="home-modern-hero-media">
           <div class="home-hero-backdrop-wrap">
-          ${display.backdrop
-              ? `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}" alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" />`
-              : '<div class="home-hero-backdrop placeholder"></div>'}
+          <img class="home-hero-backdrop${display.backdrop ? "" : " placeholder"}"
+               ${display.backdrop ? `src="${escapeAttribute(display.backdrop)}"` : ""}
+               alt="${escapeAttribute(display.title)}"
+               decoding="async"
+               fetchpriority="high" />
           </div>
           <div class="home-hero-trailer-layer"></div>
         </div>

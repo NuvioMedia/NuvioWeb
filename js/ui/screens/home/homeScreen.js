@@ -64,6 +64,7 @@ const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
 const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
+const HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS = 400;
 const CW_META_TIMEOUT_MS = 1800;
 const CW_META_TIMEOUT_TV_MS = 4200;
 const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
@@ -371,6 +372,190 @@ function shouldEnrichModernHero(hero) {
     return false;
   }
   return true;
+}
+
+function preloadImageSource(src) {
+  const normalized = String(src || "").trim();
+  if (!normalized || typeof Image === "undefined") {
+    return Promise.resolve(false);
+  }
+  return new Promise((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const finish = (loaded) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve(Boolean(loaded));
+    };
+    image.onload = () => finish(true);
+    image.onerror = () => finish(false);
+    image.decoding = "async";
+    image.src = normalized;
+    if (image.complete) {
+      finish(Number(image.naturalWidth || 0) > 0);
+    }
+  });
+}
+
+function animateModernHeroBackdropSwap(backdrop, nextSrc, nextAlt = "") {
+  if (!(backdrop instanceof HTMLImageElement)) {
+    return;
+  }
+
+  const normalizedSrc = String(nextSrc || "").trim();
+  const normalizedAlt = String(nextAlt || "featured").trim() || "featured";
+  const currentSrc = String(backdrop.getAttribute("src") || "").trim();
+  const token = Number(backdrop.heroBackdropTransitionToken || 0) + 1;
+  backdrop.heroBackdropTransitionToken = token;
+
+  const clearGhosts = () => {
+    backdrop.parentElement?.querySelectorAll?.(".home-hero-backdrop-transition-ghost")?.forEach((node) => node.remove());
+  };
+
+  const finalize = () => {
+    if (Number(backdrop.heroBackdropTransitionToken || 0) !== token) {
+      return;
+    }
+    backdrop.classList.remove("home-hero-backdrop-transition-enter", "is-visible");
+    clearGhosts();
+  };
+
+  if (!normalizedSrc) {
+    finalize();
+    backdrop.removeAttribute("src");
+    backdrop.setAttribute("alt", normalizedAlt);
+    backdrop.classList.add("placeholder");
+    return;
+  }
+
+  if (currentSrc === normalizedSrc) {
+    backdrop.setAttribute("alt", normalizedAlt);
+    backdrop.classList.remove("placeholder");
+    return;
+  }
+
+  preloadImageSource(normalizedSrc).then((loaded) => {
+    if (Number(backdrop.heroBackdropTransitionToken || 0) !== token) {
+      return;
+    }
+
+    if (!loaded) {
+      finalize();
+      backdrop.setAttribute("src", normalizedSrc);
+      backdrop.setAttribute("alt", normalizedAlt);
+      backdrop.classList.remove("placeholder");
+      return;
+    }
+
+    clearGhosts();
+    const parent = backdrop.parentElement;
+    let ghost = null;
+    if (parent && currentSrc) {
+      ghost = backdrop.cloneNode(false);
+      ghost.classList.add("home-hero-backdrop-transition-ghost");
+      parent.insertBefore(ghost, backdrop);
+    }
+
+    backdrop.classList.add("home-hero-backdrop-transition-enter");
+    backdrop.classList.remove("placeholder");
+    backdrop.setAttribute("src", normalizedSrc);
+    backdrop.setAttribute("alt", normalizedAlt);
+
+    requestAnimationFrame(() => {
+      if (Number(backdrop.heroBackdropTransitionToken || 0) !== token) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (Number(backdrop.heroBackdropTransitionToken || 0) !== token) {
+          return;
+        }
+        backdrop.classList.add("is-visible");
+        ghost?.classList?.add("is-fading-out");
+        setTimeout(() => {
+          finalize();
+        }, HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS);
+      });
+    });
+  });
+}
+
+function animateModernHeroLogoSwap(logoNode, nextSrc, nextAlt = "") {
+  if (!(logoNode instanceof HTMLImageElement)) {
+    return;
+  }
+
+  const normalizedSrc = String(nextSrc || "").trim();
+  const normalizedAlt = String(nextAlt || "logo").trim() || "logo";
+  const currentSrc = String(logoNode.getAttribute("src") || "").trim();
+  const token = Number(logoNode.heroLogoTransitionToken || 0) + 1;
+  logoNode.heroLogoTransitionToken = token;
+
+  const clearGhosts = () => {
+    logoNode.parentElement?.querySelectorAll?.(".home-hero-logo-transition-ghost")?.forEach((node) => node.remove());
+  };
+
+  const finalize = () => {
+    if (Number(logoNode.heroLogoTransitionToken || 0) !== token) {
+      return;
+    }
+    logoNode.classList.remove("home-hero-logo-transition-enter", "is-visible");
+    clearGhosts();
+  };
+
+  if (!normalizedSrc) {
+    finalize();
+    logoNode.remove();
+    return;
+  }
+
+  if (currentSrc === normalizedSrc) {
+    logoNode.setAttribute("alt", normalizedAlt);
+    return;
+  }
+
+  preloadImageSource(normalizedSrc).then((loaded) => {
+    if (Number(logoNode.heroLogoTransitionToken || 0) !== token) {
+      return;
+    }
+
+    if (!loaded) {
+      finalize();
+      logoNode.setAttribute("src", normalizedSrc);
+      logoNode.setAttribute("alt", normalizedAlt);
+      return;
+    }
+
+    clearGhosts();
+    const parent = logoNode.parentElement;
+    let ghost = null;
+    if (parent && currentSrc) {
+      ghost = logoNode.cloneNode(false);
+      ghost.classList.add("home-hero-logo-transition-ghost");
+      parent.insertBefore(ghost, logoNode);
+    }
+
+    logoNode.classList.add("home-hero-logo-transition-enter");
+    logoNode.setAttribute("src", normalizedSrc);
+    logoNode.setAttribute("alt", normalizedAlt);
+
+    requestAnimationFrame(() => {
+      if (Number(logoNode.heroLogoTransitionToken || 0) !== token) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (Number(logoNode.heroLogoTransitionToken || 0) !== token) {
+          return;
+        }
+        logoNode.classList.add("is-visible");
+        ghost?.classList?.add("is-fading-out");
+        setTimeout(() => {
+          finalize();
+        }, HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS);
+      });
+    });
+  });
 }
 
 function parseRuntimeMinutes(value) {
@@ -2520,7 +2705,15 @@ export const HomeScreen = {
     const backdrop = heroNode.querySelector(".home-hero-backdrop");
     if (backdrop) {
       const src = display.backdrop || "";
-      if (src) {
+      if (this.layoutMode === "modern" && backdrop instanceof HTMLImageElement) {
+        const shouldFreezeBackdrop = Boolean(hero?.heroMetaEnriching)
+          && String(backdrop.getAttribute("src") || "").trim();
+        if (!shouldFreezeBackdrop) {
+          animateModernHeroBackdropSwap(backdrop, src, display.title || "featured");
+        } else {
+          backdrop.setAttribute("alt", display.title || "featured");
+        }
+      } else if (src) {
         backdrop.setAttribute("src", src);
         backdrop.setAttribute("alt", display.title || "featured");
         backdrop.classList.remove("placeholder");
@@ -2534,10 +2727,14 @@ export const HomeScreen = {
     const brandNode = heroNode.querySelector(".home-hero-brand");
     if (display.logo) {
       if (logoNode) {
-        logoNode.setAttribute("src", display.logo);
-        logoNode.setAttribute("alt", display.title || "logo");
+        animateModernHeroLogoSwap(logoNode, display.logo, display.title || "logo");
       } else if (brandNode) {
-        brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
+        brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo home-hero-logo-transition-enter" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
+        const insertedLogo = brandNode.querySelector(".home-hero-logo");
+        requestAnimationFrame(() => {
+          insertedLogo?.classList?.add("is-visible");
+          setTimeout(() => insertedLogo?.classList?.remove("home-hero-logo-transition-enter", "is-visible"), HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS);
+        });
       }
     } else if (logoNode) {
       logoNode.remove();

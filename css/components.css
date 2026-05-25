@@ -5403,6 +5403,24 @@ button:focus-visible {
   transition: opacity 480ms ease;
 }
 
+.home-screen-shell.home-layout-modern .home-hero-backdrop.home-hero-backdrop-transition-enter {
+  opacity: 0;
+  transition-duration: 400ms;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-backdrop.home-hero-backdrop-transition-enter.is-visible {
+  opacity: 1;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-backdrop-transition-ghost {
+  opacity: 1;
+  transition: opacity 400ms ease;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-backdrop-transition-ghost.is-fading-out {
+  opacity: 0;
+}
+
 .home-screen-shell.home-layout-modern .home-hero-trailer-layer {
   position: absolute;
   inset: 0;
@@ -5466,8 +5484,29 @@ button:focus-visible {
   object-position: left top;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-meta-enriching .home-modern-hero-copy {
-  visibility: hidden;
+.home-screen-shell.home-layout-modern .home-hero-logo {
+  transition: opacity 400ms ease;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-logo.home-hero-logo-transition-enter {
+  opacity: 0;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-logo.home-hero-logo-transition-enter.is-visible {
+  opacity: 1;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-logo-transition-ghost {
+  position: absolute;
+  left: 0;
+  top: 0;
+  opacity: 1;
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+.home-screen-shell.home-layout-modern .home-hero-logo-transition-ghost.is-fading-out {
+  opacity: 0;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-title-text {
@@ -5482,6 +5521,7 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-hero-brand {
+  position: relative;
   flex: 0 0 auto;
   gap: 16px;
   width: 100%;
@@ -5586,6 +5626,7 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line .home-hero-imdb,
 .home-screen-shell.home-layout-modern .home-modern-hero-secondary .home-hero-imdb {
   gap: 10px;
+  color: inherit;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line .home-hero-imdb img,
