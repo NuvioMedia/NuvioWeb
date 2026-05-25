@@ -697,11 +697,43 @@ export const DiscoverScreen = {
     this.syncOpenPickerScroll();
   },
 
+  applyOpenPickerOptionFocus() {
+    if (!this.openPicker) {
+      return false;
+    }
+    const options = Array.from(this.container?.querySelectorAll(`.library-picker.open .library-picker-option.focusable[data-picker="${this.openPicker}"]`) || []);
+    if (!options.length) {
+      return false;
+    }
+    const focusIndex = Math.max(0, Math.min(options.length - 1, Number(this.pickerOptionIndex || 0)));
+    options.forEach((node, index) => node.classList.toggle("focused", index === focusIndex));
+    const target = options[focusIndex] || options[0] || null;
+    if (!target) {
+      return false;
+    }
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => {
+      if (node !== target) node.classList.remove("focused");
+    });
+    target.classList.add("focused");
+    focusWithoutAutoScroll(target);
+    this.syncOpenPickerScroll();
+    return true;
+  },
+
+  isFilterAction(action) {
+    return Boolean(this.getKindFromFilterAction(action));
+  },
+
   selectCurrentPickerOption() {
     if (!this.openPicker) return;
     const kind = this.openPicker;
     const options = this.getPickerOptions(kind);
     const option = options[this.pickerOptionIndex] || null;
+    this.lastFocusedAction = kind === "type"
+      ? "discoverFilterType"
+      : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
+    this.lastFocusedKey = null;
+    this.lastFocusedDiscoverItemId = "";
     this.openPicker = null;
     this.render();
     if (option) {
@@ -952,12 +984,20 @@ export const DiscoverScreen = {
   },
 
   restoreContentFocus({ scrollMode = "center" } = {}) {
+    if (this.openPicker && this.applyOpenPickerOptionFocus()) {
+      return true;
+    }
     const selector = this.lastFocusedAction && this.lastFocusedAction !== "openDetail"
       ? `.focusable[data-action="${this.lastFocusedAction}"]`
       : "";
-    const target = (this.lastFocusedKey
+    const filterTarget = this.isFilterAction(this.lastFocusedAction) && selector
+      ? this.container?.querySelector(selector)
+      : null;
+    const posterTarget = this.lastFocusedKey
       ? this.container?.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
-      : null)
+      : null;
+    const target = filterTarget
+      || posterTarget
       || (selector ? this.container?.querySelector(selector) : null)
       || (this.lastFocusedDiscoverItemId
         ? this.container?.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
@@ -1025,8 +1065,9 @@ export const DiscoverScreen = {
     this.layoutPrefs = LayoutPreferences.get();
     this.sidebarExpanded = false;
     const currentFocused = this.container?.querySelector(".focusable.focused");
-    if (currentFocused?.dataset?.action) {
-      this.lastFocusedAction = String(currentFocused.dataset.action);
+    const currentFocusedAction = String(currentFocused?.dataset?.action || "");
+    if (currentFocusedAction === "openDetail" || this.isFilterAction(currentFocusedAction)) {
+      this.lastFocusedAction = currentFocusedAction;
     }
 
     const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
