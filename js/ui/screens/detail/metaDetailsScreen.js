@@ -786,6 +786,40 @@ function formatCompactDate(value = "") {
   });
 }
 
+function formatEpisodeCardDate(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const localDateMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  const parsed = localDateMatch && !raw.includes("T")
+    ? new Date(Number(localDateMatch[1]), Number(localDateMatch[2]) - 1, Number(localDateMatch[3]))
+    : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  return parsed.toLocaleDateString(undefined, {
+    month: "long",
+    day: "numeric",
+    year: "numeric"
+  });
+}
+
+function renderEpisodeRuntimeLabel(runtimeMinutes = 0) {
+  const runtime = formatRuntimeMinutes(runtimeMinutes);
+  if (!runtime) {
+    return "";
+  }
+  return `
+    <span class="series-episode-runtime">
+      <svg class="series-episode-runtime-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 10.1 3.3 3.3-1.4 1.4L11 12.9V6h2v6.1Z"></path>
+      </svg>
+      <span>${escapeHtml(runtime)}</span>
+    </span>
+  `;
+}
+
 function formatPlaybackTime(value = 0) {
   const totalSeconds = Math.max(0, Math.floor(Number(value || 0)));
   const hours = Math.floor(totalSeconds / 3600);
@@ -2420,9 +2454,10 @@ export const MetaDetailsScreen = {
       const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
       const isWatched = this.watchedEpisodeKeys.has(`${episode.season}:${episode.episode}`);
       const rating = this.seriesRatingsBySeason?.[episode.season]?.find((entry) => Number(entry?.episode || 0) === Number(episode.episode || 0))?.rating ?? null;
-      const dateLabel = formatCompactDate(episode.released || "");
+      const dateLabel = formatEpisodeCardDate(episode.released || "");
+      const isUnavailable = episode.available === false;
       const metaParts = [
-        episode.runtimeMinutes > 0 ? `<span>${escapeHtml(formatRuntimeMinutes(episode.runtimeMinutes))}</span>` : "",
+        episode.runtimeMinutes > 0 ? renderEpisodeRuntimeLabel(episode.runtimeMinutes) : "",
         rating != null ? `<span class="series-episode-rating-inline">${renderImdbBadge(String(Number(rating).toFixed(1)))}</span>` : "",
         dateLabel ? `<span class="series-episode-date">${escapeHtml(dateLabel)}</span>` : ""
       ].filter(Boolean).join("");
@@ -2433,6 +2468,7 @@ export const MetaDetailsScreen = {
           <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail.replace(/'/g, "%27")}')"` : ""}>
             <div class="series-episode-overlay"></div>
             ${isWatched ? `<div class="series-episode-status complete">&#10003;</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
+            ${isUnavailable ? `<div class="series-episode-unavailable">${escapeHtml(t("episodes_unavailable", {}, "Unavailable").toUpperCase())}</div>` : ""}
             <div class="series-episode-copy">
               <div class="series-episode-badge">${escapeHtml(t("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
               <div class="series-episode-title">${escapeHtml(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
@@ -3750,11 +3786,11 @@ export const MetaDetailsScreen = {
     }
     if (action === "setCommentsMode") {
       const mode = String(target.dataset.commentsMode || "title") === "episode" ? "episode" : "title";
-      return { selector: `.detail-comments-mode[data-comments-mode="${mode}"]` };
+      return { selector: `.detail-comments-mode[data-comments-mode="${mode}"]`, preserveVerticalScroll: true };
     }
     if (action === "openComment") {
       const index = Number(target.dataset.commentIndex || 0);
-      return { selector: `.detail-comment-card[data-comment-index="${index}"]` };
+      return { selector: `.detail-comment-card[data-comment-index="${index}"]`, preserveVerticalScroll: true };
     }
     if (action === "openSharedTrailer") {
       const index = Number(target.dataset.trailerIndex || 0);
@@ -3800,7 +3836,10 @@ export const MetaDetailsScreen = {
     if (!(target instanceof HTMLElement)) {
       return false;
     }
-    return this.focusInList([target], 0, { animated: false });
+    return this.focusInList([target], 0, {
+      animated: false,
+      preserveVerticalScroll: Boolean(descriptor.preserveVerticalScroll)
+    });
   },
 
   isPerformanceConstrained() {

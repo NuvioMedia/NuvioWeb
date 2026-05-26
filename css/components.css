@@ -12157,6 +12157,29 @@ button:focus-visible {
   color: var(--detail-text-secondary);
 }
 
+.series-episode-runtime {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.series-episode-runtime-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  fill: currentColor;
+}
+
+.series-episode-date {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .series-episode-meta .series-imdb-badge {
   height: auto;
   padding: 0;
@@ -12208,6 +12231,20 @@ button:focus-visible {
 .series-episode-status.idle {
   border: 2px dashed rgba(179, 179, 179, 0.9);
   box-sizing: border-box;
+}
+
+.series-episode-unavailable {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  padding: 5px 10px;
+  border-radius: 9px;
+  background: rgba(93, 64, 55, 0.8);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: clamp(11px, 0.75vw, 14px);
+  line-height: 1.35;
+  letter-spacing: 0.09em;
+  font-weight: 600;
 }
 
 .series-insight-section {
@@ -14264,7 +14301,9 @@ button:focus-visible {
 .series-episode-badge {
   padding: 10px 20px;
   border-radius: 16px;
-  font-size: 24px;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: 2px;
 }
 
 .series-episode-title {
@@ -14281,7 +14320,26 @@ button:focus-visible {
 .series-episode-meta {
   gap: 24px;
   min-height: 32px;
-  font-size: 24px;
+  font-size: 20px;
+  line-height: 28px;
+}
+
+.series-episode-runtime {
+  gap: 8px;
+}
+
+.series-episode-runtime-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.series-episode-meta .series-imdb-badge {
+  font-size: 20px;
+}
+
+.series-episode-meta .series-imdb-badge img {
+  width: 56px;
+  height: 28px;
 }
 
 .series-episode-progress {
@@ -14298,6 +14356,16 @@ button:focus-visible {
 
 .series-episode-status.complete {
   font-size: 40px;
+}
+
+.series-episode-unavailable {
+  top: 32px;
+  right: 32px;
+  padding: 10px 20px;
+  border-radius: 16px;
+  font-size: 20px;
+  line-height: 28px;
+  letter-spacing: 2px;
 }
 
 .series-insight-tabs {
