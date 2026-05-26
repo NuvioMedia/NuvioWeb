@@ -238,6 +238,20 @@ function normalizeTrailerTargetForWeb(value) {
     : "hero_media";
 }
 
+function normalizeContinueWatchingSortModeForAndroid(value) {
+  const normalized = String(value || "default").trim().toLowerCase();
+  return normalized === "streaming_style" || normalized === "streaming-style" || normalized === "streamingstyle"
+    ? "STREAMING_STYLE"
+    : "DEFAULT";
+}
+
+function normalizeContinueWatchingSortModeForWeb(value) {
+  const normalized = String(value || "default").trim().toLowerCase();
+  return normalized === "streaming_style" || normalized === "streaming-style" || normalized === "streamingstyle"
+    ? "streaming_style"
+    : "default";
+}
+
 function normalizeTmdbLanguageForAndroid(value) {
   const normalized = String(value || "en-US").trim();
   if (!normalized) {
@@ -339,7 +353,12 @@ const FEATURE_ADAPTERS = {
         poster_card_width_dp: Math.max(72, Number(layout.posterCardWidthDp ?? 126) || 126),
         poster_card_corner_radius_dp: Math.max(0, Number(layout.posterCardCornerRadiusDp ?? 12) || 12),
         detail_page_trailer_button_enabled: Boolean(layout.detailPageTrailerButtonEnabled),
-        hide_unreleased_content: Boolean(layout.hideUnreleasedContent)
+        hide_unreleased_content: Boolean(layout.hideUnreleasedContent),
+        use_episode_thumbnails_in_cw: layout.useEpisodeThumbnailsInCw !== false,
+        blur_continue_watching_next_up: Boolean(layout.blurContinueWatchingNextUp),
+        show_unaired_next_up: layout.showUnairedNextUp !== false,
+        next_up_from_furthest_episode: layout.nextUpFromFurthestEpisode !== false,
+        continue_watching_sort_mode: normalizeContinueWatchingSortModeForAndroid(layout.continueWatchingSortMode)
       };
     },
     project(rawFeature = {}) {
@@ -365,7 +384,11 @@ const FEATURE_ADAPTERS = {
         "focused_poster_backdrop_trailer_enabled",
         "focused_poster_backdrop_trailer_muted",
         "detail_page_trailer_button_enabled",
-        "hide_unreleased_content"
+        "hide_unreleased_content",
+        "use_episode_thumbnails_in_cw",
+        "blur_continue_watching_next_up",
+        "show_unaired_next_up",
+        "next_up_from_furthest_episode"
       ].forEach((key) => {
         if (booleanOrNull(raw[key]) != null) {
           projected[key] = Boolean(raw[key]);
@@ -376,6 +399,9 @@ const FEATURE_ADAPTERS = {
       }
       if (stringOrNull(raw.focused_poster_backdrop_trailer_playback_target)) {
         projected.focused_poster_backdrop_trailer_playback_target = normalizeTrailerTargetForAndroid(raw.focused_poster_backdrop_trailer_playback_target);
+      }
+      if (stringOrNull(raw.continue_watching_sort_mode)) {
+        projected.continue_watching_sort_mode = normalizeContinueWatchingSortModeForAndroid(raw.continue_watching_sort_mode);
       }
       if (numberOrNull(raw.poster_card_width_dp) != null) {
         projected.poster_card_width_dp = Math.max(72, Math.trunc(Number(raw.poster_card_width_dp)));
@@ -444,6 +470,21 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.hide_unreleased_content) != null) {
         partial.hideUnreleasedContent = Boolean(raw.hide_unreleased_content);
+      }
+      if (booleanOrNull(raw.use_episode_thumbnails_in_cw) != null) {
+        partial.useEpisodeThumbnailsInCw = Boolean(raw.use_episode_thumbnails_in_cw);
+      }
+      if (booleanOrNull(raw.blur_continue_watching_next_up) != null) {
+        partial.blurContinueWatchingNextUp = Boolean(raw.blur_continue_watching_next_up);
+      }
+      if (booleanOrNull(raw.show_unaired_next_up) != null) {
+        partial.showUnairedNextUp = Boolean(raw.show_unaired_next_up);
+      }
+      if (booleanOrNull(raw.next_up_from_furthest_episode) != null) {
+        partial.nextUpFromFurthestEpisode = Boolean(raw.next_up_from_furthest_episode);
+      }
+      if (stringOrNull(raw.continue_watching_sort_mode)) {
+        partial.continueWatchingSortMode = normalizeContinueWatchingSortModeForWeb(raw.continue_watching_sort_mode);
       }
       if (!Object.keys(partial).length) {
         return false;

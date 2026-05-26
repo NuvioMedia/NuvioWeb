@@ -45,7 +45,7 @@ function queueWatchProgressCloudSync(delayMs = getWatchProgressSyncDebounceMs())
 
 function isSeriesType(type) {
   const normalized = String(type || "").toLowerCase();
-  return normalized === "series";
+  return normalized === "series" || normalized === "tv";
 }
 
 function matchesProgressTarget(item = {}, contentId, videoId = null) {
@@ -187,10 +187,11 @@ class WatchProgressRepository {
 
   async getRecent(limit = 30) {
     const now = Date.now();
+    const useTraktProgress = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
     const daysCap = Number(TraktSettingsStore.get().continueWatchingDaysCap || 60);
-    const cutoffMs = daysCap === 0 ? 0 : now - (daysCap * 24 * 60 * 60 * 1000);
+    const cutoffMs = !useTraktProgress || daysCap === 0 ? 0 : now - (daysCap * 24 * 60 * 60 * 1000);
     const recentItems = filterForSelectedContinueWatchingSource(WatchProgressStore.listForProfile(activeProfileId()))
-      .filter((item) => daysCap === 0 || Number(item?.updatedAt || 0) >= cutoffMs)
+      .filter((item) => cutoffMs === 0 || Number(item?.updatedAt || 0) >= cutoffMs)
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
       .slice(0, 300);
 
@@ -211,6 +212,10 @@ class WatchProgressRepository {
 
   getContinueWatchingSourceKey() {
     return `${activeProfileId()}:${selectedContinueWatchingSource()}`;
+  }
+
+  getContinueWatchingSource() {
+    return selectedContinueWatchingSource();
   }
 
   async replaceAll(items) {

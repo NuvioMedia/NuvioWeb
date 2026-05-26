@@ -22,8 +22,19 @@ const DEFAULTS = {
   modernSidebar: false,
   modernSidebarBlur: false,
   hideUnreleasedContent: false,
-  showUnairedNextUp: true
+  useEpisodeThumbnailsInCw: true,
+  blurContinueWatchingNextUp: false,
+  showUnairedNextUp: true,
+  nextUpFromFurthestEpisode: true,
+  continueWatchingSortMode: "default"
 };
+
+function normalizeContinueWatchingSortMode(value) {
+  const normalized = String(value || "default").trim().toLowerCase();
+  return normalized === "streaming_style" || normalized === "streaming-style" || normalized === "streamingstyle"
+    ? "streaming_style"
+    : "default";
+}
 
 function normalizeLayoutPreferences(value = {}) {
   const merged = {
@@ -45,7 +56,11 @@ function normalizeLayoutPreferences(value = {}) {
     posterCardWidthDp: Math.max(72, Number(merged.posterCardWidthDp ?? 126) || 126),
     posterCardCornerRadiusDp: Math.max(0, Number(merged.posterCardCornerRadiusDp ?? 12) || 12),
     detailPageTrailerButtonEnabled: Boolean(merged.detailPageTrailerButtonEnabled),
+    useEpisodeThumbnailsInCw: merged.useEpisodeThumbnailsInCw !== false,
+    blurContinueWatchingNextUp: Boolean(merged.blurContinueWatchingNextUp),
     showUnairedNextUp: merged.showUnairedNextUp !== false,
+    nextUpFromFurthestEpisode: merged.nextUpFromFurthestEpisode !== false,
+    continueWatchingSortMode: normalizeContinueWatchingSortMode(merged.continueWatchingSortMode),
     collapseSidebar: modernSidebar ? false : Boolean(merged.collapseSidebar),
     modernSidebar,
     modernSidebarBlur: modernSidebar ? Boolean(merged.modernSidebarBlur) : Boolean(merged.modernSidebarBlur)

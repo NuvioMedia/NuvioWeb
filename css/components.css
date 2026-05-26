@@ -4819,6 +4819,19 @@ button:focus-visible {
   transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
 }
 
+.home-screen-shell .home-continue-bg {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  background-position: center;
+  background-size: cover;
+}
+
+.home-screen-shell .home-continue-card-blur-next-up .home-continue-bg {
+  filter: blur(12px);
+  transform: scale(1.08);
+}
+
 .home-screen-shell .home-continue-card.focused,
 .home-screen-shell .home-continue-card.home-content-card.focused {
   border-color: transparent !important;
@@ -4835,6 +4848,7 @@ button:focus-visible {
 .home-screen-shell .home-continue-media::after {
   content: "";
   position: absolute;
+  z-index: 1;
   inset: 0;
   background: linear-gradient(180deg, transparent 0%, transparent 45%, rgba(13, 13, 13, 0.7) 78%, rgba(13, 13, 13, 0.95) 100%);
 }

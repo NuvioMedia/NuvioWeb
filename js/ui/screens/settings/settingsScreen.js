@@ -1120,6 +1120,7 @@ function createDefaultExpandedState(sectionId) {
     return {
       homeLayout: false,
       homeContent: false,
+      continueWatching: false,
       detailPage: false,
       focusedPoster: false
     };
@@ -2012,6 +2013,9 @@ export const SettingsScreen = {
     this.actionMap.set("layout:toggle:homeContent", () => {
       this.toggleExpandedSection("layout", "homeContent");
     });
+    this.actionMap.set("layout:toggle:continueWatching", () => {
+      this.toggleExpandedSection("layout", "continueWatching");
+    });
     this.actionMap.set("layout:toggle:detailPage", () => {
       this.toggleExpandedSection("layout", "detailPage");
     });
@@ -2042,6 +2046,41 @@ export const SettingsScreen = {
     });
     this.actionMap.set("layout:hideUnreleased", () => {
       LayoutPreferences.set({ hideUnreleasedContent: !LayoutPreferences.get().hideUnreleasedContent });
+    });
+    this.actionMap.set("layout:useEpisodeThumbnailsInCw", () => {
+      LayoutPreferences.set({ useEpisodeThumbnailsInCw: !LayoutPreferences.get().useEpisodeThumbnailsInCw });
+    });
+    this.actionMap.set("layout:blurContinueWatchingNextUp", () => {
+      LayoutPreferences.set({ blurContinueWatchingNextUp: !LayoutPreferences.get().blurContinueWatchingNextUp });
+    });
+    this.actionMap.set("layout:nextUpFromFurthest", () => {
+      LayoutPreferences.set({ nextUpFromFurthestEpisode: !LayoutPreferences.get().nextUpFromFurthestEpisode });
+    });
+    this.actionMap.set("layout:showUnairedNextUp", () => {
+      LayoutPreferences.set({ showUnairedNextUp: !LayoutPreferences.get().showUnairedNextUp });
+    });
+    this.actionMap.set("layout:continueWatchingSortMode", () => {
+      const options = [
+        {
+          id: "default",
+          labelKey: "settings.layout.continueWatchingSort.default",
+          label: "Default"
+        },
+        {
+          id: "streaming_style",
+          labelKey: "settings.layout.continueWatchingSort.streamingStyle",
+          label: "Streaming Style"
+        }
+      ];
+      this.openOptionDialog({
+        title: t("settings.dialogs.continueWatchingSortMode", {}, "Continue Watching Sort"),
+        options,
+        selectedId: String(model.layout.continueWatchingSortMode || "default"),
+        returnFocusKey: "layout:continueWatchingSortMode",
+        onSelect: (option) => {
+          LayoutPreferences.set({ continueWatchingSortMode: String(option.id || "default") });
+        }
+      });
     });
     this.actionMap.set("layout:posterLabels", () => {
       LayoutPreferences.set({ posterLabelsEnabled: !LayoutPreferences.get().posterLabelsEnabled });
@@ -2102,6 +2141,10 @@ export const SettingsScreen = {
     const isModernLayout = selectedLayout === "modern";
     const isModernLandscape = isModernLayout && Boolean(model.layout.modernLandscapePostersEnabled);
     const showAutoplayRow = Boolean(model.layout.focusedPosterBackdropExpandEnabled) || isModernLandscape;
+    const continueWatchingSortMode = String(model.layout.continueWatchingSortMode || "default");
+    const continueWatchingSortLabel = continueWatchingSortMode === "streaming_style"
+      ? t("settings.layout.continueWatchingSort.streamingStyle", {}, "Streaming Style")
+      : t("settings.layout.continueWatchingSort.default", {}, "Default");
 
     const homeLayoutBody = `
       <div class="settings-stack">
@@ -2176,6 +2219,41 @@ export const SettingsScreen = {
       title: t("settings.layout.hideUnreleased.title"),
       subtitle: t("settings.layout.hideUnreleased.subtitle"),
       checked: Boolean(model.layout.hideUnreleasedContent)
+    })}
+      </div>
+    `;
+
+    const continueWatchingBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+      focusKey: "layout:useEpisodeThumbnailsInCw",
+      title: t("settings.layout.useEpisodeThumbnailsInCw.title", {}, "Use Episode Thumbnails"),
+      subtitle: t("settings.layout.useEpisodeThumbnailsInCw.subtitle", {}, "Show episode artwork in Continue Watching cards."),
+      checked: model.layout.useEpisodeThumbnailsInCw !== false
+    })}
+        ${model.layout.useEpisodeThumbnailsInCw !== false ? this.renderToggleRow({
+      focusKey: "layout:blurContinueWatchingNextUp",
+      title: t("settings.layout.blurContinueWatchingNextUp.title", {}, "Blur Next Up Artwork"),
+      subtitle: t("settings.layout.blurContinueWatchingNextUp.subtitle", {}, "Blur upcoming episode artwork in Continue Watching."),
+      checked: Boolean(model.layout.blurContinueWatchingNextUp)
+    }) : ""}
+        ${this.renderToggleRow({
+      focusKey: "layout:nextUpFromFurthest",
+      title: t("settings.layout.nextUpFromFurthest.title", {}, "Up Next From Furthest Episode"),
+      subtitle: t("settings.layout.nextUpFromFurthest.subtitle", {}, "Use the highest watched episode as the seed for the next episode."),
+      checked: model.layout.nextUpFromFurthestEpisode !== false
+    })}
+        ${this.renderToggleRow({
+      focusKey: "layout:showUnairedNextUp",
+      title: t("settings.layout.showUnairedNextUp.title", {}, "Show Unaired Next Up Episodes"),
+      subtitle: t("settings.layout.showUnairedNextUp.subtitle", {}, "Allow upcoming episodes to appear in Continue Watching."),
+      checked: model.layout.showUnairedNextUp !== false
+    })}
+        ${this.renderActionRow({
+      focusKey: "layout:continueWatchingSortMode",
+      title: t("settings.layout.continueWatchingSort.title", {}, "Sort Order"),
+      subtitle: t("settings.layout.continueWatchingSort.subtitle", {}, "Choose the same Continue Watching ordering used on Android TV."),
+      value: continueWatchingSortLabel
     })}
       </div>
     `;
@@ -2263,6 +2341,13 @@ export const SettingsScreen = {
       subtitle: t("settings.layout.groups.homeContent.subtitle"),
       expanded: Boolean(expanded.homeContent),
       bodyHtml: homeContentBody
+    })}
+          ${this.renderCollapsibleRow({
+      focusKey: "layout:toggle:continueWatching",
+      title: t("settings.layout.groups.continueWatching.title", {}, "Continue Watching"),
+      subtitle: t("settings.layout.groups.continueWatching.subtitle", {}, "Configure next episodes and ordering"),
+      expanded: Boolean(expanded.continueWatching),
+      bodyHtml: continueWatchingBody
     })}
           ${this.renderCollapsibleRow({
       focusKey: "layout:toggle:detailPage",

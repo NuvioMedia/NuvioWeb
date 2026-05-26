@@ -23,6 +23,8 @@ export function renderModernHomeLayout({
   continueWatchingItems = [],
   continueWatchingLoading = false,
   continueWatchingLoadingCount = 0,
+  useEpisodeThumbnailsInCw = true,
+  blurContinueWatchingNextUp = false,
   rowItemLimit = 15,
   showHeroSection = false,
   showPosterLabels = true,
@@ -111,7 +113,9 @@ export function renderModernHomeLayout({
             ${renderContinueWatchingSection(continueWatchingItems, {
               rowKey: "continue_watching",
               loading: continueWatchingLoading,
-              loadingCount: continueWatchingLoadingCount
+              loadingCount: continueWatchingLoadingCount,
+              useEpisodeThumbnails: useEpisodeThumbnailsInCw,
+              blurNextUp: blurContinueWatchingNextUp
             })}
             <div class="home-modern-catalogs">
               ${sectionsMarkup.join("")}

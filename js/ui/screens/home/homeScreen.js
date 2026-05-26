@@ -7,6 +7,7 @@ import { watchedItemsRepository } from "../../../data/repository/watchedItemsRep
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
 import { libraryRepository, LibrarySourceMode } from "../../../data/repository/libraryRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
+import { ContinueWatchingPreferences } from "../../../data/local/continueWatchingPreferences.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { CollectionsStore, buildCollectionHomeKey } from "../../../data/local/collectionsStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
@@ -71,6 +72,7 @@ const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
 const CW_META_RETRY_TIMEOUT_MS = 8000;
 const CW_ENRICHMENT_CACHE_KEY = "homeContinueWatchingEnrichmentCache";
 const CW_ENRICHMENT_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+const CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS = 7;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -960,7 +962,7 @@ function progressFractionForContinueWatching(item = {}) {
 
 function isSeriesTypeForContinueWatching(type) {
   const normalized = String(type || "").toLowerCase();
-  return normalized === "series";
+  return normalized === "series" || normalized === "tv";
 }
 
 function isCompletedForContinueWatching(item = {}) {
@@ -986,6 +988,10 @@ function shouldTreatAsInProgressForContinueWatching(item = {}) {
 
 function episodeKey(season, episode) {
   return `${Number(season || 0)}:${Number(episode || 0)}`;
+}
+
+function episodeSortKey(season, episode) {
+  return (Number(season || 0) * 1000) + Number(episode || 0);
 }
 
 function normalizeEpisodeEntries(videos = []) {
@@ -1028,6 +1034,82 @@ function hasEpisodeAiredForContinueWatching(released) {
     return true;
   }
   return parsedTime <= Date.now();
+}
+
+function parseEpisodeReleaseDateForContinueWatching(released) {
+  const raw = String(released || "").trim();
+  if (!raw) {
+    return null;
+  }
+  const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || raw;
+  const parsedTime = Date.parse(datePortion);
+  return Number.isFinite(parsedTime) ? parsedTime : null;
+}
+
+function continueWatchingSortTimestamp(item = {}) {
+  return Number(item?.updatedAt || item?.watchedAt || 0);
+}
+
+function nextUpReleaseTimestamp(item = {}) {
+  return parseEpisodeReleaseDateForContinueWatching(firstNonEmpty(item?.released, item?.releaseInfo));
+}
+
+function sortContinueWatchingItemsForDisplay(items = [], mode = "default") {
+  const normalizedMode = String(mode || "default").trim().toLowerCase();
+  if (normalizedMode !== "streaming_style") {
+    return [...items].sort((left, right) => continueWatchingSortTimestamp(right) - continueWatchingSortTimestamp(left));
+  }
+
+  const released = [];
+  const unreleased = [];
+  (items || []).forEach((item) => {
+    if (!item?.isNextUp || item?.hasAired !== false) {
+      released.push(item);
+    } else {
+      unreleased.push(item);
+    }
+  });
+
+  released.sort((left, right) => continueWatchingSortTimestamp(right) - continueWatchingSortTimestamp(left));
+  unreleased.sort((left, right) => {
+    const leftTime = nextUpReleaseTimestamp(left);
+    const rightTime = nextUpReleaseTimestamp(right);
+    if (leftTime == null && rightTime == null) {
+      return 0;
+    }
+    if (leftTime == null) {
+      return 1;
+    }
+    if (rightTime == null) {
+      return -1;
+    }
+    return leftTime - rightTime;
+  });
+
+  return [...released, ...unreleased];
+}
+
+function shouldShowNextUpEpisodeForContinueWatching(candidate = {}, anchorSeason = null, showUnairedNextUp = true) {
+  const candidateSeason = Number(candidate?.season || 0);
+  const seedSeason = Number(anchorSeason || 0);
+  const isSeasonRollover = seedSeason > 0 && candidateSeason > 0 && candidateSeason !== seedSeason;
+  const releaseTime = parseEpisodeReleaseDateForContinueWatching(candidate?.released);
+  if (isSeasonRollover && releaseTime == null) {
+    return false;
+  }
+  if (releaseTime == null || releaseTime <= Date.now()) {
+    return true;
+  }
+  if (!showUnairedNextUp) {
+    return false;
+  }
+  if (!isSeasonRollover) {
+    return true;
+  }
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const daysUntil = Math.floor((releaseTime - todayStart.getTime()) / (24 * 60 * 60 * 1000));
+  return daysUntil <= CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS;
 }
 
 function buildProgressStatus(item) {
@@ -1192,6 +1274,31 @@ function needsContinueWatchingMetadataRefresh(items = []) {
     const normalized = normalizeContinueWatchingItem(item);
     return normalized?.contentId && (isRawContinueWatchingTitle(normalized) || !hasContinueWatchingArtwork(normalized));
   });
+}
+
+function buildNextUpSeedFromWatchedItem(item = {}) {
+  const contentId = String(item?.contentId || "").trim();
+  const contentType = String(item?.contentType || "series").trim().toLowerCase();
+  const season = Number(item?.season || 0);
+  const episode = Number(item?.episode || 0);
+  if (!contentId || !isSeriesTypeForContinueWatching(contentType) || season <= 0 || episode <= 0) {
+    return null;
+  }
+  const watchedAt = Number(item?.watchedAt || 0) || Date.now();
+  return {
+    contentId,
+    contentType,
+    videoId: item?.videoId || contentId,
+    season,
+    episode,
+    title: firstNonEmpty(item?.title, prettyId(contentId)),
+    episodeTitle: firstNonEmpty(item?.episodeTitle),
+    positionMs: 100,
+    durationMs: 100,
+    progressPercent: 100,
+    updatedAt: watchedAt,
+    source: "watched_items"
+  };
 }
 
 function continueWatchingEnrichmentCacheKey(item = {}) {
@@ -1620,24 +1727,29 @@ function renderRowHeader(title, subtitle = "") {
   `;
 }
 
-function renderContinueWatchingCard(item, index) {
+function renderContinueWatchingCard(item, index, options = {}) {
   const normalized = normalizeContinueWatchingItem(item);
   const subtitle = normalized.episodeTitle || "";
   const isNextUp = Boolean(normalized?.isNextUp);
   const hasAired = normalized?.hasAired !== false;
-  const cardImage = !isNextUp
-    ? firstNonEmpty(normalized.episodeThumbnail, normalized.backdrop, normalized.poster)
-    : (!hasAired
-      ? firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail)
-      : firstNonEmpty(normalized.thumbnail, normalized.backdrop, normalized.poster));
+  const useEpisodeThumbnails = options?.useEpisodeThumbnails !== false;
+  const blurNextUp = Boolean(options?.blurNextUp && isNextUp && useEpisodeThumbnails);
+  const cardImage = useEpisodeThumbnails
+    ? (!isNextUp
+      ? firstNonEmpty(normalized.episodeThumbnail, normalized.backdrop, normalized.poster)
+      : (!hasAired
+        ? firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail)
+        : firstNonEmpty(normalized.thumbnail, normalized.backdrop, normalized.poster)))
+    : firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail, normalized.episodeThumbnail);
   return `
-    <article class="home-content-card home-continue-card focusable"
+    <article class="home-content-card home-continue-card${blurNextUp ? " home-continue-card-blur-next-up" : ""} focusable"
              data-action="resumeProgress"
              data-cw-index="${index}"
              data-item-id="${escapeAttribute(normalized.contentId)}"
              data-item-type="${escapeAttribute(normalized.type || "movie")}"
              data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
-      <div class="home-continue-media"${cardImage ? ` style="background-image:url('${escapeAttribute(cardImage)}')"` : ""}>
+      <div class="home-continue-media">
+        ${cardImage ? `<span class="home-continue-bg" style="background-image:url('${escapeAttribute(cardImage)}')"></span>` : ""}
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || t("home.continueStatusContinue", {}, "Continue"))}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
@@ -1681,6 +1793,10 @@ export function renderContinueWatchingSection(items = [], options = {}) {
   }
   const rowKey = String(options?.rowKey || "").trim();
   const loadingCount = Math.max(1, Math.min(10, Number(options?.loadingCount || items.length || 3)));
+  const cardOptions = {
+    useEpisodeThumbnails: options?.useEpisodeThumbnails,
+    blurNextUp: options?.blurNextUp
+  };
   return `
     <section class="home-row home-row-continue"${rowKey ? ` data-row-key="${escapeAttribute(rowKey)}"` : ""}>
       <div class="home-row-head">
@@ -1688,7 +1804,7 @@ export function renderContinueWatchingSection(items = [], options = {}) {
       </div>
       <div class="home-track home-track-continue"${rowKey ? ` data-track-row-key="${escapeAttribute(rowKey)}"` : ""}>
         ${items.length
-      ? items.map((item, index) => renderContinueWatchingCard(item, index)).join("")
+      ? items.map((item, index) => renderContinueWatchingCard(item, index, cardOptions)).join("")
       : Array.from({ length: loadingCount }, (_, index) => renderContinueWatchingLoadingCard(index)).join("")}
       </div>
     </section>
@@ -3737,6 +3853,11 @@ export const HomeScreen = {
     if (!normalized?.contentId) {
       return false;
     }
+    if (normalized.isNextUp) {
+      ContinueWatchingPreferences.addDismissedNextUpKey(normalized.contentId);
+      this.pruneContinueWatchingItem(normalized);
+      return true;
+    }
     await watchProgressRepository.removeProgress(normalized.contentId, normalized.videoId || null);
     this.pruneContinueWatchingItem(normalized);
     return true;
@@ -5753,6 +5874,7 @@ export const HomeScreen = {
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
     this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
+    const includeWatchedItemNextUpSeeds = watchProgressRepository.getContinueWatchingSource?.() !== "trakt";
 
     const preserveContinueWatching = Boolean(background && this.continueWatchingDisplay?.length);
     const suppressContinueWatchingLoading = preserveContinueWatching;
@@ -5775,22 +5897,24 @@ export const HomeScreen = {
       const [allProgress, continueWatching] = await Promise.all([progressAllPromise, recentProgressPromise]);
       const allProgressItems = Array.isArray(allProgress) ? allProgress : [];
       const continueWatchingItems = Array.isArray(continueWatching) ? continueWatching : [];
-      const nextUpProgressCandidates = this.selectNextUpProgressCandidates(allProgressItems, continueWatchingItems)
-        .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
+      const watchedItems = await watchedItemsRepository.getAll(2000).catch(() => []);
+      const nextUpProgressCandidates = this.selectNextUpProgressCandidates(allProgressItems, continueWatchingItems, watchedItems, {
+        applyDaysCap: !includeWatchedItemNextUpSeeds,
+        includeProgressSeeds: !includeWatchedItemNextUpSeeds,
+        includeWatchedItemSeeds: includeWatchedItemNextUpSeeds,
+        nextUpFromFurthestEpisode: prefs.nextUpFromFurthestEpisode
+      }).slice(0, CW_MAX_NEXT_UP_LOOKUPS);
       const hasCandidates = Boolean(continueWatchingItems.length + nextUpProgressCandidates.length);
       if (!hasCandidates) {
         return {
           allProgress: allProgressItems,
           continueWatching: continueWatchingItems,
-          watchedItems: [],
+          watchedItems,
           nextUpProgressCandidates,
           hasCandidates,
           display: []
         };
       }
-      const needsNextUp = continueWatchingItems.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
-        || allProgressItems.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type));
-      const watchedItems = needsNextUp ? await watchedItemsRepository.getAll(2000).catch(() => []) : [];
       const enriched = await this.enrichContinueWatching(continueWatchingItems, {
         allProgress: allProgressItems,
         watchedItems,
@@ -5855,7 +5979,12 @@ export const HomeScreen = {
     }
     const initialAllProgressItems = Array.isArray(initialAllProgress) ? initialAllProgress : [];
     const initialContinueWatchingItems = Array.isArray(initialContinueWatching) ? initialContinueWatching : [];
-    const initialNextUpProgressCandidates = (initialContinueWatchingState?.nextUpProgressCandidates || this.selectNextUpProgressCandidates(initialAllProgressItems, initialContinueWatchingItems))
+    const initialNextUpProgressCandidates = (initialContinueWatchingState?.nextUpProgressCandidates || this.selectNextUpProgressCandidates(initialAllProgressItems, initialContinueWatchingItems, [], {
+      applyDaysCap: !includeWatchedItemNextUpSeeds,
+      includeProgressSeeds: !includeWatchedItemNextUpSeeds,
+      includeWatchedItemSeeds: includeWatchedItemNextUpSeeds,
+      nextUpFromFurthestEpisode: prefs.nextUpFromFurthestEpisode
+    }))
       .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
     const hasInitialContinueWatchingCandidates = Boolean(
       initialContinueWatchingState?.hasCandidates
@@ -5956,13 +6085,16 @@ export const HomeScreen = {
       }
       this.allProgress = Array.isArray(allProgress) ? allProgress : [];
       this.continueWatching = Array.isArray(continueWatching) ? continueWatching : [];
-      const needsNextUp = this.continueWatching.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
-        || this.allProgress.some((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type));
-      this.watchedItems = needsNextUp ? await watchedItemsRepository.getAll(2000).catch(() => []) : [];
+      this.watchedItems = await watchedItemsRepository.getAll(2000).catch(() => []);
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
       }
-      this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching)
+      this.nextUpProgressCandidates = this.selectNextUpProgressCandidates(this.allProgress, this.continueWatching, this.watchedItems, {
+        applyDaysCap: !includeWatchedItemNextUpSeeds,
+        includeProgressSeeds: !includeWatchedItemNextUpSeeds,
+        includeWatchedItemSeeds: includeWatchedItemNextUpSeeds,
+        nextUpFromFurthestEpisode: prefs.nextUpFromFurthestEpisode
+      })
         .slice(0, CW_MAX_NEXT_UP_LOOKUPS);
       const shouldShowLoading = Boolean((this.continueWatching?.length || 0) + (this.nextUpProgressCandidates?.length || 0));
       const previousDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
@@ -6292,6 +6424,8 @@ export const HomeScreen = {
         continueWatchingItems: this.continueWatchingDisplay || [],
         continueWatchingLoading: Boolean(this.continueWatchingLoading),
         continueWatchingLoadingCount: effectiveContinueWatchingLoadingCount,
+        useEpisodeThumbnailsInCw: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
+        blurContinueWatchingNextUp: Boolean(this.layoutPrefs?.blurContinueWatchingNextUp),
         rowItemLimit,
         showHeroSection,
         showPosterLabels,
@@ -6315,7 +6449,9 @@ export const HomeScreen = {
       const continueHtml = renderContinueWatchingSection(this.continueWatchingDisplay || [], {
         rowKey: "continue_watching",
         loading: Boolean(this.continueWatchingLoading),
-        loadingCount: effectiveContinueWatchingLoadingCount
+        loadingCount: effectiveContinueWatchingLoadingCount,
+        useEpisodeThumbnails: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
+        blurNextUp: Boolean(this.layoutPrefs?.blurContinueWatchingNextUp)
       });
       const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
         layoutMode: this.layoutMode,
@@ -6482,8 +6618,12 @@ export const HomeScreen = {
     };
   },
 
-  selectNextUpProgressCandidates(allProgress = [], inProgressItems = []) {
-    const cutoffMs = Date.now() - (CW_DAYS_CAP * 24 * 60 * 60 * 1000);
+  selectNextUpProgressCandidates(allProgress = [], inProgressItems = [], watchedItems = [], options = {}) {
+    const includeWatchedItemSeeds = options?.includeWatchedItemSeeds !== false;
+    const includeProgressSeeds = options?.includeProgressSeeds !== false;
+    const applyDaysCap = options?.applyDaysCap !== false;
+    const cutoffMs = applyDaysCap ? Date.now() - (CW_DAYS_CAP * 24 * 60 * 60 * 1000) : 0;
+    const nextUpFromFurthestEpisode = options?.nextUpFromFurthestEpisode !== false;
     const inProgressSeriesIds = new Set(
       (Array.isArray(inProgressItems) ? inProgressItems : [])
         .filter((item) => isSeriesTypeForContinueWatching(item?.contentType || item?.type))
@@ -6492,8 +6632,24 @@ export const HomeScreen = {
     );
 
     const latestCompletedByContent = new Map();
-    (Array.isArray(allProgress) ? allProgress : []).forEach((entry) => {
-      if (Number(entry?.updatedAt || 0) < cutoffMs) {
+    const shouldReplaceNextUpSeed = (existing, incoming) => {
+      if (!existing) {
+        return true;
+      }
+      const existingEpisodeKey = episodeSortKey(existing.season, existing.episode);
+      const incomingEpisodeKey = episodeSortKey(incoming.season, incoming.episode);
+      if (nextUpFromFurthestEpisode && incomingEpisodeKey !== existingEpisodeKey) {
+        return incomingEpisodeKey > existingEpisodeKey;
+      }
+      const existingUpdated = Number(existing.updatedAt || 0);
+      const incomingUpdated = Number(incoming.updatedAt || 0);
+      if (incomingUpdated !== existingUpdated) {
+        return incomingUpdated > existingUpdated;
+      }
+      return incomingEpisodeKey > existingEpisodeKey;
+    };
+    const addSeed = (entry) => {
+      if (cutoffMs > 0 && Number(entry?.updatedAt || 0) < cutoffMs) {
         return;
       }
       const contentId = String(entry?.contentId || "").trim();
@@ -6510,25 +6666,20 @@ export const HomeScreen = {
       }
 
       const existing = latestCompletedByContent.get(contentId);
-      if (!existing) {
+      if (shouldReplaceNextUpSeed(existing, entry)) {
         latestCompletedByContent.set(contentId, entry);
-        return;
       }
+    };
 
-      const existingUpdated = Number(existing.updatedAt || 0);
-      const incomingUpdated = Number(entry.updatedAt || 0);
-      if (incomingUpdated > existingUpdated) {
-        latestCompletedByContent.set(contentId, entry);
-        return;
-      }
-      if (incomingUpdated === existingUpdated) {
-        const existingKey = (Number(existing.season || 0) * 1000) + Number(existing.episode || 0);
-        const incomingKey = (season * 1000) + episode;
-        if (incomingKey > existingKey) {
-          latestCompletedByContent.set(contentId, entry);
-        }
-      }
-    });
+    if (includeProgressSeeds) {
+      (Array.isArray(allProgress) ? allProgress : []).forEach(addSeed);
+    }
+    if (includeWatchedItemSeeds) {
+      (Array.isArray(watchedItems) ? watchedItems : [])
+        .map((item) => buildNextUpSeedFromWatchedItem(item))
+        .filter(Boolean)
+        .forEach(addSeed);
+    }
 
     return Array.from(latestCompletedByContent.values())
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
@@ -6626,11 +6777,12 @@ export const HomeScreen = {
     return null;
   },
 
-  resolveNextUpEpisode(meta = {}, completedProgress = {}, allProgress = [], watchedEpisodeKeys = new Set()) {
+  resolveNextUpEpisode(meta = {}, completedProgress = {}, allProgress = [], watchedEpisodeKeys = new Set(), options = {}) {
     const episodes = normalizeEpisodeEntries(meta?.videos || []);
     if (!episodes.length) {
       return null;
     }
+    const showUnairedNextUp = options?.showUnairedNextUp !== false;
 
     const progressByEpisode = this.buildEpisodeProgressIndex(allProgress, completedProgress?.contentId);
     const anchorVideoId = String(completedProgress?.videoId || "").trim();
@@ -6679,6 +6831,9 @@ export const HomeScreen = {
       if (candidateProgress && shouldTreatAsInProgressForContinueWatching(candidateProgress)) {
         return null;
       }
+      if (!shouldShowNextUpEpisodeForContinueWatching(candidate, episodes[anchorIndex]?.season, showUnairedNextUp)) {
+        continue;
+      }
       return candidate;
     }
 
@@ -6693,15 +6848,29 @@ export const HomeScreen = {
   } = {}) {
     const resolvedCandidates = (Array.isArray(nextUpProgressCandidates) && nextUpProgressCandidates.length)
       ? nextUpProgressCandidates
-      : this.selectNextUpProgressCandidates(allProgress, inProgressItems);
+      : this.selectNextUpProgressCandidates(allProgress, inProgressItems, watchedItems, {
+        applyDaysCap: watchProgressRepository.getContinueWatchingSource?.() === "trakt",
+        includeProgressSeeds: watchProgressRepository.getContinueWatchingSource?.() === "trakt",
+        includeWatchedItemSeeds: watchProgressRepository.getContinueWatchingSource?.() !== "trakt",
+        nextUpFromFurthestEpisode: this.layoutPrefs?.nextUpFromFurthestEpisode
+      });
 
     if (!resolvedCandidates.length) {
       return [];
     }
 
+    const dismissedNextUpKeys = new Set(ContinueWatchingPreferences.getDismissedNextUpKeys());
+    const activeCandidates = resolvedCandidates.filter((entry) => {
+      const contentId = String(entry?.contentId || "").trim();
+      return contentId && !dismissedNextUpKeys.has(contentId);
+    });
+    if (!activeCandidates.length) {
+      return [];
+    }
+
     const neededSlots = Math.max(0, CW_MAX_VISIBLE_ITEMS - Math.min(CW_MAX_VISIBLE_ITEMS, Number(inProgressItems?.length || 0)));
     const lookupCount = Math.min(CW_MAX_NEXT_UP_LOOKUPS, neededSlots || CW_MAX_VISIBLE_ITEMS);
-    const limitedCandidates = resolvedCandidates.slice(0, lookupCount);
+    const limitedCandidates = activeCandidates.slice(0, lookupCount);
     const watchedEpisodeIndex = this.buildWatchedEpisodeIndex(watchedItems);
 
     const nextUpItems = await Promise.all(limitedCandidates.map(async (progressEntry) => {
@@ -6723,7 +6892,9 @@ export const HomeScreen = {
       }
 
       const watchedEpisodeKeys = watchedEpisodeIndex.get(contentId) || new Set();
-      const nextEpisode = this.resolveNextUpEpisode(meta, progressEntry, allProgress, watchedEpisodeKeys);
+      const nextEpisode = this.resolveNextUpEpisode(meta, progressEntry, allProgress, watchedEpisodeKeys, {
+        showUnairedNextUp: this.layoutPrefs?.showUnairedNextUp
+      });
       if (!nextEpisode) {
         return null;
       }
@@ -6750,6 +6921,7 @@ export const HomeScreen = {
         thumbnail: firstNonEmpty(nextEpisode.thumbnail, meta.thumbnail, meta.poster, meta.background),
         logo: firstNonEmpty(meta.logo),
         description: firstNonEmpty(nextEpisode.overview, meta.description),
+        released: firstNonEmpty(nextEpisode.released),
         releaseInfo: firstNonEmpty(nextEpisode.released, meta.releaseInfo),
         imdbRating: resolveImdbRating(meta),
         genres: Array.isArray(meta.genres) ? meta.genres : [],
@@ -6844,8 +7016,12 @@ export const HomeScreen = {
         .filter(Boolean)
     );
 
-    return [...inProgressItems, ...nextUpItems.filter((item) => !inProgressSeriesIds.has(String(item?.contentId || "").trim()))]
-      .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
+    const combinedItems = [
+      ...inProgressItems,
+      ...nextUpItems.filter((item) => !inProgressSeriesIds.has(String(item?.contentId || "").trim()))
+    ];
+
+    return sortContinueWatchingItemsForDisplay(combinedItems, this.layoutPrefs?.continueWatchingSortMode)
       .slice(0, CW_MAX_VISIBLE_ITEMS);
   },
 
