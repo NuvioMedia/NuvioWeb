@@ -8944,12 +8944,20 @@ button:focus-visible {
 
 .player-ui-root {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   pointer-events: none;
 }
 
 .player-external-frame-shell {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 5;
   pointer-events: auto;
@@ -8973,6 +8981,10 @@ button:focus-visible {
 
 #player {
   position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -8989,6 +9001,10 @@ button:focus-visible {
 
 #videoPlayer {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   width: 100%;
   height: 100%;
@@ -9045,6 +9061,10 @@ button:focus-visible {
 
 .player-loading-overlay {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 20;
   opacity: 1;
@@ -9079,6 +9099,10 @@ button:focus-visible {
 
 .player-loading-backdrop {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background: #080b10 center center / cover no-repeat;
   filter: saturate(0.92);
@@ -9086,6 +9110,10 @@ button:focus-visible {
 
 .player-loading-gradient {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.58) 58%, rgba(0, 0, 0, 0.92) 100%),
@@ -9159,6 +9187,10 @@ button:focus-visible {
 
 .player-controls-overlay {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 30;
   display: flex;
@@ -9175,6 +9207,10 @@ button:focus-visible {
 }
 
 .player-controls-gradient-top {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.62) 0%, rgba(0, 0, 0, 0.18) 34%, rgba(0, 0, 0, 0) 60%),
@@ -9510,6 +9546,10 @@ button:focus-visible {
 
 .player-pause-overlay {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 31;
   opacity: 1;
@@ -9524,6 +9564,10 @@ button:focus-visible {
 
 .player-pause-overlay-shade {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   background:
     linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.56) 46%, rgba(0, 0, 0, 0.82) 100%),
@@ -9901,6 +9945,10 @@ button:focus-visible {
 
 .player-modal-backdrop {
   position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   inset: 0;
   z-index: 34;
   pointer-events: auto;
@@ -12766,6 +12814,251 @@ button:focus-visible {
   display: -webkit-box !important;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.legacy-webos #player,
+.legacy-webos #videoPlayer,
+.legacy-webos .player-ui-root {
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+}
+
+.legacy-webos .player-controls-overlay {
+  padding: 48px;
+  box-sizing: border-box;
+}
+
+.legacy-webos .player-clock {
+  font-size: 36px;
+}
+
+.legacy-webos .player-ends-at,
+.legacy-webos .player-control-label,
+.legacy-webos .player-skip-intro-label,
+.legacy-webos .player-next-episode-pill,
+.legacy-webos .player-next-episode-pill-text {
+  font-size: 16px;
+}
+
+.legacy-webos .player-controls-bottom {
+  padding-top: 84px;
+  gap: 16px;
+}
+
+.legacy-webos .player-title {
+  font-size: 50px;
+}
+
+.legacy-webos .player-subtitle {
+  font-size: 30px;
+}
+
+.legacy-webos .player-meta-tertiary,
+.legacy-webos .player-control-btn,
+.legacy-webos .player-seek-direction,
+.legacy-webos .player-seek-preview {
+  font-size: 20px;
+}
+
+.legacy-webos .player-controls-row {
+  margin-top: 24px;
+  gap: 32px;
+}
+
+.legacy-webos .player-control-buttons {
+  gap: 16px;
+}
+
+.legacy-webos .player-control-btn {
+  width: 68px;
+  min-width: 68px;
+  height: 68px;
+}
+
+.legacy-webos .player-control-icon {
+  width: 34px;
+  height: 34px;
+}
+
+.legacy-webos .player-time-label {
+  font-size: 24px;
+}
+
+.legacy-webos .player-seek-overlay {
+  left: 48px;
+  right: 48px;
+  bottom: 40px;
+}
+
+.legacy-webos .player-seek-overlay-bottom {
+  gap: 16px;
+}
+
+.legacy-webos .player-skip-intro {
+  left: 48px;
+  bottom: 40px;
+}
+
+.legacy-webos .player-skip-intro.is-raised {
+  bottom: 156px;
+}
+
+.legacy-webos .player-skip-intro-btn {
+  min-width: 260px;
+  min-height: 68px;
+  padding: 0 24px;
+}
+
+.legacy-webos .player-next-episode-card {
+  right: 48px;
+  bottom: 40px;
+  width: 560px;
+}
+
+.legacy-webos .player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
+  bottom: 156px;
+}
+
+.legacy-webos .player-next-episode-card-inner {
+  gap: 18px;
+  padding: 16px;
+  border-radius: 22px;
+}
+
+.legacy-webos .player-next-episode-thumb-wrap {
+  width: 160px;
+  min-width: 160px;
+  height: 90px;
+  border-radius: 14px;
+}
+
+.legacy-webos .player-next-episode-kicker {
+  font-size: 16px;
+}
+
+.legacy-webos .player-next-episode-title {
+  font-size: 22px;
+}
+
+@supports not (font-size: clamp(1px, 2px, 3px)) {
+  .player-controls-overlay {
+    padding: 48px;
+    box-sizing: border-box;
+  }
+
+  .player-clock {
+    font-size: 36px;
+  }
+
+  .player-ends-at,
+  .player-control-label,
+  .player-skip-intro-label,
+  .player-next-episode-pill,
+  .player-next-episode-pill-text {
+    font-size: 16px;
+  }
+
+  .player-controls-bottom {
+    padding-top: 84px;
+    gap: 16px;
+  }
+
+  .player-title {
+    font-size: 50px;
+  }
+
+  .player-subtitle {
+    font-size: 30px;
+  }
+
+  .player-meta-tertiary,
+  .player-control-btn,
+  .player-seek-direction,
+  .player-seek-preview {
+    font-size: 20px;
+  }
+
+  .player-controls-row {
+    margin-top: 24px;
+    gap: 32px;
+  }
+
+  .player-control-buttons {
+    gap: 16px;
+  }
+
+  .player-control-btn {
+    width: 68px;
+    min-width: 68px;
+    height: 68px;
+  }
+
+  .player-control-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .player-time-label {
+    font-size: 24px;
+  }
+
+  .player-seek-overlay {
+    left: 48px;
+    right: 48px;
+    bottom: 40px;
+  }
+
+  .player-seek-overlay-bottom {
+    gap: 16px;
+  }
+
+  .player-skip-intro {
+    left: 48px;
+    bottom: 40px;
+  }
+
+  .player-skip-intro.is-raised {
+    bottom: 156px;
+  }
+
+  .player-skip-intro-btn {
+    min-width: 260px;
+    min-height: 68px;
+    padding: 0 24px;
+  }
+
+  .player-next-episode-card {
+    right: 48px;
+    bottom: 40px;
+    width: 560px;
+  }
+
+  .player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
+    bottom: 156px;
+  }
+
+  .player-next-episode-card-inner {
+    gap: 18px;
+    padding: 16px;
+    border-radius: 22px;
+  }
+
+  .player-next-episode-thumb-wrap {
+    width: 160px;
+    min-width: 160px;
+    height: 90px;
+    border-radius: 14px;
+  }
+
+  .player-next-episode-kicker {
+    font-size: 16px;
+  }
+
+  .player-next-episode-title {
+    font-size: 22px;
+  }
 }
 
 .performance-constrained .home-screen-shell.home-layout-classic .home-hero-description,
