@@ -11643,7 +11643,18 @@ button:focus-visible {
   left: 0;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(90deg, rgba(13, 13, 13, 1) 0%, rgba(13, 13, 13, 0.95) 10%, rgba(13, 13, 13, 0.84) 22%, rgba(13, 13, 13, 0.7) 36%, rgba(13, 13, 13, 0.52) 52%, rgba(13, 13, 13, 0.34) 66%, rgba(13, 13, 13, 0.18) 78%, rgba(13, 13, 13, 0.07) 90%, rgba(13, 13, 13, 0) 100%);
+  /* Android TV BackdropLayer leftGradient: fadeWidth = 78% of screen. */
+  background: linear-gradient(90deg,
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.95) 7.8%,
+    rgb(var(--bg-color-rgb) / 0.84) 17.16%,
+    rgb(var(--bg-color-rgb) / 0.70) 28.08%,
+    rgb(var(--bg-color-rgb) / 0.52) 40.56%,
+    rgb(var(--bg-color-rgb) / 0.34) 51.48%,
+    rgb(var(--bg-color-rgb) / 0.18) 60.84%,
+    rgb(var(--bg-color-rgb) / 0.07) 70.2%,
+    rgb(var(--bg-color-rgb) / 0) 78%,
+    rgb(var(--bg-color-rgb) / 0) 100%);
   transition: opacity 800ms ease;
 }
 
@@ -11652,8 +11663,8 @@ button:focus-visible {
 }
 
 .series-detail-shell.detail-scrolled .series-detail-vignette {
-  transition-duration: 300ms;
   opacity: 0;
+  transition-duration: 300ms;
 }
 
 .detail-bottom-shadow {
@@ -11665,7 +11676,7 @@ button:focus-visible {
   height: 24vh;
   z-index: 0;
   opacity: 0;
-  background: linear-gradient(180deg, rgba(13, 13, 13, 0) 0%, rgba(13, 13, 13, 0.92) 100%);
+  background: none;
   transition: opacity 300ms ease;
 }
 
