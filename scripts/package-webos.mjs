@@ -1,6 +1,7 @@
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -10,6 +11,17 @@ import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
+
+function resolveAresBinary(binaryName) {
+  const require = createRequire(import.meta.url);
+  const packageJsonPath = require.resolve("@webos-tools/cli/package.json");
+  const packageJson = JSON.parse(require("fs").readFileSync(packageJsonPath, "utf8"));
+  const binPath = packageJson.bin?.[binaryName];
+  if (!binPath) {
+    throw new Error(`Binary ${binaryName} not found in @webos-tools/cli`);
+  }
+  return path.join(path.dirname(packageJsonPath), binPath);
+}
 const cacheDir = path.join(rootDir, ".cache");
 const stagingDir = path.join(cacheDir, "webos-package");
 const appStageDir = path.join(stagingDir, "app");
@@ -182,7 +194,8 @@ async function packageWebOs() {
   await Promise.all([stageApp(), stageService()]);
 
   console.log("creating webOS IPK...");
-  await runCommand("ares-package", [appStageDir, serviceStageDir, "--outdir", rootDir]);
+  const aresPackage = resolveAresBinary("ares-package");
+  await runCommand(aresPackage, [appStageDir, serviceStageDir, "--outdir", rootDir]);
 }
 
 try {

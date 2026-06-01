@@ -20,6 +20,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
+    "@webos-tools/cli": "^3.2.4",
     "@babel/plugin-transform-arrow-functions": "^7.27.1",
     "@babel/plugin-transform-async-to-generator": "^7.28.6",
     "@babel/plugin-transform-block-scoping": "^7.28.6",
