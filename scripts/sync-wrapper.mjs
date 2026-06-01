@@ -8,6 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
+const bundledWebOsRuntimeDirName = "webOSTVjs-1.2.12";
 const webOsServiceSourceDirName = "space.nuvio.webos.service";
 const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceDirName = webOsServiceId;
@@ -34,6 +35,10 @@ const wrapperIconFiles = {
   webosLargeIcon: {
     source: path.join(rootDir, "assets", "images", "largeIcon.png"),
     target: "largeIcon.png"
+  },
+  webosSplash: {
+    source: path.join(rootDir, "assets", "images", "splash.png"),
+    target: "splash.png"
   },
   tizenIcon: {
     source: path.join(rootDir, "assets", "images", "tizenIcon.png"),
@@ -115,6 +120,15 @@ async function assertDistExists() {
   }
 }
 
+async function pathExists(filePath) {
+  try {
+    await access(filePath, fsConstants.F_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function syncFolder(targetDir, folderName) {
   await rm(path.join(targetDir, folderName), { recursive: true, force: true });
   await cp(path.join(distDir, folderName), path.join(targetDir, folderName), { recursive: true });
@@ -165,6 +179,16 @@ async function syncBuild(targetDir) {
     }
   }
 
+}
+async function copyBundledWebOsRuntime(targetDir) {
+  const sourceDir = path.join(rootDir, bundledWebOsRuntimeDirName);
+  if (!(await pathExists(sourceDir))) {
+    return "";
+  }
+
+  await rm(path.join(targetDir, bundledWebOsRuntimeDirName), { recursive: true, force: true });
+  await cp(sourceDir, path.join(targetDir, bundledWebOsRuntimeDirName), { recursive: true });
+  return `${bundledWebOsRuntimeDirName}/webOSTV.js`;
 }
 
 function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
@@ -330,6 +354,7 @@ async function syncWrapperIcons(targetDir, { includeLargeIcon }) {
   const iconTasks = [wrapperIconFiles.webosIcon];
   if (includeLargeIcon) {
     iconTasks.push(wrapperIconFiles.webosLargeIcon);
+    iconTasks.push(wrapperIconFiles.webosSplash);
   }
 
   await Promise.all(iconTasks.map(({ source, target }) => cp(source, path.join(targetDir, target))));
@@ -362,6 +387,7 @@ async function updateWebOsMetadata(targetDir) {
   appInfo.version = appVersion;
   appInfo.icon = wrapperIconFiles.webosIcon.target;
   appInfo.largeIcon = wrapperIconFiles.webosLargeIcon.target;
+  appInfo.splashBackground = wrapperIconFiles.webosSplash.target;
   appInfo.services = [webOsServiceId];
   delete appInfo.disableBackHistoryAPI;
 
@@ -447,14 +473,32 @@ async function updateTizenMetadata(targetDir) {
   await writeTextFile(path.join(targetDir, "index.html"), buildTizenIndexHtml());
   await writeTextFile(path.join(targetDir, "main.js"), buildTizenMainJs());
 }
+async function injectWebOsRuntimeEnv(targetDir) {
+  const envPath = path.join(targetDir, "nuvio.env.js");
+  const injection = `
+(function configureNuvioWebOsRuntimeEnv() {
+  var root = typeof globalThis !== "undefined" ? globalThis : window;
+  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
+    WEBOS_SERVICE_ID: "${webOsServiceId}"
+  });
+}());
+`;
+  const existing = await readFile(envPath, "utf8").catch(() => "");
+  await writeTextFile(envPath, `${existing.trim()}\n${injection}`);
+}
 
 const { platform, targetDir } = parseArgs(process.argv.slice(2));
 await syncVersionFiles();
 await mkdir(targetDir, { recursive: true });
 
 if (platform === "webos") {
+  await assertDistExists();
+  await syncBuild(targetDir);
   await updateWebOsMetadata(targetDir);
   await syncWebOsCompanionFiles(targetDir);
+  const webOsScriptPath = await copyBundledWebOsRuntime(targetDir);
+  await writeTextFile(path.join(targetDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }));
+  await injectWebOsRuntimeEnv(targetDir);
 }
 
 if (platform === "tizen") {

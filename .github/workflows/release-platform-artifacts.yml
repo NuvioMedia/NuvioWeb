@@ -6,15 +6,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to dispatch to private platform repos
+        description: Release tag to build platform artifacts for
         required: true
-      release_id:
-        description: Existing GitHub release ID
+      rebuild_tizen:
+        description: Rebuild hosted Tizen artifacts instead of reusing the previous release asset
         required: false
-      rebuild_webos:
-        description: Rebuild webOS wrapper instead of reusing previous IPK
+        default: "false"
+      rebuild_installer:
+        description: Rebuild desktop installer artifacts instead of reusing the previous release assets
         required: false
-        default: "true"
+        default: "false"
 
 jobs:
   resolve-release-payload:
@@ -23,8 +24,8 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.payload.outputs.tag }}
-      release_id: ${{ steps.payload.outputs.release_id }}
-      rebuild_webos: ${{ steps.payload.outputs.rebuild_webos }}
+      rebuild_tizen: ${{ steps.payload.outputs.rebuild_tizen }}
+      rebuild_installer: ${{ steps.payload.outputs.rebuild_installer }}
     steps:
       - name: Resolve release payload
         id: payload
@@ -33,73 +34,169 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "tag=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
-            echo "release_id=${{ github.event.release.id }}" >> "$GITHUB_OUTPUT"
-            if printf '%s' "$RELEASE_BODY" | grep -qi '\[reuse-webos-ipk\]'; then
-              echo "rebuild_webos=false" >> "$GITHUB_OUTPUT"
+            if printf '%s' "$RELEASE_BODY" | grep -qi '\[rebuild-tizen\]'; then
+              echo "rebuild_tizen=true" >> "$GITHUB_OUTPUT"
             else
-              echo "rebuild_webos=true" >> "$GITHUB_OUTPUT"
+              echo "rebuild_tizen=false" >> "$GITHUB_OUTPUT"
+            fi
+            if printf '%s' "$RELEASE_BODY" | grep -qi '\[rebuild-installer\]'; then
+              echo "rebuild_installer=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "rebuild_installer=false" >> "$GITHUB_OUTPUT"
             fi
           else
             echo "tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "release_id=${{ inputs.release_id }}" >> "$GITHUB_OUTPUT"
-            echo "rebuild_webos=${{ inputs.rebuild_webos || 'true' }}" >> "$GITHUB_OUTPUT"
+            echo "rebuild_tizen=${{ inputs.rebuild_tizen || 'false' }}" >> "$GITHUB_OUTPUT"
+            echo "rebuild_installer=${{ inputs.rebuild_installer || 'false' }}" >> "$GITHUB_OUTPUT"
           fi
 
-  dispatch-webos-build:
+  build-webos-release:
+    runs-on: ubuntu-latest
+    needs: resolve-release-payload
+    permissions:
+      contents: write
+    outputs:
+      package_name: ${{ steps.package.outputs.package_name }}
+      package_sha256: ${{ steps.package.outputs.package_sha256 }}
+      package_size: ${{ steps.package.outputs.package_size }}
+      package_version: ${{ steps.package.outputs.package_version }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-release-payload.outputs.tag }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Write webOS release env file
+        env:
+          WEBOS_NUVIO_ENV_JS: ${{ secrets.WEBOS_NUVIO_ENV_JS }}
+        run: |
+          if [ -z "$WEBOS_NUVIO_ENV_JS" ]; then
+            echo "WEBOS_NUVIO_ENV_JS not set; using repository fallback env handling"
+            exit 0
+          fi
+          printf '%s' "$WEBOS_NUVIO_ENV_JS" > nuvio.env.js
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package local webOS IPK
+        env:
+          TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+        run: npm run package:webos
+
+      - name: Normalize webOS package metadata
+        id: package
+        env:
+          TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          set -- space.nuvio.webos_*_all.ipk
+          if [ ! -e "$1" ]; then
+            echo "Expected webOS package was not created" >&2
+            exit 1
+          fi
+          PACKAGE_FILE="$1"
+          TARGET_FILE="NuvioTV-webOS-${TAG_NAME}.ipk"
+          mv "$PACKAGE_FILE" "$TARGET_FILE"
+          SHA256=$(shasum -a 256 "$TARGET_FILE" | cut -d' ' -f1)
+          SIZE=$(wc -c < "$TARGET_FILE" | tr -d ' ')
+          echo "package_name=$TARGET_FILE" >> "$GITHUB_OUTPUT"
+          echo "package_sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "package_size=$SIZE" >> "$GITHUB_OUTPUT"
+          echo "package_version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Upload webOS IPK to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+          PACKAGE_NAME: ${{ steps.package.outputs.package_name }}
+        run: gh release upload "$TAG_NAME" "$PACKAGE_NAME" --clobber
+
+  update-webos-metadata:
+    runs-on: ubuntu-latest
+    needs:
+      - resolve-release-payload
+      - build-webos-release
+    permissions:
+      contents: read
+    steps:
+      - name: Check out webOS metadata repo
+        if: ${{ vars.WEBOS_REPO != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.WEBOS_REPO }}
+          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
+
+      - name: Refresh Homebrew repository metadata
+        if: ${{ vars.WEBOS_REPO != '' }}
+        env:
+          RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
+          PACKAGE_SHA256: ${{ needs.build-webos-release.outputs.package_sha256 }}
+          PACKAGE_SIZE: ${{ needs.build-webos-release.outputs.package_size }}
+          PACKAGE_VERSION: ${{ needs.build-webos-release.outputs.package_version }}
+        run: |
+          RELEASE_TAG="$RELEASE_TAG" PACKAGE_SHA256="$PACKAGE_SHA256" PACKAGE_SIZE="$PACKAGE_SIZE" PACKAGE_VERSION="$PACKAGE_VERSION" node -e "const fs=require('fs');const file='webosbrew/apps.json';const data=JSON.parse(fs.readFileSync(file,'utf8'));const pkg=data.packages[0];pkg.manifest.version=process.env.PACKAGE_VERSION;pkg.manifest.ipkUrl='https://github.com/NuvioMedia/NuvioWeb/releases/download/'+process.env.RELEASE_TAG+'/NuvioTV-webOS-'+process.env.RELEASE_TAG+'.ipk';pkg.manifest.ipkHash.sha256=process.env.PACKAGE_SHA256;pkg.manifest.ipkSize=Number(process.env.PACKAGE_SIZE);fs.writeFileSync(file, JSON.stringify(data, null, 2)+'\n');"
+
+      - name: Commit webOS metadata update
+        if: ${{ vars.WEBOS_REPO != '' }}
+        env:
+          RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --rebase --autostash origin main
+          git add webosbrew/apps.json
+          if git diff --cached --quiet; then
+            echo "No webOS metadata changes to commit"
+            exit 0
+          fi
+          git commit -m "Update webOS repository metadata for ${RELEASE_TAG}"
+          git push origin HEAD:main
+
+  dispatch-tizen-build:
     runs-on: ubuntu-latest
     needs: resolve-release-payload
     permissions:
       contents: read
     steps:
-      - name: Dispatch webOS build
-        if: ${{ vars.WEBOS_REPO != '' }}
+      - name: Dispatch Tizen build
+        if: ${{ vars.TIZEN_REPO != '' }}
         env:
           GH_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
-          TARGET_REPO: ${{ vars.WEBOS_REPO }}
+          TARGET_REPO: ${{ vars.TIZEN_REPO }}
           TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
-          RELEASE_ID: ${{ needs.resolve-release-payload.outputs.release_id }}
-          REBUILD_WEBOS: ${{ needs.resolve-release-payload.outputs.rebuild_webos }}
+          REBUILD_TIZEN: ${{ needs.resolve-release-payload.outputs.rebuild_tizen }}
           SOURCE_REPO: ${{ github.repository }}
         run: |
           gh api --method POST "repos/$TARGET_REPO/dispatches" \
             -f event_type=build-release \
             -F client_payload[source_repo]="$SOURCE_REPO" \
             -F client_payload[tag]="$TAG_NAME" \
-            -F client_payload[release_id]="$RELEASE_ID" \
-            -F client_payload[rebuild_webos]="$REBUILD_WEBOS"
+            -F client_payload[rebuild_tizen]="$REBUILD_TIZEN"
 
-  update-tizen-version:
+  dispatch-installer-build:
     runs-on: ubuntu-latest
     needs: resolve-release-payload
     permissions:
       contents: read
     steps:
-      - name: Check out Tizen wrapper repo
-        if: ${{ vars.TIZEN_REPO != '' }}
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ vars.TIZEN_REPO }}
-          token: ${{ secrets.REPO_DISPATCH_TOKEN }}
-
-      - name: Update Tizen wrapper version
-        if: ${{ vars.TIZEN_REPO != '' }}
+      - name: Dispatch installer build
+        if: ${{ vars.INSTALLER_REPO != '' }}
         env:
-          RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
+          GH_TOKEN: ${{ secrets.REPO_DISPATCH_TOKEN }}
+          TARGET_REPO: ${{ vars.INSTALLER_REPO }}
+          TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+          REBUILD_INSTALLER: ${{ needs.resolve-release-payload.outputs.rebuild_installer }}
+          SOURCE_REPO: ${{ github.repository }}
         run: |
-          VERSION="${RELEASE_TAG#v}"
-          VERSION="$VERSION" node -e "const fs=require('fs');const file='package.json';const data=JSON.parse(fs.readFileSync(file,'utf8'));data.version=process.env.VERSION;fs.writeFileSync(file, JSON.stringify(data, null, 2)+'\n');"
-
-      - name: Commit Tizen wrapper version bump
-        if: ${{ vars.TIZEN_REPO != '' }}
-        env:
-          RELEASE_TAG: ${{ needs.resolve-release-payload.outputs.tag }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          if git diff --cached --quiet; then
-            echo "No Tizen version changes to commit"
-            exit 0
-          fi
-          git commit -m "Update Tizen wrapper version for ${RELEASE_TAG}"
-          git push origin HEAD:main
+          gh api --method POST "repos/$TARGET_REPO/dispatches" \
+            -f event_type=build-release \
+            -F client_payload[source_repo]="$SOURCE_REPO" \
+            -F client_payload[tag]="$TAG_NAME" \
+            -F client_payload[rebuild_installer]="$REBUILD_INSTALLER"

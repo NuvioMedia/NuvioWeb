@@ -31,6 +31,17 @@ It acts as a client-side interface that can integrate with the **Stremio addon e
 - Download the latest Windows or macOS `Nuvio WebTV Installer` build from the latest `NuvioMedia/NuvioWeb` release
 - The installer can connect to both Samsung Tizen and LG webOS TVs and install the latest `.wgt` and `.ipk` automatically
 
+macOS note:
+Current public macOS installer builds are unsigned. If macOS says the app is damaged or refuses to open it, move the app to `Applications` and run:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Nuvio WebTV Installer.app"
+codesign --force --deep --sign - "/Applications/Nuvio WebTV Installer.app"
+open "/Applications/Nuvio WebTV Installer.app"
+```
+
+This workaround should only be temporary. Once signed macOS builds are included in a future release, this manual step should no longer be needed.
+
 ### TizenBrew
 
 - Open TizenBrew on your Samsung TV
