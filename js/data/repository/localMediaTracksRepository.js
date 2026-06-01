@@ -7,6 +7,9 @@ import {
 const LOCAL_MEDIA_SERVER_PORT_CANDIDATES = [2710, 2711, 2712, 2713, 2714];
 const REQUEST_TIMEOUT_MS = 4000;
 const TRACK_CACHE_TTL_MS = 30000;
+const WEBOS_EMPTY_TRACK_CACHE_TTL_MS = 750;
+const WEBOS_LUNA_TRACK_ATTEMPTS = 6;
+const WEBOS_LUNA_TRACK_RETRY_DELAY_MS = 700;
 
 let cachedLocalMediaServerPort = LOCAL_MEDIA_SERVER_PORT_CANDIDATES[0];
 const tracksCache = new Map();
@@ -37,17 +40,63 @@ function rememberLocalMediaServerUrl(value) {
   }
 }
 
-async function requestTracksViaLuna(mediaUrl) {
-  const result = await requestWebOsCompanionService({
-    method: "tracks",
-    parameters: {
-      url: String(mediaUrl || "").trim()
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId = 0;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(message || "Request timed out"));
+    }, Math.max(1, Number(timeoutMs || 0)));
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
   });
+}
+
+function delay(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, Math.max(0, Number(ms || 0)));
+  });
+}
+
+async function requestTracksViaLuna(mediaUrl) {
+  const result = await withTimeout(
+    requestWebOsCompanionService({
+      method: "tracks",
+      parameters: {
+        url: String(mediaUrl || "").trim()
+      }
+    }),
+    REQUEST_TIMEOUT_MS,
+    "webOS companion track request timed out"
+  );
   const payload = result?.payload || {};
   rememberLocalMediaServerUrl(payload?.url);
 
   return Array.isArray(payload?.tracks) ? payload.tracks : [];
+}
+
+async function requestTracksViaLunaWithRetry(mediaUrl) {
+  let lastError = null;
+  for (let attempt = 1; attempt <= WEBOS_LUNA_TRACK_ATTEMPTS; attempt += 1) {
+    try {
+      const tracks = await requestTracksViaLuna(mediaUrl);
+      if (tracks.length > 0 || attempt >= WEBOS_LUNA_TRACK_ATTEMPTS) {
+        return tracks;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    await delay(WEBOS_LUNA_TRACK_RETRY_DELAY_MS);
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  return [];
 }
 
 async function fetchJson(url) {
@@ -94,14 +143,20 @@ export const localMediaTracksRepository = {
     const requestPromise = (async () => {
       if (Platform.isWebOS() && isWebOsCompanionServiceAvailable()) {
         try {
-          const lunaTracks = await requestTracksViaLuna(targetUrl);
+          const lunaTracks = await requestTracksViaLunaWithRetry(targetUrl);
           tracksCache.set(targetUrl, {
             tracks: Array.isArray(lunaTracks) ? lunaTracks : [],
-            expiresAt: Date.now() + TRACK_CACHE_TTL_MS
+            expiresAt: Date.now() + (lunaTracks.length > 0
+              ? TRACK_CACHE_TTL_MS
+              : WEBOS_EMPTY_TRACK_CACHE_TTL_MS)
           });
           return Array.isArray(lunaTracks) ? lunaTracks : [];
         } catch (_) {
-          // Fall back to direct localhost probing below.
+          tracksCache.set(targetUrl, {
+            tracks: [],
+            expiresAt: Date.now() + WEBOS_EMPTY_TRACK_CACHE_TTL_MS
+          });
+          return [];
         }
       }
 

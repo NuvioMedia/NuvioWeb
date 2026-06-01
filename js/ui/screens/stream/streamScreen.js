@@ -741,10 +741,6 @@ export const StreamScreen = {
     if (!itemId) {
       return false;
     }
-    if (this.params?.fromDetailRoute && Router.historyInitialized) {
-      void Router.back({ skipConsume: true });
-      return true;
-    }
     void Router.navigate("detail", {
       itemId,
       itemType: normalizeType(this.params?.itemType),

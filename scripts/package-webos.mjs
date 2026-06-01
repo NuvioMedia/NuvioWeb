@@ -101,14 +101,12 @@ async function stageApp() {
   appInfo.version = version;
   appInfo.icon = "icon.png";
   appInfo.largeIcon = "largeIcon.png";
-  appInfo.splashBackground = "splash.png";
   appInfo.services = [webOsServiceId];
   await writeFile(appInfoPath, `${JSON.stringify(appInfo, null, 2)}\n`, "utf8");
 
   await Promise.all([
     cp(path.join(rootDir, "assets", "images", "icon.png"), path.join(appStageDir, "icon.png")),
-    cp(path.join(rootDir, "assets", "images", "largeIcon.png"), path.join(appStageDir, "largeIcon.png")),
-    cp(path.join(rootDir, "assets", "images", "splash.png"), path.join(appStageDir, "splash.png"))
+    cp(path.join(rootDir, "assets", "images", "largeIcon.png"), path.join(appStageDir, "largeIcon.png"))
   ]);
 
   const webOsScriptPath = await resolveWebOsScriptPath(appStageDir);
@@ -174,38 +172,6 @@ function runCommand(command, args) {
   });
 }
 
-function isMissingCommandError(error, command) {
-  return Boolean(
-    error
-    && (
-      error.code === "ENOENT"
-      || String(error.message || "").includes(`${command} exited with code ENOENT`)
-      || String(error.message || "").includes(`spawn ${command} ENOENT`)
-    )
-  );
-}
-
-async function runAresPackage(args) {
-  try {
-    await runCommand("ares-package", args);
-    return;
-  } catch (error) {
-    if (!isMissingCommandError(error, "ares-package")) {
-      throw error;
-    }
-  }
-
-  await runCommand("npm", [
-    "exec",
-    "--yes",
-    "--package",
-    "@webos-tools/cli@3.2.2",
-    "--",
-    "ares-package",
-    ...args
-  ]);
-}
-
 async function packageWebOs() {
   await syncVersionFiles();
   await assertDistExists();
@@ -216,7 +182,7 @@ async function packageWebOs() {
   await Promise.all([stageApp(), stageService()]);
 
   console.log("creating webOS IPK...");
-  await runAresPackage([appStageDir, serviceStageDir, "--outdir", rootDir]);
+  await runCommand("ares-package", [appStageDir, serviceStageDir, "--outdir", rootDir]);
 }
 
 try {

@@ -306,6 +306,11 @@ export const AuthQrSignInScreen = {
     }
   },
 
+  consumeBackRequest() {
+    this.handleContinueAction();
+    return true;
+  },
+
   stopIntervals() {
     if (pollInterval) clearInterval(pollInterval);
     if (countdownInterval) clearInterval(countdownInterval);

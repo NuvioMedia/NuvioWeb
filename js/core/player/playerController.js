@@ -182,6 +182,10 @@ export const PlayerController = {
     return this.getPlatformAvplayEngine().name;
   },
 
+  shouldPreferTvNativePipeline() {
+    return Platform.isTizen() || Platform.isWebOS();
+  },
+
   getAvPlay() {
     return this.getPlatformAvplayEngine().getApi();
   },
@@ -779,18 +783,11 @@ export const PlayerController = {
       return false;
     }
 
-    const avplayState = this.getAvPlayState();
-    if (avplayState === "PAUSED") {
-      this.pendingAvPlayAudioTrackIndex = targetIndex;
-      this.selectedAvPlayAudioTrackIndex = targetIndex;
-      this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
-      return true;
-    }
-
     try {
       avplay.setSelectTrack("AUDIO", targetIndex);
       this.pendingAvPlayAudioTrackIndex = -1;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
+      this.nudgeAvPlayAfterTrackSwitch();
       this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       setTimeout(() => {
@@ -821,11 +818,27 @@ export const PlayerController = {
       avplay.setSelectTrack("AUDIO", targetIndex);
       this.pendingAvPlayAudioTrackIndex = -1;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
+      this.nudgeAvPlayAfterTrackSwitch();
       this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     } catch (_) {
       return false;
+    }
+  },
+
+  nudgeAvPlayAfterTrackSwitch() {
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.seekTo !== "function") {
+      return;
+    }
+    try {
+      const currentMs = Math.max(0, Number(avplay.getCurrentTime?.() || this.avplayCurrentTimeMs || 0));
+      if (Number.isFinite(currentMs) && currentMs > 0) {
+        avplay.seekTo(Math.max(0, currentMs - 1));
+      }
+    } catch (_) {
+      // Track switching is still valid without a seek nudge.
     }
   },
 
@@ -1114,7 +1127,45 @@ export const PlayerController = {
     this.avplayDurationMs = 0;
   },
 
-  playWithAvPlay(url) {
+  configureAvPlayForSource(requestHeaders = {}) {
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.setStreamingProperty !== "function") {
+      return;
+    }
+
+    const headers = requestHeaders && typeof requestHeaders === "object" ? requestHeaders : {};
+    const cookieHeader = Object.entries(headers)
+      .find(([key]) => String(key || "").trim().toLowerCase() === "cookie")?.[1];
+    const userAgentHeader = Object.entries(headers)
+      .find(([key]) => String(key || "").trim().toLowerCase() === "user-agent")?.[1];
+
+    try {
+      if (cookieHeader) {
+        avplay.setStreamingProperty("COOKIE", String(cookieHeader));
+      }
+    } catch (_) {
+      // Ignore unsupported AVPlay header properties.
+    }
+    try {
+      if (userAgentHeader) {
+        avplay.setStreamingProperty("USER_AGENT", String(userAgentHeader));
+      }
+    } catch (_) {
+      // Ignore unsupported AVPlay header properties.
+    }
+    try {
+      avplay.setStreamingProperty("ADAPTIVE_INFO", "STARTBITRATE=HIGHEST|FIXED_MAX_RESOLUTION=3840X2160");
+    } catch (_) {
+      // Ignore adaptive hints on older firmware.
+    }
+    try {
+      avplay.setStreamingProperty("SET_MODE_4K", "TRUE");
+    } catch (_) {
+      // Deprecated on newer Tizen, but still useful on older firmware.
+    }
+  },
+
+  playWithAvPlay(url, requestHeaders = {}) {
     if (!this.canUseAvPlay()) {
       return false;
     }
@@ -1139,6 +1190,7 @@ export const PlayerController = {
 
     try {
       avplay.open(this.avplayUrl);
+      this.configureAvPlayForSource(requestHeaders);
     } catch (error) {
       this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
       this.teardownAvPlay();
@@ -1392,6 +1444,7 @@ export const PlayerController = {
     const isTizenRuntime = Platform.isTizen();
     const isLivePlayback = this.isLivePlaybackItemType(itemType);
     const canUseAvPlay = this.canUseAvPlay();
+    const preferTvNative = this.shouldPreferTvNativePipeline();
     const canUseHlsJs = this.canUseHlsJs();
     const canUseDashJs = this.canUseDashJs();
     const canPlayNativeHls = this.canPlayNatively("application/vnd.apple.mpegurl");
@@ -1407,14 +1460,29 @@ export const PlayerController = {
 
     if (this.isLikelyHlsMimeType(normalizedSourceType)) {
       const candidates = [];
+      if (isTizenRuntime) {
+        if (canPlayNativeHls) {
+          pushCandidate(candidates, "native-hls");
+        }
+        if (canUseHlsJs) {
+          pushCandidate(candidates, "hls.js");
+        }
+        if (canUseAvPlay) {
+          pushCandidate(candidates, avplayEngine);
+        }
+        return candidates;
+      }
+      if (preferTvNative && canUseAvPlay) {
+        pushCandidate(candidates, avplayEngine);
+      }
+      if (canPlayNativeHls) {
+        pushCandidate(candidates, "native-hls");
+      }
       if (isLivePlayback && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
       }
       if (isTizenRuntime && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
-      }
-      if (canPlayNativeHls) {
-        pushCandidate(candidates, "native-hls");
       }
       if (!isTizenRuntime && canUseHlsJs) {
         pushCandidate(candidates, "hls.js");
@@ -1427,20 +1495,32 @@ export const PlayerController = {
 
     if (this.isLikelyDashMimeType(normalizedSourceType)) {
       const candidates = [];
+      if (isTizenRuntime) {
+        if (canPlayNativeDash) {
+          pushCandidate(candidates, "native-dash");
+        }
+        if (canUseDashJs) {
+          pushCandidate(candidates, "dash.js");
+        }
+        if (canUseAvPlay) {
+          pushCandidate(candidates, avplayEngine);
+        }
+        return candidates;
+      }
+      if (preferTvNative && canUseAvPlay) {
+        pushCandidate(candidates, avplayEngine);
+      }
+      if (canPlayNativeDash) {
+        pushCandidate(candidates, "native-dash");
+      }
       if (isLivePlayback && canUseDashJs) {
         pushCandidate(candidates, "dash.js");
       }
       if (isTizenRuntime && canUseDashJs) {
         pushCandidate(candidates, "dash.js");
       }
-      if (Platform.isWebOS() && canPlayNativeDash) {
-        pushCandidate(candidates, "native-dash");
-      }
       if (!isTizenRuntime && canUseDashJs) {
         pushCandidate(candidates, "dash.js");
-      }
-      if (canPlayNativeDash) {
-        pushCandidate(candidates, "native-dash");
       }
       if (canUseAvPlay) {
         pushCandidate(candidates, avplayEngine);
@@ -1460,9 +1540,6 @@ export const PlayerController = {
     }
 
     const candidates = [];
-    if (isTizenRuntime) {
-      pushCandidate(candidates, "native-file");
-    }
     pushCandidate(candidates, "native-file");
     if (!isTizenRuntime && canUseAvPlay) {
       pushCandidate(candidates, avplayEngine);
@@ -1731,6 +1808,16 @@ export const PlayerController = {
       }
     });
 
+    [
+      Hls.Events.AUDIO_TRACKS_UPDATED,
+      Hls.Events.AUDIO_TRACK_SWITCHED,
+      Hls.Events.AUDIO_TRACK_LOADED
+    ].filter(Boolean).forEach((eventName) => {
+      hls.on(eventName, () => {
+        this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+      });
+    });
+
     this.video.removeAttribute("src");
     hls.attachMedia(this.video);
     return true;
@@ -1862,6 +1949,10 @@ export const PlayerController = {
     }
     try {
       this.dashInstance.setCurrentTrack(target);
+      const currentTime = Number(this.video?.currentTime || 0);
+      if (Number.isFinite(currentTime) && currentTime > 0) {
+        this.video.currentTime = Math.max(0, currentTime - 0.001);
+      }
       this.emitVideoEvent("dashtrackschanged", { playbackEngine: "dash.js" });
       return true;
     } catch (_) {
@@ -1956,7 +2047,11 @@ export const PlayerController = {
   },
 
   setHlsAudioTrack(index) {
-    return hlsJsEngine.setAudioTrack(this.hlsInstance, index);
+    const applied = hlsJsEngine.setAudioTrack(this.hlsInstance, index);
+    if (applied) {
+      this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+    }
+    return applied;
   },
 
   setNativeAudioTrack(index) {
@@ -2016,12 +2111,16 @@ export const PlayerController = {
     return true;
   },
 
-  setWebOsEmbeddedAudioTrack(trackIndex) {
+  setWebOsEmbeddedAudioTrack(trackIndex, selectedTrackIndex = trackIndex) {
     if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
       return false;
     }
 
     const targetIndex = Number(trackIndex);
+    const selectedIndex = Number(selectedTrackIndex);
+    const storedSelectedIndex = Number.isFinite(selectedIndex) && selectedIndex >= 0
+      ? selectedIndex
+      : targetIndex;
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       this.selectedWebOsEmbeddedAudioTrackIndex = -1;
       return false;
@@ -2077,7 +2176,7 @@ export const PlayerController = {
       });
     };
 
-    this.selectedWebOsEmbeddedAudioTrackIndex = targetIndex;
+    this.selectedWebOsEmbeddedAudioTrackIndex = storedSelectedIndex;
 
     const mediaId = this.syncNativeMediaId();
     if (mediaId) {
@@ -2086,7 +2185,7 @@ export const PlayerController = {
     }
 
     this.waitForNativeMediaId().then((resolvedMediaId) => {
-      if (Number(this.selectedWebOsEmbeddedAudioTrackIndex) !== targetIndex) {
+      if (Number(this.selectedWebOsEmbeddedAudioTrackIndex) !== storedSelectedIndex) {
         return;
       }
       applySelection(resolvedMediaId);
@@ -2449,7 +2548,7 @@ export const PlayerController = {
         : "native-file";
 
     if (preferredEngine === this.getPlatformAvplayEngineName()) {
-      const avplayStarted = this.playWithAvPlay(url);
+      const avplayStarted = this.playWithAvPlay(url, requestHeaders);
       if (!avplayStarted) {
         this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
         this.attemptVideoPlay({
@@ -2460,7 +2559,7 @@ export const PlayerController = {
             if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay()) {
               return false;
             }
-            const fallbackStarted = this.playWithAvPlay(url);
+            const fallbackStarted = this.playWithAvPlay(url, requestHeaders);
             if (fallbackStarted) {
               this.isPlaying = true;
             }
@@ -2532,7 +2631,7 @@ export const PlayerController = {
           if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay() || !this.isLikelyDirectFileUrl(url)) {
             return false;
           }
-          const fallbackStarted = this.playWithAvPlay(url);
+          const fallbackStarted = this.playWithAvPlay(url, requestHeaders);
           if (fallbackStarted) {
             this.isPlaying = true;
           }

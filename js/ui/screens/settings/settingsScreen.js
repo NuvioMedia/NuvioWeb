@@ -21,9 +21,18 @@ import { SavedLibrarySyncService } from "../../../core/profile/savedLibrarySyncS
 import { WatchedItemsSyncService } from "../../../core/profile/watchedItemsSyncService.js";
 import { WatchProgressSyncService } from "../../../core/profile/watchProgressSyncService.js";
 import { AuthManager } from "../../../core/auth/authManager.js";
+import { SupabaseApi } from "../../../data/remote/supabase/supabaseApi.js";
 import { Platform } from "../../../platform/index.js";
 import { I18n } from "../../../i18n/index.js";
 import { PluginManager } from "../../../core/player/pluginManager.js";
+import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
+import { TraktAuthService } from "../../../data/repository/traktAuthService.js";
+import {
+  TRAKT_CONTINUE_WATCHING_DAYS_CAP_ALL,
+  TraktLibrarySourceMode,
+  TraktSettingsStore,
+  WatchProgressSource
+} from "../../../data/local/traktSettingsStore.js";
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
@@ -40,20 +49,22 @@ import {
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
 const SETTINGS_UI_STATE_KEY = "settingsScreenUiState";
-const SETTINGS_VERSION_LABEL = typeof __NUVIO_APP_VERSION__ !== "undefined"
+const SETTINGS_RAIL_SCROLL_TARGET_RATIO = 0.42;
+const SETTINGS_RAIL_SCROLL_STIFFNESS = 180;
+const SETTINGS_RAIL_SCROLL_DAMPING_RATIO = 0.95;
+const SETTINGS_VERSION_LABEL = formatSettingsVersionLabel(typeof __NUVIO_APP_VERSION__ !== "undefined"
   ? __NUVIO_APP_VERSION__
-  : "0.0.0";
+  : "0.0.0");
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
-const SUPPORTERS_URL = "https://github.com/Tapframe/NuvioStreaming";
 
 const THEME_OPTIONS = [
-  { id: "WHITE", labelKey: "settings.appearance.themes.white", color: "#f5f5f5" },
-  { id: "CRIMSON", labelKey: "settings.appearance.themes.crimson", color: "#e53935" },
-  { id: "OCEAN", labelKey: "settings.appearance.themes.ocean", color: "#1e88e5" },
-  { id: "VIOLET", labelKey: "settings.appearance.themes.violet", color: "#8e24aa" },
-  { id: "EMERALD", labelKey: "settings.appearance.themes.emerald", color: "#43a047" },
-  { id: "AMBER", labelKey: "settings.appearance.themes.amber", color: "#fb8c00" },
-  { id: "ROSE", labelKey: "settings.appearance.themes.rose", color: "#d81b60" }
+  { id: "WHITE", labelKey: "settings.appearance.themes.white", color: "#f5f5f5", onColor: "#111111" },
+  { id: "CRIMSON", labelKey: "settings.appearance.themes.crimson", color: "#e53935", onColor: "#ffffff" },
+  { id: "OCEAN", labelKey: "settings.appearance.themes.ocean", color: "#1e88e5", onColor: "#ffffff" },
+  { id: "VIOLET", labelKey: "settings.appearance.themes.violet", color: "#8e24aa", onColor: "#ffffff" },
+  { id: "EMERALD", labelKey: "settings.appearance.themes.emerald", color: "#43a047", onColor: "#ffffff" },
+  { id: "AMBER", labelKey: "settings.appearance.themes.amber", color: "#fb8c00", onColor: "#ffffff" },
+  { id: "ROSE", labelKey: "settings.appearance.themes.rose", color: "#d81b60", onColor: "#ffffff" }
 ];
 
 const FONT_OPTIONS = [
@@ -63,19 +74,30 @@ const FONT_OPTIONS = [
 ];
 
 const APP_LANGUAGE_NATIVE_LABELS = {
+  ar: "Arabic",
+  bs: "Bosnian",
+  cs: "Cestina",
+  de: "Deutsch",
   en: "English",
+  el: "Greek",
   es: "Espanol",
   fr: "Francais",
+  he: "Hebrew",
   hi: "Hindi",
   hu: "Magyar",
   it: "Italiano",
   ja: "Japanese",
+  lt: "Lietuviu",
   nl: "Nederlands",
+  no: "Norsk",
   pl: "Polski",
+  pt: "Portugues",
   ro: "Romana",
+  ru: "Russian",
   se: "Svenska",
   sk: "Slovencina",
   sl: "Slovenscina",
+  sv: "Svenska",
   tr: "Turkce",
   vi: "Tieng Viet"
 };
@@ -192,7 +214,7 @@ const AVAILABLE_SUBTITLE_LANGUAGES = [
 ].sort((left, right) => left.label.localeCompare(right.label));
 
 const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
-  { id: "forced", labelKey: "subtitle_none_forced_only", label: "None (forced only)" },
+  { id: "off", label: "Off" },
   ...AVAILABLE_SUBTITLE_LANGUAGES
 ];
 
@@ -246,6 +268,23 @@ const HOME_LAYOUT_OPTIONS = [
   { id: "classic", labelKey: "settings.layout.homeLayouts.classic.label", captionKey: "settings.layout.homeLayouts.classic.caption" }
 ];
 
+const TRAKT_CONTINUE_WATCHING_DAY_OPTIONS = [14, 30, 60, 90, 180, 365, TRAKT_CONTINUE_WATCHING_DAYS_CAP_ALL];
+
+const TRAKT_WATCH_PROGRESS_OPTIONS = [
+  { id: WatchProgressSource.TRAKT, labelKey: "trakt_watch_progress_source_trakt" },
+  { id: WatchProgressSource.NUVIO_SYNC, labelKey: "trakt_watch_progress_source_nuvio" }
+];
+
+const TRAKT_LIBRARY_SOURCE_OPTIONS = [
+  { id: TraktLibrarySourceMode.TRAKT, labelKey: "trakt_library_source_trakt" },
+  { id: TraktLibrarySourceMode.LOCAL, labelKey: "trakt_library_source_nuvio" }
+];
+
+const TRAKT_COMMENTS_OPTIONS = [
+  { id: "on", labelKey: "trakt_setting_on" },
+  { id: "off", labelKey: "trakt_setting_off" }
+];
+
 const SECTION_META = [
   { id: "account", labelKey: "settings.sections.account.label", subtitleKey: "settings.sections.account.subtitle" },
   { id: "profiles", labelKey: "settings.sections.profiles.label", subtitleKey: "settings.sections.profiles.subtitle" },
@@ -265,7 +304,6 @@ const SECTION_ICONS = {
   layout: "grid_view",
   plugins: "build",
   integration: "link",
-  playback: "settings",
   trakt: "trakt",
   about: "info"
 };
@@ -286,6 +324,15 @@ const ROW_ICONS = {
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function formatSettingsVersionLabel(value) {
+  const normalized = String(value || "").trim();
+  const shortMatch = normalized.match(/^(\d+\.\d+)\.0$/);
+  if (shortMatch) {
+    return shortMatch[1];
+  }
+  return normalized || "0.0.0";
 }
 
 function t(key, params = {}, fallback = key) {
@@ -380,6 +427,9 @@ function renderSectionNavIcon(sectionId) {
   if (sectionId === "trakt") {
     return '<img class="settings-nav-icon settings-nav-icon-image" src="assets/icons/trakt_tv_glyph.svg" alt="" aria-hidden="true" />';
   }
+  if (sectionId === "playback") {
+    return iconSvg('<path d="M8 6.82v10.36c0 .79.87 1.27 1.54.84l8.14-5.18c.62-.39.62-1.29 0-1.69L9.54 5.98C8.87 5.55 8 6.03 8 6.82z"></path>', "settings-nav-icon settings-nav-icon-svg");
+  }
   const iconName = SECTION_ICONS[sectionId] || "settings";
   return `<span class="settings-nav-icon settings-nav-icon-material material-icons" aria-hidden="true">${iconName}</span>`;
 }
@@ -426,6 +476,65 @@ function labelForLayout(layout) {
     HOME_LAYOUT_OPTIONS.find((item) => item.id === String(layout || "").toLowerCase()),
     t("settings.layout.homeLayouts.classic.label")
   );
+}
+
+function labelForTraktContinueWatchingDays(days) {
+  const normalizedDays = Number(days || 0);
+  if (normalizedDays === TRAKT_CONTINUE_WATCHING_DAYS_CAP_ALL) {
+    return t("trakt_all_history", {}, "All history");
+  }
+  return t("trakt_days_format", [normalizedDays], `${normalizedDays} days`);
+}
+
+function labelForTraktWatchProgressSource(source) {
+  return translateOptionLabel(
+    TRAKT_WATCH_PROGRESS_OPTIONS.find((item) => item.id === String(source || WatchProgressSource.TRAKT)),
+    t("trakt_watch_progress_source_trakt", {}, "Trakt")
+  );
+}
+
+function labelForTraktLibrarySource(mode) {
+  return translateOptionLabel(
+    TRAKT_LIBRARY_SOURCE_OPTIONS.find((item) => item.id === String(mode || TraktLibrarySourceMode.TRAKT)),
+    t("trakt_library_source_trakt", {}, "Trakt")
+  );
+}
+
+function labelForTraktComments(enabled) {
+  return enabled ? t("trakt_setting_on", {}, "On") : t("trakt_setting_off", {}, "Off");
+}
+
+function formatTraktDuration(valueMs) {
+  const totalSeconds = Math.max(0, Math.floor(Number(valueMs || 0) / 1000));
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor(totalSeconds / 3600) % 24;
+  const minutes = Math.floor(totalSeconds / 60) % 60;
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
+}
+
+function renderTraktCountdownText(key, remainingMs, fallbackPrefix, attributeName) {
+  const duration = formatTraktDuration(remainingMs);
+  const text = t(key, [duration], `${fallbackPrefix} ${duration}`);
+  const escapedDuration = escapeHtml(duration);
+  return escapeHtml(text).replace(escapedDuration, `<span ${attributeName}>${escapedDuration}</span>`);
+}
+
+function createTraktQrDataUrl(userCode) {
+  if (!userCode || typeof document === "undefined") {
+    return "";
+  }
+  try {
+    const canvas = document.createElement("canvas");
+    QrCodeGenerator.generate(canvas, `https://trakt.tv/activate/${encodeURIComponent(userCode)}`, 420);
+    return canvas.toDataURL("image/png");
+  } catch (error) {
+    console.warn("Failed to generate Trakt QR", error);
+    return "";
+  }
 }
 
 function labelForTmdbLanguage(language) {
@@ -475,21 +584,10 @@ async function validateDebridApiKey(providerId, apiKey) {
   return false;
 }
 
-function extractLanguageCode(value, fallback = "off") {
-  if (value && typeof value === "object") {
-    return extractLanguageCode(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
-  }
-  const code = String(value ?? "").trim();
-  if (!code || code.toLowerCase() === "[object object]") {
-    return fallback;
-  }
-  return code;
-}
-
-function normalizeSelectableSubtitleLanguageCode(language, fallback = "off") {
-  const code = extractLanguageCode(language, fallback).trim().toLowerCase();
+function normalizeSelectableSubtitleLanguageCode(language) {
+  const code = String(language ?? "").trim().toLowerCase();
   if (!code) {
-    return fallback;
+    return "off";
   }
   switch (code) {
     case "pt-br":
@@ -517,9 +615,11 @@ function labelForSubtitlePlaybackLanguage(language) {
   const normalized = normalizeSelectableSubtitleLanguageCode(language);
   return translateOptionLabel(
     PREFERRED_SUBTITLE_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
-    normalized === "off" || normalized === "forced"
-      ? t("subtitle_none_forced_only", {}, "None (forced only)")
-      : normalized === "system"
+    normalized === "off"
+      ? "Off"
+      : normalized === "forced"
+        ? t("settings.playback.useForcedSubtitles.title", {}, "Use forced subtitles")
+        : normalized === "system"
           ? t("common.system")
           : String(language || "system")
   );
@@ -527,7 +627,7 @@ function labelForSubtitlePlaybackLanguage(language) {
 
 function subtitleLanguageOptionCode(option) {
   const normalized = normalizeSelectableSubtitleLanguageCode(option?.id);
-  if (!normalized || normalized === "off" || normalized === "forced") {
+  if (!normalized || normalized === "off") {
     return "";
   }
   return normalized.toUpperCase();
@@ -549,6 +649,17 @@ function focusKeySelector(selector, key) {
   return `${selector}[data-focus-key="${escapeSelector(String(key))}"]`;
 }
 
+function isSettingsActivateEvent(event) {
+  const code = Number(event?.keyCode || event?.which || 0);
+  const key = String(event?.key || "");
+  return code === 13
+    || code === 23
+    || key === "Enter"
+    || key === "NumpadEnter"
+    || key === "OK"
+    || key === "Select";
+}
+
 function scrollIntoNearestView(node) {
   if (!node || typeof node.scrollIntoView !== "function") {
     return;
@@ -561,6 +672,196 @@ function scrollIntoNearestView(node) {
   } catch (_) {
     node.scrollIntoView();
   }
+}
+
+function getScrollMax(node, axis = "y") {
+  if (!node) {
+    return 0;
+  }
+  return Math.max(0, axis === "x" ? node.scrollWidth - node.clientWidth : node.scrollHeight - node.clientHeight);
+}
+
+function getScrollPosition(node, axis = "y") {
+  return Number(axis === "x" ? node?.scrollLeft || 0 : node?.scrollTop || 0);
+}
+
+function setScrollPosition(node, value, axis = "y") {
+  if (!node) {
+    return;
+  }
+  if (axis === "x") {
+    node.scrollLeft = value;
+    return;
+  }
+  node.scrollTop = value;
+}
+
+function animateSettingsScroll(container, nextPosition, axis = "y") {
+  if (!container) {
+    return;
+  }
+
+  const frameKey = axis === "x" ? "settingsScrollAnimationFrameX" : "settingsScrollAnimationFrameY";
+  if (container[frameKey]) {
+    cancelAnimationFrame(container[frameKey]);
+    container[frameKey] = null;
+  }
+
+  const startPosition = getScrollPosition(container, axis);
+  if (Math.abs(nextPosition - startPosition) < 1 || typeof requestAnimationFrame !== "function") {
+    setScrollPosition(container, nextPosition, axis);
+    updateSettingsScrollIndicators(container);
+    return;
+  }
+
+  let position = startPosition;
+  let velocity = 0;
+  let lastTime = performance.now();
+  const damping = 2 * SETTINGS_RAIL_SCROLL_DAMPING_RATIO * Math.sqrt(SETTINGS_RAIL_SCROLL_STIFFNESS);
+  const step = (now) => {
+    const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - lastTime) / 1000));
+    lastTime = now;
+
+    const displacement = position - nextPosition;
+    const acceleration = (-SETTINGS_RAIL_SCROLL_STIFFNESS * displacement) - (damping * velocity);
+    velocity += acceleration * deltaSeconds;
+    position += velocity * deltaSeconds;
+    setScrollPosition(container, position, axis);
+    updateSettingsScrollIndicators(container);
+
+    if (Math.abs(position - nextPosition) > 0.5 || Math.abs(velocity) > 0.5) {
+      container[frameKey] = requestAnimationFrame(step);
+    } else {
+      setScrollPosition(container, nextPosition, axis);
+      container[frameKey] = null;
+      updateSettingsScrollIndicators(container);
+    }
+  };
+
+  container[frameKey] = requestAnimationFrame(step);
+}
+
+function scrollSettingsNodeIntoContainer(node, container, axis = "y") {
+  if (!node || !container) {
+    return;
+  }
+
+  const maxScroll = getScrollMax(container, axis);
+  if (maxScroll <= 0) {
+    updateSettingsScrollIndicators(container);
+    return;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const nodeRect = node.getBoundingClientRect();
+  const containerSize = axis === "x" ? container.clientWidth : container.clientHeight;
+  const nodeStart = axis === "x" ? nodeRect.left - containerRect.left : nodeRect.top - containerRect.top;
+  const nodeSize = axis === "x" ? nodeRect.width || node.offsetWidth || 0 : nodeRect.height || node.offsetHeight || 0;
+  const itemCenterInViewport = nodeStart + (nodeSize / 2);
+  const targetCenter = containerSize * SETTINGS_RAIL_SCROLL_TARGET_RATIO;
+  const nextPosition = clamp(getScrollPosition(container, axis) + itemCenterInViewport - targetCenter, 0, maxScroll);
+
+  if (Math.abs(getScrollPosition(container, axis) - nextPosition) < 1) {
+    updateSettingsScrollIndicators(container);
+    return;
+  }
+  animateSettingsScroll(container, nextPosition, axis);
+}
+
+export function scrollSettingsContentItem(node) {
+  if (!node) {
+    return;
+  }
+
+  const dialogContainer = node.closest?.(".settings-dialog-list");
+  if (dialogContainer) {
+    scrollSettingsNodeIntoContainer(node, dialogContainer, "y");
+    return;
+  }
+
+  const horizontalContainer = node.closest?.(".settings-theme-row");
+  if (horizontalContainer) {
+    scrollSettingsNodeIntoContainer(node, horizontalContainer, "x");
+  }
+
+  const verticalContainer = node.closest?.(".settings-content, .settings-group-card-fill, .settings-trakt-scroll-area, .supporters-list");
+  if (verticalContainer) {
+    scrollSettingsNodeIntoContainer(node, verticalContainer, "y");
+    return;
+  }
+
+  scrollIntoNearestView(node);
+}
+
+function updateSettingsScrollIndicators(container) {
+  if (!container) {
+    return;
+  }
+
+  const verticalFrame = container.closest?.(".settings-content-frame, .settings-sidebar-frame, .settings-trakt-scroll-frame");
+  if (
+    verticalFrame
+    && (
+      container.classList?.contains("settings-content")
+      || container.classList?.contains("settings-sidebar")
+      || container.classList?.contains("settings-trakt-scroll-area")
+    )
+  ) {
+    const maxScroll = getScrollMax(container, "y");
+    const scrollTop = getScrollPosition(container, "y");
+    verticalFrame.classList.toggle("can-scroll-backward", scrollTop > 1);
+    verticalFrame.classList.toggle("can-scroll-forward", maxScroll > 1 && scrollTop < maxScroll - 1);
+  }
+
+  const horizontalFrame = container.closest?.(".settings-horizontal-scroll-frame");
+  if (horizontalFrame && container.classList?.contains("settings-theme-row")) {
+    const maxScroll = getScrollMax(container, "x");
+    const scrollLeft = getScrollPosition(container, "x");
+    horizontalFrame.classList.toggle("can-scroll-backward", scrollLeft > 1);
+    horizontalFrame.classList.toggle("can-scroll-forward", maxScroll > 1 && scrollLeft < maxScroll - 1);
+  }
+}
+
+function updateSettingsScrollIndicatorsSoon(container) {
+  if (!container) {
+    return;
+  }
+  requestAnimationFrame(() => updateSettingsScrollIndicators(container));
+}
+
+export function bindSettingsScrollIndicators(root) {
+  if (!root) {
+    return;
+  }
+
+  root.querySelectorAll?.(".settings-sidebar, .settings-content, .settings-theme-row, .settings-trakt-scroll-area").forEach((container) => {
+    if (!container.settingsScrollIndicatorBound) {
+      container.settingsScrollIndicatorBound = true;
+      container.addEventListener("scroll", () => updateSettingsScrollIndicators(container), { passive: true });
+    }
+    updateSettingsScrollIndicatorsSoon(container);
+  });
+}
+
+export function settingsScrollIndicatorMarkup(axis = "vertical") {
+  if (axis === "horizontal") {
+    return `
+      <span class="settings-scroll-indicator settings-scroll-indicator-left" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false"><path d="M14.6 7.4 10 12l4.6 4.6" /></svg>
+      </span>
+      <span class="settings-scroll-indicator settings-scroll-indicator-right" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false"><path d="m9.4 7.4 4.6 4.6-4.6 4.6" /></svg>
+      </span>
+    `;
+  }
+  return `
+    <span class="settings-scroll-indicator settings-scroll-indicator-up" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false"><path d="M7.4 14.6 12 10l4.6 4.6" /></svg>
+    </span>
+    <span class="settings-scroll-indicator settings-scroll-indicator-down" aria-hidden="true">
+      <svg viewBox="0 0 24 24" focusable="false"><path d="m7.4 9.4 4.6 4.6 4.6-4.6" /></svg>
+    </span>
+  `;
 }
 
 function decodeJwtPayload(token) {
@@ -580,6 +881,64 @@ function decodeJwtPayload(token) {
 function getSessionEmail() {
   const payload = decodeJwtPayload(SessionStore.accessToken);
   return String(payload?.email || payload?.user_metadata?.email || "").trim() || null;
+}
+
+async function fetchAccountSyncOverview() {
+  const response = await SupabaseApi.rpc("get_sync_overview", {}, true);
+  const source = response && typeof response === "object" && !Array.isArray(response)
+    ? response
+    : {};
+  const addons = source.addons && typeof source.addons === "object" ? source.addons : {};
+  const plugins = source.plugins && typeof source.plugins === "object" ? source.plugins : {};
+  const libraryItems = source.library_items && typeof source.library_items === "object" ? source.library_items : {};
+  const watchProgress = source.watch_progress && typeof source.watch_progress === "object" ? source.watch_progress : {};
+  const watchedItems = source.watched_items && typeof source.watched_items === "object" ? source.watched_items : {};
+  const remoteProfiles = source.profiles && typeof source.profiles === "object" ? source.profiles : {};
+  const profiles = await ProfileManager.getProfiles();
+  const allProfileIds = Array.from(new Set([
+    ...Object.keys(addons),
+    ...Object.keys(plugins),
+    ...Object.keys(libraryItems),
+    ...Object.keys(watchProgress),
+    ...Object.keys(watchedItems),
+    ...Object.keys(remoteProfiles)
+  ]))
+    .map((id) => Number(id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+    .sort((left, right) => left - right);
+
+  const readCount = (bucket, id) => {
+    const value = Number(bucket[String(id)] || 0);
+    return Number.isFinite(value) ? value : 0;
+  };
+  const total = (bucket) => Object.values(bucket).reduce((sum, value) => {
+    const count = Number(value || 0);
+    return sum + (Number.isFinite(count) ? count : 0);
+  }, 0);
+
+  return {
+    profileCount: Object.keys(remoteProfiles).length,
+    totalAddons: total(addons),
+    totalPlugins: total(plugins),
+    totalLibrary: total(libraryItems),
+    totalWatchProgress: total(watchProgress),
+    totalWatchedItems: total(watchedItems),
+    perProfile: allProfileIds.map((profileId) => {
+      const profileIdString = String(profileId);
+      const localProfile = profiles.find((profile) => String(profile?.id) === profileIdString || String(profile?.profileIndex) === profileIdString);
+      const remoteProfile = remoteProfiles[profileIdString] || {};
+      return {
+        profileId,
+        profileName: localProfile?.name || remoteProfile.name || `Profile ${profileId}`,
+        avatarColorHex: localProfile?.avatarColorHex || remoteProfile.color || "#1E88E5",
+        addons: readCount(addons, profileId),
+        plugins: readCount(plugins, profileId),
+        library: readCount(libraryItems, profileId),
+        watchProgress: readCount(watchProgress, profileId),
+        watchedItems: readCount(watchedItems, profileId)
+      };
+    })
+  };
 }
 
 function getVisibleSections(model) {
@@ -606,33 +965,93 @@ function scrollSettingsRailItem(node) {
 
   const railRect = rail.getBoundingClientRect();
   const itemRect = node.getBoundingClientRect();
-  const itemTop = (itemRect.top - railRect.top) + rail.scrollTop;
-  const itemBottom = (itemRect.bottom - railRect.top) + rail.scrollTop;
-  const itemHeight = itemRect.height || node.offsetHeight || 0;
-  const padding = Math.max(12, Math.round(clientHeight * 0.12));
-  const viewTop = rail.scrollTop + padding;
-  const viewBottom = rail.scrollTop + clientHeight - padding;
-  let nextScrollTop = rail.scrollTop;
-
-  if (itemTop < viewTop) {
-    nextScrollTop = Math.max(0, itemTop - padding);
-  } else if (itemBottom > viewBottom) {
-    nextScrollTop = Math.min(maxScroll, itemBottom - clientHeight + padding);
-  } else {
-    return;
-  }
+  const itemCenterInViewport = (itemRect.top - railRect.top) + ((itemRect.height || node.offsetHeight || 0) / 2);
+  const targetCenter = clientHeight * SETTINGS_RAIL_SCROLL_TARGET_RATIO;
+  const nextScrollTop = clamp(rail.scrollTop + itemCenterInViewport - targetCenter, 0, maxScroll);
 
   if (Math.abs(rail.scrollTop - nextScrollTop) < 1) {
     return;
   }
-  if (typeof rail.scrollTo === "function") {
-    rail.scrollTo({
-      top: nextScrollTop,
-      behavior: "auto"
-    });
+  animateSettingsRailScroll(rail, nextScrollTop);
+}
+
+function animateSettingsRailScroll(rail, nextScrollTop) {
+  if (!rail) {
     return;
   }
-  rail.scrollTop = nextScrollTop;
+
+  if (rail.settingsScrollAnimationFrame) {
+    cancelAnimationFrame(rail.settingsScrollAnimationFrame);
+    rail.settingsScrollAnimationFrame = null;
+  }
+
+  const startTop = Number(rail.scrollTop || 0);
+  if (Math.abs(nextScrollTop - startTop) < 1 || typeof requestAnimationFrame !== "function") {
+    rail.scrollTop = nextScrollTop;
+    updateSettingsRailIndicators(rail);
+    return;
+  }
+
+  let position = startTop;
+  let velocity = 0;
+  let lastTime = performance.now();
+  const damping = 2 * SETTINGS_RAIL_SCROLL_DAMPING_RATIO * Math.sqrt(SETTINGS_RAIL_SCROLL_STIFFNESS);
+  const step = (now) => {
+    const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - lastTime) / 1000));
+    lastTime = now;
+
+    const displacement = position - nextScrollTop;
+    const acceleration = (-SETTINGS_RAIL_SCROLL_STIFFNESS * displacement) - (damping * velocity);
+    velocity += acceleration * deltaSeconds;
+    position += velocity * deltaSeconds;
+    rail.scrollTop = position;
+    updateSettingsRailIndicators(rail);
+
+    if (Math.abs(position - nextScrollTop) > 0.5 || Math.abs(velocity) > 0.5) {
+      rail.settingsScrollAnimationFrame = requestAnimationFrame(step);
+    } else {
+      rail.scrollTop = nextScrollTop;
+      rail.settingsScrollAnimationFrame = null;
+      updateSettingsRailIndicators(rail);
+    }
+  };
+
+  rail.settingsScrollAnimationFrame = requestAnimationFrame(step);
+}
+
+function updateSettingsRailIndicators(rail) {
+  if (!rail) {
+    return;
+  }
+
+  const frame = rail.closest?.(".settings-sidebar-frame");
+  if (!frame) {
+    return;
+  }
+
+  const maxScroll = Math.max(0, rail.scrollHeight - rail.clientHeight);
+  const scrollTop = Number(rail.scrollTop || 0);
+  frame.classList.toggle("can-scroll-backward", scrollTop > 1);
+  frame.classList.toggle("can-scroll-forward", maxScroll > 1 && scrollTop < maxScroll - 1);
+}
+
+function updateSettingsRailIndicatorsSoon(rail) {
+  if (!rail) {
+    return;
+  }
+  requestAnimationFrame(() => updateSettingsRailIndicators(rail));
+}
+
+function focusSettingsNode(node) {
+  if (!node || typeof node.focus !== "function") {
+    return;
+  }
+
+  try {
+    node.focus({ preventScroll: true });
+  } catch (_) {
+    node.focus();
+  }
 }
 
 function isScrollContainerAtBoundary(node, direction) {
@@ -660,10 +1079,12 @@ function captureSettingsScrollState(contentNode) {
     return null;
   }
 
-  const themeGrid = contentNode.querySelector(".settings-theme-grid");
+  const fillScrollers = Array.from(contentNode.querySelectorAll(".settings-group-card-fill, .settings-trakt-scroll-area"));
+  const horizontalScrollers = Array.from(contentNode.querySelectorAll(".settings-theme-row"));
   return {
     contentScrollTop: Number(contentNode.scrollTop || 0),
-    themeGridScrollTop: Number(themeGrid?.scrollTop || 0)
+    fillScrollTops: fillScrollers.map((node) => Number(node.scrollTop || 0)),
+    horizontalScrollLefts: horizontalScrollers.map((node) => Number(node.scrollLeft || 0))
   };
 }
 
@@ -673,10 +1094,12 @@ function restoreSettingsScrollState(contentNode, scrollState) {
   }
 
   contentNode.scrollTop = Number(scrollState.contentScrollTop || 0);
-  const themeGrid = contentNode.querySelector(".settings-theme-grid");
-  if (themeGrid) {
-    themeGrid.scrollTop = Number(scrollState.themeGridScrollTop || 0);
-  }
+  Array.from(contentNode.querySelectorAll(".settings-group-card-fill, .settings-trakt-scroll-area")).forEach((node, index) => {
+    node.scrollTop = Number(scrollState.fillScrollTops?.[index] || 0);
+  });
+  Array.from(contentNode.querySelectorAll(".settings-theme-row")).forEach((node, index) => {
+    node.scrollLeft = Number(scrollState.horizontalScrollLefts?.[index] || 0);
+  });
 }
 
 function addonKindsLabel(addon) {
@@ -692,6 +1115,7 @@ function createDefaultExpandedState(sectionId) {
     return {
       homeLayout: false,
       homeContent: false,
+      continueWatching: false,
       detailPage: false,
       focusedPoster: false
     };
@@ -749,15 +1173,21 @@ function isAppearanceThemeFocusKey(focusKey) {
 export const SettingsScreen = {
 
   ensureShell() {
-    if (this.container?.querySelector?.(".settings-shell")) {
+    if (this.container?.querySelector?.(".settings-shell .settings-sidebar-frame") && this.container?.querySelector?.(".settings-shell .settings-content-frame")) {
       return;
     }
     this.container.innerHTML = `
       <div class="home-shell settings-shell">
         <div class="settings-root-sidebar-slot" data-settings-root-sidebar></div>
         <div class="settings-workspace">
-          <aside class="settings-sidebar" data-settings-nav></aside>
-          <section class="settings-content" data-settings-content></section>
+          <div class="settings-sidebar-frame">
+            <aside class="settings-sidebar" data-settings-nav></aside>
+            ${settingsScrollIndicatorMarkup("vertical")}
+          </div>
+          <div class="settings-content-frame">
+            <section class="settings-content" data-settings-content></section>
+            ${settingsScrollIndicatorMarkup("vertical")}
+          </div>
         </div>
         <div data-settings-dialog></div>
       </div>
@@ -770,6 +1200,10 @@ export const SettingsScreen = {
     if (!this.handleWheelBound) {
       this.handleWheelBound = this.handleWheelEvent.bind(this);
       this.container.addEventListener("wheel", this.handleWheelBound, { passive: false });
+    }
+    if (!this.handleClickBound) {
+      this.handleClickBound = this.handleClickEvent.bind(this);
+      this.container.addEventListener("click", this.handleClickBound);
     }
     this.settingsRouteEnterPending = true;
     const persistedUiState = readSettingsUiState();
@@ -860,6 +1294,8 @@ export const SettingsScreen = {
   },
 
   async collectModel() {
+    const authState = AuthManager.getAuthState();
+    this.ensureAccountSyncOverview(authState);
     const [addons, profiles] = await Promise.all([
       addonRepository.getInstalledAddons(),
       ProfileManager.getProfiles()
@@ -881,10 +1317,60 @@ export const SettingsScreen = {
       mdbList: MdbListSettingsStore.get(),
       animeSkip: AnimeSkipSettingsStore.get(),
       debrid: DebridSettingsStore.get(),
+      trakt: this.collectTraktModel(),
       rotatedDpad: Boolean(LocalStore.get(ROTATED_DPAD_KEY, true)),
       strictDpadGrid: Boolean(LocalStore.get(STRICT_DPAD_GRID_KEY, true)),
-      authState: AuthManager.getAuthState()
+      authState,
+      accountSyncOverview: this.accountSyncOverview || null,
+      accountSyncOverviewLoading: Boolean(this.accountSyncOverviewPromise)
     };
+  },
+
+  collectTraktModel() {
+    const auth = TraktAuthService.getCurrentAuthState();
+    const settings = TraktSettingsStore.get();
+    const mode = auth.accessToken && auth.refreshToken
+      ? "connected"
+      : auth.deviceCode
+        ? "awaiting_approval"
+        : "disconnected";
+    return {
+      auth,
+      settings,
+      mode,
+      credentialsConfigured: TraktAuthService.hasRequiredCredentials(),
+      isLoading: Boolean(this.traktLoading),
+      isStatsLoading: Boolean(this.traktStatsLoading),
+      statusMessage: this.traktStatusMessage || null,
+      errorMessage: this.traktErrorMessage || null,
+      stats: this.traktStats || null
+    };
+  },
+
+  ensureAccountSyncOverview(authState = AuthManager.getAuthState()) {
+    if (authState !== "authenticated") {
+      this.accountSyncOverview = null;
+      this.accountSyncOverviewPromise = null;
+      this.accountSyncOverviewLoaded = false;
+      return;
+    }
+    if (this.accountSyncOverviewLoaded || this.accountSyncOverviewPromise) {
+      return;
+    }
+    this.accountSyncOverviewPromise = fetchAccountSyncOverview()
+      .then((overview) => {
+        this.accountSyncOverview = overview;
+      })
+      .catch((error) => {
+        console.warn("Account sync overview failed", error);
+      })
+      .finally(() => {
+        this.accountSyncOverviewLoaded = true;
+        this.accountSyncOverviewPromise = null;
+        if (this.container && this.activeSection === "account") {
+          void this.render();
+        }
+      });
   },
 
   renderNav() {
@@ -978,11 +1464,10 @@ export const SettingsScreen = {
               ${this.registerAction(focusKey, this.actionMap.get(focusKey))}>
         <span class="settings-theme-swatch-wrap">
           <span class="settings-theme-swatch${swatchClass}" style="background:${escapeHtml(theme.color)};">
-            ${selected ? iconSvg(ROW_ICONS.check, "settings-theme-check") : ""}
+            ${selected ? `<span class="settings-theme-check-wrap" style="color:${escapeHtml(theme.onColor || "#fff")};">${iconSvg(ROW_ICONS.check, "settings-theme-check")}</span>` : ""}
           </span>
         </span>
         <span class="settings-theme-name">${escapeHtml(translateOptionLabel(theme))}</span>
-        <span class="settings-theme-underline" style="background:${escapeHtml(theme.color)};"></span>
       </button>
     `;
   },
@@ -995,7 +1480,6 @@ export const SettingsScreen = {
         <span class="settings-layout-badge">${escapeHtml(t("common.beta", {}, "Beta"))}</span>
         <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}">${renderLayoutPreviewMarkup(option.id)}</span>
         <span class="settings-layout-name">${escapeHtml(translateOptionLabel(option))}</span>
-        <span class="settings-layout-caption">${escapeHtml(translateOptionCaption(option))}</span>
       </button>
     `;
   },
@@ -1257,33 +1741,133 @@ export const SettingsScreen = {
 
   renderAccountSection(model) {
     const signedIn = model.authState === "authenticated";
+    const loading = model.authState === "loading";
     this.actionMap.set("account:signin", () => Router.navigate("authQrSignIn"));
     this.actionMap.set("account:signout", async () => {
       await AuthManager.signOut();
-      Router.navigate("authQrSignIn");
+      this.accountSyncOverview = null;
+      this.accountSyncOverviewPromise = null;
+      this.accountSyncOverviewLoaded = false;
+      await this.render();
     });
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "account"))}
-      <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-stack">
-          ${signedIn
-        ? `<div class="settings-account-status">
-                <span class="settings-account-status-label">${t("settings.status.signedIn")}</span>
-                <strong class="settings-account-status-value">${escapeHtml(model.accountEmail || t("settings.status.linkedFallback"))}</strong>
-              </div>`
-        : `<p class="settings-account-note">${t("settings.account.syncNote")}</p>
-              ${this.renderActionRow({
-          focusKey: "account:signin",
-          title: t("settings.account.signInWithQr"),
-          subtitle: t("settings.account.signInWithQrSubtitle")
-        })}`}
-          ${signedIn ? this.renderActionRow({
-          focusKey: "account:signout",
-          title: t("settings.account.signOut"),
-          subtitle: t("settings.account.signOutSubtitle")
-        }) : ""}
+      <div class="settings-group-card settings-group-card-fill settings-account-card">
+        <div class="settings-account-list">
+          ${loading ? `<p class="settings-account-loading">${escapeHtml(t("account_loading", {}, "Loading..."))}</p>` : ""}
+          ${!loading && !signedIn ? `
+            <p class="settings-account-description">${escapeHtml(t("account_sync_description", {}, "Sync your library, watch progress, addons, and plugins across devices."))}</p>
+            <p class="settings-account-inline-note">${escapeHtml(t("account_sync_restart_note", {}, "Sync is not real-time across active devices. Restart this device after signing in or to pick up changes made elsewhere."))}</p>
+            ${this.renderAccountActionButton({
+        focusKey: "account:signin",
+        icon: "vpn_key",
+        title: t("account_signin_qr_title", {}, "Sign In with QR"),
+        subtitle: t("account_signin_qr_subtitle", {}, "Scan a QR code and complete email login on your phone")
+      })}
+          ` : ""}
+          ${signedIn ? `
+            ${this.renderAccountStatusCard(model.accountEmail || t("settings.status.linkedFallback", {}, "Linked account"))}
+            <p class="settings-account-inline-note">${escapeHtml(t("account_sync_restart_note", {}, "Sync is not real-time across active devices. Restart this device after signing in or to pick up changes made elsewhere."))}</p>
+            ${model.accountSyncOverview
+        ? this.renderAccountSyncOverview(model.accountSyncOverview)
+        : (model.accountSyncOverviewLoading ? this.renderAccountSyncOverviewLoading() : "")}
+            ${this.renderAccountSignOutButton()}
+          ` : ""}
         </div>
+      </div>
+    `;
+  },
+
+  renderAccountStatusCard(value) {
+    return `
+      <div class="settings-account-status-card">
+        <span class="settings-account-status-icon material-icons" aria-hidden="true">check_circle</span>
+        <span class="settings-account-status-label">${escapeHtml(t("account_signed_in_label", {}, "Signed in"))}</span>
+        <strong class="settings-account-status-value">${escapeHtml(value)}</strong>
+      </div>
+    `;
+  },
+
+  renderAccountActionButton({ focusKey, icon, title, subtitle }) {
+    return `
+      <button class="settings-account-action-button settings-content-focusable focusable"
+              data-zone="content"
+              ${this.registerAction(focusKey, this.actionMap.get(focusKey))}
+              data-role="action">
+        <span class="settings-account-button-icon material-icons" aria-hidden="true">${escapeHtml(icon)}</span>
+        <span class="settings-account-button-copy">
+          <span class="settings-account-button-title">${escapeHtml(title)}</span>
+          <span class="settings-account-button-subtitle">${escapeHtml(subtitle)}</span>
+        </span>
+      </button>
+    `;
+  },
+
+  renderAccountSignOutButton() {
+    return `
+      <button class="settings-account-signout-button settings-content-focusable focusable"
+              data-zone="content"
+              ${this.registerAction("account:signout", this.actionMap.get("account:signout"))}
+              data-role="action">
+        <span class="settings-account-signout-icon material-icons" aria-hidden="true">logout</span>
+        <span class="settings-account-signout-label">${escapeHtml(t("account_sign_out", {}, "Sign Out"))}</span>
+      </button>
+    `;
+  },
+
+  renderAccountSyncOverviewLoading() {
+    return `
+      <div class="settings-account-sync-overview settings-account-sync-loading">
+        ${escapeHtml(t("account_loading_sync", {}, "Loading sync data..."))}
+      </div>
+    `;
+  },
+
+  renderAccountSyncOverview(overview) {
+    const statLabels = [
+      t("account_stat_addons", {}, "addons"),
+      t("account_stat_plugins", {}, "plugins"),
+      t("account_stat_library", {}, "library"),
+      t("account_stat_progress", {}, "progress"),
+      t("account_stat_watched", {}, "watched")
+    ];
+    const renderStats = (values) => values.map((value, index) => `
+      <span class="settings-account-stat">
+        <strong>${escapeHtml(value)}</strong>
+        <small>${escapeHtml(statLabels[index])}</small>
+      </span>
+    `).join("");
+    const rows = Array.isArray(overview?.perProfile) ? overview.perProfile : [];
+    return `
+      <div class="settings-account-sync-overview">
+        <div class="settings-account-sync-row settings-account-sync-total-row">
+          <span class="settings-account-sync-total-label">${escapeHtml(t("account_total_label", {}, "Total"))}</span>
+          <span class="settings-account-sync-stats">
+            ${renderStats([
+        overview.totalAddons || 0,
+        overview.totalPlugins || 0,
+        overview.totalLibrary || 0,
+        overview.totalWatchProgress || 0,
+        overview.totalWatchedItems || 0
+      ])}
+          </span>
+        </div>
+        ${rows.map((profile) => `
+          <div class="settings-account-sync-row">
+            <span class="settings-account-profile-badge" style="background:${escapeHtml(profile.avatarColorHex || "#1E88E5")};">${escapeHtml(String(profile.profileName || "?").charAt(0).toUpperCase() || "?")}</span>
+            <span class="settings-account-profile-name">${escapeHtml(profile.profileName || `Profile ${profile.profileId || ""}`)}</span>
+            <span class="settings-account-sync-stats">
+              ${renderStats([
+        profile.addons || 0,
+        profile.plugins || 0,
+        profile.library || 0,
+        profile.watchProgress || 0,
+        profile.watchedItems || 0
+      ])}
+            </span>
+          </div>
+        `).join("")}
       </div>
     `;
   },
@@ -1296,11 +1880,11 @@ export const SettingsScreen = {
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "profiles"))}
-      <div class="settings-group-card settings-group-card-fill">
+      <div class="settings-group-card settings-profile-card">
         <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "profiles:manage",
-      title: t("settings.profiles.manageProfiles"),
+      title: t("profile_manage_button", {}, "Manage Profiles"),
       subtitle: "",
       icon: null,
       classes: "settings-profile-manage-row"
@@ -1320,10 +1904,11 @@ export const SettingsScreen = {
 
     this.actionMap.set("appearance:font", () => {
       this.openOptionDialog({
-        title: t("settings.dialogs.selectFont"),
+        title: t("appearance_font_dialog_title", {}, "Choose Font"),
         options: FONT_OPTIONS,
         selectedId: model.theme.fontFamily,
         returnFocusKey: "appearance:font",
+        dialogClassName: "settings-appearance-dialog",
         onSelect: (option) => {
           ThemeStore.set({ fontFamily: option.id });
           ThemeManager.apply();
@@ -1333,10 +1918,11 @@ export const SettingsScreen = {
 
     this.actionMap.set("appearance:language", () => {
       this.openOptionDialog({
-        title: t("settings.dialogs.selectLanguage"),
+        title: t("appearance_language_dialog_title", {}, "Choose Language"),
         options: LANGUAGE_OPTIONS,
         selectedId: model.theme.language,
         returnFocusKey: "appearance:language",
+        dialogClassName: "settings-appearance-dialog",
         onSelect: async (option) => {
           ThemeStore.set({ language: option.id });
           await I18n.init();
@@ -1345,34 +1931,65 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("appearance:amoled", () => {
+      const nextAmoled = !Boolean(ThemeStore.get().amoledMode);
+      ThemeStore.set({
+        amoledMode: nextAmoled,
+        amoledSurfacesMode: nextAmoled ? Boolean(ThemeStore.get().amoledSurfacesMode) : false
+      });
+      ThemeManager.apply();
+    });
+    this.actionMap.set("appearance:amoledSurfaces", () => {
+      ThemeStore.set({ amoledSurfacesMode: !Boolean(ThemeStore.get().amoledSurfacesMode) });
+      ThemeManager.apply();
+    });
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "appearance"))}
-      <div class="settings-group-card settings-theme-grid-card">
-        <div class="settings-theme-grid">
-          ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
+      <div class="settings-group-card settings-appearance-group-card settings-theme-grid-card">
+        <div class="settings-group-heading">
+          <div class="settings-group-title">${escapeHtml(t("appearance_color_theme", {}, "Color Theme"))}</div>
+          <div class="settings-group-subtitle">${escapeHtml(t("appearance_color_theme_subtitle", {}, "Pick the accent color used across the app"))}</div>
+        </div>
+        <div class="settings-horizontal-scroll-frame">
+          <div class="settings-theme-row">
+            ${THEME_OPTIONS.map((theme) => this.renderThemeCard(
       theme,
       String(model.theme.themeName).toUpperCase() === theme.id,
       `appearance:theme:${theme.id}`
     )).join("")}
+          </div>
+          ${settingsScrollIndicatorMarkup("horizontal")}
         </div>
+        ${this.renderToggleRow({
+      focusKey: "appearance:amoled",
+      title: t("appearance_amoled_mode", {}, "AMOLED Mode"),
+      subtitle: t("appearance_amoled_mode_subtitle", {}, "Use pure black for app backgrounds"),
+      checked: Boolean(model.theme.amoledMode)
+    })}
+        ${model.theme.amoledMode ? this.renderToggleRow({
+      focusKey: "appearance:amoledSurfaces",
+      title: t("appearance_amoled_surfaces_mode", {}, "Pure Black Surfaces"),
+      subtitle: t("appearance_amoled_surfaces_mode_subtitle", {}, "Also make cards, panels, and containers pure black"),
+      checked: Boolean(model.theme.amoledSurfacesMode)
+    }) : ""}
       </div>
-      <div class="settings-group-card">
+      <div class="settings-group-card settings-appearance-group-card">
+        <div class="settings-group-heading">
+          <div class="settings-group-title">${escapeHtml(t("appearance_font_and_language", {}, "Font and Language"))}</div>
+          <div class="settings-group-subtitle">${escapeHtml(t("appearance_font_and_language_subtitle", {}, "Choose the typeface and locale used throughout the app"))}</div>
+        </div>
         <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "appearance:font",
-      title: t("settings.appearance.appFont"),
-      subtitle: t("settings.appearance.appFontSubtitle"),
+      title: t("appearance_font", {}, "App Font"),
+      subtitle: t("appearance_font_subtitle", {}, "Choose your preferred font"),
       value: labelForFont(model.theme.fontFamily)
     })}
-        </div>
-      </div>
-      <div class="settings-group-card">
-        <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "appearance:language",
-      title: t("settings.appearance.appLanguage"),
-      subtitle: t("settings.appearance.appLanguageSubtitle"),
+      title: t("appearance_language", {}, "App Language"),
+      subtitle: t("appearance_language_subtitle", {}, "Override system language"),
       value: labelForLanguage(model.theme.language)
     })}
         </div>
@@ -1389,6 +2006,9 @@ export const SettingsScreen = {
     });
     this.actionMap.set("layout:toggle:homeContent", () => {
       this.toggleExpandedSection("layout", "homeContent");
+    });
+    this.actionMap.set("layout:toggle:continueWatching", () => {
+      this.toggleExpandedSection("layout", "continueWatching");
     });
     this.actionMap.set("layout:toggle:detailPage", () => {
       this.toggleExpandedSection("layout", "detailPage");
@@ -1421,8 +2041,40 @@ export const SettingsScreen = {
     this.actionMap.set("layout:hideUnreleased", () => {
       LayoutPreferences.set({ hideUnreleasedContent: !LayoutPreferences.get().hideUnreleasedContent });
     });
+    this.actionMap.set("layout:useEpisodeThumbnailsInCw", () => {
+      LayoutPreferences.set({ useEpisodeThumbnailsInCw: !LayoutPreferences.get().useEpisodeThumbnailsInCw });
+    });
+    this.actionMap.set("layout:blurContinueWatchingNextUp", () => {
+      LayoutPreferences.set({ blurContinueWatchingNextUp: !LayoutPreferences.get().blurContinueWatchingNextUp });
+    });
+    this.actionMap.set("layout:nextUpFromFurthest", () => {
+      LayoutPreferences.set({ nextUpFromFurthestEpisode: !LayoutPreferences.get().nextUpFromFurthestEpisode });
+    });
     this.actionMap.set("layout:showUnairedNextUp", () => {
       LayoutPreferences.set({ showUnairedNextUp: !LayoutPreferences.get().showUnairedNextUp });
+    });
+    this.actionMap.set("layout:continueWatchingSortMode", () => {
+      const options = [
+        {
+          id: "default",
+          labelKey: "settings.layout.continueWatchingSort.default",
+          label: "Default"
+        },
+        {
+          id: "streaming_style",
+          labelKey: "settings.layout.continueWatchingSort.streamingStyle",
+          label: "Streaming Style"
+        }
+      ];
+      this.openOptionDialog({
+        title: t("settings.dialogs.continueWatchingSortMode", {}, "Continue Watching Sort"),
+        options,
+        selectedId: String(model.layout.continueWatchingSortMode || "default"),
+        returnFocusKey: "layout:continueWatchingSortMode",
+        onSelect: (option) => {
+          LayoutPreferences.set({ continueWatchingSortMode: String(option.id || "default") });
+        }
+      });
     });
     this.actionMap.set("layout:posterLabels", () => {
       LayoutPreferences.set({ posterLabelsEnabled: !LayoutPreferences.get().posterLabelsEnabled });
@@ -1483,6 +2135,10 @@ export const SettingsScreen = {
     const isModernLayout = selectedLayout === "modern";
     const isModernLandscape = isModernLayout && Boolean(model.layout.modernLandscapePostersEnabled);
     const showAutoplayRow = Boolean(model.layout.focusedPosterBackdropExpandEnabled) || isModernLandscape;
+    const continueWatchingSortMode = String(model.layout.continueWatchingSortMode || "default");
+    const continueWatchingSortLabel = continueWatchingSortMode === "streaming_style"
+      ? t("settings.layout.continueWatchingSort.streamingStyle", {}, "Streaming Style")
+      : t("settings.layout.continueWatchingSort.default", {}, "Default");
 
     const homeLayoutBody = `
       <div class="settings-stack">
@@ -1558,11 +2214,40 @@ export const SettingsScreen = {
       subtitle: t("settings.layout.hideUnreleased.subtitle"),
       checked: Boolean(model.layout.hideUnreleasedContent)
     })}
+      </div>
+    `;
+
+    const continueWatchingBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+      focusKey: "layout:useEpisodeThumbnailsInCw",
+      title: t("settings.layout.useEpisodeThumbnailsInCw.title", {}, "Use Episode Thumbnails"),
+      subtitle: t("settings.layout.useEpisodeThumbnailsInCw.subtitle", {}, "Show episode artwork in Continue Watching cards."),
+      checked: model.layout.useEpisodeThumbnailsInCw !== false
+    })}
+        ${model.layout.useEpisodeThumbnailsInCw !== false ? this.renderToggleRow({
+      focusKey: "layout:blurContinueWatchingNextUp",
+      title: t("settings.layout.blurContinueWatchingNextUp.title", {}, "Blur Next Up Artwork"),
+      subtitle: t("settings.layout.blurContinueWatchingNextUp.subtitle", {}, "Blur upcoming episode artwork in Continue Watching."),
+      checked: Boolean(model.layout.blurContinueWatchingNextUp)
+    }) : ""}
+        ${this.renderToggleRow({
+      focusKey: "layout:nextUpFromFurthest",
+      title: t("settings.layout.nextUpFromFurthest.title", {}, "Up Next From Furthest Episode"),
+      subtitle: t("settings.layout.nextUpFromFurthest.subtitle", {}, "Use the highest watched episode as the seed for the next episode."),
+      checked: model.layout.nextUpFromFurthestEpisode !== false
+    })}
         ${this.renderToggleRow({
       focusKey: "layout:showUnairedNextUp",
-      title: t("settings.layout.showUnairedNextUp.title", {}, "Unaired Next Up Episodes"),
-      subtitle: t("settings.layout.showUnairedNextUp.subtitle", {}, "Show upcoming episodes in Continue Watching before their release date."),
+      title: t("settings.layout.showUnairedNextUp.title", {}, "Show Unaired Next Up Episodes"),
+      subtitle: t("settings.layout.showUnairedNextUp.subtitle", {}, "Allow upcoming episodes to appear in Continue Watching."),
       checked: model.layout.showUnairedNextUp !== false
+    })}
+        ${this.renderActionRow({
+      focusKey: "layout:continueWatchingSortMode",
+      title: t("settings.layout.continueWatchingSort.title", {}, "Sort Order"),
+      subtitle: t("settings.layout.continueWatchingSort.subtitle", {}, "Choose the same Continue Watching ordering used on Android TV."),
+      value: continueWatchingSortLabel
     })}
       </div>
     `;
@@ -1652,6 +2337,13 @@ export const SettingsScreen = {
       bodyHtml: homeContentBody
     })}
           ${this.renderCollapsibleRow({
+      focusKey: "layout:toggle:continueWatching",
+      title: t("settings.layout.groups.continueWatching.title", {}, "Continue Watching"),
+      subtitle: t("settings.layout.groups.continueWatching.subtitle", {}, "Configure next episodes and ordering"),
+      expanded: Boolean(expanded.continueWatching),
+      bodyHtml: continueWatchingBody
+    })}
+          ${this.renderCollapsibleRow({
       focusKey: "layout:toggle:detailPage",
       title: t("settings.layout.groups.detailPage.title"),
       subtitle: t("settings.layout.groups.detailPage.subtitle"),
@@ -1706,7 +2398,7 @@ export const SettingsScreen = {
             ${this.renderActionRow({
       focusKey: "integration:hub:debrid",
       title: t("settings.integration.debrid.label", {}, "Debrid"),
-      subtitle: t("settings.integration.debrid.subtitle", {}, "Resolve cached Debrid streams automatically")
+      subtitle: t("settings.integration.debrid.subtitle", {}, "Connect accounts for links and library access")
     })}
             ${this.renderActionRow({
       focusKey: "integration:hub:tmdb",
@@ -1731,98 +2423,8 @@ export const SettingsScreen = {
   renderIntegrationDetail(model, key) {
     this.actionMap.set("integration:back", () => {
       this.integrationView = "hub";
-      this.contentFocusKey = "integration:hub:tmdb";
+      this.contentFocusKey = key === "debrid" ? "integration:hub:debrid" : "integration:hub:tmdb";
     });
-
-    if (key === "tmdb") {
-      this.actionMap.set("integration:tmdb:enabled", () => {
-        TmdbSettingsStore.set({ enabled: !TmdbSettingsStore.get().enabled });
-      });
-      this.actionMap.set("integration:tmdb:artwork", () => {
-        TmdbSettingsStore.set({ useArtwork: !TmdbSettingsStore.get().useArtwork });
-      });
-      this.actionMap.set("integration:tmdb:basic", () => {
-        TmdbSettingsStore.set({ useBasicInfo: !TmdbSettingsStore.get().useBasicInfo });
-      });
-      this.actionMap.set("integration:tmdb:details", () => {
-        TmdbSettingsStore.set({ useDetails: !TmdbSettingsStore.get().useDetails });
-      });
-      this.actionMap.set("integration:tmdb:language", () => {
-        this.openOptionDialog({
-          title: t("settings.dialogs.selectTmdbLanguage"),
-          options: TMDB_LANGUAGE_OPTIONS,
-          selectedId: TmdbSettingsStore.get().language,
-          returnFocusKey: "integration:tmdb:language",
-          onSelect: (option) => {
-            TmdbSettingsStore.set({ language: option.id });
-          }
-        });
-      });
-      this.actionMap.set("integration:tmdb:api", () => {
-        this.openTextDialog({
-          title: t("settings.integration.tmdb.apiKey.prompt"),
-          value: TmdbSettingsStore.get().apiKey || "",
-          returnFocusKey: "integration:tmdb:api",
-          onSubmit: (value) => {
-            TmdbSettingsStore.set({ apiKey: String(value).trim() });
-            return true;
-          }
-        });
-      });
-
-      return `
-        ${this.renderSectionHeader({ labelKey: "settings.integration.tmdb.label", subtitleKey: "settings.integration.tmdb.subtitle" })}
-        <div class="settings-group-card settings-group-card-fill">
-          <div class="settings-stack">
-            ${this.renderActionRow({
-        focusKey: "integration:back",
-        title: t("settings.integration.backToIntegrations.title"),
-        subtitle: t("settings.integration.backToIntegrations.subtitle"),
-        icon: "back"
-      })}
-            ${this.renderToggleRow({
-        focusKey: "integration:tmdb:enabled",
-        title: t("settings.integration.tmdb.enable.title"),
-        subtitle: t("settings.integration.tmdb.enable.subtitle"),
-        checked: Boolean(model.tmdb.enabled)
-      })}
-            ${this.renderToggleRow({
-        focusKey: "integration:tmdb:artwork",
-        title: t("settings.integration.tmdb.artwork.title"),
-        subtitle: t("settings.integration.tmdb.artwork.subtitle"),
-        checked: Boolean(model.tmdb.useArtwork),
-        disabled: !model.tmdb.enabled
-      })}
-            ${this.renderToggleRow({
-        focusKey: "integration:tmdb:basic",
-        title: t("settings.integration.tmdb.basicInfo.title"),
-        subtitle: t("settings.integration.tmdb.basicInfo.subtitle"),
-        checked: Boolean(model.tmdb.useBasicInfo),
-        disabled: !model.tmdb.enabled
-      })}
-            ${this.renderToggleRow({
-        focusKey: "integration:tmdb:details",
-        title: t("settings.integration.tmdb.details.title"),
-        subtitle: t("settings.integration.tmdb.details.subtitle"),
-        checked: Boolean(model.tmdb.useDetails),
-        disabled: !model.tmdb.enabled
-      })}
-            ${this.renderActionRow({
-        focusKey: "integration:tmdb:language",
-        title: t("settings.integration.tmdb.language.title"),
-        subtitle: t("settings.integration.tmdb.language.subtitle"),
-        value: labelForTmdbLanguage(model.tmdb.language)
-      })}
-            ${this.renderActionRow({
-        focusKey: "integration:tmdb:api",
-        title: t("settings.integration.tmdb.apiKey.title"),
-        subtitle: t("settings.integration.tmdb.apiKey.subtitle"),
-        value: maskValue(model.tmdb.apiKey, t("common.notSet"))
-      })}
-          </div>
-        </div>
-      `;
-    }
 
     if (key === "debrid") {
       const providers = DebridProviders.visible();
@@ -1963,7 +2565,7 @@ export const SettingsScreen = {
       });
 
       return `
-        ${this.renderSectionHeader({ label: t("settings.integration.debrid.label", {}, "Connected Services"), subtitle: t("settings.integration.debrid.subtitle", {}, "Connect accounts for links and library access") })}
+        ${this.renderSectionHeader({ labelKey: "settings.integration.debrid.label", subtitleKey: "settings.integration.debrid.subtitle" })}
         <div class="settings-group-card settings-group-card-fill">
           <div class="settings-stack">
             ${this.renderActionRow({
@@ -2057,6 +2659,96 @@ export const SettingsScreen = {
         title: t("settings.integration.debrid.template.reset.title", {}, "Reset formatting"),
         subtitle: t("settings.integration.debrid.template.reset.subtitle", {}, "Restore default source formatting."),
         value: t("settings.integration.debrid.template.reset.value", {}, "Reset")
+      })}
+          </div>
+        </div>
+      `;
+    }
+
+    if (key === "tmdb") {
+      this.actionMap.set("integration:tmdb:enabled", () => {
+        TmdbSettingsStore.set({ enabled: !TmdbSettingsStore.get().enabled });
+      });
+      this.actionMap.set("integration:tmdb:artwork", () => {
+        TmdbSettingsStore.set({ useArtwork: !TmdbSettingsStore.get().useArtwork });
+      });
+      this.actionMap.set("integration:tmdb:basic", () => {
+        TmdbSettingsStore.set({ useBasicInfo: !TmdbSettingsStore.get().useBasicInfo });
+      });
+      this.actionMap.set("integration:tmdb:details", () => {
+        TmdbSettingsStore.set({ useDetails: !TmdbSettingsStore.get().useDetails });
+      });
+      this.actionMap.set("integration:tmdb:language", () => {
+        this.openOptionDialog({
+          title: t("settings.dialogs.selectTmdbLanguage"),
+          options: TMDB_LANGUAGE_OPTIONS,
+          selectedId: TmdbSettingsStore.get().language,
+          returnFocusKey: "integration:tmdb:language",
+          onSelect: (option) => {
+            TmdbSettingsStore.set({ language: option.id });
+          }
+        });
+      });
+      this.actionMap.set("integration:tmdb:api", () => {
+        this.openTextDialog({
+          title: t("settings.integration.tmdb.apiKey.prompt"),
+          value: TmdbSettingsStore.get().apiKey || "",
+          returnFocusKey: "integration:tmdb:api",
+          onSubmit: (value) => {
+            TmdbSettingsStore.set({ apiKey: String(value).trim() });
+            return true;
+          }
+        });
+      });
+
+      return `
+        ${this.renderSectionHeader({ labelKey: "settings.integration.tmdb.label", subtitleKey: "settings.integration.tmdb.subtitle" })}
+        <div class="settings-group-card settings-group-card-fill">
+          <div class="settings-stack">
+            ${this.renderActionRow({
+        focusKey: "integration:back",
+        title: t("settings.integration.backToIntegrations.title"),
+        subtitle: t("settings.integration.backToIntegrations.subtitle"),
+        icon: "back"
+      })}
+            ${this.renderToggleRow({
+        focusKey: "integration:tmdb:enabled",
+        title: t("settings.integration.tmdb.enable.title"),
+        subtitle: t("settings.integration.tmdb.enable.subtitle"),
+        checked: Boolean(model.tmdb.enabled)
+      })}
+            ${this.renderToggleRow({
+        focusKey: "integration:tmdb:artwork",
+        title: t("settings.integration.tmdb.artwork.title"),
+        subtitle: t("settings.integration.tmdb.artwork.subtitle"),
+        checked: Boolean(model.tmdb.useArtwork),
+        disabled: !model.tmdb.enabled
+      })}
+            ${this.renderToggleRow({
+        focusKey: "integration:tmdb:basic",
+        title: t("settings.integration.tmdb.basicInfo.title"),
+        subtitle: t("settings.integration.tmdb.basicInfo.subtitle"),
+        checked: Boolean(model.tmdb.useBasicInfo),
+        disabled: !model.tmdb.enabled
+      })}
+            ${this.renderToggleRow({
+        focusKey: "integration:tmdb:details",
+        title: t("settings.integration.tmdb.details.title"),
+        subtitle: t("settings.integration.tmdb.details.subtitle"),
+        checked: Boolean(model.tmdb.useDetails),
+        disabled: !model.tmdb.enabled
+      })}
+            ${this.renderActionRow({
+        focusKey: "integration:tmdb:language",
+        title: t("settings.integration.tmdb.language.title"),
+        subtitle: t("settings.integration.tmdb.language.subtitle"),
+        value: labelForTmdbLanguage(model.tmdb.language)
+      })}
+            ${this.renderActionRow({
+        focusKey: "integration:tmdb:api",
+        title: t("settings.integration.tmdb.apiKey.title"),
+        subtitle: t("settings.integration.tmdb.apiKey.subtitle"),
+        value: maskValue(model.tmdb.apiKey, t("common.notSet"))
       })}
           </div>
         </div>
@@ -2198,13 +2890,22 @@ export const SettingsScreen = {
     this.actionMap.set("playback:subtitlesEnabled", () => {
       PlayerSettingsStore.set({ subtitlesEnabled: !PlayerSettingsStore.get().subtitlesEnabled });
     });
+    this.actionMap.set("playback:useForcedSubtitles", () => {
+      const currentSettings = PlayerSettingsStore.get();
+      PlayerSettingsStore.set({
+        subtitleStyle: {
+          ...currentSettings.subtitleStyle,
+          useForcedSubtitles: !Boolean(currentSettings.subtitleStyle?.useForcedSubtitles)
+        }
+      });
+    });
     this.actionMap.set("playback:subtitleLanguage", () => {
       const currentSettings = PlayerSettingsStore.get();
       const currentLanguage = normalizeSelectableSubtitleLanguageCode(currentSettings.subtitleStyle?.preferredLanguage || currentSettings.subtitleLanguage);
       this.openOptionDialog({
         title: t("settings.dialogs.preferredSubtitleLanguage"),
         options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
-        selectedId: currentLanguage === "system" || currentLanguage === "off" ? "forced" : currentLanguage,
+        selectedId: currentLanguage === "system" ? "off" : currentLanguage,
         returnFocusKey: "playback:subtitleLanguage",
         dialogClassName: "settings-language-dialog",
         optionRenderer: "subtitle-language",
@@ -2283,6 +2984,12 @@ export const SettingsScreen = {
       subtitle: t("settings.playback.subtitleLanguage.subtitle"),
       value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
     })}
+        ${this.renderToggleRow({
+      focusKey: "playback:useForcedSubtitles",
+      title: t("settings.playback.useForcedSubtitles.title", {}, "Use forced subtitles"),
+      subtitle: t("settings.playback.useForcedSubtitles.subtitle", {}, "Prefer forced subtitles when the audio matches the selected subtitle language."),
+      checked: Boolean(model.player.subtitleStyle?.useForcedSubtitles)
+    })}
         ${this.renderActionRow({
       focusKey: "playback:renderMode",
       title: t("settings.playback.renderMode.title"),
@@ -2300,8 +3007,8 @@ export const SettingsScreen = {
       focusKey: "playback:toggle:general",
       title: t("settings.playback.groups.general.title"),
       subtitle: t("settings.playback.groups.general.subtitle"),
-      expanded: Boolean(expanded.general),
-      bodyHtml: generalBody
+          expanded: Boolean(expanded.general),
+          bodyHtml: generalBody
     })}
           ${this.renderCollapsibleRow({
       focusKey: "playback:toggle:audio",
@@ -2322,18 +3029,361 @@ export const SettingsScreen = {
     `;
   },
 
-  renderTraktSection() {
-    this.actionMap.set("trakt:open", () => Router.navigate("account"));
+  async startTraktDeviceAuth() {
+    this.traktLoading = true;
+    this.traktErrorMessage = null;
+    this.traktStatusMessage = null;
+    this.contentFocusKey = "trakt:back";
+    await this.render();
+    try {
+      await TraktAuthService.startDeviceAuth();
+      this.traktStatusMessage = "Enter code on trakt.tv/activate";
+      this.startTraktPolling();
+    } catch (error) {
+      this.traktErrorMessage = String(error?.message || error || t("qr_login_start_failed", {}, "Failed to start QR login"));
+    } finally {
+      this.traktLoading = false;
+      await this.render();
+    }
+  },
 
+  startTraktPolling(force = false) {
+    if (this.traktPollTimer && !force) {
+      return;
+    }
+    this.stopTraktPolling();
+    const poll = async () => {
+      const state = TraktAuthService.getCurrentAuthState();
+      if (!state.deviceCode || Router.getCurrent() !== "settings" || this.activeSection !== "trakt") {
+        this.stopTraktPolling();
+        return;
+      }
+      const result = await TraktAuthService.pollDeviceToken().catch((error) => ({
+        type: "failed",
+        message: String(error?.message || error || "Network error, will retry")
+      }));
+      if (result.type === "approved") {
+        this.stopTraktPolling();
+        this.traktStatusMessage = `Connected as ${result.username || "Trakt user"}`;
+        this.traktErrorMessage = null;
+        await this.loadTraktStats(true);
+        await this.render();
+        return;
+      }
+      if (result.type === "pending") {
+        this.traktStatusMessage = t("trakt_waiting_approval", {}, "Waiting for approval...");
+        this.traktErrorMessage = null;
+      } else if (result.type === "slow_down") {
+        this.traktStatusMessage = "Rate limited, slowing down polling...";
+        this.traktErrorMessage = null;
+      } else if (result.type === "expired") {
+        this.stopTraktPolling();
+        this.traktStatusMessage = null;
+        this.traktErrorMessage = t("trakt_error_code_expired", {}, "Code expired. Generate a new code.");
+      } else if (result.type === "denied") {
+        this.stopTraktPolling();
+        this.traktStatusMessage = null;
+        this.traktErrorMessage = t("trakt_error_denied", {}, "Trakt authorization was denied.");
+      } else if (result.type === "already_used") {
+        this.stopTraktPolling();
+        this.traktStatusMessage = null;
+        this.traktErrorMessage = t("trakt_error_code_used", {}, "This Trakt code was already used.");
+      } else if (result.type === "failed") {
+        this.traktStatusMessage = null;
+        this.traktErrorMessage = result.message || "Token polling failed";
+      }
+      await this.render();
+      const nextState = TraktAuthService.getCurrentAuthState();
+      if (nextState.deviceCode && !this.traktPollTimer) {
+        this.traktPollTimer = setTimeout(() => {
+          this.traktPollTimer = null;
+          void poll();
+        }, Math.max(1, Number(nextState.pollInterval || 5)) * 1000);
+      }
+    };
+    void poll();
+  },
+
+  stopTraktPolling() {
+    if (this.traktPollTimer) {
+      clearTimeout(this.traktPollTimer);
+      this.traktPollTimer = null;
+    }
+  },
+
+  async loadTraktStats(forceRefresh = false) {
+    if (!TraktAuthService.isAuthenticated()) {
+      this.traktStats = null;
+      this.traktStatsLoading = false;
+      return;
+    }
+    this.traktStatsLoading = true;
+    try {
+      this.traktStats = await TraktAuthService.fetchStats(forceRefresh);
+    } catch (error) {
+      console.warn("Failed to load Trakt stats", error);
+    } finally {
+      this.traktStatsLoading = false;
+    }
+  },
+
+  openTraktDisconnectDialog() {
+    this.openOptionDialog({
+      title: t("trakt_disconnect_title", {}, "Disconnect Trakt?"),
+      options: [
+        { id: "disconnect", labelKey: "trakt_disconnect" },
+        { id: "cancel", labelKey: "action_cancel", label: "Cancel" }
+      ],
+      selectedId: "cancel",
+      returnFocusKey: "trakt:disconnect",
+      dialogClassName: "settings-trakt-confirm-dialog",
+      onSelect: async (option) => {
+        if (option.id !== "disconnect") {
+          return;
+        }
+        this.stopTraktPolling();
+        this.traktLoading = true;
+        await TraktAuthService.disconnect();
+        this.traktStats = null;
+        this.traktLoading = false;
+        this.traktStatusMessage = "Disconnected from Trakt";
+      }
+    });
+  },
+
+  renderTraktSection(model) {
+    const trakt = model.trakt || this.collectTraktModel();
+    const auth = trakt.auth || {};
+    const settings = trakt.settings || TraktSettingsStore.get();
+    const mode = trakt.mode || "disconnected";
+    const isConnected = mode === "connected";
+    const isAwaitingApproval = mode === "awaiting_approval";
+    const userCode = auth.userCode || "";
+    const remaining = auth.expiresAt ? Math.max(0, Number(auth.expiresAt) - Date.now()) : 0;
+    const tokenRemaining = auth.createdAt && auth.expiresIn
+      ? Math.max(0, ((Number(auth.createdAt) + Number(auth.expiresIn)) * 1000) - Date.now())
+      : 0;
+
+    if (isAwaitingApproval) {
+      this.startTraktPolling();
+    }
+    if (isConnected && !this.traktStats && !this.traktStatsLoading) {
+      void this.loadTraktStats(false).then(() => {
+        if (this.container && this.activeSection === "trakt") {
+          void this.render();
+        }
+      });
+    }
+
+    this.actionMap.set("trakt:back", () => {
+      this.syncNavFocusToActive();
+      this.focusZone = "nav";
+    });
+    this.actionMap.set("trakt:login", () => this.startTraktDeviceAuth());
+    this.actionMap.set("trakt:cancel", async () => {
+      this.stopTraktPolling();
+      await TraktAuthService.disconnect();
+      this.traktStatusMessage = null;
+      this.traktErrorMessage = null;
+    });
+    this.actionMap.set("trakt:retry", () => this.startTraktPolling(true));
+    this.actionMap.set("trakt:disconnect", () => this.openTraktDisconnectDialog());
+    this.actionMap.set("trakt:librarySource", () => {
+      this.openOptionDialog({
+        title: t("trakt_library_source_dialog_title", {}, "Library Source"),
+        options: TRAKT_LIBRARY_SOURCE_OPTIONS,
+        selectedId: settings.librarySourceMode,
+        returnFocusKey: "trakt:librarySource",
+        dialogClassName: "settings-trakt-dialog",
+        onSelect: (option) => {
+          TraktSettingsStore.setLibrarySourceMode(option.id);
+          this.traktStatusMessage = option.id === TraktLibrarySourceMode.TRAKT
+            ? t("trakt_library_source_trakt_selected", {}, "Trakt library selected")
+            : t("trakt_library_source_nuvio_selected", {}, "Nuvio library selected");
+        }
+      });
+    });
+    this.actionMap.set("trakt:watchProgress", () => {
+      this.openOptionDialog({
+        title: t("trakt_watch_progress_dialog_title", {}, "Watch Progress"),
+        options: TRAKT_WATCH_PROGRESS_OPTIONS,
+        selectedId: settings.watchProgressSource,
+        returnFocusKey: "trakt:watchProgress",
+        dialogClassName: "settings-trakt-dialog",
+        onSelect: (option) => {
+          TraktSettingsStore.setWatchProgressSource(option.id);
+          this.traktStatusMessage = option.id === WatchProgressSource.TRAKT
+            ? t("trakt_watch_progress_trakt_selected", {}, "Watch progress source set to Trakt")
+            : t("trakt_watch_progress_nuvio_selected", {}, "Watch progress source set to Nuvio Sync");
+        }
+      });
+    });
+    this.actionMap.set("trakt:cwWindow", () => {
+      this.openOptionDialog({
+        title: t("trakt_cw_window_title", {}, "Continue Watching Window"),
+        options: TRAKT_CONTINUE_WATCHING_DAY_OPTIONS.map((days) => ({ id: String(days), label: labelForTraktContinueWatchingDays(days) })),
+        selectedId: String(settings.continueWatchingDaysCap),
+        returnFocusKey: "trakt:cwWindow",
+        dialogClassName: "settings-trakt-grid-dialog",
+        onSelect: (option) => {
+          TraktSettingsStore.setContinueWatchingDaysCap(Number(option.id));
+          this.traktStatusMessage = "Continue watching window updated";
+        }
+      });
+    });
+    this.actionMap.set("trakt:comments", () => {
+      this.openOptionDialog({
+        title: t("trakt_comments_dialog_title", {}, "Comments"),
+        options: TRAKT_COMMENTS_OPTIONS,
+        selectedId: settings.showMetaComments ? "on" : "off",
+        returnFocusKey: "trakt:comments",
+        dialogClassName: "settings-trakt-dialog",
+        onSelect: (option) => {
+          const enabled = option.id === "on";
+          TraktSettingsStore.setShowMetaComments(enabled);
+          this.traktStatusMessage = enabled
+            ? t("trakt_comments_now_shown", {}, "Trakt reviews on metadata pages are now shown")
+            : t("trakt_comments_now_hidden", {}, "Trakt reviews on metadata pages are now hidden");
+        }
+      });
+    });
+
+    return `
+      <div class="settings-slide-panel settings-trakt-panel">
+        <div class="settings-trakt-hero">
+          <img class="settings-trakt-logo" src="assets/icons/trakt_tv_favicon.svg" alt="" aria-hidden="true" />
+          <div class="settings-trakt-title">Trakt</div>
+          <p class="settings-trakt-description">${escapeHtml(t("trakt_description", {}, "Sync your watchlist, watch progress, continue watching, scrobbles, and personal lists with Trakt."))}</p>
+          ${isConnected ? `<p class="settings-trakt-connected">${escapeHtml(t("trakt_connected_as", [auth.username || "Trakt user"], `Connected as ${auth.username || "Trakt user"}`))}</p>` : ""}
+        </div>
+        <div class="settings-trakt-card">
+          <div class="settings-trakt-scroll-frame settings-content-frame">
+            <div class="settings-trakt-scroll-area">
+              <div class="settings-trakt-header-row">
+                <div class="settings-trakt-card-title">${escapeHtml(t("trakt_account_login", {}, "Account Login"))}</div>
+                ${isAwaitingApproval ? `<button class="settings-trakt-small-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:cancel", this.actionMap.get("trakt:cancel"))}>${escapeHtml(t("action_cancel", {}, "Cancel"))}</button>` : ""}
+              </div>
+              ${isAwaitingApproval ? this.renderTraktAwaitingApproval(userCode, remaining) : ""}
+              ${isConnected ? this.renderTraktConnected(auth, tokenRemaining, trakt) : ""}
+              ${!isAwaitingApproval && !isConnected ? this.renderTraktDisconnected(trakt) : ""}
+              ${isConnected ? this.renderTraktOptions(settings) : ""}
+              ${!isConnected && trakt.statusMessage ? `<p class="settings-trakt-message">${escapeHtml(trakt.statusMessage)}</p>` : ""}
+              ${trakt.errorMessage ? `<p class="settings-trakt-error">${escapeHtml(trakt.errorMessage)}</p>` : ""}
+            </div>
+            ${settingsScrollIndicatorMarkup("vertical")}
+          </div>
+          <div class="settings-trakt-footer-row">
+            ${isAwaitingApproval ? `<button class="settings-trakt-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:retry", this.actionMap.get("trakt:retry"))}>${escapeHtml(t("trakt_retry", {}, "Retry"))}</button>` : ""}
+            <button class="settings-trakt-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:back", this.actionMap.get("trakt:back"))}>${escapeHtml(t("trakt_back", {}, "Back"))}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  renderTraktAwaitingApproval(userCode, remainingMs) {
+    const qrDataUrl = createTraktQrDataUrl(userCode);
+    return `
+      <p class="settings-trakt-body-copy">${escapeHtml(t("trakt_awaiting_instruction", {}, "Go to trakt.tv/activate and enter this code:"))}</p>
+      <div class="settings-trakt-code">${escapeHtml(userCode || "-")}</div>
+      ${qrDataUrl ? `<img class="settings-trakt-qr" src="${escapeHtml(qrDataUrl)}" alt="${escapeHtml(t("cd_trakt_qr", {}, "Trakt QR code"))}" />` : ""}
+      <p class="settings-trakt-meta-copy">${renderTraktCountdownText("trakt_code_expires", remainingMs, "Code expires in", "data-trakt-device-countdown")}</p>
+    `;
+  },
+
+  renderTraktDisconnected(trakt) {
+    return `
+      <p class="settings-trakt-body-copy">${escapeHtml(t("trakt_login_instruction", {}, "Press Login to start Trakt device authentication. A QR code will appear here."))}</p>
+      <button class="settings-trakt-button settings-trakt-login-button settings-content-focusable focusable${!trakt.credentialsConfigured || trakt.isLoading ? " is-disabled" : ""}"
+              data-zone="content"
+              ${this.registerAction("trakt:login", !trakt.credentialsConfigured || trakt.isLoading ? () => { } : this.actionMap.get("trakt:login"))}>
+        ${escapeHtml(t("trakt_login", {}, "Login"))}
+      </button>
+      ${!trakt.credentialsConfigured ? `<p class="settings-trakt-warning">${escapeHtml(t("trakt_missing_credentials", {}, "Missing TRAKT_CLIENT_ID / TRAKT_CLIENT_SECRET in local.properties."))}</p>` : ""}
+    `;
+  },
+
+  renderTraktConnected(auth, tokenRemainingMs, trakt) {
+    return `
+      ${tokenRemainingMs ? `<p class="settings-trakt-meta-copy">${renderTraktCountdownText("trakt_token_refreshes", tokenRemainingMs, "Trakt access token refreshes in", "data-trakt-token-countdown")}</p>` : ""}
+      <button class="settings-trakt-button settings-content-focusable focusable" data-zone="content" ${this.registerAction("trakt:disconnect", this.actionMap.get("trakt:disconnect"))}>${escapeHtml(t("trakt_disconnect", {}, "Disconnect"))}</button>
+      ${this.renderTraktStatsStrip(trakt.stats, trakt.isStatsLoading)}
+    `;
+  },
+
+  renderTraktStatsStrip(stats, isLoading) {
+    const values = isLoading
+      ? ["...", "...", "...", "..."]
+      : [
+        stats?.moviesWatched ?? "-",
+        stats?.showsWatched ?? "-",
+        stats?.episodesWatched ?? "-",
+        stats?.totalWatchedHours == null ? "-" : `${stats.totalWatchedHours}h`
+      ];
+    const labels = [
+      t("trakt_stat_movies", {}, "Movies"),
+      t("trakt_stat_shows", {}, "Shows"),
+      t("trakt_stat_episodes", {}, "Episodes"),
+      t("trakt_stat_watched_hours", {}, "Watched Hours")
+    ];
+    return `
+      <div class="settings-trakt-stats">
+        <div class="settings-trakt-stats-label">${escapeHtml(t("trakt_cached_label", {}, "Cached"))}</div>
+        <div class="settings-trakt-stats-line" aria-hidden="true"></div>
+        <div class="settings-trakt-stats-row">
+          ${values.map((value, index) => `
+            <div class="settings-trakt-stat">
+              <strong>${escapeHtml(value)}</strong>
+              <span>${escapeHtml(labels[index])}</span>
+            </div>
+          `).join("")}
+        </div>
+        <div class="settings-trakt-stats-line" aria-hidden="true"></div>
+      </div>
+    `;
+  },
+
+  renderTraktOptions(settings) {
+    return `
+      <div class="settings-stack settings-trakt-options-stack">
+        ${this.renderActionRow({
+      focusKey: "trakt:librarySource",
+      title: t("trakt_library_source_title", {}, "Library Source"),
+      subtitle: t("trakt_library_source_subtitle", {}, "Choose which library to use for saving and viewing your collection"),
+      value: labelForTraktLibrarySource(settings.librarySourceMode)
+    })}
+        ${this.renderActionRow({
+      focusKey: "trakt:watchProgress",
+      title: t("trakt_watch_progress_title", {}, "Watch Progress"),
+      subtitle: t("trakt_watch_progress_subtitle", {}, "Choose which progress source powers resume and continue watching"),
+      value: labelForTraktWatchProgressSource(settings.watchProgressSource)
+    })}
+        ${this.renderActionRow({
+      focusKey: "trakt:cwWindow",
+      title: t("trakt_continue_watching_window", {}, "Continue Watching Window"),
+      subtitle: t("trakt_continue_watching_subtitle", {}, "Trakt history considered for continue watching"),
+      value: labelForTraktContinueWatchingDays(settings.continueWatchingDaysCap)
+    })}
+        ${this.renderActionRow({
+      focusKey: "trakt:comments",
+      title: t("trakt_comments_title", {}, "Comments"),
+      subtitle: t("trakt_comments_subtitle", {}, "Show Trakt reviews on metadata pages"),
+      value: labelForTraktComments(settings.showMetaComments)
+    })}
+      </div>
+    `;
+  },
+
+  renderTraktLauncher() {
+    this.actionMap.set("trakt:open", () => Router.navigate("trakt"));
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "trakt"))}
       <div class="settings-group-card settings-group-card-fill">
         <div class="settings-stack">
           ${this.renderActionRow({
       focusKey: "trakt:open",
-      title: t("settings.trakt.openSettings"),
-      subtitle: plannedSubtitle(t("settings.trakt.openSettingsSubtitle")),
-      planned: true
+      title: t("settings.trakt.openSettings", {}, "Trakt"),
+      subtitle: t("settings.trakt.openSettingsSubtitle", {}, "Open Trakt connection screen.")
     })}
         </div>
       </div>
@@ -2344,9 +3394,7 @@ export const SettingsScreen = {
     this.actionMap.set("about:privacy", () => {
       window.open?.(PRIVACY_URL, "_blank");
     });
-    this.actionMap.set("about:supporters", () => {
-      window.open?.(SUPPORTERS_URL, "_blank");
-    });
+    this.actionMap.set("about:supporters", () => Router.navigate("supportersContributors"));
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "about"))}
@@ -2382,7 +3430,7 @@ export const SettingsScreen = {
     if (section.id === "plugins") return this.renderPluginsSection(model);
     if (section.id === "integration") return this.renderIntegrationSection(model);
     if (section.id === "playback") return this.renderPlaybackSection(model);
-    if (section.id === "trakt") return this.renderTraktSection(model);
+    if (section.id === "trakt") return this.renderTraktLauncher(model);
     return this.renderAboutSection(model);
   },
 
@@ -2439,6 +3487,16 @@ export const SettingsScreen = {
     if (navSlot && navSlot.innerHTML !== navHtml) {
       navSlot.innerHTML = navHtml;
     }
+    if (navSlot && this.railScrollNode !== navSlot) {
+      if (this.railScrollNode && this.handleRailScrollBound) {
+        this.railScrollNode.removeEventListener("scroll", this.handleRailScrollBound);
+      }
+      this.handleRailScrollBound = () => updateSettingsRailIndicators(navSlot);
+      navSlot.addEventListener("scroll", this.handleRailScrollBound, { passive: true });
+      this.railScrollNode = navSlot;
+    }
+    updateSettingsRailIndicatorsSoon(navSlot);
+    updateSettingsScrollIndicatorsSoon(navSlot);
 
     const sectionChanged = this.renderedSectionId !== section.id;
     const previousScrollState = !sectionChanged ? captureSettingsScrollState(contentSlot) : null;
@@ -2469,14 +3527,17 @@ export const SettingsScreen = {
       onExpandSidebar: () => this.openSidebar()
     });
     ScreenUtils.indexFocusables(this.container);
+    bindSettingsScrollIndicators(this.container);
     this.settingsRouteEnterPending = false;
     this.applyFocus();
+    updateSettingsRailIndicatorsSoon(navSlot);
+    updateSettingsScrollIndicatorsSoon(contentSlot);
   },
 
   applyFocus() {
     this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
     const selectedNode = this.container.querySelector(".settings-nav-item.selected");
-    if (selectedNode) {
+    if (selectedNode && this.focusZone !== "nav") {
       scrollSettingsRailItem(selectedNode);
     }
 
@@ -2485,8 +3546,8 @@ export const SettingsScreen = {
         || this.container.querySelector(".settings-dialog-option");
       if (dialogNode) {
         dialogNode.classList.add("focused");
-        dialogNode.focus();
-        scrollIntoNearestView(dialogNode);
+        focusSettingsNode(dialogNode);
+        scrollSettingsContentItem(dialogNode);
       }
       return;
     }
@@ -2497,7 +3558,7 @@ export const SettingsScreen = {
         : this.container.querySelector(`.settings-text-dialog-button[data-dialog-index="${this.dialogFocusIndex}"]`);
       if (dialogNode) {
         dialogNode.classList.add("focused");
-        dialogNode.focus();
+        focusSettingsNode(dialogNode);
         if (dialogNode.matches?.("[data-text-dialog-role='field']")) {
           try {
             const length = String(dialogNode.value || "").length;
@@ -2506,7 +3567,7 @@ export const SettingsScreen = {
             // Ignore unsupported selection APIs on TV browsers.
           }
         }
-        scrollIntoNearestView(dialogNode);
+        scrollSettingsContentItem(dialogNode);
       }
       return;
     }
@@ -2516,7 +3577,7 @@ export const SettingsScreen = {
       const sidebarNode = sidebarNodes[this.sidebarFocusIndex] || getRootSidebarSelectedNode(this.container, this.layoutPrefs);
       if (sidebarNode) {
         sidebarNode.classList.add("focused");
-        sidebarNode.focus();
+        focusSettingsNode(sidebarNode);
         if (!this.layoutPrefs?.modernSidebar) {
           setLegacySidebarExpanded(this.container, true);
         }
@@ -2535,8 +3596,12 @@ export const SettingsScreen = {
       const fallbackContent = contentNode || this.container.querySelector(".settings-content-focusable");
       if (fallbackContent) {
         fallbackContent.classList.add("focused");
-        fallbackContent.focus();
-        scrollIntoNearestView(fallbackContent);
+        focusSettingsNode(fallbackContent);
+        if (this.suppressNextContentFocusScroll) {
+          this.suppressNextContentFocusScroll = false;
+        } else {
+          scrollSettingsContentItem(fallbackContent);
+        }
         this.contentFocusKey = String(fallbackContent.dataset.focusKey || "");
         return;
       }
@@ -2547,7 +3612,7 @@ export const SettingsScreen = {
       || this.container.querySelector(".settings-nav-item");
     if (navNode) {
       navNode.classList.add("focused");
-      navNode.focus();
+      focusSettingsNode(navNode);
       scrollSettingsRailItem(navNode);
     }
   },
@@ -2582,6 +3647,10 @@ export const SettingsScreen = {
   async activateNavSelection() {
     const section = this.visibleSections[this.navIndex];
     if (!section) {
+      return;
+    }
+    if (section.id === "trakt") {
+      await Router.navigate("trakt");
       return;
     }
     this.setActiveSection(section.id);
@@ -2622,10 +3691,10 @@ export const SettingsScreen = {
       if (rememberedTheme) {
         before?.classList?.remove("focused");
         rememberedTheme.classList.add("focused");
-        rememberedTheme.focus();
+        focusSettingsNode(rememberedTheme);
         this.contentFocusKey = String(rememberedTheme.dataset.focusKey || "");
         this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-        scrollIntoNearestView(rememberedTheme);
+        scrollSettingsContentItem(rememberedTheme);
         return before !== rememberedTheme;
       }
     }
@@ -2663,10 +3732,10 @@ export const SettingsScreen = {
       if (nextTheme) {
         before?.classList?.remove("focused");
         nextTheme.classList.add("focused");
-        nextTheme.focus();
+        focusSettingsNode(nextTheme);
         this.contentFocusKey = String(nextTheme.dataset.focusKey || "");
         this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-        scrollIntoNearestView(nextTheme);
+        scrollSettingsContentItem(nextTheme);
         return before !== nextTheme;
       }
     }
@@ -2679,7 +3748,7 @@ export const SettingsScreen = {
         this.rememberAppearanceThemeFocusKey(beforeFocusKey);
       }
       this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-      scrollIntoNearestView(after);
+      scrollSettingsContentItem(after);
     }
     return before !== after;
   },
@@ -2715,6 +3784,62 @@ export const SettingsScreen = {
     }
 
     content.scrollTop += deltaY;
+  },
+
+  async handleClickEvent(event) {
+    const target = event?.target?.closest?.(".settings-nav-item, .settings-content-focusable, .settings-dialog-option, [data-text-dialog-role='field']");
+    if (!target || !this.container?.contains?.(target)) {
+      return;
+    }
+
+    event?.preventDefault?.();
+    if (target.classList.contains("settings-nav-item")) {
+      const navIndex = Number(target.dataset.navIndex);
+      if (Number.isFinite(navIndex)) {
+        this.navIndex = clamp(navIndex, 0, Math.max(0, this.visibleSections.length - 1));
+      }
+      this.focusZone = "nav";
+      await this.activateNavSelection();
+      return;
+    }
+
+    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    focusSettingsNode(target);
+
+    if (String(target.dataset.focusKey || "") === "about:supporters") {
+      await Router.navigate("supportersContributors");
+      return;
+    }
+
+    if (this.textDialog) {
+      const field = target.closest?.("[data-text-dialog-role='field']");
+      if (field) {
+        this.focusZone = "dialog";
+        this.dialogFocusIndex = 0;
+        return;
+      }
+      const button = target.closest?.(".settings-text-dialog-button[data-dialog-index]");
+      if (button) {
+        this.focusZone = "dialog";
+        this.dialogFocusIndex = clamp(Number(button.dataset.dialogIndex || 1), 1, 2);
+        await this.activateFocused();
+        return;
+      }
+      return;
+    }
+
+    if (target.classList.contains("settings-dialog-option")) {
+      const dialogIndex = Number(target.dataset.dialogIndex);
+      if (Number.isFinite(dialogIndex)) {
+        this.dialogFocusIndex = dialogIndex;
+      }
+    } else {
+      this.focusZone = "content";
+      this.contentFocusKey = String(target.dataset.focusKey || this.contentFocusKey || "");
+    }
+
+    await this.activateFocused();
   },
 
   async activateFocused() {
@@ -2754,10 +3879,15 @@ export const SettingsScreen = {
       return;
     }
 
+    if (String(current.dataset.focusKey || "") === "about:supporters") {
+      await Router.navigate("supportersContributors");
+      return;
+    }
+
     const zone = String(current.dataset.zone || "");
 
     if (isRootSidebarNode(current)) {
-      await activateLegacySidebarAction(String(current.dataset.action || ""), "settings");
+      activateLegacySidebarAction(String(current.dataset.action || ""), "settings");
       if (isSelectedSidebarAction(String(current.dataset.action || ""), "settings")) {
         await this.closeSidebarToNav();
       }
@@ -2786,90 +3916,16 @@ export const SettingsScreen = {
 
     this.contentFocusKey = focusKey;
     this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
+    const role = String(current.dataset.role || "");
+    const isSectionToggle = role === "section-toggle";
+    this.suppressNextContentFocusScroll = this.focusZone === "content" && (role === "toggle" || isSectionToggle);
     await action();
 
     if (Router.getCurrent() === "settings") {
-      await this.render();
+      await this.render({ refreshModel: !isSectionToggle });
       this.focusZone = "content";
       this.applyFocus();
     }
-  },
-
-  onPointerFocus(target) {
-    if (!target || !this.container?.contains(target)) {
-      return false;
-    }
-
-    if (this.optionDialog) {
-      const dialogOption = target.closest?.(".settings-dialog-option");
-      if (dialogOption) {
-        this.dialogFocusIndex = clamp(
-          Number(dialogOption.dataset.dialogIndex || 0),
-          0,
-          Math.max(0, this.optionDialog.options.length - 1)
-        );
-        return true;
-      }
-      return false;
-    }
-
-    if (this.textDialog) {
-      const field = target.closest?.("[data-text-dialog-role='field']");
-      if (field) {
-        this.dialogFocusIndex = 0;
-        return true;
-      }
-      const button = target.closest?.(".settings-text-dialog-button[data-dialog-index]");
-      if (button) {
-        this.dialogFocusIndex = clamp(Number(button.dataset.dialogIndex || 1), 1, 2);
-        return true;
-      }
-      return false;
-    }
-
-    if (isRootSidebarNode(target)) {
-      const sidebarNodes = getRootSidebarNodes(this.container, this.layoutPrefs);
-      this.focusZone = "sidebar";
-      this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(target));
-      if (this.layoutPrefs?.modernSidebar) {
-        this.sidebarExpanded = true;
-        setModernSidebarExpanded(this.container, true);
-      } else {
-        setLegacySidebarExpanded(this.container, true);
-      }
-      return true;
-    }
-
-    const zone = String(target.dataset.zone || "");
-    if (zone === "nav") {
-      this.focusZone = "nav";
-      this.navIndex = clamp(
-        Number(target.dataset.navIndex || 0),
-        0,
-        Math.max(0, this.visibleSections.length - 1)
-      );
-      scrollSettingsRailItem(target);
-      return true;
-    }
-
-    if (target.matches?.(".settings-content-focusable")) {
-      this.focusZone = "content";
-      this.contentFocusKey = String(target.dataset.focusKey || "");
-      this.rememberAppearanceThemeFocusKey(this.contentFocusKey);
-      scrollIntoNearestView(target);
-      return true;
-    }
-
-    return false;
-  },
-
-  async onPointerActivate(target) {
-    if (!target || !this.container?.contains(target)) {
-      return false;
-    }
-    this.onPointerFocus(target);
-    await this.activateFocused();
-    return true;
   },
 
   async onKeyDown(event) {
@@ -2894,14 +3950,35 @@ export const SettingsScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
-    const key = String(event?.key || event?.code || event?.keyName || "").toLowerCase();
 
-    if (this.focusZone === "sidebar" && (code === 36 || key === "home")) {
-      event?.preventDefault?.();
-      event?.stopPropagation?.();
-      event?.stopImmediatePropagation?.();
-      await Router.navigate("home");
-      return;
+    if (this.textDialog) {
+      const activeField = document.activeElement?.matches?.("[data-text-dialog-role='field']");
+      if ((code === 38 || code === 40) && !(activeField && this.textDialog.multiline)) {
+        event?.preventDefault?.();
+        const delta = code === 38 ? -1 : 1;
+        this.dialogFocusIndex = clamp(this.dialogFocusIndex + delta, 0, 2);
+        this.applyFocus();
+        return;
+      }
+      if (code === 37 || code === 39) {
+        if (!activeField) {
+          event?.preventDefault?.();
+          this.dialogFocusIndex = clamp(this.dialogFocusIndex + (code === 37 ? -1 : 1), 0, 2);
+          this.applyFocus();
+        }
+        return;
+      }
+      if (code === 13 && activeField) {
+        if (this.textDialog.multiline) {
+          return;
+        }
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        event?.stopImmediatePropagation?.();
+        await this.submitTextDialog();
+        await this.render();
+        return;
+      }
     }
 
     if (this.optionDialog) {
@@ -2919,25 +3996,6 @@ export const SettingsScreen = {
 
       if (code === 37 || code === 39) {
         event?.preventDefault?.();
-        return;
-      }
-    }
-
-    if (this.textDialog) {
-      const activeField = document.activeElement?.matches?.("[data-text-dialog-role='field']");
-      if ((code === 38 || code === 40) && !(activeField && this.textDialog.multiline)) {
-        event?.preventDefault?.();
-        const delta = code === 38 ? -1 : 1;
-        this.dialogFocusIndex = clamp(this.dialogFocusIndex + delta, 0, 2);
-        this.applyFocus();
-        return;
-      }
-      if (code === 37 || code === 39) {
-        if (!activeField) {
-          event?.preventDefault?.();
-          this.dialogFocusIndex = clamp(this.dialogFocusIndex + (code === 37 ? -1 : 1), 0, 2);
-          this.applyFocus();
-        }
         return;
       }
     }
@@ -3014,25 +4072,11 @@ export const SettingsScreen = {
       }
     }
 
-    if (this.textDialog && code === 13 && document.activeElement?.matches?.("[data-text-dialog-role='field']")) {
-      if (this.textDialog.multiline) {
-        return;
-      }
-      event?.preventDefault?.();
-      event?.stopPropagation?.();
-      event?.stopImmediatePropagation?.();
-      await this.submitTextDialog();
-      await this.render();
-      return;
-    }
-
-    if (code !== 13) {
+    if (!isSettingsActivateEvent(event)) {
       return;
     }
 
     event?.preventDefault?.();
-    event?.stopPropagation?.();
-    event?.stopImmediatePropagation?.();
     await this.activateFocused();
   },
 
@@ -3042,20 +4086,40 @@ export const SettingsScreen = {
       void this.render({ refreshModel: false });
       return true;
     }
-    if (!this.optionDialog) {
-      return false;
+    if (this.optionDialog) {
+      this.closeOptionDialog();
+      void this.render({ refreshModel: false });
+      return true;
     }
-    this.closeOptionDialog();
-    void this.render({ refreshModel: false });
+    if (this.focusZone === "sidebar") {
+      Platform.exitApp();
+    } else {
+      void this.openSidebar();
+    }
     return true;
   },
 
   cleanup() {
+    this.stopTraktPolling?.();
     LocalStore.remove(SETTINGS_UI_STATE_KEY);
     if (this.container && this.handleWheelBound) {
       this.container.removeEventListener("wheel", this.handleWheelBound);
     }
+    if (this.container && this.handleClickBound) {
+      this.container.removeEventListener("click", this.handleClickBound);
+    }
+    const navSlot = this.container?.querySelector?.("[data-settings-nav]");
+    if (navSlot && this.handleRailScrollBound) {
+      navSlot.removeEventListener("scroll", this.handleRailScrollBound);
+    }
+    if (navSlot?.settingsScrollAnimationFrame) {
+      cancelAnimationFrame(navSlot.settingsScrollAnimationFrame);
+      navSlot.settingsScrollAnimationFrame = null;
+    }
     this.handleWheelBound = null;
+    this.handleClickBound = null;
+    this.handleRailScrollBound = null;
+    this.railScrollNode = null;
     this.activeSection = null;
     this.focusZone = "nav";
     this.sidebarFocusIndex = 0;
@@ -3069,6 +4133,7 @@ export const SettingsScreen = {
     this.dialogFocusIndex = 0;
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
+    this.suppressNextContentFocusScroll = false;
     this.renderedSectionId = null;
     ScreenUtils.hide(this.container);
   }

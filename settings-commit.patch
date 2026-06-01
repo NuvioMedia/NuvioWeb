@@ -1,0 +1,74 @@
+diff --git a/css/components.css b/css/components.css
+index 600e259..042ee6e 100644
+--- a/css/components.css
++++ b/css/components.css
+@@ -6787,7 +6787,7 @@ button:focus-visible {
+ }
+ 
+ .settings-group-card-fill {
+-  flex: 1 1 auto;
++  flex: 1 1 0;
+   min-height: 0;
+   overflow-y: auto;
+   scrollbar-width: none;
+@@ -7613,16 +7613,16 @@ button:focus-visible {
+ .settings-layout-grid {
+   display: grid;
+   grid-template-columns: repeat(3, minmax(0, 1fr));
+-  gap: 14px;
++  gap: 24px;
+ }
+ 
+ .settings-layout-card {
+-  min-height: 216px;
+-  border-radius: 28px;
++  min-height: 316px;
++  border-radius: 36px;
+   border: 1px solid transparent;
+   background: var(--bg-color);
+   color: #fff;
+-  padding: 22px;
++  padding: 20px;
+   text-align: left;
+   display: flex;
+   flex-direction: column;
+@@ -7649,8 +7649,8 @@ button:focus-visible {
+ }
+ 
+ .settings-layout-preview {
+-  height: 112px;
+-  border-radius: 12px;
++  height: 224px;
++  border-radius: 24px;
+   background: var(--bg-color);
+   position: relative;
+   overflow: hidden;
+@@ -7865,13 +7865,10 @@ button:focus-visible {
+ }
+ 
+ .settings-layout-name {
+-  font-size: 24px;
++  font-size: 28px;
+   font-weight: 500;
+-}
+-
+-.settings-layout-caption {
+-  color: var(--text-secondary);
+-  font-size: 18px;
++  line-height: 40px;
++  letter-spacing: 0.2px;
+ }
+ 
+ .settings-profile-summary {
+diff --git a/js/ui/screens/settings/settingsScreen.js b/js/ui/screens/settings/settingsScreen.js
+index a922fb2..80c75ec 100644
+--- a/js/ui/screens/settings/settingsScreen.js
++++ b/js/ui/screens/settings/settingsScreen.js
+@@ -1485,7 +1485,6 @@ export const SettingsScreen = {
+         <span class="settings-layout-badge">${escapeHtml(t("common.beta", {}, "Beta"))}</span>
+         <span class="settings-layout-preview settings-layout-preview-${escapeHtml(option.id)}">${renderLayoutPreviewMarkup(option.id)}</span>
+         <span class="settings-layout-name">${escapeHtml(translateOptionLabel(option))}</span>
+-        <span class="settings-layout-caption">${escapeHtml(translateOptionCaption(option))}</span>
+       </button>
+     `;
+   },

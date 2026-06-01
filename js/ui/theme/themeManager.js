@@ -21,7 +21,16 @@ export const ThemeManager = {
 
   apply() {
     const theme = ThemeStore.get();
-    const colors = ThemeColors.getPalette(theme.themeName);
+    const colors = {
+      ...ThemeColors.getPalette(theme.themeName)
+    };
+    if (theme.amoledMode) {
+      colors["--bg-color"] = "#000000";
+      if (theme.amoledSurfacesMode) {
+        colors["--bg-elevated"] = "#000000";
+        colors["--card-bg"] = "#000000";
+      }
+    }
     const derivedColors = {
       "--bg-color-rgb": toRgbChannels(colors["--bg-color"], "13 13 13"),
       "--bg-elevated-rgb": toRgbChannels(colors["--bg-elevated"], "26 26 26"),

@@ -946,6 +946,8 @@
     <string name="settings.playback.renderMode.subtitle">Choose how subtitles are drawn.</string>
     <string name="settings.playback.renderMode.title">Render Mode</string>
     <string name="settings.playback.subtitleLanguage.subtitle">Preferred subtitle language.</string>
+    <string name="sub_use_forced_subtitles">強制字幕を使用</string>
+    <string name="sub_use_forced_subtitles_desc">音声が選択した字幕言語と一致する場合は強制字幕を優先します。</string>
     <string name="settings.plugins.addRepositoryPrompt">Add repository URL</string>
     <string name="settings.plugins.customProviderTemplate">Custom provider template</string>
     <string name="settings.plugins.noRepositoriesSubtitle">Add a repository to get started.</string>

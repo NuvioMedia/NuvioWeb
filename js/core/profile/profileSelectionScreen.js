@@ -1,11 +1,14 @@
 import { Router } from "../../ui/navigation/router.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
+import { ProfileSettingsSyncService } from "../../core/profile/profileSettingsSyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
+import { Platform } from "../../platform/index.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
+import { NuvioDialog } from "../../ui/components/nuvioDialog.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#f5f5f5";
@@ -79,6 +82,67 @@ function escapeHtml(value) {
 function getProfileInitial(name) {
   const trimmed = String(name || "").trim();
   return trimmed ? trimmed.charAt(0).toUpperCase() : "?";
+}
+
+const centeredScrollAnimations = new WeakMap();
+
+function animateScrollTop(container, clampedTarget, duration = 220) {
+  if (!container) {
+    return;
+  }
+  if (typeof requestAnimationFrame !== "function") {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  const existing = centeredScrollAnimations.get(container);
+  if (existing) {
+    cancelAnimationFrame(existing);
+  }
+  const startTop = container.scrollTop;
+  const delta = clampedTarget - startTop;
+  if (Math.abs(delta) < 1) {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  const startTime = performance.now();
+  const step = (now) => {
+    const elapsed = Math.min(1, (now - startTime) / duration);
+    const eased = 1 - Math.pow(1 - elapsed, 4);
+    container.scrollTop = startTop + (delta * eased);
+    if (elapsed < 1) {
+      centeredScrollAnimations.set(container, requestAnimationFrame(step));
+    } else {
+      centeredScrollAnimations.delete(container);
+    }
+  };
+  centeredScrollAnimations.set(container, requestAnimationFrame(step));
+}
+
+function centerAvatarRowInScrollContainer(node, container, siblingNodes, behavior = "smooth") {
+  if (!node || !container) {
+    return;
+  }
+  const rows = buildVisualRows(siblingNodes || []);
+  const row = rows.find((entry) => entry.nodes.includes(node));
+  if (!row) {
+    return;
+  }
+  const rowRects = row.nodes.map((entry) => entry.getBoundingClientRect());
+  const rowTop = Math.min(...rowRects.map((rect) => rect.top));
+  const rowBottom = Math.max(...rowRects.map((rect) => rect.bottom));
+  const rowHeight = rowBottom - rowTop;
+  const containerRect = container.getBoundingClientRect();
+  const targetTop = container.scrollTop + (rowTop - containerRect.top) - ((containerRect.height - rowHeight) / 2);
+  const clampedTarget = Math.max(0, targetTop);
+  if (behavior !== "smooth") {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  if (Math.abs(clampedTarget - container.scrollTop) < 8) {
+    container.scrollTop = clampedTarget;
+    return;
+  }
+  animateScrollTop(container, clampedTarget, 120);
 }
 
 function clampChannel(value) {
@@ -216,6 +280,8 @@ export const ProfileSelectionScreen = {
     this.lastProfileFocusKey = "profile:1";
     this.optionsProfileId = null;
     this.deleteProfileId = null;
+    this._optionsDialog = null;
+    this._deleteDialog = null;
     this.editorState = null;
     this.pinOverlayState = null;
     this.pinOverlayRenderState = null;
@@ -238,11 +304,6 @@ export const ProfileSelectionScreen = {
     this.profiles = await ProfileManager.getProfiles();
     await this.refreshProfilePinStates();
     this.lastProfileFocusKey = `profile:${this.activeProfileId || "1"}`;
-    if (!this.isManagementMode && this.profiles.length === 1 && !this.isProfilePinEnabled(this.profiles[0]?.id)) {
-      await this.activateProfile(this.profiles[0].id);
-      return;
-    }
-
     await this.loadAvatarCatalog();
     this.render();
   },
@@ -297,11 +358,11 @@ export const ProfileSelectionScreen = {
     if (category === "all") {
       return this.avatarCatalog;
     }
-    return this.avatarCatalog.filter((avatar) => avatar.category === category);
+    return this.avatarCatalog.filter((avatar) => String(avatar.category || "").toLowerCase() === category.toLowerCase());
   },
 
   render() {
-    const canAddProfile = this.isManagementMode && this.getVisibleProfiles().length < 4;
+    const canAddProfile = this.getVisibleProfiles().length < 4;
     const title = this.isManagementMode
       ? t("profile_manage_title", {}, "Manage Profiles")
       : t("profile_selection_title", {}, "Who's watching?");
@@ -333,8 +394,6 @@ export const ProfileSelectionScreen = {
         ${this.renderPinOverlay()}
       </div>
       ${this.renderEditorOverlay()}
-      ${this.renderOptionsDialog()}
-      ${this.renderDeleteDialog()}
       ${this.renderPinActionToast()}
     `;
 
@@ -429,7 +488,7 @@ export const ProfileSelectionScreen = {
               <div class="profile-editor-preview-avatar" style="background:${escapeHtml(this.editorState.selectedColorHex || getDefaultProfileColor())}">
                 ${previewAvatarUrl
                   ? `<img class="profile-editor-preview-image" src="${escapeHtml(previewAvatarUrl)}" alt="${escapeHtml(previewName)}"/>`
-                  : escapeHtml(getProfileInitial(previewName))}
+                  : escapeHtml(getProfileInitial(String(this.editorState.name || "").trim()))}
               </div>
 
               <div class="profile-editor-preview-name${String(this.editorState.name || "").trim() ? "" : " is-placeholder"}" data-role="editor-preview-name">${escapeHtml(previewName)}</div>
@@ -446,7 +505,7 @@ export const ProfileSelectionScreen = {
                        tabindex="0"/>
               </label>
 
-              <button class="profile-overlay-button profile-overlay-button-secondary profile-overlay-focusable"
+              <button class="profile-overlay-button profile-overlay-button-primary profile-overlay-focusable"
                       type="button"
                       data-action="cancel-editor"
                       data-focus-key="editor:cancel"
@@ -492,64 +551,10 @@ export const ProfileSelectionScreen = {
                 </div>
               `}
 
-              <div class="profile-editor-avatar-hint" data-role="editor-avatar-hint">
+              <div class="profile-editor-avatar-hint${this.editorState.focusedAvatarName ? " has-name" : ""}" data-role="editor-avatar-hint">
                 ${escapeHtml(this.editorState.focusedAvatarName || t("profile_avatar_focus_hint", {}, "Focus an avatar to view its name"))}
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-    `;
-  },
-
-  renderOptionsDialog() {
-    const profile = this.getProfileById(this.optionsProfileId);
-    if (!profile) {
-      return "";
-    }
-    const pinEnabled = this.isProfilePinEnabled(profile.id);
-
-    return `
-      <div class="profile-dialog-backdrop" data-action="dismiss-options-dialog">
-        <div class="profile-dialog profile-dialog-small" data-overlay-root="options">
-          <div class="profile-dialog-title">${escapeHtml(t("profile_selection_options_title", {}, "Profile Options"))}</div>
-          <div class="profile-dialog-actions">
-            <button class="profile-dialog-button profile-focusable focusable"
-                    type="button"
-                    data-action="open-edit-profile"
-                    data-profile-id="${escapeHtml(profile.id)}"
-                    data-focus-key="options:edit"
-                    tabindex="0">
-              ${escapeHtml(t("profile_edit_label", {}, "Edit"))}
-            </button>
-            <button class="profile-dialog-button profile-focusable focusable"
-                    type="button"
-                    data-action="open-profile-pin"
-                    data-profile-id="${escapeHtml(profile.id)}"
-                    data-focus-key="options:pin"
-                    tabindex="0">
-              ${pinEnabled ? PROFILE_PIN_TEXT.change : PROFILE_PIN_TEXT.set}
-            </button>
-            ${pinEnabled ? `
-              <button class="profile-dialog-button profile-focusable focusable"
-                      type="button"
-                      data-action="remove-profile-pin"
-                      data-profile-id="${escapeHtml(profile.id)}"
-                      data-focus-key="options:remove-pin"
-                      tabindex="0">
-                ${PROFILE_PIN_TEXT.remove}
-              </button>
-            ` : ""}
-            ${profile.isPrimary ? "" : `
-              <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
-                      type="button"
-                      data-action="confirm-delete-profile"
-                      data-profile-id="${escapeHtml(profile.id)}"
-                      data-focus-key="options:delete"
-                      tabindex="0">
-                ${escapeHtml(t("profile_delete", {}, "Delete"))}
-              </button>
-            `}
           </div>
         </div>
       </div>
@@ -643,34 +648,6 @@ export const ProfileSelectionScreen = {
     `;
   },
 
-  renderDeleteDialog() {
-    const profile = this.getProfileById(this.deleteProfileId);
-    if (!profile) {
-      return "";
-    }
-
-    return `
-      <div class="profile-dialog-backdrop" data-action="dismiss-delete-dialog">
-        <div class="profile-dialog profile-dialog-medium" data-overlay-root="delete">
-          <div class="profile-dialog-title">${escapeHtml(t("profile_delete_confirm_title", {}, "Delete Profile?"))}</div>
-          <p class="profile-dialog-subtitle">
-            ${escapeHtml(t("profile_delete_confirm_subtitle", {}, "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."))}
-          </p>
-          <div class="profile-dialog-actions">
-            <button class="profile-dialog-button profile-dialog-button-danger profile-focusable focusable"
-                    type="button"
-                    data-action="delete-profile"
-                    data-profile-id="${escapeHtml(profile.id)}"
-                    data-focus-key="delete:confirm"
-                    tabindex="0">
-              ${escapeHtml(t("profile_delete_btn", {}, "Delete Profile"))}
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-  },
-
   bindEvents() {
     const gridCards = Array.from(this.container.querySelectorAll(".profile-card"));
     gridCards.forEach((card) => {
@@ -680,7 +657,7 @@ export const ProfileSelectionScreen = {
       });
     });
 
-    Array.from(this.container.querySelectorAll(".profile-overlay-focusable, .profile-dialog-button")).forEach((node) => {
+    Array.from(this.container.querySelectorAll(".profile-overlay-focusable")).forEach((node) => {
       node.addEventListener("focus", () => this.handleFocusableFocus(node));
       node.addEventListener("click", async (event) => {
         event.stopPropagation();
@@ -722,19 +699,6 @@ export const ProfileSelectionScreen = {
       });
     }
 
-    Array.from(this.container.querySelectorAll(".profile-dialog-backdrop")).forEach((backdrop) => {
-      backdrop.addEventListener("click", (event) => {
-        if (event.target !== backdrop) {
-          return;
-        }
-        if (backdrop.querySelector("[data-overlay-root='options']")) {
-          this.closeOptionsDialog();
-        } else {
-          this.closeDeleteDialog();
-        }
-      });
-    });
-
     const pinBackdrop = this.container.querySelector(".profile-pin-layer");
     if (pinBackdrop && pinOverlay) {
       pinBackdrop.addEventListener("click", (event) => {
@@ -766,7 +730,7 @@ export const ProfileSelectionScreen = {
       }
     } else if (profileId === "add") {
       this.lastProfileFocusKey = "profile:add";
-      this.updateBackground(getDefaultProfileColor());
+      this.updateBackground("#555555");
     }
 
     if (avatarId && this.editorState) {
@@ -775,12 +739,15 @@ export const ProfileSelectionScreen = {
       const hintNode = this.container.querySelector("[data-role='editor-avatar-hint']");
       if (hintNode) {
         hintNode.textContent = this.editorState.focusedAvatarName || "Focus an avatar to view its name";
+        hintNode.classList.toggle("has-name", Boolean(this.editorState.focusedAvatarName));
       }
-      node.scrollIntoView({ block: "nearest", inline: "nearest" });
+      const gridNode = node.closest(".profile-editor-avatar-grid");
+      const avatarButtons = Array.from(gridNode?.querySelectorAll("[data-action='select-avatar']") || []);
+      centerAvatarRowInScrollContainer(node, gridNode, avatarButtons, "smooth");
     }
 
     if (category) {
-      node.scrollIntoView({ block: "nearest", inline: "nearest" });
+      node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
     }
   },
 
@@ -804,12 +771,6 @@ export const ProfileSelectionScreen = {
   getDefaultFocusKey() {
     if (this.pinOverlayState) {
       return "pin:root";
-    }
-    if (this.deleteProfileId) {
-      return "delete:confirm";
-    }
-    if (this.optionsProfileId) {
-      return "options:edit";
     }
     if (this.editorState) {
       return "editor:name";
@@ -1020,25 +981,78 @@ export const ProfileSelectionScreen = {
     return true;
   },
 
+  updateBackground(colorHex) {
+    const screen = this.container?.querySelector(".profile-screen");
+    if (!screen) return;
+
+    const targetColor = parseHexColor(colorHex, parseHexColor(getDefaultProfileColor()));
+
+    // Cancel any in-progress animation
+    if (this._bgAnimRaf) {
+      cancelAnimationFrame(this._bgAnimRaf);
+      this._bgAnimRaf = null;
+    }
+
+    // Start from whatever color is currently displayed
+    const fromColor = this._bgCurrentColor || targetColor;
+    this._bgCurrentColor = fromColor;
+
+    const DURATION = 520; // matches ATV animateColorAsState tween(520)
+    // ATV tween() default easing is FastOutSlowIn = cubic-bezier(0.4, 0.0, 0.2, 1.0)
+    const fastOutSlowIn = (t) => {
+      // cubic-bezier(0.4, 0, 0.2, 1) approximated via the standard formula
+      // Using a closed-form cubic bezier evaluator
+      const cx = 3 * 0.4, bx = 3 * (0.2 - 0.4) - 0, ax = 1 - cx - bx;
+      const cy = 3 * 0.0, by = 3 * (1.0 - 0.0) - 0, ay = 1 - cy - by;
+      // Solve for x(t)=input using Newton-Raphson
+      let s = t;
+      for (let i = 0; i < 6; i++) {
+        const x = ((ax * s + bx) * s + cx) * s - t;
+        const dx = (3 * ax * s + 2 * bx) * s + cx;
+        if (Math.abs(dx) < 1e-6) break;
+        s -= x / dx;
+      }
+      return ((ay * s + by) * s + cy) * s;
+    };
+    const startTime = performance.now();
+
+    const tick = (now) => {
+      const elapsed = now - startTime;
+      const t = Math.min(elapsed / DURATION, 1);
+      const eased = fastOutSlowIn(t);
+      // Linear interpolation (ATV uses linear tween for color)
+      const animatedColor = {
+        r: Math.round(fromColor.r + (targetColor.r - fromColor.r) * eased),
+        g: Math.round(fromColor.g + (targetColor.g - fromColor.g) * eased),
+        b: Math.round(fromColor.b + (targetColor.b - fromColor.b) * eased),
+      };
+      this._bgCurrentColor = animatedColor;
+      screen.style.background = this.buildBackgroundStyleFromColor(animatedColor);
+      if (t < 1) {
+        this._bgAnimRaf = requestAnimationFrame(tick);
+      } else {
+        this._bgAnimRaf = null;
+      }
+    };
+
+    this._bgAnimRaf = requestAnimationFrame(tick);
+  },
+
   buildBackgroundStyle(colorHex) {
+    const accent = parseHexColor(colorHex, parseHexColor(getDefaultProfileColor()));
+    return this.buildBackgroundStyleFromColor(accent);
+  },
+
+  buildBackgroundStyleFromColor(accent) {
     const rootStyles = getComputedStyle(document.documentElement);
     const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
     const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
-    const accent = parseHexColor(colorHex, parseHexColor(getDefaultProfileColor()));
     const gradientTop = mixColors(elevated, accent, 0.3);
     const gradientMid = mixColors(background, accent, 0.14);
     return `
-      linear-gradient(180deg, ${colorToRgba(gradientTop, 1)} 0%, ${colorToRgba(gradientMid, 1)} 42%, ${colorToRgba(background, 1)} 100%),
-      linear-gradient(90deg, ${colorToRgba(accent, 0.26)} 0%, ${colorToRgba(accent, 0.08)} 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%)
+      linear-gradient(90deg, ${colorToRgba(accent, 0.26)} 0%, ${colorToRgba(accent, 0.08)} 45%, rgba(0, 0, 0, 0) 72%, rgba(0, 0, 0, 0) 100%),
+      linear-gradient(180deg, ${colorToRgba(gradientTop, 1)} 0%, ${colorToRgba(gradientMid, 1)} 42%, ${colorToRgba(background, 1)} 100%)
     `;
-  },
-
-  updateBackground(colorHex) {
-    const screen = this.container?.querySelector(".profile-screen");
-    if (!screen) {
-      return;
-    }
-    screen.style.background = this.buildBackgroundStyle(colorHex);
   },
 
   syncEditorPreview() {
@@ -1073,9 +1087,9 @@ export const ProfileSelectionScreen = {
       profileId: null,
       originalName: "",
       name: "",
-      selectedColorHex: getDefaultProfileColor(),
+      selectedColorHex: "#1E88E5",
       selectedAvatarId: null,
-      baseColorHex: getDefaultProfileColor(),
+      baseColorHex: "#1E88E5",
       category: "all",
       focusedAvatarName: null
     };
@@ -1114,13 +1128,65 @@ export const ProfileSelectionScreen = {
     if (!profile) {
       return;
     }
-    this.editorState = null;
-    this.deleteProfileId = null;
+    // Destroy any existing dialogs
+    this._destroyDialogs();
+
     this.optionsProfileId = String(profile.id);
-    this.pendingFocusKey = "options:edit";
-    this.suppressNextFocusClick("options:edit");
-    this.suppressOptionsDialogEnterUntilKeyUp = true;
-    this.render();
+    const pinEnabled = this.isProfilePinEnabled(profile.id);
+
+    const buttons = [
+      {
+        label: t("profile_edit_label", {}, "Edit"),
+        key: "edit",
+        onAction: () => {
+          this._optionsDialog?.destroy();
+          this._optionsDialog = null;
+          this.openEditEditor(this.getProfileById(profile.id));
+        }
+      },
+      {
+        label: pinEnabled ? PROFILE_PIN_TEXT.change : PROFILE_PIN_TEXT.set,
+        key: "pin",
+        onAction: () => {
+          this._optionsDialog?.destroy();
+          this._optionsDialog = null;
+          const p = this.getProfileById(profile.id);
+          if (p) this.openPinOverlay(this.isProfilePinEnabled(p.id) ? "verify-change" : "set", p);
+        }
+      },
+      ...(pinEnabled ? [{
+        label: PROFILE_PIN_TEXT.remove,
+        key: "remove-pin",
+        onAction: () => {
+          this._optionsDialog?.destroy();
+          this._optionsDialog = null;
+          const p = this.getProfileById(profile.id);
+          if (p) this.openPinOverlay("verify-remove", p);
+        }
+      }] : []),
+      ...(!profile.isPrimary ? [{
+        label: t("profile_delete", {}, "Delete"),
+        key: "delete",
+        danger: true,
+        onAction: () => {
+          this._optionsDialog?.destroy();
+          this._optionsDialog = null;
+          this.openDeleteDialog(this.getProfileById(profile.id));
+        }
+      }] : [])
+    ];
+
+    this._optionsDialog = new NuvioDialog({
+      title: t("profile_selection_options_title", {}, "Profile Options"),
+      widthVw: 37.5, // 360dp / 960dp screen = 37.5vw
+      buttons,
+      onDismiss: () => {
+        this._optionsDialog = null;
+        this.optionsProfileId = null;
+        this.pendingFocusKey = `profile:${profile.id}`;
+        this.restoreFocus();
+      }
+    }).mount(document.body);
   },
 
   canHoldManageProfile(node) {
@@ -1195,8 +1261,12 @@ export const ProfileSelectionScreen = {
   closeOptionsDialog() {
     const profileId = this.optionsProfileId;
     this.optionsProfileId = null;
+    if (this._optionsDialog) {
+      this._optionsDialog.destroy();
+      this._optionsDialog = null;
+    }
     this.pendingFocusKey = profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1");
-    this.render();
+    this.restoreFocus();
   },
 
   openPinOverlay(type, profile, currentPin = null) {
@@ -1451,17 +1521,42 @@ export const ProfileSelectionScreen = {
     if (!profile || profile.isPrimary) {
       return;
     }
-    this.optionsProfileId = null;
+    this._destroyDialogs();
     this.deleteProfileId = String(profile.id);
-    this.pendingFocusKey = "delete:confirm";
-    this.render();
+
+    this._deleteDialog = new NuvioDialog({
+      title: t("profile_delete_confirm_title", {}, "Delete Profile?"),
+      subtitle: t("profile_delete_confirm_subtitle", {}, "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."),
+      widthVw: 43.75, // 420dp / 960dp screen = 43.75vw
+      buttons: [
+        {
+          label: t("profile_delete_btn", {}, "Delete Profile"),
+          key: "confirm",
+          danger: true,
+          onAction: () => {
+            const id = this.deleteProfileId;
+            this._deleteDialog = null;
+            this.deleteProfileId = null;
+            this.deleteProfile(id);
+          }
+        }
+      ],
+      onDismiss: () => {
+        this._deleteDialog = null;
+        this.closeDeleteDialog();
+      }
+    }).mount(document.body);
   },
 
   closeDeleteDialog() {
     const profileId = this.deleteProfileId;
     this.deleteProfileId = null;
+    if (this._deleteDialog) {
+      this._deleteDialog.destroy();
+      this._deleteDialog = null;
+    }
     this.pendingFocusKey = profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1");
-    this.render();
+    this.restoreFocus();
   },
 
   async submitEditor() {
@@ -1632,11 +1727,14 @@ export const ProfileSelectionScreen = {
       return;
     }
     await ProfileManager.setActiveProfile(profileId);
-    await StartupSyncService.syncPull();
+    await ProfileSettingsSyncService.pull(profileId);
+    StartupSyncService.syncPull().catch((error) => {
+      console.warn("Profile startup sync failed", error);
+    });
     await I18n.init();
     ThemeManager.apply();
     I18n.apply();
-    Router.navigate("home");
+    Router.navigate("home", { forceReload: true });
   },
 
   async onKeyDown(event) {
@@ -1652,7 +1750,9 @@ export const ProfileSelectionScreen = {
       || this.container.querySelector("[data-overlay-root='editor']");
     const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
 
-    if (code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
+    const supportsRemoteEnterHold = Platform.isTizen() || Platform.isWebOS();
+
+    if (!supportsRemoteEnterHold || code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
       this.cancelPendingProfileHold();
     }
 
@@ -1681,9 +1781,6 @@ export const ProfileSelectionScreen = {
         return;
       }
       event?.preventDefault?.();
-      if (overlayRoot.dataset.overlayRoot === "options" && this.suppressOptionsDialogEnterUntilKeyUp) {
-        return;
-      }
       this.rememberKeyboardActivation(focused);
       await this.activateFocusedNode(focused);
       return;
@@ -1705,7 +1802,7 @@ export const ProfileSelectionScreen = {
       }
     }
 
-    if (code === 13 && this.canHoldManageProfile(currentProfileCard)) {
+    if (supportsRemoteEnterHold && code === 13 && this.canHoldManageProfile(currentProfileCard)) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingProfileHold(currentProfileCard)) {
         this.startPendingProfileHold(currentProfileCard);
@@ -1730,12 +1827,8 @@ export const ProfileSelectionScreen = {
   },
 
   async onKeyUp(event) {
-    if (this.suppressOptionsDialogEnterUntilKeyUp) {
-      this.suppressOptionsDialogEnterUntilKeyUp = false;
-      if (Number(event?.keyCode || 0) === 13) {
-        event?.preventDefault?.();
-        return;
-      }
+    if (!Platform.isTizen() && !Platform.isWebOS()) {
+      return;
     }
     if (Number(event?.keyCode || 0) !== 13 || this.pinOverlayState || this.optionsProfileId || this.deleteProfileId || this.editorState) {
       return;
@@ -1751,11 +1844,11 @@ export const ProfileSelectionScreen = {
       this.closePinOverlay();
       return true;
     }
-    if (this.deleteProfileId) {
+    if (this._deleteDialog || this.deleteProfileId) {
       this.closeDeleteDialog();
       return true;
     }
-    if (this.optionsProfileId) {
+    if (this._optionsDialog || this.optionsProfileId) {
       this.closeOptionsDialog();
       return true;
     }
@@ -1769,8 +1862,27 @@ export const ProfileSelectionScreen = {
     return false;
   },
 
+  _destroyDialogs() {
+    if (this._optionsDialog) {
+      this._optionsDialog.destroy();
+      this._optionsDialog = null;
+    }
+    if (this._deleteDialog) {
+      this._deleteDialog.destroy();
+      this._deleteDialog = null;
+    }
+    this.optionsProfileId = null;
+    this.deleteProfileId = null;
+  },
+
   cleanup() {
+    this._destroyDialogs();
     this.cancelPendingProfileHold();
+    if (this._bgAnimRaf) {
+      cancelAnimationFrame(this._bgAnimRaf);
+      this._bgAnimRaf = null;
+    }
+    this._bgCurrentColor = null;
     if (this.pinActionMessageTimer) {
       clearTimeout(this.pinActionMessageTimer);
       this.pinActionMessageTimer = null;
@@ -1781,7 +1893,6 @@ export const ProfileSelectionScreen = {
     }
     this.pinTransitionCallback = null;
     this.suppressedFocusClick = null;
-    this.suppressOptionsDialogEnterUntilKeyUp = false;
     const container = document.getElementById("profileSelection");
     if (!container) {
       return;

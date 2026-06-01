@@ -1000,6 +1000,8 @@
     <string name="settings.playback.renderMode.subtitle">Choose how subtitles are drawn.</string>
     <string name="settings.playback.renderMode.title">Render Mode</string>
     <string name="settings.playback.subtitleLanguage.subtitle">Preferred subtitle language.</string>
+    <string name="sub_use_forced_subtitles">Dùng phụ đề bắt buộc</string>
+    <string name="sub_use_forced_subtitles_desc">Ưu tiên phụ đề bắt buộc khi âm thanh khớp với ngôn ngữ phụ đề đã chọn.</string>
     <string name="settings.plugins.addRepositoryPrompt">Add repository URL</string>
     <string name="settings.plugins.customProviderTemplate">Custom provider template</string>
     <string name="settings.plugins.noRepositoriesSubtitle">Add a repository to get started.</string>

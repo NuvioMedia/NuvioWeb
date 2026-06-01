@@ -153,9 +153,11 @@ async function syncServiceFolder(targetDir, serviceDirName, { targetServiceDirNa
 
 async function syncBuild(targetDir) {
   await mkdir(targetDir, { recursive: true });
-  await syncFolder(targetDir, "assets");
-  await syncFolder(targetDir, "css");
-  await syncFolder(targetDir, "res");
+  await Promise.all([
+    syncFolder(targetDir, "assets"),
+    syncFolder(targetDir, "css"),
+    syncFolder(targetDir, "res")
+  ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetDir, "app.bundle.js"));
   try {
@@ -178,7 +180,6 @@ async function syncBuild(targetDir) {
   }
 
 }
-
 async function copyBundledWebOsRuntime(targetDir) {
   const sourceDir = path.join(rootDir, bundledWebOsRuntimeDirName);
   if (!(await pathExists(sourceDir))) {
@@ -472,7 +473,6 @@ async function updateTizenMetadata(targetDir) {
   await writeTextFile(path.join(targetDir, "index.html"), buildTizenIndexHtml());
   await writeTextFile(path.join(targetDir, "main.js"), buildTizenMainJs());
 }
-
 async function injectWebOsRuntimeEnv(targetDir) {
   const envPath = path.join(targetDir, "nuvio.env.js");
   const injection = `

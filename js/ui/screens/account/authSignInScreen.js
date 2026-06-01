@@ -166,6 +166,16 @@ export const AuthSignInScreen = {
     }
   },
 
+  consumeBackRequest() {
+    if (!this.textDialog) {
+      return false;
+    }
+    this.textDialog = null;
+    this.pendingEmail = "";
+    this.render();
+    return true;
+  },
+
   cleanup() {
     this.textDialog = null;
     this.pendingEmail = "";

@@ -1,5 +1,4 @@
 import { httpRequest } from "../../../core/network/httpClient.js";
-import { SessionStore } from "../../../core/storage/sessionStore.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../../../config.js";
 
 function buildHeaders(extra = {}, useSession = true) {
@@ -7,9 +6,7 @@ function buildHeaders(extra = {}, useSession = true) {
     apikey: SUPABASE_ANON_KEY,
     ...extra
   };
-  if (useSession && SessionStore.accessToken) {
-    headers.Authorization = `Bearer ${SessionStore.accessToken}`;
-  } else if (headers.Authorization == null) {
+  if (!useSession && headers.Authorization == null) {
     headers.Authorization = `Bearer ${SUPABASE_ANON_KEY}`;
   }
   return headers;
@@ -21,6 +18,7 @@ export const SupabaseApi = {
     return httpRequest(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
       method: "POST",
       headers: buildHeaders({ "Content-Type": "application/json" }, useSession),
+      includeSessionAuth: useSession,
       body: JSON.stringify(body)
     });
   },
@@ -29,7 +27,8 @@ export const SupabaseApi = {
     const suffix = query ? `?${query}` : "";
     return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${suffix}`, {
       method: "GET",
-      headers: buildHeaders({}, useSession)
+      headers: buildHeaders({}, useSession),
+      includeSessionAuth: useSession
     });
   },
 
@@ -41,6 +40,7 @@ export const SupabaseApi = {
         "Content-Type": "application/json",
         Prefer: "resolution=merge-duplicates,return=representation"
       }, useSession),
+      includeSessionAuth: useSession,
       body: JSON.stringify(rows)
     });
   },
@@ -48,7 +48,8 @@ export const SupabaseApi = {
   delete(table, query, useSession = true) {
     return httpRequest(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
       method: "DELETE",
-      headers: buildHeaders({ Prefer: "return=representation" }, useSession)
+      headers: buildHeaders({ Prefer: "return=representation" }, useSession),
+      includeSessionAuth: useSession
     });
   }
 

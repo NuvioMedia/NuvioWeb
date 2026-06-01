@@ -7,7 +7,9 @@ const DEFAULT_THEME = {
   themeName: "WHITE",
   accentColor: "#ffffff",
   fontFamily: "INTER",
-  language: null
+  language: null,
+  amoledMode: false,
+  amoledSurfacesMode: false
 };
 
 const THEME_BY_ACCENT = new Map([

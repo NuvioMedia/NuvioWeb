@@ -46,6 +46,10 @@ export const ProfileManager = {
     LocalStore.set(ACTIVE_PROFILE_ID_KEY, String(id));
   },
 
+  clearActiveProfile() {
+    LocalStore.remove(ACTIVE_PROFILE_ID_KEY);
+  },
+
   async createProfile({
     name,
     avatarColorHex = "#1E88E5",

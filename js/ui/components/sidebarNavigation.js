@@ -11,7 +11,7 @@ const ROOT_SIDEBAR_ITEMS = [
     labelKey: "sidebar.home",
     iconType: "svg",
     viewBox: "0 0 24 24",
-    iconMarkup: '<path d="M12 3.2 3.5 10v10.25c0 .69.56 1.25 1.25 1.25h5.5v-6.5h3.5v6.5h5.5c.69 0 1.25-.56 1.25-1.25V10L12 3.2Zm0 1.92 7 5.6v9.53h-4v-6.5H9v6.5H5v-9.53l7-5.6Z"/>'
+    iconMarkup: '<path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/>'
   },
   {
     action: "gotoSearch",
@@ -92,10 +92,11 @@ function getItemForAction(action = "") {
   return ROOT_SIDEBAR_ITEMS.find((item) => item.action === String(action || "")) || null;
 }
 
-function getModernSidebarPresentation() {
+function getModernSidebarPresentation(selectedRoute = "") {
+  const route = String(selectedRoute || "").trim().toLowerCase();
   return {
     showPill: true,
-    keepPillExpanded: true
+    keepPillExpanded: route === "settings"
   };
 }
 
@@ -132,17 +133,18 @@ export async function getSidebarProfileState() {
 export function activateLegacySidebarAction(action, currentRoute = "") {
   const normalizedAction = String(action || "");
   if (!normalizedAction) {
-    return null;
+    return;
   }
   if (normalizedAction === "gotoAccount") {
-    return Router.navigate("profileSelection");
+    Router.navigate("profileSelection");
+    return;
   }
 
   const target = getItemForAction(normalizedAction);
   if (!target || target.route === currentRoute) {
-    return null;
+    return;
   }
-  return Router.navigate(target.route);
+  Router.navigate(target.route);
 }
 
 export function isSelectedSidebarAction(action, selectedRoute = "") {
@@ -200,12 +202,13 @@ export function renderModernSidebar({
   const selectedItem = getSelectedItem(selectedRoute);
   const profileState = profile || {};
   const showProfileSelector = Boolean(profileState.showProfileSelector && profileState.activeProfileName);
-  const { showPill, keepPillExpanded } = getModernSidebarPresentation();
+  const { keepPillExpanded } = getModernSidebarPresentation(selectedRoute);
+  const showPill = selectedItem.route !== "search";
   const selectedLabel = itemLabel(selectedItem);
   const performanceConstrained = Platform.isWebOS() || Platform.isTizen();
 
   return `
-    <div class="modern-sidebar-shell${expanded ? " expanded" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">
+    <div class="modern-sidebar-shell${expanded ? " expanded panel-visible" : ""}${blurEnabled ? " blur-enabled" : ""}${keepPillExpanded ? " keep-pill-expanded" : ""}${performanceConstrained ? " performance-constrained" : ""}" data-selected-route="${selectedRoute}">
       ${showPill ? `
         <button class="modern-sidebar-pill${pillIconOnly && !keepPillExpanded ? " icon-only" : ""}" data-action="expandSidebar" aria-label="${t("sidebar.expandSidebar")}" aria-expanded="${expanded ? "true" : "false"}">
           <img class="modern-sidebar-pill-chevron" src="assets/icons/ic_chevron_compact_left.png" alt="" aria-hidden="true" />
@@ -215,7 +218,7 @@ export function renderModernSidebar({
           </span>
         </button>
       ` : ""}
-      <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}"${expanded ? "" : " hidden"}>
+      <aside class="modern-sidebar-panel" aria-hidden="${expanded ? "false" : "true"}">
         ${showProfileSelector ? `
           <button class="modern-sidebar-profile focusable" data-action="gotoAccount" aria-label="${t("sidebar.switchProfile")}">
             <span class="modern-sidebar-profile-avatar" style="background:${profileState.activeProfileColorHex || getThemeAccentFallback()}">
@@ -267,15 +270,49 @@ export function bindRootSidebarEvents(container, {
   onExpandSidebar = null,
   onSelectedAction = null
 } = {}) {
-  container?.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable").forEach((node) => {
+  const focusables = Array.from(container?.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable") || []);
+
+  const moveSidebarFocus = (currentNode, delta) => {
+    const nodes = focusables.filter((node) => node.isConnected);
+    const currentIndex = nodes.indexOf(currentNode);
+    if (currentIndex === -1) {
+      return false;
+    }
+    const nextIndex = Math.max(0, Math.min(nodes.length - 1, currentIndex + delta));
+    const target = nodes[nextIndex] || null;
+    if (!target || target === currentNode) {
+      return true;
+    }
+    nodes.forEach((node) => node.classList.remove("focused"));
+    target.classList.add("focused");
+    focusWithoutAutoScroll(target);
+    return true;
+  };
+
+  focusables.forEach((node) => {
     node.onclick = async (event) => {
       event?.preventDefault?.();
       event?.stopPropagation?.();
       event?.stopImmediatePropagation?.();
       const action = String(node.dataset.action || "");
-      await activateLegacySidebarAction(action, currentRoute);
+      activateLegacySidebarAction(action, currentRoute);
       if (isSelectedSidebarAction(action, currentRoute) && typeof onSelectedAction === "function") {
         await onSelectedAction(node);
+      }
+    };
+
+    node.onkeydown = (event) => {
+      const keyCode = Number(event?.keyCode || 0);
+      if (keyCode === 38) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        moveSidebarFocus(node, -1);
+        return;
+      }
+      if (keyCode === 40) {
+        event?.preventDefault?.();
+        event?.stopPropagation?.();
+        moveSidebarFocus(node, 1);
       }
     };
   });
@@ -297,7 +334,31 @@ export function setLegacySidebarExpanded(container, expanded) {
   if (!sidebar) {
     return;
   }
-  sidebar.classList.toggle("expanded", Boolean(expanded));
+  if (sidebar._legacyOpenTimer) {
+    clearTimeout(sidebar._legacyOpenTimer);
+    sidebar._legacyOpenTimer = null;
+  }
+  const shouldExpand = Boolean(expanded);
+  if (shouldExpand) {
+    sidebar.classList.add("opening");
+    sidebar.classList.add("content-expanded");
+    void sidebar.offsetWidth;
+    requestAnimationFrame(() => {
+      sidebar.classList.add("expanded");
+    });
+    sidebar._legacyOpenTimer = setTimeout(() => {
+      sidebar.classList.remove("opening");
+      sidebar._legacyOpenTimer = null;
+    }, 350);
+    return;
+  }
+
+  sidebar.classList.remove("opening");
+  sidebar.classList.remove("content-expanded");
+  void sidebar.offsetWidth;
+  requestAnimationFrame(() => {
+    sidebar.classList.remove("expanded");
+  });
 }
 
 export function getLegacySidebarNodes(container) {
@@ -389,14 +450,54 @@ export function setModernSidebarExpanded(container, expanded) {
   }
   const panel = shell.querySelector(".modern-sidebar-panel");
   const pill = shell.querySelector(".modern-sidebar-pill");
-  shell.classList.toggle("expanded", Boolean(expanded));
-  if (panel) {
-    panel.hidden = !expanded;
-    panel.setAttribute("aria-hidden", expanded ? "false" : "true");
+  if (shell._modernOpenTimer) {
+    clearTimeout(shell._modernOpenTimer);
+    shell._modernOpenTimer = null;
   }
+  if (shell._modernCloseStartTimer) {
+    clearTimeout(shell._modernCloseStartTimer);
+    shell._modernCloseStartTimer = null;
+  }
+  if (shell._modernCloseEndTimer) {
+    clearTimeout(shell._modernCloseEndTimer);
+    shell._modernCloseEndTimer = null;
+  }
+
+  if (expanded) {
+    shell.classList.add("panel-visible", "opening");
+    shell.classList.remove("collapsing");
+    if (panel) {
+      panel.setAttribute("aria-hidden", "false");
+    }
+    if (pill) {
+      pill.setAttribute("aria-expanded", "true");
+    }
+    requestAnimationFrame(() => {
+      shell.classList.add("expanded");
+    });
+    shell._modernOpenTimer = setTimeout(() => {
+      shell.classList.remove("opening");
+      shell._modernOpenTimer = null;
+    }, 365);
+    return true;
+  }
+
+  shell.classList.add("collapsing");
+  shell.classList.remove("opening");
   if (pill) {
-    pill.setAttribute("aria-expanded", expanded ? "true" : "false");
+    pill.setAttribute("aria-expanded", "false");
   }
+  shell._modernCloseStartTimer = setTimeout(() => {
+    shell.classList.remove("expanded");
+    shell._modernCloseStartTimer = null;
+  }, 70);
+  shell._modernCloseEndTimer = setTimeout(() => {
+    shell.classList.remove("panel-visible", "collapsing");
+    if (panel) {
+      panel.setAttribute("aria-hidden", "true");
+    }
+    shell._modernCloseEndTimer = null;
+  }, 430);
   return true;
 }
 

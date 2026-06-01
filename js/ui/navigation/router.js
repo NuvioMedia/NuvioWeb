@@ -10,11 +10,14 @@ import { LibraryScreen } from "../screens/library/libraryScreen.js";
 import { SearchScreen } from "../screens/search/searchScreen.js";
 import { DiscoverScreen } from "../screens/search/discoverScreen.js";
 import { SettingsScreen } from "../screens/settings/settingsScreen.js";
+import { TraktScreen } from "../screens/trakt/traktScreen.js";
+import { SupportersContributorsScreen } from "../screens/supporters/supportersContributorsScreen.js";
 import { PluginScreen } from "../screens/plugin/pluginScreen.js";
 import { CatalogOrderScreen } from "../screens/plugin/catalogOrderScreen.js";
 import { StreamScreen } from "../screens/stream/streamScreen.js";
 import { CastDetailScreen } from "../screens/cast/castDetailScreen.js";
 import { CatalogSeeAllScreen } from "../screens/catalog/catalogSeeAllScreen.js";
+import { FolderDetailScreen } from "../screens/collection/folderDetailScreen.js";
 import { Platform } from "../../platform/index.js";
 import { RouteStateStore } from "./routeStateStore.js";
 
@@ -49,11 +52,14 @@ export const Router = {
     search: SearchScreen,
     discover: DiscoverScreen,
     settings: SettingsScreen,
+    trakt: TraktScreen,
+    supportersContributors: SupportersContributorsScreen,
     plugin: PluginScreen,
     catalogOrder: CatalogOrderScreen,
     stream: StreamScreen,
     castDetail: CastDetailScreen,
-    catalogSeeAll: CatalogSeeAllScreen
+    catalogSeeAll: CatalogSeeAllScreen,
+    folderDetail: FolderDetailScreen
   },
 
   getRouteStateKey(routeName, params = {}) {

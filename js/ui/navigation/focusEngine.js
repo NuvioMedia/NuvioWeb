@@ -109,7 +109,9 @@ export const FocusEngine = {
     const currentScreen = Router.getCurrentScreen();
 
     if (currentScreen?.onKeyDown) {
-      currentScreen.onKeyDown(normalizedEvent);
+      Promise.resolve(currentScreen.onKeyDown(normalizedEvent)).catch((error) => {
+        console.warn("Screen keydown handler failed", error);
+      });
     }
   },
 
@@ -121,7 +123,9 @@ export const FocusEngine = {
       return;
     }
     const normalizedEvent = buildNormalizedEvent(event);
-    currentScreen.onKeyUp(normalizedEvent);
+    Promise.resolve(currentScreen.onKeyUp(normalizedEvent)).catch((error) => {
+      console.warn("Screen keyup handler failed", error);
+    });
   },
 
   handleTizenHardwareKey(event) {

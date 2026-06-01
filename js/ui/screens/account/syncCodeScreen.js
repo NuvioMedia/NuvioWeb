@@ -124,6 +124,15 @@ export const SyncCodeScreen = {
     }
   },
 
+  consumeBackRequest() {
+    if (!this.textDialog) {
+      return false;
+    }
+    this.textDialog = false;
+    this.render();
+    return true;
+  },
+
   cleanup() {
     ScreenUtils.hide(this.container);
   }

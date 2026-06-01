@@ -167,6 +167,7 @@ export const TmdbMetadataService = {
       genres: Array.isArray(data.genres) ? data.genres.map((genre) => genre.name).filter(Boolean) : [],
       rating: typeof data.vote_average === "number" ? data.vote_average : null,
       releaseInfo: releaseYear || null,
+      released: type === "tv" ? (data.first_air_date || null) : (data.release_date || null),
       runtime: Number.isFinite(runtimeValue) && runtimeValue > 0 ? `${runtimeValue} min` : null,
       country: countryValue || null,
       language: spokenLanguage?.iso_639_1 || spokenLanguage?.english_name || null,

@@ -2,6 +2,38 @@ import { AuthState } from "./authState.js";
 import { SessionStore } from "../storage/sessionStore.js";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "../../config.js";
 
+function isJwtLike(token) {
+  const value = String(token || "").trim();
+  return value.split(".").length === 3;
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const [, payload] = String(token || "").split(".");
+    if (!payload) {
+      return null;
+    }
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch {
+    return null;
+  }
+}
+
+function isJwtExpired(token, leewaySeconds = 30) {
+  if (!isJwtLike(token)) {
+    return true;
+  }
+  const payload = decodeJwtPayload(token);
+  const exp = Number(payload?.exp || 0);
+  if (!Number.isFinite(exp) || exp <= 0) {
+    return false;
+  }
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  return exp <= (nowSeconds + leewaySeconds);
+}
+
 class AuthManagerClass {
 
   constructor() {
@@ -61,6 +93,10 @@ class AuthManagerClass {
     return this.state === AuthState.AUTHENTICATED;
   }
 
+  isAccessTokenExpired(leewaySeconds = 30) {
+    return isJwtExpired(SessionStore.accessToken, leewaySeconds);
+  }
+
   // ------------------------------------
   // EMAIL LOGIN
   // ------------------------------------
@@ -96,14 +132,19 @@ class AuthManagerClass {
     this.setState(AuthState.SIGNED_OUT);
   }
 
-  async refreshSessionIfNeeded() {
+  async refreshSessionIfNeeded({ force = false } = {}) {
     if (this.refreshPromise) {
       return this.refreshPromise;
     }
 
+    const accessToken = SessionStore.accessToken;
     const refreshToken = SessionStore.refreshToken;
     if (!refreshToken) {
-      return Boolean(SessionStore.accessToken);
+      return Boolean(accessToken) && !isJwtExpired(accessToken, 0);
+    }
+
+    if (!force && accessToken && !isJwtExpired(accessToken)) {
+      return true;
     }
 
     this.refreshPromise = (async () => {

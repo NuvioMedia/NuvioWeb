@@ -51,7 +51,7 @@ export function normalizeKeyEvent(event, backCodes = []) {
   const keyName = String(event?.keyName || event?.detail?.keyName || "");
   const code = String(event?.code || "");
   const keyNameLower = keyName.toLowerCase();
-  const fallbackCode = keyNameLower === "back" ? 10009 : 0;
+  const fallbackCode = keyNameLower === "back" || keyNameLower === "return" ? 10009 : 0;
   const rawCode = Number(getArrowCodeFromKey(key) || event?.keyCode || event?.which || fallbackCode || 0);
   const normalizedCode = normalizeDirectionalKeyCode(rawCode);
   const isBack = isBackEvent(event, backCodes, normalizedCode);
@@ -81,7 +81,7 @@ export function isBackEvent(event, backCodes = [], normalizedCode = null) {
     return false;
   }
 
-  if (keyNameLower === "back") {
+  if (keyNameLower === "back" || keyNameLower === "return") {
     return true;
   }
 

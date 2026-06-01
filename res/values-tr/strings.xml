@@ -1093,6 +1093,8 @@
     <string name="settings.playback.renderMode.subtitle">Choose how subtitles are drawn.</string>
     <string name="settings.playback.renderMode.title">Render Mode</string>
     <string name="settings.playback.subtitleLanguage.subtitle">Preferred subtitle language.</string>
+    <string name="sub_use_forced_subtitles">Zorunlu altyazıları kullan</string>
+    <string name="sub_use_forced_subtitles_desc">Ses seçilen altyazı diliyle eşleştiğinde zorunlu altyazıları tercih et.</string>
     <string name="settings.plugins.addRepositoryPrompt">Add repository URL</string>
     <string name="settings.plugins.customProviderTemplate">Custom provider template</string>
     <string name="settings.plugins.noRepositoriesSubtitle">Add a repository to get started.</string>

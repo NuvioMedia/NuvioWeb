@@ -7,12 +7,23 @@ function joinUrl(baseUrl, path) {
 }
 
 async function requestJson(baseUrl, path, options = {}) {
-  const response = await fetch(joinUrl(baseUrl, path), {
-    ...options,
-    headers: {
-      ...(options.headers || {})
-    }
-  });
+  let response;
+  try {
+    response = await fetch(joinUrl(baseUrl, path), {
+      ...options,
+      headers: {
+        ...(options.headers || {})
+      }
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: null,
+      text: "",
+      error
+    };
+  }
   const text = await response.text();
   let data = null;
   if (text.trim()) {

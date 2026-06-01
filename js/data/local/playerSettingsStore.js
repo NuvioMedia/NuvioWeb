@@ -20,7 +20,8 @@ const DEFAULTS = {
     outlineColor: "#000000",
     verticalOffset: 0,
     preferredLanguage: "off",
-    secondaryPreferredLanguage: "off"
+    secondaryPreferredLanguage: "off",
+    useForcedSubtitles: false
   },
   audioAmplificationDb: 0,
   persistAudioAmplification: false
@@ -69,28 +70,40 @@ function normalizePlayerSettings(settings = {}) {
     ...DEFAULTS.subtitleStyle,
     ...(settings.subtitleStyle || {})
   };
-  const preferredLanguage = normalizeSelectableSubtitleLanguageCode(
+  let preferredLanguage = normalizeSelectableSubtitleLanguageCode(
     subtitleStyle.preferredLanguage ?? settings.subtitleLanguage,
     DEFAULTS.subtitleStyle.preferredLanguage
   );
   const subtitlesEnabled = settings.subtitlesEnabled ?? DEFAULTS.subtitlesEnabled;
-  const normalizedPreferredLanguage = preferredLanguage === "off" && subtitlesEnabled !== false
-    ? "forced"
-    : preferredLanguage;
-  const secondaryPreferredLanguage = normalizeSelectableSubtitleLanguageCode(
+  let secondaryPreferredLanguage = normalizeSelectableSubtitleLanguageCode(
     subtitleStyle.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
     DEFAULTS.subtitleStyle.secondaryPreferredLanguage
   );
+  let useForcedSubtitles = Boolean(subtitleStyle.useForcedSubtitles ?? settings.useForcedSubtitles);
+
+  if (preferredLanguage === "forced") {
+    useForcedSubtitles = true;
+    preferredLanguage = secondaryPreferredLanguage && secondaryPreferredLanguage !== "forced" && secondaryPreferredLanguage !== "off"
+      ? secondaryPreferredLanguage
+      : "en";
+    secondaryPreferredLanguage = "off";
+  }
+  if (secondaryPreferredLanguage === "forced") {
+    useForcedSubtitles = true;
+    secondaryPreferredLanguage = "off";
+  }
+
   return {
     ...DEFAULTS,
     ...settings,
     subtitlesEnabled,
-    subtitleLanguage: normalizedPreferredLanguage,
+    subtitleLanguage: preferredLanguage,
     secondarySubtitleLanguage: secondaryPreferredLanguage,
     subtitleStyle: {
       ...subtitleStyle,
-      preferredLanguage: normalizedPreferredLanguage,
-      secondaryPreferredLanguage
+      preferredLanguage,
+      secondaryPreferredLanguage,
+      useForcedSubtitles
     }
   };
 }

@@ -1,14 +1,19 @@
 export const MODERN_HOME_CONSTANTS = {
-  heroFocusDelayMs: 90,
+  heroFocusDelayMs: 450,
   heroRapidNavThresholdMs: 130,
-  heroRapidSettleMs: 170,
+  heroRapidSettleMs: 400,
   keyRepeatThrottleMs: 80,
   cameraFollowDelayMs: 140,
   cameraFollowDurationXMs: 440,
   cameraFollowDurationYMs: 440,
   cameraSafetyDurationMs: 180,
+  springScrollStiffness: 180,
+  springScrollDampingRatio: 0.95,
   rowFocusInset: 40,
-  trackEdgePadding: 52
+  trackEdgePadding: 104,
+  verticalFastScrollVelocityPxPerSec: 6400,
+  verticalFastScrollEndTimeoutMs: 160,
+  verticalFastScrollMaxFrameMs: 48
 };
 
 export function renderModernHomeLayout({
@@ -18,7 +23,9 @@ export function renderModernHomeLayout({
   continueWatchingItems = [],
   continueWatchingLoading = false,
   continueWatchingLoadingCount = 0,
-  rowItemLimit = 10,
+  useEpisodeThumbnailsInCw = true,
+  blurContinueWatchingNextUp = false,
+  rowItemLimit = 15,
   showHeroSection = false,
   showPosterLabels = true,
   showCatalogTypeSuffix = true,
@@ -39,6 +46,7 @@ export function renderModernHomeLayout({
   const sectionsMarkup = [];
 
   rows.forEach((rowData, rowIndex) => {
+    const isCollectionRow = rowData?.rowKind === "collection";
     const items = Array.isArray(rowData?.result?.data?.items) ? rowData.result.data.items : [];
     const isLoading = rowData?.result?.status === "loading";
     const rowItems = items.length ? items : (rowData.loadingItems || []);
@@ -46,9 +54,9 @@ export function renderModernHomeLayout({
       return;
     }
 
-    const rowKey = buildModernRowKey(rowData);
+    const rowKey = String(rowData?.homeCatalogKey || buildModernRowKey(rowData));
     const seeAllId = `${rowData.addonId || "addon"}_${rowData.catalogId || "catalog"}_${rowData.type || "movie"}`;
-    if (!isLoading) {
+    if (!isLoading && !isCollectionRow) {
       catalogSeeAllMap.set(seeAllId, {
         addonBaseUrl: rowData.addonBaseUrl || "",
         addonId: rowData.addonId || "",
@@ -60,15 +68,17 @@ export function renderModernHomeLayout({
       });
     }
 
-    const maxItems = Math.max(1, Number(rowItemLimit || 10));
-    const hasSeeAll = !isLoading && items.length > maxItems;
+    const maxItems = Math.max(1, Number(rowItemLimit || 15));
     const visibleItems = rowItems.slice(0, maxItems);
-    const rowTitle = formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
+    const rowTitle = isCollectionRow
+      ? String(rowData.collectionTitle || rowData.collection?.title || "Collection")
+      : formatCatalogRowTitle(rowData.catalogName, rowData.type, showCatalogTypeSuffix);
     const cardsMarkup = visibleItems.map((item, itemIndex) => createPosterCardMarkup(
       item,
       rowIndex,
       itemIndex,
       rowData.type,
+      rowData,
       showPosterLabels,
       "modern",
       expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex,
@@ -82,10 +92,6 @@ export function renderModernHomeLayout({
         </div>
         <div class="home-track" data-track-row-key="${escapeHtml(rowKey)}">
           ${cardsMarkup}
-          ${hasSeeAll ? createSeeAllCardMarkup(seeAllId, rowData, {
-            layoutMode: "modern",
-            preferLandscapePoster: preferLandscapePosters
-          }) : ""}
         </div>
       </section>
     `);
@@ -108,7 +114,9 @@ export function renderModernHomeLayout({
             ${renderContinueWatchingSection(continueWatchingItems, {
               rowKey: "continue_watching",
               loading: continueWatchingLoading,
-              loadingCount: continueWatchingLoadingCount
+              loadingCount: continueWatchingLoadingCount,
+              useEpisodeThumbnails: useEpisodeThumbnailsInCw,
+              blurNextUp: blurContinueWatchingNextUp
             })}
             <div class="home-modern-catalogs">
               ${sectionsMarkup.join("")}
@@ -206,7 +214,7 @@ function renderModernHeroMarkup({
   }
   return `
     <section class="home-hero home-hero-modern">
-      <article class="home-hero-card home-modern-hero-card"
+      <article class="home-hero-card home-modern-hero-card${heroItem?.heroMetaEnriching ? " is-hero-meta-enriching" : ""}"
                data-item-id="${escapeAttribute(heroItem?.id || "")}"
                data-item-type="${escapeAttribute(heroItem?.type || "movie")}"
                data-item-title="${escapeAttribute(heroItem?.name || "Untitled")}">

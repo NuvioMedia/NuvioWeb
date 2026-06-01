@@ -704,6 +704,27 @@ function buildEpisodePanelHint() {
   return `UP/DOWN ${t("discover_select_catalog", {}, "Select")} | OK ${t("episodes_play", {}, "Play")} | BACK ${t("episodes_panel_close", {}, "Close")}`;
 }
 
+function episodeDisplayCode(episode = {}) {
+  const season = Number(episode?.season);
+  const episodeNumber = Number(episode?.episode);
+  if (!Number.isFinite(season) || !Number.isFinite(episodeNumber)) {
+    return "";
+  }
+  return `S${season} E${episodeNumber}`;
+}
+
+function episodeThumbnailUrl(episode = {}) {
+  return cleanDisplayText(
+    episode?.thumbnail
+    || episode?.thumbnailUrl
+    || episode?.still
+    || episode?.stillUrl
+    || episode?.poster
+    || episode?.image
+    || ""
+  );
+}
+
 function qualityLabelFromText(value) {
   const text = String(value || "").toLowerCase();
   if (text.includes("2160") || text.includes("4k")) return "2160p";
@@ -1096,9 +1117,9 @@ export const PlayerScreen = {
     this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
 
     this.aspectModes = [
-      { objectFit: "contain", label: "Fit" },
-      { objectFit: "cover", label: "Fill" },
-      { objectFit: "fill", label: "Stretch" }
+      { objectFit: "contain", label: t("player_aspect_fit", {}, "Fit") },
+      { objectFit: "cover", label: t("player_aspect_fill", {}, "Fill") },
+      { objectFit: "fill", label: t("player_aspect_stretch", {}, "Stretch") }
     ];
 
     this.streamCandidates = this.normalizeStreamCandidates(Array.isArray(params.streamCandidates) ? params.streamCandidates : []);
@@ -1212,6 +1233,7 @@ export const PlayerScreen = {
     this.embeddedTrackRequestPromise = null;
     this.embeddedTrackRequestUrl = "";
     this.lastEmbeddedTrackProbeUrl = "";
+    this.lastEmbeddedTrackRetryAt = 0;
     this.manifestLoadToken = 0;
     this.manifestLoading = false;
     this.manifestAudioTracks = [];
@@ -2708,6 +2730,52 @@ export const PlayerScreen = {
       && !this.isNextEpisodeCardVisible();
   },
 
+  syncNativePausedStateForPauseOverlay() {
+    if (
+      this.isExternalFrameMode()
+      || this.loadingVisible
+      || this.startupAudioGateActive
+      || (typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay())
+    ) {
+      return false;
+    }
+
+    const video = PlayerController.video;
+    if (!video?.paused) {
+      return false;
+    }
+
+    const readyState = typeof PlayerController.getPlaybackReadyState === "function"
+      ? Number(PlayerController.getPlaybackReadyState() || 0)
+      : Number(video.readyState || 0);
+    if (readyState < 3) {
+      return false;
+    }
+
+    const ended = typeof PlayerController.isPlaybackEnded === "function"
+      ? PlayerController.isPlaybackEnded()
+      : Boolean(video.ended);
+    if (ended) {
+      return false;
+    }
+
+    const wasPaused = Boolean(this.paused);
+    if (!wasPaused) {
+      this.clearPlaybackStallGuard();
+      this.paused = true;
+      this.updateMediaSessionPlaybackState();
+      this.setControlsVisible(true, { focus: false });
+      this.renderControlButtons();
+    }
+
+    if (this.canShowPauseOverlay() && !this.pauseOverlayVisible && !this.pauseOverlayTimer) {
+      this.schedulePauseOverlay();
+      return true;
+    }
+
+    return !wasPaused;
+  },
+
   dismissPauseOverlay({ revealControls = false, focus = false } = {}) {
     this.clearPauseOverlayTimer();
     if (!this.pauseOverlayVisible && !revealControls) {
@@ -2740,6 +2808,9 @@ export const PlayerScreen = {
   },
 
   syncPauseOverlayState() {
+    if (this.syncNativePausedStateForPauseOverlay()) {
+      return;
+    }
     if (this.pauseOverlayVisible && !this.canShowPauseOverlay()) {
       this.dismissPauseOverlay();
       return;
@@ -2957,10 +3028,6 @@ export const PlayerScreen = {
   navigateBackToStreamScreen() {
     if (!this.params?.itemId && !this.params?.videoId) {
       return false;
-    }
-    if (this.params?.returnToStreamOnBack && Router.historyInitialized) {
-      void Router.back({ skipConsume: true });
-      return true;
     }
     void Router.navigate("stream", this.buildStreamRouteParamsFromPlayer(), {
       skipStackPush: true,
@@ -3755,6 +3822,7 @@ export const PlayerScreen = {
       ["loadeddata", onPlayable],
       ["canplay", onPlayable],
       ["avplaytrackschanged", onTrackListChanged],
+      ["hlstrackschanged", onTrackListChanged],
       ["dashtrackschanged", onTrackListChanged]
     ];
 
@@ -4742,6 +4810,7 @@ export const PlayerScreen = {
     this.embeddedTrackRequestPromise = null;
     this.embeddedTrackRequestUrl = "";
     this.lastEmbeddedTrackProbeUrl = "";
+    this.lastEmbeddedTrackRetryAt = 0;
     this.lastTrackWarmupAt = Date.now();
     const embeddedSubtitleWarmupPromise = this.loadEmbeddedSubtitleTracks();
     this.initialEmbeddedTrackBootstrapPromise = embeddedSubtitleWarmupPromise;
@@ -4878,6 +4947,7 @@ export const PlayerScreen = {
   },
 
   refreshTrackDialogs() {
+    this.invalidateTrackDialogCaches();
     this.syncTrackState();
     if (this.startupTrackPreferenceReady) {
       this.applyStartupAudioPreference();
@@ -4993,12 +5063,26 @@ export const PlayerScreen = {
         return;
       }
 
-      const doneByData = this.hasAudioTracksAvailable() || this.hasSubtitleTracksAvailable();
+      const now = Date.now();
+      const shouldRetryEmbeddedSubtitles = this.canDiscoverEmbeddedSubtitleTracks()
+        && this.embeddedSubtitleTracks.length <= 0
+        && !this.embeddedSubtitleLoading;
+      if (
+        shouldRetryEmbeddedSubtitles
+        && (now - Number(this.lastEmbeddedTrackRetryAt || 0)) >= 1200
+      ) {
+        this.lastEmbeddedTrackRetryAt = now;
+        this.loadEmbeddedSubtitleTracks();
+      }
+
+      const doneByData = this.hasSubtitleTracksAvailable()
+        || (this.hasAudioTracksAvailable() && !shouldRetryEmbeddedSubtitles);
       const doneByIdle = !this.subtitleLoading
         && !this.embeddedSubtitleLoading
         && !this.manifestLoading
-        && (Date.now() - Number(this.trackDiscoveryStartedAt || 0)) >= 1200;
-      const doneByTimeout = Date.now() >= this.trackDiscoveryDeadline;
+        && !shouldRetryEmbeddedSubtitles
+        && (now - Number(this.trackDiscoveryStartedAt || 0)) >= 1200;
+      const doneByTimeout = now >= this.trackDiscoveryDeadline;
       this.refreshTrackDialogs();
 
       if (doneByData || doneByIdle || doneByTimeout) {
@@ -6185,14 +6269,33 @@ export const PlayerScreen = {
     return Array.from(new Set(targets));
   },
 
-  getStartupForcedSubtitleLanguageTargets() {
-    const targets = [];
-    const selectedAudioOption = this.collectAudioOptionItems().find((entry) => entry.selected && entry.languageKey);
-    if (selectedAudioOption?.languageKey) {
-      targets.push(selectedAudioOption.languageKey);
+  shouldUseStartupForcedSubtitles(settings = PlayerSettingsStore.get()) {
+    const preferred = extractSubtitleLanguageSetting(settings.subtitleStyle?.preferredLanguage || settings.subtitleLanguage || "off").trim().toLowerCase();
+    const secondary = extractSubtitleLanguageSetting(settings.subtitleStyle?.secondaryPreferredLanguage || settings.secondarySubtitleLanguage || "off").trim().toLowerCase();
+    return Boolean(settings.subtitleStyle?.useForcedSubtitles || settings.useForcedSubtitles)
+      || preferred === "forced"
+      || secondary === "forced";
+  },
+
+  getStartupForcedSubtitleLanguageTarget() {
+    const settings = PlayerSettingsStore.get();
+    if (!settings.subtitlesEnabled || !this.shouldUseStartupForcedSubtitles(settings)) {
+      return null;
     }
-    targets.push(...this.getStartupPreferredAudioLanguageTargets());
-    return Array.from(new Set(targets.filter(Boolean)));
+
+    const explicitTargets = this.getStartupPreferredSubtitleLanguageTargets();
+    const selectedAudioOption = this.collectAudioOptionItems().find((entry) => entry.selected && entry.languageKey);
+    const primaryTarget = explicitTargets[0] || null;
+    if (primaryTarget && selectedAudioOption && this.matchesStartupAudioTarget(selectedAudioOption, primaryTarget)) {
+      return primaryTarget;
+    }
+
+    const preferredAudioTargets = this.getStartupPreferredAudioLanguageTargets();
+    if (!primaryTarget && selectedAudioOption && preferredAudioTargets.some((target) => this.matchesStartupAudioTarget(selectedAudioOption, target))) {
+      return selectedAudioOption.languageKey;
+    }
+
+    return null;
   },
 
   getStartupSubtitlePreferenceMode() {
@@ -6200,11 +6303,14 @@ export const PlayerScreen = {
     if (!settings.subtitlesEnabled) {
       return "off";
     }
+    if (this.getStartupForcedSubtitleLanguageTarget()) {
+      return "audio-forced";
+    }
     const explicitTargets = this.getStartupPreferredSubtitleLanguageTargets();
     if (explicitTargets.length) {
       return "language";
     }
-    return "audio-forced";
+    return "off";
   },
 
   getStartupPreferredAudioLanguageTargets() {
@@ -6357,16 +6463,6 @@ export const PlayerScreen = {
       if (internalMatch) return internalMatch;
       const addonMatch = findMatch(target, { sourceType: "addon", forced: false });
       if (addonMatch) return addonMatch;
-      const forcedInternal = findMatch(target, { sourceType: "internal", forced: true });
-      if (forcedInternal) return forcedInternal;
-      const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
-      if (forcedAddon) return forcedAddon;
-    }
-
-    if (mode === "audio-forced") {
-      return options.find((entry) => entry.sourceType === "internal" && entry.isForced)
-        || options.find((entry) => entry.sourceType === "addon" && entry.isForced)
-        || null;
     }
 
     return null;
@@ -6399,10 +6495,17 @@ export const PlayerScreen = {
     }
 
     const preferenceMode = this.getStartupSubtitlePreferenceMode();
-    const preferredTargets = preferenceMode === "audio-forced"
-      ? this.getStartupForcedSubtitleLanguageTargets()
+    const forcedTarget = preferenceMode === "audio-forced"
+      ? this.getStartupForcedSubtitleLanguageTarget()
+      : null;
+    const preferredTargets = forcedTarget
+      ? [forcedTarget]
       : this.getStartupPreferredSubtitleLanguageTargets();
     const isStillLoading = this.isSubtitlePreferenceDiscoveryPending();
+
+    if (this.shouldUseStartupForcedSubtitles() && !this.collectAudioOptionItems().some((entry) => entry.selected && entry.languageKey) && this.isAudioPreferenceDiscoveryPending()) {
+      return false;
+    }
 
     if (preferenceMode === "off") {
       if (this.selectedSubtitleTrackIndex >= 0 || this.selectedEmbeddedSubtitleTrackIndex >= 0 || this.selectedAddonSubtitleId || this.selectedManifestSubtitleTrackId) {
@@ -7006,6 +7109,64 @@ export const PlayerScreen = {
     return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
   },
 
+  getMergedAudioTrackEntries(audioTracks = []) {
+    const entries = [];
+    const representedEmbeddedIndexes = new Set();
+
+    audioTracks.forEach((track, index) => {
+      const embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(index) || this.getEmbeddedAudioTrack(index);
+      const embeddedTrackIndex = Number(embeddedTrack?.embeddedTrackIndex);
+      if (Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0) {
+        representedEmbeddedIndexes.add(embeddedTrackIndex);
+      }
+
+      const mergedTrack = this.mergeEmbeddedAudioTrackMetadata(track, index);
+      const display = formatAudioTrackDisplay(mergedTrack, index);
+      entries.push({
+        id: `audio-track-${index}`,
+        label: display.label,
+        secondary: display.secondary,
+        selected: Number.isFinite(embeddedTrackIndex) && this.selectedEmbeddedAudioTrackIndex >= 0
+          ? embeddedTrackIndex === this.selectedEmbeddedAudioTrackIndex
+          : index === this.selectedAudioTrackIndex,
+        audioTrackIndex: index,
+        track: mergedTrack
+      });
+    });
+
+    this.embeddedAudioTracks.forEach((track, index) => {
+      const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
+      const normalizedEmbeddedIndex = Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0
+        ? embeddedTrackIndex
+        : index;
+      const nativeTrackIndex = Number(track?.nativeTrackIndex);
+      const representedByNativeIndex = Number.isFinite(nativeTrackIndex)
+        && nativeTrackIndex >= 0
+        && nativeTrackIndex < audioTracks.length;
+      const representedByOrder = index < audioTracks.length;
+
+      if (
+        representedEmbeddedIndexes.has(normalizedEmbeddedIndex)
+        || representedByNativeIndex
+        || representedByOrder
+      ) {
+        return;
+      }
+
+      const display = formatAudioTrackDisplay(track, index);
+      entries.push({
+        id: `audio-embedded-${normalizedEmbeddedIndex}`,
+        label: display.label,
+        secondary: display.secondary,
+        selected: normalizedEmbeddedIndex === this.selectedEmbeddedAudioTrackIndex,
+        embeddedAudioTrackIndex: normalizedEmbeddedIndex,
+        track
+      });
+    });
+
+    return entries;
+  },
+
   getAudioEntries() {
     const cachedEntries = this.trackDialogCache?.audioEntries;
     if (cachedEntries) {
@@ -7074,31 +7235,8 @@ export const PlayerScreen = {
       });
         } else {
           const audioTracks = this.getAudioTracks();
-          if (audioTracks.length) {
-            entries = audioTracks.map((track, index) => {
-              const mergedTrack = this.mergeEmbeddedAudioTrackMetadata(track, index);
-              const display = formatAudioTrackDisplay(mergedTrack, index);
-              return {
-                id: `audio-track-${index}`,
-                label: display.label,
-                secondary: display.secondary,
-                selected: index === this.selectedAudioTrackIndex,
-                audioTrackIndex: index,
-                track: mergedTrack
-              };
-            });
-          } else if (this.embeddedAudioTracks.length) {
-            entries = this.embeddedAudioTracks.map((track, index) => {
-              const display = formatAudioTrackDisplay(track, index);
-              return {
-                id: `audio-embedded-${track?.embeddedTrackIndex ?? index}`,
-                label: display.label,
-                secondary: display.secondary,
-                selected: Number(track?.embeddedTrackIndex) === this.selectedEmbeddedAudioTrackIndex,
-                embeddedAudioTrackIndex: Number(track?.embeddedTrackIndex),
-                track
-              };
-            });
+          if (audioTracks.length || this.embeddedAudioTracks.length) {
+            entries = this.getMergedAudioTrackEntries(audioTracks);
           } else if (this.manifestAudioTracks.length) {
             entries = this.manifestAudioTracks.map((track, index) => {
               const display = formatAudioTrackDisplay(track, index);
@@ -7264,11 +7402,15 @@ export const PlayerScreen = {
 	        applied = typeof PlayerController.setAvPlayAudioTrack === "function" && Number.isFinite(nativeTrackIndex)
 	          ? PlayerController.setAvPlayAudioTrack(nativeTrackIndex)
 	          : false;
-	      } else {
+      } else {
+        const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
+        const targetTrackIndex = Number.isFinite(nativeTrackIndex) && nativeTrackIndex >= 0
+          ? nativeTrackIndex
+          : selectedEntry.embeddedAudioTrackIndex;
 	        applied = typeof PlayerController.setWebOsEmbeddedAudioTrack === "function"
-	          ? PlayerController.setWebOsEmbeddedAudioTrack(selectedEntry.embeddedAudioTrackIndex)
+	          ? PlayerController.setWebOsEmbeddedAudioTrack(targetTrackIndex, selectedEntry.embeddedAudioTrackIndex)
 	          : false;
-	      }
+      }
 		      if (applied) {
 		        this.selectedEmbeddedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
 		        this.selectedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
@@ -7334,13 +7476,41 @@ export const PlayerScreen = {
     }
 
     const entries = this.getAudioEntries();
+    const audioControls = [
+      {
+        id: "amplification",
+        title: t("audio_mix_label", {}, "Audio boost"),
+        value: `${Math.round(Number(this.audioAmplificationDb || 0))} dB`,
+        helper: this.audioAmplificationAvailable
+          ? t("audio_mix_range", { min: AUDIO_AMPLIFICATION_MIN_DB, max: AUDIO_AMPLIFICATION_MAX_DB }, `Range ${AUDIO_AMPLIFICATION_MIN_DB}-${AUDIO_AMPLIFICATION_MAX_DB} dB`)
+          : t("audio_mix_unavailable", {}, "Unavailable on this device"),
+        enabled: Boolean(this.audioAmplificationAvailable),
+        canDecrease: this.audioAmplificationAvailable && Number(this.audioAmplificationDb || 0) > AUDIO_AMPLIFICATION_MIN_DB,
+        canIncrease: this.audioAmplificationAvailable && Number(this.audioAmplificationDb || 0) < AUDIO_AMPLIFICATION_MAX_DB
+      },
+      {
+        id: "persist",
+        title: this.persistAudioAmplification
+          ? t("audio_mix_persist_on", {}, "Save audio boost: On")
+          : t("audio_mix_persist_off", {}, "Save audio boost: Off"),
+        value: "",
+        helper: t("audio_mix_persist_help", {}, "Remember boost for future playback"),
+        enabled: true,
+        toggle: true
+      }
+    ];
+    this.audioMixFocusIndex = clamp(this.audioMixFocusIndex, 0, audioControls.length - 1);
     if (!entries.length) {
+      this.audioFocusedColumn = "controls";
       const loading = this.embeddedAudioLoading
         || (this.isCurrentSourceAdaptiveManifest() && (this.manifestLoading || this.trackDiscoveryInProgress));
       const emptyMessage = loading ? "Loading audio tracks..." : this.getUnavailableTrackMessage("audio");
       dialog.innerHTML = `
         <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
         <div class="player-dialog-empty">${emptyMessage}</div>
+        <div class="player-audio-controls-list">
+          ${audioControls.map((control, index) => this.renderAudioControlItem(control, index)).join("")}
+        </div>
       `;
       return;
     }
@@ -7348,21 +7518,60 @@ export const PlayerScreen = {
     this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
-      <div class="player-dialog-list player-audio-track-list">
-        ${entries.map((entry, index) => {
-          const selected = entry.selected;
-          const focused = index === this.audioDialogIndex;
-          return `
-            <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
-              <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
-              <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
-              <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
-            </div>
-          `;
-        }).join("")}
+      <div class="player-audio-overlay-grid">
+        <div class="player-dialog-list player-audio-track-list">
+          ${entries.map((entry, index) => {
+            const selected = entry.selected;
+            const focused = this.audioFocusedColumn === "tracks" && index === this.audioDialogIndex;
+            return `
+              <div class="player-dialog-item${selected ? " selected" : ""}${focused ? " focused" : ""}">
+                <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
+                <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
+                <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        <div class="player-audio-controls-list">
+          ${audioControls.map((control, index) => this.renderAudioControlItem(control, index)).join("")}
+        </div>
       </div>
     `;
     this.scrollAudioDialogIntoView();
+  },
+
+  renderAudioControlItem(control, index) {
+    const focused = this.audioFocusedColumn === "controls" && index === this.audioMixFocusIndex;
+    if (control.toggle) {
+      return `
+        <div class="player-audio-control-card player-audio-toggle${this.persistAudioAmplification ? " selected" : ""}${focused ? " focused" : ""}">
+          <div class="player-dialog-item-main">${escapeHtml(control.title)}</div>
+          <div class="player-dialog-item-sub">${escapeHtml(control.helper || "")}</div>
+        </div>
+      `;
+    }
+    return `
+      <div class="player-audio-control-card${focused ? " focused" : ""}${!control.enabled ? " disabled" : ""}">
+        <div class="player-audio-control-title">${escapeHtml(control.title)}</div>
+        <div class="player-audio-control-value">${escapeHtml(control.value)}</div>
+        <div class="player-audio-step-row">
+          <button class="player-dialog-step player-dialog-step-minus${focused ? " focused" : ""}${!control.canDecrease ? " disabled" : ""}" type="button" tabindex="-1">&#8722;</button>
+          <button class="player-dialog-step player-dialog-step-plus${focused ? " focused" : ""}${!control.canIncrease ? " disabled" : ""}" type="button" tabindex="-1">&#43;</button>
+        </div>
+        <div class="player-dialog-item-sub">${escapeHtml(control.helper || "")}</div>
+      </div>
+    `;
+  },
+
+  activateAudioControl(direction = 0) {
+    if (this.audioMixFocusIndex === 0) {
+      if (!this.audioAmplificationAvailable) {
+        return;
+      }
+      this.adjustAudioAmplification(direction < 0 ? -1 : 1);
+      return;
+    }
+    this.togglePersistAudioAmplification();
   },
 
   scrollAudioDialogIntoView() {
@@ -7379,28 +7588,59 @@ export const PlayerScreen = {
     const entries = this.getAudioEntries();
     const isNavigationKey = keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
 
-    if (!entries.length) {
-      return isNavigationKey;
+    if (keyCode === 37) {
+      if (this.audioFocusedColumn === "controls") {
+        if (this.audioMixFocusIndex === 0) {
+          this.activateAudioControl(-1);
+        } else if (entries.length) {
+          this.audioFocusedColumn = "tracks";
+          this.renderAudioDialog();
+        }
+      }
+      return true;
     }
 
-    if (keyCode === 37 || keyCode === 39) {
+    if (keyCode === 39) {
+      if (this.audioFocusedColumn === "tracks") {
+        if (!entries.length) {
+          this.audioFocusedColumn = "controls";
+          this.renderAudioDialog();
+          return true;
+        }
+        this.audioFocusedColumn = "controls";
+        this.renderAudioDialog();
+      } else if (this.audioMixFocusIndex === 0) {
+        this.activateAudioControl(1);
+      }
       return true;
     }
 
     if (keyCode === 38) {
-      this.audioDialogIndex = clamp(this.audioDialogIndex - 1, 0, entries.length - 1);
+      if (this.audioFocusedColumn === "tracks") {
+        this.audioDialogIndex = clamp(this.audioDialogIndex - 1, 0, entries.length - 1);
+      } else {
+        this.audioMixFocusIndex = clamp(this.audioMixFocusIndex - 1, 0, 1);
+      }
       this.renderAudioDialog();
       return true;
     }
 
     if (keyCode === 40) {
-      this.audioDialogIndex = clamp(this.audioDialogIndex + 1, 0, entries.length - 1);
+      if (this.audioFocusedColumn === "tracks") {
+        this.audioDialogIndex = clamp(this.audioDialogIndex + 1, 0, entries.length - 1);
+      } else {
+        this.audioMixFocusIndex = clamp(this.audioMixFocusIndex + 1, 0, 1);
+      }
       this.renderAudioDialog();
       return true;
     }
 
     if (keyCode === 13) {
-      this.applyAudioTrack(this.audioDialogIndex);
+      if (this.audioFocusedColumn === "tracks") {
+        this.applyAudioTrack(this.audioDialogIndex);
+      } else {
+        this.activateAudioControl(this.audioMixFocusIndex === 0 ? 1 : 0);
+      }
       return true;
     }
 
@@ -7697,6 +7937,7 @@ export const PlayerScreen = {
                   </div>
                 </div>
                 <div class="player-source-side">
+                  ${stream.addonLogo ? `<img class="player-source-logo" src="${escapeAttribute(stream.addonLogo)}" alt="" />` : ""}
                   <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
                   ${isCurrent ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>` : ""}
                 </div>
@@ -8073,10 +8314,21 @@ export const PlayerScreen = {
     const cards = this.episodes.slice(0, 80).map((episode, index) => {
       const selected = index === this.episodePanelIndex;
       const selectedClass = selected ? " selected" : "";
+      const current = Number(episode?.season) === Number(this.params?.season) && Number(episode?.episode) === Number(this.params?.episode);
+      const code = episodeDisplayCode(episode);
+      const thumbnail = episodeThumbnailUrl(episode);
       return `
         <div class="player-episode-item${selectedClass}">
-          <div class="player-episode-item-title">S${episode.season}E${episode.episode} ${escapeHtml(episode.title || t("episodes_episode", {}, "Episode"))}</div>
-          <div class="player-episode-item-subtitle">${escapeHtml(episode.overview || "")}</div>
+          <div class="player-episode-thumb-wrap">
+            ${thumbnail ? `<img class="player-episode-thumb" src="${escapeAttribute(thumbnail)}" alt="" />` : `<div class="player-episode-thumb-fallback"></div>`}
+            ${code ? `<div class="player-episode-code">${escapeHtml(code)}</div>` : ""}
+            ${current ? `<div class="player-episode-current">&#10003;</div>` : ""}
+          </div>
+          <div class="player-episode-copy">
+            <div class="player-episode-item-title">${escapeHtml(episode.title || t("episodes_episode", {}, "Episode"))}</div>
+            ${episode.released ? `<div class="player-episode-date">${escapeHtml(episode.released)}</div>` : ""}
+            <div class="player-episode-item-subtitle">${escapeHtml(episode.overview || "")}</div>
+          </div>
         </div>
       `;
     }).join("");
@@ -8304,6 +8556,11 @@ export const PlayerScreen = {
       return;
     }
 
+    if (action === "switchEngine") {
+      this.switchPlaybackEngine();
+      return;
+    }
+
     if (action === "episodes") {
       this.toggleEpisodePanel();
       return;
@@ -8336,6 +8593,22 @@ export const PlayerScreen = {
       this.cycleAspectMode();
       return;
     }
+  },
+
+  switchPlaybackEngine() {
+    const targetEngine = typeof PlayerController.getAlternativePlaybackEngine === "function"
+      ? PlayerController.getAlternativePlaybackEngine(this.activePlaybackUrl)
+      : null;
+    if (!targetEngine || !this.activePlaybackUrl) {
+      this.showAspectToast(t("player_engine_switch_unavailable", {}, "No alternate player engine"));
+      return;
+    }
+    this.showAspectToast(t("player_engine_switching_title", {}, "Switching player"));
+    void this.playStreamByUrl(this.activePlaybackUrl, {
+      preservePlaybackState: true,
+      resetSilentAudioState: false,
+      forceEngine: targetEngine
+    });
   },
 
   consumeBackRequest() {

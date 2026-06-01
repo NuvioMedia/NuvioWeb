@@ -8,14 +8,12 @@ function escapeHtml(value) {
 }
 
 function chevronSvg(open, className) {
+  const path = open
+    ? "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"
+    : "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
   return `
     <svg viewBox="0 0 24 24" class="${className}" aria-hidden="true" focusable="false">
-      <path d="${open ? "M6 14l6-6 6 6" : "M6 10l6 6 6-6"}"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.75"
-            stroke-linecap="round"
-            stroke-linejoin="round" />
+      <path d="${path}" fill="currentColor" />
     </svg>
   `;
 }
@@ -30,6 +28,7 @@ export function renderFilterPicker({
   value,
   options = [],
   open = false,
+  closing = false,
   focusIndex = 0,
   widthClass = "",
   classPrefix = "library-picker",
@@ -50,44 +49,59 @@ export function renderFilterPicker({
   const wrapperClassName = joinClasses(
     classPrefix,
     open ? "open" : "",
+    closing ? "closing" : "",
     widthClass,
     wrapperExtraClass
   );
   const anchorClassName = joinClasses(`${classPrefix}-anchor`, "focusable", anchorExtraClass);
-  const menuClassName = joinClasses(`${classPrefix}-menu`, menuExtraClass);
+  const menuClassName = joinClasses(
+    `${classPrefix}-menu`,
+    open ? `${classPrefix}-menu-open` : "",
+    closing ? `${classPrefix}-menu-closing` : "",
+    menuExtraClass
+  );
   const chevronClassName = `${classPrefix}-chevron`;
+  const shouldRenderMenu = open || closing;
+  const canFocusOptions = optionFocusable && open;
+  const shouldHighlightClosingOption = open || closing;
 
   return `
     <div class="${wrapperClassName}">
-      <button class="${anchorClassName}"
-              data-action="${escapeHtml(anchorAction)}"
-              data-picker="${escapeHtml(picker)}">
+      <div class="${anchorClassName}"
+           data-action="${escapeHtml(anchorAction)}"
+           data-picker="${escapeHtml(picker)}"
+           role="button"
+           aria-haspopup="listbox"
+           aria-expanded="${open ? "true" : "false"}"
+           tabindex="-1">
         <span class="${classPrefix}-copy">
           <span class="${classPrefix}-title">${escapeHtml(title)}</span>
           <span class="${classPrefix}-value">${escapeHtml(value)}</span>
         </span>
         <span class="${classPrefix}-icon">${chevronSvg(open, chevronClassName)}</span>
-      </button>
-      ${open ? `
-        <div class="${menuClassName}" role="listbox" aria-label="${escapeHtml(title)}">
+      </div>
+      ${shouldRenderMenu ? `
+        <div class="${menuClassName}" role="listbox" aria-label="${escapeHtml(title)}" aria-hidden="${open ? "false" : "true"}">
           ${options.map((option, index) => {
+            const isActiveOption = shouldHighlightClosingOption && index === normalizedFocusIndex;
             const optionClassName = joinClasses(
               `${classPrefix}-option`,
-              optionFocusable ? "focusable" : "",
+              canFocusOptions ? "focusable" : "",
               optionExtraClass,
-              index === normalizedFocusIndex ? focusedOptionClass : "",
-              index === normalizedFocusIndex ? targetOptionClass : "",
+              isActiveOption ? focusedOptionClass : "",
+              isActiveOption ? targetOptionClass : "",
               index === normalizedSelectedIndex ? selectedOptionClass : ""
             );
             return `
-              <button class="${optionClassName}"
-                      data-action="${escapeHtml(optionAction)}"
-                      data-picker="${escapeHtml(picker)}"
-                      data-option-index="${index}"
-                      role="option"
-                      aria-selected="${index === normalizedSelectedIndex ? "true" : "false"}">
+              <div class="${optionClassName}"
+                   data-action="${escapeHtml(optionAction)}"
+                   data-picker="${escapeHtml(picker)}"
+                   data-option-index="${index}"
+                   role="option"
+                   aria-selected="${index === normalizedSelectedIndex ? "true" : "false"}"
+                   tabindex="-1">
                 ${escapeHtml(option?.label ?? option?.value ?? "")}
-              </button>
+              </div>
             `;
           }).join("")}
         </div>

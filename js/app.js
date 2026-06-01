@@ -19,6 +19,9 @@ import { FocusEngine } from "./ui/navigation/focusEngine.js";
 import { PlayerController } from "./core/player/playerController.js";
 import { AuthManager } from "./core/auth/authManager.js";
 import { AuthState } from "./core/auth/authState.js";
+import { ProfileManager } from "./core/profile/profileManager.js";
+import { ProfileSyncService } from "./core/profile/profileSyncService.js";
+import { ProfileSettingsSyncService } from "./core/profile/profileSettingsSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
@@ -29,6 +32,13 @@ import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
 
 const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
+const SIGNED_OUT_ALLOWED_ROUTES = new Set(["trakt"]);
+let hasSelectedProfileThisSession = false;
+let appShellRendered = false;
+
+function isSignedOutRouteAllowed() {
+  return SIGNED_OUT_ALLOWED_ROUTES.has(Router.getCurrent());
+}
 
 function formatErrorMessage(error) {
   if (!error) {
@@ -65,10 +75,13 @@ function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
   const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
   const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
+  const legacyTizen = Platform.isTizen();
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
   document.body.classList.toggle("legacy-webos", legacyWebOs);
+  document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
+  document.body.classList.toggle("legacy-tizen", legacyTizen);
 }
 
 function isAddonRemoteMode() {
@@ -79,8 +92,37 @@ function isAddonRemoteMode() {
   }
 }
 
+async function shouldShowProfileSelection() {
+  await ProfileSyncService.pull();
+  const profiles = await ProfileManager.getProfiles();
+  const activeProfileId = ProfileManager.getActiveProfileId();
+  const pinStates = await ProfileSyncService.pullProfileLockStates();
+  const activeProfileHasPin = Boolean(pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]);
+
+  return !hasSelectedProfileThisSession && (profiles.length > 1 || activeProfileHasPin);
+}
+
+async function routeAfterAuthentication() {
+  const showProfileSelection = await shouldShowProfileSelection();
+  if (showProfileSelection) {
+    Router.navigate("profileSelection");
+    return;
+  }
+
+  hasSelectedProfileThisSession = true;
+  const profiles = await ProfileManager.getProfiles();
+  const activeProfileId = ProfileManager.getActiveProfileId();
+  const activeProfile = profiles.find((profile) => String(profile.id) === String(activeProfileId)) || profiles[0] || null;
+  if (activeProfile) {
+    await ProfileManager.setActiveProfile(activeProfile.id);
+    await ProfileSettingsSyncService.pull(activeProfile.id);
+  }
+  Router.navigate("home");
+}
+
 async function bootstrapApp() {
   renderAppShell();
+  appShellRendered = true;
   Platform.init();
   applyPerformanceMode();
   await I18n.init();
@@ -102,10 +144,15 @@ async function bootstrapApp() {
 
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
+      hasSelectedProfileThisSession = false;
       const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
+      if (isSignedOutRouteAllowed()) {
+        return;
+      }
       if (shouldBypassQr) {
-        if (Router.getCurrent() !== "home") {
-          Router.navigate("home", {}, {
+        ProfileManager.clearActiveProfile();
+        if (Router.getCurrent() !== "profileSelection") {
+          Router.navigate("profileSelection", {}, {
             replaceHistory: true,
             skipStackPush: true
           });
@@ -121,7 +168,10 @@ async function bootstrapApp() {
     if (state === AuthState.AUTHENTICATED) {
       LocalStore.remove(GUEST_QR_BYPASS_KEY);
       StartupSyncService.start();
-      Router.navigate("profileSelection");
+      routeAfterAuthentication().catch((error) => {
+        console.warn("Failed to resolve authenticated route", error);
+        Router.navigate("profileSelection");
+      });
     }
   });
 
@@ -130,6 +180,7 @@ async function bootstrapApp() {
 
 async function bootstrapAddonRemoteMode() {
   await renderAddonRemotePage();
+  appShellRendered = true;
 }
 
 if (document.readyState === "loading") {
@@ -152,9 +203,17 @@ window.addEventListener("error", (event) => {
   if (!event?.error) {
     return;
   }
-  renderFatalError(event.error);
+  if (!appShellRendered) {
+    renderFatalError(event.error);
+    return;
+  }
+  console.warn("Unhandled runtime error", event.error);
 });
 
 window.addEventListener("unhandledrejection", (event) => {
-  renderFatalError(event?.reason);
+  if (!appShellRendered) {
+    renderFatalError(event?.reason);
+    return;
+  }
+  console.warn("Unhandled promise rejection", event?.reason);
 });

@@ -847,6 +847,8 @@
     <string name="settings.playback.renderMode.subtitle">Choose how subtitles are drawn.</string>
     <string name="settings.playback.renderMode.title">Render Mode</string>
     <string name="settings.playback.subtitleLanguage.subtitle">Preferred subtitle language.</string>
+    <string name="sub_use_forced_subtitles">Použiť vynútené titulky</string>
+    <string name="sub_use_forced_subtitles_desc">Uprednostni vynútené titulky, keď sa zvuk zhoduje s vybraným jazykom titulkov.</string>
     <string name="settings.plugins.addRepositoryPrompt">Add repository URL</string>
     <string name="settings.plugins.customProviderTemplate">Custom provider template</string>
     <string name="settings.plugins.noRepositoriesSubtitle">Add a repository to get started.</string>

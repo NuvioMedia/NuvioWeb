@@ -49,7 +49,15 @@ export const hlsJsEngine = {
       return false;
     }
     try {
+      if ("nextAudioTrack" in instance) {
+        instance.nextAudioTrack = targetIndex;
+      }
       instance.audioTrack = targetIndex;
+      try {
+        instance.startLoad?.();
+      } catch (_) {
+        // The track switch itself has already been requested.
+      }
       return true;
     } catch (_) {
       return false;

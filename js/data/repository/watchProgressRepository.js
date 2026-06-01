@@ -1,8 +1,9 @@
 import { WatchProgressStore } from "../local/watchProgressStore.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { ContinueWatchingPreferences } from "../local/continueWatchingPreferences.js";
+import { TraktSettingsStore, WatchProgressSource } from "../local/traktSettingsStore.js";
+import { TraktAuthStore } from "../local/traktAuthStore.js";
 
-const CONTINUE_WATCHING_DAYS_CAP = 60;
 const CW_PROGRESS_START_THRESHOLD = 0.02;
 const CW_PROGRESS_END_THRESHOLD = 0.90;
 
@@ -44,7 +45,7 @@ function queueWatchProgressCloudSync(delayMs = getWatchProgressSyncDebounceMs())
 
 function isSeriesType(type) {
   const normalized = String(type || "").toLowerCase();
-  return normalized === "series";
+  return normalized === "series" || normalized === "tv";
 }
 
 function matchesProgressTarget(item = {}, contentId, videoId = null) {
@@ -109,6 +110,25 @@ function shouldTreatAsInProgressForContinueWatching(item = {}) {
     && source !== "trakt_show_progress";
 }
 
+function isTraktProgressItem(item = {}) {
+  return String(item.source || "").toLowerCase().startsWith("trakt");
+}
+
+function selectedContinueWatchingSource() {
+  const settings = TraktSettingsStore.get();
+  const requestedSource = settings.watchProgressSource || WatchProgressSource.TRAKT;
+  return requestedSource === WatchProgressSource.TRAKT && TraktAuthStore.isAuthenticated()
+    ? WatchProgressSource.TRAKT
+    : WatchProgressSource.NUVIO_SYNC;
+}
+
+function filterForSelectedContinueWatchingSource(items = []) {
+  const useTrakt = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
+  return (Array.isArray(items) ? items : []).filter((item) => (
+    useTrakt ? isTraktProgressItem(item) : !isTraktProgressItem(item)
+  ));
+}
+
 function deduplicateInProgress(items = []) {
   const seriesItems = [];
   const nonSeriesItems = [];
@@ -167,9 +187,11 @@ class WatchProgressRepository {
 
   async getRecent(limit = 30) {
     const now = Date.now();
-    const cutoffMs = now - (CONTINUE_WATCHING_DAYS_CAP * 24 * 60 * 60 * 1000);
-    const recentItems = WatchProgressStore.listForProfile(activeProfileId())
-      .filter((item) => Number(item?.updatedAt || 0) >= cutoffMs)
+    const useTraktProgress = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
+    const daysCap = Number(TraktSettingsStore.get().continueWatchingDaysCap || 60);
+    const cutoffMs = !useTraktProgress || daysCap === 0 ? 0 : now - (daysCap * 24 * 60 * 60 * 1000);
+    const recentItems = filterForSelectedContinueWatchingSource(WatchProgressStore.listForProfile(activeProfileId()))
+      .filter((item) => cutoffMs === 0 || Number(item?.updatedAt || 0) >= cutoffMs)
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
       .slice(0, 300);
 
@@ -182,6 +204,18 @@ class WatchProgressRepository {
 
   async getAll() {
     return WatchProgressStore.listForProfile(activeProfileId());
+  }
+
+  async getAllForContinueWatching() {
+    return filterForSelectedContinueWatchingSource(WatchProgressStore.listForProfile(activeProfileId()));
+  }
+
+  getContinueWatchingSourceKey() {
+    return `${activeProfileId()}:${selectedContinueWatchingSource()}`;
+  }
+
+  getContinueWatchingSource() {
+    return selectedContinueWatchingSource();
   }
 
   async replaceAll(items) {

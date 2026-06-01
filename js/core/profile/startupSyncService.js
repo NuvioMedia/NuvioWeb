@@ -1,5 +1,6 @@
 import { AuthManager } from "../auth/authManager.js";
 import { addonRepository } from "../../data/repository/addonRepository.js";
+import { ProfileManager } from "./profileManager.js";
 import { ProfileSyncService } from "./profileSyncService.js";
 import { LibrarySyncService } from "./librarySyncService.js";
 import { WatchProgressSyncService } from "./watchProgressSyncService.js";
@@ -7,6 +8,7 @@ import { SavedLibrarySyncService } from "./savedLibrarySyncService.js";
 import { WatchedItemsSyncService } from "./watchedItemsSyncService.js";
 import { PluginSyncService } from "./pluginSyncService.js";
 import { ProfileSettingsSyncService } from "./profileSettingsSyncService.js";
+import { CollectionSyncService } from "./collectionSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
 
@@ -18,6 +20,25 @@ function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function normalizeProfileId(value) {
+  const normalized = String(value ?? "").trim();
+  return normalized || null;
+}
+
+async function collectKnownProfileIds(profiles = []) {
+  const ids = [
+    normalizeProfileId(ProfileManager.getActiveProfileId()),
+    ...(Array.isArray(profiles) ? profiles : []).map((profile) => normalizeProfileId(profile?.id ?? profile?.profileIndex))
+  ].filter(Boolean);
+
+  if (ids.length <= 1) {
+    const storedProfiles = await ProfileManager.getProfiles().catch(() => []);
+    ids.push(...storedProfiles.map((profile) => normalizeProfileId(profile?.id ?? profile?.profileIndex)).filter(Boolean));
+  }
+
+  return Array.from(new Set(ids));
 }
 
 export const StartupSyncService = {
@@ -67,13 +88,17 @@ export const StartupSyncService = {
     let didApplyProfileSettings = false;
     for (let attempt = 1; attempt <= MAX_PULL_ATTEMPTS; attempt += 1) {
       try {
-        await ProfileSyncService.pull();
-        didApplyProfileSettings = await ProfileSettingsSyncService.pull();
+        const profiles = await ProfileSyncService.pull();
+        const profileIds = await collectKnownProfileIds(profiles);
+        for (const profileId of profileIds) {
+          didApplyProfileSettings = (await ProfileSettingsSyncService.pull(profileId)) || didApplyProfileSettings;
+        }
         if (didApplyProfileSettings) {
           await I18n.init();
           ThemeManager.apply();
           I18n.apply();
         }
+        await CollectionSyncService.pull();
         await PluginSyncService.pull();
         await LibrarySyncService.pull();
         await SavedLibrarySyncService.pull();
@@ -97,6 +122,7 @@ export const StartupSyncService = {
     try {
       await ProfileSyncService.push();
       await ProfileSettingsSyncService.push();
+      await CollectionSyncService.push();
       await PluginSyncService.push();
       await LibrarySyncService.push();
       await SavedLibrarySyncService.push();

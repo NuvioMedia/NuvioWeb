@@ -1,4 +1,5 @@
 import { SessionStore } from "../storage/sessionStore.js";
+import { AuthManager } from "../auth/authManager.js";
 
 function toHeaderObject(headers) {
   if (!headers) {
@@ -21,6 +22,10 @@ export async function httpRequest(url, options = {}) {
 
   const headers = toHeaderObject(options.headers);
 
+  if (includeSessionAuth && SessionStore.refreshToken && AuthManager.isAccessTokenExpired()) {
+    await AuthManager.refreshSessionIfNeeded();
+  }
+
   if (includeSessionAuth && SessionStore.accessToken && !hasHeader(headers, "Authorization")) {
     headers["Authorization"] = `Bearer ${SessionStore.accessToken}`;
   }
@@ -39,11 +44,25 @@ export async function httpRequest(url, options = {}) {
     ...fetchOptions
   } = options;
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     ...fetchOptions,
     method,
     headers
   });
+
+  if (response.status === 401 && includeSessionAuth && SessionStore.refreshToken) {
+    const refreshed = await AuthManager.refreshSessionIfNeeded({ force: true });
+    if (refreshed && SessionStore.accessToken) {
+      response = await fetch(url, {
+        ...fetchOptions,
+        method,
+        headers: {
+          ...headers,
+          Authorization: `Bearer ${SessionStore.accessToken}`
+        }
+      });
+    }
+  }
 
   if (!response.ok) {
     const text = await response.text();

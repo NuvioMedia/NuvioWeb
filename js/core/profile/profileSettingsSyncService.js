@@ -6,8 +6,12 @@ import { LayoutPreferences } from "../../data/local/layoutPreferences.js";
 import { PlayerSettingsStore } from "../../data/local/playerSettingsStore.js";
 import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
 import { MdbListSettingsStore } from "../../data/local/mdbListSettingsStore.js";
+import { TraktSettingsStore, normalizeTraktContinueWatchingDaysCap } from "../../data/local/traktSettingsStore.js";
 import { AnimeSkipSettingsStore } from "../../data/local/animeSkipSettingsStore.js";
-import { DebridSettingsStore } from "../../data/local/debridSettingsStore.js";
+import {
+  ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE,
+  DebridSettingsStore
+} from "../../data/local/debridSettingsStore.js";
 import { ProfileManager } from "./profileManager.js";
 import {
   clearProfileSettingsCloudSyncPending,
@@ -38,6 +42,12 @@ function isPlainObject(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function isEncodedPreferenceValue(value) {
+  return isPlainObject(value)
+    && typeof value.type === "string"
+    && Object.prototype.hasOwnProperty.call(value, "value");
+}
+
 function normalizeFeaturePayload(value) {
   if (!isPlainObject(value)) {
     return {};
@@ -62,24 +72,61 @@ function normalizeBlob(blob = {}) {
   return {
     version: Number(blob?.version || 1) || 1,
     features: Object.entries(features).reduce((accumulator, [featureName, featureValue]) => {
-      accumulator[String(featureName || "").trim()] = normalizeFeaturePayload(featureValue);
+      const normalizedFeatureName = String(featureName || "").trim();
+      if (!normalizedFeatureName || !isPlainObject(featureValue)) {
+        return accumulator;
+      }
+      accumulator[normalizedFeatureName] = cloneValue(featureValue) || {};
       return accumulator;
     }, {})
   };
 }
 
+function encodePreferenceValue(value) {
+  if (isEncodedPreferenceValue(value)) {
+    return cloneValue(value);
+  }
+  if (typeof value === "string") {
+    return { type: "string", value };
+  }
+  if (typeof value === "boolean") {
+    return { type: "boolean", value };
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Number.isInteger(value)
+      ? { type: "int", value: Math.trunc(value) }
+      : { type: "float", value };
+  }
+  if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) {
+    return { type: "string_set", value: Array.from(new Set(value)).sort() };
+  }
+  return null;
+}
+
+function encodeFeaturePayload(featurePayload = {}) {
+  if (!isPlainObject(featurePayload)) {
+    return {};
+  }
+  return Object.entries(featurePayload).reduce((accumulator, [key, value]) => {
+    const normalizedKey = String(key || "").trim();
+    if (!normalizedKey) {
+      return accumulator;
+    }
+    const encodedValue = encodePreferenceValue(value);
+    if (encodedValue) {
+      accumulator[normalizedKey] = encodedValue;
+    }
+    return accumulator;
+  }, {});
+}
+
+function hasObjectEntries(value) {
+  return isPlainObject(value) && Object.keys(value).length > 0;
+}
+
 function readCache() {
   const cached = LocalStore.get(CACHE_KEY, {}) || {};
   return isPlainObject(cached) ? cached : {};
-}
-
-function getCachedBlob(profileId) {
-  const cache = readCache();
-  const key = String(resolveProfileId(profileId));
-  if (!cache || !isPlainObject(cache[key])) {
-    return null;
-  }
-  return normalizeBlob(cache[key]);
 }
 
 function setCachedBlob(profileId, blob) {
@@ -171,10 +218,36 @@ function normalizePreferredSubtitleLanguageForAndroid(settings = {}) {
     settings.subtitleStyle?.preferredLanguage ?? settings.subtitleLanguage,
     "off"
   );
-  if (normalized === "off" && settings.subtitlesEnabled !== false) {
-    return "forced";
+  if (normalized === "forced") {
+    const secondary = normalizeSubtitleLanguage(
+      settings.subtitleStyle?.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
+      "off"
+    );
+    return secondary && secondary !== "off" && secondary !== "forced" ? secondary : "en";
   }
-  return normalized;
+  return normalized === "off" ? "none" : normalized;
+}
+
+function normalizeSecondarySubtitleLanguageForAndroid(settings = {}) {
+  const normalized = normalizeSubtitleLanguage(
+    settings.subtitleStyle?.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
+    "off"
+  );
+  return normalized === "forced" || normalized === "off" ? "none" : normalized;
+}
+
+function shouldUseForcedSubtitlesForAndroid(settings = {}) {
+  const preferred = normalizeSubtitleLanguage(
+    settings.subtitleStyle?.preferredLanguage ?? settings.subtitleLanguage,
+    "off"
+  );
+  const secondary = normalizeSubtitleLanguage(
+    settings.subtitleStyle?.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
+    "off"
+  );
+  return Boolean(settings.subtitleStyle?.useForcedSubtitles || settings.useForcedSubtitles)
+    || preferred === "forced"
+    || secondary === "forced";
 }
 
 function normalizeAudioLanguageForAndroid(value) {
@@ -226,6 +299,18 @@ function normalizeHomeLayoutForWeb(value) {
   }
 }
 
+function normalizeDiscoverLocationForAndroid(enabled) {
+  return enabled === false ? "OFF" : "IN_SEARCH";
+}
+
+function normalizeSearchDiscoverEnabledForWeb(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+  return normalized !== "OFF";
+}
+
 function normalizeTrailerTargetForAndroid(value) {
   return String(value || "").trim().toLowerCase() === "expanded_card"
     ? "EXPANDED_CARD"
@@ -236,6 +321,42 @@ function normalizeTrailerTargetForWeb(value) {
   return String(value || "").trim().toUpperCase() === "EXPANDED_CARD"
     ? "expanded_card"
     : "hero_media";
+}
+
+function normalizeTraktWatchProgressSourceForAndroid(value) {
+  const normalized = String(value || "trakt").trim().toLowerCase();
+  return normalized === "nuvio_sync" || normalized === "nuviosync"
+    ? "NUVIO_SYNC"
+    : "TRAKT";
+}
+
+function normalizeTraktWatchProgressSourceForWeb(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "NUVIO_SYNC" ? "nuvio_sync" : "trakt";
+}
+
+function normalizeTraktLibrarySourceForAndroid(value) {
+  const normalized = String(value || "trakt").trim().toLowerCase();
+  return normalized === "local" ? "LOCAL" : "TRAKT";
+}
+
+function normalizeTraktLibrarySourceForWeb(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "LOCAL" ? "local" : "trakt";
+}
+
+function normalizeContinueWatchingSortModeForAndroid(value) {
+  const normalized = String(value || "default").trim().toLowerCase();
+  return normalized === "streaming_style" || normalized === "streaming-style" || normalized === "streamingstyle"
+    ? "STREAMING_STYLE"
+    : "DEFAULT";
+}
+
+function normalizeContinueWatchingSortModeForWeb(value) {
+  const normalized = String(value || "default").trim().toLowerCase();
+  return normalized === "streaming_style" || normalized === "streaming-style" || normalized === "streamingstyle"
+    ? "streaming_style"
+    : "default";
 }
 
 function normalizeTmdbLanguageForAndroid(value) {
@@ -286,7 +407,9 @@ const FEATURE_ADAPTERS = {
       const theme = ThemeStore.getForProfile(profileId);
       return {
         selected_theme: String(theme.themeName || "WHITE").toUpperCase(),
-        selected_font: String(theme.fontFamily || "INTER").toUpperCase()
+        selected_font: String(theme.fontFamily || "INTER").toUpperCase(),
+        amoled_mode: Boolean(theme.amoledMode),
+        amoled_surfaces_mode: Boolean(theme.amoledSurfacesMode)
       };
     },
     project(rawFeature = {}) {
@@ -298,6 +421,12 @@ const FEATURE_ADAPTERS = {
       if (stringOrNull(raw.selected_font)) {
         projected.selected_font = String(raw.selected_font).toUpperCase();
       }
+      if (booleanOrNull(raw.amoled_mode) != null) {
+        projected.amoled_mode = Boolean(raw.amoled_mode);
+      }
+      if (booleanOrNull(raw.amoled_surfaces_mode) != null) {
+        projected.amoled_surfaces_mode = Boolean(raw.amoled_surfaces_mode);
+      }
       return projected;
     },
     import(profileId, rawFeature = {}) {
@@ -308,6 +437,12 @@ const FEATURE_ADAPTERS = {
       }
       if (stringOrNull(raw.selected_font)) {
         partial.fontFamily = String(raw.selected_font).toUpperCase();
+      }
+      if (booleanOrNull(raw.amoled_mode) != null) {
+        partial.amoledMode = Boolean(raw.amoled_mode);
+      }
+      if (booleanOrNull(raw.amoled_surfaces_mode) != null) {
+        partial.amoledSurfacesMode = Boolean(raw.amoled_surfaces_mode);
       }
       if (!Object.keys(partial).length) {
         return false;
@@ -328,6 +463,7 @@ const FEATURE_ADAPTERS = {
         modern_landscape_posters_enabled: Boolean(layout.modernLandscapePostersEnabled),
         hero_section_enabled: Boolean(layout.heroSectionEnabled),
         search_discover_enabled: Boolean(layout.searchDiscoverEnabled),
+        discover_location: normalizeDiscoverLocationForAndroid(layout.searchDiscoverEnabled),
         poster_labels_enabled: Boolean(layout.posterLabelsEnabled),
         catalog_addon_name_enabled: Boolean(layout.catalogAddonNameEnabled),
         catalog_type_suffix_enabled: Boolean(layout.catalogTypeSuffixEnabled),
@@ -339,7 +475,12 @@ const FEATURE_ADAPTERS = {
         poster_card_width_dp: Math.max(72, Number(layout.posterCardWidthDp ?? 126) || 126),
         poster_card_corner_radius_dp: Math.max(0, Number(layout.posterCardCornerRadiusDp ?? 12) || 12),
         detail_page_trailer_button_enabled: Boolean(layout.detailPageTrailerButtonEnabled),
-        hide_unreleased_content: Boolean(layout.hideUnreleasedContent)
+        hide_unreleased_content: Boolean(layout.hideUnreleasedContent),
+        use_episode_thumbnails_in_cw: layout.useEpisodeThumbnailsInCw !== false,
+        blur_continue_watching_next_up: Boolean(layout.blurContinueWatchingNextUp),
+        show_unaired_next_up: layout.showUnairedNextUp !== false,
+        next_up_from_furthest_episode: layout.nextUpFromFurthestEpisode !== false,
+        continue_watching_sort_mode: normalizeContinueWatchingSortModeForAndroid(layout.continueWatchingSortMode)
       };
     },
     project(rawFeature = {}) {
@@ -357,7 +498,6 @@ const FEATURE_ADAPTERS = {
         "modern_sidebar_blur_enabled",
         "modern_landscape_posters_enabled",
         "hero_section_enabled",
-        "search_discover_enabled",
         "poster_labels_enabled",
         "catalog_addon_name_enabled",
         "catalog_type_suffix_enabled",
@@ -365,7 +505,11 @@ const FEATURE_ADAPTERS = {
         "focused_poster_backdrop_trailer_enabled",
         "focused_poster_backdrop_trailer_muted",
         "detail_page_trailer_button_enabled",
-        "hide_unreleased_content"
+        "hide_unreleased_content",
+        "use_episode_thumbnails_in_cw",
+        "blur_continue_watching_next_up",
+        "show_unaired_next_up",
+        "next_up_from_furthest_episode"
       ].forEach((key) => {
         if (booleanOrNull(raw[key]) != null) {
           projected[key] = Boolean(raw[key]);
@@ -374,8 +518,18 @@ const FEATURE_ADAPTERS = {
       if (numberOrNull(raw.focused_poster_backdrop_expand_delay_seconds) != null) {
         projected.focused_poster_backdrop_expand_delay_seconds = Math.max(0, Math.trunc(Number(raw.focused_poster_backdrop_expand_delay_seconds)));
       }
+      if (stringOrNull(raw.discover_location)) {
+        projected.discover_location = String(raw.discover_location).trim().toUpperCase();
+        projected.search_discover_enabled = normalizeSearchDiscoverEnabledForWeb(raw.discover_location);
+      } else if (booleanOrNull(raw.search_discover_enabled) != null) {
+        projected.search_discover_enabled = Boolean(raw.search_discover_enabled);
+        projected.discover_location = normalizeDiscoverLocationForAndroid(raw.search_discover_enabled);
+      }
       if (stringOrNull(raw.focused_poster_backdrop_trailer_playback_target)) {
         projected.focused_poster_backdrop_trailer_playback_target = normalizeTrailerTargetForAndroid(raw.focused_poster_backdrop_trailer_playback_target);
+      }
+      if (stringOrNull(raw.continue_watching_sort_mode)) {
+        projected.continue_watching_sort_mode = normalizeContinueWatchingSortModeForAndroid(raw.continue_watching_sort_mode);
       }
       if (numberOrNull(raw.poster_card_width_dp) != null) {
         projected.poster_card_width_dp = Math.max(72, Math.trunc(Number(raw.poster_card_width_dp)));
@@ -406,7 +560,9 @@ const FEATURE_ADAPTERS = {
       if (booleanOrNull(raw.hero_section_enabled) != null) {
         partial.heroSectionEnabled = Boolean(raw.hero_section_enabled);
       }
-      if (booleanOrNull(raw.search_discover_enabled) != null) {
+      if (stringOrNull(raw.discover_location)) {
+        partial.searchDiscoverEnabled = normalizeSearchDiscoverEnabledForWeb(raw.discover_location);
+      } else if (booleanOrNull(raw.search_discover_enabled) != null) {
         partial.searchDiscoverEnabled = Boolean(raw.search_discover_enabled);
       }
       if (booleanOrNull(raw.poster_labels_enabled) != null) {
@@ -445,6 +601,21 @@ const FEATURE_ADAPTERS = {
       if (booleanOrNull(raw.hide_unreleased_content) != null) {
         partial.hideUnreleasedContent = Boolean(raw.hide_unreleased_content);
       }
+      if (booleanOrNull(raw.use_episode_thumbnails_in_cw) != null) {
+        partial.useEpisodeThumbnailsInCw = Boolean(raw.use_episode_thumbnails_in_cw);
+      }
+      if (booleanOrNull(raw.blur_continue_watching_next_up) != null) {
+        partial.blurContinueWatchingNextUp = Boolean(raw.blur_continue_watching_next_up);
+      }
+      if (booleanOrNull(raw.show_unaired_next_up) != null) {
+        partial.showUnairedNextUp = Boolean(raw.show_unaired_next_up);
+      }
+      if (booleanOrNull(raw.next_up_from_furthest_episode) != null) {
+        partial.nextUpFromFurthestEpisode = Boolean(raw.next_up_from_furthest_episode);
+      }
+      if (stringOrNull(raw.continue_watching_sort_mode)) {
+        partial.continueWatchingSortMode = normalizeContinueWatchingSortModeForWeb(raw.continue_watching_sort_mode);
+      }
       if (!Object.keys(partial).length) {
         return false;
       }
@@ -458,7 +629,8 @@ const FEATURE_ADAPTERS = {
       return {
         preferred_audio_language: normalizeAudioLanguageForAndroid(settings.preferredAudioLanguage),
         subtitle_preferred_language: normalizePreferredSubtitleLanguageForAndroid(settings),
-        subtitle_secondary_language: normalizeSubtitleLanguage(settings.subtitleStyle?.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage, "off"),
+        subtitle_secondary_language: normalizeSecondarySubtitleLanguageForAndroid(settings),
+        subtitle_use_forced_subtitles: shouldUseForcedSubtitlesForAndroid(settings),
         subtitle_size: Math.max(50, Math.trunc(Number(settings.subtitleStyle?.fontSize ?? 100) || 100)),
         subtitle_vertical_offset: Math.trunc(Number(settings.subtitleStyle?.verticalOffset ?? 0) || 0),
         subtitle_bold: Boolean(settings.subtitleStyle?.bold),
@@ -485,6 +657,7 @@ const FEATURE_ADAPTERS = {
       }
       [
         "subtitle_bold",
+        "subtitle_use_forced_subtitles",
         "subtitle_outline_enabled",
         "persist_audio_amplification",
         "skip_intro_enabled",
@@ -512,12 +685,25 @@ const FEATURE_ADAPTERS = {
       const partial = {};
       const subtitleStyle = {};
       const preferredAudioLanguage = normalizeAudioLanguageForWeb(raw.preferred_audio_language);
-      const subtitleLanguage = stringOrNull(raw.subtitle_preferred_language)
+      let subtitleLanguage = stringOrNull(raw.subtitle_preferred_language)
         ? normalizeSubtitleLanguage(raw.subtitle_preferred_language, "off")
         : null;
-      const secondarySubtitleLanguage = stringOrNull(raw.subtitle_secondary_language)
+      let secondarySubtitleLanguage = stringOrNull(raw.subtitle_secondary_language)
         ? normalizeSubtitleLanguage(raw.subtitle_secondary_language, "off")
         : null;
+      let useForcedSubtitles = booleanOrNull(raw.subtitle_use_forced_subtitles);
+
+      if (subtitleLanguage === "forced") {
+        useForcedSubtitles = true;
+        subtitleLanguage = secondarySubtitleLanguage && secondarySubtitleLanguage !== "forced" && secondarySubtitleLanguage !== "off"
+          ? secondarySubtitleLanguage
+          : "en";
+        secondarySubtitleLanguage = "off";
+      }
+      if (secondarySubtitleLanguage === "forced") {
+        useForcedSubtitles = true;
+        secondarySubtitleLanguage = "off";
+      }
 
       if (preferredAudioLanguage) {
         partial.preferredAudioLanguage = preferredAudioLanguage;
@@ -530,6 +716,9 @@ const FEATURE_ADAPTERS = {
       if (secondarySubtitleLanguage) {
         partial.secondarySubtitleLanguage = secondarySubtitleLanguage;
         subtitleStyle.secondaryPreferredLanguage = secondarySubtitleLanguage;
+      }
+      if (useForcedSubtitles != null) {
+        subtitleStyle.useForcedSubtitles = Boolean(useForcedSubtitles);
       }
       if (numberOrNull(raw.subtitle_size) != null) {
         subtitleStyle.fontSize = Math.max(50, Math.trunc(Number(raw.subtitle_size)));
@@ -568,6 +757,32 @@ const FEATURE_ADAPTERS = {
         return false;
       }
       PlayerSettingsStore.setForProfile(profileId, partial, { silentSync: true });
+      return true;
+    }
+  },
+  trailer_settings: {
+    export(profileId) {
+      const settings = PlayerSettingsStore.getForProfile(profileId);
+      return {
+        trailer_enabled: Boolean(settings.trailerAutoplay)
+      };
+    },
+    project(rawFeature = {}) {
+      const raw = normalizeFeaturePayload(rawFeature);
+      const projected = {};
+      if (booleanOrNull(raw.trailer_enabled) != null) {
+        projected.trailer_enabled = Boolean(raw.trailer_enabled);
+      }
+      return projected;
+    },
+    import(profileId, rawFeature = {}) {
+      const raw = normalizeFeaturePayload(rawFeature);
+      if (booleanOrNull(raw.trailer_enabled) == null) {
+        return false;
+      }
+      PlayerSettingsStore.setForProfile(profileId, {
+        trailerAutoplay: Boolean(raw.trailer_enabled)
+      }, { silentSync: true });
       return true;
     }
   },
@@ -660,6 +875,55 @@ const FEATURE_ADAPTERS = {
       return true;
     }
   },
+  trakt_settings: {
+    export(profileId) {
+      const settings = TraktSettingsStore.getForProfile(profileId);
+      return {
+        continue_watching_days_cap: normalizeTraktContinueWatchingDaysCap(settings.continueWatchingDaysCap),
+        show_meta_comments: settings.showMetaComments !== false,
+        watch_progress_source: normalizeTraktWatchProgressSourceForAndroid(settings.watchProgressSource),
+        library_source_mode: normalizeTraktLibrarySourceForAndroid(settings.librarySourceMode)
+      };
+    },
+    project(rawFeature = {}) {
+      const raw = normalizeFeaturePayload(rawFeature);
+      const projected = {};
+      if (numberOrNull(raw.continue_watching_days_cap) != null) {
+        projected.continue_watching_days_cap = normalizeTraktContinueWatchingDaysCap(raw.continue_watching_days_cap);
+      }
+      if (booleanOrNull(raw.show_meta_comments) != null) {
+        projected.show_meta_comments = Boolean(raw.show_meta_comments);
+      }
+      if (stringOrNull(raw.watch_progress_source)) {
+        projected.watch_progress_source = normalizeTraktWatchProgressSourceForAndroid(raw.watch_progress_source);
+      }
+      if (stringOrNull(raw.library_source_mode)) {
+        projected.library_source_mode = normalizeTraktLibrarySourceForAndroid(raw.library_source_mode);
+      }
+      return projected;
+    },
+    import(profileId, rawFeature = {}) {
+      const raw = normalizeFeaturePayload(rawFeature);
+      const partial = {};
+      if (numberOrNull(raw.continue_watching_days_cap) != null) {
+        partial.continueWatchingDaysCap = normalizeTraktContinueWatchingDaysCap(raw.continue_watching_days_cap);
+      }
+      if (booleanOrNull(raw.show_meta_comments) != null) {
+        partial.showMetaComments = Boolean(raw.show_meta_comments);
+      }
+      if (stringOrNull(raw.watch_progress_source)) {
+        partial.watchProgressSource = normalizeTraktWatchProgressSourceForWeb(raw.watch_progress_source);
+      }
+      if (stringOrNull(raw.library_source_mode)) {
+        partial.librarySourceMode = normalizeTraktLibrarySourceForWeb(raw.library_source_mode);
+      }
+      if (!Object.keys(partial).length) {
+        return false;
+      }
+      TraktSettingsStore.setForProfile(profileId, partial, { silentSync: true });
+      return true;
+    }
+  },
   animeskip_settings: {
     export(profileId) {
       const settings = AnimeSkipSettingsStore.getForProfile(profileId);
@@ -714,7 +978,7 @@ const FEATURE_ADAPTERS = {
         stream_codec_filter: String(settings.streamCodecFilter || "ANY").toUpperCase(),
         stream_preferences: settings.streamPreferences ? JSON.stringify(settings.streamPreferences) : "",
         debrid_stream_name_template: String(settings.streamNameTemplate || ""),
-        debrid_stream_description_template: String(settings.streamDescriptionTemplate || "")
+        debrid_stream_description_template: String(settings.streamDescriptionTemplate || ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE)
       };
     },
     project(rawFeature = {}) {
@@ -843,14 +1107,18 @@ function buildComparableSignatureFromLocal(profileId) {
 
 function buildOutgoingBlob(profileId, baseBlob = null) {
   const normalizedBase = normalizeBlob(baseBlob || {});
-  const nextFeatures = {
-    ...normalizedBase.features
-  };
+  const nextFeatures = Object.entries(normalizedBase.features).reduce((accumulator, [featureName, featurePayload]) => {
+    const encodedPayload = encodeFeaturePayload(featurePayload);
+    if (hasObjectEntries(encodedPayload) || SUPPORTED_FEATURE_NAMES.includes(featureName)) {
+      accumulator[featureName] = encodedPayload;
+    }
+    return accumulator;
+  }, {});
 
   SUPPORTED_FEATURE_NAMES.forEach((featureName) => {
     nextFeatures[featureName] = {
-      ...normalizeFeaturePayload(nextFeatures[featureName]),
-      ...FEATURE_ADAPTERS[featureName].export(profileId)
+      ...(nextFeatures[featureName] || {}),
+      ...encodeFeaturePayload(FEATURE_ADAPTERS[featureName].export(profileId))
     };
   });
 
@@ -869,6 +1137,15 @@ function extractBlobFromResponse(response) {
     return null;
   }
   return normalizeBlob(blob);
+}
+
+async function pullRemoteBlob(profileId) {
+  const resolvedProfileId = resolveProfileId(profileId);
+  const response = await SupabaseApi.rpc(PULL_RPC, {
+    p_profile_id: resolvedProfileId,
+    p_platform: SETTINGS_SYNC_PLATFORM
+  }, true);
+  return extractBlobFromResponse(response);
 }
 
 function applyRemoteBlob(profileId, blob) {
@@ -894,11 +1171,7 @@ export const ProfileSettingsSyncService = {
         await this.push(resolvedProfileId);
         return false;
       }
-      const response = await SupabaseApi.rpc(PULL_RPC, {
-        p_profile_id: resolvedProfileId,
-        p_platform: SETTINGS_SYNC_PLATFORM
-      }, true);
-      const blob = extractBlobFromResponse(response);
+      const blob = await pullRemoteBlob(resolvedProfileId);
       if (!blob) {
         return false;
       }
@@ -927,7 +1200,12 @@ export const ProfileSettingsSyncService = {
         return false;
       }
       const resolvedProfileId = resolveProfileId(profileId);
-      const blob = buildOutgoingBlob(String(resolvedProfileId), getCachedBlob(resolvedProfileId));
+      const remoteBlob = await pullRemoteBlob(resolvedProfileId);
+      if (!remoteBlob) {
+        console.warn("Profile settings sync push skipped: missing remote base blob; refusing to create a partial settings blob");
+        return false;
+      }
+      const blob = buildOutgoingBlob(String(resolvedProfileId), remoteBlob);
       await SupabaseApi.rpc(PUSH_RPC, {
         p_profile_id: resolvedProfileId,
         p_settings_json: blob,
