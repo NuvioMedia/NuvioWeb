@@ -670,7 +670,6 @@ export const CatalogSeeAllScreen = {
       return;
     }
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
     const focusedBeforeDpad = this.container?.querySelector(".focusable.focused") || null;
     if (this.posterOptionsMenu) {
       if (code === 38 || code === 40) {
@@ -686,12 +685,6 @@ export const CatalogSeeAllScreen = {
         await this.activatePosterOptionsMenu();
         return;
       }
-      return;
-    }
-    if (this.isPosterHoldTarget(focusedBeforeDpad) && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93)) {
-      event?.preventDefault?.();
-      this.cancelPendingPosterHold();
-      await this.openPosterOptionsMenu(focusedBeforeDpad);
       return;
     }
     if (code === 13 && this.isPosterHoldTarget(focusedBeforeDpad)) {

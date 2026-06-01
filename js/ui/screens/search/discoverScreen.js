@@ -1239,7 +1239,12 @@ export const DiscoverScreen = {
 
     const current = this.container.querySelector(".focusable.focused");
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
+      return;
+    }
     const currentAction = String(current?.dataset?.action || "");
     const focusedFilterKind = this.getKindFromFilterAction(currentAction);
     if (isEnterKey(event) && focusedFilterKind) {
@@ -1249,12 +1254,6 @@ export const DiscoverScreen = {
       return;
     }
 
-    if (this.isPosterHoldTarget(current) && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93)) {
-      event?.preventDefault?.();
-      this.cancelPendingPosterHold();
-      await this.openPosterOptionsMenu(current);
-      return;
-    }
     if (code === 13 && this.isPosterHoldTarget(current)) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingPosterHold(current)) {

@@ -3464,6 +3464,7 @@ export const HomeScreen = {
       title: item.title || "Untitled",
       subtitle: t("cw_dialog_subtitle", {}, "Choose what you want to do with this item."),
       widthVw: 37.5,
+      suppressEnterUntilKeyUp: true,
       buttons: options.map((option, index) => ({
         label: option.label,
         key: option.action,
@@ -3485,6 +3486,7 @@ export const HomeScreen = {
         this.holdMenuScrollState = null;
       }
     }).mount(document.body);
+    this.suppressHoldMenuEnterUntilKeyUp = true;
     this.scheduleHoldMenuScrollRestore();
     return true;
   },
@@ -3500,6 +3502,7 @@ export const HomeScreen = {
       title: item.name || "Untitled",
       subtitle: t("home_poster_dialog_subtitle", {}, "Title actions"),
       widthVw: 37.5,
+      suppressEnterUntilKeyUp: true,
       buttons: options.map((option, index) => ({
         label: option.label,
         key: option.action,
@@ -3524,6 +3527,7 @@ export const HomeScreen = {
         this.holdMenuScrollState = null;
       }
     }).mount(document.body);
+    this.suppressHoldMenuEnterUntilKeyUp = true;
     this.scheduleHoldMenuScrollRestore();
     return true;
   },
@@ -5973,6 +5977,7 @@ export const HomeScreen = {
     this.posterHoldMenu = null;
     this.posterListPicker = null;
     this.pendingContinueWatchingFocusIndex = null;
+    this.suppressHoldMenuEnterUntilKeyUp = false;
     this.cancelPendingContinueWatchingEnter();
     this.forceInitialContinueWatchingFocus = false;
     this.continueWatchingLoading = false;
@@ -7333,10 +7338,12 @@ export const HomeScreen = {
   onKeyDown(event) {
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
-    const supportsRemoteEnterHold = Platform.isTizen() || Platform.isWebOS();
-    const isRemoteHoldTarget = supportsRemoteEnterHold && this.isHomeHoldTarget(currentFocusedNode);
-    if (!isRemoteHoldTarget || code !== 13) {
+    if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
+      event.preventDefault?.();
+      return;
+    }
+    const isEnterHoldTarget = code === 13 && this.isHomeHoldTarget(currentFocusedNode);
+    if (!isEnterHoldTarget) {
       this.cancelPendingContinueWatchingEnter();
       this.cancelPendingContinueWatchingHold();
     }
@@ -7404,16 +7411,7 @@ export const HomeScreen = {
     }
     const isContinueWatchingHoldTarget = this.isContinueWatchingHoldTarget(currentFocusedNode);
     const isHomeHoldTarget = this.isHomeHoldTarget(currentFocusedNode);
-    const wantsContinueWatchingMenu = isHomeHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsContinueWatchingMenu) {
-      event.preventDefault?.();
-      this.cancelPendingContinueWatchingEnter();
-      this.cancelPendingContinueWatchingHold();
-      this.openHoldMenuForNode(currentFocusedNode);
-      return;
-    }
-    if (supportsRemoteEnterHold && code === 13 && isHomeHoldTarget) {
+    if (code === 13 && isHomeHoldTarget) {
       event.preventDefault?.();
       if (!event?.repeat && !this.hasPendingContinueWatchingHold(currentFocusedNode)) {
         this.startPendingContinueWatchingHold(currentFocusedNode);
@@ -7451,8 +7449,12 @@ export const HomeScreen = {
   },
 
   onKeyUp(event) {
-    if (!Platform.isTizen() && !Platform.isWebOS()) {
-      return;
+    if (this.suppressHoldMenuEnterUntilKeyUp) {
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event?.preventDefault?.();
+        return;
+      }
     }
     if (Number(event?.keyCode || 0) !== 13) {
       return;
@@ -7619,6 +7621,7 @@ export const HomeScreen = {
   cleanup() {
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
+    this.suppressHoldMenuEnterUntilKeyUp = false;
     this.destroyHomeHoldDialog();
     this.continueWatchingMenu = null;
     this.posterHoldMenu = null;

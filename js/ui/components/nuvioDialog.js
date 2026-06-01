@@ -44,7 +44,7 @@
  */
 
 export class NuvioDialog {
-  constructor({ title, subtitle = null, error = null, widthVw = 54.2, buttons = [], onDismiss = null, panelClassName = "", actionsClassName = "" }) {
+  constructor({ title, subtitle = null, error = null, widthVw = 54.2, buttons = [], onDismiss = null, panelClassName = "", actionsClassName = "", suppressEnterUntilKeyUp = false }) {
     this.title = title;
     this.subtitle = subtitle;
     this.error = error;
@@ -53,13 +53,16 @@ export class NuvioDialog {
     this.onDismiss = onDismiss;
     this.panelClassName = panelClassName;
     this.actionsClassName = actionsClassName;
+    this.suppressEnterUntilKeyUp = Boolean(suppressEnterUntilKeyUp);
 
     this._focusedIndex = 0;
     this._destroyed = false;
     this._backdrop = null;
     this._panel = null;
     this._buttonEls = [];
+    this._enterSuppressed = this.suppressEnterUntilKeyUp;
     this._keyHandler = this._onKey.bind(this);
+    this._keyUpHandler = this._onKeyUp.bind(this);
   }
 
   mount(container = document.body) {
@@ -135,6 +138,7 @@ export class NuvioDialog {
 
     // Keyboard navigation
     window.addEventListener("keydown", this._keyHandler, { capture: true });
+    window.addEventListener("keyup", this._keyUpHandler, { capture: true });
 
     // Focus first button after 2 frames (matches ATV LaunchedEffect repeat(2) { withFrameNanos })
     requestAnimationFrame(() => requestAnimationFrame(() => this._focusIndex(0)));
@@ -212,9 +216,24 @@ export class NuvioDialog {
     if (key === "Enter" || key === " ") {
       e.preventDefault();
       e.stopPropagation();
+      if (this._enterSuppressed) {
+        return;
+      }
       const btn = this.buttons[this._focusedIndex];
       if (btn?.onAction) btn.onAction();
       return;
+    }
+  }
+
+  _onKeyUp(e) {
+    if (this._destroyed) return;
+    const key = e.key;
+    if (key === "Enter" || key === " ") {
+      this._enterSuppressed = false;
+      if (this.suppressEnterUntilKeyUp) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
     }
   }
 
@@ -228,6 +247,7 @@ export class NuvioDialog {
     if (this._destroyed) return;
     this._destroyed = true;
     window.removeEventListener("keydown", this._keyHandler, { capture: true });
+    window.removeEventListener("keyup", this._keyUpHandler, { capture: true });
 
     const backdrop = this._backdrop;
     const panel = this._panel;

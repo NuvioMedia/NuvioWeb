@@ -239,6 +239,7 @@ export class PosterOptionsDialogController {
       title: item.title || item.name || item.id || "Untitled",
       subtitle: t("home_poster_dialog_subtitle", {}, "Title actions"),
       widthVw: 37.5,
+      suppressEnterUntilKeyUp: true,
       buttons: options.map((option) => ({
         label: option.label,
         key: option.action,
@@ -288,6 +289,7 @@ export class PosterOptionsDialogController {
       subtitle: t("detail_lists_subtitle", {}, "Choose which lists should include this title"),
       error: this.listPicker.error || null,
       widthVw: 52,
+      suppressEnterUntilKeyUp: true,
       buttons: getPosterListPickerOptions(this.listPicker).map((option) => ({
         label: option.label,
         key: option.action,

@@ -5893,7 +5893,6 @@ export const MetaDetailsScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
     const currentFocusedNode = this.container.querySelector(".focusable.focused") || null;
 
     const isEpisodeHoldTarget = this.isEpisodeHoldTarget(currentFocusedNode);
@@ -6007,42 +6006,6 @@ export const MetaDetailsScreen = {
       }
     }
 
-    const wantsEpisodeHoldMenu = isEpisodeHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsEpisodeHoldMenu) {
-      event?.preventDefault?.();
-      this.cancelPendingEpisodeHold();
-      this.openEpisodeHoldMenu(currentFocusedNode);
-      return;
-    }
-    const wantsSeasonHoldMenu = isSeasonHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsSeasonHoldMenu) {
-      event?.preventDefault?.();
-      this.cancelPendingSeasonHold();
-      this.openSeasonHoldMenu(currentFocusedNode);
-      return;
-    }
-    const wantsPosterOptionsMenu = isPosterHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsPosterOptionsMenu) {
-      event?.preventDefault?.();
-      this.cancelPendingPosterHold();
-      await this.openPosterOptionsMenu(currentFocusedNode);
-      return;
-    }
-    const wantsHeroOptionsMenu = isHeroHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsHeroOptionsMenu) {
-      event?.preventDefault?.();
-      this.cancelPendingHeroHold();
-      if (String(currentFocusedNode?.dataset?.action || "") === "playDefault") {
-        this.openHeroPlayMenu();
-      } else {
-        await this.openLibraryListMenu();
-      }
-      return;
-    }
     if (code === 13 && isEpisodeHoldTarget) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingEpisodeHold(currentFocusedNode)) {

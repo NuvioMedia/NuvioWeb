@@ -1404,7 +1404,10 @@ export const LibraryScreen = {
 
     const state = this.controller.getState();
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
+      event?.preventDefault?.();
+      return;
+    }
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;
@@ -1422,12 +1425,6 @@ export const LibraryScreen = {
     const current = this.container?.querySelector(".focusable.focused") || activeNode || null;
     const sidebarLocked = state.listEditorState || state.showDeleteConfirm || state.showManageDialog || state.expandedPicker;
 
-    if (!sidebarLocked && this.isPosterHoldTarget(current) && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93)) {
-      event?.preventDefault?.();
-      this.cancelPendingPosterHold();
-      await this.openPosterOptionsMenu(current);
-      return;
-    }
     if (!sidebarLocked && code === 13 && this.isPosterHoldTarget(current)) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingPosterHold(current)) {

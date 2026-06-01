@@ -1491,7 +1491,10 @@ export const SearchScreen = {
 
   async onKeyDown(event) {
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
+      event.preventDefault?.();
+      return;
+    }
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
     const isPosterHoldTarget = this.isPosterHoldTarget(currentFocusedNode);
     if (!isPosterHoldTarget || code !== 13) {
@@ -1555,14 +1558,6 @@ export const SearchScreen = {
       }
     }
 
-    const wantsPosterOptionsMenu = isPosterHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsPosterOptionsMenu) {
-      event.preventDefault?.();
-      this.cancelPendingPosterHold();
-      await this.openPosterOptionsMenu(currentFocusedNode);
-      return;
-    }
     if (code === 13 && isPosterHoldTarget) {
       event.preventDefault?.();
       if (!event?.repeat && !this.hasPendingPosterHold(currentFocusedNode)) {

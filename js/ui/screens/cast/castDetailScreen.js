@@ -349,7 +349,6 @@ export const CastDetailScreen = {
 
   async onKeyDown(event) {
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
     const current = this.container?.querySelector(".focusable.focused") || null;
     const isPosterHoldTarget = this.isPosterHoldTarget(current);
     if (!isPosterHoldTarget || code !== 13) {
@@ -390,14 +389,6 @@ export const CastDetailScreen = {
       return;
     }
     if (!current) {
-      return;
-    }
-    const wantsPosterOptionsMenu = isPosterHoldTarget
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-    if (wantsPosterOptionsMenu) {
-      event?.preventDefault?.();
-      this.cancelPendingPosterHold();
-      await this.openPosterOptionsMenu(current);
       return;
     }
     if (code === 13 && isPosterHoldTarget) {

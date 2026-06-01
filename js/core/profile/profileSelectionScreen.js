@@ -5,7 +5,6 @@ import { ProfileSettingsSyncService } from "../../core/profile/profileSettingsSy
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
-import { Platform } from "../../platform/index.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
 import { NuvioDialog } from "../../ui/components/nuvioDialog.js";
@@ -299,6 +298,7 @@ export const ProfileSelectionScreen = {
     this.suppressedFocusClick = null;
     this.avatarCatalog = [];
     this.lastKeyboardActivation = null;
+    this.suppressHoldMenuEnterUntilKeyUp = false;
 
     await ProfileSyncService.pull();
     this.profiles = await ProfileManager.getProfiles();
@@ -1179,6 +1179,7 @@ export const ProfileSelectionScreen = {
     this._optionsDialog = new NuvioDialog({
       title: t("profile_selection_options_title", {}, "Profile Options"),
       widthVw: 37.5, // 360dp / 960dp screen = 37.5vw
+      suppressEnterUntilKeyUp: true,
       buttons,
       onDismiss: () => {
         this._optionsDialog = null;
@@ -1187,6 +1188,7 @@ export const ProfileSelectionScreen = {
         this.restoreFocus();
       }
     }).mount(document.body);
+    this.suppressHoldMenuEnterUntilKeyUp = true;
   },
 
   canHoldManageProfile(node) {
@@ -1743,16 +1745,17 @@ export const ProfileSelectionScreen = {
     }
 
     const code = Number(event?.keyCode || 0);
-    const originalKeyCode = Number(event?.originalKeyCode || code || 0);
+    if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
+      event?.preventDefault?.();
+      return;
+    }
     const overlayRoot = this.container.querySelector("[data-overlay-root='pin']")
       || this.container.querySelector("[data-overlay-root='delete']")
       || this.container.querySelector("[data-overlay-root='options']")
       || this.container.querySelector("[data-overlay-root='editor']");
     const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
 
-    const supportsRemoteEnterHold = Platform.isTizen() || Platform.isWebOS();
-
-    if (!supportsRemoteEnterHold || code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
+    if (code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
       this.cancelPendingProfileHold();
     }
 
@@ -1786,23 +1789,7 @@ export const ProfileSelectionScreen = {
       return;
     }
 
-    const wantsManageOptions = !this.isManagementMode
-      && ((code === 13 && event?.repeat) || originalKeyCode === 82 || code === 93);
-
-    if (wantsManageOptions) {
-      const current = currentProfileCard;
-      const profileId = current?.dataset?.profileId;
-      if (profileId && profileId !== "add") {
-        const profile = this.getProfileById(profileId);
-        if (profile) {
-          event?.preventDefault?.();
-          this.openOptionsDialog(profile);
-          return;
-        }
-      }
-    }
-
-    if (supportsRemoteEnterHold && code === 13 && this.canHoldManageProfile(currentProfileCard)) {
+    if (code === 13 && this.canHoldManageProfile(currentProfileCard)) {
       event?.preventDefault?.();
       if (!event?.repeat && !this.hasPendingProfileHold(currentProfileCard)) {
         this.startPendingProfileHold(currentProfileCard);
@@ -1827,8 +1814,12 @@ export const ProfileSelectionScreen = {
   },
 
   async onKeyUp(event) {
-    if (!Platform.isTizen() && !Platform.isWebOS()) {
-      return;
+    if (this.suppressHoldMenuEnterUntilKeyUp) {
+      this.suppressHoldMenuEnterUntilKeyUp = false;
+      if (Number(event?.keyCode || 0) === 13) {
+        event?.preventDefault?.();
+        return;
+      }
     }
     if (Number(event?.keyCode || 0) !== 13 || this.pinOverlayState || this.optionsProfileId || this.deleteProfileId || this.editorState) {
       return;
@@ -1878,6 +1869,7 @@ export const ProfileSelectionScreen = {
   cleanup() {
     this._destroyDialogs();
     this.cancelPendingProfileHold();
+    this.suppressHoldMenuEnterUntilKeyUp = false;
     if (this._bgAnimRaf) {
       cancelAnimationFrame(this._bgAnimRaf);
       this._bgAnimRaf = null;

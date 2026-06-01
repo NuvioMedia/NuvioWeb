@@ -10,6 +10,15 @@ export function getArrowCodeFromKey(key) {
   return null;
 }
 
+function getKeyCodeFromName(keyName) {
+  const normalized = String(keyName || "").toLowerCase();
+  const keyMap = {
+    back: 10009,
+    return: 10009
+  };
+  return keyMap[normalized] || 0;
+}
+
 function isEditableTarget(target) {
   const tagName = String(target?.tagName || "").toUpperCase();
   return Boolean(
@@ -51,7 +60,7 @@ export function normalizeKeyEvent(event, backCodes = []) {
   const keyName = String(event?.keyName || event?.detail?.keyName || "");
   const code = String(event?.code || "");
   const keyNameLower = keyName.toLowerCase();
-  const fallbackCode = keyNameLower === "back" || keyNameLower === "return" ? 10009 : 0;
+  const fallbackCode = getKeyCodeFromName(keyName || key || code);
   const rawCode = Number(getArrowCodeFromKey(key) || event?.keyCode || event?.which || fallbackCode || 0);
   const normalizedCode = normalizeDirectionalKeyCode(rawCode);
   const isBack = isBackEvent(event, backCodes, normalizedCode);
