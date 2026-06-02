@@ -146,6 +146,14 @@ function groupNodesByRow(nodes = [], tolerance = 28) {
   return rows;
 }
 
+function filterStructureSignature(state = {}) {
+  return [
+    state.sourceMode === "trakt" ? "trakt" : "local",
+    Array.isArray(state.availableGenres) && state.availableGenres.length ? "genre" : "no-genre",
+    Array.isArray(state.availableYears) && state.availableYears.length ? "year" : "no-year"
+  ].join("|");
+}
+
 export const LibraryScreen = {
 
   clearClosingPicker() {
@@ -198,10 +206,32 @@ export const LibraryScreen = {
     });
   },
 
+  handleControllerChange(state = null) {
+    const nextState = state || this.controller?.getState?.() || null;
+    const partialRefresh = this.partialContentRefresh;
+    if (
+      partialRefresh
+      && nextState
+      && !nextState.isLoading
+      && !nextState.isSyncing
+      && !nextState.showManageDialog
+      && !nextState.listEditorState
+      && !nextState.showDeleteConfirm
+    ) {
+      this.partialContentRefresh = null;
+      this.updateRenderedLibraryContent(nextState, {
+        preservePickerRow: partialRefresh.structureSignature === filterStructureSignature(nextState)
+      });
+      return;
+    }
+    this.partialContentRefresh = null;
+    this.requestRender();
+  },
+
   async mount() {
     this.container = document.getElementById("library");
     ScreenUtils.show(this.container);
-    this.controller = new LibraryController(() => this.requestRender());
+    this.controller = new LibraryController((state) => this.handleControllerChange(state));
     this.libraryRouteEnterPending = true;
     this.sidebarProfile = await getSidebarProfileState();
     this.layoutPrefs = LayoutPreferences.get();
@@ -221,6 +251,7 @@ export const LibraryScreen = {
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
     this.lastPrivacyFocus = "private";
+    this.partialContentRefresh = null;
 
     this.render();
     this.bindEvents();
@@ -342,6 +373,134 @@ export const LibraryScreen = {
       targetOptionClass: "library-picker-option-target",
       optionFocusable: isOpen
     });
+  },
+
+  renderPickerGroups(state) {
+    const primaryPickerMarkup = [
+      state.sourceMode === "trakt"
+        ? this.renderPicker("list", t("library_filter_list", {}, "List"), this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
+        : "",
+      this.renderPicker("type", t("library_filter_type", {}, "Type"), this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), "library-picker-flex"),
+      this.renderPicker("sort", t("library_filter_sort", {}, "Sort"), this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), "library-picker-flex")
+    ].filter(Boolean).join("");
+
+    const secondaryPickerMarkup = [
+      state.availableGenres.length
+        ? this.renderPicker("genre", t("library_filter_genre", {}, "Genre"), this.controller.getSelectedGenreLabel(), this.controller.getPickerOptions("genre"), "library-picker-flex")
+        : "",
+      state.availableYears.length
+        ? this.renderPicker("year", t("library_filter_year", {}, "Year"), this.controller.getSelectedYearLabel(), this.controller.getPickerOptions("year"), "library-picker-flex")
+        : ""
+    ].filter(Boolean).join("");
+
+    return `
+      <section class="library-picker-groups" id="libraryPickerGroupsMount">
+        <div class="library-picker-row">
+          ${primaryPickerMarkup}
+        </div>
+        ${secondaryPickerMarkup ? `<div class="library-picker-row">${secondaryPickerMarkup}</div>` : ""}
+      </section>
+    `;
+  },
+
+  renderLibraryContentArea(state) {
+    return `
+      <div id="libraryContentAreaMount">
+        ${this.renderActions(state)}
+        ${state.visibleItems.length ? this.renderGrid(state.visibleItems) : this.renderEmptyState()}
+        ${state.transientMessage ? `<div class="library-toast">${escapeHtml(state.transientMessage)}</div>` : ""}
+      </div>
+    `;
+  },
+
+  syncRenderedPickerValues(state) {
+    const valueByPicker = {
+      list: this.controller.getSelectedListLabel(),
+      type: this.controller.getSelectedTypeLabel(),
+      sort: this.controller.getSelectedSortLabel(),
+      genre: this.controller.getSelectedGenreLabel(),
+      year: this.controller.getSelectedYearLabel()
+    };
+    Object.entries(valueByPicker).forEach(([picker, value]) => {
+      const node = this.container?.querySelector(`.library-picker-anchor[data-picker="${selectorValue(picker)}"] .library-picker-value`);
+      if (node instanceof HTMLElement) {
+        node.textContent = value;
+      }
+    });
+  },
+
+  closePickerMenuInDom(picker = "") {
+    if (!this.container) {
+      return;
+    }
+    this.lastRenderedExpandedPicker = null;
+    this.clearClosingPicker();
+    Array.from(this.container.querySelectorAll(".library-picker-groups .library-picker")).forEach((node) => {
+      node.classList.remove("open", "closing");
+      const menu = node.querySelector(".library-picker-menu");
+      if (menu) {
+        menu.remove();
+      }
+    });
+    Array.from(this.container.querySelectorAll(".library-picker-groups .library-picker-anchor")).forEach((node) => {
+      node.setAttribute("aria-expanded", "false");
+    });
+    this.syncRenderedPickerValues(this.controller.getState());
+    const target = picker
+      ? this.container.querySelector(`.library-picker-anchor[data-picker="${selectorValue(picker)}"]`)
+      : null;
+    if (target instanceof HTMLElement) {
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) {
+          node.classList.remove("focused");
+        }
+      });
+      this.setFocusedNode(target);
+    }
+  },
+
+  updateRenderedLibraryContent(state, { preservePickerRow = true } = {}) {
+    if (!this.container || !this.container.querySelector(".library-shell")) {
+      this.requestRender();
+      return;
+    }
+
+    const sourceNode = this.container.querySelector("#libraryPageSource");
+    if (sourceNode instanceof HTMLElement) {
+      sourceNode.textContent = this.controller.getSourceLabel();
+    }
+
+    const pickerMount = this.container.querySelector("#libraryPickerGroupsMount");
+    if (pickerMount instanceof HTMLElement) {
+      if (preservePickerRow) {
+        this.syncRenderedPickerValues(state);
+      } else {
+        pickerMount.outerHTML = this.renderPickerGroups(state);
+      }
+    }
+
+    const contentMount = this.container.querySelector("#libraryContentAreaMount");
+    if (contentMount instanceof HTMLElement) {
+      contentMount.outerHTML = this.renderLibraryContentArea(state);
+    }
+
+    ScreenUtils.indexFocusables(this.container);
+    bindRootSidebarEvents(this.container, {
+      currentRoute: "library",
+      onSelectedAction: () => this.focusMainNode(null, { preferEntryPoint: true }),
+      onExpandSidebar: () => this.focusSidebarNode()
+    });
+
+    if (this.pendingPickerRestore) {
+      const target = this.container.querySelector(`.library-picker-anchor[data-picker="${selectorValue(this.pendingPickerRestore)}"]`);
+      if (target instanceof HTMLElement) {
+        this.setFocusedNode(target);
+        this.pendingPickerRestore = null;
+        return;
+      }
+    }
+
+    this.restoreFocus();
   },
 
   renderGrid(items) {
@@ -566,23 +725,6 @@ export const LibraryScreen = {
       return;
     }
 
-    const primaryPickerMarkup = [
-      state.sourceMode === "trakt"
-        ? this.renderPicker("list", t("library_filter_list", {}, "List"), this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
-        : "",
-      this.renderPicker("type", t("library_filter_type", {}, "Type"), this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), "library-picker-flex"),
-      this.renderPicker("sort", t("library_filter_sort", {}, "Sort"), this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), "library-picker-flex")
-    ].filter(Boolean).join("");
-
-    const secondaryPickerMarkup = [
-      state.availableGenres.length
-        ? this.renderPicker("genre", t("library_filter_genre", {}, "Genre"), this.controller.getSelectedGenreLabel(), this.controller.getPickerOptions("genre"), "library-picker-flex")
-        : "",
-      state.availableYears.length
-        ? this.renderPicker("year", t("library_filter_year", {}, "Year"), this.controller.getSelectedYearLabel(), this.controller.getPickerOptions("year"), "library-picker-flex")
-        : ""
-    ].filter(Boolean).join("");
-
     this.container.innerHTML = `
       <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}" style="${escapeHtml(libraryStyle)}">
         ${this.renderSidebar()}
@@ -590,21 +732,12 @@ export const LibraryScreen = {
           <section class="library-page">
             <header class="library-page-header">
               <h1 class="library-page-title">${escapeHtml(t("library_title", {}, "Library"))}</h1>
-              <div class="library-page-source">${escapeHtml(this.controller.getSourceLabel())}</div>
+              <div class="library-page-source" id="libraryPageSource">${escapeHtml(this.controller.getSourceLabel())}</div>
             </header>
 
-            <section class="library-picker-groups">
-              <div class="library-picker-row">
-                ${primaryPickerMarkup}
-              </div>
-              ${secondaryPickerMarkup ? `<div class="library-picker-row">${secondaryPickerMarkup}</div>` : ""}
-            </section>
+            ${this.renderPickerGroups(state)}
 
-            ${this.renderActions(state)}
-
-            ${state.visibleItems.length ? this.renderGrid(state.visibleItems) : this.renderEmptyState()}
-
-            ${state.transientMessage ? `<div class="library-toast">${escapeHtml(state.transientMessage)}</div>` : ""}
+            ${this.renderLibraryContentArea(state)}
           </section>
         </main>
         ${this.renderManageListsDialog(state)}
@@ -1304,11 +1437,17 @@ export const LibraryScreen = {
       const index = Number(node.dataset.optionIndex || 0);
       this.pendingPickerRestore = picker || null;
       this.focusZone = "content";
-      this.controller.setState({
+      this.partialContentRefresh = {
+        picker,
+        structureSignature: filterStructureSignature(this.controller.getState())
+      };
+      this.controller.state = {
+        ...this.controller.state,
         pickerFocusIndex: index,
         expandedPicker: picker
-      });
+      };
       this.controller.selectOpenPickerOption();
+      this.closePickerMenuInDom(picker);
       if (picker === "sort") {
         requestAnimationFrame(() => {
           this.container?.querySelector(".home-main")?.scrollTo?.({ top: 0, left: 0, behavior: "auto" });

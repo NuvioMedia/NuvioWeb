@@ -80,6 +80,13 @@ function extractReleaseYear(item = {}) {
   return "";
 }
 
+function actionForPickerKind(kind) {
+  if (kind === "type") return "discoverFilterType";
+  if (kind === "catalog") return "discoverFilterCatalog";
+  if (kind === "genre") return "discoverFilterGenre";
+  return "discoverFilterType";
+}
+
 function isKey(event, code, aliases = []) {
   const keyCode = Number(event?.keyCode || 0);
   if (keyCode === code) return true;
@@ -185,9 +192,32 @@ export const DiscoverScreen = {
       this.closingPickerTimer = null;
       if (this.closingPicker === pickerKey) {
         this.closingPicker = null;
-        this.render();
+        this.requestRender();
       }
     }, PICKER_MENU_EXIT_MS);
+  },
+
+  cancelScheduledRender() {
+    if (this.renderFrame) {
+      cancelAnimationFrame(this.renderFrame);
+      this.renderFrame = null;
+    }
+  },
+
+  requestRender() {
+    if (!this.container || Router.getCurrent() !== "discover") {
+      return;
+    }
+    if (this.renderFrame) {
+      return;
+    }
+    this.renderFrame = requestAnimationFrame(() => {
+      this.renderFrame = null;
+      if (!this.container || Router.getCurrent() !== "discover") {
+        return;
+      }
+      this.render();
+    });
   },
 
   getRouteStateKey() {
@@ -293,7 +323,7 @@ export const DiscoverScreen = {
       this.loading = false;
       this.items = [];
       this.suppressInitialLoadingRenders = false;
-      this.render();
+      this.requestRender();
     } finally {
       this.suppressInitialLoadingRenders = false;
     }
@@ -354,10 +384,49 @@ export const DiscoverScreen = {
     }
   },
 
-  async reloadItems({ suppressLoadingRender = false } = {}) {
-    const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
+  getSelectedCatalog() {
+    return this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
+  },
+
+  getDiscoverContextLabel(selectedCatalog = null) {
+    return selectedCatalog
+      ? `${selectedCatalog.addonName || "Addon"} • ${formatAddonTypeLabel(selectedCatalog.type)}`
+      : "Choose a catalog to start browsing";
+  },
+
+  renderDiscoverCards(selectedCatalog = null) {
+    return this.items.length
+      ? this.items.map((item, index) => `
+              <article class="discover-card seeall-card focusable"
+                        data-action="openDetail"
+                        data-item-id="${item.id || ""}"
+                        data-item-type="${item.type || selectedCatalog?.type || "movie"}"
+                        data-item-title="${item.name || "Untitled"}"
+                        data-poster-src="${escapeHtml(item.poster || "")}"
+                        data-backdrop-src="${escapeHtml(item.background || item.backdrop || "")}"
+                        data-focus-key="item:${item.id || index}"
+                        data-item-index="${index}">
+                 <div class="seeall-card-poster-wrap">
+                   ${item.poster
+      ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
+      : `<div class="seeall-card-poster placeholder"></div>`}
+                 </div>
+                 ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
+                   <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
+                   <div class="seeall-card-year">${escapeHtml(extractReleaseYear(item))}</div>
+                 ` : ""}
+               </article>
+             `).join("")
+      : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
+  },
+
+  renderDiscoverLoadingMarkup() {
+    return this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : "";
+  },
+
+  async reloadItems({ suppressLoadingRender = false, preserveExistingItems = false, partialRender = false } = {}) {
+    const selectedCatalog = this.getSelectedCatalog();
     this.captureViewState();
-    this.items = [];
     this.nextSkip = 0;
     this.hasMore = true;
     this.loading = true;
@@ -365,31 +434,42 @@ export const DiscoverScreen = {
     this.lastFocusedDiscoverItemId = "";
     this.pendingRestoreFocus = false;
     this.savedScrollTop = 0;
+    if (!preserveExistingItems) {
+      this.items = [];
+    }
     if (!suppressLoadingRender && !this.suppressInitialLoadingRenders) {
-      this.render();
+      this.requestRender();
     }
     if (!selectedCatalog) {
       this.loading = false;
       this.hasMore = false;
       this.suppressInitialLoadingRenders = false;
-      this.render();
+      if (partialRender) {
+        this.updateRenderedDiscoverResults();
+      } else {
+        this.requestRender();
+      }
       return;
     }
 
     this.loading = false;
-    await this.loadNextPage({ restoreFocusToGrid: false, suppressLoadingRender });
+    await this.loadNextPage({ restoreFocusToGrid: false, suppressLoadingRender, replaceExistingItems: preserveExistingItems, partialRender });
   },
 
-  async loadNextPage({ restoreFocusToGrid = true, preserveViewport = false, suppressLoadingRender = false } = {}) {
+  async loadNextPage({ restoreFocusToGrid = true, preserveViewport = false, suppressLoadingRender = false, replaceExistingItems = false, partialRender = false } = {}) {
     if (this.loading || !this.hasMore) {
       return;
     }
 
     const token = this.loadToken;
-    const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
+    const selectedCatalog = this.getSelectedCatalog();
     if (!selectedCatalog) {
       this.hasMore = false;
-      this.render();
+      if (partialRender) {
+        this.updateRenderedDiscoverResults();
+      } else {
+        this.requestRender();
+      }
       return;
     }
 
@@ -398,7 +478,7 @@ export const DiscoverScreen = {
     this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
     this.preserveViewportOnNextRender = Boolean(preserveViewport);
     if (!suppressLoadingRender && !preserveViewport && !this.suppressInitialLoadingRenders) {
-      this.render();
+      this.requestRender();
     }
 
     const extraArgs = {};
@@ -424,13 +504,19 @@ export const DiscoverScreen = {
       this.hasMore = false;
       this.preserveViewportOnNextRender = false;
       this.suppressInitialLoadingRenders = false;
-      this.render();
+      if (partialRender) {
+        this.updateRenderedDiscoverResults();
+      } else {
+        this.requestRender();
+      }
       return;
     }
 
     const incoming = Array.isArray(result?.data?.items) ? result.data.items : [];
     let addedCount = 0;
-    if (!this.items.length) {
+    if (replaceExistingItems) {
+      this.items = [];
+    } else if (!this.items.length) {
       this.items = [];
     }
     if (incoming.length) {
@@ -454,7 +540,11 @@ export const DiscoverScreen = {
     this.pendingRestoreFocus = Boolean(restoreFocusToGrid);
     this.preserveViewportOnNextRender = Boolean(preserveViewport && addedCount > 0);
     this.suppressInitialLoadingRenders = false;
-    this.render();
+    if (partialRender) {
+      this.updateRenderedDiscoverResults();
+    } else {
+      this.requestRender();
+    }
   },
 
   shouldAutoLoadMore(index) {
@@ -507,22 +597,112 @@ export const DiscoverScreen = {
       if (!value || value === this.selectedType) return;
       this.selectedType = value;
       this.updateCatalogOptions();
-      this.reloadItems({ suppressLoadingRender: true });
+      this.reloadItems({ suppressLoadingRender: true, preserveExistingItems: true, partialRender: true });
       return;
     }
     if (kind === "catalog") {
       if (!value || value === this.selectedCatalogKey) return;
       this.selectedCatalogKey = value;
       this.updateGenreOptions();
-      this.reloadItems({ suppressLoadingRender: true });
+      this.reloadItems({ suppressLoadingRender: true, preserveExistingItems: true, partialRender: true });
       return;
     }
     if (kind === "genre") {
       const safeValue = value || "Default";
       if (safeValue === this.selectedGenre) return;
       this.selectedGenre = safeValue;
-      this.reloadItems({ suppressLoadingRender: true });
+      this.reloadItems({ suppressLoadingRender: true, preserveExistingItems: true, partialRender: true });
     }
+  },
+
+  syncRenderedFilterValues() {
+    const valueByKind = {
+      type: formatAddonTypeLabel(this.selectedType),
+      catalog: this.getSelectedCatalog()?.catalogName || "Select",
+      genre: this.selectedGenre || "Default"
+    };
+    Object.entries(valueByKind).forEach(([kind, value]) => {
+      const node = this.container?.querySelector(`.library-picker-anchor[data-picker="${kind}"] .library-picker-value`);
+      if (node instanceof HTMLElement) {
+        node.textContent = value;
+      }
+    });
+  },
+
+  closePickerMenuInDom(focusAction = "") {
+    if (!this.container) {
+      return;
+    }
+    this.lastRenderedOpenPicker = null;
+    this.clearClosingPicker();
+    Array.from(this.container.querySelectorAll(".discover-picker-row .library-picker")).forEach((node) => {
+      node.classList.remove("open", "closing");
+      const menu = node.querySelector(".library-picker-menu");
+      if (menu) {
+        menu.remove();
+      }
+    });
+    Array.from(this.container.querySelectorAll(".discover-picker-row .library-picker-anchor")).forEach((node) => {
+      node.setAttribute("aria-expanded", "false");
+    });
+    this.syncRenderedFilterValues();
+    const target = focusAction
+      ? this.container.querySelector(`.discover-filter[data-action="${focusAction}"]`)
+      : null;
+    if (target instanceof HTMLElement) {
+      this.container.querySelectorAll(".focusable.focused").forEach((node) => {
+        if (node !== target) {
+          node.classList.remove("focused");
+        }
+      });
+      target.classList.add("focused");
+      focusWithoutAutoScroll(target);
+    }
+  },
+
+  updateRenderedDiscoverResults() {
+    if (!this.container || !this.container.querySelector(".discover-shell")) {
+      this.requestRender();
+      return;
+    }
+    const selectedCatalog = this.getSelectedCatalog();
+    const subtitleNode = this.container.querySelector("#discoverContextLabel");
+    if (subtitleNode instanceof HTMLElement) {
+      subtitleNode.textContent = this.getDiscoverContextLabel(selectedCatalog);
+    }
+    const gridNode = this.container.querySelector("#discoverGridMount");
+    if (gridNode instanceof HTMLElement) {
+      gridNode.innerHTML = this.renderDiscoverCards(selectedCatalog);
+    }
+    const loadingNode = this.container.querySelector("#discoverLoadingMount");
+    if (loadingNode instanceof HTMLElement) {
+      loadingNode.innerHTML = this.renderDiscoverLoadingMarkup();
+    }
+
+    ScreenUtils.indexFocusables(this.container);
+    this.buildNavigationModel();
+    this.bindCardEvents();
+
+    const focusedFilter = this.container.querySelector(".discover-filter.focused");
+    if (focusedFilter instanceof HTMLElement) {
+      focusWithoutAutoScroll(focusedFilter);
+      this.scrollContentToTop();
+      return;
+    }
+
+    if (this.pendingRestoreFocus) {
+      const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
+      this.pendingRestoreFocus = false;
+      this.preserveViewportOnNextRender = false;
+      this.restoreFocusedCard({ scrollMode });
+      this.syncOpenPickerScroll();
+      return;
+    }
+    this.restoreScrollState();
+    const scrollMode = this.preserveViewportOnNextRender ? "none" : "center";
+    this.preserveViewportOnNextRender = false;
+    this.restoreContentFocus({ scrollMode });
+    this.syncOpenPickerScroll();
   },
 
   openPickerMenu(kind) {
@@ -535,14 +715,14 @@ export const DiscoverScreen = {
     this.lastFocusedAction = kind === "type"
       ? "discoverFilterType"
       : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
-    this.render();
+    this.requestRender();
   },
 
   closePickerMenu() {
     if (!this.openPicker) return;
     this.openPicker = null;
     if (!this.suppressInitialLoadingRenders) {
-      this.render();
+      this.requestRender();
     }
   },
 
@@ -626,10 +806,10 @@ export const DiscoverScreen = {
           this.pendingPosterOptionsFocusKey = "";
           this.pendingRestoreFocus = true;
           this.preserveViewportOnNextRender = true;
-          this.render();
+          this.requestRender();
         },
         onChanged: () => {
-          this.render();
+          this.requestRender();
         }
       });
     }
@@ -677,7 +857,7 @@ export const DiscoverScreen = {
     }
     const options = Array.from(this.container?.querySelectorAll(".library-picker.open .library-picker-option") || []);
     if (!options.length) {
-      this.render();
+      this.requestRender();
       return;
     }
     const selectedValue = this.getCurrentPickerValue(this.openPicker);
@@ -727,18 +907,18 @@ export const DiscoverScreen = {
     const option = options[this.pickerOptionIndex] || null;
     const currentValue = this.getCurrentPickerValue(kind);
     const hasChanged = Boolean(option) && option.value !== currentValue;
-    this.lastFocusedAction = kind === "type"
-      ? "discoverFilterType"
-      : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
+    this.lastFocusedAction = actionForPickerKind(kind);
     this.lastFocusedKey = null;
     this.lastFocusedDiscoverItemId = "";
     this.openPicker = null;
     if (!hasChanged) {
-      this.render();
+      this.requestRender();
+      return;
     }
     if (option) {
       this.setPickerValue(kind, option.value);
     }
+    this.closePickerMenuInDom(this.lastFocusedAction);
   },
 
   focusFilter(action) {
@@ -1065,6 +1245,7 @@ export const DiscoverScreen = {
   },
 
   render() {
+    this.cancelScheduledRender();
     this.layoutPrefs = LayoutPreferences.get();
     this.sidebarExpanded = false;
     const openPicker = this.openPicker || null;
@@ -1081,33 +1262,9 @@ export const DiscoverScreen = {
       this.lastFocusedAction = currentFocusedAction;
     }
 
-    const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
-    const contextLabel = selectedCatalog
-      ? `${selectedCatalog.addonName || "Addon"} • ${formatAddonTypeLabel(selectedCatalog.type)}`
-      : "Choose a catalog to start browsing";
-    const cards = this.items.length
-      ? this.items.map((item, index) => `
-              <article class="discover-card seeall-card focusable"
-                        data-action="openDetail"
-                        data-item-id="${item.id || ""}"
-                        data-item-type="${item.type || selectedCatalog?.type || "movie"}"
-                        data-item-title="${item.name || "Untitled"}"
-                        data-poster-src="${escapeHtml(item.poster || "")}"
-                        data-backdrop-src="${escapeHtml(item.background || item.backdrop || "")}"
-                        data-focus-key="item:${item.id || index}"
-                        data-item-index="${index}">
-                 <div class="seeall-card-poster-wrap">
-                   ${item.poster
-                     ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
-                     : `<div class="seeall-card-poster placeholder"></div>`}
-                 </div>
-                 ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
-                   <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
-                   <div class="seeall-card-year">${escapeHtml(extractReleaseYear(item))}</div>
-                 ` : ""}
-               </article>
-             `).join("")
-      : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
+    const selectedCatalog = this.getSelectedCatalog();
+    const contextLabel = this.getDiscoverContextLabel(selectedCatalog);
+    const cards = this.renderDiscoverCards(selectedCatalog);
 
     const enterClass = this.discoverRouteEnterPending ? " nuvio-route-slide-enter" : "";
     this.discoverRouteEnterPending = false;
@@ -1118,17 +1275,17 @@ export const DiscoverScreen = {
           <div class="seeall-shell discover-seeall-shell">
             <header class="seeall-header discover-header">
               <h2 class="seeall-title">Discover</h2>
-              <div class="seeall-subtitle">${escapeHtml(contextLabel)}</div>
+              <div class="seeall-subtitle" id="discoverContextLabel">${escapeHtml(contextLabel)}</div>
             </header>
-            <section class="library-picker-row discover-picker-row">
+            <section class="library-picker-row discover-picker-row" id="discoverPickerRow">
               ${this.renderFilterPicker("type", "Type", formatAddonTypeLabel(this.selectedType))}
               ${this.renderFilterPicker("catalog", "Catalog", selectedCatalog?.catalogName || "Select")}
               ${this.renderFilterPicker("genre", "Genre", this.selectedGenre || "Default")}
             </section>
-            <section class="seeall-grid discover-grid">
+            <section class="seeall-grid discover-grid" id="discoverGridMount">
               ${cards}
             </section>
-            ${this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : ""}
+            <div id="discoverLoadingMount">${this.renderDiscoverLoadingMarkup()}</div>
           </div>
         </main>
       </div>
@@ -1287,9 +1444,9 @@ export const DiscoverScreen = {
           ? "discoverFilterType"
           : (this.openPicker === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
         this.openPicker = null;
-        this.render();
         this.lastFocusedAction = action;
         this.moveFilterFocus(movingRight ? 1 : -1);
+        this.requestRender();
         return;
       }
       return;
@@ -1380,6 +1537,7 @@ export const DiscoverScreen = {
 
   cleanup() {
     this.loadToken = (this.loadToken || 0) + 1;
+    this.cancelScheduledRender();
     this.clearClosingPicker();
     this.lastRenderedOpenPicker = null;
     this.cancelPendingPosterHold();
