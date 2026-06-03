@@ -71,17 +71,51 @@ function isLowEndDevice() {
   return lowCpu || lowMem;
 }
 
+function supportsFlexGap() {
+  if (typeof document === "undefined" || !document.body) {
+    return true;
+  }
+
+  const flex = document.createElement("div");
+  flex.style.display = "flex";
+  flex.style.flexDirection = "column";
+  flex.style.rowGap = "1px";
+  flex.style.position = "absolute";
+  flex.style.top = "-9999px";
+  flex.style.left = "-9999px";
+  flex.appendChild(document.createElement("div"));
+  flex.appendChild(document.createElement("div"));
+  document.body.appendChild(flex);
+  const supported = flex.scrollHeight === 1;
+  document.body.removeChild(flex);
+  return supported;
+}
+
+function supportsAspectRatio() {
+  const css = globalThis.CSS;
+  if (!css || typeof css.supports !== "function") {
+    return false;
+  }
+  return css.supports("aspect-ratio", "1 / 1");
+}
+
 function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
   const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
   const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
   const legacyTizen = Platform.isTizen();
+  const flexGapUnsupported = !supportsFlexGap();
+  const aspectRatioUnsupported = !supportsAspectRatio();
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
   document.body.classList.toggle("legacy-webos", legacyWebOs);
   document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
   document.body.classList.toggle("legacy-tizen", legacyTizen);
+  document.documentElement.classList.toggle("no-flex-gap", flexGapUnsupported);
+  document.body.classList.toggle("no-flex-gap", flexGapUnsupported);
+  document.documentElement.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
+  document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
 }
 
 function isAddonRemoteMode() {

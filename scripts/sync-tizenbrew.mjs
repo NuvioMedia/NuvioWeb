@@ -22,7 +22,7 @@ const defaultEnvFileContents = `(function bootstrapTizenEnv() {
       SUPABASE_ANON_KEY: "",
       TV_LOGIN_REDIRECT_BASE_URL: "",
       PUBLIC_APP_URL: "",
-      YOUTUBE_PROXY_URL: "",
+      YOUTUBE_PROXY_URL: "youtube-proxy.html",
       ADDON_REMOTE_BASE_URL: "",
       ENABLE_REMOTE_WRAPPER_MODE: false,
       PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
@@ -137,6 +137,7 @@ async function syncBuild(targetAppDir, envSourcePath) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetAppDir, "app.bundle.js"));
+  await cp(path.join(distDir, "youtube-proxy.html"), path.join(targetAppDir, "youtube-proxy.html"));
   if (envSourcePath) {
     await cp(envSourcePath, path.join(targetAppDir, "nuvio.env.js"));
   } else {

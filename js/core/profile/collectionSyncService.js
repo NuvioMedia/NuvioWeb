@@ -80,9 +80,6 @@ export const CollectionSyncService = {
 
       const remoteCollections = parseRemoteCollectionsPayload(blob);
       const localCollections = CollectionsStore.getForProfile(resolvedProfileId);
-      if (!remoteCollections.length && localCollections.length) {
-        return false;
-      }
       if (stableStringify(remoteCollections) === stableStringify(localCollections)) {
         return false;
       }

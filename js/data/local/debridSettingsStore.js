@@ -18,6 +18,7 @@ export const DEBRID_SETTINGS_DEFAULTS = {
   streamDolbyVisionFilter: "ANY",
   streamHdrFilter: "ANY",
   streamCodecFilter: "ANY",
+  streamBadgesEnabled: true,
   streamPreferences: null,
   streamNameTemplate: "{stream.resolution::=2160p[\"4K \"||\"\"]}{stream.resolution::=1440p[\"QHD \"||\"\"]}{stream.resolution::=1080p[\"FHD \"||\"\"]}{stream.resolution::=720p[\"HD \"||\"\"]}{stream.resolution::exists[\"\"||\"Direct \"]}{service.shortName::exists[\"{service.shortName} \"||\"Debrid \"]}Instant",
   streamDescriptionTemplate: ""
@@ -73,6 +74,7 @@ function normalizeDebridSettings(value = {}) {
     streamDolbyVisionFilter: normalizeEnum(source.streamDolbyVisionFilter, "streamDolbyVisionFilter"),
     streamHdrFilter: normalizeEnum(source.streamHdrFilter, "streamHdrFilter"),
     streamCodecFilter: normalizeEnum(source.streamCodecFilter, "streamCodecFilter"),
+    streamBadgesEnabled: source.streamBadgesEnabled !== false,
     streamPreferences: normalizeStreamPreferences(source.streamPreferences),
     streamNameTemplate: String(source.streamNameTemplate || DEBRID_SETTINGS_DEFAULTS.streamNameTemplate),
     streamDescriptionTemplate: normalizeStreamDescriptionTemplate(source.streamDescriptionTemplate)

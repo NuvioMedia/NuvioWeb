@@ -136,6 +136,7 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
     copyDistFolder("css"),
     copyDistFolder("res"),
     cp(path.join(distDir, "app.bundle.js"), path.join(stagingDir, "app.bundle.js")),
+    cp(path.join(distDir, "youtube-proxy.html"), path.join(stagingDir, "youtube-proxy.html")),
     cp(path.join(rootDir, "assets", "images", "tizenIcon.png"), path.join(stagingDir, "icon.png")),
     writeFile(path.join(stagingDir, "config.xml"), buildConfigXml({ appId, packageId, version }), "utf8"),
     writeFile(path.join(stagingDir, "index.html"), buildIndexHtml(), "utf8"),

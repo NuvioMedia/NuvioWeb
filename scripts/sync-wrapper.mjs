@@ -1,4 +1,4 @@
-import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
@@ -8,7 +8,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
-const bundledWebOsRuntimeDirName = "webOSTVjs-1.2.12";
+const webOsRuntimeScriptPath = "assets/libs/webOSTV.js";
 const webOsServiceSourceDirName = "space.nuvio.webos.service";
 const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceDirName = webOsServiceId;
@@ -18,7 +18,7 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     SUPABASE_URL: "",
     SUPABASE_ANON_KEY: "",
     TV_LOGIN_REDIRECT_BASE_URL: "",
-    YOUTUBE_PROXY_URL: "",
+    YOUTUBE_PROXY_URL: "youtube-proxy.html",
     ADDON_REMOTE_BASE_URL: "",
     WEBOS_SERVICE_ID: "space.nuvio.webos.service",
     ENABLE_REMOTE_WRAPPER_MODE: false,
@@ -160,6 +160,7 @@ async function syncBuild(targetDir) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetDir, "app.bundle.js"));
+  await cp(path.join(distDir, "youtube-proxy.html"), path.join(targetDir, "youtube-proxy.html"));
   try {
     await cp(path.join(distDir, "nuvio.env.js"), path.join(targetDir, "nuvio.env.js"));
   } catch (error) {
@@ -180,15 +181,13 @@ async function syncBuild(targetDir) {
   }
 
 }
-async function copyBundledWebOsRuntime(targetDir) {
-  const sourceDir = path.join(rootDir, bundledWebOsRuntimeDirName);
-  if (!(await pathExists(sourceDir))) {
+async function resolveBundledWebOsRuntime(targetDir) {
+  const targetScriptPath = path.join(targetDir, webOsRuntimeScriptPath);
+  if (!(await pathExists(targetScriptPath))) {
     return "";
   }
 
-  await rm(path.join(targetDir, bundledWebOsRuntimeDirName), { recursive: true, force: true });
-  await cp(sourceDir, path.join(targetDir, bundledWebOsRuntimeDirName), { recursive: true });
-  return `${bundledWebOsRuntimeDirName}/webOSTV.js`;
+  return webOsRuntimeScriptPath;
 }
 
 function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
@@ -364,16 +363,6 @@ async function syncTizenIcon(targetDir) {
   await cp(wrapperIconFiles.tizenIcon.source, path.join(targetDir, wrapperIconFiles.tizenIcon.target));
 }
 
-async function resolveWebOsScriptPath(targetDir) {
-  const entries = await readdir(targetDir, { withFileTypes: true });
-  const webOsDir = entries
-    .filter((entry) => entry.isDirectory() && /^webOSTVjs/i.test(entry.name))
-    .map((entry) => entry.name)
-    .sort((left, right) => right.localeCompare(left))[0];
-
-  return webOsDir ? `${webOsDir}/webOSTV.js` : "";
-}
-
 async function updateWebOsMetadata(targetDir) {
   const { version: appVersion } = await readAppMetadata();
   const appInfoPath = path.join(targetDir, "appinfo.json");
@@ -496,7 +485,7 @@ if (platform === "webos") {
   await syncBuild(targetDir);
   await updateWebOsMetadata(targetDir);
   await syncWebOsCompanionFiles(targetDir);
-  const webOsScriptPath = await copyBundledWebOsRuntime(targetDir);
+  const webOsScriptPath = await resolveBundledWebOsRuntime(targetDir);
   await writeTextFile(path.join(targetDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }));
   await injectWebOsRuntimeEnv(targetDir);
 }

@@ -31,6 +31,7 @@ const serviceTempBundlePath = path.join(stagingDir, "__webos-service.bundle.js")
 const appName = "Nuvio TV";
 const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceSourceDir = path.join(rootDir, "services", webOsServiceId);
+const webOsRuntimeScriptPath = "assets/libs/webOSTV.js";
 
 async function assertDistExists() {
   try {
@@ -51,14 +52,12 @@ async function pathExists(filePath) {
 }
 
 async function resolveWebOsScriptPath(targetDir) {
-  const webOsDirName = "webOSTVjs-1.2.12";
-  const webOsDir = path.join(rootDir, webOsDirName);
-  if (!(await pathExists(webOsDir))) {
+  const webOsScriptPath = path.join(targetDir, webOsRuntimeScriptPath);
+  if (!(await pathExists(webOsScriptPath))) {
     return "";
   }
 
-  await cp(webOsDir, path.join(targetDir, webOsDirName), { recursive: true });
-  return `${webOsDirName}/webOSTV.js`;
+  return webOsRuntimeScriptPath;
 }
 
 function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {

@@ -45,6 +45,8 @@ function buildNormalizedEvent(event) {
 export const FocusEngine = {
   lastBackHandledAt: 0,
   lastPointerFocusTarget: null,
+  pointerMoveFrame: null,
+  pendingPointerMoveEvent: null,
 
   init() {
     this.boundHandleKey = this.handleKey.bind(this);
@@ -143,6 +145,7 @@ export const FocusEngine = {
     if (
       target.disabled
       || target.classList.contains("is-disabled")
+      || target.classList.contains("disabled")
       || target.getAttribute("aria-disabled") === "true"
     ) {
       return null;
@@ -187,6 +190,27 @@ export const FocusEngine = {
   },
 
   handlePointerMove(event) {
+    if (!Platform.isWebOS()) {
+      return;
+    }
+    this.pendingPointerMoveEvent = event;
+    if (this.pointerMoveFrame) {
+      return;
+    }
+    const run = () => {
+      this.pointerMoveFrame = null;
+      const pendingEvent = this.pendingPointerMoveEvent;
+      this.pendingPointerMoveEvent = null;
+      this.processPointerMove(pendingEvent);
+    };
+    if (typeof requestAnimationFrame === "function") {
+      this.pointerMoveFrame = requestAnimationFrame(run);
+    } else {
+      this.pointerMoveFrame = setTimeout(run, 16);
+    }
+  },
+
+  processPointerMove(event) {
     if (!Platform.isWebOS()) {
       return;
     }

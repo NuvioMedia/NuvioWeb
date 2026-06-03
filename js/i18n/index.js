@@ -9,25 +9,28 @@ const SUPPORTED_LOCALES = [
   "de",
   "el",
   "es",
+  "es-419",
   "fr",
   "he",
   "hi",
-  "hu",
+  "id",
   "it",
   "ja",
   "lt",
   "nl",
   "no",
   "pl",
-  "pt",
+  "pt-br",
+  "pt-pt",
   "ro",
   "ru",
-  "se",
   "sk",
   "sl",
   "sv",
+  "ta",
   "tr",
-  "vi"
+  "vi",
+  "zh-cn"
 ];
 
 const KEY_ALIASES = {
@@ -307,11 +310,38 @@ let baseMessagesPromise = null;
 const localeMessagesCache = new Map();
 
 function normalizeLocale(value) {
-  const raw = String(value || "").trim().toLowerCase();
+  const raw = String(value || "").trim().toLowerCase().replace(/_/g, "-");
   if (!raw) {
     return "";
   }
-  const [language] = raw.split(/[-_]/);
+  if (raw === "iw") {
+    return "he";
+  }
+  if (raw === "in") {
+    return "id";
+  }
+  if (raw === "pt") {
+    return "pt-br";
+  }
+  if (raw === "zh") {
+    return "zh-cn";
+  }
+  if (raw === "es-419" || raw.startsWith("es-419-")) {
+    return "es-419";
+  }
+  if (raw === "zh-cn" || raw.startsWith("zh-cn-")) {
+    return "zh-cn";
+  }
+  if (raw === "pt-br" || raw.startsWith("pt-br-")) {
+    return "pt-br";
+  }
+  if (raw === "pt-pt" || raw.startsWith("pt-pt-")) {
+    return "pt-pt";
+  }
+  if (SUPPORTED_LOCALES.includes(raw)) {
+    return raw;
+  }
+  const [language] = raw.split("-");
   return language || raw;
 }
 

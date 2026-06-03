@@ -81,25 +81,28 @@ const APP_LANGUAGE_NATIVE_LABELS = {
   en: "English",
   el: "Greek",
   es: "Espanol",
+  "es-419": "Espanol (Latinoamerica)",
   fr: "Francais",
   he: "Hebrew",
   hi: "Hindi",
-  hu: "Magyar",
+  id: "Bahasa Indonesia",
   it: "Italiano",
   ja: "Japanese",
   lt: "Lietuviu",
   nl: "Nederlands",
   no: "Norsk",
   pl: "Polski",
-  pt: "Portugues",
+  "pt-br": "Portugues (Brasil)",
+  "pt-pt": "Portugues (Portugal)",
   ro: "Romana",
   ru: "Russian",
-  se: "Svenska",
   sk: "Slovencina",
   sl: "Slovenscina",
   sv: "Svenska",
+  ta: "Tamil",
   tr: "Turkce",
-  vi: "Tieng Viet"
+  vi: "Tieng Viet",
+  "zh-cn": "Chinese (Simplified)"
 };
 
 function appLanguageOptionLabel(localeId) {
@@ -2534,6 +2537,9 @@ export const SettingsScreen = {
           onSelect: (option) => DebridSettingsStore.set({ streamCodecFilter: option.id })
         });
       });
+      this.actionMap.set("integration:debrid:streamBadges", () => {
+        DebridSettingsStore.set({ streamBadgesEnabled: !DebridSettingsStore.get().streamBadgesEnabled });
+      });
       this.actionMap.set("integration:debrid:nameTemplate", () => {
         this.openTextDialog({
           title: t("settings.integration.debrid.template.name.prompt", {}, "Stream name pattern"),
@@ -2641,6 +2647,12 @@ export const SettingsScreen = {
         title: t("settings.integration.debrid.codec.title", {}, "Codec"),
         subtitle: t("settings.integration.debrid.codec.subtitle", {}, "Filter sources by video codec."),
         value: labelForOption(DEBRID_CODEC_OPTIONS, model.debrid.streamCodecFilter, "Any codec")
+      })}
+            ${this.renderToggleRow({
+        focusKey: "integration:debrid:streamBadges",
+        title: t("settings.integration.debrid.streamBadges.title", {}, "Stream badges"),
+        subtitle: t("settings.integration.debrid.streamBadges.subtitle", {}, "Show quality, HDR, codec, audio, and size chips in source results."),
+        checked: model.debrid.streamBadgesEnabled !== false
       })}
             ${this.renderActionRow({
         focusKey: "integration:debrid:nameTemplate",

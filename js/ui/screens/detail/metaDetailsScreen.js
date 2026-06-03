@@ -509,7 +509,7 @@ function renderStreamAddonIcon(addonName = "") {
   }
   return `
     <span class="series-stream-addon-badge" aria-hidden="true">
-      <img class="series-stream-addon-icon" src="${escapeHtml(iconPath)}" alt="" decoding="async" onerror="this.hidden=true;const fallback=this.nextElementSibling;if(fallback){fallback.hidden=false;}" />
+      <img class="series-stream-addon-icon" src="${escapeHtml(iconPath)}" alt="" decoding="async" onerror="this.hidden=true;var fallback=this.nextElementSibling;if(fallback){fallback.hidden=false;}" />
       <span class="series-stream-addon-fallback" hidden>${fallback}</span>
     </span>
   `;
@@ -601,7 +601,7 @@ function resolveYoutubeId(value = "") {
 }
 
 function shouldUseDirectYoutubeEmbedOnTv() {
-  return Platform.isWebOS() || Platform.isTizen();
+  return (Platform.isWebOS() || Platform.isTizen()) && !String(YOUTUBE_PROXY_URL || "").trim();
 }
 
 function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
@@ -628,7 +628,7 @@ function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
   return `https://www.youtube.com/embed/${videoId}?${params.toString()}`;
 }
 
-function buildYoutubeEmbedUrl(ytId = "") {
+function buildYoutubeEmbedUrl(ytId = "", { muted = true } = {}) {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
@@ -659,7 +659,7 @@ function buildYoutubeEmbedUrl(ytId = "") {
   }
   const params = new URLSearchParams({
     autoplay: "1",
-    mute: "1",
+    mute: muted ? "1" : "0",
     controls: "0",
     loop: "1",
     playlist: cleanId,
@@ -1600,6 +1600,25 @@ export const MetaDetailsScreen = {
       return null;
     }
     const currentEpisode = this.findEpisodeFromProgress(progress);
+    if (currentEpisode && detailProgressFraction(progress) < DETAIL_PROGRESS_END_THRESHOLD) {
+      return currentEpisode;
+    }
+    const completedKeys = this.watchedEpisodeKeys instanceof Set
+      ? new Set(this.watchedEpisodeKeys)
+      : new Set();
+    if (currentEpisode && detailProgressFraction(progress) >= DETAIL_PROGRESS_END_THRESHOLD) {
+      completedKeys.add(`${Number(currentEpisode.season || 0)}:${Number(currentEpisode.episode || 0)}`);
+    }
+    let latestCompletedIndex = -1;
+    this.episodes.forEach((episode, index) => {
+      const key = `${Number(episode?.season || 0)}:${Number(episode?.episode || 0)}`;
+      if (completedKeys.has(key)) {
+        latestCompletedIndex = Math.max(latestCompletedIndex, index);
+      }
+    });
+    if (latestCompletedIndex >= 0) {
+      return this.episodes[latestCompletedIndex + 1] || this.episodes[latestCompletedIndex] || this.episodes[0];
+    }
     if (!currentEpisode) {
       return this.episodes[0];
     }
@@ -1629,9 +1648,7 @@ export const MetaDetailsScreen = {
       }
       const key = `${season}:${episode}`;
       progressMap.set(key, entry);
-      const position = Number(entry?.positionMs || 0);
-      const duration = Number(entry?.durationMs || 0);
-      if (duration > 0 && position >= duration) {
+      if (detailProgressFraction(entry) >= DETAIL_PROGRESS_END_THRESHOLD) {
         watchedKeys.add(key);
       }
     });
@@ -3613,7 +3630,7 @@ export const MetaDetailsScreen = {
            data-backdrop-src="${escapeHtml(item.background || item.backdrop || item.landscapePoster || primaryImage || "")}">
         <div class="detail-morelike-poster-wrap">
           ${primaryImage
-            ? `<img class="detail-morelike-poster-image" src="${escapeHtml(primaryImage)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml(fallbackImage)}"` : ""} onerror="const next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; const placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />`
+            ? `<img class="detail-morelike-poster-image" src="${escapeHtml(primaryImage)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async"${fallbackImage ? ` data-fallback-src="${escapeHtml(fallbackImage)}"` : ""} onerror="var next=this.dataset.fallbackSrc||''; if(next && this.src !== next){ this.src = next; this.dataset.fallbackSrc=''; return; } this.hidden = true; var placeholder = this.nextElementSibling; if(placeholder){ placeholder.hidden = false; }" />`
             : ""}
           <div class="detail-morelike-poster placeholder"${primaryImage ? " hidden" : ""}></div>
         </div>
@@ -4527,8 +4544,8 @@ export const MetaDetailsScreen = {
     this.startTrailerProgressTimer();
   },
 
-  async playTrailer({ muted = null, restart = false, initiatedByUser = true } = {}) {
-    if (!this.trailerSource || this.trailerSource.kind === "youtube") {
+  async playTrailer({ muted = null, restart = false, initiatedByUser = true, preserveSource = false } = {}) {
+    if (!preserveSource && (!this.trailerSource || this.trailerSource.kind === "youtube")) {
       const preferredSource = await this.resolvePreferredTrailerSource(this.meta);
       if (preferredSource) {
         this.trailerSource = preferredSource;
@@ -6087,7 +6104,7 @@ export const MetaDetailsScreen = {
       const ytId = String(current.dataset.trailerYtId || "").trim();
       if (ytId) {
         this.trailerSource = { kind: "youtube", ytId, embedUrl: buildYoutubeEmbedUrl(ytId, { muted: false }) };
-        this.playTrailer({ muted: false, restart: true, initiatedByUser: true });
+        this.playTrailer({ muted: false, restart: true, initiatedByUser: true, preserveSource: true });
       }
       return;
     }

@@ -2,7 +2,7 @@ import { safeApiCall } from "../../core/network/safeApiCall.js";
 import { addonRepository } from "./addonRepository.js";
 import { SubtitleApi } from "../remote/api/subtitleApi.js";
 
-const PER_ADDON_TIMEOUT_MS = 8000;
+const PER_ADDON_TIMEOUT_MS = 20000;
 
 class SubtitleRepository {
 

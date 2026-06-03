@@ -3,6 +3,7 @@ import { AuthManager } from "../auth/authManager.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { ThemeStore } from "../../data/local/themeStore.js";
 import { LayoutPreferences } from "../../data/local/layoutPreferences.js";
+import { HomeCatalogStore } from "../../data/local/homeCatalogStore.js";
 import { PlayerSettingsStore } from "../../data/local/playerSettingsStore.js";
 import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
 import { MdbListSettingsStore } from "../../data/local/mdbListSettingsStore.js";
@@ -65,6 +66,26 @@ function normalizeFeaturePayload(value) {
     }
     return accumulator;
   }, {});
+}
+
+function normalizeStringArray(value) {
+  if (Array.isArray(value)) {
+    return Array.from(new Set(value.map((entry) => String(entry || "").trim()).filter(Boolean)));
+  }
+  if (typeof value === "string") {
+    return Array.from(new Set(value.split(",").map((entry) => entry.trim()).filter(Boolean)));
+  }
+  return [];
+}
+
+function firstStringArrayFromRaw(raw = {}, keys = []) {
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(raw, key)) {
+      continue;
+    }
+    return normalizeStringArray(raw[key]);
+  }
+  return null;
 }
 
 function normalizeBlob(blob = {}) {
@@ -169,6 +190,15 @@ function numberOrNull(value) {
 
 function booleanOrNull(value) {
   return typeof value === "boolean" ? value : null;
+}
+
+function booleanFromAnyKey(raw = {}, keys = []) {
+  for (const key of keys) {
+    if (booleanOrNull(raw[key]) != null) {
+      return Boolean(raw[key]);
+    }
+  }
+  return null;
 }
 
 function stringOrNull(value) {
@@ -623,6 +653,68 @@ const FEATURE_ADAPTERS = {
       return true;
     }
   },
+  home_catalog_settings: {
+    export() {
+      const prefs = HomeCatalogStore.get();
+      return {
+        catalog_order_keys: prefs.order,
+        disabled_catalog_keys: prefs.disabled
+      };
+    },
+    project(rawFeature = {}) {
+      const raw = normalizeFeaturePayload(rawFeature);
+      const projected = {};
+      const order = firstStringArrayFromRaw(raw, [
+        "catalog_order_keys",
+        "home_catalog_order",
+        "catalog_order",
+        "order"
+      ]);
+      const disabled = firstStringArrayFromRaw(raw, [
+        "disabled_catalog_keys",
+        "hidden_catalog_keys",
+        "catalog_disabled_keys",
+        "home_catalog_disabled",
+        "disabled"
+      ]);
+      if (order) {
+        projected.catalog_order_keys = order;
+      }
+      if (disabled) {
+        projected.disabled_catalog_keys = disabled;
+      }
+      return projected;
+    },
+    import(profileId, rawFeature = {}) {
+      void profileId;
+      const raw = normalizeFeaturePayload(rawFeature);
+      const partial = {};
+      const order = firstStringArrayFromRaw(raw, [
+        "catalog_order_keys",
+        "home_catalog_order",
+        "catalog_order",
+        "order"
+      ]);
+      const disabled = firstStringArrayFromRaw(raw, [
+        "disabled_catalog_keys",
+        "hidden_catalog_keys",
+        "catalog_disabled_keys",
+        "home_catalog_disabled",
+        "disabled"
+      ]);
+      if (order) {
+        partial.order = order;
+      }
+      if (disabled) {
+        partial.disabled = disabled;
+      }
+      if (!Object.keys(partial).length) {
+        return false;
+      }
+      HomeCatalogStore.set(partial, { silentSync: true });
+      return true;
+    }
+  },
   player_settings: {
     export(profileId) {
       const settings = PlayerSettingsStore.getForProfile(profileId);
@@ -976,6 +1068,7 @@ const FEATURE_ADAPTERS = {
         stream_dolby_vision_filter: String(settings.streamDolbyVisionFilter || "ANY").toUpperCase(),
         stream_hdr_filter: String(settings.streamHdrFilter || "ANY").toUpperCase(),
         stream_codec_filter: String(settings.streamCodecFilter || "ANY").toUpperCase(),
+        stream_badges_enabled: settings.streamBadgesEnabled !== false,
         stream_preferences: settings.streamPreferences ? JSON.stringify(settings.streamPreferences) : "",
         debrid_stream_name_template: String(settings.streamNameTemplate || ""),
         debrid_stream_description_template: String(settings.streamDescriptionTemplate || ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE)
@@ -992,6 +1085,10 @@ const FEATURE_ADAPTERS = {
           projected[key] = Boolean(raw[key]);
         }
       });
+      const streamBadgesEnabled = booleanFromAnyKey(raw, ["stream_badges_enabled", "stream_show_badges", "show_stream_badges"]);
+      if (streamBadgesEnabled != null) {
+        projected.stream_badges_enabled = streamBadgesEnabled;
+      }
       [
         "torbox_api_key",
         "premiumize_api_key",
@@ -1061,6 +1158,10 @@ const FEATURE_ADAPTERS = {
       }
       if (raw.stream_codec_filter != null) {
         partial.streamCodecFilter = String(raw.stream_codec_filter || "ANY").trim().toUpperCase();
+      }
+      const streamBadgesEnabled = booleanFromAnyKey(raw, ["stream_badges_enabled", "stream_show_badges", "show_stream_badges"]);
+      if (streamBadgesEnabled != null) {
+        partial.streamBadgesEnabled = streamBadgesEnabled;
       }
       if (raw.stream_preferences != null) {
         partial.streamPreferences = String(raw.stream_preferences || "").trim();

@@ -26,6 +26,11 @@ import {
 } from "../../components/posterOptionsMenu.js";
 
 const POSTER_HOLD_DELAY_MS = 650;
+const SEARCH_RESULTS_PER_ROW_DEFAULT = 18;
+const SEARCH_RESULTS_PER_ROW_CONSTRAINED = 12;
+const SEARCH_DISCOVER_RESULTS_PER_ROW_DEFAULT = 14;
+const SEARCH_DISCOVER_RESULTS_PER_ROW_CONSTRAINED = 10;
+const SEARCH_CATALOG_BATCH_SIZE_CONSTRAINED = 3;
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -126,6 +131,54 @@ function buildSearchTargets(addons = []) {
     });
   });
   return targets;
+}
+
+function isPerformanceConstrainedRuntime() {
+  return Platform.isWebOS()
+    || Platform.isTizen()
+    || Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
+}
+
+function getSearchResultsPerRow() {
+  return isPerformanceConstrainedRuntime()
+    ? SEARCH_RESULTS_PER_ROW_CONSTRAINED
+    : SEARCH_RESULTS_PER_ROW_DEFAULT;
+}
+
+function getSearchDiscoverResultsPerRow() {
+  return isPerformanceConstrainedRuntime()
+    ? SEARCH_DISCOVER_RESULTS_PER_ROW_CONSTRAINED
+    : SEARCH_DISCOVER_RESULTS_PER_ROW_DEFAULT;
+}
+
+function getSearchCatalogBatchSize() {
+  return isPerformanceConstrainedRuntime() ? SEARCH_CATALOG_BATCH_SIZE_CONSTRAINED : 0;
+}
+
+function getInputSelectionSnapshot(input = null) {
+  if (!input || typeof input.selectionStart !== "number" || typeof input.selectionEnd !== "number") {
+    return null;
+  }
+  return {
+    start: input.selectionStart,
+    end: input.selectionEnd,
+    direction: input.selectionDirection || "none",
+    valueLength: String(input.value || "").length
+  };
+}
+
+function restoreInputSelection(input = null, snapshot = null) {
+  if (!input || !snapshot || typeof input.setSelectionRange !== "function") {
+    return;
+  }
+  const valueLength = String(input.value || "").length;
+  const start = clamp(Number(snapshot.start || 0), 0, valueLength);
+  const end = clamp(Number(snapshot.end || start), 0, valueLength);
+  try {
+    input.setSelectionRange(start, end, snapshot.direction || "none");
+  } catch (_) {
+    // Some TV inputs expose selection APIs but reject while the OS keyboard is settling.
+  }
 }
 
 function formatDateLabel(item = {}) {
@@ -431,19 +484,52 @@ export const SearchScreen = {
   async reloadRows() {
     const token = this.loadToken;
     if (this.mode === "search" && this.query.length >= 2) {
-      this.rows = await this.searchRows(this.query);
+      this.rows = await this.searchRows(this.query, { token });
     } else if (this.mode === "discover") {
       this.rows = await this.loadDiscoverRows();
     } else {
       this.rows = [];
     }
     if (token !== this.loadToken) return;
+    if (this.shouldPatchResultsWithoutReplacingInput()) {
+      this.renderResultsOnly();
+      return;
+    }
     this.requestRender();
+  },
+
+  shouldPatchResultsWithoutReplacingInput() {
+    return this.isSearchInputEditingActive() && !this.pendingAutoFocusResults;
+  },
+
+  renderResultsOnly() {
+    const content = this.container?.querySelector(".search-content");
+    const header = content?.querySelector(".search-header");
+    const input = this.container?.querySelector("#searchInput");
+    if (!content || !header || !input) {
+      this.requestRender();
+      return;
+    }
+    const selectionSnapshot = getInputSelectionSnapshot(input);
+
+    while (header.nextSibling) {
+      header.nextSibling.remove();
+    }
+    content.insertAdjacentHTML("beforeend", this.renderRows());
+    ScreenUtils.indexFocusables(this.container);
+    this.buildNavigationModel();
+    this.bindActionEvents();
+    input.value = this.query || "";
+    input.focus?.();
+    this.focusNode(this.container?.querySelector(".focusable.focused") || null, input);
+    restoreInputSelection(input, selectionSnapshot);
+    this.pendingAutoFocusResults = false;
   },
 
   async loadDiscoverRows() {
     const addons = await addonRepository.getInstalledAddons();
     const sections = [];
+    const itemLimit = getSearchDiscoverResultsPerRow();
     addons.forEach((addon) => {
       addon.catalogs.forEach((catalog) => {
         const requiresSearch = Array.isArray(catalog.extra) && catalog.extra.some((extra) =>
@@ -463,101 +549,136 @@ export const SearchScreen = {
     });
 
     const picked = sections.slice(0, 8);
-    const resolved = await Promise.all(
-      picked.map(async (section) => {
-        try {
-          const result = await withTimeout(
-            catalogRepository.getCatalog({
-              addonBaseUrl: section.addonBaseUrl,
-              addonId: section.addonId,
-              addonName: section.addonName,
-              catalogId: section.catalogId,
-              catalogName: section.catalogName,
-              type: section.type,
-              skip: 0,
-              supportsSkip: true,
-            }),
-            3500,
-            { status: "error", message: "timeout" },
-          );
-          return { ...section, result };
-        } catch (err) {
-          console.warn(
-            `fail on load catalog ${section.catalogName}:`,
-            err,
-          );
-          return {
-            ...section,
-            result: { status: "error", message: "fetch_failed" },
-          };
+    const batchSize = getSearchCatalogBatchSize();
+    const resolved = [];
+    const loadSection = async (section) => {
+      try {
+        const result = await withTimeout(
+          catalogRepository.getCatalog({
+            addonBaseUrl: section.addonBaseUrl,
+            addonId: section.addonId,
+            addonName: section.addonName,
+            catalogId: section.catalogId,
+            catalogName: section.catalogName,
+            type: section.type,
+            skip: 0,
+            supportsSkip: true,
+          }),
+          3500,
+          { status: "error", message: "timeout" },
+        );
+        return { ...section, result };
+      } catch (err) {
+        console.warn(
+          `fail on load catalog ${section.catalogName}:`,
+          err,
+        );
+        return {
+          ...section,
+          result: { status: "error", message: "fetch_failed" },
+        };
+      }
+    };
+
+    if (batchSize > 0 && picked.length > batchSize) {
+      for (let index = 0; index < picked.length; index += batchSize) {
+        const batch = picked.slice(index, index + batchSize);
+        resolved.push(...await Promise.all(batch.map(loadSection)));
+        if ((index + batchSize) < picked.length) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
         }
-      }),
-    );
+      }
+    } else {
+      resolved.push(...await Promise.all(picked.map(loadSection)));
+    }
 
     return resolved
       .filter((entry) => entry.result?.status === "success" && entry.result?.data?.items?.length)
-      .map((entry) => ({
-        title: formatCatalogRowTitle(entry.catalogName, entry.addonName, entry.type),
-        subtitle: `from ${entry.addonName || "Addon"}`,
-        type: entry.type,
-        addonBaseUrl: entry.addonBaseUrl,
-        addonId: entry.addonId,
-        addonName: entry.addonName,
-        catalogId: entry.catalogId,
-        catalogName: entry.catalogName,
-        items: (entry.result?.data?.items || []).slice(0, 14)
-      }));
+      .map((entry) => {
+        const items = entry.result?.data?.items || [];
+        return {
+          title: formatCatalogRowTitle(entry.catalogName, entry.addonName, entry.type),
+          subtitle: `from ${entry.addonName || "Addon"}`,
+          type: entry.type,
+          addonBaseUrl: entry.addonBaseUrl,
+          addonId: entry.addonId,
+          addonName: entry.addonName,
+          catalogId: entry.catalogId,
+          catalogName: entry.catalogName,
+          hasMore: Boolean(items.length > itemLimit || entry.result?.data?.hasMore),
+          items: items.slice(0, itemLimit)
+        };
+      });
   },
 
-  async searchRows(query) {
+  async searchRows(query, { token = this.loadToken } = {}) {
     const addons = await addonRepository.getInstalledAddons();
     const searchableCatalogs = buildSearchTargets(addons);
+    const batchSize = getSearchCatalogBatchSize();
+    const itemLimit = getSearchResultsPerRow();
+    const responses = [];
+    const runCatalogSearch = async (catalog) => {
+      try {
+        const result = await withTimeout(
+          catalogRepository.getCatalog({
+            addonBaseUrl: catalog.addonBaseUrl,
+            addonId: catalog.addonId,
+            addonName: catalog.addonName,
+            catalogId: catalog.catalogId,
+            catalogName: catalog.catalogName,
+            type: catalog.type,
+            skip: 0,
+            extraArgs: { search: query },
+            supportsSkip: catalog.supportsSkip,
+          }),
+          3500,
+          { status: "error", message: "timeout" },
+        );
+        return { catalog, result };
+      } catch (err) {
+        console.warn(
+          `fail on search catalog ${catalog.catalogName}:`,
+          err,
+        );
+        return {
+          catalog,
+          result: { status: "error", message: "fetch_failed" },
+        };
+      }
+    };
 
-    const responses = await Promise.all(
-      searchableCatalogs.map(async (catalog) => {
-        try {
-          const result = await withTimeout(
-            catalogRepository.getCatalog({
-              addonBaseUrl: catalog.addonBaseUrl,
-              addonId: catalog.addonId,
-              addonName: catalog.addonName,
-              catalogId: catalog.catalogId,
-              catalogName: catalog.catalogName,
-              type: catalog.type,
-              skip: 0,
-              extraArgs: { search: query },
-              supportsSkip: catalog.supportsSkip,
-            }),
-            3500,
-            { status: "error", message: "timeout" },
-          );
-          return { catalog, result };
-        } catch (err) {
-          console.warn(
-            `fail on search catalog ${catalog.catalogName}:`,
-            err,
-          );
-          return {
-            catalog,
-            result: { status: "error", message: "fetch_failed" },
-          };
+    if (batchSize > 0 && searchableCatalogs.length > batchSize) {
+      for (let index = 0; index < searchableCatalogs.length; index += batchSize) {
+        if (token !== this.loadToken) {
+          break;
         }
-      }),
-    );
+        const batch = searchableCatalogs.slice(index, index + batchSize);
+        responses.push(...await Promise.all(batch.map(runCatalogSearch)));
+        if ((index + batchSize) < searchableCatalogs.length) {
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        }
+      }
+    } else {
+      responses.push(...await Promise.all(searchableCatalogs.map(runCatalogSearch)));
+    }
 
     return responses
       .filter(({ result }) => result?.status === "success" && result?.data?.items?.length)
-      .map(({ catalog, result }) => ({
-        title: formatCatalogRowTitle(catalog.catalogName, catalog.addonName, catalog.type),
-        subtitle: `from ${catalog.addonName || "Addon"}`,
-        type: catalog.type,
-        addonBaseUrl: catalog.addonBaseUrl,
-        addonId: catalog.addonId,
-        addonName: catalog.addonName,
-        catalogId: catalog.catalogId,
-        catalogName: catalog.catalogName,
-        items: (result?.data?.items || []).slice(0, 18)
-      }));
+      .map(({ catalog, result }) => {
+        const items = result?.data?.items || [];
+        return {
+          title: formatCatalogRowTitle(catalog.catalogName, catalog.addonName, catalog.type),
+          subtitle: `from ${catalog.addonName || "Addon"}`,
+          type: catalog.type,
+          addonBaseUrl: catalog.addonBaseUrl,
+          addonId: catalog.addonId,
+          addonName: catalog.addonName,
+          catalogId: catalog.catalogId,
+          catalogName: catalog.catalogName,
+          hasMore: Boolean(items.length > itemLimit || result?.data?.hasMore),
+          items: items.slice(0, itemLimit)
+        };
+      });
   },
 
   renderRows() {
@@ -606,7 +727,7 @@ export const SearchScreen = {
               <div class="search-result-date">${formatReleaseYear(item)}</div>
             </article>
           `).join("")}
-          ${(row.items || []).length >= 15 ? `
+          ${row.hasMore || (row.items || []).length >= 15 ? `
             <article class="search-result-card search-seeall-card focusable"
                      data-action="openCatalogSeeAll"
                      data-addon-base-url="${row.addonBaseUrl || ""}"
@@ -1297,8 +1418,17 @@ export const SearchScreen = {
   scheduleSearchFromInput(input) {
     this.cancelScheduledInputSearch();
     const nextQuery = trimLeadingWhitespace(input?.value || "");
+    const selectionSnapshot = getInputSelectionSnapshot(input);
     if (input && input.value !== nextQuery) {
+      const removedLeadingChars = String(input.value || "").length - nextQuery.length;
       input.value = nextQuery;
+      if (selectionSnapshot) {
+        restoreInputSelection(input, {
+          ...selectionSnapshot,
+          start: Math.max(0, Number(selectionSnapshot.start || 0) - removedLeadingChars),
+          end: Math.max(0, Number(selectionSnapshot.end || 0) - removedLeadingChars)
+        });
+      }
     }
     this.query = nextQuery.trim();
     const delay = this.query.length >= 2 ? 320 : 120;
@@ -1333,9 +1463,44 @@ export const SearchScreen = {
     });
   },
 
-  isSearchInputEditingActive() {
+  isSearchInputEditingActive(event = null) {
     const input = this.container?.querySelector("#searchInput");
-    return !!input && document.activeElement === input;
+    if (!input) {
+      return false;
+    }
+    const eventTarget = event?.target || null;
+    return document.activeElement === input
+      || eventTarget === input
+      || Boolean(eventTarget?.closest?.("#searchInput"))
+      || input.classList.contains("focused")
+      || this.container?.querySelector(".focusable.focused") === input;
+  },
+
+  keepSearchInputEditingKey(event, code) {
+    const input = this.container?.querySelector("#searchInput");
+    const navigationKeys = [35, 36, 37, 39];
+    if (!input || navigationKeys.indexOf(code) === -1 || !this.isSearchInputEditingActive(event)) {
+      return false;
+    }
+
+    if (document.activeElement !== input) {
+      const selectionSnapshot = getInputSelectionSnapshot(input);
+      input.focus?.();
+      if (selectionSnapshot && (code === 37 || code === 39)) {
+        const delta = code === 37 ? -1 : 1;
+        const nextPosition = clamp(Number(selectionSnapshot.end || selectionSnapshot.start || 0) + delta, 0, String(input.value || "").length);
+        restoreInputSelection(input, {
+          ...selectionSnapshot,
+          start: nextPosition,
+          end: nextPosition
+        });
+      } else if (selectionSnapshot) {
+        restoreInputSelection(input, selectionSnapshot);
+      }
+      event?.preventDefault?.();
+    }
+    event?.stopPropagation?.();
+    return true;
   },
 
   bindActionEvents() {
@@ -1511,12 +1676,8 @@ export const SearchScreen = {
       return;
     }
 
-    if (this.isSearchInputEditingActive()) {
-      const navigationKeys = [35, 36];
-      if (navigationKeys.indexOf(code) !== -1) {
-        event.stopPropagation?.();
-        return;
-      }
+    if (this.keepSearchInputEditingKey(event, code)) {
+      return;
     }
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {

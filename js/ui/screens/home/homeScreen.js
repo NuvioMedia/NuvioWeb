@@ -59,8 +59,10 @@ const CW_HOLD_DELAY_MS = 650;
 const HOME_INITIAL_CATALOG_LOAD = 10;
 const HOME_MAX_ITEMS_PER_ROW_DEFAULT = 15;
 const HOME_MAX_ITEMS_PER_ROW_CONSTRAINED = 10;
+const HOME_MAX_ITEMS_PER_ROW_LEGACY_TV = 8;
 const HOME_LOADING_ROW_ITEMS_DEFAULT = 10;
 const HOME_LOADING_ROW_ITEMS_CONSTRAINED = 8;
+const HOME_LOADING_ROW_ITEMS_LEGACY_TV = 6;
 const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
@@ -183,6 +185,10 @@ function encodeHeroBackdropFallbacks(sources = []) {
 }
 
 function getHeroBackdropErrorHandler() {
+  return "var q=(this.dataset.fallbackSrcs||'').split('|').filter(Boolean);var next=q.shift();if(next){this.dataset.fallbackSrcs=q.join('|');this.src=decodeURIComponent(next);return;}this.removeAttribute('src');this.classList.add('placeholder');";
+}
+
+function getImageFallbackErrorHandler() {
   return "var q=(this.dataset.fallbackSrcs||'').split('|').filter(Boolean);var next=q.shift();if(next){this.dataset.fallbackSrcs=q.join('|');this.src=decodeURIComponent(next);return;}this.removeAttribute('src');this.classList.add('placeholder');";
 }
 
@@ -802,24 +808,43 @@ function buildYoutubeEmbedUrl(videoId, { muted = true } = {}) {
     return "";
   }
   const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
-  if (!proxyBase) {
+  if (proxyBase) {
+    try {
+      const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
+      proxyUrl.searchParams.set("v", cleanId);
+      proxyUrl.searchParams.set("autoplay", "1");
+      proxyUrl.searchParams.set("muted", muted ? "1" : "0");
+      proxyUrl.searchParams.set("controls", "0");
+      proxyUrl.searchParams.set("loop", "1");
+      proxyUrl.searchParams.set("playlist", cleanId);
+      proxyUrl.searchParams.set("playsinline", "1");
+      proxyUrl.searchParams.set("rel", "0");
+      proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+      return proxyUrl.toString();
+    } catch (_) {
+      return "";
+    }
+  }
+  if (typeof globalThis?.document === "undefined") {
     return "";
   }
-  try {
-    const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
-    proxyUrl.searchParams.set("v", cleanId);
-    proxyUrl.searchParams.set("autoplay", "1");
-    proxyUrl.searchParams.set("muted", muted ? "1" : "0");
-    proxyUrl.searchParams.set("controls", "0");
-    proxyUrl.searchParams.set("loop", "1");
-    proxyUrl.searchParams.set("playlist", cleanId);
-    proxyUrl.searchParams.set("playsinline", "1");
-    proxyUrl.searchParams.set("rel", "0");
-    proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
-    return proxyUrl.toString();
-  } catch (_) {
-    return "";
+  const params = new URLSearchParams({
+    autoplay: "1",
+    mute: muted ? "1" : "0",
+    controls: "0",
+    loop: "1",
+    playlist: cleanId,
+    playsinline: "1",
+    rel: "0",
+    modestbranding: "1",
+    enablejsapi: "1",
+    iv_load_policy: "3"
+  });
+  const origin = String(globalThis?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) {
+    params.set("origin", origin);
   }
+  return `https://www.youtube.com/embed/${cleanId}?${params.toString()}`;
 }
 
 function resolveTrailerSource(meta = {}) {
@@ -1002,7 +1027,7 @@ function normalizeEpisodeEntries(videos = []) {
       season: Number(video?.season || 0),
       episode: Number(video?.episode || 0),
       title: String(video?.title || video?.name || "").trim(),
-      thumbnail: firstNonEmpty(video?.thumbnail),
+      thumbnail: firstNonEmpty(video?.thumbnail, video?.thumbnailUrl, video?.still, video?.stillUrl, video?.image, video?.poster),
       overview: firstNonEmpty(video?.overview, video?.description),
       released: firstNonEmpty(video?.released, video?.releaseInfo)
     }))
@@ -1735,13 +1760,16 @@ function renderContinueWatchingCard(item, index, options = {}) {
   const hasAired = normalized?.hasAired !== false;
   const useEpisodeThumbnails = options?.useEpisodeThumbnails !== false;
   const blurNextUp = Boolean(options?.blurNextUp && isNextUp && useEpisodeThumbnails);
-  const cardImage = useEpisodeThumbnails
+  const cardImageSources = useEpisodeThumbnails
     ? (!isNextUp
-      ? firstNonEmpty(normalized.episodeThumbnail, normalized.backdrop, normalized.poster)
+      ? [normalized.episodeThumbnail, normalized.backdrop, normalized.poster, normalized.thumbnail, normalized.background]
       : (!hasAired
-        ? firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail)
-        : firstNonEmpty(normalized.thumbnail, normalized.backdrop, normalized.poster)))
-    : firstNonEmpty(normalized.backdrop, normalized.poster, normalized.thumbnail, normalized.episodeThumbnail);
+        ? [normalized.backdrop, normalized.poster, normalized.thumbnail, normalized.background, normalized.episodeThumbnail]
+        : [normalized.thumbnail, normalized.episodeThumbnail, normalized.backdrop, normalized.poster, normalized.background]))
+    : [normalized.backdrop, normalized.poster, normalized.thumbnail, normalized.episodeThumbnail, normalized.background];
+  const uniqueCardImageSources = uniqueNonEmptyValues(cardImageSources);
+  const cardImage = uniqueCardImageSources[0] || "";
+  const fallbackQueue = encodeHeroBackdropFallbacks(uniqueCardImageSources.slice(1));
   return `
     <article class="home-content-card home-continue-card${blurNextUp ? " home-continue-card-blur-next-up" : ""} focusable"
              data-action="resumeProgress"
@@ -1750,7 +1778,7 @@ function renderContinueWatchingCard(item, index, options = {}) {
              data-item-type="${escapeAttribute(normalized.type || "movie")}"
              data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
       <div class="home-continue-media">
-        ${cardImage ? `<span class="home-continue-bg" style="background-image:url('${escapeAttribute(cardImage)}')"></span>` : ""}
+        ${cardImage ? `<img class="home-continue-bg" src="${escapeAttribute(cardImage)}"${fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : ""} alt="" aria-hidden="true" decoding="async" loading="lazy" onerror="${getImageFallbackErrorHandler()}" />` : ""}
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || t("home.continueStatusContinue", {}, "Continue"))}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
@@ -2785,10 +2813,13 @@ export const HomeScreen = {
   },
 
   shouldSuppressAutomaticTrailerPlayback() {
-    return this.isLegacyTvRuntime();
+    return this.isLegacyTvRuntime() && !Platform.isTizen();
   },
 
   getFocusedPosterTrailerDelayMs() {
+    if (Platform.isTizen()) {
+      return 1600;
+    }
     if (this.isLegacyTvRuntime()) {
       return 0;
     }
@@ -2802,13 +2833,31 @@ export const HomeScreen = {
     return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
   },
 
+  hasCollectionHomeRows() {
+    return Array.isArray(this.collections) && this.collections.length > 0;
+  },
+
   getRowItemLimit() {
+    if (this.isLegacyTvRuntime()) {
+      return HOME_MAX_ITEMS_PER_ROW_LEGACY_TV;
+    }
+    if (Platform.isWebOS() && this.hasCollectionHomeRows()) {
+      return this.collections.length > 2
+        ? HOME_MAX_ITEMS_PER_ROW_LEGACY_TV
+        : HOME_MAX_ITEMS_PER_ROW_CONSTRAINED;
+    }
     return this.isPerformanceConstrained()
       ? HOME_MAX_ITEMS_PER_ROW_CONSTRAINED
       : HOME_MAX_ITEMS_PER_ROW_DEFAULT;
   },
 
   getLoadingRowItemCount() {
+    if (this.isLegacyTvRuntime()) {
+      return HOME_LOADING_ROW_ITEMS_LEGACY_TV;
+    }
+    if (Platform.isWebOS() && this.hasCollectionHomeRows()) {
+      return HOME_LOADING_ROW_ITEMS_LEGACY_TV;
+    }
     return this.isPerformanceConstrained()
       ? HOME_LOADING_ROW_ITEMS_CONSTRAINED
       : HOME_LOADING_ROW_ITEMS_DEFAULT;
@@ -2822,6 +2871,9 @@ export const HomeScreen = {
       return 5;
     }
     if (Platform.isWebOS()) {
+      if (this.hasCollectionHomeRows()) {
+        return 4;
+      }
       const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
       if (webOsMajor > 0 && webOsMajor <= 5) {
         return 4;
@@ -2836,9 +2888,12 @@ export const HomeScreen = {
 
   getDeferredCatalogBatchSize() {
     if (this.isPerformanceConstrained()) {
-      return 4;
+      return this.isLegacyTvRuntime() ? 2 : 4;
     }
     if (Platform.isWebOS()) {
+      if (this.hasCollectionHomeRows()) {
+        return 4;
+      }
       const webOsMajor = Number(Platform.getWebOsMajorVersion?.() || 0);
       if (webOsMajor > 0 && webOsMajor <= 5) {
         return 4;
@@ -2864,7 +2919,8 @@ export const HomeScreen = {
 
   getBackgroundRenderDelay() {
     if (this.isLegacyTvRuntime()) {
-      return HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS;
+      const collectionCount = Array.isArray(this.collections) ? this.collections.length : 0;
+      return collectionCount > 2 ? HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS + 140 : HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS;
     }
     if (this.isPerformanceConstrained()) {
       return HOME_BACKGROUND_RENDER_DELAY_MS;
@@ -2873,6 +2929,9 @@ export const HomeScreen = {
   },
 
   shouldProgressivelyRenderDeferredRows() {
+    if (Platform.isWebOS() && this.hasCollectionHomeRows()) {
+      return false;
+    }
     return !this.isPerformanceConstrained();
   },
 
@@ -4236,12 +4295,13 @@ export const HomeScreen = {
   },
 
   syncFocusedCollectionCardState() {
-    Array.from(this.container?.querySelectorAll('.home-poster-card') || []).forEach((node) => {
-      if (!this.isCollectionFolderNode(node)) {
-        return;
-      }
-      this.hydrateCollectionFocusGif(node, node.classList.contains("focused"));
+    Array.from(this.container?.querySelectorAll(".home-collection-card.is-focus-gif-active:not(.focused)") || []).forEach((node) => {
+      this.hydrateCollectionFocusGif(node, false);
     });
+    const focused = this.container?.querySelector(".home-collection-card.focused") || null;
+    if (focused) {
+      this.hydrateCollectionFocusGif(focused, true);
+    }
   },
 
   syncCollectionHeroMedia(hero = null) {
@@ -5821,6 +5881,22 @@ export const HomeScreen = {
         }
       };
     }
+    if (!this.boundHomeMouseOverHandler) {
+      this.boundHomeMouseOverHandler = (event) => {
+        const target = event?.target?.closest?.(".home-main .home-content-card.focusable");
+        if (!target || !this.container?.contains(target) || target.classList.contains("focused")) {
+          return;
+        }
+        this.container.querySelectorAll(".home-main .focusable.focused").forEach((node) => node.classList.remove("focused"));
+        target.classList.add("focused");
+        if (this.isMainNode(target)) {
+          this.lastMainFocus = target;
+        }
+        this.syncFocusedCollectionCardState();
+        this.scheduleModernHeroUpdate(target);
+        this.scheduleFocusedPosterFlow(target);
+      };
+    }
     if (!this.boundHomeWheelHandler) {
       this.boundHomeWheelHandler = (event) => {
         const main = this.getHomeViewport();
@@ -5839,10 +5915,12 @@ export const HomeScreen = {
     if (this.boundHomeEventContainer) {
       this.boundHomeEventContainer.removeEventListener("focusin", this.boundHomeFocusInHandler);
       this.boundHomeEventContainer.removeEventListener("click", this.boundHomeClickHandler);
+      this.boundHomeEventContainer.removeEventListener("mouseover", this.boundHomeMouseOverHandler);
       this.boundHomeEventContainer.removeEventListener("wheel", this.boundHomeWheelHandler);
     }
     this.container.addEventListener("focusin", this.boundHomeFocusInHandler);
     this.container.addEventListener("click", this.boundHomeClickHandler);
+    this.container.addEventListener("mouseover", this.boundHomeMouseOverHandler);
     this.container.addEventListener("wheel", this.boundHomeWheelHandler, { passive: true });
     this.boundHomeEventContainer = this.container;
   },
@@ -6464,7 +6542,10 @@ export const HomeScreen = {
     const modernLandscapeLayoutClass = modernLandscapePostersEnabled
       ? " home-modern-landscape-posters"
       : "";
-    const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}`;
+    const modernSidebarLayoutClass = this.layoutPrefs?.modernSidebar
+      ? " home-modern-sidebar-enabled"
+      : "";
+    const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}${modernSidebarLayoutClass}`;
     const sizingStyle = this.layoutMode === "modern" ? buildModernHomeSizingStyle(this.layoutPrefs) : "";
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
@@ -6830,6 +6911,7 @@ export const HomeScreen = {
     }
 
     const seenTypes = new Set();
+    const requests = [];
     for (const type of typeCandidates) {
       const normalizedCandidate = String(type || "").trim().toLowerCase();
       if (!normalizedCandidate || seenTypes.has(normalizedCandidate)) {
@@ -6843,17 +6925,18 @@ export const HomeScreen = {
           continue;
         }
         seenIds.add(normalizedId);
-        try {
-          const result = await withTimeout(
-            metaRepository.getMetaFromAllAddons(normalizedCandidate, normalizedId),
-            effectiveTimeoutMs,
-            { status: "error", message: "timeout" }
-          );
-          if (result?.status === "success" && result?.data) {
-            return result.data;
-          }
-        } catch (_) { }
+        requests.push(withTimeout(
+          metaRepository.getMetaFromAllAddons(normalizedCandidate, normalizedId),
+          effectiveTimeoutMs,
+          { status: "error", message: "timeout" }
+        ).catch(() => ({ status: "error" })));
       }
+    }
+
+    const results = await Promise.all(requests);
+    const match = results.find((result) => result?.status === "success" && result?.data);
+    if (match) {
+      return match.data;
     }
 
     return null;

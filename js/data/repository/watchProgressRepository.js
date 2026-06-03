@@ -7,7 +7,7 @@ import { TraktAuthService } from "./traktAuthService.js";
 import { metaRepository } from "./metaRepository.js";
 
 const CW_PROGRESS_START_THRESHOLD = 0.02;
-const CW_PROGRESS_END_THRESHOLD = 0.90;
+const CW_PROGRESS_END_THRESHOLD = 0.85;
 
 function activeProfileId() {
   return String(ProfileManager.getActiveProfileId() || "1");

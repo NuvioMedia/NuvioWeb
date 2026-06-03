@@ -73,6 +73,7 @@ const LANGUAGE_LABELS = {
   ES: ["es", "Spanish"],
   FR: ["fr", "French"],
   DE: ["de", "German"],
+  PT_BR: ["pt-br", "Brazilian Portuguese"],
   PT: ["pt", "Portuguese"],
   PL: ["pl", "Polish"],
   CS: ["cs", "Czech"],
@@ -271,7 +272,14 @@ function encodeFromText(parsedCodec, search = "") {
 
 function languageFor(value = "") {
   const normalized = String(value || "").toLowerCase();
-  return Object.entries(LANGUAGE_LABELS).find(([, [code, label]]) => normalized === code || normalized === label.toLowerCase())?.[0] || null;
+  const compact = normalized.replace(/[^a-z0-9]/g, "");
+  return Object.entries(LANGUAGE_LABELS).find(([, [code, label]]) => {
+    const normalizedCode = String(code || "").toLowerCase();
+    const normalizedLabel = String(label || "").toLowerCase();
+    return normalized === normalizedCode
+      || normalized === normalizedLabel
+      || (compact && compact === normalizedCode.replace(/[^a-z0-9]/g, ""));
+  })?.[0] || null;
 }
 
 function languagesFromText(parsedLanguages = [], search = "") {
@@ -279,9 +287,12 @@ function languagesFromText(parsedLanguages = [], search = "") {
   if (fromParsed.length) {
     return fromParsed;
   }
-  return Object.entries(LANGUAGE_LABELS)
+  const matches = Object.entries(LANGUAGE_LABELS)
     .filter(([, [code]]) => hasToken(search, code))
     .map(([key]) => key);
+  return matches.includes("PT_BR")
+    ? matches.filter((key) => key !== "PT")
+    : matches;
 }
 
 function releaseGroupFromText(text = "") {
@@ -577,6 +588,16 @@ function languageEmoji(language = "") {
     case "ita":
     case "italian":
       return "🇮🇹";
+    case "pt-br":
+    case "ptbr":
+    case "br":
+    case "brazilian portuguese":
+    case "portuguese brazilian":
+      return "🇧🇷";
+    case "pt":
+    case "por":
+    case "portuguese":
+      return "🇵🇹";
     case "multi":
       return "Multi";
     default:
@@ -685,7 +706,24 @@ function formatManagedStream(stream = {}, fact, settings = DebridSettingsStore.g
     description: description || stream.description || stream.title || null,
     addonName: stream.addonName || null,
     addonLogo: stream.addonLogo ?? null,
-    debridProviderName: provider?.displayName || DebridProviders.displayName(providerId)
+    debridProviderName: provider?.displayName || DebridProviders.displayName(providerId),
+    streamPresentation: {
+      resolution: values["stream.resolution"] || null,
+      quality: values["stream.quality"] || null,
+      visualTags: values["stream.visualTags"] || [],
+      encode: values["stream.encode"] || null,
+      audioTags: values["stream.audioTags"] || [],
+      audioChannels: values["stream.audioChannels"] || [],
+      languages: values["stream.languages"] || [],
+      languageEmojis: values["stream.languageEmojis"] || [],
+      size: values["stream.size"] || null,
+      indexer: values["stream.indexer"] || null,
+      releaseGroup: values["stream.releaseGroup"] || null,
+      type: values["stream.type"] || null,
+      cached: values["service.cached"],
+      serviceShortName: values["service.shortName"] || null,
+      serviceName: values["service.name"] || null
+    }
   };
 }
 

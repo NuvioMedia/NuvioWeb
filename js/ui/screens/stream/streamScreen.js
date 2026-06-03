@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
 import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
+import { DebridSettingsStore } from "../../../data/local/debridSettingsStore.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { I18n } from "../../../i18n/index.js";
@@ -12,6 +13,7 @@ const addonLogoCache = new Map();
 const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
 const ADDON_LOGO_CACHE_LIMIT = 36;
 const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
+const STREAM_BADGE_LIMIT = 9;
 let addonLogoCacheHydrated = false;
 let addonLogoCachePersistTimer = null;
 
@@ -128,7 +130,8 @@ function mergeStreamItem(previous = {}, next = {}) {
     ytId: next.ytId || previous.ytId || null,
     behaviorHints: Object.keys(behaviorHints).length ? behaviorHints : null,
     subtitles: Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
-    sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources
+    sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources,
+    streamPresentation: next.streamPresentation || previous.streamPresentation || null
   };
 }
 
@@ -181,6 +184,7 @@ function flattenStreams(streamResult) {
         qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
         clientResolve: stream.clientResolve || null,
         debridCacheStatus: stream.debridCacheStatus || null,
+        streamPresentation: stream.streamPresentation || null,
         subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
         addonName: stream.addonName || groupName,
         addonLogo: stream.addonLogo || group.addonLogo || null,
@@ -313,19 +317,6 @@ function normalizeAddonLogoUrl(value = "") {
   return String(value || "").trim();
 }
 
-function isImgurLogoUrl(value = "") {
-  const url = normalizeAddonLogoUrl(value);
-  if (!url) {
-    return false;
-  }
-  try {
-    const host = new URL(url, globalThis.location?.href || "https://nuvio.local/").hostname.toLowerCase();
-    return host === "i.imgur.com" || host === "imgur.com" || host.endsWith(".imgur.com");
-  } catch (_) {
-    return /(^|\/\/)(?:i\.)?imgur\.com\//i.test(url);
-  }
-}
-
 function hydrateAddonLogoCache() {
   if (addonLogoCacheHydrated) {
     return;
@@ -415,11 +406,30 @@ function requestAddonLogo(url = "", onSettled = null) {
       onSettled();
     }
   };
+  const finishDirect = () => {
+    addonLogoCache.set(normalized, {
+      status: "direct",
+      displayUrl: normalized,
+      updatedAt: Date.now()
+    });
+    if (typeof onSettled === "function") {
+      onSettled();
+    }
+  };
+  const loadDirect = () => {
+    const directImage = new Image();
+    directImage.decoding = "async";
+    try {
+      directImage.referrerPolicy = "no-referrer";
+    } catch (_) {
+      // Some TV browsers expose referrerPolicy as read-only.
+    }
+    directImage.onload = finishDirect;
+    directImage.onerror = fail;
+    directImage.src = normalized;
+  };
   const image = new Image();
-  const shouldTryDataCache = !isImgurLogoUrl(normalized);
-  if (shouldTryDataCache) {
-    image.crossOrigin = "anonymous";
-  }
+  image.crossOrigin = "anonymous";
   image.decoding = "async";
   try {
     image.referrerPolicy = "no-referrer";
@@ -427,17 +437,6 @@ function requestAddonLogo(url = "", onSettled = null) {
     // Some TV browsers expose referrerPolicy as read-only.
   }
   image.onload = () => {
-    if (!shouldTryDataCache) {
-      addonLogoCache.set(normalized, {
-        status: "direct",
-        displayUrl: normalized,
-        updatedAt: Date.now()
-      });
-      if (typeof onSettled === "function") {
-        onSettled();
-      }
-      return;
-    }
     try {
       const dataUrl = imageToDataUrl(image);
       addonLogoCache.set(normalized, {
@@ -447,14 +446,14 @@ function requestAddonLogo(url = "", onSettled = null) {
       });
       scheduleAddonLogoCachePersist();
     } catch (_) {
-      fail();
+      loadDirect();
       return;
     }
     if (typeof onSettled === "function") {
       onSettled();
     }
   };
-  image.onerror = fail;
+  image.onerror = loadDirect;
   image.src = normalized;
 }
 
@@ -590,6 +589,218 @@ function getStreamDescriptionLines(stream = {}) {
       return normalized !== headline && normalized !== quality && !isMetaNoiseLine(entry);
     })
     .slice(0, 2);
+}
+
+function normalizeBadgeText(value = "") {
+  return String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function toBadgeArray(value) {
+  return Array.isArray(value)
+    ? value.map(normalizeBadgeText).filter(Boolean)
+    : [normalizeBadgeText(value)].filter(Boolean);
+}
+
+function uniquePushBadge(badges, seen, label, type = "default") {
+  const text = normalizeBadgeText(label);
+  if (!text) {
+    return;
+  }
+  const key = text.toLowerCase();
+  if (seen.has(key)) {
+    return;
+  }
+  seen.add(key);
+  badges.push({ label: text, type });
+}
+
+function parsedStreamDetails(stream = {}) {
+  const resolve = stream.clientResolve || stream.raw?.clientResolve || {};
+  const raw = resolve.stream?.raw || {};
+  return raw.parsed || {};
+}
+
+function normalizeCodecBadge(value = "") {
+  const normalized = normalizeBadgeText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!normalized) return "";
+  if (normalized === "av1") return "AV1";
+  if (["hevc", "h265", "x265"].includes(normalized)) return "HEVC";
+  if (["avc", "h264", "x264"].includes(normalized)) return "AVC";
+  return normalizeBadgeText(value).toUpperCase();
+}
+
+const LANGUAGE_BADGE_ALIASES = {
+  en: "🇬🇧",
+  eng: "🇬🇧",
+  english: "🇬🇧",
+  hi: "🇮🇳",
+  hin: "🇮🇳",
+  hindi: "🇮🇳",
+  it: "🇮🇹",
+  ita: "🇮🇹",
+  italian: "🇮🇹",
+  es: "🇪🇸",
+  spa: "🇪🇸",
+  spanish: "🇪🇸",
+  fr: "🇫🇷",
+  fra: "🇫🇷",
+  fre: "🇫🇷",
+  french: "🇫🇷",
+  de: "🇩🇪",
+  deu: "🇩🇪",
+  ger: "🇩🇪",
+  german: "🇩🇪",
+  pt: "🇵🇹",
+  por: "🇵🇹",
+  portuguese: "🇵🇹",
+  "pt-br": "🇧🇷",
+  ptbr: "🇧🇷",
+  br: "🇧🇷",
+  brazilian: "🇧🇷",
+  "brazilian portuguese": "🇧🇷",
+  pl: "🇵🇱",
+  polish: "🇵🇱",
+  cs: "🇨🇿",
+  czech: "🇨🇿",
+  la: "LAT",
+  latino: "LAT",
+  ja: "🇯🇵",
+  jpn: "🇯🇵",
+  japanese: "🇯🇵",
+  ko: "🇰🇷",
+  kor: "🇰🇷",
+  korean: "🇰🇷",
+  zh: "🇨🇳",
+  chinese: "🇨🇳",
+  multi: "Multi"
+};
+
+function languageBadge(value = "") {
+  const text = normalizeBadgeText(value);
+  const normalized = text.toLowerCase();
+  const compact = normalized.replace(/[^a-z0-9]/g, "");
+  return LANGUAGE_BADGE_ALIASES[normalized] || LANGUAGE_BADGE_ALIASES[compact] || text;
+}
+
+function fallbackLanguagesFromText(text = "") {
+  const value = String(text || "");
+  const matches = [];
+  const pushMatch = (label) => {
+    if (label && !matches.includes(label)) {
+      matches.push(label);
+    }
+  };
+  if (/(^|[^a-z0-9])(pt[\s._-]?br|brazilian[\s._-]?portuguese)([^a-z0-9]|$)/i.test(value)) pushMatch("pt-br");
+  if (/(^|[^a-z0-9])(en|eng|english)([^a-z0-9]|$)/i.test(value)) pushMatch("en");
+  if (/(^|[^a-z0-9])(pt|por|portuguese)([^a-z0-9]|$)/i.test(value) && !matches.includes("pt-br")) pushMatch("pt");
+  if (/(^|[^a-z0-9])(it|ita|italian)([^a-z0-9]|$)/i.test(value)) pushMatch("it");
+  if (/(^|[^a-z0-9])(es|spa|spanish)([^a-z0-9]|$)/i.test(value)) pushMatch("es");
+  if (/(^|[^a-z0-9])(fr|fra|fre|french)([^a-z0-9]|$)/i.test(value)) pushMatch("fr");
+  if (/(^|[^a-z0-9])(de|deu|ger|german)([^a-z0-9]|$)/i.test(value)) pushMatch("de");
+  if (/(^|[^a-z0-9])(multi|multilang|multi[\s._-]?audio)([^a-z0-9]|$)/i.test(value)) pushMatch("multi");
+  return matches;
+}
+
+function fallbackPresentationFromText(stream = {}) {
+  const parsed = parsedStreamDetails(stream);
+  const text = [
+    stream.name,
+    stream.title,
+    stream.description,
+    stream.behaviorHints?.filename,
+    stream.sourceType,
+    ...(Array.isArray(parsed.languages) ? parsed.languages : [])
+  ].filter(Boolean).join(" ");
+  const visualTags = [];
+  if (/\b(dolby[ ._-]?vision|dovi|dv)\b/i.test(text)) visualTags.push("DV");
+  if (/\bhdr10\+|hdr10plus\b/i.test(text)) visualTags.push("HDR10+");
+  else if (/\bhdr10\b/i.test(text)) visualTags.push("HDR10");
+  else if (/\bhdr\b/i.test(text)) visualTags.push("HDR");
+  if (/\bhlg\b/i.test(text)) visualTags.push("HLG");
+  if (/\b10\s?bit\b/i.test(text)) visualTags.push("10bit");
+  if (/\bimax\b/i.test(text)) visualTags.push("IMAX");
+  const audioTags = [];
+  if (/\batmos\b/i.test(text)) audioTags.push("Atmos");
+  if (/\b(truehd|true hd)\b/i.test(text)) audioTags.push("TrueHD");
+  if (/\bdts[\s._-]?x\b/i.test(text)) audioTags.push("DTS:X");
+  if (/\bdts[\s._-]?hd\b/i.test(text)) audioTags.push("DTS-HD");
+  if (/\bddp|dd\+|dolby digital plus\b/i.test(text)) audioTags.push("DD+");
+  if (/\baac\b/i.test(text)) audioTags.push("AAC");
+  const audioChannels = [];
+  const channelMatch = text.match(/\b([257]\.1|6\.1|2\.0)\b/);
+  if (channelMatch) audioChannels.push(channelMatch[1]);
+  const codec = /\b(av1|hevc|h\.?265|x265|avc|h\.?264|x264)\b/i.exec(text)?.[1] || "";
+  return {
+    resolution: detectQuality(text),
+    quality: "",
+    visualTags,
+    encode: normalizeCodecBadge(codec),
+    audioTags,
+    audioChannels,
+    languages: fallbackLanguagesFromText(text),
+    size: stream.behaviorHints?.videoSize || 0
+  };
+}
+
+function getStreamPresentation(stream = {}) {
+  const parsed = parsedStreamDetails(stream);
+  const presentation = stream.streamPresentation || stream.raw?.streamPresentation || {};
+  const fallback = fallbackPresentationFromText(stream);
+  const visualTags = toBadgeArray(presentation.visualTags?.length ? presentation.visualTags : parsed.hdr);
+  const audioTags = toBadgeArray(presentation.audioTags?.length ? presentation.audioTags : parsed.audio);
+  const audioChannels = toBadgeArray(presentation.audioChannels?.length ? presentation.audioChannels : parsed.channels);
+  const languages = toBadgeArray(presentation.languages?.length ? presentation.languages : parsed.languages);
+  const languageEmojis = toBadgeArray(presentation.languageEmojis?.length ? presentation.languageEmojis : []);
+  const resolvedLanguages = languages.length ? languages : fallback.languages;
+  return {
+    resolution: presentation.resolution || parsed.resolution || fallback.resolution,
+    quality: presentation.quality || parsed.quality || fallback.quality,
+    visualTags: visualTags.length ? visualTags : fallback.visualTags,
+    encode: normalizeCodecBadge(presentation.encode || parsed.codec || fallback.encode),
+    audioTags: audioTags.length ? audioTags : fallback.audioTags,
+    audioChannels: audioChannels.length ? audioChannels : fallback.audioChannels,
+    languages: resolvedLanguages,
+    languageEmojis: languageEmojis.length ? languageEmojis : resolvedLanguages.map(languageBadge).filter(Boolean),
+    size: presentation.size || stream.behaviorHints?.videoSize || fallback.size,
+    cached: presentation.cached,
+    serviceShortName: presentation.serviceShortName || ""
+  };
+}
+
+function buildStreamBadges(stream = {}, enabled = true) {
+  if (!enabled) {
+    return [];
+  }
+  const presentation = getStreamPresentation(stream);
+  const badges = [];
+  const seen = new Set();
+  const quality = normalizeBadgeText(presentation.resolution && presentation.resolution !== "Auto" ? presentation.resolution : getStreamQuality(stream));
+  uniquePushBadge(badges, seen, quality, "quality");
+  uniquePushBadge(badges, seen, presentation.quality, "quality");
+  toBadgeArray(presentation.visualTags).slice(0, 3).forEach((tag) => uniquePushBadge(badges, seen, tag, "visual"));
+  uniquePushBadge(badges, seen, presentation.encode, "codec");
+  toBadgeArray(presentation.languageEmojis).slice(0, 4).forEach((tag) => uniquePushBadge(badges, seen, tag, "language"));
+  toBadgeArray(presentation.audioTags).slice(0, 3).forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
+  toBadgeArray(presentation.audioChannels).slice(0, 1).forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
+  uniquePushBadge(badges, seen, formatBytes(presentation.size), "size");
+  if (presentation.cached === true && presentation.serviceShortName) {
+    uniquePushBadge(badges, seen, presentation.serviceShortName, "service");
+  }
+  return badges.slice(0, STREAM_BADGE_LIMIT);
+}
+
+function renderStreamBadges(stream = {}, enabled = true) {
+  const badges = buildStreamBadges(stream, enabled);
+  if (!badges.length) {
+    return "";
+  }
+  return `
+    <div class="stream-route-card-badges" aria-label="${escapeHtml(t("settings.integration.debrid.streamBadges.title", {}, "Stream badges"))}">
+      ${badges.map((badge) => `<span class="stream-route-stream-badge ${escapeHtml(badge.type)}">${escapeHtml(badge.label)}</span>`).join("")}
+    </div>
+  `;
 }
 
 function getOrderedFilterNames(sourceChips = [], streams = []) {
@@ -1131,17 +1342,29 @@ export const StreamScreen = {
     `;
   },
 
-  renderStreamCard(stream, index) {
+  renderStreamCard(stream, index, streamBadgesEnabled = true) {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
+    const badges = renderStreamBadges(stream, streamBadgesEnabled);
     const descriptionLines = getStreamDescriptionLines(stream);
     const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
     const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
-    const displayAddonLogoUrl = cachedAddonLogoUrl || "";
+    let displayAddonLogoUrl = cachedAddonLogoUrl || "";
     if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
       requestAddonLogo(addonLogoUrl, () => this.requestRender());
     }
     const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
+    const isDirectRemoteLogo = displayAddonLogoUrl
+      && displayAddonLogoUrl === addonLogoUrl
+      && !displayAddonLogoUrl.startsWith("data:image/");
+    if (Environment.isWebOS() && isDirectRemoteLogo) {
+      this.renderedDirectAddonLogoUrls = this.renderedDirectAddonLogoUrls || new Set();
+      if (this.renderedDirectAddonLogoUrls.has(addonLogoUrl)) {
+        displayAddonLogoUrl = "";
+      } else {
+        this.renderedDirectAddonLogoUrls.add(addonLogoUrl);
+      }
+    }
     const meta = [
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
@@ -1149,7 +1372,7 @@ export const StreamScreen = {
     ].filter(Boolean).join("");
     const isResolving = this.resolvingStreamId === stream.id;
     const addonBadge = displayAddonLogoUrl
-      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" /><span hidden>${addonBadgeLabel}</span>`
+      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" loading="lazy" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
 
     return `
@@ -1158,7 +1381,7 @@ export const StreamScreen = {
                data-stream-id="${escapeHtml(stream.id)}">
         <div class="stream-route-card-copy">
           <div class="stream-route-card-heading">${escapeHtml(headline)}</div>
-          <div class="stream-route-card-quality">${escapeHtml(quality)}</div>
+          ${badges || `<div class="stream-route-card-quality">${escapeHtml(quality)}</div>`}
           ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml(line)}</div>`).join("")}
           ${meta ? `<div class="stream-route-card-meta">${meta}</div>` : ""}
         </div>
@@ -1199,10 +1422,13 @@ export const StreamScreen = {
     const filtered = this.getFilteredStreams();
     const hasPendingForFilter = this.hasPendingSourceLoads();
     const hasAnyStreams = this.streams.length > 0;
+    const streamBadgesEnabled = DebridSettingsStore.get().streamBadgesEnabled !== false;
 
     let body = "";
     if (filtered.length) {
-      body = filtered.map((stream, index) => this.renderStreamCard(stream, index)).join("");
+      this.renderedDirectAddonLogoUrls = new Set();
+      body = filtered.map((stream, index) => this.renderStreamCard(stream, index, streamBadgesEnabled)).join("");
+      this.renderedDirectAddonLogoUrls = null;
       if (hasPendingForFilter) {
         body += this.renderLoadingCards(1);
       }
