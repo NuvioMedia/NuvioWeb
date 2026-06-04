@@ -61,32 +61,34 @@ export const ScreenUtils = {
   },
 
   moveFocusDirectional(container, direction, selector = ".focusable") {
-    const list = Array.from(container?.querySelectorAll(selector) || [])
-      .filter((node) => {
-        const rect = node.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      });
-    if (!list.length) {
+    // Measure every focusable once and reuse the rect for both visibility
+    // filtering and candidate scoring. Reading getBoundingClientRect twice per
+    // node (once to filter, once to score) forced two layout flushes per
+    // keypress, which stuttered on weak TV GPUs.
+    const measured = Array.from(container?.querySelectorAll(selector) || [])
+      .map((node) => ({ node, rect: node.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.width > 0 && rect.height > 0);
+    if (!measured.length) {
       return;
     }
 
-    const current = container?.querySelector(`${selector}.focused`) || list[0];
-    if (!current.classList.contains("focused")) {
-      list.forEach((node) => node.classList.remove("focused"));
-      current.classList.add("focused");
-      current.focus();
+    const current = measured.find(({ node }) => node.classList.contains("focused")) || null;
+    if (!current) {
+      const first = measured[0];
+      measured.forEach(({ node }) => node.classList.remove("focused"));
+      first.node.classList.add("focused");
+      first.node.focus();
       return;
     }
 
-    const currentRect = current.getBoundingClientRect();
+    const currentRect = current.rect;
     const cx = currentRect.left + (currentRect.width / 2);
     const cy = currentRect.top + (currentRect.height / 2);
     const strictDpadGrid = shouldUseStrictDpadGrid();
 
-    const candidates = list
-      .filter((node) => node !== current)
-      .map((node) => {
-        const rect = node.getBoundingClientRect();
+    const candidates = measured
+      .filter((entry) => entry.node !== current.node)
+      .map(({ node, rect }) => {
         const nx = rect.left + (rect.width / 2);
         const ny = rect.top + (rect.height / 2);
         const dx = nx - cx;
@@ -189,7 +191,7 @@ export const ScreenUtils = {
       return;
     }
 
-    current.classList.remove("focused");
+    current.node.classList.remove("focused");
     target.classList.add("focused");
     target.focus();
   },

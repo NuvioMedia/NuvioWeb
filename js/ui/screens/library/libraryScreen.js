@@ -125,23 +125,27 @@ function findNearestNodeByCenterX(referenceNode, nodes = []) {
 }
 
 function groupNodesByRow(nodes = [], tolerance = 28) {
+  // Measure each node once; sorting on the cached left avoids the comparator
+  // calling getBoundingClientRect twice per comparison (O(n log n) layout
+  // flushes on a full grid).
   const rows = [];
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
     const top = rect.top;
     const existingRow = rows.find((row) => Math.abs(row.top - top) <= tolerance);
     if (existingRow) {
-      existingRow.nodes.push(node);
+      existingRow.entries.push({ node, left: rect.left });
       return;
     }
     rows.push({
       top,
-      nodes: [node]
+      entries: [{ node, left: rect.left }]
     });
   });
   rows.sort((left, right) => left.top - right.top);
   rows.forEach((row) => {
-    row.nodes.sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left);
+    row.entries.sort((left, right) => left.left - right.left);
+    row.nodes = row.entries.map((entry) => entry.node);
   });
   return rows;
 }

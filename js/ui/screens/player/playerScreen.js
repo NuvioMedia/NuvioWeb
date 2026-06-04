@@ -1627,11 +1627,21 @@ export const PlayerScreen = {
     const shouldShow = Boolean(activeInterval) && !this.skipIntervalDismissed;
     button.classList.toggle("hidden", !shouldShow);
     if (!shouldShow) {
-      button.innerHTML = "";
+      if (this.skipIntroSignature !== "") {
+        button.innerHTML = "";
+        this.skipIntroSignature = "";
+      }
       return;
     }
     const label = buildSkipIntervalLabel(activeInterval);
     button.classList.toggle("is-raised", Boolean(this.controlsVisible));
+    // Called every updateUiTick / skip-interval timer. Rebuild only on change;
+    // is-selected state is folded into the signature so it stays in sync.
+    const signature = `${label}|${this.controlsVisible ? 1 : 0}`;
+    if (signature === this.skipIntroSignature) {
+      return;
+    }
+    this.skipIntroSignature = signature;
     button.innerHTML = `
       <button class="player-skip-intro-btn focusable${!this.controlsVisible ? " is-selected" : ""}" type="button" tabindex="-1" data-player-pointer-action="skipIntro">
         <span class="player-skip-intro-label">${escapeHtml(label)}</span>
@@ -3457,6 +3467,8 @@ export const PlayerScreen = {
   },
 
   applySubtitlePresentationSettings({ refreshTrackRendering = false } = {}) {
+    // Keep our AVPlay DOM subtitle overlay styled even when there is no <video>.
+    this.updateAvPlaySubtitleStyle();
     const uiRoot = this.uiRefs?.root;
     const video = PlayerController.video;
     if (!uiRoot || !video) {
@@ -3956,6 +3968,10 @@ export const PlayerScreen = {
     };
 
     const onTrackListChanged = () => {
+      // AVPlay discovers tracks asynchronously and has no <video> metadata events;
+      // make sure the startup audio/subtitle preference gets a chance to apply once
+      // the tracks (and addon subtitles) are actually known.
+      this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
       if (this.trackDiscoveryInProgress && this.hasAudioTracksAvailable() && this.hasSubtitleTracksAvailable()) {
         this.trackDiscoveryInProgress = false;
@@ -4149,19 +4165,30 @@ export const PlayerScreen = {
     }
     this.controlFocusIndex = clamp(this.controlFocusIndex, 0, Math.max(0, controls.length - 1));
 
-    wrap.innerHTML = controls.map((control) => `
-      <button class="player-control-btn focusable${control.primary ? " is-primary" : ""}"
-              data-action="${control.action}"
-              title="${escapeHtml(control.title || "")}">
-        ${control.icon
-          ? ((control.primary || control.useMask)
-            ? `<span class="player-control-icon player-control-icon-mask" style="-webkit-mask-image:url('${escapeHtml(control.icon)}');mask-image:url('${escapeHtml(control.icon)}');" aria-hidden="true"></span>`
-            : `<img class="player-control-icon" src="${control.icon}" alt="" aria-hidden="true" />`)
-          : `<span class="player-control-label">${escapeHtml(control.label || "")}</span>`}
-      </button>
-    `).join("");
+    // The control set rarely changes between presses (moveControlFocus only moves
+    // the focus index). Rebuild the DOM only when the set actually changed;
+    // otherwise just retoggle the .focused class below. Avoids an innerHTML
+    // rebuild on every left/right press, which stuttered on weak TVs.
+    const signature = controls
+      .map((control) => `${control.action}|${control.primary ? 1 : 0}|${control.useMask ? 1 : 0}|${control.icon || ""}|${control.label || ""}|${control.title || ""}`)
+      .join("~");
+    let buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
+    if (signature !== this.controlButtonsSignature || buttons.length !== controls.length) {
+      wrap.innerHTML = controls.map((control) => `
+        <button class="player-control-btn focusable${control.primary ? " is-primary" : ""}"
+                data-action="${control.action}"
+                title="${escapeHtml(control.title || "")}">
+          ${control.icon
+            ? ((control.primary || control.useMask)
+              ? `<span class="player-control-icon player-control-icon-mask" style="-webkit-mask-image:url('${escapeHtml(control.icon)}');mask-image:url('${escapeHtml(control.icon)}');" aria-hidden="true"></span>`
+              : `<img class="player-control-icon" src="${control.icon}" alt="" aria-hidden="true" />`)
+            : `<span class="player-control-label">${escapeHtml(control.label || "")}</span>`}
+        </button>
+      `).join("");
+      buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
+      this.controlButtonsSignature = signature;
+    }
 
-    const buttons = Array.from(wrap.querySelectorAll(".player-control-btn"));
     buttons.forEach((button, index) => {
       button.classList.toggle("focused", this.controlFocusZone === "buttons" && index === this.controlFocusIndex);
     });
@@ -4515,7 +4542,10 @@ export const PlayerScreen = {
 
     card.classList.toggle("hidden", hidden);
     if (hidden) {
-      card.innerHTML = "";
+      if (this.nextEpisodeCardSignature !== "") {
+        card.innerHTML = "";
+        this.nextEpisodeCardSignature = "";
+      }
       return;
     }
 
@@ -4524,6 +4554,14 @@ export const PlayerScreen = {
       ? t("next_episode_play", {}, "Play")
       : t("next_episode_unaired", {}, "Unaired");
     const thumb = this.episodes.find((entry) => String(entry?.id || "") === String(nextEpisode.videoId || ""))?.thumbnail || "";
+
+    // updateUiTick calls this every timeupdate / 1s tick. Skip the innerHTML
+    // rebuild unless the rendered content actually changed.
+    const signature = `${nextEpisode.videoId || ""}|${nextEpisode.hasAired ? 1 : 0}|${this.controlsVisible ? 1 : 0}|${titleLine}|${statusText}|${thumb}`;
+    if (signature === this.nextEpisodeCardSignature) {
+      return;
+    }
+    this.nextEpisodeCardSignature = signature;
 
     card.innerHTML = `
       <div class="player-next-episode-card-inner${nextEpisode.hasAired ? " focusable is-playable" : ""}${!this.controlsVisible ? " is-selected" : ""}"${nextEpisode.hasAired ? ' data-player-pointer-action="nextEpisode"' : ""}>
@@ -7031,6 +7069,9 @@ export const PlayerScreen = {
       return;
     }
 
+    // Tear down any active AVPlay DOM subtitle overlay; the addon branch restarts it.
+    this.stopAvPlaySubtitleOverlay();
+
     const isEmbeddedEntry = Object.prototype.hasOwnProperty.call(entry, "embeddedSubtitleTrackIndex");
     if (!isEmbeddedEntry) {
       this.disableEmbeddedSubtitleSelection();
@@ -7157,6 +7198,143 @@ export const PlayerScreen = {
     this.renderSubtitleDialog();
   },
 
+  // --- AVPlay external-subtitle DOM overlay -------------------------------
+  // Tizen AVPlay renders external subs natively (tiny, unstyled) and chrome 47
+  // has no CSS custom properties, so the style panel can't reach them. We render
+  // subs ourselves in a DOM layer over the (transparent) video plane, synced to
+  // avplay time, with inline styles taken from the subtitle style settings.
+  ensureAvPlaySubtitleOverlay() {
+    if (this.avplaySubtitleTextEl && this.avplaySubtitleOverlayEl) {
+      return this.avplaySubtitleTextEl;
+    }
+    const root = this.uiRefs?.root || document.getElementById("player") || document.body;
+    const overlay = document.createElement("div");
+    overlay.className = "avplay-subtitle-overlay";
+    const text = document.createElement("div");
+    text.className = "avplay-subtitle-text";
+    overlay.appendChild(text);
+    root.appendChild(overlay);
+    this.avplaySubtitleOverlayEl = overlay;
+    this.avplaySubtitleTextEl = text;
+    return text;
+  },
+
+  updateAvPlaySubtitleStyle() {
+    const el = this.avplaySubtitleTextEl;
+    const overlay = this.avplaySubtitleOverlayEl;
+    if (!el || !overlay) {
+      return;
+    }
+    const s = this.subtitleStyleSettings || {};
+    const pct = clamp(Number(s.fontSize || 100), 70, 180);
+    el.style.fontSize = `${Math.round(42 * pct / 100)}px`;
+    el.style.color = String(s.textColor || "#FFFFFF");
+    el.style.fontWeight = s.bold ? "800" : "600";
+    const outlineColor = String(s.outlineColor || "#000000");
+    el.style.textShadow = s.outlineEnabled === false
+      ? "1px 1px 2px rgba(0,0,0,0.9)"
+      : `0 0 3px ${outlineColor}, 0 0 6px ${outlineColor}, 1px 1px 2px ${outlineColor}`;
+    el.style.opacity = String(clamp(Number(s.textOpacity || 100), 10, 100) / 100);
+    const off = splitSubtitleVerticalOffset(s.verticalOffset);
+    const residual = Number(off?.residualOffset || 0) || 0;
+    overlay.style.bottom = `${Math.max(2, 9 + residual * 2)}vh`;
+  },
+
+  parseVttToCues(vtt) {
+    const toMs = (raw) => {
+      const m = String(raw || "").trim().match(/(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/);
+      if (!m) return null;
+      return ((Number(m[1] || 0) * 3600 + Number(m[2]) * 60 + Number(m[3])) * 1000) + Number(String(m[4]).padEnd(3, "0"));
+    };
+    const cues = [];
+    String(vtt || "").replace(/\r/g, "").split(/\n\n+/).forEach((block) => {
+      const lines = block.split("\n").filter((l) => l.trim() !== "" && !/^WEBVTT/i.test(l));
+      const idx = lines.findIndex((l) => l.includes("-->"));
+      if (idx < 0) return;
+      const parts = lines[idx].split("-->");
+      const start = toMs(parts[0]);
+      const end = toMs((parts[1] || "").trim().split(/\s+/)[0]);
+      if (start == null || end == null) return;
+      const text = lines.slice(idx + 1).join("\n").replace(/<[^>]+>/g, "").trim();
+      if (text) cues.push({ start, end, text });
+    });
+    cues.sort((a, b) => a.start - b.start);
+    return cues;
+  },
+
+  async startAvPlaySubtitleOverlay(url) {
+    this.stopAvPlaySubtitleOverlay();
+    const target = String(url || "").trim();
+    if (!target) return false;
+    let body = "";
+    try {
+      const res = await fetch(target, { headers: this.getSubtitleRequestHeaders?.() || {} });
+      body = await res.text();
+    } catch (_) {
+      return false;
+    }
+    let cues = [];
+    try {
+      cues = this.parseVttToCues(this.convertSrtToVtt(body));
+    } catch (_) {
+      cues = [];
+    }
+    if (!cues.length) return false;
+    this.avplaySubtitleCues = cues;
+    this.avplaySubtitleActiveText = null;
+    this.ensureAvPlaySubtitleOverlay();
+    this.updateAvPlaySubtitleStyle();
+    const readAvPlayTimeMs = () => {
+      try {
+        const wa = globalThis.webapis;
+        const av = (wa && (wa.avplay || wa.avPlay)) || globalThis.avplay;
+        if (av && typeof av.getCurrentTime === "function") {
+          const v = Number(av.getCurrentTime());
+          if (Number.isFinite(v) && v >= 0) return v;
+        }
+      } catch (_) {
+        // fall through to cached value
+      }
+      return Number(PlayerController.avplayCurrentTimeMs) || 0;
+    };
+    const tick = () => {
+      if (!this.avplaySubtitleCues) return;
+      const delayMs = Number(this.subtitleStyleSettings?.delay || 0) || 0;
+      const t = readAvPlayTimeMs() - delayMs;
+      let active = "";
+      const list = this.avplaySubtitleCues;
+      for (let i = 0; i < list.length; i++) {
+        if (t >= list[i].start && t < list[i].end) { active = list[i].text; break; }
+        if (list[i].start > t) break;
+      }
+      if (active !== this.avplaySubtitleActiveText) {
+        this.avplaySubtitleActiveText = active;
+        if (this.avplaySubtitleTextEl) {
+          this.avplaySubtitleTextEl.innerHTML = active
+            ? active.split("\n").map((l) => escapeHtml(l)).join("<br>")
+            : "";
+          this.avplaySubtitleTextEl.style.visibility = active ? "visible" : "hidden";
+        }
+      }
+    };
+    this.avplaySubtitleTimer = setInterval(tick, 120);
+    tick();
+    return true;
+  },
+
+  stopAvPlaySubtitleOverlay() {
+    if (this.avplaySubtitleTimer) {
+      clearInterval(this.avplaySubtitleTimer);
+      this.avplaySubtitleTimer = null;
+    }
+    this.avplaySubtitleCues = null;
+    this.avplaySubtitleActiveText = null;
+    if (this.avplaySubtitleTextEl) {
+      this.avplaySubtitleTextEl.innerHTML = "";
+      this.avplaySubtitleTextEl.style.visibility = "hidden";
+    }
+  },
+
   async applyFallbackAddonSubtitle(subtitleIndex) {
     const subtitle = this.subtitles[subtitleIndex];
     if (!subtitle?.url) {
@@ -7174,18 +7352,22 @@ export const PlayerScreen = {
       } catch (_) {
         avPlaySubtitleUrl = subtitle.url;
       }
-      const applied = typeof PlayerController.setAvPlayExternalSubtitle === "function"
-        ? PlayerController.setAvPlayExternalSubtitle(avPlaySubtitleUrl)
-        : false;
-      const fallbackApplied = !applied && avPlaySubtitleUrl !== subtitle.url && typeof PlayerController.setAvPlayExternalSubtitle === "function"
-        ? PlayerController.setAvPlayExternalSubtitle(subtitle.url)
-        : false;
-      if (applied || fallbackApplied) {
+      // Silence AVPlay's tiny native subtitle and render our own styled DOM
+      // overlay (synced to avplay time) so the style panel actually applies.
+      try {
+        if (typeof PlayerController.setAvPlaySubtitleTrack === "function") {
+          PlayerController.setAvPlaySubtitleTrack(-1);
+        }
+      } catch (_) {
+        // Ignore native subtitle mute failures.
+      }
+      const overlayApplied = await this.startAvPlaySubtitleOverlay(avPlaySubtitleUrl)
+        || (avPlaySubtitleUrl !== subtitle.url && await this.startAvPlaySubtitleOverlay(subtitle.url));
+      if (overlayApplied) {
         this.selectedAddonSubtitleId = subtitleId;
         this.selectedSubtitleTrackIndex = -1;
         this.selectedEmbeddedSubtitleTrackIndex = -1;
         this.selectedManifestSubtitleTrackId = null;
-        this.refreshSubtitleCueStyles();
         this.renderControlButtons();
         this.renderSubtitleDialog();
         return;
@@ -8354,6 +8536,26 @@ export const PlayerScreen = {
     }
   },
 
+  // Fast focus move: just shift the .focused class instead of rebuilding the
+  // whole panel (80+ cards) on every keypress — the panel was laggy while playing.
+  updateSourcesFocusVisual() {
+    const panel = this.uiRefs?.sourcesPanel;
+    if (!panel) {
+      return;
+    }
+    const zone = this.sourcesFocus.zone;
+    const index = Number(this.sourcesFocus.index || 0);
+    const target = panel.querySelector(`[data-sources-zone="${zone}"][data-sources-index="${index}"]`);
+    const prev = panel.querySelectorAll(".focusable.focused");
+    for (let i = 0; i < prev.length; i++) {
+      if (prev[i] !== target) prev[i].classList.remove("focused");
+    }
+    if (target) {
+      target.classList.add("focused");
+      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  },
+
   async activateSourcesFocus() {
     const zone = this.sourcesFocus.zone;
     const index = Number(this.sourcesFocus.index || 0);
@@ -8391,22 +8593,22 @@ export const PlayerScreen = {
 
     if (keyCode === 37) {
       this.moveSourcesFocus("left");
-      this.renderSourcesPanel();
+      this.updateSourcesFocusVisual();
       return true;
     }
     if (keyCode === 39) {
       this.moveSourcesFocus("right");
-      this.renderSourcesPanel();
+      this.updateSourcesFocusVisual();
       return true;
     }
     if (keyCode === 38) {
       this.moveSourcesFocus("up");
-      this.renderSourcesPanel();
+      this.updateSourcesFocusVisual();
       return true;
     }
     if (keyCode === 40) {
       this.moveSourcesFocus("down");
-      this.renderSourcesPanel();
+      this.updateSourcesFocusVisual();
       return true;
     }
     if (keyCode === 13) {
@@ -9520,6 +9722,12 @@ export const PlayerScreen = {
   },
 
   cleanup() {
+    this.stopAvPlaySubtitleOverlay();
+    if (this.avplaySubtitleOverlayEl) {
+      try { this.avplaySubtitleOverlayEl.remove(); } catch (_) {}
+      this.avplaySubtitleOverlayEl = null;
+      this.avplaySubtitleTextEl = null;
+    }
     this.cancelSeekPreview({ commit: false });
     this.dismissPauseOverlay();
     this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0) + 1;

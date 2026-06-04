@@ -699,6 +699,11 @@ function setScrollPosition(node, value, axis = "y") {
   node.scrollTop = value;
 }
 
+function settingsAnimationsDisabled() {
+  return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"))
+    || Boolean(globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches);
+}
+
 function animateSettingsScroll(container, nextPosition, axis = "y") {
   if (!container) {
     return;
@@ -711,7 +716,11 @@ function animateSettingsScroll(container, nextPosition, axis = "y") {
   }
 
   const startPosition = getScrollPosition(container, axis);
-  if (Math.abs(nextPosition - startPosition) < 1 || typeof requestAnimationFrame !== "function") {
+  // Constrained TVs / reduced motion: jump instantly. The spring rAF loop wrote
+  // scrollTop + recomputed indicators every frame, a per-focus stutter source.
+  if (settingsAnimationsDisabled()
+    || Math.abs(nextPosition - startPosition) < 1
+    || typeof requestAnimationFrame !== "function") {
     setScrollPosition(container, nextPosition, axis);
     updateSettingsScrollIndicators(container);
     return;
@@ -730,7 +739,6 @@ function animateSettingsScroll(container, nextPosition, axis = "y") {
     velocity += acceleration * deltaSeconds;
     position += velocity * deltaSeconds;
     setScrollPosition(container, position, axis);
-    updateSettingsScrollIndicators(container);
 
     if (Math.abs(position - nextPosition) > 0.5 || Math.abs(velocity) > 0.5) {
       container[frameKey] = requestAnimationFrame(step);
@@ -989,7 +997,9 @@ function animateSettingsRailScroll(rail, nextScrollTop) {
   }
 
   const startTop = Number(rail.scrollTop || 0);
-  if (Math.abs(nextScrollTop - startTop) < 1 || typeof requestAnimationFrame !== "function") {
+  if (settingsAnimationsDisabled()
+    || Math.abs(nextScrollTop - startTop) < 1
+    || typeof requestAnimationFrame !== "function") {
     rail.scrollTop = nextScrollTop;
     updateSettingsRailIndicators(rail);
     return;
@@ -1008,7 +1018,6 @@ function animateSettingsRailScroll(rail, nextScrollTop) {
     velocity += acceleration * deltaSeconds;
     position += velocity * deltaSeconds;
     rail.scrollTop = position;
-    updateSettingsRailIndicators(rail);
 
     if (Math.abs(position - nextScrollTop) > 0.5 || Math.abs(velocity) > 0.5) {
       rail.settingsScrollAnimationFrame = requestAnimationFrame(step);
@@ -1387,7 +1396,6 @@ export const SettingsScreen = {
           ${renderSectionNavIcon(item.id)}
           <span class="settings-nav-label-wrap">
             <span class="settings-nav-label">${escapeHtml(translateSectionCopy(item).label)}</span>
-            ${item.id === "plugins" ? `<span class="settings-nav-badge">${escapeHtml(t("common.soon", {}, "Soon"))}</span>` : ""}
           </span>
         </span>
         ${iconSvg(ROW_ICONS.chevron, "settings-nav-chevron")}
@@ -2366,12 +2374,42 @@ export const SettingsScreen = {
   },
 
   renderPluginsSection(model) {
+    const pluginsEnabled = PluginManager.pluginsEnabled;
+    const repos = PluginManager.listRepos();
+    const totalProviders = repos.reduce((sum, repo) => sum + Number(repo.count || 0), 0);
+    const activeRepos = repos.filter((repo) => repo.enabled).length;
+
+    this.actionMap.set("plugins:enable", () => {
+      PluginManager.setPluginsEnabled(!PluginManager.pluginsEnabled);
+    });
+    repos.forEach((repo) => {
+      this.actionMap.set(`plugins:repo:${repo.repoId}`, () => {
+        PluginManager.setRepoEnabled(repo.repoId, !repo.enabled);
+      });
+    });
+
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "plugins"))}
       <div class="settings-group-card settings-group-card-fill">
-        <div class="settings-empty-state settings-empty-state-plugins">
-          <p class="settings-plugin-soon-text">Plugin support is coming soon.</p>
+        <div class="settings-stack">
+          ${this.renderToggleRow({
+      focusKey: "plugins:enable",
+      title: t("settings.plugins.enable.title", {}, "Enable plugins"),
+      subtitle: t("settings.plugins.enable.subtitle", {}, "Fetch streams from installed scraper plugins"),
+      checked: pluginsEnabled
+    })}
         </div>
+        ${pluginsEnabled ? `
+          <div class="settings-section-subhead">${escapeHtml(t("settings.plugins.installed", {}, "Installed plugins"))} · ${activeRepos}/${repos.length} on · ${totalProviders} ${escapeHtml(t("settings.plugins.providersWord", {}, "providers"))}</div>
+          <div class="settings-stack">
+            ${repos.length ? repos.map((repo) => this.renderToggleRow({
+      focusKey: `plugins:repo:${repo.repoId}`,
+      title: repo.repoName,
+      subtitle: `${repo.count} ${t("settings.plugins.providersWord", {}, "providers")}`,
+      checked: repo.enabled
+    })).join("") : `<p class="settings-plugin-soon-text">${escapeHtml(t("settings.plugins.empty", {}, "No plugins installed."))}</p>`}
+          </div>
+        ` : ""}
       </div>
     `;
   },
@@ -3416,6 +3454,7 @@ export const SettingsScreen = {
           <p class="settings-about-copy">${t("settings.about.madeWithLove")}</p>
           <p class="settings-about-copy">${t("settings.about.version", { version: SETTINGS_VERSION_LABEL })}</p>
           <p class="settings-about-copy">${t("settings.about.portedBy")}</p>
+          <p class="settings-about-copy">${t("settings.about.tizenPort")}</p>
         </div>
         <div class="settings-stack">
           ${this.renderActionRow({

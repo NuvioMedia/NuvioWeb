@@ -2528,6 +2528,7 @@
     <string name="sidebar.profileFallback">Profile</string>
     <string name="sidebar.switchProfile">Switch profile</string>
     <string name="settings.about.portedBy">Ported by edoedac0 and WhiteGiso.</string>
+    <string name="settings.about.tizenPort">Ported for Tizen 3.0 by vaha.net</string>
     <string name="settings.account.signOutSubtitle">Disconnect this TV from your account.</string>
     <string name="settings.appearance.themes.amber">Amber</string>
     <string name="settings.appearance.themes.crimson">Crimson</string>

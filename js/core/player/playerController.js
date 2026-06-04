@@ -926,7 +926,27 @@ export const PlayerController = {
 
   nudgeAvPlayAfterTrackSwitch() {
     const avplay = this.getAvPlay();
-    if (!avplay || typeof avplay.seekTo !== "function") {
+    if (!avplay) {
+      return;
+    }
+    // Tizen drops the video plane when audio track changes — re-assert the
+    // display rect AND toggle the play state to force the decoder to repaint
+    // video, then a tiny seek to refresh decode.
+    try {
+      this.setAvPlayDisplayRect();
+    } catch (_) {
+      // Ignore display refresh failures.
+    }
+    try {
+      const state = this.getAvPlayState();
+      if (state === "PLAYING" && typeof avplay.pause === "function" && typeof avplay.play === "function") {
+        avplay.pause();
+        avplay.play();
+      }
+    } catch (_) {
+      // Ignore play-state toggle failures.
+    }
+    if (typeof avplay.seekTo !== "function") {
       return;
     }
     try {
@@ -936,6 +956,14 @@ export const PlayerController = {
       }
     } catch (_) {
       // Track switching is still valid without a seek nudge.
+    }
+    // Re-assert the rect again after the seek settles (some firmware resets it).
+    try {
+      const reassert = () => { try { this.setAvPlayDisplayRect(); } catch (_) {} };
+      setTimeout(reassert, 250);
+      setTimeout(reassert, 900);
+    } catch (_) {
+      // Ignore scheduling failures.
     }
   },
 
@@ -1184,12 +1212,25 @@ export const PlayerController = {
     } catch (_) {
       // Ignore display-method failures.
     }
+    // Tizen renders AVPlay video on a hardware plane BEHIND the web layer; the
+    // page must be transparent over the video rect or audio plays with a black
+    // (occluded) picture. This class punches the background stack transparent.
+    try {
+      globalThis.document?.documentElement?.classList.add("avplay-presenting");
+    } catch (_) {
+      // Ignore class toggle failures.
+    }
   },
 
   teardownAvPlay() {
     const avplay = this.getAvPlay();
 
     this.stopAvPlayTickTimer();
+    try {
+      globalThis.document?.documentElement?.classList.remove("avplay-presenting");
+    } catch (_) {
+      // Ignore class toggle failures.
+    }
     if (avplay) {
       try {
         avplay.setListener?.({});
@@ -1264,6 +1305,20 @@ export const PlayerController = {
     }
   },
 
+  buildAvPlayOpenUrl(url, requestHeaders = {}) {
+    const base = String(url || "");
+    if (!base || base.indexOf("|") !== -1) return base;
+    const headers = requestHeaders && typeof requestHeaders === "object" ? requestHeaders : {};
+    const allow = ["referer", "origin", "user-agent", "cookie"];
+    const parts = [];
+    Object.keys(headers).forEach((key) => {
+      const lk = String(key || "").trim().toLowerCase();
+      const val = headers[key];
+      if (allow.indexOf(lk) !== -1 && val) parts.push(String(key).trim() + "=" + String(val));
+    });
+    return parts.length ? base + "|" + parts.join("&") : base;
+  },
+
   playWithAvPlay(url, requestHeaders = {}) {
     if (!this.canUseAvPlay()) {
       return false;
@@ -1288,7 +1343,11 @@ export const PlayerController = {
     this.emitVideoEvent("waiting", { playbackEngine: this.playbackEngine });
 
     try {
-      avplay.open(this.avplayUrl);
+      // Tizen AVPlay sends extra HTTP headers (Referer/Origin/...) appended to the
+      // open URL as `url|Key=Val&Key2=Val2`. setStreamingProperty only covers
+      // COOKIE/USER_AGENT, so scraper streams that need a Referer (e.g. vidlink)
+      // would otherwise be rejected by their CDN.
+      avplay.open(this.buildAvPlayOpenUrl(this.avplayUrl, requestHeaders));
       this.configureAvPlayForSource(requestHeaders);
     } catch (error) {
       this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);

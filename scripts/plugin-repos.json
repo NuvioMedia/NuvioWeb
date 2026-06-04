@@ -1,0 +1,11 @@
+{
+  "_comment": "Tizen/webOS scraper plugin repos. The TV browser (Chromium 47) cannot transpile, so providers are fetched + transpiled to chrome-47 at build time by scripts/build-plugins.mjs into js/core/player/providers.generated.js. Add a repo here and re-run `npm run build:plugins` (or let the GitHub Action do it) to make it available on TV.",
+  "repos": [
+    { "id": "yoru", "base": "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/" },
+    { "id": "allinone", "base": "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/" },
+    { "id": "phisher", "base": "https://raw.githubusercontent.com/phisher98/phisher-nuvio-providers/refs/heads/main/" },
+    { "id": "ray", "base": "https://raw.githubusercontent.com/hihihihihiiray/plugins/refs/heads/main/" },
+    { "id": "michat", "base": "https://raw.githubusercontent.com/michat88/nuvio-providers/refs/heads/main/" },
+    { "id": "asura", "base": "https://raw.githubusercontent.com/PirateZoro9/asura-providers/refs/heads/main/" }
+  ]
+}

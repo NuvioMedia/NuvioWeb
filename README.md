@@ -92,6 +92,80 @@ python3 -m http.server 8080 -d dist
 
 Open `http://127.0.0.1:8080`.
 
+### Tizen / webOS Scraper Plugins (transpiled providers)
+
+On TV, source resolution can use **scraper plugins** — small JavaScript providers that
+each export `getStreams(tmdbId, type, season, episode)` and return playable streams.
+Cross-origin fetch works inside the packaged TV app because the `.wgt`/`.ipk` runtime
+does **not** enforce CORS, so providers can scrape any site.
+
+#### Why providers are pre-transpiled
+
+Samsung Tizen 3.0 / older webOS ship **Chromium ~47**. That engine cannot parse modern
+JavaScript (`async/await`, `?.`, `??`, object spread, `**`) and cannot run a transpiler
+on-device (Babel itself is written in modern JS). Provider repos *are* written in modern
+JS, so they must be transpiled to a chrome-47 target **ahead of time**, off-device.
+
+The pipeline:
+
+```text
+plugin repos (modern JS on GitHub)
+        │   scripts/plugin-repos.json  ← repo list
+        ▼
+scripts/build-plugins.mjs  ── Babel @babel/preset-env { targets: "chrome 47" } ──►
+        ▼
+js/core/player/providers.generated.js   (committed, ~2 MB)
+        ▼
+js/core/player/pluginEngine.js  ── new Function(provider.code) on-device ──► streams
+```
+
+`pluginEngine.js` executes each pre-transpiled provider through a CommonJS shim
+(`cheerioShim.js` covers `require("cheerio")`). `PluginManager` gates this behind the
+**Settings → Plugins → Enable plugins** toggle and per-repo toggles.
+
+#### Add or update a plugin repo
+
+1. Add the repo's raw base URL to [`scripts/plugin-repos.json`](scripts/plugin-repos.json)
+   (the repo must expose a `manifest.json` listing its `scrapers`).
+2. Regenerate the transpiled bundle:
+
+   ```bash
+   npm run build:plugins
+   ```
+
+3. Commit the updated `js/core/player/providers.generated.js`, then rebuild the app
+   (`npm run package:tizen` / `package:webos`).
+
+A GitHub Action ([`.github/workflows/build-tizen-plugins.yml`](.github/workflows/build-tizen-plugins.yml))
+regenerates the bundle automatically on a daily schedule, on `workflow_dispatch`, and
+whenever `plugin-repos.json` changes — so editing the repo list is enough; the Action
+fetches, transpiles, and commits the new bundle. No paid service is required.
+
+#### Request to provider / repo creators
+
+To make a provider repo work on Tizen/webOS **out of the box**, please ship a
+chrome-47-compatible build alongside the source:
+
+- Add a build step (`@babel/preset-env` with `targets: "chrome 47"`) that emits a
+  transpiled copy of each provider, and commit it (e.g. `providers/<id>.tizen.js`).
+- Expose it in `manifest.json` via an optional `tizenFilename` per scraper:
+
+  ```jsonc
+  {
+    "id": "4khdhub",
+    "filename": "providers/4khdhub.js",       // modern source
+    "tizenFilename": "providers/4khdhub.tizen.js" // pre-transpiled for Chromium 47
+  }
+  ```
+
+When a repo provides `tizenFilename`, the TV build can consume the transpiled file
+directly and the heavy transpile step is no longer needed downstream. Until then,
+this repo transpiles your provider for you via the build step above.
+
+> Avoiding `async/await`, optional chaining (`?.`), nullish coalescing (`??`), object
+> spread, and `**` in provider source is **not** enough on its own — those are syntax
+> errors on Chromium 47 and must be transpiled, not polyfilled.
+
 ### Building Wrapper Projects Yourself
 
 The public TizenBrew wrapper still points at the hosted web app. webOS release IPKs are now self-packaged from this repo, and the sync tooling remains available for developers who want custom packaged wrappers.

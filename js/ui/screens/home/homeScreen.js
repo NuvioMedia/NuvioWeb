@@ -8,6 +8,7 @@ import { savedLibraryRepository } from "../../../data/repository/savedLibraryRep
 import { libraryRepository, LibrarySourceMode } from "../../../data/repository/libraryRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { ContinueWatchingPreferences } from "../../../data/local/continueWatchingPreferences.js";
+import { LastSourceStore } from "../../../data/local/lastSourceStore.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { CollectionsStore, buildCollectionHomeKey } from "../../../data/local/collectionsStore.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
@@ -67,6 +68,13 @@ const HOME_ROW_TIMEOUT_MS = 3500;
 const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
 const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
 const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
+// Constrained TVs: keep poster images only for the focused row +/- this many rows.
+// Rows further away drop their <img> src so the weak GPU/RAM isn't holding dozens
+// of decoded posters at once.
+const HOME_LEGACY_ROW_IMAGE_BUFFER = 3;
+// 1px transparent GIF used to release off-screen poster images without showing a
+// broken-image glyph on the old Tizen WebView.
+const HOME_BLANK_PIXEL = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS = 400;
 const CW_META_TIMEOUT_MS = 1800;
 const CW_META_TIMEOUT_TV_MS = 4200;
@@ -459,6 +467,23 @@ function animateModernHeroBackdropSwap(backdrop, nextSrc, nextAlt = "") {
   const normalizedSrc = String(nextSrc || "").trim();
   const normalizedAlt = String(nextAlt || "featured").trim() || "featured";
   const currentSrc = String(backdrop.getAttribute("src") || "").trim();
+
+  // Constrained TVs (Tizen): swap the hero backdrop instantly — no preload/crossfade/
+  // ghost layers. The animated swap stuttered and made the whole home feel slow.
+  if (globalThis.document?.body?.classList?.contains("performance-constrained")) {
+    backdrop.classList.remove("home-hero-backdrop-transition-enter", "is-visible");
+    backdrop.parentElement?.querySelectorAll?.(".home-hero-backdrop-transition-ghost")?.forEach((node) => node.remove());
+    if (!normalizedSrc) {
+      backdrop.removeAttribute("src");
+      backdrop.classList.add("placeholder");
+    } else {
+      if (currentSrc !== normalizedSrc) backdrop.setAttribute("src", normalizedSrc);
+      backdrop.classList.remove("placeholder");
+    }
+    backdrop.setAttribute("alt", normalizedAlt);
+    return;
+  }
+
   const token = Number(backdrop.heroBackdropTransitionToken || 0) + 1;
   backdrop.heroBackdropTransitionToken = token;
 
@@ -2327,6 +2352,7 @@ export const HomeScreen = {
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
     this.syncFocusedCollectionCardState();
+    this.updateOffscreenRowImages(target.closest(".home-row, .home-grid-section"));
     this.scheduleModernHeroUpdate(target);
     this.scheduleFocusedPosterFlow(target);
     return true;
@@ -2523,6 +2549,12 @@ export const HomeScreen = {
       container[property] = nextValue;
       return;
     }
+    // Constrained/legacy TVs: jump instantly. The per-frame scrollTop/Left rAF
+    // tween is layout-driven and stutters on weak TV GPUs.
+    if (this.isLegacyTvRuntime() || this.isPerformanceConstrained()) {
+      container[property] = nextValue;
+      return;
+    }
 
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     const effectiveDuration = Math.max(0, Number(duration || 0));
@@ -2575,6 +2607,13 @@ export const HomeScreen = {
       ? Math.max(0, container.scrollHeight - container.clientHeight)
       : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    // Constrained/legacy TVs (Tizen): jump instantly. The spring rAF loop runs
+    // dozens of frames per row change and was the main row-to-row stutter; the
+    // tall main viewport is far too heavy to animate on these GPUs.
+    if (this.isLegacyTvRuntime() || this.isPerformanceConstrained()) {
+      container[property] = nextValue;
+      return;
+    }
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (prefersReducedMotion) {
       container[property] = nextValue;
@@ -2831,6 +2870,68 @@ export const HomeScreen = {
 
   isPerformanceConstrained() {
     return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
+  },
+
+  // Constrained TVs only: keep poster images loaded for rows near the focused row
+  // and drop the <img> src on far-away rows (off-screen virtualization of images,
+  // not of the DOM). The card elements stay in place so the focus/navigation model
+  // is untouched; only decoded image memory + paint cost shrink.
+  updateOffscreenRowImages(focusedRowOverride = null) {
+    if (this.layoutMode !== "modern" || !this.isPerformanceConstrained()) {
+      return;
+    }
+    const rows = Array.from(
+      this.container?.querySelectorAll(".home-main .home-row, .home-main .home-grid-section") || []
+    );
+    if (!rows.length) {
+      return;
+    }
+    const focusedRow = (focusedRowOverride instanceof HTMLElement)
+      ? focusedRowOverride
+      : (this.container?.querySelector(".home-main .focusable.focused")?.closest(".home-row, .home-grid-section") || null);
+    let focusIndex = focusedRow ? rows.indexOf(focusedRow) : -1;
+    if (focusIndex < 0) {
+      focusIndex = 0;
+    }
+    rows.forEach((row, index) => {
+      if (Math.abs(index - focusIndex) <= HOME_LEGACY_ROW_IMAGE_BUFFER) {
+        this.loadRowImages(row);
+      } else {
+        this.unloadRowImages(row);
+      }
+    });
+  },
+
+  unloadRowImages(row) {
+    if (!row || row.dataset.rowImagesUnloaded === "true") {
+      return;
+    }
+    row.querySelectorAll("img.content-poster, img.home-continue-bg").forEach((img) => {
+      const current = String(img.getAttribute("src") || "").trim();
+      // Skip the transparent placeholder so repeated unloads don't lose the real URL.
+      if (current && current !== HOME_BLANK_PIXEL) {
+        img.dataset.offscreenSrc = current;
+      }
+      // Swap to a 1px transparent pixel rather than dropping src — removing src
+      // shows a broken-image glyph on the old Tizen WebView. This still frees the
+      // large decoded poster from memory.
+      img.setAttribute("src", HOME_BLANK_PIXEL);
+    });
+    row.dataset.rowImagesUnloaded = "true";
+  },
+
+  loadRowImages(row) {
+    if (!row || row.dataset.rowImagesUnloaded !== "true") {
+      return;
+    }
+    row.querySelectorAll("img.content-poster, img.home-continue-bg").forEach((img) => {
+      const src = String(img.dataset.offscreenSrc || "").trim();
+      if (src && img.getAttribute("src") !== src) {
+        img.setAttribute("src", src);
+      }
+      delete img.dataset.offscreenSrc;
+    });
+    row.dataset.rowImagesUnloaded = "false";
   },
 
   hasCollectionHomeRows() {
@@ -3884,6 +3985,28 @@ export const HomeScreen = {
     this.continueWatchingMenu = null;
     this.holdMenuScrollState = null;
 
+    // If a source was remembered for this title/episode, jump straight to the
+    // stream screen and auto-play that same source (re-resolved fresh).
+    const remembered = options.startOver ? null : LastSourceStore.get(normalized.contentId, normalized.videoId);
+    if (remembered) {
+      const isSeries = isSeriesTypeForContinueWatching(normalized?.type);
+      Router.navigate("stream", {
+        itemId: normalized.contentId,
+        itemType: isSeries ? "series" : "movie",
+        videoId: normalized.videoId || null,
+        season: isSeries ? (normalized.season ?? null) : null,
+        episode: isSeries ? (normalized.episode ?? null) : null,
+        itemTitle: normalized.title || normalized.contentId || "Untitled",
+        backdrop: params.backdrop || null,
+        poster: params.poster || null,
+        logo: params.logo || null,
+        returnToDetail: false,
+        resumePositionMs: Number(params.resumePositionMs || 0) || 0,
+        autoPlaySource: remembered
+      });
+      return true;
+    }
+
     Router.navigate("detail", {
       itemId: normalized.contentId,
       itemType: normalized.type || (isSeriesTypeForContinueWatching(normalized?.type) ? "series" : "movie"),
@@ -4418,7 +4541,9 @@ export const HomeScreen = {
           }
         }
       }
-      if (isPrimary) {
+      // Constrained TVs: defer backdrop/logo hydration to the debounced expand so
+      // fast scrolling through a row doesn't trigger a storm of image loads/decodes.
+      if (isPrimary && !this.isPerformanceConstrained()) {
         this.hydrateFocusedPosterAssets(card);
       }
     };
@@ -4601,6 +4726,13 @@ export const HomeScreen = {
     if (!this.isModernPosterNode(node)) {
       return;
     }
+    // Constrained TVs (Tizen): no per-card expand. Growing the card changed its
+    // height and pushed the row below up/down on every focus move (an unwanted
+    // animation). The hero at the top shows the focused item's backdrop + meta
+    // instead; the card itself just highlights.
+    if (this.isPerformanceConstrained()) {
+      return;
+    }
     const hasOtherExpandedPosters = Array.from(
       this.container?.querySelectorAll(".home-main .home-poster-card.is-expanded, .home-main .home-poster-card.is-trailer-active") || []
     ).some((card) => card !== node);
@@ -4682,7 +4814,9 @@ export const HomeScreen = {
     if (shouldExpand) {
       this.expandFocusedPoster(node);
     }
-    if (!shouldPreviewTrailer) {
+    // Constrained TVs (Tizen): art reveal only — no trailer preview (heavy decode
+    // + network on every focus settle stuttered the home).
+    if (!shouldPreviewTrailer || this.isPerformanceConstrained()) {
       return;
     }
     const trailerDelayMs = this.getFocusedPosterTrailerDelayMs();
@@ -4935,9 +5069,11 @@ export const HomeScreen = {
     if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
       this.collapseFocusedPoster();
     }
-    this.promotePosterCardAssets(node, { includeNeighbors: this.isPerformanceConstrained() });
+    // Constrained TVs: don't eager-load neighbour posters — decoding cards ahead
+    // of focus while scrolling was the main horizontal stutter in poster rows.
+    this.promotePosterCardAssets(node, { includeNeighbors: false });
     const defaultDelayMs = this.isPerformanceConstrained()
-      ? 0
+      ? 250
       : Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
     const existingState = this.focusedPosterFlowState;
     const canReuseExistingState = Boolean(flowKey && existingState?.key === flowKey);
@@ -5084,6 +5220,12 @@ export const HomeScreen = {
   getExpandedPosterScrollAdjustments(current, target, direction = null) {
     const expanded = this.layoutMode === "modern" ? this.expandedPosterNode : null;
     if (!expanded || expanded !== current || expanded === target || !expanded.classList.contains("is-expanded")) {
+      return { horizontal: 0, vertical: 0 };
+    }
+    // Only a downward move off a landscape card needs the collapse-height delta.
+    // Skip the costly getComputedStyle() flush on left/right/up moves — it was
+    // running on every horizontal step inside poster rows and stuttering nav.
+    if (direction !== "down" || !expanded.classList.contains("is-landscape")) {
       return { horizontal: 0, vertical: 0 };
     }
     const targetShell = this.container?.querySelector(".home-screen-shell");
@@ -5385,6 +5527,9 @@ export const HomeScreen = {
     }
     this.lastMainFocus = target;
     this.rememberMainRowFocus(target);
+    // Keep image (un)loading in sync with the viewport even during scroll-driven
+    // focus syncs and fast scroll (this runs with suppressFlows too).
+    this.updateOffscreenRowImages(target.closest(".home-row, .home-grid-section"));
     if (!suppressFlows) {
       this.scheduleModernHeroUpdate(target);
       this.scheduleFocusedPosterFlow(target);
@@ -5639,10 +5784,14 @@ export const HomeScreen = {
         this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
       }
       this.scheduleModernHeroUpdate(target);
-      if (this.isPerformanceConstrained()) {
-        this.promotePosterCardAssets(target, { includeNeighbors: true });
-      }
+      // scheduleFocusedPosterFlow already promotes the focused card's assets; the
+      // extra constrained-only promote here was duplicate work every keypress.
       this.scheduleFocusedPosterFlow(target);
+      // Row changed: refresh which rows keep their poster images loaded. Skipped
+      // for left/right (same row) so horizontal scrolling stays cheap.
+      if (direction === "up" || direction === "down" || !direction) {
+        this.updateOffscreenRowImages(target.closest(".home-row, .home-grid-section"));
+      }
     } else {
       this.cancelModernCameraFollow({ stopAnimations: true });
       this.cancelPendingHeroFocus();
@@ -6554,6 +6703,7 @@ export const HomeScreen = {
       ? retainedFocusState
       : null;
     const expandFocusedPoster = this.layoutMode === "modern"
+      && !globalThis.document?.body?.classList?.contains("performance-constrained")
       && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled || modernLandscapePostersEnabled)
       && Number(this.layoutPrefs?.focusedPosterBackdropExpandDelaySeconds ?? 3) <= 0
       && Boolean(focusState);
@@ -6743,6 +6893,7 @@ export const HomeScreen = {
     this.renderedLayoutMode = this.layoutMode;
     this.ensureHomeTruncationObservers();
     this.scheduleHomeTruncationUpdate();
+    this.updateOffscreenRowImages();
     this.scheduleReturnFocusRestore();
   },
 
@@ -7326,6 +7477,10 @@ export const HomeScreen = {
   onKeyDown(event) {
     const currentFocusedNode = this.container?.querySelector(".focusable.focused") || null;
     const code = Number(event?.keyCode || 0);
+    if (this.isExitConfirmationOpen()) {
+      this.handleExitConfirmationKey(event, code);
+      return;
+    }
     if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
       event.preventDefault?.();
       return;
@@ -7349,7 +7504,7 @@ export const HomeScreen = {
         || this.container?.querySelector(".home-sidebar .focusable.focused")
       );
       if (sidebarFocused) {
-        Platform.exitApp();
+        this.showExitConfirmation();
       } else {
         this.openSidebar();
       }
@@ -7444,11 +7599,77 @@ export const HomeScreen = {
       || this.container?.querySelector(".home-sidebar .focusable.focused")
     );
     if (sidebarFocused) {
-      Platform.exitApp();
+      this.showExitConfirmation();
     } else {
       this.openSidebar();
     }
     return true;
+  },
+
+  isExitConfirmationOpen() {
+    if (this.exitConfirmEl && !this.exitConfirmEl.isConnected) {
+      this.exitConfirmEl = null;
+    }
+    return Boolean(this.exitConfirmEl);
+  },
+
+  showExitConfirmation() {
+    if (this.isExitConfirmationOpen() || !this.container) {
+      return;
+    }
+    const overlay = document.createElement("div");
+    overlay.className = "home-exit-confirm-overlay";
+    overlay.innerHTML = `
+      <div class="home-exit-confirm" role="dialog" aria-modal="true">
+        <div class="home-exit-confirm-title">${escapeHtml(t("home.exit.title", {}, "Exit Nuvio?"))}</div>
+        <div class="home-exit-confirm-message">${escapeHtml(t("home.exit.message", {}, "Are you sure you want to close the app?"))}</div>
+        <div class="home-exit-confirm-actions">
+          <button type="button" class="home-exit-confirm-btn" data-exit-confirm="cancel">${escapeHtml(t("home.exit.cancel", {}, "Cancel"))}</button>
+          <button type="button" class="home-exit-confirm-btn home-exit-confirm-btn-danger" data-exit-confirm="exit">${escapeHtml(t("home.exit.confirm", {}, "Exit"))}</button>
+        </div>
+      </div>`;
+    this.container.appendChild(overlay);
+    this.exitConfirmEl = overlay;
+    this.exitConfirmIndex = 0;
+    this.updateExitConfirmFocus();
+  },
+
+  updateExitConfirmFocus() {
+    if (!this.isExitConfirmationOpen()) {
+      return;
+    }
+    const buttons = this.exitConfirmEl.querySelectorAll(".home-exit-confirm-btn");
+    buttons.forEach((button, index) => {
+      button.classList.toggle("focused", index === this.exitConfirmIndex);
+    });
+  },
+
+  closeExitConfirmation() {
+    if (this.exitConfirmEl) {
+      this.exitConfirmEl.remove();
+      this.exitConfirmEl = null;
+    }
+  },
+
+  handleExitConfirmationKey(event, code) {
+    event.preventDefault?.();
+    if (Platform.isBackEvent(event)) {
+      this.closeExitConfirmation();
+      return;
+    }
+    if (code === 37 || code === 39) {
+      this.exitConfirmIndex = code === 37 ? 0 : 1;
+      this.updateExitConfirmFocus();
+      return;
+    }
+    if (code === 13) {
+      if (this.exitConfirmIndex === 1) {
+        this.closeExitConfirmation();
+        Platform.exitApp();
+      } else {
+        this.closeExitConfirmation();
+      }
+    }
   },
 
   // ---------------------------------------------------------------------------

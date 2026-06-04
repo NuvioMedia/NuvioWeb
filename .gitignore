@@ -2,8 +2,12 @@ AGENTS.md
 nuvio.env.js
 node_modules/
 *.ipk
+*.wgt
 dist/
 .cache/
+unreal_mcp.log
+plugins-poc/
+HELPERS/
 .pm2/
 logs/
 app.bundle.js

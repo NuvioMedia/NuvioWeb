@@ -2986,7 +2986,7 @@ export const MetaDetailsScreen = {
         || this.episodes?.[0]
         || null;
       if (targetEpisode?.id) {
-        await this.openEpisodeStreamChooser(targetEpisode.id);
+        this.navigateToStreamScreenForEpisode(targetEpisode);
       }
       return;
     }
@@ -3198,7 +3198,7 @@ export const MetaDetailsScreen = {
     if (!selectedEpisode) {
       return false;
     }
-    await this.openEpisodeStreamChooser(selectedEpisode.id);
+    this.navigateToStreamScreenForEpisode(selectedEpisode);
     return true;
   },
 
@@ -4006,6 +4006,12 @@ export const MetaDetailsScreen = {
       ? Math.max(0, container.scrollHeight - container.clientHeight)
       : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    // Constrained/legacy TVs (Tizen, weak webOS): jump instantly. The spring rAF
+    // loop runs many frames writing scrollTop/Left, the main row-to-row stutter.
+    if (this.isLegacyTvRuntime() || this.isPerformanceConstrained()) {
+      container[property] = nextValue;
+      return;
+    }
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (prefersReducedMotion) {
       container[property] = nextValue;
@@ -5008,7 +5014,9 @@ export const MetaDetailsScreen = {
     if (!detailContent || !(target instanceof HTMLElement) || !detailContent.contains(target)) {
       return;
     }
-    const focusables = Array.from(detailContent.querySelectorAll(".focusable")).filter((node) => node instanceof HTMLElement);
+    // Only the first and last focusable are needed; index the NodeList directly
+    // instead of allocating + filtering the whole list each keypress.
+    const focusables = detailContent.querySelectorAll(".focusable");
     if (!focusables.length) {
       return;
     }
@@ -5142,7 +5150,11 @@ export const MetaDetailsScreen = {
       return false;
     }
     const previous = this.container.querySelector(".focusable.focused");
-    this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
+    // Only `previous` carries .focused (this function maintains that invariant),
+    // so clear it directly instead of sweeping every focusable each keypress.
+    if (previous && previous !== target) {
+      previous.classList.remove("focused");
+    }
     target.classList.add("focused");
     target.focus({ preventScroll: true });
     this.rememberEpisodeFocus(target, list);
@@ -6127,7 +6139,7 @@ export const MetaDetailsScreen = {
     if (action === "openEpisodeStreams") {
       const selectedEpisode = this.episodes.find((entry) => entry.id === current.dataset.videoId);
       if (selectedEpisode) {
-        await this.openEpisodeStreamChooser(selectedEpisode.id);
+        this.navigateToStreamScreenForEpisode(selectedEpisode);
       }
       return;
     }

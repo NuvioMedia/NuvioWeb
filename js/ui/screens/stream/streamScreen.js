@@ -5,11 +5,18 @@ import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.
 import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
 import { DebridSettingsStore } from "../../../data/local/debridSettingsStore.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
+import { LastSourceStore } from "../../../data/local/lastSourceStore.js";
 import { Environment } from "../../../platform/environment.js";
 import { I18n } from "../../../i18n/index.js";
 
 const failedAddonLogoUrls = new Set();
 const addonLogoCache = new Map();
+
+// Session cache of scraped streams so re-opening a title loads instantly instead
+// of re-scraping (~30s). Short TTL because plugin/CDN URLs expire; Reload bypasses it.
+const STREAM_CACHE = new Map();
+const STREAM_CACHE_TTL_MS = 10 * 60 * 1000;
+const STREAM_CACHE_MAX = 60;
 const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
 const ADDON_LOGO_CACHE_LIMIT = 36;
 const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
@@ -1024,10 +1031,31 @@ export const StreamScreen = {
     void this.loadStreams();
   },
 
-  async loadStreams() {
+  getStreamCacheKey() {
+    const p = this.params || {};
+    return `${normalizeType(p.itemType)}:${String(p.videoId || p.itemId || "")}:${p.season ?? ""}:${p.episode ?? ""}`;
+  },
+
+  async loadStreams({ force = false } = {}) {
     const token = this.loadToken;
     const itemType = normalizeType(this.params?.itemType);
     const videoId = String(this.params?.videoId || this.params?.itemId || "");
+    const cacheKey = this.getStreamCacheKey();
+
+    if (!force) {
+      const cached = STREAM_CACHE.get(cacheKey);
+      if (cached && (Date.now() - cached.at) < STREAM_CACHE_TTL_MS && cached.streams?.length) {
+        this.streams = cached.streams.slice();
+        this.sourceChips = (cached.chips || []).slice();
+        this.addonLogoLookup = cached.logoLookup || {};
+        this.addonFilter = "all";
+        this.loading = false;
+        this.error = "";
+        this.focusState = { zone: "card", index: 0 };
+        this.requestRender();
+        return;
+      }
+    }
 
     this.loading = true;
     this.error = "";
@@ -1140,6 +1168,7 @@ export const StreamScreen = {
           this.focusState = { zone: "card", index: 0 };
         }
         this.requestRender();
+        this.maybeAutoPlayRememberedSource();
       }
     };
 
@@ -1157,6 +1186,16 @@ export const StreamScreen = {
       this.loading = false;
       if (this.streams.length) {
         this.focusState = { zone: "card", index: clamp(Number(this.focusState?.index || 0), 0, this.streams.length - 1) };
+        // Cache the scraped result for fast re-open (short TTL — URLs expire).
+        if (STREAM_CACHE.size >= STREAM_CACHE_MAX) {
+          STREAM_CACHE.delete(STREAM_CACHE.keys().next().value);
+        }
+        STREAM_CACHE.set(cacheKey, {
+          streams: this.streams.slice(),
+          chips: this.sourceChips.slice(),
+          logoLookup: this.addonLogoLookup,
+          at: Date.now()
+        });
       } else {
         this.focusState = { zone: "filter", index: 0 };
       }
@@ -1507,6 +1546,18 @@ export const StreamScreen = {
     });
   },
 
+  maybeAutoPlayRememberedSource() {
+    if (this.autoPlayTriggered || !this.params?.autoPlaySource) {
+      return;
+    }
+    const match = LastSourceStore.matchStream(this.streams, this.params.autoPlaySource);
+    if (!match) {
+      return; // wait for more chunks; falls back to manual pick if it never appears
+    }
+    this.autoPlayTriggered = true;
+    this.playStream(match.id);
+  },
+
   async playStream(streamId) {
     const filtered = this.getFilteredStreams();
     const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
@@ -1553,6 +1604,18 @@ export const StreamScreen = {
       this.requestRender();
     }
     const itemType = normalizeType(this.params?.itemType);
+    // Remember this source so "Continue watching" can auto-play it next time.
+    try {
+      LastSourceStore.save(this.params?.itemId, this.params?.videoId, {
+        addonName: selected.addonName || selected.sourceName || null,
+        sourceName: selected.addonName || selected.sourceName || null,
+        bingeGroup: selected.behaviorHints?.bingeGroup || null,
+        quality: selected.quality || null,
+        provider: selected.provider || null
+      });
+    } catch (_) {
+      // Non-fatal: remembering the source is best-effort.
+    }
     Router.navigate("player", {
       streamUrl: targetUrl,
       itemId: this.params?.itemId || null,

@@ -5,6 +5,7 @@
   "version": "0.2.0",
   "scripts": {
     "build": "node ./scripts/build.mjs",
+    "build:plugins": "node ./scripts/build-plugins.mjs",
     "build:on-release": "node ./scripts/release-build-poller.mjs",
     "install:webos": "node ./scripts/ares-install-webos.mjs",
     "inspect:webos": "node ./scripts/ares-inspect-webos.mjs",
@@ -20,7 +21,6 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
-    "@webos-tools/cli": "^3.2.4",
     "@babel/plugin-transform-arrow-functions": "^7.27.1",
     "@babel/plugin-transform-async-to-generator": "^7.28.6",
     "@babel/plugin-transform-block-scoping": "^7.28.6",
@@ -31,17 +31,21 @@
     "@babel/plugin-transform-shorthand-properties": "^7.27.1",
     "@babel/preset-env": "^7.29.2",
     "@babel/runtime": "^7.29.2",
+    "@babel/standalone": "^7.29.7",
     "@chialab/esbuild-plugin-babel": "^0.19.1",
     "@csstools/postcss-global-data": "^4.0.0",
+    "@webos-tools/cli": "^3.2.4",
     "autoprefixer": "^10.4.27",
     "babel-loader": "^10.1.1",
+    "cheerio": "^1.2.0",
     "core-js": "^3.49.0",
     "cssnano": "^7.1.4",
     "esbuild": "^0.27.3",
     "esbuild-plugin-babel": "^0.2.3",
     "postcss": "^8.5.9",
     "postcss-custom-properties": "^15.0.1",
-    "regenerator-runtime": "^0.14.1"
+    "regenerator-runtime": "^0.14.1",
+    "ws": "^8.21.0"
   },
   "dependencies": {
     "intersection-observer": "^0.12.2",

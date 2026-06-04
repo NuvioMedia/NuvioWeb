@@ -816,8 +816,25 @@ export const SupportersContributorsScreen = {
   },
 
   consumeBackRequest() {
-    void this.handleBack();
-    return true;
+    // Only dismiss in-screen overlays here and report whether one was consumed.
+    // Must NOT call handleBack(): handleBack() -> Router.back() -> consumeBackRequest()
+    // recursed infinitely and the real history back never ran (no way out of the
+    // Supporters/Contributors screen). Returning false lets Router.back() proceed.
+    if (this.dialog) {
+      const returnFocusKey = this.dialog.returnFocusKey;
+      this.dialog = null;
+      this.focusKey = returnFocusKey || `tab:${this.selectedTab}`;
+      this.preserveListScrollAfterFocus = true;
+      void this.render();
+      return true;
+    }
+    if (this.showDonateQr) {
+      this.showDonateQr = false;
+      this.focusKey = "brand:donate";
+      void this.render();
+      return true;
+    }
+    return false;
   },
 
   async handleBack() {

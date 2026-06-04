@@ -1146,6 +1146,12 @@ export const SearchScreen = {
       container[property] = nextValue;
       return;
     }
+    // Constrained/legacy TVs: jump instantly. The per-frame scrollTop/Left rAF
+    // tween is layout-driven and stutters on weak TV GPUs.
+    if (isPerformanceConstrainedRuntime()) {
+      container[property] = nextValue;
+      return;
+    }
 
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (prefersReducedMotion) {
@@ -1187,6 +1193,12 @@ export const SearchScreen = {
       ? Math.max(0, container.scrollHeight - container.clientHeight)
       : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    // Constrained/legacy TVs: jump instantly. The spring rAF loop writes
+    // scrollTop/Left every frame, the main row-to-row stutter source.
+    if (isPerformanceConstrainedRuntime()) {
+      container[property] = nextValue;
+      return;
+    }
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (prefersReducedMotion) {
       container[property] = nextValue;
