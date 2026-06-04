@@ -7500,7 +7500,8 @@ export const HomeScreen = {
         this.collapseFocusedPoster();
       }
       const sidebarFocused = Boolean(
-        this.container?.querySelector(".modern-sidebar-panel .focusable.focused")
+        this.isSidebarNode(this.container?.querySelector(".focusable.focused"))
+        || this.container?.querySelector(".modern-sidebar-panel .focusable.focused")
         || this.container?.querySelector(".home-sidebar .focusable.focused")
       );
       if (sidebarFocused) {
@@ -7582,6 +7583,10 @@ export const HomeScreen = {
   },
 
   consumeBackRequest() {
+    if (this.isExitConfirmationOpen()) {
+      this.closeExitConfirmation();
+      return true;
+    }
     if (this.continueWatchingMenu) {
       this.closeContinueWatchingMenu();
       return true;
@@ -7595,7 +7600,8 @@ export const HomeScreen = {
       this.collapseFocusedPoster();
     }
     const sidebarFocused = Boolean(
-      this.container?.querySelector(".modern-sidebar-panel .focusable.focused")
+      this.isSidebarNode(this.container?.querySelector(".focusable.focused"))
+      || this.container?.querySelector(".modern-sidebar-panel .focusable.focused")
       || this.container?.querySelector(".home-sidebar .focusable.focused")
     );
     if (sidebarFocused) {
@@ -7607,7 +7613,10 @@ export const HomeScreen = {
   },
 
   isExitConfirmationOpen() {
-    if (this.exitConfirmEl && !this.exitConfirmEl.isConnected) {
+    // Node.isConnected does not exist on Chromium 47 (Tizen 3.0) — it returns
+    // undefined, so the old `!el.isConnected` check nulled the ref on every call
+    // and the dialog never trapped keys. Use document.contains instead.
+    if (this.exitConfirmEl && !document.contains(this.exitConfirmEl)) {
       this.exitConfirmEl = null;
     }
     return Boolean(this.exitConfirmEl);
@@ -7628,7 +7637,10 @@ export const HomeScreen = {
           <button type="button" class="home-exit-confirm-btn home-exit-confirm-btn-danger" data-exit-confirm="exit">${escapeHtml(t("home.exit.confirm", {}, "Exit"))}</button>
         </div>
       </div>`;
-    this.container.appendChild(overlay);
+    // Append to <body>, not this.container: a deferred home re-render replaces
+    // container.innerHTML (hero enrichment etc.) and would detach the overlay,
+    // dropping key trapping so arrows leak to the home grid behind the dialog.
+    document.body.appendChild(overlay);
     this.exitConfirmEl = overlay;
     this.exitConfirmIndex = 0;
     this.updateExitConfirmFocus();
@@ -7801,6 +7813,7 @@ export const HomeScreen = {
   },
 
   cleanup() {
+    this.closeExitConfirmation();
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;

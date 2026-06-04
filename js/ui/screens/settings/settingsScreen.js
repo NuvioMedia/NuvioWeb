@@ -2380,7 +2380,13 @@ export const SettingsScreen = {
     const activeRepos = repos.filter((repo) => repo.enabled).length;
 
     this.actionMap.set("plugins:enable", () => {
-      PluginManager.setPluginsEnabled(!PluginManager.pluginsEnabled);
+      const next = !PluginManager.pluginsEnabled;
+      PluginManager.setPluginsEnabled(next);
+      // Turning plugins on: pull the latest daily bundle in the background so the
+      // repo list and streaming use the freshest providers.
+      if (next) {
+        PluginManager.refreshProviders().catch(() => { });
+      }
     });
     repos.forEach((repo) => {
       this.actionMap.set(`plugins:repo:${repo.repoId}`, () => {
@@ -2971,6 +2977,28 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("playback:secondarySubtitleLanguage", () => {
+      const currentSettings = PlayerSettingsStore.get();
+      const currentLanguage = normalizeSelectableSubtitleLanguageCode(currentSettings.subtitleStyle?.secondaryPreferredLanguage || currentSettings.secondarySubtitleLanguage);
+      this.openOptionDialog({
+        title: t("settings.dialogs.secondarySubtitleLanguage", {}, "Secondary subtitle language"),
+        options: PREFERRED_SUBTITLE_LANGUAGE_OPTIONS,
+        selectedId: currentLanguage === "system" ? "off" : currentLanguage,
+        returnFocusKey: "playback:secondarySubtitleLanguage",
+        dialogClassName: "settings-language-dialog",
+        optionRenderer: "subtitle-language",
+        onSelect: (option) => {
+          const normalized = normalizeSelectableSubtitleLanguageCode(option.id);
+          PlayerSettingsStore.set({
+            secondarySubtitleLanguage: normalized,
+            subtitleStyle: {
+              ...currentSettings.subtitleStyle,
+              secondaryPreferredLanguage: normalized
+            }
+          });
+        }
+      });
+    });
     this.actionMap.set("playback:renderMode", () => {
       this.openOptionDialog({
         title: t("settings.dialogs.subtitleRenderMode"),
@@ -3033,6 +3061,12 @@ export const SettingsScreen = {
       title: t("settings.playback.subtitleLanguage.title"),
       subtitle: t("settings.playback.subtitleLanguage.subtitle"),
       value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
+    })}
+        ${this.renderActionRow({
+      focusKey: "playback:secondarySubtitleLanguage",
+      title: t("settings.playback.secondarySubtitleLanguage.title", {}, "Secondary subtitle language"),
+      subtitle: t("settings.playback.secondarySubtitleLanguage.subtitle", {}, "Also loaded when available, after your primary language."),
+      value: labelForSubtitlePlaybackLanguage(model.player.secondarySubtitleLanguage)
     })}
         ${this.renderToggleRow({
       focusKey: "playback:useForcedSubtitles",

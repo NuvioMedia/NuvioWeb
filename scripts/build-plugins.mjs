@@ -34,9 +34,13 @@ async function getText(url) {
 }
 
 function transpile(code) {
-  return transformSync(code, {
+  // Drop a leading shebang ("#!/usr/bin/env node") — it is a syntax error once the
+  // provider is run via new Function(...) on-device.
+  const src = String(code).replace(/^#![^\n]*\n?/, "");
+  return transformSync(src, {
     presets: [["@babel/preset-env", { targets: "chrome 47" }]],
-    compact: true, comments: false, sourceType: "script",
+    // "unambiguous": handle providers written as ES modules (import/export) too.
+    compact: true, comments: false, sourceType: "unambiguous",
   }).code;
 }
 

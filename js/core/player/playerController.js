@@ -541,14 +541,14 @@ export const PlayerController = {
           if (!this.isUsingAvPlay()) {
             return;
           }
-          this.applyPendingAvPlayAudioTrackSelection();
+          this.applyPendingAvPlayAudioTrackSelection({ allowNudge: false });
         }, delayMs);
       });
       setTimeout(() => {
         if (!this.isUsingAvPlay()) {
           return;
         }
-        this.applyPendingAvPlayAudioTrackSelection();
+        this.applyPendingAvPlayAudioTrackSelection({ allowNudge: false });
         if (syncTracks) {
           this.syncAvPlayTrackInfo({ force: true });
           this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -884,7 +884,7 @@ export const PlayerController = {
     }
   },
 
-  applyPendingAvPlayAudioTrackSelection() {
+  applyPendingAvPlayAudioTrackSelection({ allowNudge = true } = {}) {
     const pendingIndex = Number(this.pendingAvPlayAudioTrackIndex);
     const desiredIndex = Number(this.desiredAvPlayAudioTrackIndex);
     const desiredActive = Number.isFinite(desiredIndex)
@@ -907,6 +907,7 @@ export const PlayerController = {
       return false;
     }
 
+    const alreadySelected = Number(this.selectedAvPlayAudioTrackIndex) === targetIndex;
     try {
       avplay.setSelectTrack("AUDIO", targetIndex);
       if (Number.isFinite(pendingIndex) && pendingIndex === targetIndex) {
@@ -915,7 +916,13 @@ export const PlayerController = {
       this.selectedAvPlayAudioTrackIndex = targetIndex;
       this.desiredAvPlayAudioTrackIndex = targetIndex;
       this.desiredAvPlayAudioTrackUntil = Date.now() + 5000;
-      this.nudgeAvPlayAfterTrackSwitch();
+      // The pause/play/seek nudge forces a mid-playback audio switch, but during
+      // startup it restarts buffering and the picture never appears (audio plays,
+      // video black). Only nudge for a real change, and never when the caller opts
+      // out (startup) — then the track is selected cleanly before the first frame.
+      if (allowNudge && !alreadySelected) {
+        this.nudgeAvPlayAfterTrackSwitch();
+      }
       this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
@@ -1149,9 +1156,14 @@ export const PlayerController = {
     const documentHeight = Number(document.documentElement?.clientHeight || 0);
     const windowWidth = Number(window.innerWidth || 0);
     const windowHeight = Number(window.innerHeight || 0);
-    const widthCandidates = [playerSize.width, documentWidth, windowWidth]
+    // Prefer the stable layout viewport (documentElement / window — 1920x1080 from
+    // the Tizen viewport meta) over the #player element's getBoundingClientRect.
+    // The element rect can transiently measure taller than the screen during layout,
+    // which made AVPlay render the video below the panel and clip the bottom + DOM
+    // subtitles. The fixed layout viewport never overflows.
+    const widthCandidates = [documentWidth, windowWidth, playerSize.width]
       .filter((value) => Number.isFinite(value) && value > 0);
-    const heightCandidates = [playerSize.height, documentHeight, windowHeight]
+    const heightCandidates = [documentHeight, windowHeight, playerSize.height]
       .filter((value) => Number.isFinite(value) && value > 0);
     return {
       width: Math.max(1, Math.round(widthCandidates[0] || 1920)),
@@ -1366,6 +1378,14 @@ export const PlayerController = {
         },
         onbufferingcomplete: () => {
           this.avplayReady = true;
+          // Re-assert the display rect once decoding buffers: AVPlay often keeps the
+          // video plane hidden (audio-only) until the rect is re-applied after the
+          // decoder is ready, which looked like "audio starts, video appears late".
+          try {
+            this.setAvPlayDisplayRect();
+          } catch (_) {
+            // Ignore display-rect failures.
+          }
           this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
         },
         oncurrentplaytime: (currentTimeMs) => {
@@ -1373,6 +1393,17 @@ export const PlayerController = {
           if (Number.isFinite(value) && value >= 0) {
             this.avplayCurrentTimeMs = value;
           }
+        },
+        // AVPlay delivers in-stream (built-in) subtitle text through this callback.
+        // The picture lives on a hardware plane behind the transparent web layer,
+        // so AVPlay's own caption rendering is not visible — we forward the text and
+        // draw it in a DOM overlay instead (see playerScreen avplaysubtitle handler).
+        onsubtitlechange: (durationMs, text) => {
+          this.emitVideoEvent("avplaysubtitle", {
+            playbackEngine: this.playbackEngine,
+            text: typeof text === "string" ? text : "",
+            durationMs: Number(durationMs || 0)
+          });
         },
         onstreamcompleted: () => {
           this.avplayEnded = true;
@@ -1418,6 +1449,20 @@ export const PlayerController = {
       this.emitVideoEvent("loadeddata", { playbackEngine: this.playbackEngine });
       this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
+      // Nudge the video plane to show promptly: some firmware only renders the
+      // picture after the rect is re-applied a beat after playback starts (audio
+      // would otherwise play with a frozen/late picture).
+      [160, 500, 1100].forEach((ms) => {
+        setTimeout(() => {
+          if (this.isUsingAvPlay()) {
+            try {
+              this.setAvPlayDisplayRect();
+            } catch (_) {
+              // Ignore display-rect failures.
+            }
+          }
+        }, ms);
+      });
       if (this.startupAudioGateActive) {
         return;
       }

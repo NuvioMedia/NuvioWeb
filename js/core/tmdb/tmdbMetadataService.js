@@ -20,6 +20,19 @@ function toImageUrl(path) {
   return `${IMAGE_BASE_URL}${path}`;
 }
 
+// TMDB tags most title logos as English ("en"); few exist for hr/sr/etc. So when the
+// UI language is non-English we still want a logo: prefer the exact language, then
+// English, then a language-neutral logo, then whatever is first. Returns a file_path.
+function pickLogoPath(logos, langBase) {
+  if (!Array.isArray(logos) || !logos.length) {
+    return null;
+  }
+  const byLang = (code) => logos.find((logo) => String(logo?.iso_639_1 || "").toLowerCase() === code);
+  const neutral = logos.find((logo) => !logo?.iso_639_1);
+  const chosen = byLang(langBase) || byLang("en") || neutral || logos[0];
+  return chosen?.file_path || null;
+}
+
 function normalizeTmdbTrailerLanguage(language = "") {
   const normalized = String(language || "").trim().replace(/_/g, "-");
   if (!normalized) {
@@ -127,7 +140,11 @@ export const TmdbMetadataService = {
 
     const type = resolveType(contentType);
     const lang = language || settings.language || "en-US";
-    const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos,external_ids&include_image_language=${encodeURIComponent(lang)},null`;
+    const langBase = String(lang).slice(0, 2).toLowerCase();
+    // Always include English ("en") and language-neutral ("null") logos — most TMDB
+    // title logos are tagged English, so requesting only the UI language drops them.
+    const imageLanguages = Array.from(new Set([langBase, "en", "null"])).join(",");
+    const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos,external_ids&include_image_language=${encodeURIComponent(imageLanguages)}`;
     const url = `${TMDB_BASE_URL}/${type}/${encodeURIComponent(String(tmdbId))}?${params}`;
 
     const response = await fetch(url);
@@ -136,7 +153,7 @@ export const TmdbMetadataService = {
     }
 
     const data = await response.json();
-    const logoPath = Array.isArray(data?.images?.logos) ? data.images.logos[0]?.file_path : null;
+    const logoPath = pickLogoPath(data?.images?.logos, langBase);
     const releaseYear = type === "tv"
       ? String(data.first_air_date || "").slice(0, 4)
       : String(data.release_date || "").slice(0, 4);

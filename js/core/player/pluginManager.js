@@ -8,7 +8,7 @@ const PLUGIN_REPOS_DISABLED_KEY = "pluginReposDisabled";
 export const PluginManager = {
 
   get pluginsEnabled() {
-    return Boolean(LocalStore.get(PLUGINS_ENABLED_KEY, false));
+    return Boolean(LocalStore.get(PLUGINS_ENABLED_KEY, true));
   },
 
   // Repo ids the user turned off. Default: empty (all installed repos active).
@@ -24,6 +24,11 @@ export const PluginManager = {
       ...repo,
       enabled: !disabled.has(String(repo.repoId))
     }));
+  },
+
+  // Pull the latest daily-rebuilt public provider bundle (cached, builtAt-gated).
+  refreshProviders() {
+    return PluginEngine.refreshFromRemote();
   },
 
   setRepoEnabled(repoId, enabled) {

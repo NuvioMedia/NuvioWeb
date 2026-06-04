@@ -1,0 +1,56 @@
+name: Build Tizen plugin bundle
+
+# The Tizen / webOS TV browser (Chromium 47) cannot run a transpiler on-device, so
+# scraper providers must be transpiled to chrome-47 ahead of time. This job fetches
+# every provider from the repos listed in scripts/plugin-repos.json, transpiles them
+# with Babel, and commits the result to js/core/player/providers.generated.js.
+#
+# Add or remove a repo in scripts/plugin-repos.json (a normal commit) and this job
+# regenerates the bundle automatically — no app rebuild needed for the bundle itself.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - "scripts/plugin-repos.json"
+      - "scripts/build-plugins.mjs"
+  schedule:
+    # Daily at 04:00 UTC — picks up upstream provider updates from the repos.
+    - cron: "0 4 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-tizen-plugins
+  cancel-in-progress: true
+
+jobs:
+  build-plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Transpile providers to chrome 47
+        run: npm run build:plugins
+
+      - name: Commit regenerated provider bundle
+        run: |
+          if git diff --quiet -- js/core/player/providers.generated.js; then
+            echo "No provider changes — nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add js/core/player/providers.generated.js
+          git commit -m "chore(plugins): regenerate transpiled provider bundle"
+          git push

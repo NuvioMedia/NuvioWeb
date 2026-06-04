@@ -514,7 +514,16 @@ function rememberFailedAddonLogo(url = "") {
   }
 }
 
-function getStreamHeadline(stream = {}) {
+// Shared with the in-player Sources panel so both render identical card meta.
+export function getStreamCardMetaHtml(stream = {}) {
+  return [
+    renderMetaItem("peers", extractPeerCount(stream)),
+    renderMetaItem("size", formatBytes(stream?.behaviorHints?.videoSize)),
+    renderMetaItem("source", extractIndexerName(stream))
+  ].filter(Boolean).join("");
+}
+
+export function getStreamHeadline(stream = {}) {
   const primary = [
     stream.name,
     stream.title,
@@ -527,7 +536,7 @@ function getStreamHeadline(stream = {}) {
   return firstLine || (stream.addonName || "Unknown source");
 }
 
-function getStreamQuality(stream = {}) {
+export function getStreamQuality(stream = {}) {
   const qualityLines = [];
   [stream.name, stream.title, stream.description].forEach((value) => {
     String(value || "").split(/\r?\n/).forEach((line) => {
@@ -567,7 +576,7 @@ function isMetaNoiseLine(line = "") {
   return false;
 }
 
-function getStreamDescriptionLines(stream = {}) {
+export function getStreamDescriptionLines(stream = {}) {
   const candidates = [
     stream.name,
     stream.description,
@@ -798,7 +807,7 @@ function buildStreamBadges(stream = {}, enabled = true) {
   return badges.slice(0, STREAM_BADGE_LIMIT);
 }
 
-function renderStreamBadges(stream = {}, enabled = true) {
+export function renderStreamBadges(stream = {}, enabled = true) {
   const badges = buildStreamBadges(stream, enabled);
   if (!badges.length) {
     return "";
@@ -963,10 +972,17 @@ export const StreamScreen = {
       itemId,
       itemType: normalizeType(this.params?.itemType),
       fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
-      returnHomeOnBack: Boolean(this.params?.continueWatchingBackHome || this.params?.returnHomeOnBack)
+      // Once we've gone detail -> stream -> player and come back to detail, the stream
+      // screen is a dead-end still sitting in history. Pressing back from this detail
+      // should go straight home, not re-open that stream screen.
+      returnHomeOnBack: true
     }, {
       skipStackPush: true,
-      replaceHistory: true
+      replaceHistory: true,
+      // Treat returning to detail as back navigation so the detail screen does NOT
+      // re-trigger its "auto-open continue-watching stream" — that re-opened the
+      // stream, which (when no source plays) bounced straight back here in a loop.
+      isBackNavigation: true
     });
     return true;
   },
@@ -1604,18 +1620,8 @@ export const StreamScreen = {
       this.requestRender();
     }
     const itemType = normalizeType(this.params?.itemType);
-    // Remember this source so "Continue watching" can auto-play it next time.
-    try {
-      LastSourceStore.save(this.params?.itemId, this.params?.videoId, {
-        addonName: selected.addonName || selected.sourceName || null,
-        sourceName: selected.addonName || selected.sourceName || null,
-        bingeGroup: selected.behaviorHints?.bingeGroup || null,
-        quality: selected.quality || null,
-        provider: selected.provider || null
-      });
-    } catch (_) {
-      // Non-fatal: remembering the source is best-effort.
-    }
+    // The source is remembered by the player once it actually presents a frame
+    // (playback success), not here at selection time.
     Router.navigate("player", {
       streamUrl: targetUrl,
       itemId: this.params?.itemId || null,

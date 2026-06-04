@@ -1387,7 +1387,7 @@
     <string name="stream_info_subtitle_source_embedded">Embedded</string>
     <string name="stream_info_player_engine">Player Engine</string>
     <string name="sources_title">Sources</string>
-    <string name="sources_reload">Reload</string>
+    <string name="sources_reload">Reload links</string>
     <string name="sources_close">Close</string>
     <string name="sources_playing">Playing</string>
     <string name="sources_no_streams">No streams found</string>

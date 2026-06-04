@@ -48,6 +48,7 @@
     "ws": "^8.21.0"
   },
   "dependencies": {
+    "crypto-js": "^4.2.0",
     "intersection-observer": "^0.12.2",
     "jszip": "^3.10.1",
     "whatwg-fetch": "^3.6.20"

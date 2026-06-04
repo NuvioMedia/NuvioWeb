@@ -5,6 +5,15 @@ import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { parentalGuideRepository } from "../../../data/repository/parentalGuideRepository.js";
 import { skipIntroRepository } from "../../../data/repository/skipIntroRepository.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import { LastSourceStore } from "../../../data/local/lastSourceStore.js";
+import { LastSubtitleStore } from "../../../data/local/lastSubtitleStore.js";
+import {
+  getStreamHeadline,
+  getStreamQuality,
+  getStreamDescriptionLines,
+  renderStreamBadges,
+  getStreamCardMetaHtml
+} from "../stream/streamScreen.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
@@ -38,6 +47,42 @@ const AUDIO_TRACK_LANGUAGE_KEY_BY_CODE = {
 };
 const LANGUAGE_CODE_ALIASES = {
   ara: "ar",
+  alb: "sq",
+  sqi: "sq",
+  baq: "eu",
+  eus: "eu",
+  bos: "bs",
+  bul: "bg",
+  cze: "cs",
+  ces: "cs",
+  cro: "hr",
+  hrv: "hr",
+  scr: "hr",
+  dan: "da",
+  ell: "el",
+  gre: "el",
+  est: "et",
+  fas: "fa",
+  per: "fa",
+  fil: "tl",
+  fin: "fi",
+  geo: "ka",
+  kat: "ka",
+  heb: "he",
+  ice: "is",
+  isl: "is",
+  ind: "id",
+  lav: "lv",
+  lit: "lt",
+  mac: "mk",
+  mkd: "mk",
+  may: "ms",
+  msa: "ms",
+  nor: "no",
+  scc: "sr",
+  srp: "sr",
+  tha: "th",
+  ukr: "uk",
   chi: "zh",
   deu: "de",
   dut: "nl",
@@ -69,6 +114,39 @@ const LANGUAGE_CODE_ALIASES = {
 const LANGUAGE_NAME_ALIASES = {
   arabic: "ar",
   arabo: "ar",
+  albanian: "sq",
+  shqip: "sq",
+  bosnian: "bs",
+  bosanski: "bs",
+  bulgarian: "bg",
+  croatian: "hr",
+  hrvatski: "hr",
+  czech: "cs",
+  cesky: "cs",
+  danish: "da",
+  dansk: "da",
+  estonian: "et",
+  filipino: "tl",
+  tagalog: "tl",
+  finnish: "fi",
+  suomi: "fi",
+  greek: "el",
+  hebrew: "he",
+  icelandic: "is",
+  indonesian: "id",
+  latvian: "lv",
+  lithuanian: "lt",
+  macedonian: "mk",
+  malay: "ms",
+  norwegian: "no",
+  norsk: "no",
+  persian: "fa",
+  farsi: "fa",
+  serbian: "sr",
+  srpski: "sr",
+  thai: "th",
+  ukrainian: "uk",
+  vietnamese: "vi",
   chinese: "zh",
   cinese: "zh",
   deutsch: "de",
@@ -113,11 +191,12 @@ const LANGUAGE_NAME_ALIASES = {
 };
 const SUBTITLE_LANGUAGE_OFF_KEY = "__off__";
 const SUBTITLE_LANGUAGE_UNKNOWN_KEY = "__unknown__";
+const SUBTITLE_SHOW_ALL_KEY = "__show_all__";
 const SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C5C", "#00FF88"];
 const SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
 const SUBTITLE_DELAY_STEP_MS = 250;
 const SUBTITLE_FONT_STEP = 10;
-const SUBTITLE_VERTICAL_OFFSET_STEP = 0.01;
+const SUBTITLE_VERTICAL_OFFSET_STEP = 0.5;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -796,7 +875,7 @@ function normalizeSubtitleVerticalOffset(value = 0) {
   if (!Number.isFinite(parsed)) {
     return 0;
   }
-  const normalized = Number(clamp(parsed, -12, 12).toFixed(2));
+  const normalized = Number(clamp(parsed, -20, 20).toFixed(2));
   return Object.is(normalized, -0) ? 0 : normalized;
 }
 
@@ -1223,6 +1302,12 @@ export const PlayerScreen = {
     }
 
     this.subtitles = [];
+    // Addon subtitles are filtered to preferred languages by default; the user can
+    // flip "Show all languages" in the CC dialog to see every fetched language.
+    this.subtitleShowAllAddons = false;
+    this.repositorySubtitlesAll = [];
+    this.repositorySubtitlesFiltered = [];
+    this.sidecarSubtitlesCache = [];
     this.embeddedSubtitleTracks = [];
     this.subtitleDialogVisible = false;
     this.subtitleDialogTab = "builtIn";
@@ -2563,6 +2648,7 @@ export const PlayerScreen = {
               <div class="player-loading-title">${escapeHtml(this.params.playerTitle || this.params.itemId || "Nuvio")}</div>
             </div>
             ${this.params.playerSubtitle ? `<div class="player-loading-subtitle">${escapeHtml(this.params.playerSubtitle)}</div>` : ""}
+            <div class="player-loading-status" id="playerLoadingStatus"></div>
           </div>
         </div>
 
@@ -2646,6 +2732,7 @@ export const PlayerScreen = {
       loadingOverlay: uiRoot.querySelector("#playerLoadingOverlay"),
       loadingIdentity: uiRoot.querySelector(".player-loading-identity"),
       loadingLogo: uiRoot.querySelector(".player-loading-logo"),
+      loadingStatus: uiRoot.querySelector(".player-loading-status"),
       parentalGuide: uiRoot.querySelector("#playerParentalGuide"),
       skipIntro: uiRoot.querySelector("#playerSkipIntro"),
       aspectToast: uiRoot.querySelector("#playerAspectToast"),
@@ -3400,6 +3487,27 @@ export const PlayerScreen = {
     }
   },
 
+  // Re-align the AVPlay presentation after an audio-track switch (or any re-buffer):
+  // snap the video plane back to full screen and force the DOM subtitle to re-render
+  // at the current time, so the three streams don't drift apart.
+  resyncAvPlayPresentation() {
+    if (typeof PlayerController.isUsingAvPlay === "function" && !PlayerController.isUsingAvPlay()) {
+      return;
+    }
+    try {
+      PlayerController.setAvPlayDisplayRect?.();
+    } catch (_) {
+      // Ignore display-rect failures.
+    }
+    // Force the subtitle tick to re-evaluate from scratch on the next pass.
+    this.avplaySubtitleActiveText = null;
+    try {
+      this.applySubtitlePresentationSettings();
+    } catch (_) {
+      // Ignore subtitle restyle failures.
+    }
+  },
+
   persistPlayerPresentationSettings() {
     PlayerSettingsStore.set({
       subtitleDelayMs: Number(this.subtitleDelayMs || 0),
@@ -3864,6 +3972,9 @@ export const PlayerScreen = {
       this.dismissPauseOverlay();
       this.loadingVisible = true;
       this.updateLoadingVisibility();
+      if (!this.hasPresentedPlaybackFrame && !this.loadingStatusTimer) {
+        this.startLoadingStatusCycle();
+      }
       if (!this.sourcesPanelVisible && !this.isSeekOverlaySuppressingControls()) {
         this.setControlsVisible(true, { focus: false });
       }
@@ -3884,6 +3995,11 @@ export const PlayerScreen = {
       }
       this.lastPlaybackErrorAt = 0;
       this.sourcesError = "";
+      // First frame for this source: it actually works, so remember it for
+      // "Continue watching" (covers manual picks, switches, and auto-fallback).
+      if (!this.hasPresentedPlaybackFrame) {
+        this.rememberPlayedSource(this.getCurrentStreamCandidate());
+      }
       this.hasPresentedPlaybackFrame = true;
       this.markPlaybackProgress();
       this.clearPlaybackStallGuard();
@@ -3978,6 +4094,48 @@ export const PlayerScreen = {
         this.clearTrackDiscoveryTimer();
         this.refreshTrackDialogs();
       }
+      // An audio-track switch re-buffers the AVPlay video (seek nudge). Re-assert the
+      // full-screen video plane and re-render the DOM subtitle across the recovery
+      // window so video, audio and subtitles snap back together instead of drifting
+      // (and the picture can't end up shifted down).
+      if (PlayerController.isUsingAvPlay?.()) {
+        [0, 250, 700, 1400].forEach((ms) => {
+          setTimeout(() => this.resyncAvPlayPresentation(), ms);
+        });
+      }
+    };
+
+    const onAvPlaySubtitleChange = (event) => {
+      // Built-in (in-stream) AVPlay subtitle text. Skip while our external-VTT
+      // overlay is driving cues by time, so the two don't double up.
+      if (this.avplaySubtitleCues) {
+        return;
+      }
+      const text = String(event?.detail?.text || "");
+      const render = () => {
+        this.ensureAvPlaySubtitleOverlay();
+        this.updateAvPlaySubtitleStyle();
+        if (this.avplaySubtitleTextEl) {
+          this.avplaySubtitleActiveText = text;
+          this.avplaySubtitleTextEl.innerHTML = text
+            ? text.split("\n").map((line) => escapeHtml(line)).join("<br>")
+            : "";
+          this.avplaySubtitleTextEl.style.visibility = text ? "visible" : "hidden";
+        }
+      };
+      // AVPlay pushes built-in subtitles in real time, so we can only DELAY them
+      // (positive delay), not show them earlier. Negative delay falls back to 0.
+      // Use addon (external) subtitles when you need to pull them earlier.
+      const delayMs = Math.max(0, Number(this.subtitleDelayMs || 0) || 0);
+      if (delayMs > 0) {
+        const timer = setTimeout(render, delayMs);
+        if (!Array.isArray(this.avplayBuiltInSubtitleTimers)) {
+          this.avplayBuiltInSubtitleTimers = [];
+        }
+        this.avplayBuiltInSubtitleTimers.push(timer);
+      } else {
+        render();
+      }
     };
 
     const onError = (event) => {
@@ -3995,11 +4153,17 @@ export const PlayerScreen = {
       const mediaErrorCode = detailErrorCode || Number(video?.error?.code || 0) || controllerErrorCode;
 
       this.markPlaybackSourceFailed(this.activePlaybackUrl);
-      if (!this.hasPresentedPlaybackFrame && (mediaErrorCode === 3 || mediaErrorCode === 4)) {
+      // Auto-advance to the next source when a source fails before showing any frame.
+      // Include network errors (code 2): an expired plugin/CDN link — common for
+      // "Continue watching" auto-play — fails to connect rather than to decode, and
+      // should silently roll over to the next source instead of dead-ending.
+      if (!this.hasPresentedPlaybackFrame && (mediaErrorCode === 2 || mediaErrorCode === 3 || mediaErrorCode === 4)) {
         const targetEngine = typeof PlayerController.getAlternativePlaybackEngine === "function"
           ? PlayerController.getAlternativePlaybackEngine(this.activePlaybackUrl)
           : null;
-        if (targetEngine) {
+        // A different engine can rescue a decode/format error (3/4) but not a dead
+        // link (network error 2) — for those go straight to the next source.
+        if (targetEngine && mediaErrorCode !== 2) {
           this.lastPlaybackErrorAt = 0;
           this.loadingVisible = true;
           this.paused = false;
@@ -4026,6 +4190,7 @@ export const PlayerScreen = {
           this.paused = false;
           this.sourcesError = null;
           this.updateLoadingVisibility();
+          this.setLoadingStatus(t("player_trying_next_source", {}, "Trying next source…"));
           console.warn("Playback failed during startup; trying next source", {
             url: this.activePlaybackUrl,
             mediaErrorCode,
@@ -4070,7 +4235,8 @@ export const PlayerScreen = {
       ["canplay", onPlayable],
       ["avplaytrackschanged", onTrackListChanged],
       ["hlstrackschanged", onTrackListChanged],
-      ["dashtrackschanged", onTrackListChanged]
+      ["dashtrackschanged", onTrackListChanged],
+      ["avplaysubtitle", onAvPlaySubtitleChange]
     ];
 
     bindings.forEach(([eventName, handler]) => {
@@ -4479,6 +4645,45 @@ export const PlayerScreen = {
     }
   },
 
+  // Status line under the title on the loading screen.
+  setLoadingStatus(text) {
+    const el = this.uiRefs?.loadingStatus;
+    if (el) {
+      el.textContent = String(text || "");
+    }
+  },
+
+  // Cycle through plausible loading stages while a source is being prepared, so the
+  // screen feels alive ("Getting link… / Checking codecs… / …") instead of a static
+  // "Buffering". Real events (trying next source) can still set a one-off message.
+  startLoadingStatusCycle() {
+    this.stopLoadingStatusCycle();
+    const messages = [
+      t("player_status_getting_link", {}, "Getting link…"),
+      t("player_status_checking_codecs", {}, "Checking codecs…"),
+      t("player_status_checking_subtitles", {}, "Checking subtitles…"),
+      t("player_status_buffering", {}, "Buffering…"),
+      t("player_status_loading", {}, "Loading…")
+    ];
+    let index = 0;
+    this.setLoadingStatus(messages[0]);
+    this.loadingStatusTimer = setInterval(() => {
+      if (!this.loadingVisible) {
+        this.stopLoadingStatusCycle();
+        return;
+      }
+      index = (index + 1) % messages.length;
+      this.setLoadingStatus(messages[index]);
+    }, 1300);
+  },
+
+  stopLoadingStatusCycle() {
+    if (this.loadingStatusTimer) {
+      clearInterval(this.loadingStatusTimer);
+      this.loadingStatusTimer = null;
+    }
+  },
+
   updateLoadingVisibility() {
     const overlay = this.uiRefs?.loadingOverlay;
     if (!overlay) {
@@ -4503,6 +4708,8 @@ export const PlayerScreen = {
     overlay.classList.toggle("seek-only", Boolean(this.seekLoading));
     if (!this.loadingVisible) {
       this.seekLoading = false;
+      this.stopLoadingStatusCycle();
+      this.setLoadingStatus("");
     }
     if (this.loadingVisible) {
       this.dismissPauseOverlay();
@@ -5027,6 +5234,7 @@ export const PlayerScreen = {
     this.hasPresentedPlaybackFrame = false;
     this.loadingVisible = true;
     this.updateLoadingVisibility();
+    this.startLoadingStatusCycle();
     this.enableStartupAudioGate();
     this.cancelSeekPreview({ commit: false });
     if (preservePlaybackState) {
@@ -5069,6 +5277,10 @@ export const PlayerScreen = {
     this.startupAudioPreferenceApplying = false;
     this.startupTrackPreferenceReady = false;
     this.builtInSubtitleCount = 0;
+    this.subtitleShowAllAddons = false;
+    this.repositorySubtitlesAll = [];
+    this.repositorySubtitlesFiltered = [];
+    this.sidecarSubtitlesCache = [];
     this.embeddedSubtitleTracks = [];
     this.clearSubtitleCueStyleBindings();
     this.clearMountedExternalSubtitleTracks();
@@ -5157,7 +5369,27 @@ export const PlayerScreen = {
     if (!selected) {
       return;
     }
+    // Remembered on first frame (playback success), not at selection time.
     await this.playStreamCandidate(selected, { preservePlaybackState: true });
+  },
+
+  // Remember a source the user actively switched to, so "Continue watching" auto-plays
+  // the most recently chosen one next time.
+  rememberPlayedSource(stream) {
+    if (!stream) {
+      return;
+    }
+    try {
+      LastSourceStore.save(this.params?.itemId, this.params?.videoId, {
+        addonName: stream.addonName || stream.sourceName || null,
+        sourceName: stream.addonName || stream.sourceName || null,
+        bingeGroup: stream.behaviorHints?.bingeGroup || null,
+        quality: stream.quality || null,
+        provider: stream.provider || null
+      });
+    } catch (_) {
+      // Non-fatal: remembering the source is best-effort.
+    }
   },
 
   markPlaybackSourceFailed(url = this.activePlaybackUrl) {
@@ -6479,6 +6711,19 @@ export const PlayerScreen = {
       const [offEntry] = values.splice(offIndex, 1);
       values.unshift(offEntry);
     }
+    // Offer "Show all languages" when the preferred-language filter is hiding some
+    // fetched addon subtitles (or already showing all so the user can switch back).
+    if (this.subtitleShowAllAddons || this.hasHiddenAddonSubtitleLanguages()) {
+      values.push({
+        key: SUBTITLE_SHOW_ALL_KEY,
+        label: this.subtitleShowAllAddons
+          ? t("subtitle_show_preferred", {}, "Preferred languages")
+          : t("subtitle_show_all", {}, "Show all languages"),
+        selected: false,
+        count: 0,
+        isShowAllToggle: true
+      });
+    }
     this.trackDialogCache.subtitleLanguageRail = values;
     return values;
   },
@@ -6509,6 +6754,15 @@ export const PlayerScreen = {
     }
 
     this.applySubtitleEntry(option.entry);
+    // Remember the language the user actively picked (not startup auto-apply) so it
+    // is restored next time for this title.
+    if (!this.startupSubtitlePreferenceApplying) {
+      try {
+        LastSubtitleStore.save(this.params?.itemId, this.params?.videoId, option.languageKey);
+      } catch (_) {
+        // Non-fatal: remembering the subtitle is best-effort.
+      }
+    }
     return true;
   },
 
@@ -6644,6 +6898,67 @@ export const PlayerScreen = {
       .filter(Boolean);
 
     return Array.from(new Set(targets));
+  },
+
+  // The subtitle language the user last chose for this title/episode (if any).
+  getRememberedSubtitleLanguageKey() {
+    try {
+      const remembered = LastSubtitleStore.get(this.params?.itemId, this.params?.videoId);
+      const key = String(remembered?.languageKey || "").trim().toLowerCase();
+      return key && key !== SUBTITLE_LANGUAGE_OFF_KEY ? key : "";
+    } catch (_) {
+      return "";
+    }
+  },
+
+  // Languages allowed for this title: the remembered choice first (so it auto-applies
+  // and isn't filtered out), then the Settings preferred languages. Drives both the
+  // CC list filter and the startup auto-select.
+  getEffectiveSubtitleLanguageTargets() {
+    const targets = this.getStartupPreferredSubtitleLanguageTargets();
+    const remembered = this.getRememberedSubtitleLanguageKey();
+    return remembered ? Array.from(new Set([remembered, ...targets])) : targets;
+  },
+
+  // Keep only subtitles in the allowed (preferred / remembered) languages. If no
+  // preference is set, or none of the preferred languages have any subtitle for this
+  // title, fall back to all languages so the list is never empty.
+  // True when a preferred-language filter is hiding some fetched addon subtitles,
+  // so the "Show all languages" toggle is worth offering in the CC dialog.
+  hasHiddenAddonSubtitleLanguages() {
+    const all = Array.isArray(this.repositorySubtitlesAll) ? this.repositorySubtitlesAll.length : 0;
+    const shown = Array.isArray(this.repositorySubtitlesFiltered) ? this.repositorySubtitlesFiltered.length : 0;
+    return all > 0 && all > shown;
+  },
+
+  rebuildSubtitlesFromCache() {
+    const sidecar = Array.isArray(this.sidecarSubtitlesCache) ? this.sidecarSubtitlesCache : [];
+    const repository = this.subtitleShowAllAddons
+      ? (this.repositorySubtitlesAll || [])
+      : (this.repositorySubtitlesFiltered || []);
+    this.subtitles = this.mergeSubtitleCandidates(sidecar, repository);
+  },
+
+  toggleSubtitleShowAllAddons() {
+    this.subtitleShowAllAddons = !this.subtitleShowAllAddons;
+    this.rebuildSubtitlesFromCache();
+    this.invalidateTrackDialogCaches();
+    this.refreshSubtitleCueStyles();
+    this.renderSubtitleDialog();
+  },
+
+  filterSubtitlesByPreferredLanguage(subs) {
+    const list = Array.isArray(subs) ? subs : [];
+    const targets = this.getEffectiveSubtitleLanguageTargets();
+    if (!targets.length) {
+      return list;
+    }
+    const allowed = new Set(targets);
+    const filtered = list.filter((sub) => {
+      const key = normalizeSubtitleLanguageKey(sub?.lang || sub?.language || getSubtitleEntryLanguageSource(sub) || "");
+      return key && allowed.has(key);
+    });
+    return filtered.length ? filtered : list;
   },
 
   shouldUseStartupForcedSubtitles(settings = PlayerSettingsStore.get()) {
@@ -6877,7 +7192,7 @@ export const PlayerScreen = {
       : null;
     const preferredTargets = forcedTarget
       ? [forcedTarget]
-      : this.getStartupPreferredSubtitleLanguageTargets();
+      : this.getEffectiveSubtitleLanguageTargets();
     const isStillLoading = this.isSubtitlePreferenceDiscoveryPending();
 
     if (this.shouldUseStartupForcedSubtitles() && !this.collectAudioOptionItems().some((entry) => entry.selected && entry.languageKey) && this.isAudioPreferenceDiscoveryPending()) {
@@ -6957,7 +7272,7 @@ export const PlayerScreen = {
   adjustSubtitleStyleControl(controlId, delta = 0) {
     const style = { ...(this.subtitleStyleSettings || {}) };
     if (controlId === "delay") {
-      this.subtitleDelayMs = clamp(Number(this.subtitleDelayMs || 0) + (delta * SUBTITLE_DELAY_STEP_MS), -5000, 5000);
+      this.subtitleDelayMs = clamp(Number(this.subtitleDelayMs || 0) + (delta * SUBTITLE_DELAY_STEP_MS), -30000, 30000);
     } else if (controlId === "fontSize") {
       style.fontSize = clamp(Number(style.fontSize || 100) + (delta * SUBTITLE_FONT_STEP), 70, 180);
     } else if (controlId === "bold" && delta !== 0) {
@@ -7235,9 +7550,12 @@ export const PlayerScreen = {
       ? "1px 1px 2px rgba(0,0,0,0.9)"
       : `0 0 3px ${outlineColor}, 0 0 6px ${outlineColor}, 1px 1px 2px ${outlineColor}`;
     el.style.opacity = String(clamp(Number(s.textOpacity || 100), 10, 100) / 100);
+    // Use the FULL offset (not just the fractional part) — the AVPlay subtitle is a
+    // DOM overlay with no real "lines", so the whole range should move it. Was only
+    // applying residualOffset, which capped movement at ~+/-1 line.
     const off = splitSubtitleVerticalOffset(s.verticalOffset);
-    const residual = Number(off?.residualOffset || 0) || 0;
-    overlay.style.bottom = `${Math.max(2, 9 + residual * 2)}vh`;
+    const value = Number(off?.value || 0) || 0;
+    overlay.style.bottom = `${Math.max(2, Math.min(80, 9 + value * 2))}vh`;
   },
 
   parseVttToCues(vtt) {
@@ -7299,7 +7617,10 @@ export const PlayerScreen = {
     };
     const tick = () => {
       if (!this.avplaySubtitleCues) return;
-      const delayMs = Number(this.subtitleStyleSettings?.delay || 0) || 0;
+      // Delay lives in this.subtitleDelayMs (the Delay control writes there); the old
+      // code read subtitleStyleSettings.delay, which is never set, so the adjustment
+      // did nothing. Positive delay shows cues later; negative shows them earlier.
+      const delayMs = Number(this.subtitleDelayMs || 0) || 0;
       const t = readAvPlayTimeMs() - delayMs;
       let active = "";
       const list = this.avplaySubtitleCues;
@@ -7326,6 +7647,10 @@ export const PlayerScreen = {
     if (this.avplaySubtitleTimer) {
       clearInterval(this.avplaySubtitleTimer);
       this.avplaySubtitleTimer = null;
+    }
+    if (Array.isArray(this.avplayBuiltInSubtitleTimers)) {
+      this.avplayBuiltInSubtitleTimers.forEach((timer) => clearTimeout(timer));
+      this.avplayBuiltInSubtitleTimers = [];
     }
     this.avplaySubtitleCues = null;
     this.avplaySubtitleActiveText = null;
@@ -7469,7 +7794,8 @@ export const PlayerScreen = {
     const styleItems = this.getSubtitleStyleControls();
     this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex, 0, Math.max(0, styleItems.length - 1));
     const subtitleLoadingVisible = this.embeddedSubtitleLoading && this.canDiscoverEmbeddedSubtitleTracks();
-    const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY || subtitleLoadingVisible;
+    const showOptionsRail = (activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY
+      && activeLanguage !== SUBTITLE_SHOW_ALL_KEY) || subtitleLoadingVisible;
     const focusedStyleSide = this.subtitleStyleControlSide === "plus" ? "plus" : "minus";
     const emptySubtitleOptionsMarkup = subtitleLoadingVisible
       ? `<div class="player-dialog-empty">${escapeHtml(t("subtitle_loading_builtin", {}, "Loading subtitle tracks..."))}</div>`
@@ -7590,6 +7916,10 @@ export const PlayerScreen = {
       if (this.subtitleFocusedRail === "language") {
         const language = languages[this.subtitleLanguageRailIndex];
         if (!language) {
+          return true;
+        }
+        if (language.isShowAllToggle || language.key === SUBTITLE_SHOW_ALL_KEY) {
+          this.toggleSubtitleShowAllAddons();
           return true;
         }
         if (language.key === SUBTITLE_LANGUAGE_OFF_KEY) {
@@ -8416,7 +8746,7 @@ export const PlayerScreen = {
       <div class="player-sources-header">
         <div class="player-sources-title">${escapeHtml(t("sources_title", {}, "Sources"))}</div>
         <div class="player-sources-actions">
-          <button class="player-sources-top-btn focusable${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload" data-sources-zone="top" data-sources-index="0">${escapeHtml(t("sources_reload", {}, "Reload"))}</button>
+          <button class="player-sources-top-btn focusable${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 0 ? " focused" : ""}" data-top-action="reload" data-sources-zone="top" data-sources-index="0">${escapeHtml(t("sources_reload", {}, "Reload links"))}</button>
           <button class="player-sources-top-btn focusable${this.sourcesFocus.zone === "top" && this.sourcesFocus.index === 1 ? " focused" : ""}" data-top-action="close" data-sources-zone="top" data-sources-index="1">${escapeHtml(t("sources_close", {}, "Close"))}</button>
         </div>
       </div>
@@ -8447,20 +8777,19 @@ export const PlayerScreen = {
           : filtered.map((stream, index) => {
             const focused = this.sourcesFocus.zone === "list" && this.sourcesFocus.index === index;
             const isCurrent = this.streamCandidates[this.currentStreamIndex]?.url === stream.url;
+            // Render the same rich card the full Sources screen uses (badges, codec
+            // line, size/source meta) via the shared helpers and stream-route-* styles.
+            const headline = getStreamHeadline(stream);
+            const badges = renderStreamBadges(stream, true);
+            const descriptionLines = getStreamDescriptionLines(stream);
+            const metaHtml = getStreamCardMetaHtml(stream);
             return `
               <article class="player-source-card focusable${focused ? " focused" : ""}${isCurrent ? " selected" : ""}" data-sources-zone="list" data-sources-index="${index}">
-                <div class="player-source-main">
-                  <div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>
-                  <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
-                  <div class="player-source-tags">
-                    <span class="player-source-tag">${escapeHtml(qualityLabelFromText(`${stream.label} ${stream.description}`))}</span>
-                    <span class="player-source-tag">${escapeHtml(String(stream.sourceType || "stream") || "stream")}</span>
-                  </div>
-                </div>
-                <div class="player-source-side">
-                  ${stream.addonLogo ? `<img class="player-source-logo" src="${escapeAttribute(stream.addonLogo)}" alt="" decoding="async" loading="lazy" />` : ""}
-                  <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
-                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>` : ""}
+                <div class="player-source-main stream-route-card-copy">
+                  <div class="stream-route-card-heading">${escapeHtml(headline)}${isCurrent ? `<span class="player-source-playing-inline">${escapeHtml(t("sources_playing", {}, "Playing"))}</span>` : ""}</div>
+                  ${badges || `<div class="stream-route-card-quality">${escapeHtml(getStreamQuality(stream))}</div>`}
+                  ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml(line)}</div>`).join("")}
+                  ${metaHtml ? `<div class="stream-route-card-meta">${metaHtml}</div>` : ""}
                 </div>
               </article>
             `;
@@ -8520,9 +8849,24 @@ export const PlayerScreen = {
     }
 
     if (zone === "list") {
-      if (direction === "up") {
-        if (index > 0) {
+      // The list renders as a 2-column grid, so navigation is 2D: left/right move
+      // within a row, up/down move a whole row (index +/- 2).
+      const COLS = 2;
+      if (direction === "left") {
+        if (index % COLS > 0) {
           this.sourcesFocus = { zone: "list", index: index - 1 };
+        }
+        return;
+      }
+      if (direction === "right") {
+        if (index % COLS < COLS - 1 && index + 1 < list.length) {
+          this.sourcesFocus = { zone: "list", index: index + 1 };
+        }
+        return;
+      }
+      if (direction === "up") {
+        if (index >= COLS) {
+          this.sourcesFocus = { zone: "list", index: index - COLS };
         } else if (filters.length) {
           this.sourcesFocus = { zone: "filter", index: clamp(filters.indexOf(this.sourceFilter), 0, filters.length - 1) };
         } else {
@@ -8531,7 +8875,13 @@ export const PlayerScreen = {
         return;
       }
       if (direction === "down") {
-        this.sourcesFocus = { zone: "list", index: clamp(index + 1, 0, Math.max(0, list.length - 1)) };
+        const next = index + COLS;
+        if (next < list.length) {
+          this.sourcesFocus = { zone: "list", index: next };
+        } else if (index < list.length - 1) {
+          // Drop into the last (partial) row.
+          this.sourcesFocus = { zone: "list", index: list.length - 1 };
+        }
       }
     }
   },
@@ -8580,6 +8930,7 @@ export const PlayerScreen = {
 
     const selectedStream = list[clamp(index, 0, Math.max(0, list.length - 1))] || null;
     if (selectedStream) {
+      // Remembered on first frame (playback success), not at selection time.
       await this.playStreamCandidate(selectedStream, { preservePlaybackState: true });
     }
   },
@@ -8640,8 +8991,8 @@ export const PlayerScreen = {
   applyAspectMode({ showToast = false } = {}) {
     const mode = this.aspectModes[this.aspectModeIndex] || this.aspectModes[0];
     const video = PlayerController.video;
+    const rect = this.calculateAspectRect(mode.objectFit, video);
     if (video) {
-      const rect = this.calculateAspectRect(mode.objectFit, video);
       video.style.position = "fixed";
       video.style.left = `${Math.round(rect.x)}px`;
       video.style.top = `${Math.round(rect.y)}px`;
@@ -8651,9 +9002,30 @@ export const PlayerScreen = {
       video.style.maxHeight = "none";
       video.style.objectFit = "fill";
       video.style.background = "black";
-      if (typeof PlayerController.setAvPlayDisplayRect === "function") {
-        PlayerController.setAvPlayDisplayRect(rect, rect.displayMethod);
+    }
+    // AVPlay (Tizen) has no <video> element — drive the hardware video plane via the
+    // display rect + method, so Fit / Fill / Stretch actually work there too.
+    if (typeof PlayerController.setAvPlayDisplayRect === "function"
+      && typeof PlayerController.isUsingAvPlay === "function"
+      && PlayerController.isUsingAvPlay()) {
+      const vp = typeof PlayerController.getAvPlayViewportSize === "function"
+        ? PlayerController.getAvPlayViewportSize()
+        : { width: 1920, height: 1080 };
+      // All three modes use a clean full-screen rect and differ only by AVPlay's
+      // display METHOD (passing an oversized rect did nothing — FULL_SCREEN ignores
+      // the rect, so Fill looked identical to Stretch):
+      //   Fit     -> LETTER_BOX    (keep aspect, black bars)
+      //   Fill    -> CROPPED_FULL  (keep aspect, zoom + crop to fill screen)
+      //   Stretch -> FULL_SCREEN   (ignore aspect, stretch to fill)
+      let method;
+      if (mode.objectFit === "cover") {
+        method = "PLAYER_DISPLAY_MODE_CROPPED_FULL";
+      } else if (mode.objectFit === "contain") {
+        method = "PLAYER_DISPLAY_MODE_LETTER_BOX";
+      } else {
+        method = "PLAYER_DISPLAY_MODE_FULL_SCREEN";
       }
+      PlayerController.setAvPlayDisplayRect({ x: 0, y: 0, width: vp.width, height: vp.height }, method);
     }
     if (showToast) {
       this.showAspectToast(mode.label);
@@ -8661,12 +9033,16 @@ export const PlayerScreen = {
   },
 
   calculateAspectRect(objectFit = "contain", video = PlayerController.video) {
-    const viewport = typeof PlayerController.getPlayerViewportSize === "function"
-      ? PlayerController.getPlayerViewportSize()
-      : {
-        width: Math.max(1, Number(window.innerWidth || document.documentElement?.clientWidth || globalThis.screen?.width || 1920)),
-        height: Math.max(1, Number(window.innerHeight || document.documentElement?.clientHeight || globalThis.screen?.height || 1080))
-      };
+    // Prefer the stable layout viewport (1920x1080) over the #player element rect,
+    // which can transiently measure taller than the screen and skew the centering.
+    const viewport = typeof PlayerController.getAvPlayViewportSize === "function"
+      ? PlayerController.getAvPlayViewportSize()
+      : (typeof PlayerController.getPlayerViewportSize === "function"
+        ? PlayerController.getPlayerViewportSize()
+        : {
+          width: Math.max(1, Number(window.innerWidth || document.documentElement?.clientWidth || globalThis.screen?.width || 1920)),
+          height: Math.max(1, Number(window.innerHeight || document.documentElement?.clientHeight || globalThis.screen?.height || 1080))
+        });
     const viewportWidth = viewport.width;
     const viewportHeight = viewport.height;
     if (objectFit === "fill") {
@@ -8942,6 +9318,7 @@ export const PlayerScreen = {
     this.subtitleLoading = true;
 
     const sidecarSubtitles = this.collectStreamSidecarSubtitles();
+    this.sidecarSubtitlesCache = sidecarSubtitles;
     const subtitleLookup = this.buildSubtitleLookupContext();
     try {
       this.subtitles = this.mergeSubtitleCandidates(sidecarSubtitles, []);
@@ -8970,7 +9347,16 @@ export const PlayerScreen = {
         return;
       }
 
-      this.subtitles = this.mergeSubtitleCandidates(sidecarSubtitles, repositorySubtitles);
+      // Only load addon subtitles in the preferred / remembered languages (Settings).
+      // Sidecar subs that ship with the chosen stream are kept regardless.
+      const filteredRepositorySubtitles = this.filterSubtitlesByPreferredLanguage(repositorySubtitles);
+      this.repositorySubtitlesAll = repositorySubtitles;
+      this.repositorySubtitlesFiltered = filteredRepositorySubtitles;
+      this.sidecarSubtitlesCache = sidecarSubtitles;
+      const repositoryForDisplay = this.subtitleShowAllAddons
+        ? repositorySubtitles
+        : filteredRepositorySubtitles;
+      this.subtitles = this.mergeSubtitleCandidates(sidecarSubtitles, repositoryForDisplay);
       if (this.subtitleDialogVisible && this.subtitleDialogTab === "builtIn") {
         const builtInBoundary = this.resolveBuiltInSubtitleBoundary(this.getTextTracks());
         if (builtInBoundary <= 0 && this.subtitles.length > 0) {
