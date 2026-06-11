@@ -1,19 +1,11 @@
 import "./runtime/polyfills.js";
-import "intersection-observer";  
+import "intersection-observer";
 import "whatwg-fetch";
-
-(function applyLegacyPatches() {
-  const originalGetElementById = document.getElementById;
-  document.getElementById = function(id) {
-    if (id === undefined || id === null || id === "") return null;
-    return originalGetElementById.call(document, id);
-  };
-
-  if (typeof Node === "undefined") {
-    globalThis.Node = { ELEMENT_NODE: 1 };
-  }
-})();
-
+import { detailWatchedEnrichmentService } from "./data/repository/detailWatchedEnrichmentService.js";
+import {
+  preloadStreamBadgeImages,
+  resetAddonLogoCache,
+} from "./ui/screens/stream/streamScreen.js";
 import { Router } from "./ui/navigation/router.js";
 import { FocusEngine } from "./ui/navigation/focusEngine.js";
 import { PlayerController } from "./core/player/playerController.js";
@@ -24,13 +16,24 @@ import { ProfileSyncService } from "./core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "./core/profile/profileSettingsSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
-import { preloadStreamBadgeImages, resetAddonLogoCache } from "./ui/screens/stream/streamScreen.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
 import { warmStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
+
+(function applyLegacyPatches() {
+  const originalGetElementById = document.getElementById;
+  document.getElementById = function (id) {
+    if (id === undefined || id === null || id === "") return null;
+    return originalGetElementById.call(document, id);
+  };
+
+  if (typeof Node === "undefined") {
+    globalThis.Node = { ELEMENT_NODE: 1 };
+  }
+})();
 
 const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
 const SIGNED_OUT_ALLOWED_ROUTES = new Set(["trakt"]);
@@ -101,13 +104,19 @@ function supportsAspectRatio() {
 }
 
 function applyPerformanceMode() {
-  const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
-  const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
+  const constrained =
+    Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
+  const webOsMajorVersion = Platform.isWebOS()
+    ? Number(Platform.getWebOsMajorVersion() || 0)
+    : 0;
   const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
   const legacyTizen = Platform.isTizen();
   const flexGapUnsupported = !supportsFlexGap();
   const aspectRatioUnsupported = !supportsAspectRatio();
-  document.documentElement.classList.toggle("performance-constrained", constrained);
+  document.documentElement.classList.toggle(
+    "performance-constrained",
+    constrained,
+  );
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
   document.body.classList.toggle("legacy-webos", legacyWebOs);
@@ -115,13 +124,18 @@ function applyPerformanceMode() {
   document.body.classList.toggle("legacy-tizen", legacyTizen);
   document.documentElement.classList.toggle("no-flex-gap", flexGapUnsupported);
   document.body.classList.toggle("no-flex-gap", flexGapUnsupported);
-  document.documentElement.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
+  document.documentElement.classList.toggle(
+    "no-aspect-ratio",
+    aspectRatioUnsupported,
+  );
   document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
 }
 
 function isAddonRemoteMode() {
   try {
-    return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
+    return (
+      new URLSearchParams(window.location.search).get("addonsRemote") === "1"
+    );
   } catch {
     return false;
   }
@@ -132,9 +146,15 @@ async function shouldShowProfileSelection() {
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
   const pinStates = await ProfileSyncService.pullProfileLockStates();
-  const activeProfileHasPin = Boolean(pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]);
+  const activeProfileHasPin = Boolean(
+    pinStates?.[String(activeProfileId)] ||
+    pinStates?.[Number(activeProfileId)],
+  );
 
-  return !hasSelectedProfileThisSession && (profiles.length > 1 || activeProfileHasPin);
+  return (
+    !hasSelectedProfileThisSession &&
+    (profiles.length > 1 || activeProfileHasPin)
+  );
 }
 
 async function routeAfterAuthentication() {
@@ -147,9 +167,15 @@ async function routeAfterAuthentication() {
   hasSelectedProfileThisSession = true;
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
-  const activeProfile = profiles.find((profile) => String(profile.id) === String(activeProfileId)) || profiles[0] || null;
+  const activeProfile =
+    profiles.find(
+      (profile) => String(profile.id) === String(activeProfileId),
+    ) ||
+    profiles[0] ||
+    null;
   if (activeProfile) {
     await ProfileManager.setActiveProfile(activeProfile.id);
+    detailWatchedEnrichmentService.invalidateAllCache();
     await ProfileSettingsSyncService.pull(activeProfile.id);
   }
   Router.navigate("home");
@@ -165,9 +191,9 @@ async function bootstrapApp() {
 
   Router.init();
   PlayerController.init();
-  
-  FocusEngine.init(); 
-  
+
+  FocusEngine.init();
+
   ThemeManager.apply();
   I18n.apply();
   warmStreamingLibs({ delayMs: 1400 });
@@ -181,23 +207,29 @@ async function bootstrapApp() {
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
       hasSelectedProfileThisSession = false;
-      const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
+      const shouldBypassQr = Boolean(
+        LocalStore.get(GUEST_QR_BYPASS_KEY, false),
+      );
       if (isSignedOutRouteAllowed()) {
         return;
       }
       if (shouldBypassQr) {
         ProfileManager.clearActiveProfile();
         if (Router.getCurrent() !== "profileSelection") {
-          Router.navigate("profileSelection", {}, {
-            replaceHistory: true,
-            skipStackPush: true
-          });
+          Router.navigate(
+            "profileSelection",
+            {},
+            {
+              replaceHistory: true,
+              skipStackPush: true,
+            },
+          );
         }
         return;
       }
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       Router.navigate("authQrSignIn", {
-        onboardingMode: !hasSeenQr
+        onboardingMode: !hasSeenQr,
       });
     }
 
@@ -221,15 +253,23 @@ async function bootstrapAddonRemoteMode() {
 }
 
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
-    bootstrap().catch((error) => {
-      console.error("App bootstrap failed", error);
-      renderFatalError(error);
-    });
-  }, { once: true });
+  document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+      const bootstrap = isAddonRemoteMode()
+        ? bootstrapAddonRemoteMode
+        : bootstrapApp;
+      bootstrap().catch((error) => {
+        console.error("App bootstrap failed", error);
+        renderFatalError(error);
+      });
+    },
+    { once: true },
+  );
 } else {
-  const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
+  const bootstrap = isAddonRemoteMode()
+    ? bootstrapAddonRemoteMode
+    : bootstrapApp;
   bootstrap().catch((error) => {
     console.error("App bootstrap failed", error);
     renderFatalError(error);

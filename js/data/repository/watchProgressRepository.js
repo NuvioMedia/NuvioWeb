@@ -3,6 +3,8 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 import { ContinueWatchingPreferences } from "../local/continueWatchingPreferences.js";
 import { TraktSettingsStore, WatchProgressSource } from "../local/traktSettingsStore.js";
 import { TraktAuthStore } from "../local/traktAuthStore.js";
+import { TraktAuthService } from "./traktAuthService.js";
+import { metaRepository } from "./metaRepository.js";
 
 const CW_PROGRESS_START_THRESHOLD = 0.02;
 const CW_PROGRESS_END_THRESHOLD = 0.85;
@@ -104,10 +106,7 @@ function shouldTreatAsInProgressForContinueWatching(item = {}) {
     return false;
   }
   const hasStartedPlayback = Number(item.positionMs || 0) > 0 || Number(item.progressPercent || 0) > 0;
-  const source = String(item.source || "").toLowerCase();
-  return hasStartedPlayback
-    && source !== "trakt_history"
-    && source !== "trakt_show_progress";
+  return hasStartedPlayback;
 }
 
 function isTraktProgressItem(item = {}) {
@@ -124,7 +123,8 @@ function selectedContinueWatchingSource() {
 
 function filterForSelectedContinueWatchingSource(items = []) {
   const useTrakt = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
-  return (Array.isArray(items) ? items : []).filter((item) => (
+  const all = Array.isArray(items) ? items : [];
+  return all.filter((item) => (
     useTrakt ? isTraktProgressItem(item) : !isTraktProgressItem(item)
   ));
 }
@@ -159,6 +159,108 @@ function deduplicateInProgress(items = []) {
     .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
 }
 
+function toProgressItemFromTraktHistory(historyItem) {
+  if (!historyItem) return null;
+  const isEpisode = historyItem.type === "episode";
+  const tmdbId = isEpisode ? historyItem.showTmdbId : historyItem.tmdbId;
+  const contentId = tmdbId ? `tmdb:${tmdbId}` : historyItem.traktId ? `trakt:${historyItem.traktId}` : null;
+  if (!contentId) return null;
+  const watchedAtMs = historyItem.watchedAt ? new Date(historyItem.watchedAt).getTime() : Date.now();
+  return {
+    contentId,
+    videoId: isEpisode && historyItem.episodeTmdbId ? `tmdb:${historyItem.episodeTmdbId}` : contentId,
+    contentType: isEpisode ? "series" : "movie",
+    title: isEpisode ? historyItem.showTitle : historyItem.title,
+    year: isEpisode ? historyItem.showYear : historyItem.year,
+    imdbId: isEpisode ? historyItem.showImdbId : historyItem.imdbId,
+    source: "trakt_history",
+    updatedAt: watchedAtMs,
+    positionMs: 0,
+    durationMs: 0,
+    progressPercent: 80,
+    profileId: activeProfileId(),
+    seasonNumber: isEpisode ? historyItem.seasonNumber : undefined,
+    episodeNumber: isEpisode ? historyItem.episodeNumber : undefined,
+    episodeTitle: isEpisode ? historyItem.episodeTitle : undefined
+  };
+}
+
+function toProgressItemFromPlayback(playbackItem) {
+  if (!playbackItem || playbackItem.progressPercent == null) return null;
+  const progressFraction = playbackItem.progressPercent / 100;
+  if (progressFraction < CW_PROGRESS_START_THRESHOLD || progressFraction >= CW_PROGRESS_END_THRESHOLD) return null;
+  const isEpisode = playbackItem.type === "episode";
+  const pausedAtMs = playbackItem.pausedAt ? new Date(playbackItem.pausedAt).getTime() : Date.now();
+  return {
+    contentId: playbackItem.contentId,
+    videoId: playbackItem.videoId,
+    contentType: isEpisode ? "series" : "movie",
+    title: playbackItem.title || "",
+    year: playbackItem.year,
+    imdbId: playbackItem.imdbId,
+    source: "trakt_playback",
+    updatedAt: pausedAtMs,
+    positionMs: 0,
+    durationMs: 0,
+    progressPercent: playbackItem.progressPercent,
+    profileId: activeProfileId(),
+    seasonNumber: playbackItem.seasonNumber,
+    episodeNumber: playbackItem.episodeNumber,
+    episodeTitle: playbackItem.episodeTitle
+  };
+}
+
+function toNextEpisodeItem(watchedShowItem) {
+  if (!watchedShowItem || !watchedShowItem.nextEpisode) return null;
+  const { nextEpisode, contentId, title, year, imdbId } = watchedShowItem;
+  return {
+    contentId,
+    videoId: null,
+    contentType: "series",
+    title: title || "",
+    year,
+    imdbId,
+    source: "trakt_watched_show",
+    updatedAt: Date.now(),
+    positionMs: 0,
+    durationMs: 0,
+    progressPercent: 0,
+    profileId: activeProfileId(),
+    seasonNumber: nextEpisode.season,
+    episodeNumber: nextEpisode.number,
+    episodeTitle: nextEpisode.title || undefined
+  };
+}
+
+// Cache for enriched metadata (5-minute TTL)
+const enrichedMetaCache = new Map();
+const ENRICHED_META_CACHE_TTL_MS = 5 * 60 * 1000;
+
+async function batchEnrichProgressItems(items) {
+  if (!items.length) return [];
+  const now = Date.now();
+  const results = [];
+
+  for (const item of items) {
+    const lookupId = item.imdbId || item.contentId;
+    const cacheKey = `${item.contentType}:${lookupId}`;
+    const cached = enrichedMetaCache.get(cacheKey);
+
+    let meta = null;
+    if (cached && (now - cached.timestamp) < ENRICHED_META_CACHE_TTL_MS) {
+      meta = cached.meta;
+    } else {
+      const canonicalType = item.contentType === "series" ? "series" : "movie";
+      meta = await metaRepository.getMetaFromAllAddons(canonicalType, lookupId).catch(() => null);
+      enrichedMetaCache.set(cacheKey, { meta, timestamp: now });
+    }
+
+    results.push(meta ? { ...item, enrichedMeta: meta } : item);
+  }
+
+  return results;
+}
+
 class WatchProgressRepository {
 
   async saveProgress(progress) {
@@ -190,7 +292,37 @@ class WatchProgressRepository {
     const useTraktProgress = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
     const daysCap = Number(TraktSettingsStore.get().continueWatchingDaysCap || 60);
     const cutoffMs = !useTraktProgress || daysCap === 0 ? 0 : now - (daysCap * 24 * 60 * 60 * 1000);
-    const recentItems = filterForSelectedContinueWatchingSource(WatchProgressStore.listForProfile(activeProfileId()))
+
+    let traktHistoryItems = [];
+    let playbackItems = [];
+    let nextEpisodeItems = [];
+
+    if (useTraktProgress && TraktAuthStore.isAuthenticated()) {
+      // Parallelize all Trakt fetches via Promise.all
+      const [history, playbackState, watchedShows] = await Promise.all([
+        TraktAuthService.fetchWatchHistory({ limit: 100 }).catch((err) => {
+          console.warn("[CW] Trakt history fetch failed", err);
+          return [];
+        }),
+        TraktAuthService.fetchPlaybackState({ limit: 50 }).catch((err) => {
+          console.warn("[CW] Trakt playback state fetch failed", err);
+          return [];
+        }),
+        TraktAuthService.fetchWatchedShows().catch((err) => {
+          console.warn("[CW] Trakt watched shows fetch failed", err);
+          return [];
+        })
+      ]);
+
+      traktHistoryItems = history.map(toProgressItemFromTraktHistory).filter(Boolean);
+      playbackItems = playbackState.map(toProgressItemFromPlayback).filter(Boolean);
+      nextEpisodeItems = watchedShows.map(toNextEpisodeItem).filter(Boolean);
+    }
+
+    const localItems = WatchProgressStore.listForProfile(activeProfileId());
+    const allItems = [...localItems, ...traktHistoryItems, ...playbackItems, ...nextEpisodeItems];
+
+    const recentItems = filterForSelectedContinueWatchingSource(allItems)
       .filter((item) => cutoffMs === 0 || Number(item?.updatedAt || 0) >= cutoffMs)
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
       .slice(0, 300);
@@ -199,7 +331,8 @@ class WatchProgressRepository {
       recentItems.filter((item) => shouldTreatAsInProgressForContinueWatching(item))
     );
 
-    return inProgressOnly.slice(0, limit);
+    const enrichedItems = await batchEnrichProgressItems(inProgressOnly.slice(0, limit));
+    return enrichedItems;
   }
 
   async getAll() {

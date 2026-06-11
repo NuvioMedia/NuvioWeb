@@ -53,8 +53,8 @@ class MetaRepository {
   }
 
   async getMetaFromAllAddons(type, id) {
-    const requestedType = String(type || "").trim();
-    const inferredType = this.inferCanonicalType(requestedType, id);
+    const requestedType = this.inferCanonicalType(String(type || "").trim(), id);
+    const inferredType = requestedType;
     const cacheKey = `all:${requestedType}:${inferredType}:${String(id || "").trim()}`;
     if (this.metaCache.has(cacheKey)) {
       return { status: "success", data: this.metaCache.get(cacheKey) };
@@ -149,14 +149,17 @@ class MetaRepository {
 
   inferCanonicalType(type, id) {
     const normalizedType = String(type || "").trim();
-    const known = new Set(["movie", "series", "tv", "channel", "anime"]);
-    if (known.has(normalizedType.toLowerCase())) {
+    const lowerType = normalizedType.toLowerCase();
+    if (lowerType === "tv") {
+      return "series";
+    }
+    const known = new Set(["movie", "series", "channel", "anime"]);
+    if (known.has(lowerType)) {
       return normalizedType;
     }
     const normalizedId = String(id || "").toLowerCase();
     if (normalizedId.includes(":movie:")) return "movie";
     if (normalizedId.includes(":series:")) return "series";
-    if (normalizedId.includes(":tv:")) return "tv";
     if (normalizedId.includes(":anime:")) return "anime";
     return normalizedType;
   }

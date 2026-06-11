@@ -66,7 +66,11 @@ class AddonRepository {
   getInstalledAddonUrls() {
     const fromStorage = LocalStore.get(ADDON_URLS_KEY, null);
     if (Array.isArray(fromStorage)) {
-      const normalized = Array.from(new Set(fromStorage.map((url) => this.canonicalizeUrl(url)).filter(Boolean)));
+      const normalized = Array.from(new Set(
+        fromStorage
+          .map((url) => this.normalizeCinemetaUrl(this.canonicalizeUrl(url)))
+          .filter(Boolean)
+      ));
       if (JSON.stringify(normalized) !== JSON.stringify(fromStorage)) {
         LocalStore.set(ADDON_URLS_KEY, normalized);
       }
@@ -245,7 +249,7 @@ class AddonRepository {
   }
 
   async addAddon(url) {
-    const clean = this.canonicalizeUrl(url);
+    const clean = this.normalizeCinemetaUrl(this.canonicalizeUrl(url));
     if (!clean) {
       return;
     }
@@ -263,7 +267,7 @@ class AddonRepository {
   }
 
   async removeAddon(url) {
-    const clean = this.canonicalizeUrl(url);
+    const clean = this.normalizeCinemetaUrl(this.canonicalizeUrl(url));
     const current = this.getInstalledAddonUrls();
     const next = current.filter((value) => this.canonicalizeUrl(value) !== clean);
     if (next.length === current.length) {
@@ -278,7 +282,7 @@ class AddonRepository {
   }
 
   async refreshAddon(url) {
-    const clean = this.canonicalizeUrl(url);
+    const clean = this.normalizeCinemetaUrl(this.canonicalizeUrl(url));
     if (!clean) {
       return { status: "error", message: "Invalid addon URL" };
     }
@@ -295,7 +299,7 @@ class AddonRepository {
 
   async setAddonOrder(urls, options = {}) {
     const silent = Boolean(options?.silent);
-    const normalized = (urls || []).map((url) => this.canonicalizeUrl(url)).filter(Boolean);
+    const normalized = (urls || []).map((url) => this.normalizeCinemetaUrl(this.canonicalizeUrl(url))).filter(Boolean);
     const current = this.getInstalledAddonUrls();
     const changed = JSON.stringify(current) !== JSON.stringify(normalized);
     LocalStore.set(ADDON_URLS_KEY, normalized);
@@ -412,6 +416,13 @@ class AddonRepository {
 
       return null;
     }).filter(Boolean);
+  }
+
+  normalizeCinemetaUrl(url) {
+    return String(url || "").replace(
+      /https?:\/\/cinemeta-v3\.strem\.io/i,
+      "https://v3-cinemeta.strem.io"
+    );
   }
 
   getBuiltinFallbackManifest(baseUrl) {

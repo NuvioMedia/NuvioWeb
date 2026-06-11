@@ -10,6 +10,7 @@ import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
 import { Router } from "../../navigation/router.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
+import { TraktScrobbleService } from "../../../data/repository/traktScrobbleService.js";
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
@@ -1187,6 +1188,15 @@ function normalizePlayableImdbId(value = "") {
   return /^tt\d+$/i.test(candidate) ? candidate : "";
 }
 
+function normalizePlayableTmdbId(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw || /^tt\d+$/i.test(raw)) {
+    return 0;
+  }
+  const numeric = raw.replace(/^tmdb:/i, "").split(":")[0];
+  return /^\d+$/.test(numeric) ? Number(numeric) : 0;
+}
+
 function buildSkipIntervalLabel(interval = {}) {
   const type = String(interval?.type || "").trim().toLowerCase();
   if (type === "recap") {
@@ -1627,11 +1637,39 @@ export const PlayerScreen = {
       normalizePlayableImdbId(rawVideoId),
       normalizePlayableImdbId(rawItemId)
     ].find(Boolean) || "";
+    const tmdbId = [
+      normalizePlayableTmdbId(this.params?.tmdbId || this.params?.tmdb_id),
+      normalizePlayableTmdbId(rawItemId),
+      normalizePlayableTmdbId(rawVideoId)
+    ].find(Boolean) || 0;
     return {
       itemType,
       imdbId,
+      tmdbId,
       season: Number.isFinite(season) && season > 0 ? season : null,
       episode: Number.isFinite(episode) && episode > 0 ? episode : null
+    };
+  },
+
+  buildScrobbleContext() {
+    const identity = this.buildPlaybackIdentityContext();
+    const currentSec = this.getPlaybackCurrentSeconds();
+    const durationSec = this.getPlaybackDurationSeconds();
+    const progress =
+      durationSec > 0 ? Math.min(100, (currentSec / durationSec) * 100) : 0;
+    return {
+      contentId: String(this.params?.itemId || identity.imdbId || ""),
+      contentType: identity.itemType === "series" ? "series" : "movie",
+      imdbId: identity.imdbId,
+      tmdbId: identity.tmdbId || null,
+      title: String(this.params?.playerTitle || this.params?.itemTitle || this.params?.title || ""),
+      year: Number(this.params?.playerReleaseYear || this.params?.releaseYear || this.params?.year || 0) || null,
+      seasonNumber: identity.season,
+      episodeNumber: identity.episode,
+      episodeTitle: String(this.params?.playerEpisodeTitle || this.params?.episodeTitle || this.params?.playerSubtitle || ""),
+      positionMs: Math.round(currentSec * 1000),
+      durationMs: Math.round(durationSec * 1000),
+      progressPercent: progress,
     };
   },
 
@@ -4696,6 +4734,10 @@ export const PlayerScreen = {
         this.scheduleLoadingCompletionCheck(250);
         return;
       }
+      // Fire-and-forget scrobble start (debounced internally)
+      if (TraktScrobbleService.isEnabled()) {
+        TraktScrobbleService.start(this.buildScrobbleContext());
+      }
       this.lastPlaybackErrorAt = 0;
       this.sourcesError = "";
       this.hasPresentedPlaybackFrame = true;
@@ -4734,6 +4776,10 @@ export const PlayerScreen = {
         : Boolean(video.ended);
       if (ended) {
         return;
+      }
+      // Immediate scrobble pause
+      if (TraktScrobbleService.isEnabled()) {
+        TraktScrobbleService.pause(this.buildScrobbleContext());
       }
       this.clearPlaybackStallGuard();
       this.paused = true;
@@ -11039,6 +11085,10 @@ export const PlayerScreen = {
   },
 
   async handlePlaybackEnded() {
+    // Immediate scrobble stop (may trigger mark-as-watched)
+    if (TraktScrobbleService.isEnabled()) {
+      TraktScrobbleService.stop(this.buildScrobbleContext());
+    }
     this.clearPlaybackStallGuard();
     this.releaseStartupAudioGate({ resume: false });
     const autoplayEnabled = Boolean(PlayerSettingsStore.get().autoplayNextEpisode);
@@ -11071,6 +11121,7 @@ export const PlayerScreen = {
   },
 
   cleanup() {
+    TraktScrobbleService.cancel();
     this.unbindPlayerExitCleanup();
     this.releaseCurrentEngineFsStreamBestEffort("player-cleanup", { removeTorrent: true });
     this.cancelSeekPreview({ commit: false });

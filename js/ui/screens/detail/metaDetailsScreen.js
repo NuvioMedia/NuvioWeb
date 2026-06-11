@@ -8,6 +8,7 @@ import { watchProgressRepository } from "../../../data/repository/watchProgressR
 import { savedLibraryRepository } from "../../../data/repository/savedLibraryRepository.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { libraryRepository } from "../../../data/repository/libraryRepository.js";
+import { detailWatchedEnrichmentService } from "../../../data/repository/detailWatchedEnrichmentService.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
@@ -1275,8 +1276,28 @@ export const MetaDetailsScreen = {
       ];
       if (isSeriesDetailMeta(this.meta, this.episodes)) {
         tasks.push(withTimeout(this.fetchSeriesRatingsBySeason(this.meta), 5000, {}));
+        const traktId = this.meta?.ids?.trakt;
+        if (traktId) {
+          tasks.push(
+            withTimeout(
+              detailWatchedEnrichmentService.enrichSeriesWatchedState(this.episodes, this.params?.itemId, traktId),
+              4500,
+              new Map()
+            )
+          );
+        }
       } else {
         tasks.push(withTimeout(this.fetchMovieCollection(this.meta), 5000, { items: [], name: "" }));
+        const movieTraktId = this.meta?.ids?.trakt;
+        if (movieTraktId) {
+          tasks.push(
+            withTimeout(
+              detailWatchedEnrichmentService.enrichMovieWatchedState(this.params?.itemId, movieTraktId),
+              4500,
+              null
+            )
+          );
+        }
       }
       const results = await Promise.all(tasks);
       if (token !== this.detailLoadToken) {
@@ -1285,9 +1306,19 @@ export const MetaDetailsScreen = {
       this.moreLikeThisItems = Array.isArray(results[0]) ? results[0] : [];
       if (isSeriesDetailMeta(this.meta, this.episodes)) {
         this.seriesRatingsBySeason = results[1] || {};
+        if (this.meta?.ids?.trakt && results[2] instanceof Map) {
+          this.enrichedWatchedState = results[2];
+          this.buildEpisodeState(allProgressItems, allWatchedItems, this.enrichedWatchedState);
+          this.updateRenderedDetailSections(this.meta);
+        }
       } else {
         this.collectionItems = Array.isArray(results[1]?.items) ? results[1].items : [];
         this.collectionName = results[1]?.name || "";
+        if (this.meta?.ids?.trakt && results[2]) {
+          this.enrichedMovieState = results[2];
+          this.isMarkedWatched = Boolean(this.enrichedMovieState?.isWatched);
+          this.updateRenderedDetailSections(this.meta);
+        }
       }
       this.updateRenderedDetailSections(this.meta);
     })().catch((error) => {
@@ -1643,10 +1674,11 @@ export const MetaDetailsScreen = {
     return this.episodes[currentIndex + 1] || this.episodes[currentIndex] || this.episodes[0];
   },
 
-  buildEpisodeState(progressItems = [], watchedItems = []) {
+  buildEpisodeState(progressItems = [], watchedItems = [], remoteWatchedMap = null) {
     const progressMap = new Map();
     const watchedKeys = new Set();
     const contentId = String(this.params?.itemId || "");
+    this.enrichedWatchedState = remoteWatchedMap instanceof Map ? remoteWatchedMap : null;
 
     (Array.isArray(progressItems) ? progressItems : []).forEach((entry) => {
       if (String(entry?.contentId || "") !== contentId) {
@@ -2514,7 +2546,10 @@ export const MetaDetailsScreen = {
       const position = Number(progress?.positionMs || 0);
       const duration = Number(progress?.durationMs || 0);
       const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
-      const isWatched = this.watchedEpisodeKeys.has(`${episode.season}:${episode.episode}`);
+      const episodeKey = `${episode.season}:${episode.episode}`;
+      const isWatched = this.enrichedWatchedState?.has(episodeKey)
+        ? Boolean(this.enrichedWatchedState.get(episodeKey)?.isWatched)
+        : this.watchedEpisodeKeys.has(episodeKey);
       const rating = resolveEpisodeImdbRating(episode, this.seriesRatingsBySeason);
       const dateLabel = formatEpisodeCardDate(episode.released || "");
       const isUnavailable = episode.available === false;
@@ -2641,7 +2676,11 @@ export const MetaDetailsScreen = {
     if (!episode) {
       return false;
     }
-    return this.watchedEpisodeKeys.has(`${Number(episode.season || 0)}:${Number(episode.episode || 0)}`);
+    const key = `${Number(episode.season || 0)}:${Number(episode.episode || 0)}`;
+    if (this.enrichedWatchedState?.has(key)) {
+      return Boolean(this.enrichedWatchedState.get(key)?.isWatched);
+    }
+    return this.watchedEpisodeKeys.has(key);
   },
 
   getEpisodeHoldMenuEpisode() {
@@ -3385,6 +3424,7 @@ export const MetaDetailsScreen = {
   },
 
   async refreshEpisodePlaybackState() {
+    detailWatchedEnrichmentService.invalidateCache(this.params?.itemId);
     const [progress, allProgressItems, allWatchedItems, watchedItem] = await Promise.all([
       watchProgressRepository.getProgressByContentId(this.params?.itemId),
       watchProgressRepository.getAll(),
@@ -3395,7 +3435,7 @@ export const MetaDetailsScreen = {
       watchedItem
       || (progress && Number(progress.durationMs || 0) > 0 && Number(progress.positionMs || 0) >= Number(progress.durationMs || 0))
     );
-    this.buildEpisodeState(allProgressItems, allWatchedItems);
+    this.buildEpisodeState(allProgressItems, allWatchedItems, this.enrichedWatchedState);
     this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
   },
 
@@ -6189,6 +6229,7 @@ export const MetaDetailsScreen = {
 
     if (action === "toggleWatched") {
       const focusRestore = this.captureDetailFocus();
+      const isSeries = isSeriesDetailMeta(this.meta, this.episodes);
       if (this.isMarkedWatched) {
         await watchedItemsRepository.unmark(this.params?.itemId);
         await watchProgressRepository.removeProgress(this.params?.itemId);
@@ -6207,6 +6248,11 @@ export const MetaDetailsScreen = {
           durationMs: 100,
           updatedAt: Date.now()
         });
+      }
+      if (!isSeries && this.meta?.ids?.trakt) {
+        const enriched = await detailWatchedEnrichmentService.enrichMovieWatchedState(this.params?.itemId, this.meta.ids.trakt);
+        this.enrichedMovieState = enriched;
+        this.isMarkedWatched = Boolean(enriched?.isWatched);
       }
       await this.refreshEpisodePlaybackState();
       this.render(this.meta, focusRestore);

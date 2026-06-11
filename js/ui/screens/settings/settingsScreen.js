@@ -3514,6 +3514,13 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("trakt:toggleScrobbling", () => {
+      const current = TraktSettingsStore.get().enableScrobbling;
+      TraktSettingsStore.setEnableScrobbling(!current);
+      this.traktStatusMessage = !current
+        ? t("trakt_scrobbling_enabled", {}, "Scrobbling to Trakt is now enabled")
+        : t("trakt_scrobbling_disabled", {}, "Scrobbling to Trakt is now disabled");
+    });
 
     return `
       <div class="settings-slide-panel settings-trakt-panel">
@@ -3636,6 +3643,12 @@ export const SettingsScreen = {
       title: t("trakt_comments_title", {}, "Comments"),
       subtitle: t("trakt_comments_subtitle", {}, "Show Trakt reviews on metadata pages"),
       value: labelForTraktComments(settings.showMetaComments)
+    })}
+        ${this.renderToggleRow({
+      focusKey: "trakt:toggleScrobbling",
+      title: t("trakt_scrobbling_title", {}, "Scrobbling"),
+      subtitle: t("trakt_scrobbling_subtitle", {}, "Automatically scrobble playback to Trakt"),
+      checked: Boolean(settings.enableScrobbling)
     })}
       </div>
     `;

@@ -3,7 +3,7 @@ import { httpRequest } from "../../../core/network/httpClient.js";
 export const AddonApi = {
 
   async getManifest(url) {
-    return httpRequest(String(url || "").trim(), {
+    return httpRequest(url, {
       includeSessionAuth: false
     });
   },

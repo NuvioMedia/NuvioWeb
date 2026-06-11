@@ -8,6 +8,7 @@ import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js
 import { ThemeManager } from "../../ui/theme/themeManager.js";
 import { I18n } from "../../i18n/index.js";
 import { NuvioDialog } from "../../ui/components/nuvioDialog.js";
+import { detailWatchedEnrichmentService } from "../../data/repository/detailWatchedEnrichmentService.js";
 
 const PINNED_AVATAR_CATEGORIES = ["anime", "animation", "tv", "movie", "gaming"];
 const DEFAULT_PROFILE_COLOR = "#f5f5f5";
@@ -1749,6 +1750,7 @@ export const ProfileSelectionScreen = {
       return;
     }
     await ProfileManager.setActiveProfile(profileId);
+    detailWatchedEnrichmentService.invalidateAllCache();
     await ProfileSettingsSyncService.pull(profileId);
     StartupSyncService.syncPull().catch((error) => {
       console.warn("Profile startup sync failed", error);

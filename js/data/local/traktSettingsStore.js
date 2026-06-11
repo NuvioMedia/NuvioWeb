@@ -45,7 +45,8 @@ function normalize(settings = {}) {
     continueWatchingDaysCap: normalizeTraktContinueWatchingDaysCap(settings.continueWatchingDaysCap),
     showMetaComments: settings.showMetaComments !== false,
     watchProgressSource: normalizeWatchProgressSource(settings.watchProgressSource),
-    librarySourceMode: normalizeLibrarySourceMode(settings.librarySourceMode)
+    librarySourceMode: normalizeLibrarySourceMode(settings.librarySourceMode),
+    enableScrobbling: settings.enableScrobbling !== false
   };
 }
 
@@ -85,5 +86,9 @@ export const TraktSettingsStore = {
 
   setLibrarySourceMode(mode) {
     return this.set({ librarySourceMode: normalizeLibrarySourceMode(mode) });
+  },
+
+  setEnableScrobbling(enabled) {
+    return this.set({ enableScrobbling: Boolean(enabled) });
   }
 };

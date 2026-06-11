@@ -5,6 +5,7 @@ import {
   TRAKT_REDIRECT_URI
 } from "../../config.js";
 import { TraktAuthStore } from "../local/traktAuthStore.js";
+import { detailWatchedEnrichmentService } from "./detailWatchedEnrichmentService.js";
 
 const API_VERSION = "2";
 const DEFAULT_API_URL = "https://api.trakt.tv";
@@ -37,7 +38,7 @@ async function readResponseBody(response) {
   }
 }
 
-async function requestJson(path, { method = "GET", body = null, authorization = null, clientId = TRAKT_CLIENT_ID } = {}) {
+export async function requestJson(path, { method = "GET", body = null, authorization = null, clientId = TRAKT_CLIENT_ID } = {}) {
   const headers = {
     "Content-Type": "application/json",
     "trakt-api-version": API_VERSION,
@@ -249,6 +250,7 @@ export const TraktAuthService = {
         console.warn("Trakt revoke failed", error);
       }
     }
+    detailWatchedEnrichmentService.invalidateAllCache();
     TraktAuthStore.clearAuth();
   },
 
@@ -285,5 +287,275 @@ export const TraktAuthService = {
     };
     localStorage.setItem(cacheKey, JSON.stringify({ cachedAt: Date.now(), stats }));
     return stats;
+  },
+
+  async fetchWatchHistory({ limit = 100 } = {}) {
+    const token = await this.getValidAccessToken();
+    if (!token) return [];
+
+    const allItems = [];
+    let page = 1;
+    const perPage = Math.min(limit, 100);
+
+    while (allItems.length < limit) {
+      const { response, payload } = await requestJson(
+        `/sync/history?limit=${perPage}&page=${page}`,
+        { authorization: `Bearer ${token}` }
+      );
+      if (!response.ok || !Array.isArray(payload)) break;
+
+      allItems.push(...payload.map(normalizeHistoryItem).filter(Boolean));
+      if (payload.length < perPage) break;
+      page++;
+    }
+
+    return allItems.slice(0, limit);
+  },
+
+  async fetchWatchlist({ limit = 100 } = {}) {
+    const token = await this.getValidAccessToken();
+    if (!token) return [];
+
+    const allItems = [];
+    let page = 1;
+    const perPage = Math.min(limit, 100);
+
+    while (allItems.length < limit) {
+      const { response, payload } = await requestJson(
+        `/sync/watchlist?limit=${perPage}&page=${page}`,
+        { authorization: `Bearer ${token}` }
+      );
+      if (!response.ok || !Array.isArray(payload)) break;
+
+      allItems.push(...payload.map(normalizeWatchlistItem).filter(Boolean));
+      if (payload.length < perPage) break;
+      page++;
+    }
+
+    return allItems.slice(0, limit);
+  },
+
+  async fetchPlaybackState({ limit = 50 } = {}) {
+    const token = await this.getValidAccessToken();
+    if (!token) return [];
+
+    const { response, payload } = await requestJson(
+      `/sync/playback?limit=${limit}`,
+      { authorization: `Bearer ${token}` }
+    );
+    if (!response.ok || !Array.isArray(payload)) return [];
+
+    return payload.map(normalizePlaybackItem).filter(Boolean).slice(0, limit);
+  },
+
+  async fetchWatchedShows() {
+    const token = await this.getValidAccessToken();
+    if (!token) return [];
+
+    const state = TraktAuthStore.get();
+    const userId = state.userSlug || state.username || "me";
+
+    const { response, payload } = await requestJson(
+      `/users/${encodeURIComponent(userId)}/watched/shows?extended=noseasons`,
+      { authorization: `Bearer ${token}` }
+    );
+    if (!response.ok || !Array.isArray(payload)) return [];
+
+    return payload.map(normalizeWatchedShowItem).filter(Boolean);
+  },
+
+  async fetchWatchedMovies() {
+    const token = await this.getValidAccessToken();
+    if (!token) return [];
+
+    const state = TraktAuthStore.get();
+    const userId = state.userSlug || state.username || "me";
+
+    const { response, payload } = await requestJson(
+      `/users/${encodeURIComponent(userId)}/watched/movies?extended=noseasons`,
+      { authorization: `Bearer ${token}` }
+    );
+    if (!response.ok || !Array.isArray(payload)) return [];
+
+    return payload.map(normalizeWatchedMovieItem).filter(Boolean);
+  },
+
+  async fetchWatchedProgress(showTraktId) {
+    const token = await this.getValidAccessToken();
+    if (!token) return null;
+
+    const { response, payload } = await requestJson(
+      `/shows/${encodeURIComponent(showTraktId)}/progress/watched`,
+      { authorization: `Bearer ${token}` }
+    );
+    if (!response.ok || !payload) return null;
+
+    return normalizeWatchedProgress(payload);
   }
 };
+
+function normalizeHistoryItem(entry) {
+  if (!entry || !entry.watched_at) return null;
+  const item = {};
+  item.watchedAt = entry.watched_at;
+  item.action = "watch";
+
+  if (entry.movie) {
+    item.type = "movie";
+    item.title = entry.movie.title;
+    item.year = entry.movie.year;
+    item.tmdbId = entry.movie.ids?.tmdb;
+    item.imdbId = entry.movie.ids?.imdb;
+    item.traktId = entry.movie.ids?.trakt;
+  } else if (entry.show || entry.episode) {
+    item.type = "episode";
+    item.showTitle = entry.show?.title;
+    item.showYear = entry.show?.year;
+    item.showTmdbId = entry.show?.ids?.tmdb;
+    item.showImdbId = entry.show?.ids?.imdb;
+    item.showTraktId = entry.show?.ids?.trakt;
+    if (entry.episode) {
+      item.seasonNumber = entry.episode.season;
+      item.episodeNumber = entry.episode.number;
+      item.episodeTitle = entry.episode.title;
+      item.episodeTmdbId = entry.episode.ids?.tmdb;
+      item.episodeTraktId = entry.episode.ids?.trakt;
+    }
+  } else {
+    return null;
+  }
+  return item;
+}
+
+function normalizeWatchlistItem(entry) {
+  if (!entry || !entry.listed_at) return null;
+  const item = {};
+  item.addedAt = entry.listed_at;
+  item.type = entry.type;
+
+  if (entry.movie) {
+    item.title = entry.movie.title;
+    item.year = entry.movie.year;
+    item.tmdbId = entry.movie.ids?.tmdb;
+    item.imdbId = entry.movie.ids?.imdb;
+    item.traktId = entry.movie.ids?.trakt;
+  } else if (entry.show) {
+    item.title = entry.show.title;
+    item.year = entry.show.year;
+    item.tmdbId = entry.show.ids?.tmdb;
+    item.imdbId = entry.show.ids?.imdb;
+    item.traktId = entry.show.ids?.trakt;
+  } else {
+    return null;
+  }
+  return item;
+}
+
+function normalizePlaybackItem(entry) {
+  if (!entry || entry.progress == null) return null;
+  const isEpisode = entry.type === "episode";
+  const media = isEpisode ? entry.episode : entry.movie;
+  const show = isEpisode ? entry.show : null;
+  if (!media) return null;
+
+  const tmdbId = isEpisode ? show?.ids?.tmdb : media.ids?.tmdb;
+  const traktId = isEpisode ? show?.ids?.trakt : media.ids?.trakt;
+  const contentId = tmdbId ? `tmdb:${tmdbId}` : traktId ? `trakt:${traktId}` : null;
+  if (!contentId) return null;
+
+  return {
+    type: isEpisode ? "episode" : "movie",
+    contentId,
+    videoId: isEpisode && media.ids?.tmdb ? `tmdb:${media.ids.tmdb}` : contentId,
+    progressPercent: Math.max(0, Math.min(100, Number(entry.progress) || 0)),
+    pausedAt: entry.paused_at,
+    title: isEpisode ? show?.title : media.title,
+    year: isEpisode ? show?.year : media.year,
+    imdbId: isEpisode ? show?.ids?.imdb : media.ids?.imdb,
+    tmdbId,
+    traktId,
+    seasonNumber: isEpisode ? media.season : undefined,
+    episodeNumber: isEpisode ? media.number : undefined,
+    episodeTitle: isEpisode ? media.title : undefined
+  };
+}
+
+function normalizeWatchedShowItem(entry) {
+  if (!entry || !entry.show?.ids) return null;
+  const show = entry.show;
+  const progress = entry.progress?.watched || {};
+  const nextEpisode = entry.next_episode || null;
+
+  const tmdbId = show.ids?.tmdb;
+  const traktId = show.ids?.trakt;
+  const contentId = tmdbId ? `tmdb:${tmdbId}` : traktId ? `trakt:${traktId}` : null;
+  if (!contentId) return null;
+
+  return {
+    type: "series",
+    contentId,
+    title: show.title,
+    year: show.year,
+    imdbId: show.ids?.imdb,
+    tmdbId,
+    traktId,
+    watchedProgress: {
+      progress: Number(progress.progress || 0),
+      aired: Number(progress.aired || 0),
+      completed: Number(progress.completed || 0)
+    },
+    nextEpisode: nextEpisode ? {
+      season: nextEpisode.season,
+      number: nextEpisode.number,
+      title: nextEpisode.title || ""
+    } : null
+  };
+}
+
+function normalizeWatchedProgress(payload) {
+  const map = new Map();
+  
+  if (!payload?.seasons || !Array.isArray(payload.seasons)) {
+    return map;
+  }
+  
+  for (const season of payload.seasons) {
+    const seasonNumber = season.number;
+    if (!season.episodes || !Array.isArray(season.episodes)) continue;
+    
+    for (const episode of season.episodes) {
+      if (!episode.completed) continue;
+      
+      const key = `${seasonNumber}:${episode.number}`;
+      map.set(key, {
+        isWatched: true,
+        watchedAt: episode.last_watched_at || null,
+        source: "trakt"
+      });
+    }
+  }
+  
+  return map;
+}
+
+function normalizeWatchedMovieItem(entry) {
+  if (!entry || !entry.movie?.ids) return null;
+  const movie = entry.movie;
+
+  const tmdbId = movie.ids?.tmdb;
+  const traktId = movie.ids?.trakt;
+  const contentId = tmdbId ? `tmdb:${tmdbId}` : traktId ? `trakt:${traktId}` : null;
+  if (!contentId) return null;
+
+  return {
+    type: "movie",
+    contentId,
+    title: movie.title,
+    year: movie.year,
+    imdbId: movie.ids?.imdb,
+    tmdbId,
+    traktId,
+    plays: Number(entry.plays || 0),
+    lastWatchedAt: entry.last_watched_at
+  };
+}
