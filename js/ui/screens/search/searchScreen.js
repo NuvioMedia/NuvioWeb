@@ -1496,6 +1496,21 @@ export const SearchScreen = {
       return false;
     }
 
+    // Release left/right once the caret sits at the matching edge of the value
+    // (always true for an empty input) so dpad navigation can move focus out
+    // of the input, e.g. to the discover/mic buttons.
+    const valueLength = String(input.value || "").length;
+    const selectionSnapshot = getInputSelectionSnapshot(input);
+    const caretStart = selectionSnapshot ? clamp(Number(selectionSnapshot.start || 0), 0, valueLength) : valueLength;
+    const caretEnd = selectionSnapshot ? clamp(Number(selectionSnapshot.end || 0), 0, valueLength) : valueLength;
+    const hasSelection = caretStart !== caretEnd;
+    if (code === 37 && !hasSelection && caretStart <= 0) {
+      return false;
+    }
+    if (code === 39 && !hasSelection && caretEnd >= valueLength) {
+      return false;
+    }
+
     if (document.activeElement !== input) {
       const selectionSnapshot = getInputSelectionSnapshot(input);
       input.focus?.();
