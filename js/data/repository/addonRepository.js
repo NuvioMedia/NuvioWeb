@@ -372,13 +372,7 @@ class AddonRepository {
       id: catalog.id,
       name: catalog.name || catalog.id,
       apiType: (catalog.type || "").trim(),
-      extra: Array.isArray(catalog.extra)
-        ? catalog.extra.map((entry) => ({
-          name: entry.name,
-          isRequired: Boolean(entry.isRequired),
-          options: Array.isArray(entry.options) ? entry.options : null
-        }))
-        : []
+      extra: this.mapCatalogExtra(catalog)
     }));
 
     return {
@@ -394,6 +388,25 @@ class AddonRepository {
       catalogs,
       resources: this.parseResources(manifest.resources || [], types)
     };
+  }
+
+  mapCatalogExtra(catalog = {}) {
+    if (Array.isArray(catalog.extra)) {
+      return catalog.extra.map((entry) => ({
+        name: entry.name,
+        isRequired: Boolean(entry.isRequired),
+        options: Array.isArray(entry.options) ? entry.options : null
+      }));
+    }
+    // Legacy manifest format: extraSupported/extraRequired as plain name arrays.
+    const required = Array.isArray(catalog.extraRequired) ? catalog.extraRequired : [];
+    const supported = Array.isArray(catalog.extraSupported) ? catalog.extraSupported : [];
+    const names = supported.concat(required.filter((name) => supported.indexOf(name) === -1));
+    return names.map((name) => ({
+      name: String(name),
+      isRequired: required.indexOf(name) !== -1,
+      options: null
+    }));
   }
 
   parseResources(resources, defaultTypes) {

@@ -29,7 +29,7 @@ import {
 import {
   buildCatalogDisableKey,
   buildCatalogOrderKey,
-  isSearchOnlyCatalog
+  catalogRequiresExtras
 } from "../../../core/addons/homeCatalogs.js";
 import {
   activateLegacySidebarAction,
@@ -6106,7 +6106,7 @@ export const HomeScreen = {
 
     addons.forEach((addon) => {
       addon.catalogs
-        .filter((catalog) => !isSearchOnlyCatalog(catalog))
+        .filter((catalog) => !catalogRequiresExtras(catalog))
         .forEach((catalog) => {
           catalogDescriptors.push({
             addonBaseUrl: addon.baseUrl,

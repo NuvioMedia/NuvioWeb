@@ -1,7 +1,7 @@
-export function isSearchOnlyCatalog(catalog) {
-  return Array.isArray(catalog?.extra) && catalog.extra.some((entry) =>
-    String(entry?.name || "").toLowerCase() === "search" && Boolean(entry?.isRequired)
-  );
+export function catalogRequiresExtras(catalog) {
+  // Catalogs that cannot be requested without extra params (required search,
+  // genre, ...) belong to the search/discover screens, not the home screen.
+  return Array.isArray(catalog?.extra) && catalog.extra.some((entry) => Boolean(entry?.isRequired));
 }
 
 export function buildCatalogOrderKey(addonId, type, catalogId) {
@@ -27,7 +27,7 @@ export function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKe
 
   (addons || []).forEach((addon) => {
     (addon.catalogs || [])
-      .filter((catalog) => !isSearchOnlyCatalog(catalog))
+      .filter((catalog) => !catalogRequiresExtras(catalog))
       .forEach((catalog) => {
         const key = buildCatalogOrderKey(addon.id, catalog.apiType, catalog.id);
         if (seenKeys.has(key)) {
