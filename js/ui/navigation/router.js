@@ -39,27 +39,34 @@ export const Router = {
   skipConsumeNextPopstate: false,
   ignoreNextPopstate: false,
 
-  routes: {
-    home: HomeScreen,
-    player: PlayerScreen,
-    account: AccountScreen,
-    authQrSignIn: AuthQrSignInScreen,
-    authSignIn: AuthSignInScreen,
-    syncCode: SyncCodeScreen,
-    profileSelection: ProfileSelectionScreen,
-    detail: MetaDetailsScreen,
-    library: LibraryScreen,
-    search: SearchScreen,
-    discover: DiscoverScreen,
-    settings: SettingsScreen,
-    trakt: TraktScreen,
-    supportersContributors: SupportersContributorsScreen,
-    plugin: PluginScreen,
-    catalogOrder: CatalogOrderScreen,
-    stream: StreamScreen,
-    castDetail: CastDetailScreen,
-    catalogSeeAll: CatalogSeeAllScreen,
-    folderDetail: FolderDetailScreen
+  _routes: null,
+
+  get routes() {
+    if (!this._routes) {
+      this._routes = {
+        home: HomeScreen,
+        player: PlayerScreen,
+        account: AccountScreen,
+        authQrSignIn: AuthQrSignInScreen,
+        authSignIn: AuthSignInScreen,
+        syncCode: SyncCodeScreen,
+        profileSelection: ProfileSelectionScreen,
+        detail: MetaDetailsScreen,
+        library: LibraryScreen,
+        search: SearchScreen,
+        discover: DiscoverScreen,
+        settings: SettingsScreen,
+        trakt: TraktScreen,
+        supportersContributors: SupportersContributorsScreen,
+        plugin: PluginScreen,
+        catalogOrder: CatalogOrderScreen,
+        stream: StreamScreen,
+        castDetail: CastDetailScreen,
+        catalogSeeAll: CatalogSeeAllScreen,
+        folderDetail: FolderDetailScreen
+      };
+    }
+    return this._routes;
   },
 
   getRouteStateKey(routeName, params = {}) {
