@@ -360,6 +360,20 @@ function buildEnrichedTmdbItem(baseItem = {}, enriched = {}, settings = {}) {
   }, baseItem.type || baseItem.apiType || "movie");
 }
 
+function mapTmdbDiscoverSortBy(sortBy, mediaType) {
+  const raw = String(sortBy || "").trim();
+  if (!raw || raw === "original") {
+    return "popularity.desc";
+  }
+  if (mediaType === "tv" && raw === "release_date.desc") {
+    return "first_air_date.desc";
+  }
+  if (mediaType === "movie" && raw === "first_air_date.desc") {
+    return "release_date.desc";
+  }
+  return raw;
+}
+
 async function fetchTmdbSourceItems(source = {}, page = 1) {
   const apiKey = getTmdbApiKey();
   if (!apiKey) {
@@ -400,18 +414,37 @@ async function fetchTmdbSourceItems(source = {}, page = 1) {
       page: 1
     };
   }
-  const params = new URLSearchParams({
-    api_key: apiKey,
-    language,
-    page: String(page),
-    sort_by: String(source.sortBy || (mediaType === "tv" ? "first_air_date.desc" : "popularity.desc"))
-  });
+  const params = new URLSearchParams();
+  params.set("api_key", apiKey);
+  params.set("language", language);
+  params.set("page", String(page));
+  params.set("sort_by", mapTmdbDiscoverSortBy(source.sortBy, mediaType));
   const filters = source.filters && typeof source.filters === "object" ? source.filters : {};
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value != null && value !== "") {
-      params.set(key.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`), String(value));
+  const setIfPresent = (key, value) => {
+    if (value != null && String(value).trim() !== "") {
+      params.set(key, String(value));
     }
-  });
+  };
+  // Param names must match what TMDB discover expects (same mapping as the
+  // mobile app), otherwise TMDB silently ignores them and differently
+  // configured catalogs all return the same result.
+  setIfPresent("with_genres", filters.withGenres);
+  setIfPresent("vote_count.gte", filters.voteCountGte);
+  setIfPresent("vote_average.gte", filters.voteAverageGte);
+  setIfPresent("vote_average.lte", filters.voteAverageLte);
+  setIfPresent("with_original_language", filters.withOriginalLanguage);
+  setIfPresent("with_origin_country", filters.withOriginCountry);
+  setIfPresent("with_keywords", filters.withKeywords);
+  setIfPresent("with_companies", filters.withCompanies);
+  setIfPresent("with_networks", filters.withNetworks);
+  if (String(filters.withWatchProviders || "").trim()) {
+    params.set("with_watch_providers", String(filters.withWatchProviders));
+    params.set("watch_region", String(filters.watchRegion || "").trim() || "US");
+    params.set("with_watch_monetization_types", "flatrate|free|ads|rent|buy");
+  }
+  setIfPresent(mediaType === "movie" ? "year" : "first_air_date_year", filters.year);
+  setIfPresent(mediaType === "movie" ? "primary_release_date.gte" : "first_air_date.gte", filters.releaseDateGte);
+  setIfPresent(mediaType === "movie" ? "primary_release_date.lte" : "first_air_date.lte", filters.releaseDateLte);
   if (type === "COMPANY" && source.tmdbId) {
     params.set("with_companies", String(source.tmdbId));
   }
@@ -545,7 +578,7 @@ export const FolderDetailScreen = {
       ? this.folder.sources
       : buildFallbackStreamingSources(this.folder);
     const sourceTabs = folderSources.map((source, index) => ({
-      key: `${source.provider}:${source.addonId || source.tmdbId || source.traktListId || source.catalogId || "source"}:${source.title || source.sortBy || index}`,
+      key: `${source.provider}:${source.addonId || source.tmdbId || source.traktListId || source.catalogId || "source"}:${source.title || source.sortBy || "source"}:${index}`,
       label: source.provider === "tmdb"
         ? buildTmdbTabLabel(source)
         : (source.provider === "trakt" ? buildTraktTabLabel(source) : buildAddonTabLabel(source, addons)),

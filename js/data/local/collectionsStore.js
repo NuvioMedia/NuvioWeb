@@ -45,21 +45,36 @@ function normalizeFolderViewMode(value) {
   return CollectionFolderViewMode.TABBED_GRID;
 }
 
+function numberOrNull(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function intOrNull(value) {
+  const parsed = numberOrNull(value);
+  return parsed == null ? null : Math.trunc(parsed);
+}
+
 function normalizeTmdbFilters(value = {}) {
   const raw = value && typeof value === "object" ? value : {};
   return {
     withGenres: stringOrNull(raw.withGenres),
     releaseDateGte: stringOrNull(raw.releaseDateGte),
     releaseDateLte: stringOrNull(raw.releaseDateLte),
-    voteAverageGte: Number.isFinite(Number(raw.voteAverageGte)) ? Number(raw.voteAverageGte) : null,
-    voteAverageLte: Number.isFinite(Number(raw.voteAverageLte)) ? Number(raw.voteAverageLte) : null,
-    voteCountGte: Number.isFinite(Number(raw.voteCountGte)) ? Math.trunc(Number(raw.voteCountGte)) : null,
+    voteAverageGte: numberOrNull(raw.voteAverageGte),
+    voteAverageLte: numberOrNull(raw.voteAverageLte),
+    voteCountGte: intOrNull(raw.voteCountGte),
     withOriginalLanguage: stringOrNull(raw.withOriginalLanguage),
     withOriginCountry: stringOrNull(raw.withOriginCountry),
     withKeywords: stringOrNull(raw.withKeywords),
     withCompanies: stringOrNull(raw.withCompanies),
     withNetworks: stringOrNull(raw.withNetworks),
-    year: Number.isFinite(Number(raw.year)) ? Math.trunc(Number(raw.year)) : null
+    withWatchProviders: stringOrNull(raw.withWatchProviders),
+    watchRegion: stringOrNull(raw.watchRegion),
+    year: intOrNull(raw.year)
   };
 }
 
