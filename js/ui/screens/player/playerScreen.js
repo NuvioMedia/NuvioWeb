@@ -2062,6 +2062,55 @@ export const PlayerScreen = {
     target.style.setProperty("box-shadow", "none", "important");
   },
 
+  isSkipIntroButtonFocusable() {
+    const container = this.uiRefs?.skipIntro;
+    const button = container?.querySelector(".player-skip-intro-btn");
+    return Boolean(
+      button
+      && button.isConnected
+      && !container.classList.contains("hidden")
+      && this.activeSkipInterval
+      && !this.skipIntervalDismissed
+      && this.isSkipIntroPlaybackReady()
+    );
+  },
+
+  syncSkipIntroFocusState() {
+    const button = this.uiRefs?.skipIntro?.querySelector(".player-skip-intro-btn");
+    if (!button) {
+      return;
+    }
+    const focused = this.controlFocusZone === "skipIntro" && this.isSkipIntroButtonFocusable();
+    button.classList.toggle("focused", focused);
+    if (focused) {
+      const activeElement = document.activeElement;
+      if (activeElement && activeElement !== button && activeElement !== document.body && typeof activeElement.blur === "function") {
+        activeElement.blur();
+      }
+      if (document.activeElement !== button && typeof button.focus === "function") {
+        try {
+          button.focus();
+        } catch (_) {
+          // Some TV runtimes can reject focus during DOM churn.
+        }
+      }
+    }
+    this.syncSkipIntroButtonTheme(button);
+  },
+
+  focusSkipIntroButton() {
+    if (!this.isSkipIntroButtonFocusable()) {
+      return false;
+    }
+    this.stickyProgressFocus = false;
+    this.autoHideControlsAfterSeek = false;
+    this.controlFocusZone = "skipIntro";
+    this.renderControlButtons();
+    this.syncSkipIntroFocusState();
+    this.resetControlsAutoHide();
+    return true;
+  },
+
   renderSkipIntroButton() {
     const button = this.uiRefs?.skipIntro;
     if (!button) {
@@ -2075,6 +2124,9 @@ export const PlayerScreen = {
     const renderKey = `${activeKey}|ready:${playbackReady ? 1 : 0}|controls:${this.controlsVisible ? 1 : 0}|hidden:${this.skipIntroAutoHidden ? 1 : 0}|dismissed:${this.skipIntervalDismissed ? 1 : 0}`;
     button.classList.toggle("hidden", !isVisible);
     button.classList.toggle("is-raised", Boolean(this.controlsVisible));
+    if (!isVisible && this.controlFocusZone === "skipIntro") {
+      this.controlFocusZone = this.controlsVisible && this.isSeekBarAvailable() ? "progress" : "buttons";
+    }
     if (!shouldShow) {
       button.innerHTML = "";
       this.skipIntroRenderedKey = renderKey;
@@ -2111,6 +2163,7 @@ export const PlayerScreen = {
         focusTarget.addEventListener("blur", syncTheme, true);
         focusTarget.dataset.skipIntroThemeBound = "1";
       }
+      focusTarget.classList.toggle("focused", this.controlFocusZone === "skipIntro");
       this.syncSkipIntroButtonTheme(focusTarget);
     }
     if (isVisible && !this.controlsVisible && !this.skipIntroAutoHidden && !this.skipIntervalDismissed) {
@@ -5326,7 +5379,17 @@ export const PlayerScreen = {
       if (focusedButton && document.activeElement !== focusedButton && typeof focusedButton.focus === "function") {
         focusedButton.focus();
       }
+    } else if (this.controlFocusZone === "skipIntro") {
+      buttons.forEach((button) => {
+        if (typeof button.blur === "function") {
+          button.blur();
+        }
+      });
+      if (progressShell && document.activeElement === progressShell && typeof progressShell.blur === "function") {
+        progressShell.blur();
+      }
     }
+    this.syncSkipIntroFocusState();
     this.renderNextEpisodeCard();
   },
 
@@ -10659,6 +10722,17 @@ export const PlayerScreen = {
   },
 
   syncPointerFocus(target) {
+    const skipIntroNode = target?.closest?.("[data-player-pointer-action='skipIntro']");
+    if (skipIntroNode && this.isSkipIntroButtonFocusable()) {
+      this.stickyProgressFocus = false;
+      this.autoHideControlsAfterSeek = false;
+      this.controlFocusZone = "skipIntro";
+      this.resetControlsAutoHide();
+      this.renderControlButtons();
+      this.syncSkipIntroFocusState();
+      return;
+    }
+
     const controlButton = target?.closest?.(".player-control-btn[data-action]");
     if (controlButton) {
       const buttons = Array.from(this.uiRefs?.controlButtons?.querySelectorAll?.(".player-control-btn[data-action]") || []);
@@ -11068,6 +11142,22 @@ export const PlayerScreen = {
       return;
     }
 
+    if (this.controlFocusZone === "skipIntro") {
+      if (keyCode === 13) {
+        if (this.skipActiveInterval()) {
+          return;
+        }
+      }
+      if (keyCode === 40) {
+        this.focusProgressBar();
+        return;
+      }
+      if (keyCode === 38 || keyCode === 37 || keyCode === 39) {
+        this.resetControlsAutoHide();
+        return;
+      }
+    }
+
     if (this.controlFocusZone === "progress") {
       if (keyCode === 37) {
         this.beginSeekPreview(-1, Boolean(event?.repeat));
@@ -11080,6 +11170,9 @@ export const PlayerScreen = {
       if (keyCode === 38) {
         this.stickyProgressFocus = false;
         this.autoHideControlsAfterSeek = false;
+        if (this.focusSkipIntroButton()) {
+          return;
+        }
         this.setControlsVisible(false);
         return;
       }

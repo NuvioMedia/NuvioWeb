@@ -27,7 +27,6 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     YOUTUBE_PROXY_URL: "youtube-proxy.html",
     ADDON_REMOTE_BASE_URL: "",
     TIZEN_ENGINEFS_SERVICE_ID: "",
-    WEBOS_SERVICE_ID: "",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""

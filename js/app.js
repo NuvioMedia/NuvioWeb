@@ -2,10 +2,6 @@ import "./runtime/polyfills.js";
 import "intersection-observer";
 import "whatwg-fetch";
 import { detailWatchedEnrichmentService } from "./data/repository/detailWatchedEnrichmentService.js";
-import {
-  preloadStreamBadgeImages,
-  resetAddonLogoCache,
-} from "./ui/screens/stream/streamScreen.js";
 import { Router } from "./ui/navigation/router.js";
 import { FocusEngine } from "./ui/navigation/focusEngine.js";
 import { PlayerController } from "./core/player/playerController.js";
@@ -186,7 +182,6 @@ async function routeAfterAuthentication() {
 }
 
 async function bootstrapApp() {
-  resetAddonLogoCache();
   renderAppShell();
   appShellRendered = true;
   Platform.init();
@@ -251,7 +246,6 @@ async function bootstrapApp() {
 }
 
 async function bootstrapAddonRemoteMode() {
-  resetAddonLogoCache();
   await renderAddonRemotePage();
   appShellRendered = true;
 }

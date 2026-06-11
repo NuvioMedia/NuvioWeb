@@ -28,7 +28,6 @@
     AVATAR_PUBLIC_BASE_URL: typeof existing.AVATAR_PUBLIC_BASE_URL === "undefined" ? "" : existing.AVATAR_PUBLIC_BASE_URL,
     ADDON_REMOTE_BASE_URL: typeof existing.ADDON_REMOTE_BASE_URL === "undefined" ? "" : existing.ADDON_REMOTE_BASE_URL,
     TIZEN_ENGINEFS_SERVICE_ID: typeof existing.TIZEN_ENGINEFS_SERVICE_ID === "undefined" ? "" : existing.TIZEN_ENGINEFS_SERVICE_ID,
-    WEBOS_SERVICE_ID: typeof existing.WEBOS_SERVICE_ID === "undefined" ? "" : existing.WEBOS_SERVICE_ID,
     ENABLE_REMOTE_WRAPPER_MODE: typeof existing.ENABLE_REMOTE_WRAPPER_MODE === "undefined" ? false : Boolean(existing.ENABLE_REMOTE_WRAPPER_MODE),
     PREFERRED_PLAYBACK_ORDER: normalizePlaybackOrder(existing.PREFERRED_PLAYBACK_ORDER),
     TMDB_API_KEY: typeof existing.TMDB_API_KEY === "undefined" ? "" : existing.TMDB_API_KEY,

@@ -48,7 +48,6 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     YOUTUBE_PROXY_URL: "youtube-proxy.html",
     ADDON_REMOTE_BASE_URL: "",
     TIZEN_ENGINEFS_SERVICE_ID: "",
-    WEBOS_SERVICE_ID: "space.nuvio.webos.service",
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""
@@ -548,27 +547,6 @@ async function updateTizenMetadata(targetDir) {
   await writeTextFile(path.join(targetDir, "main.js"), buildTizenMainJs({ engineFsServiceId }));
   await syncTizenEngineFsService(targetDir);
 }
-async function injectWebOsRuntimeEnv(targetDir) {
-  const envPath = path.join(targetDir, "nuvio.env.js");
-  const injection = `
-(function configureNuvioWebOsRuntimeEnv() {
-  var root = typeof globalThis !== "undefined" ? globalThis : window;
-  var env = root.__NUVIO_ENV__ || {};
-  var values = {
-    WEBOS_SERVICE_ID: "${webOsServiceId}"
-  };
-  for (var key in values) {
-    if (Object.prototype.hasOwnProperty.call(values, key)) {
-      env[key] = values[key];
-    }
-  }
-  root.__NUVIO_ENV__ = env;
-}());
-`;
-  const existing = await readFile(envPath, "utf8").catch(() => "");
-  await writeTextFile(envPath, `${existing.trim()}\n${injection}`);
-}
-
 const { platform, targetDir } = parseArgs(process.argv.slice(2));
 await syncVersionFiles();
 await mkdir(targetDir, { recursive: true });
@@ -580,7 +558,6 @@ if (platform === "webos") {
   await syncWebOsCompanionFiles(targetDir);
   const webOsScriptPath = await resolveBundledWebOsRuntime(targetDir);
   await writeTextFile(path.join(targetDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }));
-  await injectWebOsRuntimeEnv(targetDir);
 }
 
 if (platform === "tizen") {

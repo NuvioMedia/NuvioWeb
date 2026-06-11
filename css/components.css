@@ -10398,13 +10398,14 @@ button:focus-visible {
   position: absolute;
   left: min(3.33vw, 64px);
   bottom: min(3.125vw, 60px);
-  z-index: 29;
+  z-index: 34;
   opacity: 1;
+  pointer-events: auto;
   transition: bottom 180ms ease, opacity 180ms ease;
 }
 
 .player-skip-intro.is-raised {
-  bottom: min(12.71vw, 244px);
+  bottom: clamp(184px, 19vh, 224px);
 }
 
 .player-skip-intro.hidden {
@@ -11909,7 +11910,7 @@ button:focus-visible {
 }
 
 .player-skip-intro.is-raised {
-  bottom: min(12.71vw, 244px); /* ATV 122dp -> 244px */
+  bottom: clamp(184px, 19vh, 224px);
 }
 
 .player-skip-intro-btn {
@@ -14635,7 +14636,7 @@ button:focus-visible {
 }
 
 .legacy-webos .player-skip-intro.is-raised {
-  bottom: 244px;
+  bottom: 212px;
 }
 
 .legacy-webos .player-skip-intro-btn {
@@ -15046,7 +15047,7 @@ button:focus-visible {
   }
 
   .player-skip-intro.is-raised {
-    bottom: 244px;
+    bottom: 212px;
   }
 
   .player-skip-intro-btn {

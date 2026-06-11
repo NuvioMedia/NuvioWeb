@@ -454,6 +454,18 @@ function requestAddonLogo(url = "", onSettled = null) {
     return cached.promise || Promise.resolve(false);
   }
 
+  if (Environment.isWebOS()) {
+    addonLogoCache.set(normalized, {
+      status: "direct",
+      displayUrl: normalized,
+      updatedAt: Date.now()
+    });
+    if (typeof onSettled === "function") {
+      setTimeout(onSettled, 0);
+    }
+    return Promise.resolve(true);
+  }
+
   const loadingEntry = { status: "loading", updatedAt: Date.now(), promise: null };
   addonLogoCache.set(normalized, loadingEntry);
   const promise = new Promise((resolve) => {
@@ -855,14 +867,19 @@ function buildLegacyStreamBadges(stream = {}, enabled = true, includeSizeBadge =
 
 function renderImageBadgeChip(badge = {}) {
   const imageUrl = normalizeAddonLogoUrl(badge.imageURL);
-  const cachedImageUrl = getCachedAddonLogoDisplayUrl(imageUrl);
-  if (imageUrl && !cachedImageUrl && !failedAddonLogoUrls.has(imageUrl)) {
+  let displayImageUrl = getCachedAddonLogoDisplayUrl(imageUrl);
+  if (imageUrl && !displayImageUrl && !failedAddonLogoUrls.has(imageUrl)) {
     requestAddonLogo(imageUrl);
+    if (Environment.isWebOS()) {
+      displayImageUrl = getCachedAddonLogoDisplayUrl(imageUrl);
+    }
   }
   const backgroundColor = normalizeStreamBadgeChipColor(badge.tagColor);
   const outlineColor = normalizeStreamBadgeChipColor(badge.borderColor);
   const textColor = normalizeStreamBadgeChipColor(badge.textColor);
   const filled = String(badge.tagStyle || "").trim().toLowerCase() === "filled";
+  const fallbackImageUrl = Environment.isWebOS() ? "" : imageUrl;
+  const safeImageUrl = displayImageUrl || fallbackImageUrl;
   const style = [
     filled && backgroundColor ? `background:${backgroundColor};` : "",
     outlineColor ? `border-color:${outlineColor};` : "",
@@ -870,7 +887,9 @@ function renderImageBadgeChip(badge = {}) {
   ].join("");
   return `
     <span class="stream-route-stream-badge image${filled ? " filled" : ""}"${style ? ` style="${escapeHtml(style)}"` : ""}>
-      <img src="${escapeHtml(cachedImageUrl || imageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" />
+      ${safeImageUrl
+        ? `<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+        : ""}
     </span>
   `;
 }
@@ -1575,19 +1594,11 @@ export const StreamScreen = {
     let displayAddonLogoUrl = cachedAddonLogoUrl || "";
     if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
       requestAddonLogo(addonLogoUrl, () => this.requestRender({ delayMs: 160 }));
-    }
-    const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
-    const isDirectRemoteLogo = displayAddonLogoUrl
-      && displayAddonLogoUrl === addonLogoUrl
-      && !displayAddonLogoUrl.startsWith("data:image/");
-    if (Environment.isWebOS() && isDirectRemoteLogo) {
-      this.renderedDirectAddonLogoUrls = this.renderedDirectAddonLogoUrls || new Set();
-      if (this.renderedDirectAddonLogoUrls.has(addonLogoUrl)) {
-        displayAddonLogoUrl = "";
-      } else {
-        this.renderedDirectAddonLogoUrls.add(addonLogoUrl);
+      if (Environment.isWebOS()) {
+        displayAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
       }
     }
+    const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
     const meta = [
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
@@ -1598,7 +1609,7 @@ export const StreamScreen = {
       ? t("stream.p2p.resolving", {}, "Resolving P2P stream")
       : t("stream.debrid.resolving", {}, "Resolving Debrid stream");
     const addonBadge = displayAddonLogoUrl
-      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" loading="lazy" /><span hidden>${addonBadgeLabel}</span>`
+      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="async" loading="lazy" referrerpolicy="no-referrer" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
 
     return `
@@ -1656,9 +1667,7 @@ export const StreamScreen = {
 
     let body = "";
     if (filtered.length) {
-      this.renderedDirectAddonLogoUrls = new Set();
       body = filtered.map((stream, index) => this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)).join("");
-      this.renderedDirectAddonLogoUrls = null;
       if (hasPendingForFilter) {
         body += this.renderLoadingCards(1);
       }

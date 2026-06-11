@@ -110,28 +110,6 @@ ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
 `;
 }
 
-async function injectWebOsRuntimeEnv(targetDir) {
-  const values = {
-    WEBOS_SERVICE_ID: webOsServiceId
-  };
-  const envPath = path.join(targetDir, "nuvio.env.js");
-  const injection = `
-(function configureNuvioWebOsRuntimeEnv() {
-  var root = typeof globalThis !== "undefined" ? globalThis : window;
-  var env = root.__NUVIO_ENV__ || {};
-  var values = ${JSON.stringify(values, null, 2)};
-  for (var key in values) {
-    if (Object.prototype.hasOwnProperty.call(values, key)) {
-      env[key] = values[key];
-    }
-  }
-  root.__NUVIO_ENV__ = env;
-}());
-`;
-  const existing = await readFile(envPath, "utf8").catch(() => "");
-  await writeFile(envPath, `${existing.trim()}\n${injection}`, "utf8");
-}
-
 async function stageApp() {
   const { version } = await readAppMetadata();
   await cp(distDir, appStageDir, { recursive: true });
@@ -153,7 +131,6 @@ async function stageApp() {
 
   const webOsScriptPath = await resolveWebOsScriptPath(appStageDir);
   await writeFile(path.join(appStageDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }), "utf8");
-  await injectWebOsRuntimeEnv(appStageDir);
 }
 
 async function stageService() {

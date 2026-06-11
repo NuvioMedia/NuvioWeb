@@ -38,6 +38,7 @@ const DETAIL_SCROLL_DAMPING_RATIO = 0.95;
 const DETAIL_TAB_FOCUS_TARGET = 0.40;
 const DETAIL_ROW_FOCUS_TARGET = 0.33;
 const DETAIL_SCROLL_MAX_FRAME_SECONDS = 0.016;
+const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -602,7 +603,38 @@ function resolveYoutubeId(value = "") {
 }
 
 function shouldUseDirectYoutubeEmbedOnTv() {
-  return (Platform.isWebOS() || Platform.isTizen()) && !String(YOUTUBE_PROXY_URL || "").trim();
+  return (Platform.isWebOS() || Platform.isTizen()) && !getYoutubeProxyBaseUrl();
+}
+
+function getYoutubeProxyBaseUrl() {
+  if (Platform.isWebOS() || Platform.isTizen()) {
+    return LOCAL_YOUTUBE_PROXY_URL;
+  }
+  return String(YOUTUBE_PROXY_URL || LOCAL_YOUTUBE_PROXY_URL).trim();
+}
+
+function resolveTrailerPostMessageTargetOrigin(src = "") {
+  try {
+    const url = new URL(String(src || ""), globalThis?.location?.href || "https://example.com/");
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.origin;
+    }
+  } catch (_) {
+    // Fall through to wildcard for opaque/file origins.
+  }
+  return "*";
+}
+
+function resolveTrailerTrustedProxyOrigin() {
+  try {
+    const url = new URL(getYoutubeProxyBaseUrl(), globalThis?.location?.href || "https://example.com/");
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.origin;
+    }
+  } catch (_) {
+    // Local file origins are validated by event.source instead.
+  }
+  return "";
 }
 
 function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
@@ -637,7 +669,7 @@ function buildYoutubeEmbedUrl(ytId = "", { muted = true } = {}) {
   if (shouldUseDirectYoutubeEmbedOnTv()) {
     return buildDirectYoutubeEmbedUrl(cleanId, { muted: true });
   }
-  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  const proxyBase = getYoutubeProxyBaseUrl();
   if (proxyBase) {
     try {
       const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
@@ -684,7 +716,7 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
   if (shouldUseDirectYoutubeEmbedOnTv()) {
     return buildDirectYoutubeEmbedUrl(cleanId, { muted });
   }
-  const proxyBase = String(YOUTUBE_PROXY_URL || "").trim();
+  const proxyBase = getYoutubeProxyBaseUrl();
   if (proxyBase) {
     try {
       const proxyUrl = new URL(proxyBase, globalThis?.location?.href || "https://example.com/");
@@ -988,12 +1020,7 @@ export const MetaDetailsScreen = {
     if (this.trailerProxyMessageHandler) {
       window.removeEventListener("message", this.trailerProxyMessageHandler);
     }
-    let trustedProxyOrigin = "";
-    try {
-      trustedProxyOrigin = new URL(String(YOUTUBE_PROXY_URL || "").trim(), globalThis?.location?.href || "https://example.com/").origin;
-    } catch (_) {
-      trustedProxyOrigin = "";
-    }
+    const trustedProxyOrigin = resolveTrailerTrustedProxyOrigin();
     this.trailerProxyMessageHandler = (event) => {
       const frameWindow = this.trailerUiRefs?.frame?.contentWindow;
       const data = event?.data;
@@ -1039,12 +1066,7 @@ export const MetaDetailsScreen = {
       return false;
     }
     const src = String(this.trailerUiRefs?.frame?.src || this.trailerSource?.embedUrl || "");
-    let targetOrigin = "*";
-    try {
-      targetOrigin = new URL(src, globalThis?.location?.href || "https://example.com/").origin;
-    } catch (_) {
-      targetOrigin = "*";
-    }
+    const targetOrigin = resolveTrailerPostMessageTargetOrigin(src);
     frameWindow.postMessage({
       source: "nuvio-detail-trailer",
       type: "command",
