@@ -14,6 +14,7 @@ import { AuthState } from "./core/auth/authState.js";
 import { ProfileManager } from "./core/profile/profileManager.js";
 import { ProfileSyncService } from "./core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "./core/profile/profileSettingsSyncService.js";
+import { LibrarySyncService } from "./core/profile/librarySyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
@@ -176,7 +177,10 @@ async function routeAfterAuthentication() {
   if (activeProfile) {
     await ProfileManager.setActiveProfile(activeProfile.id);
     detailWatchedEnrichmentService.invalidateAllCache();
-    await ProfileSettingsSyncService.pull(activeProfile.id);
+    await Promise.all([
+      ProfileSettingsSyncService.pull(activeProfile.id),
+      LibrarySyncService.pull()
+    ]);
   }
   Router.navigate("home");
 }

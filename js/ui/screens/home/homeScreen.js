@@ -3819,14 +3819,19 @@ export const HomeScreen = {
     return true;
   },
 
-  completePendingContinueWatchingHold(node) {
+  completePendingContinueWatchingHold(node, event = null) {
     const pending = this.pendingContinueWatchingHoldTarget;
     if (!pending) {
       return false;
     }
     const holdTriggered = Boolean(pending.holdTriggered);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= CW_HOLD_DELAY_MS;
+    const shouldOpenHoldMenu = !holdTriggered && heldLongEnough && this.hasPendingContinueWatchingHold(node);
     this.cancelPendingContinueWatchingHold();
-    if (holdTriggered) {
+    if (holdTriggered || shouldOpenHoldMenu) {
+      if (shouldOpenHoldMenu) {
+        this.openHoldMenuForNode(node);
+      }
       return true;
     }
     if (!this.isHomeHoldTarget(node)) {
@@ -7421,7 +7426,7 @@ export const HomeScreen = {
       return;
     }
     const current = this.container?.querySelector(".home-continue-card.focusable.focused, .home-poster-card.focusable.focused") || null;
-    if (this.completePendingContinueWatchingHold(current)) {
+    if (this.completePendingContinueWatchingHold(current, event)) {
       event.preventDefault?.();
     }
   },

@@ -96,7 +96,7 @@ function applyPulledAddons(rows = []) {
     .map((entry) => entry.url)
     .filter(Boolean);
   addonRepository.setAddonDisplayNameOverrides(
-    entries.map((entry) => ({ url: entry.url, name: entry.name })),
+    entries.map((entry) => ({ url: entry.url, name: entry.displayName || entry.name })),
     { replace: true }
   );
   return urls;

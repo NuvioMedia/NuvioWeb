@@ -667,8 +667,8 @@ const FEATURE_ADAPTERS = {
     }
   },
   home_catalog_settings: {
-    export() {
-      const prefs = HomeCatalogStore.get();
+    export(profileId) {
+      const prefs = HomeCatalogStore.getForProfile(profileId);
       return {
         catalog_order_keys: prefs.order,
         disabled_catalog_keys: prefs.disabled
@@ -699,7 +699,6 @@ const FEATURE_ADAPTERS = {
       return projected;
     },
     import(profileId, rawFeature = {}) {
-      void profileId;
       const raw = normalizeFeaturePayload(rawFeature);
       const partial = {};
       const order = firstStringArrayFromRaw(raw, [
@@ -724,7 +723,7 @@ const FEATURE_ADAPTERS = {
       if (!Object.keys(partial).length) {
         return false;
       }
-      HomeCatalogStore.set(partial, { silentSync: true });
+      HomeCatalogStore.setForProfile(profileId, partial, { silentSync: true });
       return true;
     }
   },
@@ -1070,7 +1069,8 @@ const FEATURE_ADAPTERS = {
       const rules = normalizeStreamBadgeRules(settings.rules);
       return {
         stream_badge_rules: rules.imports.length ? JSON.stringify(rules) : "",
-        show_file_size_badges: settings.showFileSizeBadges !== false
+        show_file_size_badges: settings.showFileSizeBadges !== false,
+        stream_badge_placement: settings.badgePlacement === "TOP" ? "TOP" : "BOTTOM"
       };
     },
     project(rawFeature = {}) {
@@ -1078,6 +1078,9 @@ const FEATURE_ADAPTERS = {
       const projected = {};
       projected.stream_badge_rules = String(raw.stream_badge_rules || "").trim();
       projected.show_file_size_badges = booleanFromAnyKey(raw, ["show_file_size_badges"]) ?? true;
+      projected.stream_badge_placement = String(raw.stream_badge_placement || raw.badge_placement || raw.badgePlacement || "").trim().toUpperCase() === "TOP"
+        ? "TOP"
+        : "BOTTOM";
       return projected;
     },
     import(profileId, rawFeature = {}) {
@@ -1089,6 +1092,10 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.show_file_size_badges) != null) {
         partial.showFileSizeBadges = Boolean(raw.show_file_size_badges);
+      }
+      const badgePlacement = String(raw.stream_badge_placement ?? raw.badge_placement ?? raw.badgePlacement ?? "").trim().toUpperCase();
+      if (badgePlacement === "TOP" || badgePlacement === "BOTTOM") {
+        partial.badgePlacement = badgePlacement;
       }
       if (!Object.keys(partial).length) {
         return false;

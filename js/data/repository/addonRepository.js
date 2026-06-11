@@ -1,9 +1,12 @@
 import { safeApiCall } from "../../core/network/safeApiCall.js";
 import { LocalStore } from "../../core/storage/localStore.js";
+import { ProfileManager } from "../../core/profile/profileManager.js";
 import { AddonApi } from "../remote/api/addonApi.js";
 
 const ADDON_URLS_KEY = "installedAddonUrls";
 const ADDON_DISPLAY_NAMES_KEY = "installedAddonDisplayNames";
+const PROFILES_KEY = "profiles";
+const PROFILE_SCOPED_VERSION = 1;
 const MANIFEST_SUFFIX = "/manifest.json";
 const DEFAULT_ADDON_URLS = [
   "https://v3-cinemeta.strem.io",
@@ -63,30 +66,123 @@ class AddonRepository {
     }
   }
 
-  getInstalledAddonUrls() {
-    const fromStorage = LocalStore.get(ADDON_URLS_KEY, null);
-    if (Array.isArray(fromStorage)) {
-      const normalized = Array.from(new Set(
-        fromStorage
-          .map((url) => this.normalizeCinemetaUrl(this.canonicalizeUrl(url)))
-          .filter(Boolean)
-      ));
-      if (JSON.stringify(normalized) !== JSON.stringify(fromStorage)) {
-        LocalStore.set(ADDON_URLS_KEY, normalized);
-      }
-      return normalized;
-    }
-
-    LocalStore.set(ADDON_URLS_KEY, DEFAULT_ADDON_URLS);
-    return [...DEFAULT_ADDON_URLS];
+  getActiveStorageProfileId(profileId = null) {
+    const raw = String(profileId ?? ProfileManager.getActiveProfileId() ?? "1").trim();
+    return raw || "1";
   }
 
-  getAddonDisplayNameOverrides() {
-    const stored = LocalStore.get(ADDON_DISPLAY_NAMES_KEY, {}) || {};
-    if (!stored || typeof stored !== "object" || Array.isArray(stored)) {
+  getKnownStorageProfileIds() {
+    const storedProfiles = LocalStore.get(PROFILES_KEY, null);
+    const ids = Array.isArray(storedProfiles)
+      ? storedProfiles
+        .map((profile) => String(profile?.id || profile?.profileIndex || "").trim())
+        .filter(Boolean)
+      : [];
+    if (!ids.includes("1")) {
+      ids.unshift("1");
+    }
+    return Array.from(new Set(ids));
+  }
+
+  isProfileScopedEnvelope(value) {
+    return Boolean(
+      value
+      && typeof value === "object"
+      && value.__profileScoped === true
+      && Number(value.version || 0) === PROFILE_SCOPED_VERSION
+      && value.profiles
+      && typeof value.profiles === "object"
+    );
+  }
+
+  cloneValue(value) {
+    if (value == null) {
+      return value;
+    }
+    return JSON.parse(JSON.stringify(value));
+  }
+
+  createProfileScopedEnvelope() {
+    return {
+      __profileScoped: true,
+      version: PROFILE_SCOPED_VERSION,
+      profiles: {}
+    };
+  }
+
+  readProfileScopedEnvelope(key, normalizeValue) {
+    const raw = LocalStore.get(key, null);
+    if (this.isProfileScopedEnvelope(raw)) {
+      const next = {
+        ...raw,
+        profiles: Object.entries(raw.profiles || {}).reduce((accumulator, [profileId, value]) => {
+          const normalizedProfileId = this.getActiveStorageProfileId(profileId);
+          accumulator[normalizedProfileId] = normalizeValue(this.cloneValue(value));
+          return accumulator;
+        }, {})
+      };
+      if (JSON.stringify(next) !== JSON.stringify(raw)) {
+        LocalStore.set(key, next);
+      }
+      return next;
+    }
+
+    const envelope = this.createProfileScopedEnvelope();
+    if (raw != null) {
+      const normalizedLegacy = normalizeValue(this.cloneValue(raw));
+      this.getKnownStorageProfileIds().forEach((profileId) => {
+        envelope.profiles[profileId] = this.cloneValue(normalizedLegacy);
+      });
+      LocalStore.set(key, envelope);
+    }
+    return envelope;
+  }
+
+  ensureProfileScopedValue(key, envelope, normalizeValue, defaultValue, profileId = null) {
+    const normalizedProfileId = this.getActiveStorageProfileId(profileId);
+    if (Object.prototype.hasOwnProperty.call(envelope.profiles, normalizedProfileId)) {
+      return envelope.profiles[normalizedProfileId];
+    }
+
+    const seed = Object.prototype.hasOwnProperty.call(envelope.profiles, "1")
+      ? this.cloneValue(envelope.profiles["1"])
+      : this.cloneValue(defaultValue);
+    envelope.profiles[normalizedProfileId] = normalizeValue(seed);
+    LocalStore.set(key, envelope);
+    return envelope.profiles[normalizedProfileId];
+  }
+
+  readProfileScopedValue(key, normalizeValue, defaultValue, profileId = null) {
+    const envelope = this.readProfileScopedEnvelope(key, normalizeValue);
+    return this.cloneValue(this.ensureProfileScopedValue(
+      key,
+      envelope,
+      normalizeValue,
+      defaultValue,
+      profileId
+    ));
+  }
+
+  writeProfileScopedValue(key, normalizeValue, value, profileId = null) {
+    const envelope = this.readProfileScopedEnvelope(key, normalizeValue);
+    const normalizedProfileId = this.getActiveStorageProfileId(profileId);
+    envelope.profiles[normalizedProfileId] = normalizeValue(this.cloneValue(value));
+    LocalStore.set(key, envelope);
+    return envelope.profiles[normalizedProfileId];
+  }
+
+  normalizeAddonUrlList(value) {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+    return Array.from(new Set(value.map((url) => this.canonicalizeUrl(url)).filter(Boolean)));
+  }
+
+  normalizeDisplayNameOverrides(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
       return {};
     }
-    return Object.entries(stored).reduce((accumulator, [url, name]) => {
+    return Object.entries(value).reduce((accumulator, [url, name]) => {
       const cleanUrl = this.canonicalizeUrl(url);
       const cleanName = String(name || "").trim();
       if (cleanUrl && cleanName) {
@@ -94,6 +190,22 @@ class AddonRepository {
       }
       return accumulator;
     }, {});
+  }
+
+  getInstalledAddonUrls() {
+    return this.readProfileScopedValue(
+      ADDON_URLS_KEY,
+      (value) => this.normalizeAddonUrlList(value),
+      DEFAULT_ADDON_URLS
+    );
+  }
+
+  getAddonDisplayNameOverrides() {
+    return this.readProfileScopedValue(
+      ADDON_DISPLAY_NAMES_KEY,
+      (value) => this.normalizeDisplayNameOverrides(value),
+      {}
+    );
   }
 
   getAddonDisplayNameOverride(url) {
@@ -119,7 +231,11 @@ class AddonRepository {
     });
     const changed = JSON.stringify(this.getAddonDisplayNameOverrides()) !== JSON.stringify(next);
     if (changed) {
-      LocalStore.set(ADDON_DISPLAY_NAMES_KEY, next);
+      this.writeProfileScopedValue(
+        ADDON_DISPLAY_NAMES_KEY,
+        (value) => this.normalizeDisplayNameOverrides(value),
+        next
+      );
       this.invalidateInstalledAddonsCache();
     }
     return changed;
@@ -203,7 +319,11 @@ class AddonRepository {
 
   async getInstalledAddons(options = {}) {
     const urls = this.getInstalledAddonUrls();
-    const cacheKey = JSON.stringify(urls);
+    const cacheKey = JSON.stringify({
+      profileId: this.getActiveStorageProfileId(),
+      urls,
+      displayNames: this.getAddonDisplayNameOverrides()
+    });
     const force = Boolean(options?.force);
     const cacheOnly = Boolean(options?.cacheOnly);
     if (!force && this.installedAddonsCache && this.installedAddonsCacheKey === cacheKey) {
@@ -229,7 +349,11 @@ class AddonRepository {
         .map((result) => result.data);
 
       const displayAddons = this.applyDisplayNames(addons);
-      if (JSON.stringify(this.getInstalledAddonUrls()) === cacheKey) {
+      if (JSON.stringify({
+        profileId: this.getActiveStorageProfileId(),
+        urls: this.getInstalledAddonUrls(),
+        displayNames: this.getAddonDisplayNameOverrides()
+      }) === cacheKey) {
         this.installedAddonsCache = displayAddons;
         this.installedAddonsCacheKey = cacheKey;
       }
@@ -259,7 +383,11 @@ class AddonRepository {
       return false;
     }
 
-    LocalStore.set(ADDON_URLS_KEY, [...current, clean]);
+    this.writeProfileScopedValue(
+      ADDON_URLS_KEY,
+      (value) => this.normalizeAddonUrlList(value),
+      [...current, clean]
+    );
     this.manifestErrorCache.delete(clean);
     this.invalidateInstalledAddonsCache();
     this.notifyAddonsChanged("add");
@@ -273,7 +401,11 @@ class AddonRepository {
     if (next.length === current.length) {
       return false;
     }
-    LocalStore.set(ADDON_URLS_KEY, next);
+    this.writeProfileScopedValue(
+      ADDON_URLS_KEY,
+      (value) => this.normalizeAddonUrlList(value),
+      next
+    );
     this.manifestCache.delete(clean);
     this.manifestErrorCache.delete(clean);
     this.invalidateInstalledAddonsCache();
@@ -302,7 +434,11 @@ class AddonRepository {
     const normalized = (urls || []).map((url) => this.normalizeCinemetaUrl(this.canonicalizeUrl(url))).filter(Boolean);
     const current = this.getInstalledAddonUrls();
     const changed = JSON.stringify(current) !== JSON.stringify(normalized);
-    LocalStore.set(ADDON_URLS_KEY, normalized);
+    this.writeProfileScopedValue(
+      ADDON_URLS_KEY,
+      (value) => this.normalizeAddonUrlList(value),
+      normalized
+    );
     if (changed) {
       const normalizedSet = new Set(normalized);
       current

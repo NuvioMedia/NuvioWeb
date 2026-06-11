@@ -24,6 +24,7 @@ function buildNormalizedEvent(event) {
     keyCode: normalizedCode,
     which: normalizedCode,
     originalKeyCode: Number(normalizedKey.originalKeyCode || event?.keyCode || 0),
+    keyDownDurationMs: 0,
     preventDefault: () => {
       if (typeof event?.preventDefault === "function") {
         event.preventDefault();
@@ -47,6 +48,7 @@ export const FocusEngine = {
   lastPointerFocusTarget: null,
   pointerMoveFrame: null,
   pendingPointerMoveEvent: null,
+  activeKeyDownStartedAt: new Map(),
 
   init() {
     this.boundHandleKey = this.handleKey.bind(this);
@@ -96,6 +98,10 @@ export const FocusEngine = {
     }
 
     const normalizedEvent = buildNormalizedEvent(event);
+    const keyIdentity = this.getKeyIdentity(normalizedEvent);
+    if (keyIdentity && !this.activeKeyDownStartedAt.has(keyIdentity)) {
+      this.activeKeyDownStartedAt.set(keyIdentity, Date.now());
+    }
 
     if (Platform.isBackEvent({
         target: normalizedEvent.target,
@@ -120,11 +126,18 @@ export const FocusEngine = {
   handleKeyUp(event) {
     if (event?.target && !document.contains(event.target)) return;
 
+    const normalizedEvent = buildNormalizedEvent(event);
+    const keyIdentity = this.getKeyIdentity(normalizedEvent);
+    if (keyIdentity) {
+      const startedAt = Number(this.activeKeyDownStartedAt.get(keyIdentity) || 0);
+      normalizedEvent.keyDownDurationMs = startedAt > 0 ? Math.max(0, Date.now() - startedAt) : 0;
+      this.activeKeyDownStartedAt.delete(keyIdentity);
+    }
+
     const currentScreen = Router.getCurrentScreen();
     if (!currentScreen?.onKeyUp) {
       return;
     }
-    const normalizedEvent = buildNormalizedEvent(event);
     Promise.resolve(currentScreen.onKeyUp(normalizedEvent)).catch((error) => {
       console.warn("Screen keyup handler failed", error);
     });
@@ -135,6 +148,15 @@ export const FocusEngine = {
       return;
     }
     this.handleBack(event, buildNormalizedEvent(event));
+  },
+
+  getKeyIdentity(event) {
+    const keyCode = Number(event?.keyCode || event?.which || 0);
+    if (keyCode) {
+      return `code:${keyCode}`;
+    }
+    const key = String(event?.key || event?.code || event?.keyName || "").trim();
+    return key ? `key:${key}` : "";
   },
 
   getPointerFocusable(event) {

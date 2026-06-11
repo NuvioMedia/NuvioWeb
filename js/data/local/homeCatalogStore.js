@@ -1,5 +1,4 @@
-import { LocalStore } from "../../core/storage/localStore.js";
-import { queueProfileSettingsCloudSync } from "./profileScopedStore.js";
+import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "homeCatalogPrefs";
 
@@ -19,31 +18,42 @@ function sameArray(left = [], right = []) {
   return left.every((entry, index) => entry === right[index]);
 }
 
+function normalizeHomeCatalogPrefs(value = {}) {
+  return {
+    order: unique(Array.isArray(value.order) ? value.order : []),
+    disabled: unique(Array.isArray(value.disabled) ? value.disabled : [])
+  };
+}
+
+const store = createProfileScopedStore({
+  key: KEY,
+  normalize: normalizeHomeCatalogPrefs
+});
+
 export const HomeCatalogStore = {
 
-  get() {
-    const stored = LocalStore.get(KEY, {}) || {};
-    return {
-      order: unique(Array.isArray(stored.order) ? stored.order : []),
-      disabled: unique(Array.isArray(stored.disabled) ? stored.disabled : [])
-    };
+  getForProfile(profileId) {
+    return store.getForProfile(profileId);
   },
 
-  set(partial, { silentSync = false, profileId = null } = {}) {
-    const current = this.get();
-    const next = {
+  get() {
+    return store.get();
+  },
+
+  setForProfile(profileId, partial, options = {}) {
+    const current = this.getForProfile(profileId);
+    const next = normalizeHomeCatalogPrefs({
       ...current,
       ...(partial || {})
-    };
-    next.order = unique(Array.isArray(next.order) ? next.order : []);
-    next.disabled = unique(Array.isArray(next.disabled) ? next.disabled : []);
+    });
     if (sameArray(current.order, next.order) && sameArray(current.disabled, next.disabled)) {
       return;
     }
-    LocalStore.set(KEY, next);
-    if (!silentSync) {
-      queueProfileSettingsCloudSync(profileId);
-    }
+    store.replaceForProfile(profileId, next, options);
+  },
+
+  set(partial, { silentSync = false, profileId = null } = {}) {
+    this.setForProfile(profileId, partial, { silentSync });
   },
 
   isDisabled(key) {
@@ -72,10 +82,9 @@ export const HomeCatalogStore = {
   },
 
   reset(options = {}) {
-    LocalStore.set(KEY, DEFAULTS);
-    if (!options.silentSync) {
-      queueProfileSettingsCloudSync(options.profileId || null);
-    }
+    store.replaceForProfile(options.profileId || null, DEFAULTS, {
+      silentSync: Boolean(options.silentSync)
+    });
   }
 
 };

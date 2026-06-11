@@ -259,6 +259,40 @@ function buildTraktTabLabel(source = {}) {
   return firstNonEmpty(source.title, `List ${source.traktListId || ""}`);
 }
 
+function stableSourceValue(value) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stableSourceValue(entry));
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value)
+      .sort()
+      .reduce((accumulator, key) => {
+        accumulator[key] = stableSourceValue(value[key]);
+        return accumulator;
+      }, {});
+  }
+  return value ?? null;
+}
+
+function buildFolderSourceKey(source = {}, index = 0) {
+  const provider = String(source.provider || "addon").toLowerCase();
+  const signature = {
+    provider,
+    index,
+    addonId: source.addonId || "",
+    catalogId: source.catalogId || "",
+    type: source.type || source.apiType || "",
+    genre: source.genre || "",
+    tmdbSourceType: source.tmdbSourceType || "",
+    tmdbId: source.tmdbId ?? "",
+    mediaType: source.mediaType || "",
+    title: source.title || "",
+    sortBy: source.sortBy || "",
+    filters: stableSourceValue(source.filters || {})
+  };
+  return `${provider}:${index}:${JSON.stringify(stableSourceValue(signature))}`;
+}
+
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, options);
   const payload = await response.json().catch(() => null);
@@ -545,7 +579,7 @@ export const FolderDetailScreen = {
       ? this.folder.sources
       : buildFallbackStreamingSources(this.folder);
     const sourceTabs = folderSources.map((source, index) => ({
-      key: `${source.provider}:${source.addonId || source.tmdbId || source.traktListId || source.catalogId || "source"}:${source.title || source.sortBy || index}`,
+      key: buildFolderSourceKey(source, index),
       label: source.provider === "tmdb"
         ? buildTmdbTabLabel(source)
         : (source.provider === "trakt" ? buildTraktTabLabel(source) : buildAddonTabLabel(source, addons)),

@@ -11243,6 +11243,11 @@ button:focus-visible {
   gap: 8px;
 }
 
+.player-source-tags.muted {
+  margin-top: 6px;
+  opacity: 0.72;
+}
+
 .player-source-tag {
   height: 24px;
   padding: 0 10px;
@@ -15345,6 +15350,14 @@ button:focus-visible {
   gap: 6px;
   margin: 10px 0 8px;
   max-width: 100%;
+}
+
+.player-source-badges {
+  margin: 0 0 7px;
+}
+
+.player-source-desc + .player-source-badges {
+  margin: 7px 0 0;
 }
 
 .stream-route-stream-badge {

@@ -907,6 +907,11 @@ function renderStreamBadges(stream = {}, enabled = true, badgeSettings = null) {
   `;
 }
 
+function resolveStreamBadgePlacement(badgeSettings = null) {
+  const placement = String((badgeSettings || StreamBadgeSettingsStore.snapshot()).badgePlacement || "BOTTOM").trim().toUpperCase();
+  return placement === "TOP" ? "TOP" : "BOTTOM";
+}
+
 function getOrderedFilterNames(sourceChips = [], streams = []) {
   const ordered = [];
   const sortedChips = (sourceChips || [])
@@ -1429,25 +1434,72 @@ export const StreamScreen = {
     if (listNode) {
       this.ensureListItemVisible(listNode, target);
       this.listScrollTop = Number(listNode.scrollTop || 0);
+      this.scheduleFocusedListItemVisibilityCheck(listNode, target);
     }
     return true;
+  },
+
+  setListScrollTop(listNode, nextScrollTop) {
+    if (!listNode) {
+      return;
+    }
+    const maxScrollTop = Math.max(0, Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0));
+    const normalized = clamp(Number(nextScrollTop || 0), 0, maxScrollTop);
+    listNode.scrollTop = normalized;
+    if (typeof listNode.scrollTo === "function") {
+      try {
+        listNode.scrollTo(0, normalized);
+      } catch (_) {
+        listNode.scrollTop = normalized;
+      }
+    }
+    this.listScrollTop = Number(listNode.scrollTop || normalized || 0);
   },
 
   ensureListItemVisible(listNode, target) {
     if (!listNode || !target) {
       return;
     }
-    const itemTop = Number(target.offsetTop || 0);
-    const itemBottom = itemTop + Number(target.offsetHeight || 0);
     const viewTop = Number(listNode.scrollTop || 0);
+    let itemTop = Number(target.offsetTop || 0);
+    let itemBottom = itemTop + Number(target.offsetHeight || 0);
+    if (typeof listNode.getBoundingClientRect === "function" && typeof target.getBoundingClientRect === "function") {
+      const listRect = listNode.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      if (listRect && targetRect && Number.isFinite(targetRect.top) && Number.isFinite(listRect.top)) {
+        itemTop = viewTop + (targetRect.top - listRect.top);
+        itemBottom = viewTop + (targetRect.bottom - listRect.top);
+      }
+    }
     const viewHeight = Number(listNode.clientHeight || 0);
+    if (!viewHeight) {
+      return;
+    }
     const viewBottom = viewTop + viewHeight;
     const pad = 16;
     if (itemBottom > viewBottom - pad) {
-      listNode.scrollTop = Math.max(0, itemBottom - viewHeight + pad);
+      this.setListScrollTop(listNode, itemBottom - viewHeight + pad);
     } else if (itemTop < viewTop + pad) {
-      listNode.scrollTop = Math.max(0, itemTop - pad);
+      this.setListScrollTop(listNode, itemTop - pad);
     }
+  },
+
+  scheduleFocusedListItemVisibilityCheck(listNode, target) {
+    if (!listNode || !target) {
+      return;
+    }
+    const run = () => {
+      const root = document.documentElement || document.body;
+      if (!this.container || !root?.contains?.(listNode) || !root?.contains?.(target)) {
+        return;
+      }
+      this.ensureListItemVisible(listNode, target);
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(run);
+      return;
+    }
+    setTimeout(run, 0);
   },
 
   getFocusLists() {
@@ -1514,6 +1566,9 @@ export const StreamScreen = {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
     const badges = renderStreamBadges(stream, streamBadgesEnabled, badgeSettings);
+    const badgePlacement = resolveStreamBadgePlacement(badgeSettings);
+    const topBadges = badgePlacement === "TOP" ? badges : "";
+    const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
     const descriptionLines = getStreamDescriptionLines(stream);
     const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
     const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
@@ -1552,8 +1607,10 @@ export const StreamScreen = {
                data-stream-id="${escapeHtml(stream.id)}">
         <div class="stream-route-card-copy">
           <div class="stream-route-card-heading">${escapeHtml(headline)}</div>
-          ${badges || `<div class="stream-route-card-quality">${escapeHtml(quality)}</div>`}
+          ${topBadges || ""}
+          ${!badges ? `<div class="stream-route-card-quality">${escapeHtml(quality)}</div>` : ""}
           ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml(line)}</div>`).join("")}
+          ${bottomBadges || ""}
           ${meta ? `<div class="stream-route-card-meta">${meta}</div>` : ""}
         </div>
         <div class="stream-route-card-side">
@@ -1682,6 +1739,12 @@ export const StreamScreen = {
   },
 
   async playStream(streamId) {
+    const playResolveToken = (Number(this.playResolveToken || 0) + 1);
+    this.playResolveToken = playResolveToken;
+    const isCurrentPlayRequest = () => (
+      this.playResolveToken === playResolveToken
+      && Router.getCurrent?.() === "stream"
+    );
     const filtered = this.getFilteredStreams();
     const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
     if (!selected) {
@@ -1703,6 +1766,9 @@ export const StreamScreen = {
         this.resolvingStreamMode = "debrid";
         this.requestRender();
         const result = await DirectDebridResolver.resolve(selected, resolveContext);
+        if (!isCurrentPlayRequest()) {
+          return;
+        }
         this.resolvingStreamId = null;
         this.resolvingStreamMode = "";
         if (result.status === "success" && result.stream?.url) {
@@ -1734,6 +1800,9 @@ export const StreamScreen = {
         const result = canUseEngineFs
           ? await WebOsEngineFsResolver.resolve(selected, resolveContext)
           : await TizenStreamingServerResolver.resolve(selected, resolveContext);
+        if (!isCurrentPlayRequest()) {
+          return;
+        }
         this.resolvingStreamId = null;
         this.resolvingStreamMode = "";
         if (result.status === "success" && result.stream?.url) {
@@ -1767,6 +1836,9 @@ export const StreamScreen = {
       }
       this.streams = this.streams.map((stream) => stream.id === selected.id ? { ...stream, ...selected } : stream);
       this.requestRender();
+    }
+    if (!isCurrentPlayRequest()) {
+      return;
     }
     const playerStreamCandidates = this.getFilteredStreams();
     const itemType = normalizeType(this.params?.itemType);
@@ -1938,6 +2010,7 @@ export const StreamScreen = {
 
   cleanup() {
     this.loadToken = (this.loadToken || 0) + 1;
+    this.playResolveToken = (Number(this.playResolveToken || 0) + 1);
     this.cancelScheduledRender();
     if (this.errorChipTimer) {
       clearTimeout(this.errorChipTimer);

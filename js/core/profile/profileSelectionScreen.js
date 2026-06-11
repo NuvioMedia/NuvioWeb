@@ -2,6 +2,7 @@ import { Router } from "../../ui/navigation/router.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "../../core/profile/profileSettingsSyncService.js";
+import { LibrarySyncService } from "../../core/profile/librarySyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
@@ -1260,14 +1261,20 @@ export const ProfileSelectionScreen = {
     return true;
   },
 
-  async completePendingProfileHold(node) {
+  async completePendingProfileHold(node, event = null) {
     const pending = this.pendingProfileHoldTarget;
     if (!pending) {
       return false;
     }
     const holdTriggered = Boolean(pending.holdTriggered);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= PROFILE_HOLD_DELAY_MS;
+    const shouldOpenHoldMenu = !holdTriggered && heldLongEnough && this.hasPendingProfileHold(node);
+    const profile = shouldOpenHoldMenu ? this.getProfileById(pending.profileId) : null;
     this.cancelPendingProfileHold();
-    if (holdTriggered) {
+    if (holdTriggered || shouldOpenHoldMenu) {
+      if (shouldOpenHoldMenu && profile) {
+        this.openOptionsDialog(profile);
+      }
       return true;
     }
     if (!node) {
@@ -1751,7 +1758,10 @@ export const ProfileSelectionScreen = {
     }
     await ProfileManager.setActiveProfile(profileId);
     detailWatchedEnrichmentService.invalidateAllCache();
-    await ProfileSettingsSyncService.pull(profileId);
+    await Promise.all([
+      ProfileSettingsSyncService.pull(profileId),
+      LibrarySyncService.pull()
+    ]);
     StartupSyncService.syncPull().catch((error) => {
       console.warn("Profile startup sync failed", error);
     });
@@ -1847,7 +1857,7 @@ export const ProfileSelectionScreen = {
       return;
     }
     const current = this.container?.querySelector(".profile-card.focused") || null;
-    if (await this.completePendingProfileHold(current)) {
+    if (await this.completePendingProfileHold(current, event)) {
       event?.preventDefault?.();
     }
   },

@@ -5,6 +5,8 @@ import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { parentalGuideRepository } from "../../../data/repository/parentalGuideRepository.js";
 import { skipIntroRepository } from "../../../data/repository/skipIntroRepository.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
+import { matchStreamBadges } from "../../../core/streams/streamBadgeRules.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
@@ -17,11 +19,91 @@ import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "..
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
+const ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS = 1500;
+const activeEngineFsPlaybackClaims = new Map();
+const deferredEngineFsRemovalTimers = new Map();
 
 function logEngineFsDebug(...args) {
   if (globalThis.__NUVIO_DEBUG_ENGINEFS__) {
     console.info(...args);
   }
+}
+
+function getEngineFsClaimKey(state = null) {
+  const infoHash = String(state?.infoHash || "").trim().toLowerCase();
+  return infoHash || "";
+}
+
+function createEngineFsClaimToken() {
+  return `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+}
+
+function clearDeferredEngineFsRemoval(key = "") {
+  const normalizedKey = String(key || "").trim().toLowerCase();
+  const pending = normalizedKey ? deferredEngineFsRemovalTimers.get(normalizedKey) : null;
+  if (!pending) {
+    return false;
+  }
+  clearTimeout(pending.timer);
+  deferredEngineFsRemovalTimers.delete(normalizedKey);
+  pending.resolve?.(false);
+  return true;
+}
+
+function claimEngineFsPlayback(state = null) {
+  const key = getEngineFsClaimKey(state);
+  if (!key) {
+    return "";
+  }
+  clearDeferredEngineFsRemoval(key);
+  const token = createEngineFsClaimToken();
+  activeEngineFsPlaybackClaims.set(key, token);
+  return token;
+}
+
+function releaseEngineFsPlaybackClaim(state = null, token = "") {
+  const key = getEngineFsClaimKey(state);
+  if (!key || !token) {
+    return;
+  }
+  if (activeEngineFsPlaybackClaims.get(key) === token) {
+    activeEngineFsPlaybackClaims.delete(key);
+  }
+}
+
+function hasActiveEngineFsPlaybackClaim(state = null) {
+  const key = getEngineFsClaimKey(state);
+  return Boolean(key && activeEngineFsPlaybackClaims.has(key));
+}
+
+function scheduleDeferredEngineFsRemoval(state = null, reason = "cleanup", delayMs = 0, removeFn = null) {
+  const key = getEngineFsClaimKey(state);
+  const waitMs = Math.max(0, Number(delayMs || 0));
+  if (!key || waitMs <= 0 || typeof removeFn !== "function") {
+    return null;
+  }
+  clearDeferredEngineFsRemoval(key);
+  return new Promise((resolve) => {
+    const timer = setTimeout(async () => {
+      const pending = deferredEngineFsRemovalTimers.get(key);
+      if (!pending || pending.timer !== timer) {
+        resolve(false);
+        return;
+      }
+      deferredEngineFsRemovalTimers.delete(key);
+      if (hasActiveEngineFsPlaybackClaim(state)) {
+        logEngineFsDebug("EngineFS deferred torrent remove skipped; stream was reused", {
+          reason,
+          infoHash: state.infoHash,
+          fileIdx: state.fileIdx
+        });
+        resolve(false);
+        return;
+      }
+      resolve(await removeFn());
+    }, waitMs);
+    deferredEngineFsRemovalTimers.set(key, { timer, resolve });
+  });
 }
 
 const AUDIO_TRACK_LANGUAGE_KEY_BY_CODE = {
@@ -803,6 +885,76 @@ function qualityLabelFromText(value) {
   return "Auto";
 }
 
+function formatBytes(value) {
+  const bytes = Number(value || 0);
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "";
+  }
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let amount = bytes;
+  let unitIndex = 0;
+  while (amount >= 1024 && unitIndex < units.length - 1) {
+    amount /= 1024;
+    unitIndex += 1;
+  }
+  const precision = amount >= 10 || unitIndex === 0 ? 0 : 1;
+  return `${amount.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function normalizeStreamBadgeChipColor(value = "") {
+  const hex = String(value || "").trim().replace(/^#/, "");
+  if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(hex)) {
+    return "";
+  }
+  return `#${hex.length === 8 ? hex.slice(2) : hex}`.toUpperCase();
+}
+
+function renderPlayerImageBadgeChip(badge = {}) {
+  const imageUrl = String(badge.imageURL || "").trim();
+  if (!imageUrl) {
+    return "";
+  }
+  const backgroundColor = normalizeStreamBadgeChipColor(badge.tagColor);
+  const outlineColor = normalizeStreamBadgeChipColor(badge.borderColor);
+  const textColor = normalizeStreamBadgeChipColor(badge.textColor);
+  const filled = String(badge.tagStyle || "").trim().toLowerCase() === "filled";
+  const style = [
+    filled && backgroundColor ? `background:${backgroundColor};` : "",
+    outlineColor ? `border-color:${outlineColor};` : "",
+    textColor ? `color:${textColor};` : ""
+  ].join("");
+  return `
+    <span class="stream-route-stream-badge image${filled ? " filled" : ""}"${style ? ` style="${escapeHtml(style)}"` : ""}>
+      <img src="${escapeAttribute(imageUrl)}" alt="${escapeAttribute(badge.name || "")}" loading="lazy" decoding="async" />
+    </span>
+  `;
+}
+
+function renderPlayerSourceBadges(stream = {}, badgeSettings = StreamBadgeSettingsStore.snapshot()) {
+  const matchedBadges = matchStreamBadges(stream, badgeSettings.rules);
+  const chips = [];
+  const sizeBytes = stream.behaviorHints?.videoSize;
+  if (badgeSettings.showFileSizeBadges !== false && sizeBytes != null) {
+    const label = formatBytes(sizeBytes);
+    if (label) {
+      chips.push(`<span class="stream-route-stream-badge size">${escapeHtml(t("streams_size", [label], `SIZE ${label}`))}</span>`);
+    }
+  }
+  matchedBadges.slice(0, 8).forEach((badge) => {
+    const chip = renderPlayerImageBadgeChip(badge);
+    if (chip) {
+      chips.push(chip);
+    }
+  });
+  return chips.length
+    ? `<div class="stream-route-card-badges player-source-badges" aria-label="${escapeHtml(t("settings_stream_badges_section", {}, "Fusion Style"))}">${chips.join("")}</div>`
+    : "";
+}
+
+function resolvePlayerSourceBadgePlacement(badgeSettings = StreamBadgeSettingsStore.snapshot()) {
+  return String(badgeSettings.badgePlacement || "BOTTOM").trim().toUpperCase() === "TOP" ? "TOP" : "BOTTOM";
+}
+
 function formatSubtitleDelay(delayMs = 0) {
   const seconds = Number(delayMs || 0) / 1000;
   return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(3)}s`;
@@ -1434,6 +1586,7 @@ export const PlayerScreen = {
     this.engineFsKeepAliveHandle = null;
     this.engineFsKeepAliveToken = "";
     this.engineFsRemovalRequests = new Map();
+    this.engineFsPlaybackToken = "";
     this.playerExitCleanupHandler = null;
     this.lastPlaybackProgressAt = Date.now();
     this.hasPresentedPlaybackFrame = false;
@@ -1495,9 +1648,11 @@ export const PlayerScreen = {
       this.activePlaybackUrl = initialStreamUrl;
       this.currentEngineFsStream = this.getEngineFsStateForStream(sourceCandidate);
       if (this.currentEngineFsStream) {
+        this.engineFsPlaybackToken = claimEngineFsPlayback(this.currentEngineFsStream);
         this.releaseStartupAudioGate({ resume: false });
         this.startEngineFsKeepAlive(this.currentEngineFsStream);
       } else {
+        this.engineFsPlaybackToken = "";
         this.enableStartupAudioGate();
       }
       PlayerController.play(this.activePlaybackUrl, this.buildPlaybackContext(sourceCandidate));
@@ -2198,7 +2353,7 @@ export const PlayerScreen = {
     );
   },
 
-  async cleanupEngineFsState(state = null, reason = "cleanup") {
+  async cleanupEngineFsState(state = null, reason = "cleanup", { deferMs = 0 } = {}) {
     const target = state?.infoHash ? state : null;
     if (!target) {
       return false;
@@ -2209,7 +2364,15 @@ export const PlayerScreen = {
       return existing;
     }
 
-    const removalPromise = (async () => {
+    const performRemoval = async () => {
+      if (hasActiveEngineFsPlaybackClaim(target)) {
+        logEngineFsDebug("EngineFS torrent remove skipped; stream is active", {
+          reason,
+          infoHash: target.infoHash,
+          fileIdx: target.fileIdx
+        });
+        return false;
+      }
       try {
         const result = target.kind === "tizen-streaming-server"
           ? await TizenStreamingServerResolver.remove(target.infoHash, { baseUrl: target.baseUrl, timeoutMs: 2500 })
@@ -2265,7 +2428,9 @@ export const PlayerScreen = {
         });
         return false;
       }
-    })();
+    };
+
+    const removalPromise = scheduleDeferredEngineFsRemoval(target, reason, deferMs, performRemoval) || performRemoval();
 
     this.engineFsRemovalRequests.set(key, removalPromise);
     try {
@@ -2348,11 +2513,12 @@ export const PlayerScreen = {
     this.engineFsKeepAliveToken = "";
   },
 
-  async releaseCurrentEngineFsStream(reason = "cleanup", { removeTorrent = false } = {}) {
+  async releaseCurrentEngineFsStream(reason = "cleanup", { removeTorrent = false, deferRemoveMs = 0 } = {}) {
     const current = this.currentEngineFsStream;
     if (!current) {
       return;
     }
+    const playbackToken = this.engineFsPlaybackToken;
     this.stopEngineFsKeepAlive();
     this.clearPlaybackStallGuard();
     if (this.engineFsStartupRetryTimer) {
@@ -2364,18 +2530,20 @@ export const PlayerScreen = {
     this.lastEngineFsStallStats = null;
     this.engineFsStallExtensions = 0;
     this.currentEngineFsStream = null;
+    this.engineFsPlaybackToken = "";
+    releaseEngineFsPlaybackClaim(current, playbackToken);
     if (!removeTorrent || !current.infoHash) {
       return;
     }
-    await this.cleanupEngineFsState(current, reason);
+    await this.cleanupEngineFsState(current, reason, { deferMs: deferRemoveMs });
   },
 
-  releaseCurrentEngineFsStreamBestEffort(reason = "cleanup", { removeTorrent = false } = {}) {
+  releaseCurrentEngineFsStreamBestEffort(reason = "cleanup", { removeTorrent = false, deferRemoveMs = 0 } = {}) {
     const current = this.currentEngineFsStream;
     if (!current) {
       return;
     }
-    void this.releaseCurrentEngineFsStream(reason, { removeTorrent }).catch(() => null);
+    void this.releaseCurrentEngineFsStream(reason, { removeTorrent, deferRemoveMs }).catch(() => null);
   },
 
   sendEngineFsRemoveOnPageExit(state = null) {
@@ -3964,7 +4132,10 @@ export const PlayerScreen = {
     if (!this.params?.itemId && !this.params?.videoId) {
       return false;
     }
-    this.releaseCurrentEngineFsStreamBestEffort("back-to-stream", { removeTorrent: true });
+    this.releaseCurrentEngineFsStreamBestEffort("back-to-stream", {
+      removeTorrent: true,
+      deferRemoveMs: ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS
+    });
     void Router.navigate("stream", this.buildStreamRouteParamsFromPlayer(), {
       skipStackPush: true,
       replaceHistory: true
@@ -4906,6 +5077,7 @@ export const PlayerScreen = {
         this.paused = false;
         this.sourcesError = null;
         this.currentEngineFsStream = engineFs;
+        this.engineFsPlaybackToken = claimEngineFsPlayback(this.currentEngineFsStream);
         this.updateLoadingVisibility();
         console.warn("EngineFS local playback failed; switching to public playback URL", {
           fromBaseUrlKind: currentEngineFsState.baseUrlKind,
@@ -6063,8 +6235,10 @@ export const PlayerScreen = {
     this.activePlaybackUrl = streamUrl;
     this.currentEngineFsStream = nextEngineFsState || null;
     if (this.currentEngineFsStream) {
+      this.engineFsPlaybackToken = claimEngineFsPlayback(this.currentEngineFsStream);
       this.startEngineFsKeepAlive(this.currentEngineFsStream);
     } else {
+      this.engineFsPlaybackToken = "";
       this.stopEngineFsKeepAlive();
     }
     this.embeddedTrackRequestPromise = null;
@@ -9671,6 +9845,8 @@ export const PlayerScreen = {
 
     const filters = this.getSourceFilters();
     const filtered = this.getFilteredSources();
+    const badgeSettings = StreamBadgeSettingsStore.snapshot();
+    const badgePlacement = resolvePlayerSourceBadgePlacement(badgeSettings);
     this.ensureSourcesFocus();
 
     panel.innerHTML = `
@@ -9708,12 +9884,17 @@ export const PlayerScreen = {
           : filtered.map((stream, index) => {
             const focused = this.sourcesFocus.zone === "list" && this.sourcesFocus.index === index;
             const isCurrent = this.streamCandidates[this.currentStreamIndex]?.url === stream.url;
+            const badges = renderPlayerSourceBadges(stream, badgeSettings);
+            const topBadges = badgePlacement === "TOP" ? badges : "";
+            const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
             return `
               <article class="player-source-card focusable${focused ? " focused" : ""}${isCurrent ? " selected" : ""}" data-sources-zone="list" data-sources-index="${index}">
                 <div class="player-source-main">
+                  ${topBadges}
                   <div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>
                   <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
-                  <div class="player-source-tags">
+                  ${bottomBadges}
+                  <div class="player-source-tags${badges ? " muted" : ""}">
                     <span class="player-source-tag">${escapeHtml(qualityLabelFromText(`${stream.label} ${stream.description}`))}</span>
                     <span class="player-source-tag">${escapeHtml(String(stream.sourceType || "stream") || "stream")}</span>
                   </div>
@@ -11123,7 +11304,10 @@ export const PlayerScreen = {
   cleanup() {
     TraktScrobbleService.cancel();
     this.unbindPlayerExitCleanup();
-    this.releaseCurrentEngineFsStreamBestEffort("player-cleanup", { removeTorrent: true });
+    this.releaseCurrentEngineFsStreamBestEffort("player-cleanup", {
+      removeTorrent: true,
+      deferRemoveMs: ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS
+    });
     this.cancelSeekPreview({ commit: false });
     this.dismissPauseOverlay();
     this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0) + 1;

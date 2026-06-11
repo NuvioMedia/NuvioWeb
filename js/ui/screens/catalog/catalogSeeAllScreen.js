@@ -463,14 +463,19 @@ export const CatalogSeeAllScreen = {
     return true;
   },
 
-  completePendingPosterHold(node) {
+  completePendingPosterHold(node, event = null) {
     const pending = this.pendingPosterHoldTarget;
     if (!pending) {
       return false;
     }
     const holdTriggered = Boolean(pending.holdTriggered);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= POSTER_HOLD_DELAY_MS;
+    const shouldOpenHoldMenu = !holdTriggered && heldLongEnough && this.hasPendingPosterHold(node);
     this.cancelPendingPosterHold();
-    if (holdTriggered) {
+    if (holdTriggered || shouldOpenHoldMenu) {
+      if (shouldOpenHoldMenu) {
+        void this.openPosterOptionsMenu(node);
+      }
       return true;
     }
     if (!this.isPosterHoldTarget(node)) {
@@ -658,7 +663,7 @@ export const CatalogSeeAllScreen = {
       return;
     }
     const current = this.container?.querySelector(".seeall-card.focusable.focused[data-action='openDetail']") || null;
-    if (this.completePendingPosterHold(current)) {
+    if (this.completePendingPosterHold(current, event)) {
       event?.preventDefault?.();
     }
   },

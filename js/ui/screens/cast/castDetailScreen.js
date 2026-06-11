@@ -236,15 +236,20 @@ export const CastDetailScreen = {
     }, POSTER_HOLD_DELAY_MS);
   },
 
-  completePendingPosterHold(node) {
+  completePendingPosterHold(node, event = null) {
     if (!this.pendingPosterHoldTarget) {
       return false;
     }
     const target = this.pendingPosterHoldTarget;
     const hadTimer = Boolean(this.pendingPosterHoldTimer);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= POSTER_HOLD_DELAY_MS;
     this.cancelPendingPosterHold();
     if (hadTimer && target === node) {
-      this.openDetailFromNode(target);
+      if (heldLongEnough) {
+        void this.openPosterOptionsMenu(target);
+      } else {
+        this.openDetailFromNode(target);
+      }
     }
     return true;
   },
@@ -345,7 +350,7 @@ export const CastDetailScreen = {
       return;
     }
     const current = this.container?.querySelector(".cast-credit-card.focusable.focused") || null;
-    if (this.completePendingPosterHold(current)) {
+    if (this.completePendingPosterHold(current, event)) {
       event?.preventDefault?.();
     }
   },

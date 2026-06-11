@@ -118,10 +118,6 @@ export const PlayerController = {
     ) {
       return normalized;
     }
-    // webOS can reject Matroska in canPlayType() while still needing the explicit source type.
-    if (Platform.isWebOS() && normalized === "video/x-matroska") {
-      return normalized;
-    }
     return this.canPlayNatively(normalized) ? normalized : null;
   },
 
@@ -753,7 +749,8 @@ export const PlayerController = {
           ]),
           forced: /^(1|true|yes)$/i.test(forcedValue),
           extraInfo,
-          avplayTrackIndex: normalizedTrackIndex
+          avplayTrackIndex: normalizedTrackIndex,
+          avplayAudioOrdinalIndex: index
         };
       });
 
@@ -781,11 +778,12 @@ export const PlayerController = {
     const desiredAudioActive = Number.isFinite(desiredAudioIndex)
       && desiredAudioIndex >= 0
       && Date.now() < Number(this.desiredAvPlayAudioTrackUntil || 0);
+    const resolvedSelectedAudioIndex = this.resolveAvPlayAudioTrackIndex(selectedAudioIndex);
 
     if (desiredAudioActive) {
       this.selectedAvPlayAudioTrackIndex = desiredAudioIndex;
-    } else if (Number.isFinite(selectedAudioIndex)) {
-      this.selectedAvPlayAudioTrackIndex = selectedAudioIndex;
+    } else if (Number.isFinite(resolvedSelectedAudioIndex) && resolvedSelectedAudioIndex >= 0) {
+      this.selectedAvPlayAudioTrackIndex = resolvedSelectedAudioIndex;
       this.pendingAvPlayAudioTrackIndex = -1;
       this.desiredAvPlayAudioTrackIndex = -1;
       this.desiredAvPlayAudioTrackUntil = 0;
@@ -816,6 +814,99 @@ export const PlayerController = {
     return Number.isFinite(this.selectedAvPlayAudioTrackIndex) ? this.selectedAvPlayAudioTrackIndex : -1;
   },
 
+  resolveAvPlayAudioTrackIndex(trackIndex) {
+    const targetIndex = Number(trackIndex);
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+      return -1;
+    }
+    const exact = this.avplayAudioTracks.find((track) => Number(track?.avplayTrackIndex) === targetIndex);
+    if (exact) {
+      return Number(exact.avplayTrackIndex);
+    }
+    const ordinal = this.avplayAudioTracks.find((track) => Number(track?.avplayAudioOrdinalIndex) === targetIndex);
+    if (ordinal) {
+      return Number(ordinal.avplayTrackIndex);
+    }
+    return -1;
+  },
+
+  getAvPlayAudioTrackSelectionCandidates(trackIndex) {
+    const targetIndex = Number(trackIndex);
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+      return [];
+    }
+    const track = this.avplayAudioTracks.find((entry) => Number(entry?.avplayTrackIndex) === targetIndex)
+      || this.avplayAudioTracks.find((entry) => Number(entry?.avplayAudioOrdinalIndex) === targetIndex);
+    if (!track) {
+      return [];
+    }
+    const seen = new Set();
+    return [
+      Number(track.avplayTrackIndex),
+      Number(track.avplayAudioOrdinalIndex)
+    ].filter((value) => {
+      if (!Number.isFinite(value) || value < 0 || seen.has(value)) {
+        return false;
+      }
+      seen.add(value);
+      return true;
+    });
+  },
+
+  getCurrentAvPlayAudioTrackIndex() {
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.getCurrentStreamInfo !== "function") {
+      return -1;
+    }
+    try {
+      const streams = avplay.getCurrentStreamInfo();
+      const audio = Array.isArray(streams)
+        ? streams.find((track) => this.normalizeAvPlayTrackType(track?.type) === "AUDIO")
+        : null;
+      return this.resolveAvPlayAudioTrackIndex(Number(audio?.index));
+    } catch (_) {
+      return -1;
+    }
+  },
+
+  trySelectAvPlayAudioTrackIndex(trackIndex, { nudge = false } = {}) {
+    const avplay = this.getAvPlay();
+    const targetIndex = Number(trackIndex);
+    if (!avplay || typeof avplay.setSelectTrack !== "function" || !Number.isFinite(targetIndex) || targetIndex < 0) {
+      return false;
+    }
+    try {
+      avplay.setSelectTrack("AUDIO", targetIndex);
+      if (nudge) {
+        this.nudgeAvPlayAfterTrackSwitch();
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  retryAvPlayAudioTrackSelection(trackIndex, { nudge = false } = {}) {
+    const canonicalIndex = this.resolveAvPlayAudioTrackIndex(trackIndex);
+    if (canonicalIndex < 0) {
+      return false;
+    }
+    const currentIndex = this.getCurrentAvPlayAudioTrackIndex();
+    if (currentIndex === canonicalIndex) {
+      return true;
+    }
+    const candidates = this.getAvPlayAudioTrackSelectionCandidates(canonicalIndex);
+    const retryCandidates = [...candidates.slice(1), ...candidates.slice(0, 1)];
+    let attempted = false;
+    retryCandidates.forEach((candidateIndex) => {
+      if (this.getCurrentAvPlayAudioTrackIndex() === canonicalIndex) {
+        return;
+      }
+      attempted = this.trySelectAvPlayAudioTrackIndex(candidateIndex, { nudge }) || attempted;
+    });
+    return attempted || this.getCurrentAvPlayAudioTrackIndex() === canonicalIndex;
+  },
+
   getSelectedAvPlaySubtitleTrackIndex() {
     return Number.isFinite(this.selectedAvPlaySubtitleTrackIndex) ? this.selectedAvPlaySubtitleTrackIndex : -1;
   },
@@ -836,13 +927,13 @@ export const PlayerController = {
     if (!this.isUsingAvPlay()) {
       return false;
     }
-    const targetIndex = Number(trackIndex);
+    const targetIndex = this.resolveAvPlayAudioTrackIndex(trackIndex);
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return false;
     }
 
-    const available = this.getAvPlayAudioTracks();
-    if (!available.some((track) => Number(track?.avplayTrackIndex) === targetIndex)) {
+    const candidates = this.getAvPlayAudioTrackSelectionCandidates(targetIndex);
+    if (!candidates.length) {
       return false;
     }
 
@@ -860,18 +951,18 @@ export const PlayerController = {
     }
 
     try {
-      avplay.setSelectTrack("AUDIO", targetIndex);
+      if (!this.trySelectAvPlayAudioTrackIndex(candidates[0], { nudge: canApplyNow })) {
+        throw new Error("setSelectTrack failed");
+      }
       this.pendingAvPlayAudioTrackIndex = canApplyNow ? -1 : targetIndex;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
-      if (canApplyNow) {
-        this.nudgeAvPlayAfterTrackSwitch();
-      }
       this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       setTimeout(() => {
         if (!this.isUsingAvPlay()) {
           return;
         }
+        this.retryAvPlayAudioTrackSelection(targetIndex, { nudge: canApplyNow });
         this.applyPendingAvPlayAudioTrackSelection();
         this.syncAvPlayTrackInfo({ force: true });
         this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -880,6 +971,7 @@ export const PlayerController = {
         if (!this.isUsingAvPlay()) {
           return;
         }
+        this.retryAvPlayAudioTrackSelection(targetIndex, { nudge: canApplyNow });
         this.applyPendingAvPlayAudioTrackSelection();
         this.syncAvPlayTrackInfo({ force: true });
         this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -905,7 +997,8 @@ export const PlayerController = {
     const targetIndex = Number.isFinite(pendingIndex) && pendingIndex >= 0
       ? pendingIndex
       : (desiredActive ? desiredIndex : -1);
-    if (!this.isUsingAvPlay() || !Number.isFinite(targetIndex) || targetIndex < 0) {
+    const canonicalIndex = this.resolveAvPlayAudioTrackIndex(targetIndex);
+    if (!this.isUsingAvPlay() || !Number.isFinite(canonicalIndex) || canonicalIndex < 0) {
       return false;
     }
 
@@ -920,14 +1013,18 @@ export const PlayerController = {
     }
 
     try {
-      avplay.setSelectTrack("AUDIO", targetIndex);
-      if (Number.isFinite(pendingIndex) && pendingIndex === targetIndex) {
+      if (!this.retryAvPlayAudioTrackSelection(canonicalIndex, { nudge: true })) {
+        const candidates = this.getAvPlayAudioTrackSelectionCandidates(canonicalIndex);
+        if (!this.trySelectAvPlayAudioTrackIndex(candidates[0], { nudge: true })) {
+          throw new Error("setSelectTrack failed");
+        }
+      }
+      if (Number.isFinite(pendingIndex) && pendingIndex === canonicalIndex) {
         this.pendingAvPlayAudioTrackIndex = -1;
       }
-      this.selectedAvPlayAudioTrackIndex = targetIndex;
-      this.desiredAvPlayAudioTrackIndex = targetIndex;
+      this.selectedAvPlayAudioTrackIndex = canonicalIndex;
+      this.desiredAvPlayAudioTrackIndex = canonicalIndex;
       this.desiredAvPlayAudioTrackUntil = Date.now() + 5000;
-      this.nudgeAvPlayAfterTrackSwitch();
       this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
@@ -1670,9 +1767,6 @@ export const PlayerController = {
     }
 
     const candidates = [];
-    if (Platform.isWebOS() && normalizedSourceType === "video/x-matroska" && canUseAvPlay) {
-      pushCandidate(candidates, avplayEngine);
-    }
     if (isTizenRuntime && canUseAvPlay) {
       pushCandidate(candidates, avplayEngine);
     }
@@ -1765,7 +1859,11 @@ export const PlayerController = {
   },
 
   applyNativeSource(url, mimeType = null, engineName = "native-file") {
-    const sourceMimeType = Platform.isWebOS() && this.isEngineFsPlaybackUrl(url)
+    const normalizedMimeType = this.normalizeMimeType(mimeType);
+    const sourceMimeType = Platform.isWebOS() && (
+      this.isEngineFsPlaybackUrl(url)
+      || normalizedMimeType === "video/x-matroska"
+    )
       ? null
       : mimeType;
     if (!nativeVideoEngine.load(this.video, url, sourceMimeType)) {

@@ -2946,6 +2946,22 @@ export const SettingsScreen = {
       StreamBadgeSettingsStore.setShowFileSizeBadges(!Boolean(badgeSettings.showFileSizeBadges));
     });
 
+    const badgePlacement = String(badgeSettings.badgePlacement || "BOTTOM").trim().toUpperCase() === "TOP" ? "TOP" : "BOTTOM";
+    const badgePlacementOptions = [
+      { id: "BOTTOM", label: t("settings_stream_badge_position_bottom", {}, "Bottom") },
+      { id: "TOP", label: t("settings_stream_badge_position_top", {}, "Top") }
+    ];
+    this.actionMap.set("streams:badgePlacement", () => {
+      this.openOptionDialog({
+        title: t("settings_stream_badge_position_dialog_title", {}, "Badge position"),
+        subtitle: t("settings_stream_badge_position_dialog_description", {}, "Select where stream badges appear on stream cards."),
+        options: badgePlacementOptions,
+        selectedId: badgePlacement,
+        returnFocusKey: "streams:badgePlacement",
+        onSelect: (option) => StreamBadgeSettingsStore.setBadgePlacement(option.id)
+      });
+    });
+
     this.actionMap.set("streams:preview:close", () => {
       this.streamBadgePreviewSourceUrl = null;
     });
@@ -3037,6 +3053,12 @@ export const SettingsScreen = {
       title: t("settings_stream_size_badges_title", {}, "Size badges"),
       subtitle: t("settings_stream_size_badges_description", {}, "Show file size badges in stream results and player source panels."),
       checked: badgeSettings.showFileSizeBadges !== false
+    })}
+          ${this.renderActionRow({
+      focusKey: "streams:badgePlacement",
+      title: t("settings_stream_badge_position_title", {}, "Badge position"),
+      subtitle: t("settings_stream_badge_position_description", {}, "Choose whether Fusion and size badges appear above or below stream cards."),
+      value: badgePlacementOptions.find((option) => option.id === badgePlacement)?.label || badgePlacementOptions[0].label
     })}
           ${this.renderActionRow({
       focusKey: "streams:add",

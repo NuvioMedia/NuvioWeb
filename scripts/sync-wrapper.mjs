@@ -16,9 +16,32 @@ const webOsServiceDirName = webOsServiceId;
 const tizenEngineFsServiceDirName = "tizen";
 const tizenEngineFsServiceRelativePath = "services/tizen/enginefs-service.js";
 const tizenEngineFsRuntimeDirRelativePath = "services/tizen/runtime";
+const webOsLegacyPreloadScript = `  <script>
+    if (typeof Object.assign !== "function") {
+      Object.assign = function assign(target) {
+        if (target == null) {
+          throw new TypeError("Cannot convert undefined or null to object");
+        }
+        var output = Object(target);
+        for (var index = 1; index < arguments.length; index += 1) {
+          var source = arguments[index];
+          if (source == null) {
+            continue;
+          }
+          for (var key in source) {
+            if (Object.prototype.hasOwnProperty.call(source, key)) {
+              output[key] = source[key];
+            }
+          }
+        }
+        return output;
+      };
+    }
+  </script>`;
 const defaultEnvFileContents = `(function defineNuvioEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
+  var env = root.__NUVIO_ENV__ || {};
+  var values = {
     SUPABASE_URL: "",
     SUPABASE_ANON_KEY: "",
     TV_LOGIN_REDIRECT_BASE_URL: "",
@@ -29,7 +52,13 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
     ENABLE_REMOTE_WRAPPER_MODE: false,
     PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
     TMDB_API_KEY: ""
-  });
+  };
+  for (var key in values) {
+    if (Object.prototype.hasOwnProperty.call(values, key)) {
+      env[key] = values[key];
+    }
+  }
+  root.__NUVIO_ENV__ = env;
 }());
 `;
 const wrapperIconFiles = {
@@ -215,6 +244,7 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
 </head>
 <body>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
+${webOsLegacyPreloadScript}
   <script src="nuvio.env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
 ${webOsScriptTag}  <script defer src="app.bundle.js"></script>
@@ -523,9 +553,16 @@ async function injectWebOsRuntimeEnv(targetDir) {
   const injection = `
 (function configureNuvioWebOsRuntimeEnv() {
   var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = Object.assign({}, root.__NUVIO_ENV__ || {}, {
+  var env = root.__NUVIO_ENV__ || {};
+  var values = {
     WEBOS_SERVICE_ID: "${webOsServiceId}"
-  });
+  };
+  for (var key in values) {
+    if (Object.prototype.hasOwnProperty.call(values, key)) {
+      env[key] = values[key];
+    }
+  }
+  root.__NUVIO_ENV__ = env;
 }());
 `;
   const existing = await readFile(envPath, "utf8").catch(() => "");

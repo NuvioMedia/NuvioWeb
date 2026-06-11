@@ -1000,6 +1000,12 @@
     <string name="settings_stream_badges_section">Fusion Style</string>
     <string name="settings_stream_size_badges_title">Size badges</string>
     <string name="settings_stream_size_badges_description">Show file size badges in stream results and player source panels.</string>
+    <string name="settings_stream_badge_position_title">Badge position</string>
+    <string name="settings_stream_badge_position_description">Choose whether Fusion and size badges appear above or below stream cards.</string>
+    <string name="settings_stream_badge_position_dialog_title">Badge position</string>
+    <string name="settings_stream_badge_position_dialog_description">Select where stream badges appear on stream cards.</string>
+    <string name="settings_stream_badge_position_top">Top</string>
+    <string name="settings_stream_badge_position_bottom">Bottom</string>
     <string name="settings_stream_badge_urls_title">Fusion badge URLs</string>
     <string name="settings_stream_badge_urls_description">Import up to %1$d Fusion-style stream badge JSON URLs. Each URL can be updated or deleted separately.</string>
     <string name="settings_stream_badge_urls_search_description">Manage imported Fusion-style stream badge JSON URLs.</string>

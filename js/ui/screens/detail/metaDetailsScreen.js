@@ -2962,15 +2962,24 @@ export const MetaDetailsScreen = {
     return true;
   },
 
-  async completePendingHeroHold(node) {
+  async completePendingHeroHold(node, event = null) {
     const pending = this.pendingHeroHoldTarget;
     if (!pending) {
       return false;
     }
     const holdTriggered = Boolean(pending.holdTriggered);
     const action = String(pending.action || "");
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= HERO_HOLD_DELAY_MS;
+    const shouldOpenHoldMenu = !holdTriggered && heldLongEnough && this.hasPendingHeroHold(node);
     this.cancelPendingHeroHold();
-    if (holdTriggered) {
+    if (holdTriggered || shouldOpenHoldMenu) {
+      if (shouldOpenHoldMenu) {
+        if (action === "playDefault") {
+          this.openHeroPlayMenu();
+        } else if (action === "toggleLibrary") {
+          void this.openLibraryListMenu();
+        }
+      }
       return true;
     }
     if (!node || String(node.dataset.action || "") !== action) {
@@ -3083,15 +3092,20 @@ export const MetaDetailsScreen = {
     }, POSTER_HOLD_DELAY_MS);
   },
 
-  completePendingPosterHold(node) {
+  completePendingPosterHold(node, event = null) {
     if (!this.pendingPosterHoldTarget) {
       return false;
     }
     const target = this.pendingPosterHoldTarget;
     const hadTimer = Boolean(this.pendingPosterHoldTimer);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= POSTER_HOLD_DELAY_MS;
     this.cancelPendingPosterHold();
     if (hadTimer && target === node) {
-      this.openMoreLikeDetailFromNode(target);
+      if (heldLongEnough) {
+        void this.openPosterOptionsMenu(target);
+      } else {
+        this.openMoreLikeDetailFromNode(target);
+      }
     }
     return true;
   },
@@ -3231,14 +3245,19 @@ export const MetaDetailsScreen = {
     return true;
   },
 
-  async completePendingEpisodeHold(node) {
+  async completePendingEpisodeHold(node, event = null) {
     const pending = this.pendingEpisodeHoldTarget;
     if (!pending) {
       return false;
     }
     const holdTriggered = Boolean(pending.holdTriggered);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= EPISODE_HOLD_DELAY_MS;
+    const shouldOpenHoldMenu = !holdTriggered && heldLongEnough && this.hasPendingEpisodeHold(node);
     this.cancelPendingEpisodeHold();
-    if (holdTriggered) {
+    if (holdTriggered || shouldOpenHoldMenu) {
+      if (shouldOpenHoldMenu) {
+        this.openEpisodeHoldMenu(node);
+      }
       return true;
     }
     if (!this.isEpisodeHoldTarget(node)) {
@@ -3252,14 +3271,19 @@ export const MetaDetailsScreen = {
     return true;
   },
 
-  completePendingSeasonHold(node) {
+  completePendingSeasonHold(node, event = null) {
     const pending = this.pendingSeasonHoldTarget;
     if (!pending) {
       return false;
     }
     const holdTriggered = Boolean(pending.holdTriggered);
+    const heldLongEnough = Number(event?.keyDownDurationMs || 0) >= EPISODE_HOLD_DELAY_MS;
+    const shouldOpenHoldMenu = !holdTriggered && heldLongEnough && this.hasPendingSeasonHold(node);
     this.cancelPendingSeasonHold();
-    if (holdTriggered) {
+    if (holdTriggered || shouldOpenHoldMenu) {
+      if (shouldOpenHoldMenu) {
+        this.openSeasonHoldMenu(node);
+      }
       return true;
     }
     if (!this.isSeasonHoldTarget(node)) {
@@ -6289,22 +6313,22 @@ export const MetaDetailsScreen = {
       return;
     }
     const current = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
-    if (await this.completePendingEpisodeHold(current)) {
+    if (await this.completePendingEpisodeHold(current, event)) {
       event?.preventDefault?.();
       return;
     }
     const season = this.container?.querySelector(".series-season-btn.focusable.focused") || null;
-    if (this.completePendingSeasonHold(season)) {
+    if (this.completePendingSeasonHold(season, event)) {
       event?.preventDefault?.();
       return;
     }
     const poster = this.container?.querySelector(".detail-morelike-card.focusable.focused") || null;
-    if (this.completePendingPosterHold(poster)) {
+    if (this.completePendingPosterHold(poster, event)) {
       event?.preventDefault?.();
       return;
     }
     const hero = this.container?.querySelector(".series-detail-actions .focusable.focused") || null;
-    if (await this.completePendingHeroHold(hero)) {
+    if (await this.completePendingHeroHold(hero, event)) {
       event?.preventDefault?.();
     }
   },

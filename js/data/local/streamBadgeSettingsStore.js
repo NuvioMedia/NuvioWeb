@@ -10,8 +10,14 @@ const LEGACY_DEBRID_KEY = "debridSettings";
 
 const DEFAULT_STREAM_BADGE_SETTINGS = {
   rules: { imports: [] },
-  showFileSizeBadges: true
+  showFileSizeBadges: true,
+  badgePlacement: "BOTTOM"
 };
+
+function normalizeBadgePlacement(value = "") {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized === "TOP" ? "TOP" : "BOTTOM";
+}
 
 function normalizeStreamBadgeSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
@@ -22,9 +28,14 @@ function normalizeStreamBadgeSettings(value = {}) {
     ?? source.payload
     ?? null;
   const showFileSizeBadges = source.showFileSizeBadges ?? source.show_file_size_badges;
+  const badgePlacement = source.badgePlacement
+    ?? source.badge_placement
+    ?? source.streamBadgePlacement
+    ?? source.stream_badge_placement;
   return {
     rules: normalizeStreamBadgeRules(rulesSource),
-    showFileSizeBadges: showFileSizeBadges !== false
+    showFileSizeBadges: showFileSizeBadges !== false,
+    badgePlacement: normalizeBadgePlacement(badgePlacement)
   };
 }
 
@@ -170,6 +181,10 @@ export const StreamBadgeSettingsStore = {
     store.set({ showFileSizeBadges: Boolean(enabled) });
   },
 
+  setBadgePlacement(placement) {
+    store.set({ badgePlacement: normalizeBadgePlacement(placement) });
+  },
+
   snapshot() {
     return normalizeStreamBadgeSettings(this.get());
   }
@@ -178,5 +193,6 @@ export const StreamBadgeSettingsStore = {
 export {
   DEFAULT_STREAM_BADGE_SETTINGS,
   LEGACY_DEBRID_KEY,
+  normalizeBadgePlacement,
   normalizeStreamBadgeSettings
 };
