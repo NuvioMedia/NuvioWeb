@@ -288,7 +288,11 @@ function normalizeAudioLanguageForAndroid(value) {
     return "DEVICE";
   }
   // Web "none" (never auto-select a track) corresponds to the Android apps'
-  // AudioLanguageOption.DEFAULT ("use media file default").
+  // AudioLanguageOption.DEFAULT ("use media file default"). "off" is accepted
+  // as an alias because the player's startup logic has always treated
+  // "off"/"none" interchangeably as "no preference"
+  // (getStartupPreferredAudioLanguageTargets), so an "off" value persisted by
+  // an older build maps to the same Android semantics.
   if (normalized.toLowerCase() === "none" || normalized.toLowerCase() === "off") {
     return "DEFAULT";
   }
