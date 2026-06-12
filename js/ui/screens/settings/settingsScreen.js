@@ -223,6 +223,7 @@ const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [
 // so the full shared language catalogue can be offered.
 const PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
   { id: "system", labelKey: "common.system" },
+  { id: "none", labelKey: "common.none" },
   ...AVAILABLE_LANGUAGES
 ];
 
