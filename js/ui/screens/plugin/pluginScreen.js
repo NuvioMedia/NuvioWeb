@@ -166,9 +166,13 @@ export const PluginScreen = {
     this.rowColumns = new Map();
     this.actionMap = new Map();
     this.setRowColumns(0, [0]);
+    this.setRowColumns(1, [0]);
 
     this.actionMap.set("manage_from_phone", async () => {
       await this.openQrOverlay();
+    });
+    this.actionMap.set("reorder_home_catalogs", async () => {
+      Router.navigate("catalogOrder");
     });
     this.actionMap.set("close_qr_overlay", async () => {
       await this.closeQrOverlay();
@@ -205,6 +209,22 @@ export const PluginScreen = {
                 </span>
                 <span class="addons-large-row-tail-group">
                   <span class="addons-large-row-tail material-icons" aria-hidden="true">phone_android</span>
+                </span>
+              </div>
+              <div role="button"
+                   class="addons-large-row addons-large-row-centered addons-focusable"
+                   data-zone="content"
+                   data-row="1"
+                   data-col="0"
+                   data-action-id="reorder_home_catalogs"
+                   tabindex="-1">
+                <span class="addons-large-row-icon material-icons" aria-hidden="true">tune</span>
+                <span class="addons-large-row-copy">
+                  <strong>Reorder &amp; hide catalogs</strong>
+                  <small>Change the order of home rows and hide catalogs you don't want shown</small>
+                </span>
+                <span class="addons-large-row-tail-group">
+                  <span class="addons-large-row-tail material-icons" aria-hidden="true">chevron_right</span>
                 </span>
               </div>
             </section>

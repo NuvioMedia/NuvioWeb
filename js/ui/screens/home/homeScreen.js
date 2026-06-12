@@ -6434,9 +6434,10 @@ export const HomeScreen = {
     const pinnedTopRows = collectionRows.filter((row) => row.pinToTop && !disabledKeys.has(row.homeCatalogDisableKey));
     const pinnedKeys = new Set(pinnedTopRows.map((row) => row.homeCatalogKey));
     const orderedRows = orderedKeys
-      .filter((key) => !pinnedKeys.has(key) && !disabledKeys.has(key))
+      .filter((key) => !pinnedKeys.has(key))
       .map((key) => rowMap.get(key))
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter((row) => !disabledKeys.has(row.homeCatalogDisableKey));
     return [...pinnedTopRows, ...orderedRows];
   },
 
