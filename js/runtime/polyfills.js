@@ -18,6 +18,9 @@ if (!Array.from) {
     if (source == null) {
       throw new TypeError("Array.from requires an array-like object");
     }
+    if (mapFn !== undefined && typeof mapFn !== "function") {
+      throw new TypeError("Array.from: when provided, the second argument must be a function");
+    }
     var result = [];
     var index = 0;
     var iteratorMethod = typeof Symbol !== "undefined" && Symbol.iterator && source[Symbol.iterator];
@@ -44,6 +47,9 @@ if (!Array.from) {
 if (!Array.prototype.find) {
   Object.defineProperty(Array.prototype, "find", {
     value: function find(predicate, thisArg) {
+      if (typeof predicate !== "function") {
+        throw new TypeError("predicate must be a function");
+      }
       for (var index = 0; index < this.length; index += 1) {
         if (predicate.call(thisArg, this[index], index, this)) {
           return this[index];
@@ -59,6 +65,9 @@ if (!Array.prototype.find) {
 if (!Array.prototype.findIndex) {
   Object.defineProperty(Array.prototype, "findIndex", {
     value: function findIndex(predicate, thisArg) {
+      if (typeof predicate !== "function") {
+        throw new TypeError("predicate must be a function");
+      }
       for (var index = 0; index < this.length; index += 1) {
         if (predicate.call(thisArg, this[index], index, this)) {
           return index;
@@ -74,8 +83,12 @@ if (!Array.prototype.findIndex) {
 if (!Array.prototype.includes) {
   Object.defineProperty(Array.prototype, "includes", {
     value: function includes(searchElement, fromIndex) {
-      var start = Math.max(0, Number(fromIndex) || 0);
-      for (var index = start; index < this.length; index += 1) {
+      var length = this.length;
+      var start = Math.trunc(Number(fromIndex) || 0);
+      if (start < 0) {
+        start = Math.max(length + start, 0);
+      }
+      for (var index = start; index < length; index += 1) {
         var value = this[index];
         if (value === searchElement
           || (typeof value === "number" && typeof searchElement === "number" && isNaN(value) && isNaN(searchElement))) {
@@ -131,6 +144,9 @@ if (!Object.assign) {
 
 if (!Object.entries) {
   Object.entries = function entries(source) {
+    if (source == null) {
+      throw new TypeError("Cannot convert undefined or null to object");
+    }
     var target = Object(source);
     var result = [];
     for (var key in target) {
@@ -144,6 +160,9 @@ if (!Object.entries) {
 
 if (!Object.values) {
   Object.values = function values(source) {
+    if (source == null) {
+      throw new TypeError("Cannot convert undefined or null to object");
+    }
     var target = Object(source);
     var result = [];
     for (var key in target) {
@@ -158,6 +177,9 @@ if (!Object.values) {
 if (!String.prototype.includes) {
   Object.defineProperty(String.prototype, "includes", {
     value: function includes(search, start) {
+      if (search instanceof RegExp) {
+        throw new TypeError("First argument must not be a regular expression");
+      }
       return String(this).indexOf(search, Number(start) || 0) !== -1;
     },
     configurable: true,
@@ -168,8 +190,11 @@ if (!String.prototype.includes) {
 if (!String.prototype.startsWith) {
   Object.defineProperty(String.prototype, "startsWith", {
     value: function startsWith(search, position) {
+      if (search instanceof RegExp) {
+        throw new TypeError("First argument must not be a regular expression");
+      }
       var source = String(this);
-      var from = Number(position) || 0;
+      var from = Math.min(Math.max(Math.trunc(Number(position) || 0), 0), source.length);
       return source.slice(from, from + String(search).length) === String(search);
     },
     configurable: true,
@@ -180,8 +205,12 @@ if (!String.prototype.startsWith) {
 if (!String.prototype.endsWith) {
   Object.defineProperty(String.prototype, "endsWith", {
     value: function endsWith(search, endPosition) {
+      if (search instanceof RegExp) {
+        throw new TypeError("First argument must not be a regular expression");
+      }
       var source = String(this);
-      var end = endPosition === undefined ? source.length : Number(endPosition) || 0;
+      var end = endPosition === undefined ? source.length : Math.trunc(Number(endPosition) || 0);
+      end = Math.min(Math.max(end, 0), source.length);
       var needle = String(search);
       return source.slice(Math.max(0, end - needle.length), end) === needle;
     },
@@ -190,8 +219,7 @@ if (!String.prototype.endsWith) {
   });
 }
 
-function buildStringPad(source, targetLength, padString) {
-  var current = String(source);
+function buildStringPad(current, targetLength, padString) {
   var length = Math.floor(Number(targetLength) || 0);
   var pad = padString === undefined ? " " : String(padString);
   if (current.length >= length || pad === "") {
@@ -208,7 +236,8 @@ function buildStringPad(source, targetLength, padString) {
 if (!String.prototype.padStart) {
   Object.defineProperty(String.prototype, "padStart", {
     value: function padStart(targetLength, padString) {
-      return buildStringPad(this, targetLength, padString) + String(this);
+      var source = String(this);
+      return buildStringPad(source, targetLength, padString) + source;
     },
     configurable: true,
     writable: true
@@ -218,7 +247,8 @@ if (!String.prototype.padStart) {
 if (!String.prototype.padEnd) {
   Object.defineProperty(String.prototype, "padEnd", {
     value: function padEnd(targetLength, padString) {
-      return String(this) + buildStringPad(this, targetLength, padString);
+      var source = String(this);
+      return source + buildStringPad(source, targetLength, padString);
     },
     configurable: true,
     writable: true
@@ -241,90 +271,6 @@ if (!Element.prototype.closest) {
     } while (el !== null && el.nodeType === 1);
     return null;
   };
-}
-
-// polyfill for Object.entries (Chrome 54+) - older webOS/Tizen browsers lack it
-// and the app touches it during bootstrap, which crashes startup there.
-if (!Object.entries) {
-  Object.entries = function entries(obj) {
-    var ownKeys = Object.keys(Object(obj));
-    var result = [];
-    for (var i = 0; i < ownKeys.length; i++) {
-      result.push([ownKeys[i], obj[ownKeys[i]]]);
-    }
-    return result;
-  };
-}
-
-// polyfill for Object.values (Chrome 54+)
-if (!Object.values) {
-  Object.values = function values(obj) {
-    var ownKeys = Object.keys(Object(obj));
-    var result = [];
-    for (var i = 0; i < ownKeys.length; i++) {
-      result.push(obj[ownKeys[i]]);
-    }
-    return result;
-  };
-}
-
-// polyfill for Array.prototype.includes (Chrome 47+)
-if (!Array.prototype.includes) {
-  Object.defineProperty(Array.prototype, "includes", {
-    value: function includes(searchElement, fromIndex) {
-      var list = Object(this);
-      var length = list.length >>> 0;
-      if (length === 0) {
-        return false;
-      }
-      var start = Number(fromIndex) || 0;
-      var index = start < 0 ? Math.max(length + start, 0) : start;
-      for (; index < length; index++) {
-        var current = list[index];
-        if (current === searchElement || (current !== current && searchElement !== searchElement)) {
-          return true;
-        }
-      }
-      return false;
-    },
-    configurable: true,
-    writable: true
-  });
-}
-
-// polyfills for String padStart/padEnd (Chrome 57+)
-function buildStringPad(padStart) {
-  return function pad(targetLength, padString) {
-    var source = String(this);
-    var target = targetLength >> 0;
-    var filler = padString === undefined ? " " : String(padString);
-    if (source.length >= target || filler === "") {
-      return source;
-    }
-    var padLength = target - source.length;
-    var padding = "";
-    while (padding.length < padLength) {
-      padding += filler;
-    }
-    padding = padding.slice(0, padLength);
-    return padStart ? padding + source : source + padding;
-  };
-}
-
-if (!String.prototype.padStart) {
-  Object.defineProperty(String.prototype, "padStart", {
-    value: buildStringPad(true),
-    configurable: true,
-    writable: true
-  });
-}
-
-if (!String.prototype.padEnd) {
-  Object.defineProperty(String.prototype, "padEnd", {
-    value: buildStringPad(false),
-    configurable: true,
-    writable: true
-  });
 }
 
 // polyfill for Object.fromEntries
