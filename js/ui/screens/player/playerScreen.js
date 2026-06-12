@@ -7859,11 +7859,20 @@ export const PlayerScreen = {
       });
     }
     const values = Array.from(groups.values());
-    const offIndex = values.findIndex((entry) => entry.key === SUBTITLE_LANGUAGE_OFF_KEY);
-    if (offIndex > 0) {
-      const [offEntry] = values.splice(offIndex, 1);
-      values.unshift(offEntry);
-    }
+    values.sort((left, right) => String(left.label || "").localeCompare(String(right.label || "")));
+    const moveToFront = (matchKey) => {
+      if (!matchKey) {
+        return;
+      }
+      const index = values.findIndex((entry) => entry.key === matchKey);
+      if (index > 0) {
+        const [entry] = values.splice(index, 1);
+        values.unshift(entry);
+      }
+    };
+    moveToFront(normalizeSubtitleLanguageKey(this.subtitleStyleSettings?.secondaryPreferredLanguage));
+    moveToFront(normalizeSubtitleLanguageKey(this.subtitleStyleSettings?.preferredLanguage));
+    moveToFront(SUBTITLE_LANGUAGE_OFF_KEY);
     this.trackDialogCache.subtitleLanguageRail = values;
     return values;
   },
@@ -7908,17 +7917,22 @@ export const PlayerScreen = {
     return this.selectSubtitleOption(options[0], { focusOptions });
   },
 
-  scrollSubtitleRailNodeIntoView(node, { center = false } = {}) {
+  scrollSubtitleRailNodeIntoView(node) {
     if (!(node instanceof HTMLElement)) {
       return;
     }
-    try {
-      node.scrollIntoView({
-        block: "nearest",
-        inline: "nearest"
-      });
-    } catch (_) {
-      node.scrollIntoView();
+    // Scroll the rail itself instead of scrollIntoView, which also scrolls
+    // every scrollable ancestor and drags the dialog/controls bar around.
+    const rail = node.closest(".player-subtitle-rail");
+    if (!rail) {
+      return;
+    }
+    const railRect = rail.getBoundingClientRect();
+    const nodeRect = node.getBoundingClientRect();
+    if (nodeRect.top < railRect.top) {
+      rail.scrollTop += nodeRect.top - railRect.top;
+    } else if (nodeRect.bottom > railRect.bottom) {
+      rail.scrollTop += nodeRect.bottom - railRect.bottom;
     }
   },
 
@@ -8627,6 +8641,7 @@ export const PlayerScreen = {
         this.selectedSubtitleTrackIndex = -1;
         this.selectedEmbeddedSubtitleTrackIndex = -1;
         this.selectedManifestSubtitleTrackId = null;
+        this.invalidateTrackDialogCaches();
         this.refreshSubtitleCueStyles();
         this.renderControlButtons();
         this.renderSubtitleDialog();
@@ -8681,6 +8696,7 @@ export const PlayerScreen = {
     this.selectedSubtitleTrackIndex = preferredIndex;
     this.selectedEmbeddedSubtitleTrackIndex = -1;
     this.selectedManifestSubtitleTrackId = null;
+    this.invalidateTrackDialogCaches();
     this.renderControlButtons();
     this.renderSubtitleDialog();
 
