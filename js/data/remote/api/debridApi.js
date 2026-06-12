@@ -47,6 +47,25 @@ function authHeaders(apiKey) {
   };
 }
 
+// A debrid key is only treated as invalid when the server gives a definitive
+// auth rejection. If the validation request never reaches the server (network
+// error, or a CORS-blocked preflight on TV/web - some providers don't return
+// access-control-allow-origin), we can't disprove the key, so we accept it
+// rather than blocking the user from saving a key that actually works.
+function isDefinitiveAuthRejection(response) {
+  return response.status === 401 || response.status === 403;
+}
+
+function interpretKeyValidation(response, isValid) {
+  if (isDefinitiveAuthRejection(response)) {
+    return false;
+  }
+  // Reached the server with a 2xx: trust the provider-specific check.
+  // Anything else (network error, CORS block, 5xx) is inconclusive, so we
+  // don't reject the key on it.
+  return response.ok ? isValid : true;
+}
+
 function formBody(values = {}) {
   const body = new URLSearchParams();
   Object.entries(values).forEach(([key, value]) => {
@@ -65,21 +84,21 @@ export const DebridApi = {
     const response = await requestJson(TORBOX_BASE_URL, "v1/api/user/me", {
       headers: authHeaders(apiKey)
     });
-    return response.ok;
+    return interpretKeyValidation(response, response.ok);
   },
 
   async validatePremiumizeApiKey(apiKey) {
     const response = await requestJson(PREMIUMIZE_BASE_URL, "api/account/info", {
       headers: authHeaders(apiKey)
     });
-    return response.ok && String(response.data?.status || "").toLowerCase() !== "error";
+    return interpretKeyValidation(response, String(response.data?.status || "").toLowerCase() !== "error");
   },
 
   async validateRealDebridApiKey(apiKey) {
     const response = await requestJson(REAL_DEBRID_BASE_URL, "user", {
       headers: authHeaders(apiKey)
     });
-    return response.ok;
+    return interpretKeyValidation(response, response.ok);
   },
 
   async torboxCreateTorrent(apiKey, magnet) {
