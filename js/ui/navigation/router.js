@@ -39,27 +39,36 @@ export const Router = {
   skipConsumeNextPopstate: false,
   ignoreNextPopstate: false,
 
-  routes: {
-    home: HomeScreen,
-    player: PlayerScreen,
-    account: AccountScreen,
-    authQrSignIn: AuthQrSignInScreen,
-    authSignIn: AuthSignInScreen,
-    syncCode: SyncCodeScreen,
-    profileSelection: ProfileSelectionScreen,
-    detail: MetaDetailsScreen,
-    library: LibraryScreen,
-    search: SearchScreen,
-    discover: DiscoverScreen,
-    settings: SettingsScreen,
-    trakt: TraktScreen,
-    supportersContributors: SupportersContributorsScreen,
-    plugin: PluginScreen,
-    catalogOrder: CatalogOrderScreen,
-    stream: StreamScreen,
-    castDetail: CastDetailScreen,
-    catalogSeeAll: CatalogSeeAllScreen,
-    folderDetail: FolderDetailScreen
+  routes: {},
+
+  // Routes are registered in init() instead of inline: this module is part
+  // of an import cycle with the screen modules, so a screen module that
+  // initializes after the router is still undefined while this object
+  // literal evaluates (app.js importing streamScreen first broke the
+  // "stream" route this way).
+  registerRoutes() {
+    this.routes = {
+      home: HomeScreen,
+      player: PlayerScreen,
+      account: AccountScreen,
+      authQrSignIn: AuthQrSignInScreen,
+      authSignIn: AuthSignInScreen,
+      syncCode: SyncCodeScreen,
+      profileSelection: ProfileSelectionScreen,
+      detail: MetaDetailsScreen,
+      library: LibraryScreen,
+      search: SearchScreen,
+      discover: DiscoverScreen,
+      settings: SettingsScreen,
+      trakt: TraktScreen,
+      supportersContributors: SupportersContributorsScreen,
+      plugin: PluginScreen,
+      catalogOrder: CatalogOrderScreen,
+      stream: StreamScreen,
+      castDetail: CastDetailScreen,
+      catalogSeeAll: CatalogSeeAllScreen,
+      folderDetail: FolderDetailScreen
+    };
   },
 
   getRouteStateKey(routeName, params = {}) {
@@ -110,6 +119,7 @@ export const Router = {
   },
 
   init() {
+    this.registerRoutes();
     if (this.popstateBound) {
       return;
     }
