@@ -13,6 +13,24 @@
 // APIs are only available through this file, and Object.entries & friends were
 // absent — profile-scoped stores call Object.entries during bootstrap, so the
 // app crashed before the UI rendered (issue #195).
+function truncToInteger(value) {
+  var num = Number(value) || 0;
+  return num < 0 ? Math.ceil(num) : Math.floor(num);
+}
+
+function isRegExpLike(value) {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  if (typeof Symbol !== "undefined" && Symbol.match) {
+    var matcher = value[Symbol.match];
+    if (matcher !== undefined) {
+      return Boolean(matcher);
+    }
+  }
+  return Object.prototype.toString.call(value) === "[object RegExp]";
+}
+
 if (!Array.from) {
   Array.from = function from(source, mapFn, thisArg) {
     if (source == null) {
@@ -83,13 +101,14 @@ if (!Array.prototype.findIndex) {
 if (!Array.prototype.includes) {
   Object.defineProperty(Array.prototype, "includes", {
     value: function includes(searchElement, fromIndex) {
-      var length = this.length;
-      var start = Math.trunc(Number(fromIndex) || 0);
+      var list = Object(this);
+      var length = Math.max(truncToInteger(list.length), 0);
+      var start = truncToInteger(fromIndex);
       if (start < 0) {
         start = Math.max(length + start, 0);
       }
       for (var index = start; index < length; index += 1) {
-        var value = this[index];
+        var value = list[index];
         if (value === searchElement
           || (typeof value === "number" && typeof searchElement === "number" && isNaN(value) && isNaN(searchElement))) {
           return true;
@@ -177,7 +196,7 @@ if (!Object.values) {
 if (!String.prototype.includes) {
   Object.defineProperty(String.prototype, "includes", {
     value: function includes(search, start) {
-      if (search instanceof RegExp) {
+      if (isRegExpLike(search)) {
         throw new TypeError("First argument must not be a regular expression");
       }
       return String(this).indexOf(search, Number(start) || 0) !== -1;
@@ -190,11 +209,11 @@ if (!String.prototype.includes) {
 if (!String.prototype.startsWith) {
   Object.defineProperty(String.prototype, "startsWith", {
     value: function startsWith(search, position) {
-      if (search instanceof RegExp) {
+      if (isRegExpLike(search)) {
         throw new TypeError("First argument must not be a regular expression");
       }
       var source = String(this);
-      var from = Math.min(Math.max(Math.trunc(Number(position) || 0), 0), source.length);
+      var from = Math.min(Math.max(truncToInteger(position), 0), source.length);
       return source.slice(from, from + String(search).length) === String(search);
     },
     configurable: true,
@@ -205,11 +224,11 @@ if (!String.prototype.startsWith) {
 if (!String.prototype.endsWith) {
   Object.defineProperty(String.prototype, "endsWith", {
     value: function endsWith(search, endPosition) {
-      if (search instanceof RegExp) {
+      if (isRegExpLike(search)) {
         throw new TypeError("First argument must not be a regular expression");
       }
       var source = String(this);
-      var end = endPosition === undefined ? source.length : Math.trunc(Number(endPosition) || 0);
+      var end = endPosition === undefined ? source.length : truncToInteger(endPosition);
       end = Math.min(Math.max(end, 0), source.length);
       var needle = String(search);
       return source.slice(Math.max(0, end - needle.length), end) === needle;
