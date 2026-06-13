@@ -1,3 +1,4 @@
+import { applyLogoTrim } from "../../../core/media/logoTrimService.js";
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
@@ -541,7 +542,7 @@ function animateModernHeroLogoSwap(logoNode, nextSrc, nextAlt = "") {
 
   const normalizedSrc = String(nextSrc || "").trim();
   const normalizedAlt = String(nextAlt || "logo").trim() || "logo";
-  const currentSrc = String(logoNode.getAttribute("src") || "").trim();
+  const currentSrc = String(logoNode._heroLogoOrigSrc || logoNode.getAttribute("src") || "").trim();
   const token = Number(logoNode.heroLogoTransitionToken || 0) + 1;
   logoNode.heroLogoTransitionToken = token;
 
@@ -575,8 +576,10 @@ function animateModernHeroLogoSwap(logoNode, nextSrc, nextAlt = "") {
 
     if (!loaded) {
       finalize();
+      logoNode._heroLogoOrigSrc = normalizedSrc;
       logoNode.setAttribute("src", normalizedSrc);
       logoNode.setAttribute("alt", normalizedAlt);
+      applyLogoTrim(logoNode);
       return;
     }
 
@@ -590,8 +593,10 @@ function animateModernHeroLogoSwap(logoNode, nextSrc, nextAlt = "") {
     }
 
     logoNode.classList.add("home-hero-logo-transition-enter");
+    logoNode._heroLogoOrigSrc = normalizedSrc;
     logoNode.setAttribute("src", normalizedSrc);
     logoNode.setAttribute("alt", normalizedAlt);
+    applyLogoTrim(logoNode);
 
     requestAnimationFrame(() => {
       if (Number(logoNode.heroLogoTransitionToken || 0) !== token) {
@@ -3132,16 +3137,20 @@ export const HomeScreen = {
           logoNode.heroLogoTransitionToken = (Number(logoNode.heroLogoTransitionToken) || 0) + 1;
           brandNode?.querySelectorAll(".home-hero-logo-transition-ghost").forEach((n) => n.remove());
           logoNode.classList.remove("home-hero-logo-transition-enter", "is-visible");
+          logoNode._heroLogoOrigSrc = display.logo;
           logoNode.setAttribute("src", display.logo);
           logoNode.setAttribute("alt", display.title || "logo");
+          applyLogoTrim(logoNode);
         } else if (brandNode) {
           brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
+          applyLogoTrim(brandNode.querySelector(".home-hero-logo"));
         }
       } else if (logoNode) {
         animateModernHeroLogoSwap(logoNode, display.logo, display.title || "logo");
       } else if (brandNode) {
         brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo home-hero-logo-transition-enter" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
         const insertedLogo = brandNode.querySelector(".home-hero-logo");
+        applyLogoTrim(insertedLogo);
         requestAnimationFrame(() => {
           insertedLogo?.classList?.add("is-visible");
           setTimeout(() => insertedLogo?.classList?.remove("home-hero-logo-transition-enter", "is-visible"), HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS);
@@ -6733,6 +6742,8 @@ export const HomeScreen = {
       </div>
       ${this.renderActiveHoldMenu()}
     `;
+
+    this.container.querySelectorAll(".home-hero-logo").forEach(applyLogoTrim);
 
     if (modernLandscapePostersEnabled) {
       this.applyCachedModernLandscapePosterMetrics(this.container.querySelector(".home-screen-shell.home-modern-landscape-posters"));
