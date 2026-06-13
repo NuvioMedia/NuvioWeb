@@ -1,7 +1,7 @@
 export const MODERN_HOME_CONSTANTS = {
-  heroFocusDelayMs: 450,
+  heroFocusDelayMs: 180,
   heroRapidNavThresholdMs: 130,
-  heroRapidSettleMs: 400,
+  heroRapidSettleMs: 120,
   keyRepeatThrottleMs: 80,
   cameraFollowDelayMs: 140,
   cameraFollowDurationXMs: 440,

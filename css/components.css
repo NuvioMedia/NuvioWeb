@@ -5527,7 +5527,7 @@ button:focus-visible {
   object-position: 100% 0;
   opacity: 1;
   filter: brightness(1.08) saturate(1.04);
-  transition: opacity 480ms ease;
+  transition: opacity 700ms ease-in-out;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-backdrop.home-hero-backdrop-transition-enter {

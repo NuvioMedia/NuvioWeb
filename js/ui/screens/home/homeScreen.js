@@ -3031,6 +3031,10 @@ export const HomeScreen = {
       clearTimeout(this.heroFocusDelayTimer);
       this.heroFocusDelayTimer = null;
     }
+    if (this.heroCopyFadeInRaf) {
+      cancelAnimationFrame(this.heroCopyFadeInRaf);
+      this.heroCopyFadeInRaf = null;
+    }
   },
 
   startHeroRotation() {
@@ -3084,10 +3088,24 @@ export const HomeScreen = {
     heroNode.dataset.itemTitle = hero?.name || "Untitled";
     heroNode.classList.toggle("is-hero-meta-enriching", Boolean(hero?.heroMetaEnriching));
 
+    const isHiding = heroNode.classList.contains("is-hero-copy-updating");
     const backdrop = heroNode.querySelector(".home-hero-backdrop");
     if (backdrop) {
       const src = display.backdrop || "";
-      if (this.layoutMode === "modern" && backdrop instanceof HTMLImageElement) {
+      if (isHiding && backdrop instanceof HTMLImageElement) {
+        // Everything is hidden — skip crossfade, swap src directly so image preloads while invisible
+        backdrop.heroBackdropTransitionToken = (Number(backdrop.heroBackdropTransitionToken) || 0) + 1;
+        heroNode.querySelectorAll(".home-hero-backdrop-transition-ghost").forEach((n) => n.remove());
+        backdrop.classList.remove("home-hero-backdrop-transition-enter", "is-visible");
+        if (src) {
+          backdrop.setAttribute("src", src);
+          backdrop.setAttribute("alt", display.title || "featured");
+          backdrop.classList.remove("placeholder");
+        } else {
+          backdrop.removeAttribute("src");
+          backdrop.classList.add("placeholder");
+        }
+      } else if (this.layoutMode === "modern" && backdrop instanceof HTMLImageElement) {
         const shouldFreezeBackdrop = Boolean(hero?.heroMetaEnriching)
           && String(backdrop.getAttribute("src") || "").trim();
         if (!shouldFreezeBackdrop) {
@@ -3108,7 +3126,18 @@ export const HomeScreen = {
     const logoNode = heroNode.querySelector(".home-hero-logo");
     const brandNode = heroNode.querySelector(".home-hero-brand");
     if (display.logo) {
-      if (logoNode) {
+      if (isHiding) {
+        // Parent is invisible — skip crossfade, swap directly
+        if (logoNode instanceof HTMLImageElement) {
+          logoNode.heroLogoTransitionToken = (Number(logoNode.heroLogoTransitionToken) || 0) + 1;
+          brandNode?.querySelectorAll(".home-hero-logo-transition-ghost").forEach((n) => n.remove());
+          logoNode.classList.remove("home-hero-logo-transition-enter", "is-visible");
+          logoNode.setAttribute("src", display.logo);
+          logoNode.setAttribute("alt", display.title || "logo");
+        } else if (brandNode) {
+          brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
+        }
+      } else if (logoNode) {
         animateModernHeroLogoSwap(logoNode, display.logo, display.title || "logo");
       } else if (brandNode) {
         brandNode.insertAdjacentHTML("afterbegin", `<img class="home-hero-logo home-hero-logo-transition-enter" src="${escapeAttribute(display.logo)}" alt="${escapeAttribute(display.title || "logo")}" decoding="async" fetchpriority="high" />`);
@@ -3119,6 +3148,8 @@ export const HomeScreen = {
         });
       }
     } else if (logoNode) {
+      logoNode.heroLogoTransitionToken = (Number(logoNode.heroLogoTransitionToken) || 0) + 1;
+      brandNode?.querySelectorAll(".home-hero-logo-transition-ghost").forEach((n) => n.remove());
       logoNode.remove();
     }
 
@@ -3170,6 +3201,12 @@ export const HomeScreen = {
     if (descriptionNode) {
       descriptionNode.textContent = display.description || " ";
       descriptionNode.classList.toggle("is-empty", !display.description);
+    }
+    if (!hero?.heroMetaEnriching) {
+      this.heroCopyFadeInRaf = requestAnimationFrame(() => {
+        this.heroCopyFadeInRaf = null;
+        heroNode.classList.remove("is-hero-copy-updating");
+      });
     }
     this.scheduleHomeTruncationUpdate({ scope: heroNode });
     this.syncCollectionHeroMedia(hero);
@@ -4165,6 +4202,10 @@ export const HomeScreen = {
     const isRapidNav = previous > 0 && (now - previous) < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs;
     const delay = this.getHeroFocusDelay({ rapid: isRapidNav });
     this.lastModernHeroNavAt = now;
+    const heroNode = this.container?.querySelector(".home-hero-card");
+    if (heroNode && String(heroNode.dataset.itemId || "") !== String(hero.id || "")) {
+      heroNode.classList.add("is-hero-copy-updating");
+    }
     this.heroFocusDelayTimer = setTimeout(async () => {
       this.heroItem = shouldEnrichModernHero(hero) ? { ...hero, heroMetaEnriching: true } : hero;
       const matchedIndex = this.heroCandidates.findIndex((item) => String(item?.id || "") === String(hero.id || ""));
