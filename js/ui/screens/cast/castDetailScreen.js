@@ -139,17 +139,21 @@ export const CastDetailScreen = {
 
   renderLoading() {
     this.container.innerHTML = `
-      <div class="cast-detail-shell">
-        <div class="cast-detail-loading">Loading cast profile...</div>
+      <div class="nav-screen cast-detail-shell">
+        <div class="nav-screen-body">
+          <div class="cast-detail-loading">Loading cast profile...</div>
+        </div>
       </div>
     `;
   },
 
   renderError(message) {
     this.container.innerHTML = `
-      <div class="cast-detail-shell">
-        <div class="cast-detail-error">${message}</div>
-        <button class="cast-detail-back focusable" data-action="back">Back</button>
+      <div class="nav-screen cast-detail-shell">
+        <div class="nav-screen-body">
+          <div class="cast-detail-error">${message}</div>
+          <button class="cast-detail-back focusable" data-action="back">Back</button>
+        </div>
       </div>
     `;
     ScreenUtils.indexFocusables(this.container);
@@ -175,26 +179,28 @@ export const CastDetailScreen = {
       : `<div class="cast-credit-empty">No titles found for this cast member.</div>`;
 
     this.container.innerHTML = `
-      <div class="cast-detail-shell">
-        <section class="cast-detail-hero">
-          <button class="cast-detail-back focusable" data-action="back">Back</button>
-          <div class="cast-detail-hero-content">
-            <div class="cast-detail-avatar"${person.profile ? ` style="background-image:url('${person.profile}')"` : ""}></div>
-            <div class="cast-detail-meta">
-              <h2 class="cast-detail-name">${person.name || "Unknown"}</h2>
-              <div class="cast-detail-facts">
-                ${person.knownForDepartment ? `<span>${person.knownForDepartment}</span>` : ""}
-                ${person.birthday ? `<span>${person.birthday}</span>` : ""}
-                ${person.placeOfBirth ? `<span>${person.placeOfBirth}</span>` : ""}
+      <div class="nav-screen cast-detail-shell">
+        <div class="nav-screen-body">
+          <section class="cast-detail-hero">
+            <button class="cast-detail-back focusable" data-action="back">Back</button>
+            <div class="cast-detail-hero-content">
+              <div class="cast-detail-avatar"${person.profile ? ` style="background-image:url('${person.profile}')"` : ""}></div>
+              <div class="cast-detail-meta">
+                <h2 class="cast-detail-name">${person.name || "Unknown"}</h2>
+                <div class="cast-detail-facts">
+                  ${person.knownForDepartment ? `<span>${person.knownForDepartment}</span>` : ""}
+                  ${person.birthday ? `<span>${person.birthday}</span>` : ""}
+                  ${person.placeOfBirth ? `<span>${person.placeOfBirth}</span>` : ""}
+                </div>
+                <p class="cast-detail-bio">${person.biography || "No biography available."}</p>
               </div>
-              <p class="cast-detail-bio">${person.biography || "No biography available."}</p>
             </div>
-          </div>
-        </section>
-        <section class="cast-detail-credits">
-          <h3 class="cast-detail-section-title">${t("cast_detail_known_for", {}, "Known For")}</h3>
-          <div class="cast-credit-track">${creditsHtml}</div>
-        </section>
+          </section>
+          <section class="cast-detail-credits">
+            <h3 class="cast-detail-section-title">${t("cast_detail_known_for", {}, "Known For")}</h3>
+            <div class="cast-credit-track">${creditsHtml}</div>
+          </section>
+        </div>
       </div>
     `;
 

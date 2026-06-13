@@ -772,6 +772,17 @@ export const SearchScreen = {
         })}
         <main class="home-main search-content">
           <section class="search-header${this.layoutPrefs?.searchDiscoverEnabled ? "" : " no-discover"}">
+            <input
+              id="searchInput"
+              class="search-input-field focusable"
+              type="text"
+              data-action="searchInput"
+              autocomplete="off"
+              autocapitalize="off"
+              spellcheck="false"
+              placeholder="${escapeHtml(t("search_placeholder", {}, "Search movies & series"))}"
+              value="${escapeHtml(queryText)}"
+            />
             ${this.layoutPrefs?.searchDiscoverEnabled ? `
               <button class="search-discover-btn focusable" data-action="openDiscover">
                 <span class="search-action-icon material-icons" aria-hidden="true">explore</span>
@@ -784,17 +795,6 @@ export const SearchScreen = {
             >
               <span class="search-action-icon material-icons" aria-hidden="true">mic</span>
             </button>
-            <input
-              id="searchInput"
-              class="search-input-field focusable"
-              type="text"
-              data-action="searchInput"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-              placeholder="${escapeHtml(t("search_placeholder", {}, "Search movies & series"))}"
-              value="${escapeHtml(queryText)}"
-            />
           </section>
           ${this.renderRows()}
         </main>

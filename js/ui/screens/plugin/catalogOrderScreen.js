@@ -167,8 +167,8 @@ export const CatalogOrderScreen = {
     }).join("");
 
     this.container.innerHTML = `
-      <div class="catalog-order-shell">
-        <main class="catalog-order-main">
+      <div class="nav-screen catalog-order-shell">
+        <main class="nav-screen-body catalog-order-main">
           <h1 class="catalog-order-title">Reorder Home Catalogs</h1>
           <p class="catalog-order-subtitle">This controls catalog row order on Home (Classic + Modern + Grid).</p>
           <section class="catalog-order-list">

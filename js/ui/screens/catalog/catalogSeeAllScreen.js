@@ -568,17 +568,19 @@ export const CatalogSeeAllScreen = {
       : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
 
     this.container.innerHTML = `
-      <div class="seeall-shell">
-        <header class="seeall-header">
-          <h2 class="seeall-title">${escapeHtml(title)}</h2>
-          ${this.layoutPrefs?.catalogAddonNameEnabled !== false && descriptor.addonName
-            ? `<div class="seeall-subtitle">${escapeHtml(t("catalog_see_all_from", [descriptor.addonName], "from %1$s"))}</div>`
-            : ""}
-        </header>
-        <section class="seeall-grid">
-          ${cards}
-        </section>
-        ${this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : ""}
+      <div class="nav-screen seeall-shell">
+        <div class="nav-screen-body">
+          <header class="seeall-header">
+            <h2 class="seeall-title">${escapeHtml(title)}</h2>
+            ${this.layoutPrefs?.catalogAddonNameEnabled !== false && descriptor.addonName
+              ? `<div class="seeall-subtitle">${escapeHtml(t("catalog_see_all_from", [descriptor.addonName], "from %1$s"))}</div>`
+              : ""}
+          </header>
+          <section class="seeall-grid">
+            ${cards}
+          </section>
+          ${this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : ""}
+        </div>
       </div>
     `;
 

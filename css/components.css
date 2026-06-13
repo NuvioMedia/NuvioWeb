@@ -16696,3 +16696,29 @@ button:focus-visible {
   color: var(--detail-text-secondary);
   font-size: 28px;
 }
+
+/* ─── Shared nav-sidebar screen layout ───────────────────────────────────── */
+/* Placed at end of file so single-class specificity ties resolve in our favor */
+
+.nav-screen {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  box-sizing: border-box;
+  /* Reset any padding from screen-specific shells; provide only sidebar offset */
+  padding: 0 0 0 var(--legacy-sidebar-rail-width);
+}
+
+.nav-screen-body {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 48px 24px;
+  box-sizing: border-box;
+  scrollbar-width: none;
+}
+
+.nav-screen-body::-webkit-scrollbar {
+  display: none;
+}

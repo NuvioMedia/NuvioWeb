@@ -2158,7 +2158,7 @@ export const MetaDetailsScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="series-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
+      <div class="nav-screen series-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
         <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="series-detail-vignette"></div>
@@ -2380,7 +2380,7 @@ export const MetaDetailsScreen = {
     const backdrop = meta.background || meta.poster || "";
 
     this.container.innerHTML = `
-      <div class="series-detail-shell movie-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
+      <div class="nav-screen series-detail-shell movie-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
         <div class="series-detail-backdrop"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="series-detail-vignette"></div>

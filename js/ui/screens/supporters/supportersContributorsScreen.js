@@ -590,8 +590,8 @@ export const SupportersContributorsScreen = {
     this.captureListScrollTop();
     const enterClass = this.routeEnterPending ? " supporters-route-enter" : "";
     this.container.innerHTML = `
-      <div class="supporters-route-shell${enterClass}">
-        <div class="supporters-route-content">
+      <div class="nav-screen supporters-route-shell${enterClass}">
+        <div class="nav-screen-body supporters-route-content">
           ${this.renderBrand()}
           <section class="supporters-content-card">
             ${this.renderTabs()}

@@ -5,19 +5,15 @@ import {
 } from "./sidebarNavigation.js";
 
 // Routes that use this persistent sidebar.
-// home and settings manage their own sidebar with expand/collapse.
+// home, settings, search, library, discover, and plugin render their own sidebar.
 // player, auth, and stream screens don't show a sidebar.
 const ROOT_SIDEBAR_ROUTES = new Set([
   "detail",
-  "library",
-  "search",
-  "discover",
   "trakt",
   "castDetail",
   "catalogSeeAll",
   "folderDetail",
   "supportersContributors",
-  "plugin",
   "catalogOrder"
 ]);
 

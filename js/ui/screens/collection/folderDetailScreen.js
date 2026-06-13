@@ -580,7 +580,7 @@ export const FolderDetailScreen = {
     this.heroItem = null;
 
     if (!this.collection || !this.folder) {
-      this.container.innerHTML = `<div class="seeall-shell"><div class="seeall-empty">Collection folder not found.</div></div>`;
+      this.container.innerHTML = `<div class="nav-screen seeall-shell"><div class="nav-screen-body"><div class="seeall-empty">Collection folder not found.</div></div></div>`;
       return;
     }
 
@@ -928,46 +928,50 @@ export const FolderDetailScreen = {
 
     this.container.innerHTML = this.viewMode === "TABBED_GRID"
       ? `
-          <div class="seeall-shell folder-detail-shell${enterClass}">
-          <header class="seeall-header folder-detail-header">
-            <div class="folder-detail-eyebrow">${escapeHtml(this.collection?.title || "Collection")}</div>
-            <h2 class="seeall-title">${escapeHtml(this.folder?.title || "Folder")}</h2>
-            ${this.tabs.length > 1 ? `
-              <div class="folder-detail-tabs">
-                ${this.tabs.map((tab, index) => `
-                  <button type="button"
-                          class="folder-detail-tab focusable${index === this.selectedTabIndex ? " is-selected" : ""}"
-                          data-action="selectTab"
-                          data-tab-index="${index}"
-                          data-focus-key="tab:${index}">${escapeHtml(tab.label || "Tab")}</button>
-                `).join("")}
-              </div>
-            ` : ""}
-          </header>
-          <section class="seeall-grid">
-            ${cards}
-          </section>
-          ${selectedTab?.loading ? '<div class="seeall-loading">Loading...</div>' : ''}
-        </div>
-      `
+          <div class="nav-screen seeall-shell folder-detail-shell${enterClass}">
+            <div class="nav-screen-body">
+              <header class="seeall-header folder-detail-header">
+                <div class="folder-detail-eyebrow">${escapeHtml(this.collection?.title || "Collection")}</div>
+                <h2 class="seeall-title">${escapeHtml(this.folder?.title || "Folder")}</h2>
+                ${this.tabs.length > 1 ? `
+                  <div class="folder-detail-tabs">
+                    ${this.tabs.map((tab, index) => `
+                      <button type="button"
+                              class="folder-detail-tab focusable${index === this.selectedTabIndex ? " is-selected" : ""}"
+                              data-action="selectTab"
+                              data-tab-index="${index}"
+                              data-focus-key="tab:${index}">${escapeHtml(tab.label || "Tab")}</button>
+                    `).join("")}
+                  </div>
+                ` : ""}
+              </header>
+              <section class="seeall-grid">
+                ${cards}
+              </section>
+              ${selectedTab?.loading ? '<div class="seeall-loading">Loading...</div>' : ''}
+            </div>
+          </div>
+        `
       : `
-        <div class="seeall-shell folder-detail-shell folder-detail-follow-layout">
-          <section class="folder-follow-hero">
-            <div class="folder-follow-hero-media">
-              <img class="folder-follow-hero-backdrop" src="${escapeHtml(heroDisplay?.backdrop || "")}" alt="" />
+          <div class="nav-screen seeall-shell folder-detail-shell folder-detail-follow-layout">
+            <div class="nav-screen-body">
+              <section class="folder-follow-hero">
+                <div class="folder-follow-hero-media">
+                  <img class="folder-follow-hero-backdrop" src="${escapeHtml(heroDisplay?.backdrop || "")}" alt="" />
+                </div>
+                <div class="folder-follow-hero-copy">
+                  <img class="folder-follow-hero-logo" src="${escapeHtml(heroDisplay?.logo || "")}" alt=""${heroDisplay?.logo ? "" : ' hidden="hidden"'} />
+                  <h1 class="folder-follow-hero-title${heroDisplay?.logo ? " is-hidden" : ""}">${escapeHtml(heroDisplay?.title || this.folder?.title || "")}</h1>
+                  <div class="folder-follow-hero-meta">${escapeHtml((heroDisplay?.meta || []).join("  •  "))}</div>
+                  <p class="folder-follow-hero-description">${escapeHtml(heroDisplay?.description || " ")}</p>
+                </div>
+              </section>
+              <section class="folder-detail-rows">
+                ${rowsMarkup}
+              </section>
             </div>
-            <div class="folder-follow-hero-copy">
-              <img class="folder-follow-hero-logo" src="${escapeHtml(heroDisplay?.logo || "")}" alt=""${heroDisplay?.logo ? "" : ' hidden="hidden"'} />
-              <h1 class="folder-follow-hero-title${heroDisplay?.logo ? " is-hidden" : ""}">${escapeHtml(heroDisplay?.title || this.folder?.title || "")}</h1>
-              <div class="folder-follow-hero-meta">${escapeHtml((heroDisplay?.meta || []).join("  •  "))}</div>
-              <p class="folder-follow-hero-description">${escapeHtml(heroDisplay?.description || " ")}</p>
-            </div>
-          </section>
-          <section class="folder-detail-rows">
-            ${rowsMarkup}
-          </section>
-        </div>
-      `;
+          </div>
+        `;
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
