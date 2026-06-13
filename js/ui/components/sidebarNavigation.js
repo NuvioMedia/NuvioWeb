@@ -248,6 +248,10 @@ export function renderLegacySidebar({
     <aside class="home-sidebar root-sidebar root-sidebar-legacy${performanceConstrained ? " performance-constrained" : ""}"
            data-selected-route="${selectedRoute}"
            data-collapsible="${collapsible ? "true" : "false"}">
+      <div class="home-brand-wrap">
+        <img class="home-brand-mark" src="assets/brand/app_logo_wordmarksmall.png" alt="Nuvio" />
+        <img class="home-brand-wordmark" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
+      </div>
       ${showProfileSelector ? `
         <button class="home-profile-pill focusable"
                 data-action="gotoAccount"
@@ -415,21 +419,15 @@ export function bindRootSidebarEvents(container, {
 
 export function setLegacySidebarExpanded(container, expanded) {
   const sidebar = container?.querySelector(".home-sidebar");
-  if (!sidebar) {
-    return;
-  }
+  if (!sidebar) return;
+
   if (sidebar._legacyOpenTimer) {
     clearTimeout(sidebar._legacyOpenTimer);
     sidebar._legacyOpenTimer = null;
   }
-  const shouldExpand = Boolean(expanded);
-  if (shouldExpand) {
-    sidebar.classList.add("opening");
-    sidebar.classList.add("content-expanded");
-    void sidebar.offsetWidth;
-    requestAnimationFrame(() => {
-      sidebar.classList.add("expanded");
-    });
+
+  if (expanded) {
+    sidebar.classList.add("opening", "content-expanded", "expanded");
     sidebar._legacyOpenTimer = setTimeout(() => {
       sidebar.classList.remove("opening");
       sidebar._legacyOpenTimer = null;
@@ -439,13 +437,7 @@ export function setLegacySidebarExpanded(container, expanded) {
     return;
   }
 
-  sidebar.classList.remove("opening");
-  sidebar.classList.remove("content-expanded");
-  void sidebar.offsetWidth;
-  requestAnimationFrame(() => {
-    sidebar.classList.remove("expanded");
-    scheduleRootSidebarTextFit(container);
-  });
+  sidebar.classList.remove("opening", "content-expanded", "expanded");
   scheduleRootSidebarTextFit(container);
 }
 
