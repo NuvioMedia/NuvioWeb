@@ -5608,10 +5608,21 @@ button:focus-visible {
   width: min(var(--modern-hero-copy-max-width), calc(100% - var(--home-content-start) - var(--modern-hero-copy-right)));
   max-width: calc(100% - var(--home-content-start) - var(--modern-hero-copy-right));
   overflow: hidden;
+  transition: opacity 200ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-meta-enriching .home-modern-hero-copy {
   visibility: hidden;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-copy-updating .home-modern-hero-copy {
+  opacity: 0;
+  transition: none;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-copy-updating .home-hero-backdrop {
+  opacity: 0 !important;
+  transition: none !important;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-logo {
