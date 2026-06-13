@@ -103,8 +103,11 @@ button:focus-visible {
   padding: 46px 34px 34px;
   box-sizing: border-box;
   border-radius: 22px;
-  border: 1px solid rgb(51 51 51 / 0.5);
-  background: #111111;
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  background: rgba(14, 16, 22, 0.5);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.11);
+  backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
+  -webkit-backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -275,8 +278,9 @@ button:focus-visible {
   min-height: 92px;
   padding: 22px 26px;
   border-radius: 24px;
-  border: 1px solid var(--border-color);
-  background: var(--card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.09);
   color: var(--text-color);
   box-sizing: border-box;
 }
@@ -1328,7 +1332,9 @@ button:focus-visible {
 .nuvio-dialog-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.84);
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1364,9 +1370,11 @@ button:focus-visible {
      — no fixed width here so maxWidth controls size */
   width: 100%;
   box-sizing: border-box;
-  background: #1a1a1a;
-  /* 1dp border: barely visible at TV distance — keep but very subtle */
-  border: 2px solid rgba(255, 255, 255, 0.06);
+  background: rgba(18, 20, 26, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
+  -webkit-backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
   border-radius: 32px;
   padding: 48px;
   display: flex;
@@ -1439,8 +1447,8 @@ button:focus-visible {
   min-height: 80px;
   box-sizing: border-box;
   border-radius: 999px;
-  border: none;
-  background: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
   color: #ffffff;
   font-size: 28px;
   line-height: 40px;
@@ -3204,7 +3212,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: min(1.04vw, 20px); /* ATV 10dp -> 20px */
-  margin-bottom: min(1.67vw, 32px); /* ATV 16dp -> 32px */
+  margin-bottom: 64px;
 }
 
 .library-picker-row {
@@ -3509,7 +3517,7 @@ button:focus-visible {
   width: var(--library-poster-width, 252px);
   padding: 0 4px;
   box-sizing: border-box;
-  font-size: 32px;
+  font-size: 26px;
   font-weight: 500;
   line-height: 1.18;
   color: var(--text-color);
@@ -8654,7 +8662,9 @@ button:focus-visible {
   bottom: 0;
   left: 0;
   inset: 0;
-  background: rgba(0, 0, 0, 0.72);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8671,8 +8681,11 @@ button:focus-visible {
   max-height: min(43vw, calc(100vh - 96px));
   padding: 48px;
   border-radius: 32px;
-  border: 2px solid #333333;
-  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 20, 26, 0.52);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
+  -webkit-backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -8711,8 +8724,8 @@ button:focus-visible {
   min-height: 80px;
   padding: 20px 32px;
   border-radius: 999px;
-  border: 1px solid transparent;
-  background: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.06);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -12356,9 +12369,11 @@ button:focus-visible {
   grid-template-columns: 0.94fr 1.46fr;
   gap: 20px;
   border-radius: 20px;
-  border: 1px solid rgb(var(--focus-color-rgb) / 0.16);
-  background: rgb(var(--bg-elevated-rgb) / 0.78);
-  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(14, 16, 22, 0.52);
+  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(32px) saturate(160%) brightness(1.06);
+  -webkit-backdrop-filter: blur(32px) saturate(160%) brightness(1.06);
   padding: 18px;
   overflow: hidden;
 }
@@ -14375,10 +14390,11 @@ button:focus-visible {
   flex: 1;
   min-height: 0;
   border-radius: 22px;
-  background: rgb(var(--bg-elevated-rgb) / 0.22);
-  box-shadow: inset 0 0 0 1px rgb(var(--focus-color-rgb) / 0.035);
-  backdrop-filter: blur(2px);
-  -webkit-backdrop-filter: blur(2px);
+  background: rgba(14, 16, 22, 0.46);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.48), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(32px) saturate(160%) brightness(1.06);
+  -webkit-backdrop-filter: blur(32px) saturate(160%) brightness(1.06);
   padding: 22px 20px 22px;
   box-sizing: border-box;
   overflow: hidden;
@@ -14420,8 +14436,9 @@ button:focus-visible {
   margin-bottom: 18px;
   padding: 28px 32px;
   border-radius: 20px;
-  border: 1px solid rgb(var(--focus-color-rgb) / 0.06);
-  background: rgb(var(--card-bg-rgb) / 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(255, 255, 255, 0.055);
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -14500,7 +14517,12 @@ button:focus-visible {
 .performance-constrained .modern-sidebar-pill-chip,
 .performance-constrained .series-episode-card,
 .performance-constrained .series-stream-panel,
-.performance-constrained .stream-route-panel-shell {
+.performance-constrained .stream-route-panel-shell,
+.performance-constrained .nuvio-dialog-backdrop,
+.performance-constrained .nuvio-dialog-panel,
+.performance-constrained .settings-dialog-backdrop,
+.performance-constrained .settings-dialog,
+.performance-constrained .qr-card {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
