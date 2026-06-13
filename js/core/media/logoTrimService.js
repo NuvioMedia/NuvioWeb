@@ -1,8 +1,22 @@
 const trimCache = new Map();
+const noCorsOrigins = new Set();
+
+function getOrigin(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
 
 function trimLogoUrl(url) {
   if (trimCache.has(url)) {
     return trimCache.get(url);
+  }
+
+  const origin = getOrigin(url);
+  if (origin && noCorsOrigins.has(origin)) {
+    return Promise.resolve(null);
   }
 
   const promise = new Promise((resolve) => {
@@ -42,10 +56,14 @@ function trimLogoUrl(url) {
         out.getContext("2d").drawImage(canvas, minX, minY, w, h, 0, 0, w, h);
         resolve(out.toDataURL());
       } catch {
+        if (origin) noCorsOrigins.add(origin);
         resolve(null);
       }
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => {
+      if (origin) noCorsOrigins.add(origin);
+      resolve(null);
+    };
     img.src = url;
   });
 
