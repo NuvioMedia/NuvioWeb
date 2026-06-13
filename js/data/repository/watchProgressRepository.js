@@ -1,11 +1,13 @@
 import { WatchProgressStore } from "../local/watchProgressStore.js";
 import { ProfileManager } from "../../core/profile/profileManager.js";
+import { LocalStore } from "../../core/storage/localStore.js";
 import { ContinueWatchingPreferences } from "../local/continueWatchingPreferences.js";
 import { TraktSettingsStore, WatchProgressSource } from "../local/traktSettingsStore.js";
 import { TraktAuthStore } from "../local/traktAuthStore.js";
 import { TraktAuthService } from "./traktAuthService.js";
 import { metaRepository } from "./metaRepository.js";
 
+const CW_DISPLAY_SNAPSHOT_KEY = "homeContinueWatchingDisplaySnapshot";
 const CW_PROGRESS_START_THRESHOLD = 0.02;
 const CW_PROGRESS_END_THRESHOLD = 0.85;
 // These bound a hung request so the fire-and-forget Continue Watching
@@ -57,6 +59,17 @@ function queueWatchProgressCloudSync(delayMs = getWatchProgressSyncDebounceMs())
     };
     void runPush();
   }, delayMs);
+}
+
+function invalidateContinueWatchingDisplaySnapshot() {
+  const sourceKey = `${activeProfileId()}:${selectedContinueWatchingSource()}`;
+  const store = LocalStore.get(CW_DISPLAY_SNAPSHOT_KEY, {});
+  if (!store || typeof store !== "object" || !Object.prototype.hasOwnProperty.call(store, sourceKey)) {
+    return;
+  }
+  const next = { ...store };
+  delete next[sourceKey];
+  LocalStore.set(CW_DISPLAY_SNAPSHOT_KEY, next);
 }
 
 function isSeriesType(type) {
@@ -289,6 +302,7 @@ class WatchProgressRepository {
       ...progress,
       updatedAt: progress.updatedAt || Date.now()
     }, activeProfileId());
+    invalidateContinueWatchingDisplaySnapshot();
     queueWatchProgressCloudSync();
   }
 
@@ -302,6 +316,7 @@ class WatchProgressRepository {
       .filter((item) => matchesProgressTarget(item, contentId, videoId));
     WatchProgressStore.remove(contentId, videoId, pid);
     await deleteWatchProgressFromCloud(removedItems);
+    invalidateContinueWatchingDisplaySnapshot();
     queueWatchProgressCloudSync();
   }
 
@@ -371,6 +386,7 @@ class WatchProgressRepository {
 
   async replaceAll(items) {
     WatchProgressStore.replaceForProfile(activeProfileId(), items || []);
+    invalidateContinueWatchingDisplaySnapshot();
   }
 
 }

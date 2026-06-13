@@ -5589,6 +5589,11 @@ export const PlayerScreen = {
       if (this.isStartupErrorVisible()) {
         return;
       }
+      if (this.seekLoading) {
+        this.seekLoading = false;
+        this.seekLoadingBaselineSeconds = null;
+        this.clearBufferingSpinnerTimer();
+      }
       if (isTizenAvPlayPlayback()) {
         this.lastPlaybackErrorAt = 0;
         this.sourcesError = "";

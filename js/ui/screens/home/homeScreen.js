@@ -21,7 +21,6 @@ import { LocalStore } from "../../../core/storage/localStore.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import {
-  buildModernNavigationRows,
   buildModernRowKey,
   MODERN_HOME_CONSTANTS,
   renderModernHomeLayout
@@ -34,7 +33,9 @@ import {
 import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
+  getLegacySidebarNodes,
   getLegacySidebarSelectedNode,
+  getModernSidebarNodes,
   getModernSidebarSelectedNode,
   getSidebarProfileState,
   focusWithoutAutoScroll,
@@ -2247,6 +2248,22 @@ export const HomeScreen = {
     if (!this.container || !layoutMode) {
       return null;
     }
+    let focused = this.getCurrentFocusedNode()
+      || this.container.querySelector(".focusable.focused")
+      || this.lastMainFocus
+      || null;
+    if (focused && !focused.isConnected) {
+      return null;
+    }
+    if (focused?.closest?.(".home-sidebar, .modern-sidebar-panel")) {
+      return {
+        layoutMode,
+        focusKind: "sidebar",
+        sidebarExpanded: Boolean(this.sidebarExpanded),
+        sidebarIndex: Number(focused?.dataset?.navIndex || 0),
+        sidebarAction: String(focused?.dataset?.action || "")
+      };
+    }
     const viewport = layoutMode === "modern"
       ? this.container.querySelector(".home-modern-rows-viewport")
       : this.container.querySelector(".home-main");
@@ -2254,15 +2271,12 @@ export const HomeScreen = {
       return null;
     }
 
-    let focused = this.container.querySelector(".home-main .focusable.focused") || this.lastMainFocus || null;
-    if (focused && !focused.isConnected) {
-      focused = null;
-    }
+    focused = this.container.querySelector(".home-main .focusable.focused") || this.lastMainFocus || null;
     if (!focused) {
       return null;
     }
     const trackStates = Object.fromEntries(
-      Array.from(this.container.querySelectorAll("[data-track-row-key]"))
+      this.getNavigationTrackNodes()
         .map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft])
         .filter(([key]) => key)
     );
@@ -2317,7 +2331,7 @@ export const HomeScreen = {
     }
 
     const trackStates = Object.fromEntries(
-      Array.from(this.container.querySelectorAll("[data-track-row-key]"))
+      this.getNavigationTrackNodes()
         .map((track) => [String(track.dataset.trackRowKey || ""), track.scrollLeft])
         .filter(([key]) => key)
     );
@@ -2358,6 +2372,19 @@ export const HomeScreen = {
     } catch (_) { }
   },
 
+  rememberContinueWatchingReturnFocus(index = null) {
+    const cards = this.getNavigationRowNodes("continue_watching");
+    const preferredIndex = Number(index);
+    const target = Number.isFinite(preferredIndex)
+      ? cards[Math.max(0, Math.min(cards.length - 1, preferredIndex))] || null
+      : (this.getCurrentFocusedNode()?.closest?.(".home-continue-card") || null);
+    if (target instanceof HTMLElement) {
+      this.rememberReturnFocusForNode(target);
+      return;
+    }
+    this.persistCurrentFocusState();
+  },
+
   readStoredReturnFocusState() {
     try {
       const navigationEntry = globalThis.performance?.getEntriesByType?.("navigation")?.[0] || null;
@@ -2390,19 +2417,14 @@ export const HomeScreen = {
     }
 
     Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
-      const track = Array.from(this.container.querySelectorAll("[data-track-row-key]"))
+      const track = this.getNavigationTrackNodes()
         .find((node) => String(node.dataset.trackRowKey || "") === String(rowKey || ""));
       if (track) {
         track.scrollLeft = Number(scrollLeft || 0);
       }
     });
 
-    const rowSection = focusState.rowKey
-      ? Array.from(this.container.querySelectorAll("[data-row-key]"))
-        .find((node) => String(node.dataset.rowKey || "") === String(focusState.rowKey || ""))
-      : null;
-    const track = rowSection?.querySelector?.(".home-track, .home-grid-track") || null;
-    const nodes = Array.from(track?.querySelectorAll(".home-content-card.focusable") || []);
+    const nodes = this.getNavigationRowNodes(focusState.rowKey);
     const target = nodes[focusState.itemIndex] || nodes[0] || null;
     if (!target) {
       return false;
@@ -2421,7 +2443,8 @@ export const HomeScreen = {
   },
 
   scheduleReturnFocusRestore() {
-    const focusState = this.pendingBackFocusState || this.readStoredReturnFocusState();
+    const focusState = this.pendingBackFocusState
+      || (this.isRestoringFocusFromBack ? this.readStoredReturnFocusState() : null);
     if (!focusState?.layoutMode) {
       return;
     }
@@ -2451,10 +2474,51 @@ export const HomeScreen = {
     }
 
     if (this.layoutMode === "modern") {
+      if (focusState.focusKind === "sidebar") {
+        return this.restoreSidebarFocusState(focusState);
+      }
       return this.restoreModernFocusState(focusState);
     }
 
+    if (focusState.focusKind === "sidebar") {
+      return this.restoreSidebarFocusState(focusState);
+    }
     return this.restoreLegacyFocusState(focusState);
+  },
+
+  restoreSidebarFocusState(focusState) {
+    if (this.homeHoldFocusLocked || !focusState || !this.container) {
+      return false;
+    }
+
+    const nodes = this.layoutPrefs?.modernSidebar
+      ? getModernSidebarNodes(this.container)
+      : getLegacySidebarNodes(this.container);
+    if (!nodes.length) {
+      return false;
+    }
+
+    const preferredIndex = Number(focusState.sidebarIndex);
+    let target = Number.isFinite(preferredIndex)
+      ? nodes[Math.max(0, Math.min(nodes.length - 1, preferredIndex))] || null
+      : null;
+
+    if (!target && focusState.sidebarAction) {
+      target = nodes.find((node) => String(node.dataset?.action || "") === String(focusState.sidebarAction || "")) || null;
+    }
+
+    target = target || (this.layoutPrefs?.modernSidebar
+      ? getModernSidebarSelectedNode(this.container)
+      : getLegacySidebarSelectedNode(this.container))
+      || nodes[0]
+      || null;
+    if (!target) {
+      return false;
+    }
+
+    this.setSidebarExpanded(true);
+    this.setFocusedNode(target);
+    return true;
   },
 
   restoreModernFocusState(focusState) {
@@ -2468,28 +2532,26 @@ export const HomeScreen = {
     }
 
     Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
-      const track = Array.from(this.container.querySelectorAll("[data-track-row-key]"))
+      const track = this.getNavigationTrackNodes()
         .find((node) => String(node.dataset.trackRowKey || "") === String(rowKey || ""));
       if (track) {
         track.scrollLeft = Number(scrollLeft || 0);
       }
     });
 
-    const rowSection = focusState.rowKey
-      ? Array.from(this.container.querySelectorAll("[data-row-key]"))
-        .find((node) => String(node.dataset.rowKey || "") === String(focusState.rowKey || ""))
-      : null;
     const maxScrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
     viewport.scrollTop = Math.max(0, Math.min(maxScrollTop, Number(focusState.mainScrollTop || 0)));
 
-    const targetTrack = rowSection?.querySelector?.(".home-track") || null;
-    const targetNodes = Array.from(targetTrack?.querySelectorAll(".home-content-card.focusable") || []);
+    const targetNodes = this.getNavigationRowNodes(focusState.rowKey);
+    if (this.isRestoringFocusFromBack && focusState.rowKey && !targetNodes.length) {
+      return false;
+    }
     const fallback = this.isRestoringFocusFromBack
-      ? this.syncMainFocusToViewport({ suppressFlows: true })
+      ? null
       : this.container.querySelector(".home-main .home-continue-card.focusable, .home-main .home-poster-card.focusable");
     const target = targetNodes[focusState.itemIndex] || targetNodes[0] || fallback;
     if (!target) {
-      return this.isRestoringFocusFromBack;
+      return false;
     }
 
     this.setFocusedNode(target);
@@ -2515,7 +2577,7 @@ export const HomeScreen = {
     }
 
     Object.entries(focusState.trackStates || {}).forEach(([rowKey, scrollLeft]) => {
-      const track = Array.from(this.container.querySelectorAll("[data-track-row-key]"))
+      const track = this.getNavigationTrackNodes()
         .find((node) => String(node.dataset.trackRowKey || "") === String(rowKey || ""));
       if (track) {
         track.scrollLeft = Number(scrollLeft || 0);
@@ -2529,19 +2591,22 @@ export const HomeScreen = {
     if (focusState.focusKind === "hero") {
       target = this.container.querySelector(".home-hero-card.focusable");
     } else if (focusState.rowKey) {
-      const rowSection = Array.from(this.container.querySelectorAll("[data-row-key]"))
-        .find((node) => String(node.dataset.rowKey || "") === String(focusState.rowKey || ""));
-      const track = rowSection?.querySelector?.(".home-track") || rowSection?.querySelector?.(".home-grid-track") || null;
-      const rowNodes = Array.from(track?.querySelectorAll(".home-content-card.focusable") || []);
+      const rowNodes = this.getNavigationRowNodes(focusState.rowKey);
       target = rowNodes[focusState.itemIndex] || rowNodes[0] || null;
     }
 
+    if (this.isRestoringFocusFromBack && focusState.rowKey) {
+      const targetExists = this.getNavigationRowNodes(focusState.rowKey).length > 0;
+      if (!targetExists && focusState.focusKind !== "hero") {
+        return false;
+      }
+    }
     const fallback = this.isRestoringFocusFromBack
-      ? this.syncMainFocusToViewport({ suppressFlows: true })
+      ? null
       : this.container.querySelector(this.getInitialFocusSelector());
     target = target || fallback;
     if (!target) {
-      return this.isRestoringFocusFromBack;
+      return false;
     }
 
     this.setFocusedNode(target);
@@ -2561,7 +2626,7 @@ export const HomeScreen = {
     if (this.homeHoldFocusLocked) {
       return false;
     }
-    const target = this.container?.querySelector(".home-row-continue .home-content-card.focusable") || null;
+    const target = this.getNavigationRowNodes("continue_watching")[0] || null;
     if (!target) {
       return false;
     }
@@ -2789,6 +2854,10 @@ export const HomeScreen = {
     }
     return this.isScrollAnimationActive(this.modernCameraFollowLastVerticalContainer, "y")
       || this.isScrollAnimationActive(this.modernCameraFollowLastHorizontalContainer, "x");
+  },
+
+  isSidebarFocusActive() {
+    return Boolean(this.container?.querySelector(".home-sidebar .focusable.focused, .modern-sidebar-panel .focusable.focused"));
   },
 
   getRowFocusInset() {
@@ -3051,13 +3120,22 @@ export const HomeScreen = {
     }
   },
 
+  invalidateNavigationModel() {
+    this.navigationDomVersion = Number(this.navigationDomVersion || 0) + 1;
+    this.navModel = null;
+  },
+
   requestRender(options = {}) {
     if (!this.container || Router.getCurrent() !== "home") {
       return;
     }
     const delayMs = Math.max(0, Number(options?.delayMs || 0));
     if (delayMs > 0) {
-      if (this.homeRenderFrame || this.homeRenderTimer) {
+      if (this.homeRenderTimer) {
+        clearTimeout(this.homeRenderTimer);
+        this.homeRenderTimer = null;
+      }
+      if (this.homeRenderFrame) {
         return;
       }
       this.homeRenderTimer = setTimeout(() => {
@@ -3102,6 +3180,7 @@ export const HomeScreen = {
       clearTimeout(this.heroFocusDelayTimer);
       this.heroFocusDelayTimer = null;
     }
+    this.heroFocusToken = Number(this.heroFocusToken || 0) + 1;
   },
 
   startHeroRotation() {
@@ -3282,6 +3361,47 @@ export const HomeScreen = {
     );
   },
 
+  getNavigationTrackNodes() {
+    if (this.layoutMode === "grid") {
+      return Array.from(this.container?.querySelectorAll("[data-track-row-key]") || []);
+    }
+    if (this.navModel?.domVersion === Number(this.navigationDomVersion || 0) && Array.isArray(this.navModel?.tracks) && this.navModel.tracks.length) {
+      return this.navModel.tracks.filter((node) => node?.isConnected);
+    }
+    return Array.from(this.container?.querySelectorAll("[data-track-row-key]") || []);
+  },
+
+  getNavigationRowSection(rowKey = "") {
+    const key = String(rowKey || "").trim();
+    if (!key) {
+      return null;
+    }
+    const cached = this.navModel?.domVersion === Number(this.navigationDomVersion || 0)
+      ? (this.navModel?.rowSectionByKey?.get(key) || null)
+      : null;
+    if (cached?.isConnected) {
+      return cached;
+    }
+    return Array.from(this.container?.querySelectorAll("[data-row-key]") || [])
+      .find((node) => String(node.dataset.rowKey || "") === key) || null;
+  },
+
+  getNavigationRowNodes(rowKey = "") {
+    const key = String(rowKey || "").trim();
+    if (!key) {
+      return [];
+    }
+    const cached = this.navModel?.domVersion === Number(this.navigationDomVersion || 0)
+      ? this.navModel?.rowNodesByRowKey?.get(key)
+      : null;
+    if (Array.isArray(cached) && cached.length) {
+      return cached.filter((node) => node?.isConnected);
+    }
+    const rowSection = this.getNavigationRowSection(key);
+    const track = rowSection?.querySelector?.(".home-track, .home-grid-track") || null;
+    return Array.from(track?.querySelectorAll(".home-content-card.focusable") || []);
+  },
+
   rememberMainRowFocus(node) {
     if (!this.isMainNode(node)) {
       return;
@@ -3375,6 +3495,24 @@ export const HomeScreen = {
       return normalizeHomeRowItem(row, item);
     }
     return null;
+  },
+
+  getHeroSourceFromFocusState(focusState) {
+    if (!focusState?.layoutMode) {
+      return null;
+    }
+    if (focusState.focusKind === "hero") {
+      return this.heroItem || this.heroCandidates?.[0] || null;
+    }
+    if (String(focusState.rowKey || "") === "continue_watching") {
+      const index = Math.max(0, Number(focusState.itemIndex || 0));
+      return normalizeContinueWatchingItem(this.continueWatchingDisplay?.[index] || null);
+    }
+    const row = (this.rows || []).find((entry) => {
+      return String(entry?.homeCatalogKey || buildModernRowKey(entry)) === String(focusState.rowKey || "");
+    }) || null;
+    const item = row?.result?.data?.items?.[Math.max(0, Number(focusState.itemIndex || 0))] || null;
+    return normalizeHomeRowItem(row, item);
   },
 
   getContinueWatchingItemFromNode(node) {
@@ -3537,7 +3675,7 @@ export const HomeScreen = {
 
   restoreContinueWatchingMenuFocus() {
     this.unlockHomeHoldFocus();
-    const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
+    const cards = this.getNavigationRowNodes("continue_watching");
     const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
       || cards[cards.length - 1]
       || null;
@@ -4016,6 +4154,7 @@ export const HomeScreen = {
         || String(focusedItem.videoId || "") !== String(pending.videoId || "")) {
         return;
       }
+      this.rememberReturnFocusForNode(current);
       this.openContinueWatchingFromItem(focusedItem);
     }, CW_ENTER_DELAY_MS);
     return true;
@@ -4027,8 +4166,10 @@ export const HomeScreen = {
       return false;
     }
     const normalized = normalizeContinueWatchingItem(item);
+    const anchorIndex = Number(this.continueWatchingMenu?.index);
     this.cancelPendingContinueWatchingEnter();
     this.destroyHomeHoldDialog();
+    this.rememberContinueWatchingReturnFocus(anchorIndex);
     this.continueWatchingMenu = null;
     this.holdMenuScrollState = null;
 
@@ -4051,8 +4192,10 @@ export const HomeScreen = {
     if (!normalized?.contentId) {
       return false;
     }
+    const anchorIndex = Number(this.continueWatchingMenu?.index);
     this.cancelPendingContinueWatchingEnter();
     this.destroyHomeHoldDialog();
+    this.rememberContinueWatchingReturnFocus(anchorIndex);
     this.continueWatchingMenu = null;
     this.holdMenuScrollState = null;
     Router.navigate("detail", {
@@ -4070,6 +4213,7 @@ export const HomeScreen = {
     if (!contentId) {
       return;
     }
+    this.clearContinueWatchingSnapshot();
     const matchesItem = (entry) => {
       if (String(entry?.contentId || "") !== contentId) {
         return false;
@@ -4251,6 +4395,12 @@ export const HomeScreen = {
       : null;
     this.destroyHomeHoldDialog();
     if (option.action === "details") {
+      if (pendingFocus) {
+        const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${Number(pendingFocus.rowIndex || 0)}"][data-item-index="${Number(pendingFocus.index || 0)}"]`) || null;
+        if (target) {
+          this.rememberReturnFocusForNode(target);
+        }
+      }
       this.posterHoldMenu = null;
       this.holdMenuScrollState = null;
       this.unlockHomeHoldFocus();
@@ -4280,6 +4430,7 @@ export const HomeScreen = {
 
   openContinueWatchingFromNode(node) {
     const item = this.getContinueWatchingItemFromNode(node);
+    this.rememberReturnFocusForNode(node);
     this.openContinueWatchingFromItem(item);
   },
 
@@ -4297,25 +4448,52 @@ export const HomeScreen = {
       return;
     }
     this.cancelPendingHeroFocus();
+    const focusToken = Number(this.heroFocusToken || 0) + 1;
+    this.heroFocusToken = focusToken;
+    const scheduledHeroIdentity = nextHeroIdentity;
     const now = Date.now();
     const previous = Number(this.lastModernHeroNavAt || 0);
     const isRapidNav = previous > 0 && (now - previous) < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs;
     const delay = this.getHeroFocusDelay({ rapid: isRapidNav });
     this.lastModernHeroNavAt = now;
-    this.heroFocusDelayTimer = setTimeout(async () => {
-      this.heroItem = shouldEnrichModernHero(hero) ? { ...hero, heroMetaEnriching: true } : hero;
-      const matchedIndex = this.heroCandidates.findIndex((item) => String(item?.id || "") === String(hero.id || ""));
-      if (matchedIndex >= 0) {
-        this.heroIndex = matchedIndex;
+    this.heroFocusDelayTimer = setTimeout(() => {
+      if (Number(this.heroFocusToken || 0) !== focusToken) {
+        return;
       }
-      this.applyHeroToDom();
-      if (shouldEnrichModernHero(hero)) {
-        await this.enrichCurrentHeroAsync(hero);
+      const currentFocusedNode = this.getCurrentFocusedNode();
+      if (currentFocusedNode !== node || !node?.isConnected || !node.classList.contains("focused")) {
+        return;
       }
+      const currentHero = this.getNodeHeroSource(node);
+      if (buildHeroIdentity(currentHero) !== scheduledHeroIdentity) {
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (Number(this.heroFocusToken || 0) !== focusToken) {
+          return;
+        }
+        const focusedNode = this.getCurrentFocusedNode();
+        if (focusedNode !== node || !node?.isConnected || !node.classList.contains("focused")) {
+          return;
+        }
+        const latestHero = this.getNodeHeroSource(node);
+        if (!latestHero || buildHeroIdentity(latestHero) !== scheduledHeroIdentity) {
+          return;
+        }
+        this.heroItem = shouldEnrichModernHero(latestHero) ? { ...latestHero, heroMetaEnriching: true } : latestHero;
+        const matchedIndex = this.heroCandidates.findIndex((item) => String(item?.id || "") === String(latestHero.id || ""));
+        if (matchedIndex >= 0) {
+          this.heroIndex = matchedIndex;
+        }
+        this.applyHeroToDom();
+        if (shouldEnrichModernHero(latestHero)) {
+          void this.enrichCurrentHeroAsync(latestHero, focusToken);
+        }
+      });
     }, delay);
   },
 
-  async enrichCurrentHeroAsync(hero) {
+  async enrichCurrentHeroAsync(hero, focusToken = Number(this.heroFocusToken || 0)) {
     if (!hero || !hero.id || hero.heroSource === "continueWatching" || hero.heroSource === "collection") {
       return;
     }
@@ -4328,6 +4506,9 @@ export const HomeScreen = {
         new Promise((_, reject) => setTimeout(() => reject(new Error("hero-enrich-timeout")), 4000))
       ]);
       if (Number(this.heroEnrichmentToken) !== token) {
+        return;
+      }
+      if (Number(this.heroFocusToken || 0) !== Number(focusToken || 0)) {
         return;
       }
       if (String(this.heroItem?.id || "") !== itemId) {
@@ -5103,7 +5284,6 @@ export const HomeScreen = {
     if (this.focusedPosterFlowState?.key && this.focusedPosterFlowState.key !== flowKey) {
       this.collapseFocusedPoster();
     }
-    this.promotePosterCardAssets(node, { includeNeighbors: this.isPerformanceConstrained() });
     const defaultDelayMs = Math.max(0, Number(prefs.focusedPosterBackdropExpandDelaySeconds ?? 3)) * 1000;
     const existingState = this.focusedPosterFlowState;
     const canReuseExistingState = Boolean(flowKey && existingState?.key === flowKey);
@@ -5140,6 +5320,13 @@ export const HomeScreen = {
           token: flowToken
         };
       }
+      if (Number(this.focusedPosterFlowToken || 0) !== flowToken) {
+        return;
+      }
+      if (this.getCurrentFocusedNode() !== node || !node?.isConnected || !node.classList.contains("focused")) {
+        return;
+      }
+      this.promotePosterCardAssets(node, { includeNeighbors: this.isPerformanceConstrained() });
       this.activateFocusedPosterFlow(node, flowToken).catch((error) => {
         console.warn("Focused poster flow failed", error);
       });
@@ -5511,6 +5698,12 @@ export const HomeScreen = {
       return null;
     }
     const current = this.getCurrentFocusedNode();
+    if (current?.closest?.(".home-sidebar, .modern-sidebar-panel")) {
+      return current;
+    }
+    if (this.isSidebarFocusActive()) {
+      return this.container.querySelector(".home-sidebar .focusable.focused, .modern-sidebar-panel .focusable.focused");
+    }
     const currentMain = current && this.isMainNode(current)
       ? current
       : (this.container.querySelector(".home-main .focusable.focused") || null);
@@ -5576,6 +5769,10 @@ export const HomeScreen = {
   },
 
   scheduleHomeViewportFocusSync() {
+    // If the sidebar is active, a home refresh must not promote a card into focus.
+    if (this.isSidebarFocusActive()) {
+      return;
+    }
     if (this.homeViewportFocusSyncTimer) {
       clearTimeout(this.homeViewportFocusSyncTimer);
     }
@@ -5851,9 +6048,6 @@ export const HomeScreen = {
         this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
       }
       this.scheduleModernHeroUpdate(target);
-      if (this.isPerformanceConstrained()) {
-        this.promotePosterCardAssets(target, { includeNeighbors: true });
-      }
       this.scheduleFocusedPosterFlow(target);
     } else {
       this.cancelModernCameraFollow({ stopAnimations: true });
@@ -5877,9 +6071,40 @@ export const HomeScreen = {
       ? Array.from(this.container?.querySelectorAll(".modern-sidebar-panel .focusable") || [])
       : Array.from(this.container?.querySelectorAll(".home-sidebar .focusable") || []);
     const rows = [];
+    const tracks = [];
+    const rowSectionByKey = new Map();
+    const rowNodesByRowKey = new Map();
+    const domVersion = Number(this.navigationDomVersion || 0);
 
     if (this.layoutMode === "modern") {
-      rows.push(...buildModernNavigationRows(this.container));
+      const continueTrack = this.container?.querySelector(".home-row-continue .home-track");
+      if (continueTrack) {
+        const continueNodes = Array.from(continueTrack.querySelectorAll(".home-content-card.focusable"));
+        if (continueNodes.length) {
+          rows.push(continueNodes);
+          tracks.push(continueTrack);
+          rowSectionByKey.set("continue_watching", continueTrack.closest(".home-row-continue") || null);
+          rowNodesByRowKey.set("continue_watching", continueNodes);
+        }
+      }
+      const rowSections = Array.from(this.container?.querySelectorAll(".home-modern-row") || []);
+      rowSections.forEach((section) => {
+        const track = section.querySelector(".home-track");
+        if (!track) {
+          return;
+        }
+        const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
+        if (!cards.length) {
+          return;
+        }
+        const rowKey = String(section.dataset.rowKey || "");
+        rows.push(cards);
+        tracks.push(track);
+        if (rowKey) {
+          rowSectionByKey.set(rowKey, section);
+          rowNodesByRowKey.set(rowKey, cards);
+        }
+      });
     } else {
       const hero = this.container?.querySelector(".home-hero-card.focusable");
       if (hero) {
@@ -5895,6 +6120,12 @@ export const HomeScreen = {
         const cards = Array.from(track.querySelectorAll(".home-content-card.focusable"));
         if (cards.length) {
           rows.push(cards);
+          tracks.push(track);
+          const rowKey = String(section.dataset.rowKey || "");
+          if (rowKey) {
+            rowSectionByKey.set(rowKey, section);
+            rowNodesByRowKey.set(rowKey, cards);
+          }
         }
       });
     }
@@ -5941,7 +6172,14 @@ export const HomeScreen = {
       });
     });
 
-    this.navModel = { sidebar, rows };
+    this.navModel = {
+      domVersion,
+      sidebar,
+      rows,
+      tracks,
+      rowSectionByKey,
+      rowNodesByRowKey
+    };
     if (!this.lastMainFocus || !this.container?.contains(this.lastMainFocus) || !this.isMainNode(this.lastMainFocus)) {
       this.lastMainFocus = rows[0]?.[0] || null;
     }
@@ -6173,6 +6411,10 @@ export const HomeScreen = {
         if (this.shouldSuspendModernViewportFocusSync()) {
           return;
         }
+        // Keep the sidebar sticky across rerenders and layout-driven scroll events.
+        if (this.isSidebarFocusActive()) {
+          return;
+        }
         const current = this.container?.querySelector(".home-main .focusable.focused") || null;
         if (current && this.isMainNode(current) && this.isNodeWithinMainViewport(current)) {
           return;
@@ -6186,6 +6428,13 @@ export const HomeScreen = {
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     this.container = document.getElementById("home");
+    const restoredRouteFocusState = navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
+      ? navigationContext.restoredState
+      : null;
+    const storedReturnFocusState = navigationContext?.isBackNavigation
+      ? (this.pendingBackFocusState || this.readStoredReturnFocusState())
+      : null;
+    const returnFocusState = restoredRouteFocusState || storedReturnFocusState;
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
     this.sidebarExpanded = false;
@@ -6201,11 +6450,13 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingEnter();
     this.forceInitialContinueWatchingFocus = false;
     this.continueWatchingLoading = false;
-    const returnFocusState = this.pendingBackFocusState || this.readStoredReturnFocusState();
     if (returnFocusState?.layoutMode) {
       this.pendingBackFocusState = returnFocusState;
+    } else if (!navigationContext?.isBackNavigation) {
+      this.clearStoredReturnFocusState();
     }
     this.isRestoringFocusFromBack = Boolean(navigationContext?.isBackNavigation || returnFocusState?.layoutMode);
+    this.suppressInitialContinueWatchingFocus = Boolean(navigationContext?.isBackNavigation || returnFocusState?.layoutMode);
     if (navigationContext?.restoredState?.layoutMode) {
       this.savedFocusStates = {
         ...(this.savedFocusStates || {}),
@@ -6289,6 +6540,21 @@ export const HomeScreen = {
     const previousContinueWatchingSignature = preserveContinueWatching
       ? buildContinueWatchingSignature(this.continueWatchingDisplay)
       : "";
+    const waitForInitialContinueWatching = Boolean(!background && !hydratedFromSnapshot);
+    let initialContinueWatchingReleased = false;
+    const releaseInitialHomeAfterContinueWatching = () => {
+      if (!waitForInitialContinueWatching || initialContinueWatchingReleased) {
+        return false;
+      }
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        return false;
+      }
+      initialContinueWatchingReleased = true;
+      this.isInitialHomeLoading = false;
+      this.hasLoadedOnce = true;
+      this.render();
+      return true;
+    };
 
     let progressAllError = null;
     let recentProgressError = null;
@@ -6341,9 +6607,11 @@ export const HomeScreen = {
         if (!this.heroItem) {
           this.heroItem = this.pickInitialHero();
         }
-        this.isInitialHomeLoading = false;
-        this.hasLoadedOnce = true;
-        this.requestBackgroundRender();
+        if (!waitForInitialContinueWatching) {
+          this.isInitialHomeLoading = false;
+          this.hasLoadedOnce = true;
+          this.requestBackgroundRender();
+        }
       }
     });
     if (token !== this.homeLoadToken) {
@@ -6358,16 +6626,20 @@ export const HomeScreen = {
       && this.continueWatchingDisplay?.length) {
       // CW already painted instantly from the snapshot — focus it on this render.
       // Fresh data reconciles fire-and-forget below.
-      this.forceInitialContinueWatchingFocus = true;
+      if (!this.suppressInitialContinueWatchingFocus) {
+        this.forceInitialContinueWatchingFocus = true;
+      }
     }
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
     this.heroIndex = 0;
     this.heroItem = this.pickInitialHero();
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
     this.loadedWatchProgressSourceKey = watchProgressRepository.getContinueWatchingSourceKey();
-    this.isInitialHomeLoading = false;
-    this.hasLoadedOnce = true;
-    this.render();
+    if (!waitForInitialContinueWatching) {
+      this.isInitialHomeLoading = false;
+      this.hasLoadedOnce = true;
+      this.render();
+    }
     logHomePerf("loadData", {
       phase: "first-render",
       ms: Number((homePerfNow() - loadStart).toFixed(2)),
@@ -6467,7 +6739,7 @@ export const HomeScreen = {
       if (!suppressContinueWatchingLoading) {
         this.continueWatchingLoading = shouldShowLoading;
         this.continueWatchingDisplay = [];
-        if (previousLoadingState !== this.continueWatchingLoading || previousDisplaySignature) {
+        if (!waitForInitialContinueWatching && (previousLoadingState !== this.continueWatchingLoading || previousDisplaySignature)) {
           this.requestBackgroundRender();
         }
       }
@@ -6475,18 +6747,20 @@ export const HomeScreen = {
       if (!shouldShowLoading) {
         if (suppressContinueWatchingLoading && (progressAllError || recentProgressError)) {
           this.continueWatchingLoading = false;
+          releaseInitialHomeAfterContinueWatching();
           return;
         }
         if (preserveContinueWatching) {
           const nextSignature = "";
           if (nextSignature === previousContinueWatchingSignature) {
             this.continueWatchingLoading = false;
+            releaseInitialHomeAfterContinueWatching();
             return;
           }
         }
         this.continueWatchingLoading = false;
         this.continueWatchingDisplay = [];
-        if (previousLoadingState || previousDisplaySignature) {
+        if (!releaseInitialHomeAfterContinueWatching() && (previousLoadingState || previousDisplaySignature)) {
           this.requestBackgroundRender();
         }
         return;
@@ -6518,22 +6792,25 @@ export const HomeScreen = {
         this.continueWatchingLoading = false;
         this.persistContinueWatchingSnapshot();
         if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
-          this.heroItem = this.pickInitialHero();
-          if (!background && !this.hasAppliedInitialContinueWatchingFocus) {
+          if (!this.suppressInitialContinueWatchingFocus) {
+            this.heroItem = this.pickInitialHero();
+          }
+          if (!background && !this.suppressInitialContinueWatchingFocus && !this.hasAppliedInitialContinueWatchingFocus) {
             this.forceInitialContinueWatchingFocus = true;
           }
         }
         const nextDisplaySignature = buildContinueWatchingSignature(this.continueWatchingDisplay);
         const nextHeroIdentity = buildHeroIdentity(this.heroItem);
-        if (previousLoadingState !== this.continueWatchingLoading
+        if (!releaseInitialHomeAfterContinueWatching()
+          && (previousLoadingState !== this.continueWatchingLoading
           || previousDisplaySignature !== nextDisplaySignature
-          || previousHeroIdentity !== nextHeroIdentity) {
+          || previousHeroIdentity !== nextHeroIdentity)) {
           this.requestBackgroundRender();
         }
       } catch (error) {
         console.warn("Continue watching async enrichment failed", error);
         this.continueWatchingLoading = false;
-        if (!suppressContinueWatchingLoading && previousLoadingState) {
+        if (!releaseInitialHomeAfterContinueWatching() && !suppressContinueWatchingLoading && previousLoadingState) {
           this.requestBackgroundRender();
         }
       }
@@ -6543,7 +6820,7 @@ export const HomeScreen = {
           return;
         }
         this.continueWatchingLoading = false;
-        if (!suppressContinueWatchingLoading) {
+        if (!releaseInitialHomeAfterContinueWatching() && !suppressContinueWatchingLoading) {
           this.requestBackgroundRender();
         }
       });
@@ -6737,19 +7014,30 @@ export const HomeScreen = {
     this.cancelScheduledRender();
     this.cancelModernCameraFollow({ stopAnimations: true });
     this.teardownModernTrackScrollPagination();
-    const retainedFocusState = this.captureCurrentFocusState() || this.savedFocusStates?.[this.layoutMode] || null;
+    this.invalidateNavigationModel();
+    const backFocusState = this.isRestoringFocusFromBack
+      ? (this.pendingBackFocusState || this.readStoredReturnFocusState() || null)
+      : null;
+    const retainedFocusState = backFocusState
+      || this.captureCurrentFocusState()
+      || this.savedFocusStates?.[this.layoutMode]
+      || null;
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
+    const backFocusHero = backFocusState ? this.getHeroSourceFromFocusState(backFocusState) : null;
     const shouldHoldHeroForContinueWatching = this.layoutMode === "modern"
       && Boolean(this.continueWatchingLoading)
       && !this.continueWatchingDisplay?.length
       && !this.heroItem;
     let heroItem = null;
     if (!shouldHoldHeroForContinueWatching) {
-      const rawHeroItem = this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows);
+      const rawHeroItem = backFocusHero || this.heroItem || this.heroCandidates?.[this.heroIndex] || this.pickHeroItem(this.rows);
       heroItem = isCollectionFolderItem(rawHeroItem)
         ? normalizeCollectionFolderItem(rawHeroItem)
         : normalizeCatalogItem(rawHeroItem, "movie");
+      if (backFocusHero) {
+        this.heroItem = heroItem;
+      }
     }
     if (this.layoutMode === "modern" && shouldEnrichModernHero(heroItem)) {
       heroItem = { ...heroItem, heroMetaEnriching: true };
@@ -6856,6 +7144,7 @@ export const HomeScreen = {
       ? (this.pendingCollectionRouteReturnAnimation ? " nuvio-route-slide-enter" : " home-route-content-enter")
       : "";
     this.pendingCollectionRouteReturnAnimation = false;
+    const sidebarFocusLocked = Boolean(this.sidebarExpanded);
 
     this.container.innerHTML = `
       <div class="home-shell home-screen-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
@@ -6895,7 +7184,10 @@ export const HomeScreen = {
     }
     const canAttemptRestore = Boolean(retainedFocusState);
     let restoredFocus = false;
-    if (!this.homeHoldFocusLocked && this.pendingPosterHoldFocus) {
+    if (sidebarFocusLocked) {
+      restoredFocus = this.restoreSidebarFocusState(retainedFocusState?.focusKind === "sidebar" ? retainedFocusState : null);
+    }
+    if (!sidebarFocusLocked && !this.homeHoldFocusLocked && !backFocusState && this.pendingPosterHoldFocus) {
       const pending = this.pendingPosterHoldFocus;
       const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${Number(pending.rowIndex || 0)}"][data-item-index="${Number(pending.index || 0)}"]`) || null;
       this.pendingPosterHoldFocus = null;
@@ -6908,7 +7200,13 @@ export const HomeScreen = {
         this.ensureMainVerticalVisibility(target);
       }
     }
-    if (!restoredFocus && !this.homeHoldFocusLocked && Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
+    if (!restoredFocus && !sidebarFocusLocked && !this.homeHoldFocusLocked && this.isRestoringFocusFromBack && backFocusState) {
+      restoredFocus = this.restoreFocusState(backFocusState);
+      if (restoredFocus) {
+        this.isRestoringFocusFromBack = false;
+      }
+    }
+    if (!restoredFocus && !sidebarFocusLocked && !this.homeHoldFocusLocked && !backFocusState && Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
       const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
       const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
         || cards[cards.length - 1]
@@ -6916,8 +7214,8 @@ export const HomeScreen = {
       this.pendingContinueWatchingFocusIndex = null;
       if (target) {
         restoredFocus = true;
-    this.setFocusedNode(target);
-    this.lastMainFocus = target;
+        this.setFocusedNode(target);
+        this.lastMainFocus = target;
         this.rememberMainRowFocus(target);
         this.ensureTrackHorizontalVisibility(target);
         this.ensureMainVerticalVisibility(target);
@@ -6930,17 +7228,17 @@ export const HomeScreen = {
           this.scheduleFocusedPosterFlow(current);
         }
       }
-    } else if (!this.isRestoringFocusFromBack && this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
+    } else if (!sidebarFocusLocked && !backFocusState && !this.isRestoringFocusFromBack && this.forceInitialContinueWatchingFocus && this.layoutMode === "modern") {
       this.forceInitialContinueWatchingFocus = false;
       restoredFocus = this.focusInitialContinueWatchingCard();
       this.hasAppliedInitialContinueWatchingFocus = restoredFocus;
-    } else if (canAttemptRestore && !this.homeHoldFocusLocked) {
+    } else if (!sidebarFocusLocked && canAttemptRestore && !this.homeHoldFocusLocked) {
       restoredFocus = this.restoreFocusState(retainedFocusState);
       if (restoredFocus) {
         this.isRestoringFocusFromBack = false;
       }
     }
-    if (!restoredFocus && !this.homeHoldFocusLocked && !this.isRestoringFocusFromBack && shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
+    if (!restoredFocus && !sidebarFocusLocked && !this.homeHoldFocusLocked && !backFocusState && !this.isRestoringFocusFromBack && shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
       const currentFocusedNode = this.getCurrentFocusedNode();
       if (currentFocusedNode?.isConnected) {
         currentFocusedNode.classList.remove("focused");
@@ -6948,7 +7246,7 @@ export const HomeScreen = {
       this.setCurrentFocusedNode(null);
       this.lastMainFocus = null;
       this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
-    } else if (!restoredFocus && !this.homeHoldFocusLocked) {
+    } else if (!restoredFocus && !sidebarFocusLocked && !this.homeHoldFocusLocked && !backFocusState) {
       ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
       const current = this.container.querySelector(".home-main .focusable.focused");
       if (current && this.isMainNode(current)) {
@@ -7352,6 +7650,21 @@ export const HomeScreen = {
       watchProgressRepository.getContinueWatchingSourceKey(),
       this.continueWatchingDisplay
     );
+  },
+
+  clearContinueWatchingSnapshot() {
+    const scopeKey = watchProgressRepository.getContinueWatchingSourceKey();
+    if (!scopeKey) {
+      return;
+    }
+    const store = LocalStore.get(CW_DISPLAY_SNAPSHOT_KEY, {});
+    if (!store || typeof store !== "object" || !Object.prototype.hasOwnProperty.call(store, scopeKey)) {
+      return;
+    }
+    const next = { ...store };
+    delete next[scopeKey];
+    LocalStore.set(CW_DISPLAY_SNAPSHOT_KEY, next);
+    this.continueWatchingHydratedFromSnapshot = false;
   },
 
   async enrichContinueWatching(items = [], options = {}) {
@@ -7793,6 +8106,7 @@ export const HomeScreen = {
           ).join("");
           if (newMarkup && track.isConnected) {
             const frag = document.createRange().createContextualFragment(newMarkup);
+            this.invalidateNavigationModel();
             track.appendChild(frag);
             this.buildNavigationModel();
           }

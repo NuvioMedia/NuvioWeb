@@ -1870,6 +1870,7 @@ export const MetaDetailsScreen = {
   navigateBackFromDetail() {
     if (this.params?.returnHomeOnBack) {
       Router.navigate("home", {}, {
+        isBackNavigation: true,
         skipStackPush: true,
         replaceHistory: true
       });

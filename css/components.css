@@ -14717,6 +14717,23 @@ button:focus-visible {
   transform: scale(1.005) !important;
 }
 
+.performance-constrained .home-screen-shell .home-content-card,
+.performance-constrained .home-screen-shell .home-continue-card,
+.performance-constrained .home-screen-shell .home-poster-frame,
+.performance-constrained .home-screen-shell .home-hero-card,
+.performance-constrained .home-screen-shell .home-hero-backdrop,
+.performance-constrained .home-screen-shell .home-hero-logo {
+  transition: none !important;
+}
+
+.performance-constrained .home-screen-shell .home-content-card.focused,
+.performance-constrained .home-screen-shell .home-continue-card.focused,
+.performance-constrained .home-screen-shell .home-hero-card.focused,
+.performance-constrained .home-screen-shell .home-poster-card.focused .home-poster-frame {
+  transform: none !important;
+  box-shadow: none !important;
+}
+
 .performance-constrained .home-continue-media-loading,
 .performance-constrained .home-continue-card-loading,
 .performance-constrained .home-continue-card-loading .home-continue-progress,
