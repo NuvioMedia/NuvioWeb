@@ -1061,6 +1061,18 @@ export const LibraryScreen = {
     return null;
   },
 
+  isTopGridRowNode(node) {
+    if (!node?.matches?.(".library-grid-card.focusable")) {
+      return false;
+    }
+    const cards = Array.from(this.container?.querySelectorAll(".library-grid-card.focusable") || []);
+    if (!cards.length) {
+      return false;
+    }
+    const rows = groupNodesByRow(cards);
+    return Boolean(rows[0]?.nodes?.includes(node));
+  },
+
   handleActionsRowNavigation(event, current) {
     if (!current || !current.closest?.(".library-actions-row")) {
       return false;
@@ -1105,12 +1117,14 @@ export const LibraryScreen = {
       return false;
     }
     const code = Number(event?.keyCode || 0);
+    const isTopGridRow = this.isTopGridRowNode(current);
     const fromPickerRow = code === 40
       && current.matches?.(".library-picker-anchor.focusable")
       && Boolean(current.closest?.(".library-picker-row"));
     const fromGrid = code === 38
       && current.matches?.(".library-grid-card.focusable")
-      && Boolean(current.closest?.(".library-grid"));
+      && Boolean(current.closest?.(".library-grid"))
+      && isTopGridRow;
     const fromActionsRow = current.closest?.(".library-actions-row") || null;
     if (fromActionsRow) {
       return this.handleActionsRowNavigation(event, current);
@@ -1174,11 +1188,17 @@ export const LibraryScreen = {
     }
     if (direction === "up") {
       const target = this.resolveRelativeGridNode(current, direction);
-      if (!target) {
+      if (target && target !== current) {
+        event?.preventDefault?.();
+        this.setFocusedNode(target);
+        return true;
+      }
+      const pickerTarget = this.resolvePreferredPickerRowNode(current);
+      if (!pickerTarget || pickerTarget === current) {
         return false;
       }
       event?.preventDefault?.();
-      this.setFocusedNode(target);
+      this.setFocusedNode(pickerTarget);
       return true;
     }
     const target = this.resolveRelativeGridNode(current, direction);

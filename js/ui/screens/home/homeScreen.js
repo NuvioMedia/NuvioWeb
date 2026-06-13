@@ -3291,6 +3291,9 @@ export const HomeScreen = {
   },
 
   setFocusedNode(target, { suppressDelegatedFocus = false } = {}) {
+    if (this.homeHoldFocusLocked) {
+      return target instanceof HTMLElement ? target : null;
+    }
     const current = this.getCurrentFocusedNode();
     if (current && current !== target && current.isConnected) {
       current.classList.remove("focused");
@@ -3437,6 +3440,25 @@ export const HomeScreen = {
     }
   },
 
+  lockHomeHoldFocus() {
+    this.homeHoldFocusLocked = true;
+    const current = this.getCurrentFocusedNode();
+    if (current?.isConnected) {
+      current.classList.remove("focused");
+    }
+    if (document.activeElement instanceof HTMLElement && this.container?.contains(document.activeElement)) {
+      try {
+        document.activeElement.blur();
+      } catch (_) {
+      }
+    }
+    this.setCurrentFocusedNode(null);
+  },
+
+  unlockHomeHoldFocus() {
+    this.homeHoldFocusLocked = false;
+  },
+
   captureHoldMenuScrollState() {
     const viewport = this.getHomeViewport();
     if (!viewport) {
@@ -3476,6 +3498,7 @@ export const HomeScreen = {
   },
 
   restoreContinueWatchingMenuFocus() {
+    this.unlockHomeHoldFocus();
     const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
     const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
       || cards[cards.length - 1]
@@ -3494,6 +3517,7 @@ export const HomeScreen = {
   },
 
   restorePosterHoldMenuFocus() {
+    this.unlockHomeHoldFocus();
     const pending = this.pendingPosterHoldFocus;
     this.pendingPosterHoldFocus = null;
     if (!pending) {
@@ -3517,6 +3541,7 @@ export const HomeScreen = {
     if (!item) {
       return false;
     }
+    this.lockHomeHoldFocus();
     this.destroyHomeHoldDialog();
     const options = this.getContinueWatchingMenuOptions();
     this._homeHoldDialog = new NuvioDialog({
@@ -3555,6 +3580,7 @@ export const HomeScreen = {
     if (!item?.id) {
       return false;
     }
+    this.lockHomeHoldFocus();
     this.destroyHomeHoldDialog();
     const options = this.getPosterHoldMenuOptions();
     this._homeHoldDialog = new NuvioDialog({
@@ -3612,6 +3638,7 @@ export const HomeScreen = {
     if (!this.posterListPicker) {
       return false;
     }
+    this.lockHomeHoldFocus();
     this.destroyHomeHoldDialog();
     const item = this.posterListPicker.item || {};
     this._homeHoldDialog = new NuvioDialog({
@@ -4114,6 +4141,7 @@ export const HomeScreen = {
     this.continueWatchingMenu = null;
     this.pendingContinueWatchingFocusIndex = anchorIndex;
     this.holdMenuScrollState = null;
+    this.unlockHomeHoldFocus();
     this.render();
     return true;
   },
@@ -4177,10 +4205,17 @@ export const HomeScreen = {
     if (!item || !option) {
       return false;
     }
+    const pendingFocus = this.posterHoldMenu
+      ? {
+          rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
+          index: Number(this.posterHoldMenu.index || 0)
+        }
+      : null;
     this.destroyHomeHoldDialog();
     if (option.action === "details") {
       this.posterHoldMenu = null;
       this.holdMenuScrollState = null;
+      this.unlockHomeHoldFocus();
       Router.navigate("detail", {
         itemId: item.id,
         itemType: item.type || "movie",
@@ -4197,8 +4232,10 @@ export const HomeScreen = {
     } else {
       return false;
     }
+    this.pendingPosterHoldFocus = pendingFocus;
     this.posterHoldMenu = null;
     this.holdMenuScrollState = null;
+    this.unlockHomeHoldFocus();
     this.render();
     return true;
   },
@@ -5708,6 +5745,9 @@ export const HomeScreen = {
   },
 
   focusNode(current, target, direction = null, inputMeta = null) {
+    if (this.homeHoldFocusLocked) {
+      return false;
+    }
     if (!current || !target || current === target) {
       return false;
     }
@@ -6081,6 +6121,7 @@ export const HomeScreen = {
     this.pillIconOnly = false;
     this.homeRouteEnterPending = true;
     this.destroyHomeHoldDialog();
+    this.unlockHomeHoldFocus();
     this.continueWatchingMenu = null;
     this.posterHoldMenu = null;
     this.posterListPicker = null;
@@ -6834,7 +6875,20 @@ export const HomeScreen = {
     }
     const canAttemptRestore = Boolean(retainedFocusState);
     let restoredFocus = false;
-    if (Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
+    if (!this.homeHoldFocusLocked && this.pendingPosterHoldFocus) {
+      const pending = this.pendingPosterHoldFocus;
+      const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${Number(pending.rowIndex || 0)}"][data-item-index="${Number(pending.index || 0)}"]`) || null;
+      this.pendingPosterHoldFocus = null;
+      if (target) {
+        restoredFocus = true;
+        this.setFocusedNode(target);
+        this.lastMainFocus = target;
+        this.rememberMainRowFocus(target);
+        this.ensureTrackHorizontalVisibility(target);
+        this.ensureMainVerticalVisibility(target);
+      }
+    }
+    if (!restoredFocus && !this.homeHoldFocusLocked && Number.isFinite(this.pendingContinueWatchingFocusIndex)) {
       const cards = Array.from(this.container?.querySelectorAll(".home-row-continue .home-content-card.focusable") || []);
       const target = cards[Math.max(0, Math.min(cards.length - 1, Number(this.pendingContinueWatchingFocusIndex || 0)))]
         || cards[cards.length - 1]
@@ -6866,7 +6920,7 @@ export const HomeScreen = {
         this.isRestoringFocusFromBack = false;
       }
     }
-    if (!restoredFocus && !this.isRestoringFocusFromBack && shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
+    if (!restoredFocus && !this.homeHoldFocusLocked && !this.isRestoringFocusFromBack && shouldHoldHeroForContinueWatching && this.layoutMode === "modern") {
       const currentFocusedNode = this.getCurrentFocusedNode();
       if (currentFocusedNode?.isConnected) {
         currentFocusedNode.classList.remove("focused");
@@ -6874,7 +6928,7 @@ export const HomeScreen = {
       this.setCurrentFocusedNode(null);
       this.lastMainFocus = null;
       this.hasAppliedInitialContinueWatchingFocus = this.focusInitialContinueWatchingCard();
-    } else if (!restoredFocus) {
+    } else if (!restoredFocus && !this.homeHoldFocusLocked) {
       ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
       const current = this.container.querySelector(".home-main .focusable.focused");
       if (current && this.isMainNode(current)) {
@@ -7747,6 +7801,7 @@ export const HomeScreen = {
     this.cancelPendingContinueWatchingHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;
     this.destroyHomeHoldDialog();
+    this.unlockHomeHoldFocus();
     this.continueWatchingMenu = null;
     this.posterHoldMenu = null;
     this.posterListPicker = null;
