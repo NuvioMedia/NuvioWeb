@@ -1590,7 +1590,10 @@ export const SettingsScreen = {
       onSelect,
       returnFocusKey,
       dialogClassName,
-      optionRenderer
+      optionRenderer,
+      // Grid dialogs lay options out in 2 columns; everything else is a single
+      // column. Used by the dpad handler so left/right can move between columns.
+      optionColumns: String(dialogClassName || "").includes("settings-trakt-grid-dialog") ? 2 : 1
     };
     const selectedIndex = this.optionDialog.options.findIndex((option) => String(option.id) === String(selectedId));
     this.dialogFocusIndex = clamp(selectedIndex >= 0 ? selectedIndex : 0, 0, Math.max(0, this.optionDialog.options.length - 1));
@@ -4292,20 +4295,25 @@ export const SettingsScreen = {
     }
 
     if (this.optionDialog) {
-      if (code === 38 || code === 40) {
+      if (code === 38 || code === 40 || code === 37 || code === 39) {
         event?.preventDefault?.();
-        const delta = code === 38 ? -1 : 1;
-        this.dialogFocusIndex = clamp(
-          this.dialogFocusIndex + delta,
-          0,
-          Math.max(0, this.optionDialog.options.length - 1)
-        );
-        this.applyFocus();
-        return;
-      }
-
-      if (code === 37 || code === 39) {
-        event?.preventDefault?.();
+        const count = this.optionDialog.options.length;
+        const cols = Math.max(1, Number(this.optionDialog.optionColumns || 1));
+        const index = this.dialogFocusIndex;
+        let next = index;
+        if (code === 38) {
+          next = index - cols;
+        } else if (code === 40) {
+          next = index + cols;
+        } else if (code === 37) {
+          if (index % cols > 0) next = index - 1;
+        } else if (code === 39) {
+          if (index % cols < cols - 1 && index + 1 < count) next = index + 1;
+        }
+        if (next >= 0 && next < count && next !== index) {
+          this.dialogFocusIndex = next;
+          this.applyFocus();
+        }
         return;
       }
     }
