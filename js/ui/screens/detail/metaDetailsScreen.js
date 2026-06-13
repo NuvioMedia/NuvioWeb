@@ -2999,7 +2999,7 @@ export const MetaDetailsScreen = {
   },
 
   isPosterHoldTarget(node) {
-    return Boolean(node?.matches?.(".detail-morelike-card.focusable"));
+    return Boolean(node?.matches?.(".detail-morelike-card.focusable:not(.detail-trailer-card)"));
   },
 
   isHeroHoldTarget(node) {
@@ -3246,8 +3246,12 @@ export const MetaDetailsScreen = {
   },
 
   openMoreLikeDetailFromNode(node) {
+    const itemId = String(node?.dataset?.itemId || "").trim();
+    if (!itemId) {
+      return;
+    }
     Router.navigate("detail", {
-      itemId: node.dataset.itemId,
+      itemId,
       itemType: node.dataset.itemType || "movie",
       fallbackTitle: node.dataset.itemTitle || "Untitled"
     });
