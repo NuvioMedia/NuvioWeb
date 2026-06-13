@@ -691,22 +691,31 @@ export const SearchScreen = {
 
   renderRows() {
     if (!Array.isArray(this.rows) || !this.rows.length) {
+      let innerContent = "";
+
       if (this.mode === "search") {
-        return `
+        innerContent = `
           <div class="search-empty-state search-empty-state-results">
             <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
             <h2>${escapeHtml(t("search_no_results_title", {}, "No Results"))}</h2>
             <p>${escapeHtml(t("search_no_results_subtitle", {}, "Try searching with different keywords"))}</p>
           </div>
         `;
+      } else {
+        innerContent = `
+          <div class="search-empty-state">
+            <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
+            <h2>${escapeHtml(t("search_start_title", {}, "Start Searching"))}</h2>
+            <p>${escapeHtml(this.layoutPrefs?.searchDiscoverEnabled
+              ? t("search_start_subtitle", {}, "Enter at least 2 characters")
+              : t("search_start_subtitle_no_discover", {}, "Discover is disabled. Enter at least 2 characters"))}</p>
+          </div>
+        `;
       }
-        return `
-        <div class="search-empty-state">
-          <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
-          <h2>${escapeHtml(t("search_start_title", {}, "Start Searching"))}</h2>
-          <p>${escapeHtml(this.layoutPrefs?.searchDiscoverEnabled
-            ? t("search_start_subtitle", {}, "Enter at least 2 characters")
-            : t("search_start_subtitle_no_discover", {}, "Discover is disabled. Enter at least 2 characters"))}</p>
+
+      return `
+        <div class="search-empty-state-container">
+          ${innerContent}
         </div>
       `;
     }

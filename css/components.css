@@ -460,8 +460,8 @@ button:focus-visible {
 }
 
 .profile-title {
-  margin: 0;
-  font-size: 88px;
+  margin: auto 0 0 0;
+  font-size: 48px;
   line-height: 1.05;
   font-weight: 500;
   letter-spacing: -1px;
@@ -481,8 +481,7 @@ button:focus-visible {
   justify-content: center;
   align-items: flex-start;
   gap: 56px;
-  min-height: 476px;
-  margin-top: auto;
+  margin-top: 32px;
   flex-wrap: wrap;
 }
 
@@ -647,7 +646,7 @@ button:focus-visible {
 }
 
 .profile-hint {
-  margin: auto 0 0;
+  margin: 48px 0 0 0;
   font-size: 28px;
   line-height: 1.35;
   font-weight: 500;
@@ -2549,7 +2548,7 @@ button:focus-visible {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 48px 0 28px;
+  padding: 48px 64px;
   background: var(--bg-color);
   scroll-padding-top: 22px;
   scroll-padding-bottom: 36px;
@@ -2561,12 +2560,10 @@ button:focus-visible {
 }
 
 .search-header {
-  display: grid;
-  grid-template-columns: repeat(2, 110px) minmax(0, 1fr);
+  display: flex;
   gap: 24px;
   align-items: center;
   margin-bottom: 64px;
-  padding: 0 48px;
   scroll-margin-top: 22px;
 }
 
@@ -2599,7 +2596,6 @@ button:focus-visible {
 }
 
 .search-input-field {
-  width: 100%;
   height: 110px;
   border-radius: 64px;
   border: 1px solid var(--border-color);
@@ -2609,6 +2605,7 @@ button:focus-visible {
   font-size: 34px;
   font-weight: 500;
   box-sizing: border-box;
+  flex: 1;
 }
 
 .search-discover-btn.focused,
@@ -2626,15 +2623,16 @@ button:focus-visible {
   outline: none;
 }
 
+.search-empty-state-container {
+  display: flex;
+  justify-content: center;
+}
+
 .search-empty-state {
-  min-height: 400px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  text-align: center;
   color: var(--text-color);
-  padding-bottom: 0;
 }
 
 .search-empty-state-results {
@@ -3172,7 +3170,7 @@ button:focus-visible {
 }
 
 .library-main {
-  padding: 48px 96px 64px;
+  padding: 48px 64px;
   background: var(--bg-color);
 }
 
@@ -4107,7 +4105,7 @@ button:focus-visible {
   position: relative;
   min-height: 270px;
   border-radius: 22px;
-  padding: 48px 0px;
+  padding: 48px 64px;
   overflow: hidden;
   background: linear-gradient(100deg, rgba(8, 11, 15, 0.95), rgba(15, 20, 28, 0.7));
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -4572,11 +4570,6 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-classic .home-row {
   margin-bottom: 64px;
-}
-
-.home-screen-shell .home-row-head {
-  margin-bottom: 12px;
-  padding-left: var(--home-content-start);
 }
 
 .home-screen-shell.home-layout-modern .home-row-head {
@@ -5622,11 +5615,6 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-copy {
-  position: absolute;
-  left: var(--home-content-start);
-  top: var(--modern-hero-copy-top-safe);
-  right: var(--modern-hero-copy-right);
-  bottom: calc(var(--modern-rows-viewport-height) + var(--modern-hero-copy-bottom-gap));
   z-index: 2;
   display: flex;
   flex-direction: column;
@@ -5659,7 +5647,7 @@ button:focus-visible {
   height: var(--modern-hero-logo-max-height);
   max-height: var(--modern-hero-logo-max-height);
   object-fit: contain;
-  object-position: left top;
+  object-position: bottom top;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-logo {
@@ -5864,6 +5852,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding-left: 64px;
 }
 
 .home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-catalogs {
@@ -5883,11 +5872,6 @@ button:focus-visible {
   padding-top: 0;
 }
 
-.home-screen-shell.home-layout-modern .home-row-head,
-.home-screen-shell.home-layout-modern .home-track {
-  padding-left: var(--home-content-start);
-}
-
 .home-screen-shell.home-layout-modern .home-row-head {
   margin-bottom: 14px;
 }
@@ -5901,7 +5885,7 @@ button:focus-visible {
 .home-screen-shell.home-layout-modern .home-track {
   --home-track-gap: 24px;
   margin-left: calc(var(--modern-track-peek-extension) * -1);
-  padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
+  padding-left: 104px;
   padding-right: 52px;
   padding-bottom: 0;
   align-items: flex-end;
@@ -6236,19 +6220,10 @@ button:focus-visible {
 }
 
 .settings-workspace {
-  flex: 0 0 auto;
-  width: calc(100vw - var(--legacy-sidebar-rail-width) - 64px);
-  height: calc(100vh - 96px);
-  margin: 48px 64px 48px var(--legacy-sidebar-rail-width);
-  min-width: 0;
-  min-height: 0;
-  border-radius: 56px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-elevated);
-  padding: 40px;
+  padding: 48px 64px;
   display: grid;
   grid-template-columns: 440px minmax(0, 1fr);
-  gap: 32px;
+  gap: 64px;
   transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1), margin 350ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: width, margin;
 }
@@ -9029,7 +9004,7 @@ button:focus-visible {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
-  padding: 56px 72px 128px;
+  padding: 48px 64px;
   scrollbar-width: none;
 }
 
@@ -13244,7 +13219,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 0 var(--tv-safe-gutter-wide) clamp(20px, 2.2vh, 32px);
+  padding: 48px 64px;
   box-sizing: border-box;
 }
 
@@ -16714,7 +16689,7 @@ button:focus-visible {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 48px 24px;
+  padding: 48px 64px;
   box-sizing: border-box;
   scrollbar-width: none;
 }
