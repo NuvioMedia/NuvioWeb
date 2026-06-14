@@ -487,6 +487,7 @@ button:focus-visible {
   gap: 56px;
   margin-top: 32px;
   flex-wrap: wrap;
+  height: 400px;
 }
 
 .profile-card {
@@ -6324,6 +6325,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-content-card.focused {
   transform: scale(1.02);
+  transform-origin: top;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.focused,
@@ -12378,22 +12380,6 @@ button:focus-visible {
   display: block;
 }
 
-.series-season-btn {
-  height: 44px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.34);
-  color: #eef4fb;
-  font-size: 28px;
-  font-weight: 600;
-  pointer-events: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  white-space: nowrap;
-}
-
 .series-season-btn.selected {
   background: rgba(255, 255, 255, 0.2);
 }
@@ -13076,21 +13062,9 @@ button:focus-visible {
   transition: opacity 800ms ease;
 }
 
-/* Scrim when root sidebar is open on detail/cast/etc screens */
-.series-detail-shell::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 5;
-  pointer-events: none;
-  opacity: 0;
-  will-change: opacity;
-  transition: opacity 350ms cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::before {
-  opacity: 1;
+.series-detail-shell.detail-scrolled .series-detail-backdrop {
+  opacity: 0.15;
+  transition-duration: 300ms;
 }
 
 .detail-trailer-layer {
@@ -13347,22 +13321,26 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   opacity: 0;
 }
 
+.series-detail-shell.detail-scrolled .series-detail-vignette {
+  opacity: 0;
+  transition-duration: 300ms;
+}
 
 .detail-bottom-shadow {
-  position: fixed;
+  position: absolute;
+  right: 0;
   bottom: 0;
   left: 0;
-  right: 0;
-  height: 28vh;
-  z-index: 2;
-  pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(4, 6, 10, 0.82) 70%, rgba(4, 6, 10, 0.96) 100%);
+  inset: auto 0 0;
+  height: 24vh;
+  z-index: 0;
   opacity: 0;
-  transition: opacity 400ms ease;
+  background: none;
+  transition: opacity 300ms ease;
 }
 
 .series-detail-shell.detail-scrolled .detail-bottom-shadow {
-  opacity: 1;
+  opacity: 0;
 }
 
 .series-detail-content {
@@ -13381,7 +13359,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 }
 
 .detail-hero-section {
-  min-height: 100vh;
+  min-height: clamp(620px, 60vh, 780px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
@@ -13761,8 +13739,8 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   flex: 0 0 auto;
   scroll-snap-align: start;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.34);
-  color: #eef4fb;
+  background: var(--detail-bg-card);
+  color: var(--detail-text-primary);
   font-weight: 600;
   pointer-events: auto;
   display: inline-flex;
