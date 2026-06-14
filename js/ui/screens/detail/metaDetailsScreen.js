@@ -5386,9 +5386,14 @@ export const MetaDetailsScreen = {
           : horizontalTrack;
         const rect = verticalTarget.getBoundingClientRect();
         const contentRect = detailContent.getBoundingClientRect();
+        const seasonMountHeight = this.container?.querySelector("#detailSeasonRowMount")?.offsetHeight ?? 0;
         const focusTarget = horizontalTrack.matches(".series-insight-tabs")
           ? DETAIL_TAB_FOCUS_TARGET
-          : DETAIL_ROW_FOCUS_TARGET;
+          : horizontalTrack.matches(".series-season-row")
+            ? 0
+            : horizontalTrack.matches(".series-episode-track") && seasonMountHeight > 0
+              ? seasonMountHeight / detailContent.clientHeight
+              : DETAIL_ROW_FOCUS_TARGET;
         const targetTop = contentRect.top + (detailContent.clientHeight * focusTarget);
         const nextScrollTop = detailContent.scrollTop + rect.top - targetTop;
         if (animated) {
@@ -6362,7 +6367,7 @@ export const MetaDetailsScreen = {
       const season = Number(current.dataset.season || this.selectedRatingSeason || 1);
       if (season !== this.selectedRatingSeason) {
         this.selectedRatingSeason = season;
-        this.render(this.meta);
+        this.updateRenderedDetailSections(this.meta);
       }
       return;
     }
