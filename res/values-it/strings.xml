@@ -2412,4 +2412,10 @@
     <string name="detail_lists_save_failed">Impossibile salvare le modifiche alla lista.</string>
     <string name="skip_outro">Salta outro</string>
     <string name="common_all">Tutti</string>
+    <string name="detail.resume">Riprendi</string>
+    <string name="detail.resumeEpisodeShort">Riprendi S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Riproduci dall'inizio</string>
+    <string name="detail.resumeAvailable">Ripresa disponibile</string>
+    <string name="detail.currentEpisode">Episodio {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} rimanenti</string>
 </resources>

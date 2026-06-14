@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -38,28 +39,6 @@ const webOsLegacyPreloadScript = `  <script>
       };
     }
   </script>`;
-const defaultEnvFileContents = `(function defineNuvioEnv() {
-  var root = typeof globalThis !== "undefined" ? globalThis : window;
-  var env = root.__NUVIO_ENV__ || {};
-  var values = {
-    SUPABASE_URL: "",
-    SUPABASE_ANON_KEY: "",
-    TV_LOGIN_REDIRECT_BASE_URL: "",
-    YOUTUBE_PROXY_URL: "youtube-proxy.html",
-    ADDON_REMOTE_BASE_URL: "",
-    TIZEN_ENGINEFS_SERVICE_ID: "",
-    ENABLE_REMOTE_WRAPPER_MODE: false,
-    PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
-    TMDB_API_KEY: ""
-  };
-  for (var key in values) {
-    if (Object.prototype.hasOwnProperty.call(values, key)) {
-      env[key] = values[key];
-    }
-  }
-  root.__NUVIO_ENV__ = env;
-}());
-`;
 const wrapperIconFiles = {
   webosIcon: {
     source: path.join(rootDir, "assets", "images", "icon.png"),
@@ -167,11 +146,6 @@ async function syncFolder(targetDir, folderName) {
   await cp(path.join(distDir, folderName), path.join(targetDir, folderName), { recursive: true });
 }
 
-async function syncRootFolder(targetDir, folderName) {
-  await rm(path.join(targetDir, folderName), { recursive: true, force: true });
-  await cp(path.join(rootDir, folderName), path.join(targetDir, folderName), { recursive: true });
-}
-
 async function syncServiceFolder(targetDir, serviceDirName, { targetServiceDirName = serviceDirName } = {}) {
   const targetServicesDir = path.join(targetDir, "services");
   await mkdir(targetServicesDir, { recursive: true });
@@ -199,14 +173,7 @@ async function syncBuild(targetDir) {
     await cp(path.join(distDir, "nuvio.env.js"), path.join(targetDir, "nuvio.env.js"));
   } catch (error) {
     if (error?.code === "ENOENT") {
-      try {
-        await cp(path.join(rootDir, "nuvio.env.example.js"), path.join(targetDir, "nuvio.env.js"));
-      } catch (fallbackError) {
-        if (fallbackError?.code !== "ENOENT") {
-          throw fallbackError;
-        }
-        await writeFile(path.join(targetDir, "nuvio.env.js"), defaultEnvFileContents, "utf8");
-      }
+      await writeRuntimeEnvScriptFile(path.join(targetDir, "nuvio.env.js"), { rootDir });
       return;
     }
     if (error?.code !== "ENOENT") {

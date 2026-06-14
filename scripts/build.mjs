@@ -8,8 +8,8 @@ import postcss from 'postcss';
 import cssnano from 'cssnano';
 import autoprefixer from 'autoprefixer';
 import postcssCustomProperties from 'postcss-custom-properties';
-import esbuildBabel from '@chialab/esbuild-plugin-babel';
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -17,22 +17,6 @@ const distDir = path.join(rootDir, "dist");
 const cacheDir = path.join(rootDir, ".cache");
 const bundleFileName = "app.bundle.js";
 const tempBundlePath = path.join(cacheDir, "__app.bundle.build.js");
-
-const defaultEnvFileContents = `(function defineNuvioEnv() {
-  var root = typeof globalThis !== "undefined" ? globalThis : window;
-  root.__NUVIO_ENV__ = {
-    SUPABASE_URL: "",
-    SUPABASE_ANON_KEY: "",
-    TV_LOGIN_REDIRECT_BASE_URL: "",
-    YOUTUBE_PROXY_URL: "youtube-proxy.html",
-    ADDON_REMOTE_BASE_URL: "",
-    TIZEN_ENGINEFS_SERVICE_ID: "",
-    ENABLE_REMOTE_WRAPPER_MODE: false,
-    PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
-    TMDB_API_KEY: ""
-  };
-}());
-`;
 
 async function buildCSS() {
   console.log("processing CSS with PostCSS (legacy support)...");
@@ -57,7 +41,7 @@ async function buildCSS() {
   }
 }
 
-async function copyOptionalRootFile(fileName, { fallback = null, defaultContents = defaultEnvFileContents } = {}) {
+async function copyOptionalRootFile(fileName, { fallback = null, defaultContents = "" } = {}) {
   const targetPath = path.join(distDir, fileName);
   try {
     await cp(path.join(rootDir, fileName), targetPath);
@@ -174,15 +158,12 @@ async function runBuild() {
     const sourceIndex = await readFile(path.join(rootDir, "index.html"), "utf8");
     await writeFile(path.join(distDir, "index.html"), sourceIndex);
 
-    console.log("configuring nuvio.env.js...");
-    const copiedEnvSource = await copyOptionalRootFile("nuvio.env.js", {
-      fallback: "nuvio.env.example.js"
-    });
-
-    if (copiedEnvSource === "nuvio.env.example.js") {
-      console.warn("WARNING: using nuvio.env.example.js as fallback.");
-    } else if (copiedEnvSource === "generated-default") {
-      console.warn("WARNING: generated default nuvio.env.js (unconfigured).");
+    console.log("configuring runtime env from local.properties...");
+    const envResult = await writeRuntimeEnvScriptFile(path.join(distDir, "nuvio.env.js"), { rootDir });
+    if (!envResult.sourcePath) {
+      console.warn("WARNING: generated default runtime env (unconfigured).");
+    } else if (path.basename(envResult.sourcePath) === "local.properties.example") {
+      console.warn("WARNING: using local.properties.example as fallback.");
     }
 
     console.log(`\nbuild finished successfully in: ${distDir}`);

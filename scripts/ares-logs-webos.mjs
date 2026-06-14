@@ -1,10 +1,5 @@
-import { spawn, spawnSync } from "node:child_process";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { runAresCli } from "./aresCli.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const rootDir = path.resolve(__dirname, "..");
-const compatPath = path.join(__dirname, "node24-ares-compat.cjs");
 const defaultPatterns = [
   "nuvio",
   "com.nuvio",
@@ -13,17 +8,6 @@ const defaultPatterns = [
   "WAM",
   "JS"
 ];
-
-function findExecutable(command) {
-  const result = spawnSync("which", [command], {
-    encoding: "utf8"
-  });
-  const executablePath = String(result.stdout || "").trim();
-  if (result.status !== 0 || !executablePath) {
-    throw new Error(`Unable to find ${command} on PATH.`);
-  }
-  return executablePath;
-}
 
 function parseArgs(args) {
   const passthrough = [];
@@ -50,33 +34,6 @@ function parseArgs(args) {
   return { passthrough, showAll, enableDevLogs, diagnose };
 }
 
-function runAresNovacom(args, { pipeStdout = false, pipeStderr = false } = {}) {
-  return new Promise((resolve, reject) => {
-    const aresNovacomPath = findExecutable("ares-novacom");
-    const child = spawn(process.execPath, ["--require", compatPath, aresNovacomPath, ...args], {
-      cwd: rootDir,
-      stdio: ["inherit", pipeStdout ? "pipe" : "inherit", pipeStderr ? "pipe" : "inherit"]
-    });
-
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0 || code === null) {
-        resolve();
-        return;
-      }
-      if (pipeStdout) {
-        process.exitCode = code;
-        return;
-      }
-      reject(new Error(`ares-novacom exited with code ${code}`));
-    });
-
-    if (pipeStdout) {
-      resolve(child);
-    }
-  });
-}
-
 function shouldPrintLine(line) {
   const lowerLine = line.toLowerCase();
   return defaultPatterns.some((pattern) => lowerLine.includes(pattern.toLowerCase()));
@@ -93,7 +50,7 @@ async function enableDeveloperLogs(passthroughArgs) {
     "PmLogCtl set WAM debug"
   ].join("; ");
 
-  await runAresNovacom(["--run", command, ...passthroughArgs]);
+  await runAresCli("ares-novacom", ["--run", command, ...passthroughArgs]);
 }
 
 async function streamLogs({ passthrough, showAll }) {
@@ -140,7 +97,7 @@ ls -la /tmp 2>&1
 exit 2
 `;
   const command = `sh -c ${shellQuote(remoteScript)}`;
-  const child = await runAresNovacom(["--run", command, ...passthrough], {
+  const child = await runAresCli("ares-novacom", ["--run", command, ...passthrough], {
     pipeStdout: true,
     pipeStderr: true
   });
@@ -200,7 +157,7 @@ echo "[logs:webos] process hints:"
 ps -ef 2>/dev/null | grep -Ei 'nuvio|wam|webapp|com.webos.app' | grep -v grep
 `;
   const command = `sh -c ${shellQuote(remoteScript)}`;
-  await runAresNovacom(["--run", command, ...passthrough]);
+  await runAresCli("ares-novacom", ["--run", command, ...passthrough]);
 }
 
 async function main() {

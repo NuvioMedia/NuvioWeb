@@ -2602,4 +2602,10 @@
     <string name="detail_lists_save_failed">Could not save list changes.</string>
     <string name="skip_outro">Skip Outro</string>
     <string name="common_all">All</string>
+    <string name="detail.resume">Resume</string>
+    <string name="detail.resumeEpisodeShort">Resume S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Play from Beginning</string>
+    <string name="detail.resumeAvailable">Resume available</string>
+    <string name="detail.currentEpisode">Episode {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} left</string>
 </resources>

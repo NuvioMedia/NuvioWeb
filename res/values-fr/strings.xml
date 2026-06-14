@@ -2503,4 +2503,10 @@
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Tout</string>
     <string name="subtitle_none_forced_only">Aucun (forcés uniquement)</string>
+    <string name="detail.resume">Reprendre</string>
+    <string name="detail.resumeEpisodeShort">Reprendre S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Lire depuis le début</string>
+    <string name="detail.resumeAvailable">Reprise disponible</string>
+    <string name="detail.currentEpisode">Épisode {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} restantes</string>
 </resources>

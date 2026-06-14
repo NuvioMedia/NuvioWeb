@@ -897,4 +897,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Alles</string>
+    <string name="detail.resume">Hervatten</string>
+    <string name="detail.resumeEpisodeShort">S{{season}}E{{episode}} hervatten</string>
+    <string name="detail.playFromBeginning">Vanaf het begin afspelen</string>
+    <string name="detail.resumeAvailable">Hervatten beschikbaar</string>
+    <string name="detail.currentEpisode">Aflevering {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} resterend</string>
 </resources>

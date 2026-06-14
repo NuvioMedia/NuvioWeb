@@ -2,6 +2,7 @@ AGENTS.md
 .roo
 
 nuvio.env.js
+local.properties
 node_modules/
 *.ipk
 *.wgt

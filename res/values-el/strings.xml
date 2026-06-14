@@ -2218,4 +2218,10 @@
     <string name="trakt_related_error_request_failed">Αποτυχία αιτήματος σχετικών Trakt</string>
     <string name="trakt_comments_error_request_failed">Αποτυχία αιτήματος σχολίων Trakt</string>
     <string name="trakt_library_error_fetch_list_items">Αποτυχία ανάκτησης στοιχείων λίστας</string>
+    <string name="detail.resume">Συνέχεια</string>
+    <string name="detail.resumeEpisodeShort">Συνέχεια S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Αναπαραγωγή από την αρχή</string>
+    <string name="detail.resumeAvailable">Η συνέχεια είναι διαθέσιμη</string>
+    <string name="detail.currentEpisode">Επεισόδιο {{episode}}</string>
+    <string name="detail.timeLeftDuration">Απομένουν {{time}}</string>
 </resources>

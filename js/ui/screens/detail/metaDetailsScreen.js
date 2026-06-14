@@ -1,7 +1,6 @@
 ﻿import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
-import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
@@ -26,12 +25,18 @@ import {
   posterItemFromNode,
   PosterOptionsDialogController
 } from "../../components/posterOptionsMenu.js";
+import {
+  WATCH_PROGRESS_COMPLETED_THRESHOLD,
+  getWatchProgressFraction,
+  isWatchProgressInProgress,
+  resolveWatchProgressResumePositionMs
+} from "../../../domain/model/watchProgress.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const EPISODE_HOLD_DELAY_MS = 650;
 const POSTER_HOLD_DELAY_MS = 650;
 const HERO_HOLD_DELAY_MS = 650;
-const DETAIL_PROGRESS_END_THRESHOLD = 0.85;
+const DETAIL_PROGRESS_END_THRESHOLD = WATCH_PROGRESS_COMPLETED_THRESHOLD;
 const TRAKT_COMMENTS_LIMIT = 100;
 const DETAIL_SCROLL_STIFFNESS = 180;
 const DETAIL_SCROLL_DAMPING_RATIO = 0.95;
@@ -151,18 +156,50 @@ function normalizeEpisodes(videos = []) {
 }
 
 function detailProgressFraction(progress = {}) {
-  const position = Number(progress?.positionMs || 0);
-  const duration = Number(progress?.durationMs || 0);
-  if (Number.isFinite(position) && Number.isFinite(duration) && position > 0 && duration > 0) {
-    return Math.max(0, Math.min(1, position / duration));
+  return getWatchProgressFraction(progress);
+}
+
+function pushUniqueResumeId(ids, value) {
+  const normalized = String(value || "").trim();
+  if (normalized && !ids.includes(normalized)) {
+    ids.push(normalized);
   }
-  if (progress?.progressPercent != null && progress.progressPercent !== "") {
-    const explicitPercent = Number(progress.progressPercent);
-    if (Number.isFinite(explicitPercent)) {
-      return Math.max(0, Math.min(1, explicitPercent / 100));
-    }
+}
+
+function buildResumeContentIds(meta = {}, params = {}) {
+  const ids = [];
+  pushUniqueResumeId(ids, params?.itemId);
+  pushUniqueResumeId(ids, params?.originalItemId);
+  pushUniqueResumeId(ids, meta?.id);
+  const imdb = String(meta?.ids?.imdb || meta?.imdb_id || meta?.imdbId || params?.imdbId || "").trim();
+  if (imdb) {
+    pushUniqueResumeId(ids, imdb);
+    pushUniqueResumeId(ids, `imdb:${imdb}`);
   }
-  return 0;
+  const tmdb = meta?.ids?.tmdb ?? meta?.tmdb_id ?? meta?.tmdbId ?? params?.tmdbId;
+  if (tmdb != null && String(tmdb).trim() !== "") {
+    pushUniqueResumeId(ids, String(tmdb));
+    pushUniqueResumeId(ids, `tmdb:${tmdb}`);
+  }
+  const trakt = meta?.ids?.trakt ?? meta?.trakt_id ?? meta?.traktId;
+  if (trakt != null && String(trakt).trim() !== "") {
+    pushUniqueResumeId(ids, String(trakt));
+    pushUniqueResumeId(ids, `trakt:${trakt}`);
+  }
+  return ids;
+}
+
+function formatResumeRemaining(progress = {}) {
+  const positionMs = Number(progress?.positionMs || 0);
+  const durationMs = Number(progress?.durationMs || 0);
+  if (!Number.isFinite(positionMs) || !Number.isFinite(durationMs) || positionMs <= 0 || durationMs <= positionMs) {
+    return "";
+  }
+  const minutes = Math.max(1, Math.round((durationMs - positionMs) / 60000));
+  const durationText = formatDurationMinutes(minutes);
+  return durationText
+    ? t("detail.timeLeftDuration", { time: durationText }, "{{time}} left")
+    : "";
 }
 
 function isSeriesDetailMeta(meta = {}, episodes = null) {
@@ -894,22 +931,6 @@ function containsTraktInlineSpoiler(value = "") {
   return /\[spoiler\].*?\[\/spoiler\]/is.test(String(value || ""));
 }
 
-function formatCompactDate(value = "") {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return raw;
-  }
-  return parsed.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  });
-}
-
 function formatEpisodeCardDate(value = "") {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -1202,6 +1223,8 @@ export const MetaDetailsScreen = {
     this.trailerProxyMessageHandler = null;
     this.trailerYoutubeFallbackActive = false;
     this.episodeProgressMap = new Map();
+    this.resumeProgress = null;
+    this.resumeContentIds = [];
     this.episodeFocusIndexBySeason = {};
     this.railFocusIndexByKey = {};
     this.watchedEpisodeKeys = new Set();
@@ -1286,7 +1309,7 @@ export const MetaDetailsScreen = {
       { status: "error", message: "timeout" }
     );
     const isSavedPromise = savedLibraryRepository.isSaved(itemId);
-    const progressPromise = watchProgressRepository.getProgressByContentId(itemId);
+    const progressPromise = watchProgressRepository.getResumeByContentId(itemId);
     const watchedItemPromise = watchedItemsRepository.isWatched(itemId);
     const allProgressPromise = watchProgressRepository.getAll();
     const allWatchedPromise = watchedItemsRepository.getAll();
@@ -1294,7 +1317,7 @@ export const MetaDetailsScreen = {
     const [
       metaResult,
       isSaved,
-      progress,
+      initialProgress,
       watchedItem,
       allProgressItems,
       allWatchedItems
@@ -1312,6 +1335,18 @@ export const MetaDetailsScreen = {
     if (token !== this.detailLoadToken) {
       return;
     }
+    this.resumeContentIds = buildResumeContentIds(meta, this.params);
+    let progress = initialProgress;
+    if (!progress && this.resumeContentIds.length > 1) {
+      progress = await watchProgressRepository.getResumeByContentIds(this.resumeContentIds).catch((error) => {
+        console.warn("Detail resume lookup failed", error);
+        return null;
+      });
+      if (token !== this.detailLoadToken) {
+        return;
+      }
+    }
+    this.resumeProgress = progress && isWatchProgressInProgress(progress) ? progress : null;
     this.isSavedInLibrary = isSaved;
     this.isMarkedWatched = Boolean(
       watchedItem
@@ -1322,9 +1357,10 @@ export const MetaDetailsScreen = {
     this.meta = meta;
     this.episodes = normalizeEpisodes(meta?.videos || []);
     this.castItems = extractCast(meta);
-    this.buildEpisodeState(allProgressItems, allWatchedItems);
-    this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
-    this.selectedSeason = this.resolveInitialSelectedSeason(progress, allProgressItems);
+    const progressItemsForDetail = this.resumeProgress ? [this.resumeProgress, ...allProgressItems] : allProgressItems;
+    this.buildEpisodeState(progressItemsForDetail, allWatchedItems);
+    this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(this.resumeProgress || progress);
+    this.selectedSeason = this.resolveInitialSelectedSeason(this.resumeProgress || progress, progressItemsForDetail);
     this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
     this.moreLikeThisItems = [];
     this.collectionItems = [];
@@ -1352,7 +1388,7 @@ export const MetaDetailsScreen = {
       this.meta = enrichedMeta || meta;
       this.episodes = normalizeEpisodes(this.meta?.videos || []);
       this.castItems = extractCast(this.meta);
-      this.buildEpisodeState(allProgressItems, allWatchedItems);
+      this.buildEpisodeState(progressItemsForDetail, allWatchedItems);
       this.trailerSource = resolveTrailerSource(this.meta);
       if (!this.castItems.length) {
         const fallbackCast = await withTimeout(this.fetchTmdbCastFallback(this.meta), 3200, []);
@@ -1360,9 +1396,9 @@ export const MetaDetailsScreen = {
           this.castItems = fallbackCast;
         }
       }
-      this.selectedSeason = this.resolveInitialSelectedSeason(progress, allProgressItems);
+      this.selectedSeason = this.resolveInitialSelectedSeason(this.resumeProgress || progress, progressItemsForDetail);
       this.selectedRatingSeason = this.selectedRatingSeason || this.selectedSeason || 1;
-      this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
+      this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(this.resumeProgress || progress);
       this.updateRenderedDetailSections(this.meta);
       void this.refreshTrailerSource(this.meta, token);
       void this.loadTraktComments({ force: true });
@@ -1597,7 +1633,7 @@ export const MetaDetailsScreen = {
     };
   },
 
-  async loadTraktComments({ force = false, append = false } = {}) {
+  async loadTraktComments({ force: _force = false, append = false } = {}) {
     if (!TraktSettingsStore.get().showMetaComments || !TraktAuthService.isAuthenticated() || !this.supportsTraktComments(this.meta)) {
       this.commentsItems = [];
       this.commentsPage = 0;
@@ -1852,8 +1888,12 @@ export const MetaDetailsScreen = {
       return;
     }
     this.autoOpenedContinueWatchingStream = true;
+    const routeStartFromBeginning = Boolean(this.params?.startFromBeginning);
     const extraParams = {
-      resumePositionMs: Number(this.params?.resumeProgressMs || 0) || 0,
+      resumePositionMs: routeStartFromBeginning ? 0 : (Number(this.params?.resumeProgressMs || 0) || 0),
+      resumeProgressPercent: routeStartFromBeginning ? null : (this.params?.resumeProgressPercent ?? this.resumeProgress?.progressPercent ?? null),
+      resumeDurationMs: routeStartFromBeginning ? 0 : (Number(this.params?.resumeDurationMs || this.resumeProgress?.durationMs || 0) || 0),
+      startFromBeginning: routeStartFromBeginning,
       returnToDetail: true,
       continueWatchingBackHome: true
     };
@@ -2045,12 +2085,27 @@ export const MetaDetailsScreen = {
     (streamResult.data || []).forEach((group) => {
       const groupName = group.addonName || "Addon";
       (group.streams || []).forEach((stream, index) => {
+        const streamOrigin = {
+          ...(group.streamOrigin || {}),
+          ...(stream.streamOrigin || {}),
+          addonId: stream.addonId || group.addonId || group.streamOrigin?.addonId || stream.streamOrigin?.addonId || null,
+          addonBaseUrl: stream.addonBaseUrl || group.addonBaseUrl || group.streamOrigin?.addonBaseUrl || stream.streamOrigin?.addonBaseUrl || null,
+          addonName: stream.addonName || group.addonName || group.streamOrigin?.addonName || stream.streamOrigin?.addonName || groupName,
+          sourceProviderId: stream.sourceProviderId || group.sourceProviderId || stream.streamOrigin?.sourceProviderId || group.streamOrigin?.sourceProviderId || null
+        };
         const entry = {
           id: `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
           label: stream.title || stream.name || `${groupName} stream`,
           description: stream.description || stream.name || "",
+          addonId: stream.addonId || group.addonId || null,
+          addonBaseUrl: stream.addonBaseUrl || group.addonBaseUrl || null,
           addonName: groupName,
           addonLogo: group.addonLogo || stream.addonLogo || null,
+          addonOrderIndex: Number.isFinite(Number(stream.addonOrderIndex))
+            ? Number(stream.addonOrderIndex)
+            : Number(group.addonOrderIndex ?? Number.MAX_SAFE_INTEGER),
+          sourceProviderId: stream.sourceProviderId || group.sourceProviderId || null,
+          streamOrigin,
           sourceType: stream.type || stream.source || "",
           url: stream.url || stream.externalUrl || "",
           ytId: stream.ytId || null,
@@ -2140,12 +2195,26 @@ export const MetaDetailsScreen = {
   },
 
   getSeriesHeroPlayLabel() {
+    const progress = this.getActiveResumeProgress();
+    if (progress) {
+      const season = Number(progress.season || this.nextEpisodeToWatch?.season || 0);
+      const episode = Number(progress.episode || this.nextEpisodeToWatch?.episode || 0);
+      return season > 0 && episode > 0
+        ? t("detail.resumeEpisodeShort", { season, episode }, "Resume S{{season}}E{{episode}}")
+        : t("detail.resume", {}, "Resume");
+    }
     return this.nextEpisodeToWatch
       ? t(
         "detail.nextEpisodeShort",
         { season: this.nextEpisodeToWatch.season, episode: this.nextEpisodeToWatch.episode },
         "Next S{{season}}E{{episode}}"
       )
+      : t("detail.play", {}, "Play");
+  },
+
+  getMovieHeroPlayLabel() {
+    return this.getActiveResumeProgress()
+      ? t("detail.resume", {}, "Resume")
       : t("detail.play", {}, "Play");
   },
 
@@ -2156,7 +2225,7 @@ export const MetaDetailsScreen = {
     const playableType = resolvePlayableDetailType(this.params?.itemType || meta?.type, meta);
     return this.renderHeroSection({
       meta,
-      playLabel: t("detail.play", {}, "Play"),
+      playLabel: this.getMovieHeroPlayLabel(),
       creditLine: directorLine,
       creditPrefix: t("detail.director", {}, "Director"),
       showWatchedButton: playableType !== "tv"
@@ -2228,18 +2297,52 @@ export const MetaDetailsScreen = {
             <span class="series-btn-icon">${renderPlayGlyph()}</span>
             <span>${escapeHtml(playLabel)}</span>
           </button>
+          ${this.getActiveResumeProgress() ? `<button class="series-secondary-btn focusable" data-action="playFromBeginning">${escapeHtml(t("detail.playFromBeginning", {}, "Play from Beginning"))}</button>` : ""}
           <button class="series-circle-btn focusable${this.isSavedInLibrary ? " is-library-selected" : ""}" data-action="toggleLibrary">
             ${renderLibraryGlyph(this.isSavedInLibrary)}
           </button>
           ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${escapeAttribute(this.isMarkedWatched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched"))}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
           ${trailerButton}
         </div>
+        ${this.renderResumeIndicator()}
         ${creditLine ? `<p class="series-detail-support">${escapeHtml(creditPrefix)}: ${escapeHtml(creditLine)}</p>` : ""}
         ${externalRatings}
         <p class="series-detail-description">${escapeHtml(meta.description || t("detail.noDescription", {}, "No description."))}</p>
         ${this.renderHeroMetaRows(meta)}
       </section>
     `;
+  },
+
+  getActiveResumeProgress() {
+    const progress = this.resumeProgress || null;
+    return progress && isWatchProgressInProgress(progress) ? progress : null;
+  },
+
+  renderResumeIndicator() {
+    const progress = this.getActiveResumeProgress();
+    if (!progress) {
+      return "";
+    }
+    const percent = Math.max(1, Math.min(99, Math.round(detailProgressFraction(progress) * 100)));
+    const episodeParts = [];
+    const season = Number(progress.season || 0);
+    const episode = Number(progress.episode || 0);
+    if (season > 0 && episode > 0) {
+      episodeParts.push(`S${season}E${episode}`);
+    }
+    const title = String(progress.episodeTitle || "").trim();
+    if (title) {
+      episodeParts.push(title);
+    }
+    const episodeText = episodeParts.join(" - ");
+    const remaining = formatResumeRemaining(progress);
+    const parts = [
+      t("detail.resumeAvailable", {}, "Resume available"),
+      `${percent}%`,
+      episodeText ? t("detail.currentEpisode", { episode: episodeText }, "Episode {{episode}}") : "",
+      remaining
+    ].filter(Boolean);
+    return `<div class="detail-resume-indicator">${parts.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}</div>`;
   },
 
   renderHeroMetaRows(meta) {
@@ -2860,7 +2963,11 @@ export const MetaDetailsScreen = {
     if (this.getPreviousEpisodes(episode).length > 0) {
       options.push({ action: "markPreviousWatched", label: t("episodes_mark_previous_watched", {}, "Mark previous episodes as watched") });
     }
-    options.push({ action: "play", label: t("episodes_play", {}, "Play") });
+    const progress = this.getEpisodeMenuProgress(episode);
+    options.push({ action: "play", label: progress && isWatchProgressInProgress(progress) ? t("detail.resume", {}, "Resume") : t("episodes_play", {}, "Play") });
+    if (progress && isWatchProgressInProgress(progress)) {
+      options.push({ action: "playFromBeginning", label: t("detail.playFromBeginning", {}, "Play from Beginning") });
+    }
     return options;
   },
 
@@ -3003,19 +3110,38 @@ export const MetaDetailsScreen = {
   },
 
   mountHeroPlayDialog() {
+    const hasResume = Boolean(this.getActiveResumeProgress());
+    const buttons = hasResume
+      ? [
+          {
+            label: t("detail.resume", {}, "Resume"),
+            key: "resume",
+            onAction: () => {
+              void this.activateHeroOptionsMenu("resume");
+            }
+          },
+          {
+            label: t("detail.playFromBeginning", {}, "Play from Beginning"),
+            key: "playFromBeginning",
+            onAction: () => {
+              void this.activateHeroOptionsMenu("playFromBeginning");
+            }
+          }
+        ]
+      : [{
+          label: t("play_manually", {}, "Play manually"),
+          key: "playManually",
+          onAction: () => {
+            void this.activateHeroOptionsMenu("playManually");
+          }
+        }];
     this.destroyDetailHoldDialog();
     this.detailHoldDialog = new NuvioDialog({
       title: this.meta?.name || this.params?.fallbackTitle || "Untitled",
       subtitle: t("detail.playOptions", {}, "Play options"),
       widthVw: 37.5,
       suppressEnterUntilKeyUp: true,
-      buttons: [{
-        label: t("play_manually", {}, "Play manually"),
-        key: "playManually",
-        onAction: () => {
-          void this.activateHeroOptionsMenu();
-        }
-      }],
+      buttons,
       onDismiss: () => {
         this.detailHoldDialog = null;
         this.heroPlayMenu = null;
@@ -3197,18 +3323,40 @@ export const MetaDetailsScreen = {
     return this.mountLibraryListDialog();
   },
 
-  async playDefaultFromHero() {
+  getResumeParamsForProgress(progress = null, { startOver = false } = {}) {
+    if (startOver) {
+      return {
+        startFromBeginning: true,
+        resumePositionMs: 0,
+        resumeProgressPercent: null,
+        resumeDurationMs: 0
+      };
+    }
+    const resume = progress || this.getActiveResumeProgress();
+    if (!resume) {
+      return {};
+    }
+    const params = {
+      resumePositionMs: resolveWatchProgressResumePositionMs(resume),
+      resumeProgressPercent: Number(resume.progressPercent ?? (detailProgressFraction(resume) * 100)) || null,
+      resumeDurationMs: Number(resume.durationMs || 0) || 0
+    };
+    return params;
+  },
+
+  async playDefaultFromHero(options = {}) {
+    const startOver = Boolean(options?.startOver);
     if (isSeriesDetailMeta(this.meta, this.episodes)) {
       const targetEpisode = this.nextEpisodeToWatch
         || this.episodes?.find((entry) => entry.season === this.selectedSeason)
         || this.episodes?.[0]
         || null;
       if (targetEpisode?.id) {
-        await this.openEpisodeStreamChooser(targetEpisode.id);
+        await this.openEpisodeStreamChooser(targetEpisode.id, { startOver });
       }
       return;
     }
-    await this.openMovieStreamChooser();
+    await this.openMovieStreamChooser({ startOver });
   },
 
   async toggleLibraryFromHero() {
@@ -3521,9 +3669,9 @@ export const MetaDetailsScreen = {
     }
     const progress = this.getEpisodeMenuProgress(episode);
     this.episodeHoldMenu = null;
-    this.navigateToStreamScreenForEpisode(episode, {
-      resumePositionMs: options.startOver ? 0 : (Number(progress?.positionMs || 0) || 0)
-    });
+    this.navigateToStreamScreenForEpisode(episode, this.getResumeParamsForProgress(progress, {
+      startOver: Boolean(options.startOver)
+    }));
     return true;
   },
 
@@ -3613,17 +3761,21 @@ export const MetaDetailsScreen = {
   async refreshEpisodePlaybackState() {
     detailWatchedEnrichmentService.invalidateCache(this.params?.itemId);
     const [progress, allProgressItems, allWatchedItems, watchedItem] = await Promise.all([
-      watchProgressRepository.getProgressByContentId(this.params?.itemId),
+      watchProgressRepository.getResumeByContentIds(
+        this.resumeContentIds?.length ? this.resumeContentIds : [this.params?.itemId]
+      ),
       watchProgressRepository.getAll(),
       watchedItemsRepository.getAll(),
       watchedItemsRepository.isWatched(this.params?.itemId)
     ]);
+    this.resumeProgress = progress && isWatchProgressInProgress(progress) ? progress : null;
     this.isMarkedWatched = Boolean(
       watchedItem
       || (progress && Number(progress.durationMs || 0) > 0 && Number(progress.positionMs || 0) >= Number(progress.durationMs || 0))
     );
-    this.buildEpisodeState(allProgressItems, allWatchedItems, this.enrichedWatchedState);
-    this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(progress);
+    const progressItemsForDetail = this.resumeProgress ? [this.resumeProgress, ...allProgressItems] : allProgressItems;
+    this.buildEpisodeState(progressItemsForDetail, allWatchedItems, this.enrichedWatchedState);
+    this.nextEpisodeToWatch = this.computeNextEpisodeToWatch(this.resumeProgress || progress);
   },
 
   async setEpisodeWatchedState(episode, watched) {
@@ -3673,6 +3825,10 @@ export const MetaDetailsScreen = {
       this.closeEpisodeHoldMenu({ restoreFocus: false });
       return this.startEpisodeFromHoldMenu(episode);
     }
+    if (option.action === "playFromBeginning") {
+      this.closeEpisodeHoldMenu({ restoreFocus: false });
+      return this.startEpisodeFromHoldMenu(episode, { startOver: true });
+    }
     if (option.action === "toggleWatched") {
       this.closeEpisodeHoldMenu({ restoreFocus: false });
       return this.setEpisodeWatchedState(episode, !this.isEpisodeMarkedWatched(episode));
@@ -3705,7 +3861,7 @@ export const MetaDetailsScreen = {
   async activateHeroOptionsMenu(actionOverride = "") {
     if (this.heroPlayMenu) {
       this.closeHeroMenus({ restoreFocus: false });
-      await this.playDefaultFromHero();
+      await this.playDefaultFromHero({ startOver: actionOverride === "playFromBeginning" });
       return true;
     }
     if (!this.libraryListMenu) {
@@ -4850,7 +5006,7 @@ export const MetaDetailsScreen = {
     }
   },
 
-  async openEpisodeStreamChooser(videoId) {
+  async openEpisodeStreamChooser(videoId, options = {}) {
     if (!videoId || !this.meta) {
       return;
     }
@@ -4859,12 +5015,13 @@ export const MetaDetailsScreen = {
     if (!episode) {
       return;
     }
-    this.navigateToStreamScreenForEpisode(episode);
+    const progress = this.getEpisodeMenuProgress(episode) || this.getActiveResumeProgress();
+    this.navigateToStreamScreenForEpisode(episode, this.getResumeParamsForProgress(progress, options));
   },
 
-  async openMovieStreamChooser() {
+  async openMovieStreamChooser(options = {}) {
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
-    this.navigateToStreamScreenForMovie();
+    this.navigateToStreamScreenForMovie(this.getResumeParamsForProgress(this.getActiveResumeProgress(), options));
   },
 
   getActivePendingSelection() {
@@ -5065,6 +5222,7 @@ export const MetaDetailsScreen = {
     const currentIndex = this.episodes.findIndex((entry) => entry.id === pending.videoId);
     const nextEpisode = currentIndex >= 0 ? (this.episodes[currentIndex + 1] || null) : null;
     const imdbId = resolveMetaImdbId(this.meta, this.params);
+    const resumeParams = this.getResumeParamsForProgress(this.getEpisodeMenuProgress(pending.episode) || this.getActiveResumeProgress());
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
@@ -5085,7 +5243,18 @@ export const MetaDetailsScreen = {
       parentalGuide: this.meta?.parentalGuide || null,
       episodes: this.episodes || [],
       streamCandidates: pending.streams || [],
+      preferredStreamId: selectedStream.id || null,
+      playbackSourceContext: selectedStream.streamOrigin || {
+        addonId: selectedStream.addonId || "",
+        addonBaseUrl: selectedStream.addonBaseUrl || "",
+        addonName: selectedStream.addonName || "",
+        addonOrderIndex: Number.isFinite(Number(selectedStream.addonOrderIndex)) ? Number(selectedStream.addonOrderIndex) : null,
+        sourceProviderId: selectedStream.sourceProviderId || "",
+        sourceIds: Array.isArray(selectedStream.sources) ? selectedStream.sources : [],
+        selectedStreamId: selectedStream.id || ""
+      },
       fromDetailRoute: true,
+      ...resumeParams,
       nextEpisodeVideoId: nextEpisode?.id || null,
       nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null,
       nextEpisodeSeason: nextEpisode?.season ?? null,
@@ -5167,6 +5336,7 @@ export const MetaDetailsScreen = {
       return;
     }
     const imdbId = resolveMetaImdbId(this.meta, this.params);
+    const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
@@ -5183,7 +5353,18 @@ export const MetaDetailsScreen = {
       parentalGuide: this.meta?.parentalGuide || null,
       episodes: [],
       streamCandidates: pending.streams || [],
-      fromDetailRoute: true
+      preferredStreamId: selectedStream.id || null,
+      playbackSourceContext: selectedStream.streamOrigin || {
+        addonId: selectedStream.addonId || "",
+        addonBaseUrl: selectedStream.addonBaseUrl || "",
+        addonName: selectedStream.addonName || "",
+        addonOrderIndex: Number.isFinite(Number(selectedStream.addonOrderIndex)) ? Number(selectedStream.addonOrderIndex) : null,
+        sourceProviderId: selectedStream.sourceProviderId || "",
+        sourceIds: Array.isArray(selectedStream.sources) ? selectedStream.sources : [],
+        selectedStreamId: selectedStream.id || ""
+      },
+      fromDetailRoute: true,
+      ...resumeParams
     });
   },
 
@@ -6287,6 +6468,11 @@ export const MetaDetailsScreen = {
       return;
     }
 
+    if (action === "playFromBeginning") {
+      await this.playDefaultFromHero({ startOver: true });
+      return;
+    }
+
     if (action === "toggleTrailer") {
       this.playTrailer({ muted: false, restart: true, initiatedByUser: true });
       return;
@@ -6448,6 +6634,8 @@ export const MetaDetailsScreen = {
 
     if (action === "playStream" && current.dataset.streamUrl) {
       const imdbId = resolveMetaImdbId(this.meta, this.params);
+      const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
+      const selectedStream = (this.streamItems || []).find((stream) => String(stream?.url || "") === String(current.dataset.streamUrl || "")) || null;
       Router.navigate("player", {
         streamUrl: current.dataset.streamUrl,
         itemId: this.params?.itemId,
@@ -6461,7 +6649,20 @@ export const MetaDetailsScreen = {
         playerBackdropUrl: this.meta?.background || this.meta?.poster || null,
         playerLogoUrl: this.meta?.logo || null,
         episodes: this.episodes || [],
-        streamCandidates: this.streamItems || []
+        streamCandidates: this.streamItems || [],
+        preferredStreamId: selectedStream?.id || null,
+        playbackSourceContext: selectedStream
+          ? (selectedStream.streamOrigin || {
+              addonId: selectedStream.addonId || "",
+              addonBaseUrl: selectedStream.addonBaseUrl || "",
+              addonName: selectedStream.addonName || "",
+              addonOrderIndex: Number.isFinite(Number(selectedStream.addonOrderIndex)) ? Number(selectedStream.addonOrderIndex) : null,
+              sourceProviderId: selectedStream.sourceProviderId || "",
+              sourceIds: Array.isArray(selectedStream.sources) ? selectedStream.sources : [],
+              selectedStreamId: selectedStream.id || ""
+            })
+          : null,
+        ...resumeParams
       });
       return;
     }

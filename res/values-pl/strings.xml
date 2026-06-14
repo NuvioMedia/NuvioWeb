@@ -2481,4 +2481,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Wszystkie</string>
+    <string name="detail.resume">Wznów</string>
+    <string name="detail.resumeEpisodeShort">Wznów S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Odtwórz od początku</string>
+    <string name="detail.resumeAvailable">Wznawianie dostępne</string>
+    <string name="detail.currentEpisode">Odcinek {{episode}}</string>
+    <string name="detail.timeLeftDuration">Zostało {{time}}</string>
 </resources>

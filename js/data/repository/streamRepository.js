@@ -90,14 +90,33 @@ class StreamRepository {
         }
 
         const group = {
+          addonId: addon.id,
+          addonBaseUrl: addon.baseUrl,
           addonName: addon.displayName,
           addonLogo: addon.logo,
           addonOrderIndex: orderIndex,
+          streamOrigin: {
+            kind: "addon",
+            addonId: addon.id,
+            addonBaseUrl: addon.baseUrl,
+            addonName: addon.displayName,
+            addonOrderIndex: orderIndex
+          },
           streams: addonStreams.map((stream) => ({
             ...stream,
+            addonId: addon.id,
+            addonBaseUrl: addon.baseUrl,
             addonName: addon.displayName,
             addonLogo: addon.logo,
-            addonOrderIndex: orderIndex
+            addonOrderIndex: orderIndex,
+            streamOrigin: {
+              ...(stream.streamOrigin || {}),
+              kind: "addon",
+              addonId: addon.id,
+              addonBaseUrl: addon.baseUrl,
+              addonName: addon.displayName,
+              addonOrderIndex: orderIndex
+            }
           }))
         };
         return prepareDebridGroup(group);
@@ -144,12 +163,25 @@ class StreamRepository {
     });
 
     return pluginResults.map((result) => ({
+      sourceProviderId: result.sourceId || result.sourceName || null,
       addonName: result.sourceName,
       addonLogo: null,
+      streamOrigin: {
+        kind: "plugin",
+        sourceProviderId: result.sourceId || result.sourceName || null,
+        addonName: result.sourceName || null
+      },
       streams: (result.streams || []).map((stream) => ({
         ...stream,
+        sourceProviderId: result.sourceId || result.sourceName || null,
         addonName: result.sourceName,
-        addonLogo: null
+        addonLogo: null,
+        streamOrigin: {
+          ...(stream.streamOrigin || {}),
+          kind: "plugin",
+          sourceProviderId: result.sourceId || result.sourceName || null,
+          addonName: result.sourceName || null
+        }
       }))
     }));
   }

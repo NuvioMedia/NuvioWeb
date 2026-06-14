@@ -6,10 +6,19 @@ import { TraktSettingsStore, WatchProgressSource } from "../local/traktSettingsS
 import { TraktAuthStore } from "../local/traktAuthStore.js";
 import { TraktAuthService } from "./traktAuthService.js";
 import { metaRepository } from "./metaRepository.js";
+import {
+  WATCH_PROGRESS_COMPLETED_THRESHOLD,
+  WATCH_PROGRESS_STARTED_THRESHOLD,
+  getWatchProgressFraction,
+  hasWatchProgressStarted,
+  isWatchProgressCompleted,
+  isWatchProgressInProgress,
+  resolveWatchProgressResumePositionMs
+} from "../../domain/model/watchProgress.js";
 
 const CW_DISPLAY_SNAPSHOT_KEY = "homeContinueWatchingDisplaySnapshot";
-const CW_PROGRESS_START_THRESHOLD = 0.02;
-const CW_PROGRESS_END_THRESHOLD = 0.85;
+const CW_PROGRESS_START_THRESHOLD = WATCH_PROGRESS_STARTED_THRESHOLD;
+const CW_PROGRESS_END_THRESHOLD = WATCH_PROGRESS_COMPLETED_THRESHOLD;
 // These bound a hung request so the fire-and-forget Continue Watching
 // reconciliation can't leak a never-resolving promise. They are NOT on the
 // app's critical path (the home screen paints from a snapshot), so they are
@@ -101,28 +110,12 @@ async function deleteWatchProgressFromCloud(items = []) {
   }
 }
 
-function progressFractionForContinueWatching(item = {}) {
-  const durationMs = Number(item.durationMs || 0);
-  const positionMs = Number(item.positionMs || 0);
-  if (Number.isFinite(durationMs) && durationMs > 0 && Number.isFinite(positionMs) && positionMs > 0) {
-    return Math.max(0, Math.min(1, positionMs / durationMs));
-  }
-  if (item.progressPercent != null && item.progressPercent !== "") {
-    const explicitPercent = Number(item.progressPercent);
-    if (Number.isFinite(explicitPercent)) {
-      return Math.max(0, Math.min(1, explicitPercent / 100));
-    }
-  }
-  return 0;
-}
-
 function isCompletedForContinueWatching(item = {}) {
-  return progressFractionForContinueWatching(item) >= CW_PROGRESS_END_THRESHOLD;
+  return isWatchProgressCompleted(item);
 }
 
 function isInProgressForContinueWatching(item = {}) {
-  const fraction = progressFractionForContinueWatching(item);
-  return fraction >= CW_PROGRESS_START_THRESHOLD && fraction < CW_PROGRESS_END_THRESHOLD;
+  return isWatchProgressInProgress(item);
 }
 
 function shouldTreatAsInProgressForContinueWatching(item = {}) {
@@ -132,8 +125,7 @@ function shouldTreatAsInProgressForContinueWatching(item = {}) {
   if (isCompletedForContinueWatching(item)) {
     return false;
   }
-  const hasStartedPlayback = Number(item.positionMs || 0) > 0 || Number(item.progressPercent || 0) > 0;
-  return hasStartedPlayback;
+  return hasWatchProgressStarted(item);
 }
 
 function isTraktProgressItem(item = {}) {
@@ -184,6 +176,70 @@ function deduplicateInProgress(items = []) {
 
   return [...nonSeriesItems, ...latestSeriesItems]
     .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+}
+
+function normalizeContentIdList(values = []) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(values) ? values : [values]).forEach((value) => {
+    const normalized = String(value || "").trim();
+    if (!normalized || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    out.push(normalized);
+  });
+  return out;
+}
+
+function matchesAnyContentId(item = {}, contentIds = []) {
+  const normalized = String(item?.contentId || "").trim();
+  return Boolean(normalized && contentIds.includes(normalized));
+}
+
+function matchesResumeTarget(item = {}, { videoId = null, season = null, episode = null } = {}) {
+  const wantedVideoId = String(videoId || "").trim();
+  if (wantedVideoId && String(item?.videoId || "").trim() === wantedVideoId) {
+    return true;
+  }
+  const wantedSeason = Number(season || 0);
+  const wantedEpisode = Number(episode || 0);
+  if (wantedSeason > 0 && wantedEpisode > 0) {
+    return Number(item?.season || item?.seasonNumber || 0) === wantedSeason
+      && Number(item?.episode || item?.episodeNumber || 0) === wantedEpisode;
+  }
+  return !wantedVideoId;
+}
+
+function selectBestResumeProgress(items = [], contentIds = [], target = {}) {
+  const candidates = (Array.isArray(items) ? items : [])
+    .filter((item) => matchesAnyContentId(item, contentIds))
+    .filter((item) => shouldTreatAsInProgressForContinueWatching(item));
+  if (!candidates.length) {
+    return null;
+  }
+  const targeted = candidates.filter((item) => matchesResumeTarget(item, target));
+  const pool = targeted.length ? targeted : candidates;
+  return pool
+    .slice()
+    .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0))[0] || null;
+}
+
+function normalizeResumeProgress(progress = null) {
+  if (!progress) {
+    return null;
+  }
+  const durationMs = Number(progress.durationMs || 0);
+  const positionMs = resolveWatchProgressResumePositionMs(progress, durationMs);
+  return {
+    ...progress,
+    positionMs,
+    durationMs: Number.isFinite(durationMs) && durationMs > 0 ? Math.trunc(durationMs) : 0,
+    progressFraction: getWatchProgressFraction(progress),
+    progressPercent: progress.progressPercent != null && progress.progressPercent !== ""
+      ? Number(progress.progressPercent)
+      : (getWatchProgressFraction(progress) * 100)
+  };
 }
 
 function toProgressItemFromTraktHistory(historyItem) {
@@ -308,6 +364,28 @@ class WatchProgressRepository {
 
   async getProgressByContentId(contentId) {
     return WatchProgressStore.findByContentId(contentId, activeProfileId());
+  }
+
+  async getResumeByContentIds(contentIds, target = {}) {
+    const candidates = normalizeContentIdList(contentIds);
+    if (!candidates.length) {
+      return null;
+    }
+    const localItems = WatchProgressStore.listForProfile(activeProfileId());
+    let sourceItems = filterForSelectedContinueWatchingSource(localItems);
+
+    if (selectedContinueWatchingSource() === WatchProgressSource.TRAKT && TraktAuthStore.isAuthenticated()) {
+      sourceItems = await this.getRecent(300).catch((error) => {
+        console.warn("[CW] Resume lookup failed", error);
+        return sourceItems;
+      });
+    }
+
+    return normalizeResumeProgress(selectBestResumeProgress(sourceItems, candidates, target));
+  }
+
+  async getResumeByContentId(contentId, target = {}) {
+    return this.getResumeByContentIds([contentId], target);
   }
 
   async removeProgress(contentId, videoId = null) {

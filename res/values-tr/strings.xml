@@ -2344,4 +2344,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Tümü</string>
+    <string name="detail.resume">Devam et</string>
+    <string name="detail.resumeEpisodeShort">S{{season}}E{{episode}} devam et</string>
+    <string name="detail.playFromBeginning">Baştan oynat</string>
+    <string name="detail.resumeAvailable">Devam etme mevcut</string>
+    <string name="detail.currentEpisode">Bölüm {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} kaldı</string>
 </resources>

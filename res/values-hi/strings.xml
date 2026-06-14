@@ -1027,4 +1027,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">सभी</string>
+    <string name="detail.resume">फिर से शुरू करें</string>
+    <string name="detail.resumeEpisodeShort">S{{season}}E{{episode}} फिर से शुरू करें</string>
+    <string name="detail.playFromBeginning">शुरुआत से चलाएँ</string>
+    <string name="detail.resumeAvailable">फिर से शुरू करना उपलब्ध है</string>
+    <string name="detail.currentEpisode">एपिसोड {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} बाकी</string>
 </resources>

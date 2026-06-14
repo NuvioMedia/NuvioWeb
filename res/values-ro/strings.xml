@@ -741,4 +741,10 @@
     <string name="subtitle_none_forced_only">Nimic (doar forțate)</string>
     <string name="audio_dv_title">DV7 - HEVC rezervă</string>
     <string name="common_all">Toate</string>
+    <string name="detail.resume">Reia</string>
+    <string name="detail.resumeEpisodeShort">Reia S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Redă de la început</string>
+    <string name="detail.resumeAvailable">Reluare disponibilă</string>
+    <string name="detail.currentEpisode">Episodul {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} rămase</string>
 </resources>

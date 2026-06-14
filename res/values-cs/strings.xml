@@ -1791,4 +1791,10 @@
     <string name="cast_error_load_details_for">Nepodařilo se načíst podrobnosti pro %1$s</string>
     <string name="tmdb_entity_error_load_named">Nepodařilo se načíst %1$s</string>
     <string name="tmdb_entity_error_load">Nepodařilo se načíst entitu TMDB</string>
+    <string name="detail.resume">Pokračovat</string>
+    <string name="detail.resumeEpisodeShort">Pokračovat S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Přehrát od začátku</string>
+    <string name="detail.resumeAvailable">Pokračování je dostupné</string>
+    <string name="detail.currentEpisode">Epizoda {{episode}}</string>
+    <string name="detail.timeLeftDuration">Zbývá {{time}}</string>
 </resources>

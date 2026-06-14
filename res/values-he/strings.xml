@@ -934,4 +934,10 @@
     <string name="sub_advanced_section">רינדור כתוביות מתקדם</string>
     <string name="playback_player_auto">אוטומטי (הטוב ביותר לתוכן)</string>
     <string name="playback_player_auto_desc">ExoPlayer לסרטים ולתוכניות טלוויזיה · MPV לאנימה</string>
+    <string name="detail.resume">המשך</string>
+    <string name="detail.resumeEpisodeShort">המשך S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">נגן מההתחלה</string>
+    <string name="detail.resumeAvailable">המשך זמין</string>
+    <string name="detail.currentEpisode">פרק {{episode}}</string>
+    <string name="detail.timeLeftDuration">נותרו {{time}}</string>
 </resources>

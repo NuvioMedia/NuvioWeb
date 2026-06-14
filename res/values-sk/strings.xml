@@ -2374,4 +2374,10 @@
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Všetko</string>
     <string name="subtitle_none_forced_only">Žiadne (len vynútené)</string>
+    <string name="detail.resume">Pokračovať</string>
+    <string name="detail.resumeEpisodeShort">Pokračovať S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Prehrať od začiatku</string>
+    <string name="detail.resumeAvailable">Pokračovanie je dostupné</string>
+    <string name="detail.currentEpisode">Epizóda {{episode}}</string>
+    <string name="detail.timeLeftDuration">Zostáva {{time}}</string>
 </resources>

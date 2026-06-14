@@ -2069,4 +2069,10 @@
     <string name="trakt_related_error_request_failed">ட்ராக்ட் தொடர்புடைய கோரிக்கை தோல்வியடைந்தது</string>
     <string name="trakt_comments_error_request_failed">ட்ராக்ட் கருத்துகள் கோரிக்கை தோல்வியடைந்தது</string>
     <string name="trakt_library_error_fetch_list_items">பட்டியல் உருப்படிகளைப் பெற முடியவில்லை</string>
+    <string name="detail.resume">தொடரவும்</string>
+    <string name="detail.resumeEpisodeShort">S{{season}}E{{episode}} தொடரவும்</string>
+    <string name="detail.playFromBeginning">ஆரம்பத்திலிருந்து இயக்கு</string>
+    <string name="detail.resumeAvailable">தொடர்வு கிடைக்கிறது</string>
+    <string name="detail.currentEpisode">எபிசோடு {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} மீதம்</string>
 </resources>

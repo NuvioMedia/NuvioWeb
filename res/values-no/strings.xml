@@ -1018,4 +1018,10 @@
     <string name="watchlist_removed">Fjernet fra ønskelisten</string>
     <string name="playback_player_auto">Automatisk (Best for innhold)</string>
     <string name="playback_player_auto_desc">ExoPlayer for filmer og serier · MPV for anime</string>
+    <string name="detail.resume">Fortsett</string>
+    <string name="detail.resumeEpisodeShort">Fortsett S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Spill fra begynnelsen</string>
+    <string name="detail.resumeAvailable">Fortsettelse tilgjengelig</string>
+    <string name="detail.currentEpisode">Episode {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} igjen</string>
 </resources>

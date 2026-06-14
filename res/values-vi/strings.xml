@@ -917,4 +917,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Tất cả</string>
+    <string name="detail.resume">Tiếp tục</string>
+    <string name="detail.resumeEpisodeShort">Tiếp tục S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Phát từ đầu</string>
+    <string name="detail.resumeAvailable">Có thể tiếp tục</string>
+    <string name="detail.currentEpisode">Tập {{episode}}</string>
+    <string name="detail.timeLeftDuration">Còn {{time}}</string>
 </resources>

@@ -1207,4 +1207,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">すべて</string>
+    <string name="detail.resume">再開</string>
+    <string name="detail.resumeEpisodeShort">S{{season}}E{{episode}}を再開</string>
+    <string name="detail.playFromBeginning">最初から再生</string>
+    <string name="detail.resumeAvailable">再開できます</string>
+    <string name="detail.currentEpisode">エピソード {{episode}}</string>
+    <string name="detail.timeLeftDuration">残り{{time}}</string>
 </resources>

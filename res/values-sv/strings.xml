@@ -1403,4 +1403,10 @@
     <string name="collections_card_subtitle">Gruppera kataloger i mappar på din hemskärm</string>
     <string name="collections_tab_all">Alla</string>
     <string name="collections_tab_combined">Kombinerat</string>
+    <string name="detail.resume">Fortsätt</string>
+    <string name="detail.resumeEpisodeShort">Fortsätt S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Spela från början</string>
+    <string name="detail.resumeAvailable">Fortsättning tillgänglig</string>
+    <string name="detail.currentEpisode">Avsnitt {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} kvar</string>
 </resources>

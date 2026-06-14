@@ -905,4 +905,10 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="watchlist_removed">Pašalinta iš žiūrėjimo sąrašo</string>
     <string name="playback_player_auto">Automatiškai (Geriausia turiniui)</string>
     <string name="playback_player_auto_desc">ExoPlayer filmams ir serialams · MPV animėms</string>
+    <string name="detail.resume">Tęsti</string>
+    <string name="detail.resumeEpisodeShort">Tęsti S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Leisti nuo pradžios</string>
+    <string name="detail.resumeAvailable">Galima tęsti</string>
+    <string name="detail.currentEpisode">Serija {{episode}}</string>
+    <string name="detail.timeLeftDuration">Liko {{time}}</string>
 </resources>

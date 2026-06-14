@@ -2338,4 +2338,10 @@
     <string name="debrid_picker_excluded_release_groups_title">Исключённые релиз-группы</string>
     <string name="debrid_picker_excluded_release_groups_subtitle">Скрывать выбранные релиз-группы.</string>
     <string name="subtitle_language_unknown">Неизвестный</string>
+    <string name="detail.resume">Продолжить</string>
+    <string name="detail.resumeEpisodeShort">Продолжить S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Смотреть с начала</string>
+    <string name="detail.resumeAvailable">Доступно продолжение</string>
+    <string name="detail.currentEpisode">Эпизод {{episode}}</string>
+    <string name="detail.timeLeftDuration">Осталось {{time}}</string>
 </resources>

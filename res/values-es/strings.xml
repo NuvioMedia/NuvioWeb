@@ -1070,4 +1070,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Todo</string>
+    <string name="detail.resume">Reanudar</string>
+    <string name="detail.resumeEpisodeShort">Reanudar T{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Reproducir desde el principio</string>
+    <string name="detail.resumeAvailable">Reanudación disponible</string>
+    <string name="detail.currentEpisode">Episodio {{episode}}</string>
+    <string name="detail.timeLeftDuration">Quedan {{time}}</string>
 </resources>

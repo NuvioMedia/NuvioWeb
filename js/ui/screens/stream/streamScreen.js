@@ -1,11 +1,11 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
 import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
-import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
 import { DebridSettingsStore } from "../../../data/local/debridSettingsStore.js";
 import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
 import { LocalStore } from "../../../core/storage/localStore.js";
@@ -183,6 +183,14 @@ function flattenStreams(streamResult) {
   (streamResult.data || []).forEach((group) => {
     const groupName = group.addonName || "Addon";
     (group.streams || []).forEach((stream, index) => {
+      const streamOrigin = {
+        ...(group.streamOrigin || {}),
+        ...(stream.streamOrigin || {}),
+        addonId: stream.addonId || group.addonId || group.streamOrigin?.addonId || stream.streamOrigin?.addonId || null,
+        addonBaseUrl: stream.addonBaseUrl || group.addonBaseUrl || group.streamOrigin?.addonBaseUrl || stream.streamOrigin?.addonBaseUrl || null,
+        addonName: stream.addonName || group.addonName || group.streamOrigin?.addonName || stream.streamOrigin?.addonName || groupName,
+        sourceProviderId: stream.sourceProviderId || group.sourceProviderId || stream.streamOrigin?.sourceProviderId || group.streamOrigin?.sourceProviderId || null
+      };
       const entry = {
         id: stream.id || `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
         name: stream.name || null,
@@ -202,8 +210,12 @@ function flattenStreams(streamResult) {
         debridCacheStatus: stream.debridCacheStatus || null,
         streamPresentation: stream.streamPresentation || null,
         subtitles: Array.isArray(stream.subtitles) ? stream.subtitles : [],
+        addonId: stream.addonId || group.addonId || null,
+        addonBaseUrl: stream.addonBaseUrl || group.addonBaseUrl || null,
         addonName: stream.addonName || groupName,
         addonLogo: stream.addonLogo || group.addonLogo || null,
+        sourceProviderId: stream.sourceProviderId || group.sourceProviderId || stream.streamOrigin?.sourceProviderId || group.streamOrigin?.sourceProviderId || null,
+        streamOrigin,
         addonOrderIndex: Number.isFinite(Number(stream.addonOrderIndex))
           ? Number(stream.addonOrderIndex)
           : Number(group.addonOrderIndex ?? Number.MAX_SAFE_INTEGER),
@@ -277,8 +289,8 @@ function extractPeerCount(stream = {}) {
     stream.behaviorHints?.filename || ""
   ].join(" "));
   const patterns = [
-    /\bseed(?:ers?)?\s*[:\-]?\s*(\d{1,5})\b/i,
-    /\bpeers?\s*[:\-]?\s*(\d{1,5})\b/i,
+    /\bseed(?:ers?)?\s*[:-]?\s*(\d{1,5})\b/i,
+    /\bpeers?\s*[:-]?\s*(\d{1,5})\b/i,
     /\b(\d{1,5})\s*seed(?:ers?)?\b/i,
     /\b👤\s*(\d{1,5})\b/i
   ];
@@ -706,25 +718,6 @@ function normalizeAddonLogoLookup(lookup = {}) {
     rememberAddonLogoLookup(normalized, key, value);
   });
   return normalized;
-}
-
-function buildAddonLogoLookup(addons = []) {
-  const lookup = {};
-  (addons || []).forEach((addon) => {
-    const logo = normalizeAddonLogoUrl(addon?.logo);
-    if (!logo) {
-      return;
-    }
-    [
-      addon?.displayName,
-      addon?.name,
-      addon?.id,
-      addon?.baseUrl
-    ].forEach((key) => {
-      rememberAddonLogoLookup(lookup, key, lookup[normalizeAddonLookupKey(key)] || logo);
-    });
-  });
-  return lookup;
 }
 
 function resolveAddonLogo(addonName = "", lookup = {}) {
@@ -1986,13 +1979,34 @@ export const StreamScreen = {
     }
     const playerStreamCandidates = this.getFilteredStreams();
     const itemType = normalizeType(this.params?.itemType);
+    const startFromBeginning = Boolean(this.params?.startFromBeginning);
+    let resumePositionMs = startFromBeginning ? 0 : (Number(this.params?.resumePositionMs || 0) || 0);
+    let resumeProgressPercent = startFromBeginning ? null : this.params?.resumeProgressPercent;
+    let resumeDurationMs = startFromBeginning ? 0 : (Number(this.params?.resumeDurationMs || 0) || 0);
+    if (!startFromBeginning && resumePositionMs <= 0 && !(Number(resumeProgressPercent) > 0)) {
+      const resumeProgress = await watchProgressRepository.getResumeByContentId(this.params?.itemId, {
+        videoId: this.params?.videoId || null,
+        season: this.params?.season,
+        episode: this.params?.episode
+      }).catch((error) => {
+        console.warn("Stream resume lookup failed", error);
+        return null;
+      });
+      resumePositionMs = Number(resumeProgress?.positionMs || 0) || 0;
+      resumeProgressPercent = resumeProgress?.progressPercent ?? resumeProgressPercent;
+      resumeDurationMs = Number(resumeProgress?.durationMs || 0) || resumeDurationMs;
+    }
+
     Router.navigate("player", {
       streamUrl: selected.url || selected.externalUrl || null,
       itemId: this.params?.itemId || null,
       itemType: itemType || "movie",
       imdbId: this.params?.imdbId || null,
       videoId: this.params?.videoId || null,
-      resumePositionMs: Number(this.params?.resumePositionMs || 0) || 0,
+      resumePositionMs,
+      resumeProgressPercent,
+      resumeDurationMs,
+      startFromBeginning,
       episodeLabel: this.params?.season && this.params?.episode
         ? `S${this.params.season}E${this.params.episode}`
         : null,
@@ -2009,6 +2023,15 @@ export const StreamScreen = {
       episodes: Array.isArray(this.params?.episodes) ? this.params.episodes : [],
       streamCandidates: playerStreamCandidates,
       preferredStreamId: selected.id,
+      playbackSourceContext: selected.streamOrigin || {
+        addonId: selected.addonId || "",
+        addonBaseUrl: selected.addonBaseUrl || "",
+        addonName: selected.addonName || "",
+        addonOrderIndex: Number.isFinite(Number(selected.addonOrderIndex)) ? Number(selected.addonOrderIndex) : null,
+        sourceProviderId: selected.sourceProviderId || "",
+        sourceIds: Array.isArray(selected.sources) ? selected.sources : [],
+        selectedStreamId: selected.id || ""
+      },
       returnToStreamOnBack: true,
       fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       nextEpisodeVideoId: this.params?.nextEpisodeVideoId || null,

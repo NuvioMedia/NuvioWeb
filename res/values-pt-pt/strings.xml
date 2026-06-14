@@ -2241,4 +2241,10 @@
     <string name="trakt_related_error_request_failed">O pedido de itens relacionados do Trakt falhou</string>
     <string name="trakt_comments_error_request_failed">O pedido de comentários do Trakt falhou</string>
     <string name="trakt_library_error_fetch_list_items">Falha ao obter os itens da lista</string>
+    <string name="detail.resume">Retomar</string>
+    <string name="detail.resumeEpisodeShort">Retomar T{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Reproduzir desde o início</string>
+    <string name="detail.resumeAvailable">Retoma disponível</string>
+    <string name="detail.currentEpisode">Episódio {{episode}}</string>
+    <string name="detail.timeLeftDuration">Restam {{time}}</string>
 </resources>

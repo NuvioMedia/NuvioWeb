@@ -2157,4 +2157,10 @@
     <string name="trakt_related_error_request_failed">Trakt 相关请求失败</string>
     <string name="trakt_comments_error_request_failed">Trakt 评论请求失败</string>
     <string name="trakt_library_error_fetch_list_items">获取列表项目失败</string>
+    <string name="detail.resume">继续播放</string>
+    <string name="detail.resumeEpisodeShort">继续 S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">从头播放</string>
+    <string name="detail.resumeAvailable">可继续播放</string>
+    <string name="detail.currentEpisode">剧集 {{episode}}</string>
+    <string name="detail.timeLeftDuration">剩余 {{time}}</string>
 </resources>

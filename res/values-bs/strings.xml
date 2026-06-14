@@ -1355,4 +1355,10 @@
     <string name="collections_card_subtitle">Grupiši kataloge u foldere na svom početnom ekranu</string>
     <string name="collections_tab_all">Sve</string>
     <string name="collections_tab_combined">Kombinovano</string>
+    <string name="detail.resume">Nastavi</string>
+    <string name="detail.resumeEpisodeShort">Nastavi S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Pusti od početka</string>
+    <string name="detail.resumeAvailable">Nastavak je dostupan</string>
+    <string name="detail.currentEpisode">Epizoda {{episode}}</string>
+    <string name="detail.timeLeftDuration">Preostalo {{time}}</string>
 </resources>

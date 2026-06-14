@@ -2187,4 +2187,10 @@
     <string name="auth.syncCode.prompt">Insert sync code</string>
     <string name="auth.syncCode.setCode">Set Code</string>
     <string name="common_all">Vse</string>
+    <string name="detail.resume">Nadaljuj</string>
+    <string name="detail.resumeEpisodeShort">Nadaljuj S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Predvajaj od začetka</string>
+    <string name="detail.resumeAvailable">Nadaljevanje je na voljo</string>
+    <string name="detail.currentEpisode">Epizoda {{episode}}</string>
+    <string name="detail.timeLeftDuration">Še {{time}}</string>
 </resources>

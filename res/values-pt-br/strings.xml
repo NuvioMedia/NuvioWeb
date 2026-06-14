@@ -2338,4 +2338,10 @@
     <string name="debrid_size_range_min_plus">%1$d GB+</string>
     <string name="debrid_size_range_min_max">%1$d-%2$d GB</string>
     <string name="subtitle_language_unknown">Desconhecido</string>
+    <string name="detail.resume">Retomar</string>
+    <string name="detail.resumeEpisodeShort">Retomar T{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Reproduzir desde o início</string>
+    <string name="detail.resumeAvailable">Retomada disponível</string>
+    <string name="detail.currentEpisode">Episódio {{episode}}</string>
+    <string name="detail.timeLeftDuration">{{time}} restantes</string>
 </resources>

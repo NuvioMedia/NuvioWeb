@@ -1079,7 +1079,7 @@ function buildProgressStatus(item) {
   const effectivePositionMs = Math.max(0, Math.min(durationMs, positionMs));
   const remainingMinutes = Math.max(0, Math.round((durationMs - effectivePositionMs) / 60000));
   const progress = Math.max(0, Math.min(1, effectivePositionMs / durationMs));
-  if (progress >= 0.85 || remainingMinutes <= 10) {
+  if (progress >= CW_PROGRESS_END_THRESHOLD || remainingMinutes <= 10) {
     return t("home.continueStatusAlmostDone", {}, "Almost done");
   }
   if (remainingMinutes > 0) {
@@ -1840,7 +1840,10 @@ function continueWatchingStreamParams(item, options = {}) {
     landscapePoster: firstNonEmpty(normalized.landscapePoster, normalized.backdrop, normalized.background, normalized.poster),
     poster: firstNonEmpty(normalized.poster, normalized.backdrop, normalized.background),
     logo: firstNonEmpty(normalized.logo),
-    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0)
+    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0),
+    resumeProgressPercent: options.startOver ? null : (normalized.progressPercent ?? null),
+    resumeDurationMs: options.startOver ? 0 : (Number(normalized.durationMs || 0) || 0),
+    startFromBeginning: Boolean(options.startOver)
   };
 }
 
@@ -4090,6 +4093,9 @@ export const HomeScreen = {
       autoOpenContinueWatching: true,
       returnHomeOnBack: true,
       resumeProgressMs: Number(params.resumePositionMs || 0) || 0,
+      resumeProgressPercent: params.resumeProgressPercent ?? null,
+      resumeDurationMs: Number(params.resumeDurationMs || 0) || 0,
+      startFromBeginning: Boolean(params.startFromBeginning),
       resumeVideoId: normalized.videoId || null,
       resumeSeason: normalized.season ?? null,
       resumeEpisode: normalized.episode ?? null

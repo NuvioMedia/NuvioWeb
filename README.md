@@ -155,7 +155,7 @@ That creates `NuvioTV_VERSION.wgt` in the repo root. The package uses:
 
 - Tizen package id: `NuvioTV`
 - Tizen application id: `NuvioTV.NuvioTV`
-- bundled runtime env: your local `nuvio.env.js` copied by `npm run build`
+- bundled runtime env: generated from your local `local.properties` by `npm run build`
 
 Override these when needed:
 
@@ -163,10 +163,10 @@ Override these when needed:
 TIZEN_PACKAGE_ID=NuvioTV TIZEN_APP_ID=NuvioTV.NuvioTV npm run package:tizen
 ```
 
-To package a different env file explicitly:
+To package a different properties file explicitly:
 
 ```bash
-npm run package:tizen -- --env-source /absolute/path/to/nuvio.env.js
+npm run package:tizen -- --env-source /absolute/path/to/local.properties
 ```
 
 ### Sync Commands

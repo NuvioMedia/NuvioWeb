@@ -9752,6 +9752,7 @@ button:focus-visible {
   --player-controls-y: 24px;
   --player-control-size: 48px;
   --player-control-icon: 24px;
+  --player-action-controls-open-bottom: clamp(224px, 28vh, 300px);
 }
 
 #videoPlayer::cue {
@@ -10619,13 +10620,18 @@ button:focus-visible {
   left: min(3.33vw, 64px);
   bottom: min(3.125vw, 60px);
   z-index: 34;
+  max-width: min(38vw, 420px);
   opacity: 1;
   pointer-events: auto;
   transition: bottom 180ms ease, opacity 180ms ease;
 }
 
 .player-skip-intro.is-raised {
-  bottom: clamp(184px, 19vh, 224px);
+  bottom: var(--player-action-controls-open-bottom);
+}
+
+#playerUiRoot.controls-visible .player-skip-intro {
+  bottom: var(--player-action-controls-open-bottom);
 }
 
 .player-skip-intro.hidden {
@@ -10635,6 +10641,7 @@ button:focus-visible {
 
 .player-skip-intro-btn {
   min-width: 0;
+  max-width: 100%;
   min-height: 0;
   padding: 0;
   border: none;
@@ -10671,6 +10678,7 @@ button:focus-visible {
   align-items: center;
   gap: min(0.83vw, 16px);
   padding: min(1.25vw, 24px) min(1.875vw, 36px);
+  max-width: 100%;
   min-width: 0;
 }
 
@@ -10694,6 +10702,10 @@ button:focus-visible {
   font-size: min(1.46vw, 28px);
   font-weight: 500;
   line-height: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-skip-intro-progress {
@@ -10734,8 +10746,8 @@ button:focus-visible {
   transition: bottom 180ms ease, opacity 180ms ease;
 }
 
-.player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
-  bottom: clamp(138px, 15vh, 176px);
+#playerUiRoot.controls-visible .player-next-episode-card {
+  bottom: var(--player-action-controls-open-bottom);
 }
 
 .player-next-episode-card.hidden {
@@ -11582,6 +11594,7 @@ button:focus-visible {
   --player-panel-padding: min(2.5vw, 48px); /* ATV 24dp -> 48px */
   --player-overlay-left: min(5.42vw, 104px); /* ATV 52dp -> 104px */
   --player-overlay-bottom: min(7.92vw, 152px); /* ATV 76dp -> 152px */
+  --player-action-controls-open-bottom: clamp(292px, 31vh, 360px);
   --player-atv-primary: #9e9e9e;
   --player-atv-text-primary: #ffffff;
   --player-atv-text-secondary: #b3b3b3;
@@ -12170,7 +12183,7 @@ button:focus-visible {
 }
 
 .player-skip-intro.is-raised {
-  bottom: clamp(184px, 19vh, 224px);
+  bottom: var(--player-action-controls-open-bottom);
 }
 
 .player-skip-intro-btn {
@@ -12263,6 +12276,7 @@ button:focus-visible {
     --player-overlay-bottom: 64px;
     --player-control-size: 48px;
     --player-control-icon: 24px;
+    --player-action-controls-open-bottom: 238px;
   }
 
   .player-subtitle-modal,
@@ -12352,6 +12366,7 @@ button:focus-visible {
 }
 
 .series-primary-btn,
+.series-secondary-btn,
 .series-circle-btn {
   border: none;
   cursor: pointer;
@@ -13515,6 +13530,7 @@ button:focus-visible {
 }
 
 .detail-trailer-active .series-detail-actions,
+.detail-trailer-active .detail-resume-indicator,
 .detail-trailer-active .series-detail-support,
 .detail-trailer-active .detail-ratings-row,
 .detail-trailer-active .series-detail-description,
@@ -13525,6 +13541,7 @@ button:focus-visible {
 }
 
 .series-primary-btn,
+.series-secondary-btn,
 .series-circle-btn {
   border: none;
   cursor: pointer;
@@ -13547,6 +13564,21 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 10px;
+}
+
+.series-secondary-btn {
+  min-height: 96px;
+  padding: 24px 34px;
+  border-radius: 64px;
+  background: var(--detail-bg-card);
+  color: var(--detail-text-primary);
+  border: 0 solid transparent;
+  font-size: var(--tv-body-text);
+  line-height: 1;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
 }
 
 .series-circle-btn {
@@ -13573,6 +13605,7 @@ button:focus-visible {
 }
 
 .series-primary-btn.focused,
+.series-secondary-btn.focused,
 .series-circle-btn.focused,
 .series-season-btn.focused,
 .series-insight-tab.focused,
@@ -13586,6 +13619,7 @@ button:focus-visible {
 }
 
 .series-primary-btn.focused,
+.series-secondary-btn.focused,
 .series-circle-btn.focused,
 .series-season-btn.focused,
 .series-rating-season.focused,
@@ -13613,6 +13647,39 @@ button:focus-visible {
   color: #000000;
   box-shadow: 0 0 0 4px var(--detail-focus-ring);
   transform: none;
+}
+
+.series-secondary-btn.focused {
+  background: var(--secondary-color);
+  color: var(--on-secondary);
+  box-shadow: 0 0 0 4px var(--detail-focus-ring);
+  transform: none;
+}
+
+.detail-resume-indicator {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-height: 32px;
+  margin: -8px 0 18px;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: var(--tv-body-text);
+  line-height: 1.2;
+}
+
+.detail-resume-indicator span {
+  display: inline-flex;
+  align-items: center;
+}
+
+.detail-resume-indicator span:not(:last-child)::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  margin-left: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.46);
 }
 
 .series-circle-btn.focused {
@@ -14932,7 +14999,7 @@ button:focus-visible {
 }
 
 .legacy-webos .player-skip-intro.is-raised {
-  bottom: 212px;
+  bottom: var(--player-action-controls-open-bottom);
 }
 
 .legacy-webos .player-skip-intro-btn {
@@ -15010,8 +15077,8 @@ button:focus-visible {
   width: 560px;
 }
 
-.legacy-webos .player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
-  bottom: 156px;
+.legacy-webos #playerUiRoot.controls-visible .player-next-episode-card {
+  bottom: var(--player-action-controls-open-bottom);
 }
 
 .legacy-webos .player-next-episode-card-inner {
@@ -15343,7 +15410,7 @@ button:focus-visible {
   }
 
   .player-skip-intro.is-raised {
-    bottom: 212px;
+    bottom: var(--player-action-controls-open-bottom);
   }
 
   .player-skip-intro-btn {
@@ -15420,8 +15487,8 @@ button:focus-visible {
     width: 560px;
   }
 
-  .player-controls-overlay:not(.hidden) ~ .player-next-episode-card {
-    bottom: 156px;
+  #playerUiRoot.controls-visible .player-next-episode-card {
+    bottom: var(--player-action-controls-open-bottom);
   }
 
   .player-next-episode-card-inner {

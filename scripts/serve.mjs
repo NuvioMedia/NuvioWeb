@@ -4,6 +4,7 @@ import path from "node:path";
 import { readFile, stat } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { buildRuntimeEnvScript, readEnvProperties } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -163,6 +164,16 @@ async function proxyLocalMediaRequest(request, response, pathname) {
 const server = http.createServer(async (request, response) => {
   try {
     const requestUrl = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+    if (requestUrl.pathname === "/nuvio.env.js") {
+      const { env } = await readEnvProperties({ rootDir });
+      response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": "application/javascript; charset=utf-8"
+      });
+      response.end(buildRuntimeEnvScript(env));
+      return;
+    }
+
     if (requestUrl.pathname === "/settings" || requestUrl.pathname.startsWith("/tracks/")) {
       await proxyLocalMediaRequest(request, response, `${requestUrl.pathname}${requestUrl.search || ""}`);
       return;

@@ -1345,4 +1345,10 @@
     <string name="collections_card_subtitle">تجميع القوائم في مجلدات على شاشتك الرئيسية</string>
     <string name="collections_tab_all">الكل</string>
     <string name="collections_tab_combined">مجتمعة</string>
+    <string name="detail.resume">استئناف</string>
+    <string name="detail.resumeEpisodeShort">استئناف S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">تشغيل من البداية</string>
+    <string name="detail.resumeAvailable">الاستئناف متاح</string>
+    <string name="detail.currentEpisode">الحلقة {{episode}}</string>
+    <string name="detail.timeLeftDuration">متبقٍ {{time}}</string>
 </resources>

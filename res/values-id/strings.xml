@@ -2240,4 +2240,10 @@
     <string name="trakt_related_error_request_failed">Permintaan terkait Trakt gagal</string>
     <string name="trakt_comments_error_request_failed">Permintaan komentar Trakt gagal</string>
     <string name="trakt_library_error_fetch_list_items">Gagal mengambil item daftar</string>
+    <string name="detail.resume">Lanjutkan</string>
+    <string name="detail.resumeEpisodeShort">Lanjutkan S{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Putar dari Awal</string>
+    <string name="detail.resumeAvailable">Lanjutkan tersedia</string>
+    <string name="detail.currentEpisode">Episode {{episode}}</string>
+    <string name="detail.timeLeftDuration">Sisa {{time}}</string>
 </resources>

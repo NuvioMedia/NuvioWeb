@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import JSZip from "jszip";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -167,7 +168,10 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
   await stageTizenEngineFsService();
 
   if (envSourcePath) {
-    await cp(envSourcePath, path.join(stagingDir, "nuvio.env.js"));
+    await writeRuntimeEnvScriptFile(path.join(stagingDir, "nuvio.env.js"), {
+      rootDir,
+      sourcePath: envSourcePath
+    });
   } else {
     await cp(path.join(distDir, "nuvio.env.js"), path.join(stagingDir, "nuvio.env.js"));
   }

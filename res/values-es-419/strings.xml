@@ -2240,4 +2240,10 @@
     <string name="trakt_related_error_request_failed">La solicitud de relacionados de Trakt falló</string>
     <string name="trakt_comments_error_request_failed">La solicitud de comentarios de Trakt falló</string>
     <string name="trakt_library_error_fetch_list_items">No se pudieron obtener los elementos de la lista</string>
+    <string name="detail.resume">Reanudar</string>
+    <string name="detail.resumeEpisodeShort">Reanudar T{{season}}E{{episode}}</string>
+    <string name="detail.playFromBeginning">Reproducir desde el principio</string>
+    <string name="detail.resumeAvailable">Reanudación disponible</string>
+    <string name="detail.currentEpisode">Episodio {{episode}}</string>
+    <string name="detail.timeLeftDuration">Faltan {{time}}</string>
 </resources>
