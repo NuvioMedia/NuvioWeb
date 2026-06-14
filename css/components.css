@@ -12412,7 +12412,7 @@ button:focus-visible {
   width: 100%;
   padding: 16px 48px 0px 0px;
   scrollbar-width: none;
-  gap: 48px;
+  gap: 32px;
   margin-top: -16px;
 }
 
@@ -12465,7 +12465,7 @@ button:focus-visible {
   min-height: 48px;
 }
 
-.series-episode-overview {
+/* .series-episode-overview {
   margin-top: 4px;
   font-size: 14px;
   color: rgba(234, 241, 250, 0.82);
@@ -12476,7 +12476,7 @@ button:focus-visible {
   -webkit-box-orient: vertical;
   max-height: 40px;
   overflow: hidden;
-}
+} */
 
 .series-stream-overlay {
   position: absolute;
@@ -13844,8 +13844,7 @@ button:focus-visible {
 
 .series-episode-top-row {
   display: flex;
-  justify-content: space-between;
-  flex-direction: row;
+  justify-content: end;
   align-items: center;
 }
 
@@ -13853,6 +13852,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  justify-content: start;
 }
 
 .series-episode-badge {
@@ -13877,14 +13877,13 @@ button:focus-visible {
 .series-episode-overview {
   margin-top: 0;
   max-height: none;
-  font-size: var(--tv-caption-text);
-  line-height: 1.5;
   color: rgba(255, 255, 255, 0.9);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  font-size: 28px;
+  line-height: 44px;
   overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 .series-episode-meta {
@@ -16458,7 +16457,7 @@ button:focus-visible {
 }
 
 .series-episode-thumb {
-  height: 500px;
+  height: 395px;
   border-radius: 64px;
 }
 
@@ -16473,17 +16472,13 @@ button:focus-visible {
   font-size: 20px;
   line-height: 28px;
   letter-spacing: 2px;
+  align-self: start;
 }
 
 .series-episode-title {
   min-height: 56px;
   font-size: 32px;
   line-height: 56px;
-}
-
-.series-episode-overview {
-  font-size: 28px;
-  line-height: 44px;
 }
 
 .series-episode-meta {
