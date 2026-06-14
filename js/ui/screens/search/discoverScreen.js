@@ -337,7 +337,9 @@ export const DiscoverScreen = {
     this.catalogs = [];
     addons.forEach((addon) => {
       addon.catalogs.forEach((catalog) => {
-        const isSearchOnly = (catalog.extra || []).some((extra) => extra?.name === "search");
+        const isSearchOnly = (catalog.extra || []).some(
+          (extra) => extra?.name === "search" && Boolean(extra?.isRequired)
+        );
         if (isSearchOnly) return;
         const type = String(catalog.apiType || "").trim();
         if (!type) return;
