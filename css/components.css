@@ -5548,7 +5548,7 @@ button:focus-visible {
   opacity: 1;
 }
 
-/* Modern layout: full-screen flex column so hero + rows are clean adjacent sections */
+/* Modern layout: full-screen flex column so hero + row s are clean adjacent sections */
 .home-screen-shell.home-layout-modern .home-main {
   padding: 0;
   overflow: hidden;
@@ -5626,7 +5626,7 @@ button:focus-visible {
   flex-direction: column;
   justify-content: flex-end;
   align-items: flex-start;
-  padding: var(--modern-hero-copy-top-safe) var(--modern-hero-copy-right) var(--modern-hero-copy-bottom-gap) 104px;
+  padding: 48px 64px 48px 64px;
   box-sizing: border-box;
 }
 
@@ -5985,7 +5985,7 @@ button:focus-visible {
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: none;
-  scroll-padding-top: 0;
+  scroll-padding-top: 20px;
 }
 
 .folder-detail-home-shell .home-main {

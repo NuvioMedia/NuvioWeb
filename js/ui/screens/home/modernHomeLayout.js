@@ -9,7 +9,7 @@ export const MODERN_HOME_CONSTANTS = {
   cameraSafetyDurationMs: 180,
   springScrollStiffness: 180,
   springScrollDampingRatio: 0.95,
-  rowFocusInset: 40,
+  rowFocusInset: 64,
   trackEdgePadding: 104,
   verticalFastScrollVelocityPxPerSec: 6400,
   verticalFastScrollEndTimeoutMs: 160,
