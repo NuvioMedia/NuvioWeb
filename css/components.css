@@ -13348,6 +13348,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 
 .series-detail-shell.detail-scrolled .detail-bottom-shadow {
   opacity: 1;
+  z-index: 0;
 }
 
 .series-detail-content {

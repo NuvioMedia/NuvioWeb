@@ -3873,7 +3873,7 @@ export const MetaDetailsScreen = {
       if (!shell) {
         return;
       }
-      shell.classList.toggle("detail-scrolled", content.scrollTop > 160);
+      shell.classList.toggle("detail-scrolled", content.scrollTop >= 560);
     };
     content.addEventListener("scroll", this.detailScrollHandler, { passive: true });
     if (this.detailFocusHandler) {
@@ -5695,6 +5695,17 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(actions, actionIndex + 1) || true;
       if (direction === "down") {
         if (seasons.length) {
+          const detailContent = this.getDetailContentScroller();
+          const isHeroTransition = detailContent && detailContent.scrollTop < 50;
+          if (isHeroTransition) {
+            const seasonMount = this.container?.querySelector("#detailSeasonRowMount");
+            if (detailContent && seasonMount) {
+              detailContent.style.scrollBehavior = "smooth";
+              detailContent.scrollTop = seasonMount.offsetTop;
+              setTimeout(() => { detailContent.style.scrollBehavior = ""; }, 700);
+            }
+            return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons), { animated: false }) || true;
+          }
           return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (episodes.length) {
@@ -5713,7 +5724,13 @@ export const MetaDetailsScreen = {
       if (direction === "right") return this.focusInList(seasons, seasonIndex + 1) || true;
       if (direction === "up") {
         if (actions.length) {
-          return this.focusInList(actions, Math.min(seasonIndex, actions.length - 1)) || true;
+          const detailContent = this.getDetailContentScroller();
+          if (detailContent) {
+            detailContent.style.scrollBehavior = "smooth";
+            detailContent.scrollTop = 0;
+            setTimeout(() => { detailContent.style.scrollBehavior = ""; }, 700);
+          }
+          return this.focusInList(actions, Math.min(seasonIndex, actions.length - 1), { animated: false }) || true;
         }
       }
       if (direction === "down") {
