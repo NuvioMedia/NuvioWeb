@@ -1,0 +1,20 @@
+# Development and CI metadata
+.github/
+
+# Documentation not needed by the running web app
+/docs/development.md
+
+# Platform packaging and device-management helpers not needed on Heroku
+/scripts/ares-*.mjs
+/scripts/diagnose-*.mjs
+/scripts/localhost-listen-patch.cjs
+/scripts/node24-ares-compat.cjs
+/scripts/package-tizen.mjs
+/scripts/package-webos.mjs
+/scripts/sync-tizenbrew.mjs
+/scripts/sync-wrapper.mjs
+/services/webos/
+
+# Local/editor artifacts
+.DS_Store
+**/.DS_Store

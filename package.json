@@ -23,7 +23,9 @@
     "sync": "node ./scripts/sync-wrapper.mjs",
     "sync:tizen": "node ./scripts/sync-wrapper.mjs --tizen",
     "sync:webos": "node ./scripts/sync-wrapper.mjs --webos",
-    "sync:tizenbrew": "node ./scripts/sync-tizenbrew.mjs"
+    "sync:tizenbrew": "node ./scripts/sync-tizenbrew.mjs",
+    "start": "node ./scripts/serve.mjs",
+    "heroku-postbuild": "npm run build"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
@@ -59,5 +61,8 @@
     "intersection-observer": "^0.12.2",
     "jszip": "^3.10.1",
     "whatwg-fetch": "^3.6.20"
+  },
+  "engines": {
+    "node": ">=22 <25"
   }
 }
