@@ -1840,7 +1840,8 @@ function continueWatchingStreamParams(item, options = {}) {
     landscapePoster: firstNonEmpty(normalized.landscapePoster, normalized.backdrop, normalized.background, normalized.poster),
     poster: firstNonEmpty(normalized.poster, normalized.backdrop, normalized.background),
     logo: firstNonEmpty(normalized.logo),
-    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0)
+    resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0),
+    resumeStreamIdentity: options.startOver ? null : (normalized.streamIdentity || null)
   };
 }
 
@@ -4092,7 +4093,8 @@ export const HomeScreen = {
       resumeProgressMs: Number(params.resumePositionMs || 0) || 0,
       resumeVideoId: normalized.videoId || null,
       resumeSeason: normalized.season ?? null,
-      resumeEpisode: normalized.episode ?? null
+      resumeEpisode: normalized.episode ?? null,
+      resumeStreamIdentity: params.resumeStreamIdentity || null
     });
     return true;
   },
@@ -7054,7 +7056,15 @@ export const HomeScreen = {
       ? (this.pendingCollectionRouteReturnAnimation ? " nuvio-route-slide-enter" : " home-route-content-enter")
       : "";
     this.pendingCollectionRouteReturnAnimation = false;
-    const sidebarFocusLocked = Boolean(this.sidebarExpanded);
+    // When returning to home via Back, only keep the sidebar expanded/focused if
+    // the focus we are restoring actually belonged to the sidebar. Otherwise the
+    // sidebar stole focus and "popped up" on every back navigation (issue #232).
+    if (this.isRestoringFocusFromBack && retainedFocusState?.focusKind !== "sidebar") {
+      this.sidebarExpanded = false;
+    }
+    const sidebarFocusLocked = Boolean(
+      this.sidebarExpanded && retainedFocusState?.focusKind === "sidebar",
+    );
 
     this.container.innerHTML = `
       <div class="home-shell home-screen-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
@@ -7939,7 +7949,7 @@ export const HomeScreen = {
       if (!rowKey || this._trackScrollHandlers.has(track)) {
         return;
       }
-      const handler = () => {
+      const runPagination = () => {
         if (this._trackPaginationInFlight?.has(rowKey)) {
           return;
         }
@@ -8027,6 +8037,19 @@ export const HomeScreen = {
           console.warn("Home track pagination failed for", rowKey, err);
         }).finally(() => {
           this._trackPaginationInFlight?.delete(rowKey);
+        });
+      };
+      // Coalesce to one run per frame. The pagination check reads offsetWidth
+      // (forced reflow); running it on every raw scroll event made the modern
+      // layout stutter on slow TVs once content was loaded (issue #232).
+      let scrollRaf = 0;
+      const handler = () => {
+        if (scrollRaf) {
+          return;
+        }
+        scrollRaf = requestAnimationFrame(() => {
+          scrollRaf = 0;
+          runPagination();
         });
       };
       this._trackScrollHandlers.set(track, handler);

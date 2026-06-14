@@ -45,7 +45,7 @@ function escapeHtml(value = "") {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 }
 
@@ -78,23 +78,27 @@ function detectQuality(text = "") {
 }
 
 function isMagnetUrl(value = "") {
-  return String(value || "").trim().toLowerCase().startsWith("magnet:");
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("magnet:");
 }
 
 function streamDebridIdentity(item = {}) {
   const resolve = item.clientResolve || item.raw?.clientResolve || {};
   const behaviorHints = item.behaviorHints || item.raw?.behaviorHints || {};
   const infoHash = item.infoHash || item.raw?.infoHash || resolve.infoHash || "";
-  const magnetUri = resolve.magnetUri
-    || (isMagnetUrl(item.url) ? item.url : "")
-    || (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
+  const magnetUri =
+    resolve.magnetUri ||
+    (isMagnetUrl(item.url) ? item.url : "") ||
+    (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
   const hasDebridMarker = Boolean(
-    item.clientResolve
-      || item.raw?.clientResolve
-      || item.debridCacheStatus
-      || item.raw?.debridCacheStatus
-      || infoHash
-      || magnetUri
+    item.clientResolve ||
+    item.raw?.clientResolve ||
+    item.debridCacheStatus ||
+    item.raw?.debridCacheStatus ||
+    infoHash ||
+    magnetUri
   );
   if (!hasDebridMarker) {
     return "";
@@ -105,7 +109,12 @@ function streamDebridIdentity(item = {}) {
   }
   return [
     String(item.addonName || "Addon"),
-    String(resolve.service || item.debridCacheStatus?.providerId || item.raw?.debridCacheStatus?.providerId || ""),
+    String(
+      resolve.service ||
+        item.debridCacheStatus?.providerId ||
+        item.raw?.debridCacheStatus?.providerId ||
+        ""
+    ),
     String(locator),
     String(resolve.fileIdx ?? item.fileIdx ?? item.raw?.fileIdx ?? ""),
     String(behaviorHints.filename || resolve.filename || ""),
@@ -144,7 +153,8 @@ function mergeStreamItem(previous = {}, next = {}) {
     externalUrl: next.externalUrl || previous.externalUrl || null,
     ytId: next.ytId || previous.ytId || null,
     behaviorHints: Object.keys(behaviorHints).length ? behaviorHints : null,
-    subtitles: Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
+    subtitles:
+      Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
     sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources,
     streamPresentation: next.streamPresentation || previous.streamPresentation || null
   };
@@ -162,7 +172,7 @@ function formatBytes(value) {
     amount /= 1024;
     unitIndex += 1;
   }
-  const precision = unitIndex >= 3 ? 2 : (unitIndex >= 2 ? 1 : 0);
+  const precision = unitIndex >= 3 ? 2 : unitIndex >= 2 ? 1 : 0;
   return `${amount.toFixed(precision)} ${units[unitIndex]}`;
 }
 
@@ -184,7 +194,9 @@ function flattenStreams(streamResult) {
     const groupName = group.addonName || "Addon";
     (group.streams || []).forEach((stream, index) => {
       const entry = {
-        id: stream.id || `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
+        id:
+          stream.id ||
+          `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
         name: stream.name || null,
         title: stream.title || null,
         description: stream.description || null,
@@ -197,7 +209,9 @@ function flattenStreams(streamResult) {
         behaviorHints: stream.behaviorHints || null,
         sources: Array.isArray(stream.sources) ? stream.sources : [],
         quality: stream.quality || null,
-        qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+        qualityValue: Number.isFinite(Number(stream.qualityValue))
+          ? Number(stream.qualityValue)
+          : -1,
         clientResolve: stream.clientResolve || null,
         debridCacheStatus: stream.debridCacheStatus || null,
         streamPresentation: stream.streamPresentation || null,
@@ -212,9 +226,9 @@ function flattenStreams(streamResult) {
         raw: stream
       };
       if (
-        DirectDebridResolver.shouldListStream(entry)
-        || WebOsEngineFsResolver.canResolveStream(entry)
-        || TizenStreamingServerResolver.canResolveStream(entry)
+        DirectDebridResolver.shouldListStream(entry) ||
+        WebOsEngineFsResolver.canResolveStream(entry) ||
+        TizenStreamingServerResolver.canResolveStream(entry)
       ) {
         flattened.push(entry);
       }
@@ -270,12 +284,14 @@ function renderMetaItem(kind, value) {
 }
 
 function extractPeerCount(stream = {}) {
-  const text = String([
-    stream.name || "",
-    stream.title || "",
-    stream.description || "",
-    stream.behaviorHints?.filename || ""
-  ].join(" "));
+  const text = String(
+    [
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      stream.behaviorHints?.filename || ""
+    ].join(" ")
+  );
   const patterns = [
     /\bseed(?:ers?)?\s*[:\-]?\s*(\d{1,5})\b/i,
     /\bpeers?\s*[:\-]?\s*(\d{1,5})\b/i,
@@ -299,23 +315,20 @@ function extractIndexerName(stream = {}) {
       return value;
     }
   }
-  const searchText = String([
-    stream.name || "",
-    stream.title || "",
-    stream.description || "",
-    stream.behaviorHints?.filename || ""
-  ].join(" "));
-  const known = [
-    "ThePirateBay",
-    "1337x",
-    "RARBG",
-    "YTS",
-    "EZTV",
-    "TorBox",
-    "Torrentio",
-    "Orion"
-  ];
-  return known.find((entry) => new RegExp(entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(searchText)) || "";
+  const searchText = String(
+    [
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      stream.behaviorHints?.filename || ""
+    ].join(" ")
+  );
+  const known = ["ThePirateBay", "1337x", "RARBG", "YTS", "EZTV", "TorBox", "Torrentio", "Orion"];
+  return (
+    known.find((entry) =>
+      new RegExp(entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(searchText)
+    ) || ""
+  );
 }
 
 function getAddonBadgeLabel(name = "") {
@@ -385,8 +398,7 @@ async function warmAddonLogoPreview(url = "") {
       directImage.decoding = "async";
       try {
         directImage.referrerPolicy = "no-referrer";
-      } catch (_) {
-      }
+      } catch (_) {}
       directImage.onload = () => {
         (async () => {
           await awaitImageDecoded(directImage);
@@ -414,8 +426,7 @@ async function warmAddonLogoPreview(url = "") {
               settle(true);
               return;
             }
-          } catch (_) {
-          }
+          } catch (_) {}
           finishDirect();
         })();
         return;
@@ -426,12 +437,10 @@ async function warmAddonLogoPreview(url = "") {
     image.decoding = "async";
     try {
       image.crossOrigin = "anonymous";
-    } catch (_) {
-    }
+    } catch (_) {}
     try {
       image.referrerPolicy = "no-referrer";
-    } catch (_) {
-    }
+    } catch (_) {}
     image.onload = () => finish(image);
     image.onerror = loadDirect;
     image.src = normalized;
@@ -465,7 +474,10 @@ export async function preloadStreamBadgeImages(settings = StreamBadgeSettingsSto
   await Promise.all(Array.from(urls).map((url) => requestAddonLogo(url)));
 }
 
-async function preloadMatchedStreamBadgeImages(streams = [], settings = StreamBadgeSettingsStore.snapshot()) {
+async function preloadMatchedStreamBadgeImages(
+  streams = [],
+  settings = StreamBadgeSettingsStore.snapshot()
+) {
   const urls = new Set();
   (streams || []).forEach((stream) => {
     matchStreamBadges(stream, settings?.rules)
@@ -484,9 +496,7 @@ async function preloadAddonLogoImages(streams = [], lookup = {}) {
   const urls = new Set();
   (streams || []).forEach((stream) => {
     const url = normalizeAddonLogoUrl(
-      stream?.addonLogo
-      || stream?.raw?.addonLogo
-      || resolveAddonLogo(stream?.addonName, lookup)
+      stream?.addonLogo || stream?.raw?.addonLogo || resolveAddonLogo(stream?.addonName, lookup)
     );
     if (url) {
       urls.add(url);
@@ -501,9 +511,7 @@ function hydrateAddonLogoCache() {
   }
   addonLogoCacheHydrated = true;
   const cached = LocalStore.get(ADDON_LOGO_CACHE_KEY, {});
-  const entries = cached && typeof cached === "object" && !Array.isArray(cached)
-    ? cached
-    : {};
+  const entries = cached && typeof cached === "object" && !Array.isArray(cached) ? cached : {};
   Object.keys(entries).forEach((url) => {
     const entry = entries[url];
     const dataUrl = String(entry?.dataUrl || "").trim();
@@ -521,11 +529,12 @@ function hydrateAddonLogoCache() {
 function persistAddonLogoCache() {
   addonLogoCachePersistTimer = null;
   const entries = Array.from(addonLogoCache.entries())
-    .filter(([, entry]) => (
-      entry?.status === "ready"
-      && String(entry.displayUrl || "").startsWith("data:image/")
-      && String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
-    ))
+    .filter(
+      ([, entry]) =>
+        entry?.status === "ready" &&
+        String(entry.displayUrl || "").startsWith("data:image/") &&
+        String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
+    )
     .sort((left, right) => Number(right[1].updatedAt || 0) - Number(left[1].updatedAt || 0))
     .slice(0, ADDON_LOGO_CACHE_LIMIT);
   const payload = {};
@@ -688,7 +697,9 @@ function getCachedAddonLogoDisplayUrl(url = "") {
 }
 
 function normalizeAddonLookupKey(value = "") {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function rememberAddonLogoLookup(lookup = {}, addonName = "", addonLogo = "") {
@@ -715,12 +726,7 @@ function buildAddonLogoLookup(addons = []) {
     if (!logo) {
       return;
     }
-    [
-      addon?.displayName,
-      addon?.name,
-      addon?.id,
-      addon?.baseUrl
-    ].forEach((key) => {
+    [addon?.displayName, addon?.name, addon?.id, addon?.baseUrl].forEach((key) => {
       rememberAddonLogoLookup(lookup, key, lookup[normalizeAddonLookupKey(key)] || logo);
     });
   });
@@ -740,39 +746,43 @@ function rememberFailedAddonLogo(url = "") {
 }
 
 function getStreamHeadline(stream = {}) {
-  const primary = [
-    stream.name,
-    stream.title,
-    stream.description
-  ].find((value) => String(value || "").trim());
+  const primary = [stream.name, stream.title, stream.description].find((value) =>
+    String(value || "").trim()
+  );
   if (!primary) {
     return stream.addonName || "Unknown source";
   }
   const firstLine = String(primary).split(/\r?\n/)[0].trim();
-  return firstLine || (stream.addonName || "Unknown source");
+  return firstLine || stream.addonName || "Unknown source";
 }
 
 function getStreamQuality(stream = {}) {
   const qualityLines = [];
   [stream.name, stream.title, stream.description].forEach((value) => {
-    String(value || "").split(/\r?\n/).forEach((line) => {
-      const normalized = String(line || "").trim();
-      if (normalized) {
-        qualityLines.push(normalized);
-      }
-    });
+    String(value || "")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const normalized = String(line || "").trim();
+        if (normalized) {
+          qualityLines.push(normalized);
+        }
+      });
   });
-  const qualityCandidate = qualityLines.find((line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line));
+  const qualityCandidate = qualityLines.find(
+    (line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line)
+  );
   if (qualityCandidate) {
     return qualityCandidate;
   }
-  return detectQuality([
-    stream.name || "",
-    stream.title || "",
-    stream.description || "",
-    stream.behaviorHints?.filename || "",
-    stream.sourceType || ""
-  ].join(" "));
+  return detectQuality(
+    [
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      stream.behaviorHints?.filename || "",
+      stream.sourceType || ""
+    ].join(" ")
+  );
 }
 
 function isMetaNoiseLine(line = "") {
@@ -783,10 +793,16 @@ function isMetaNoiseLine(line = "") {
   if (/[👤💾⚙🧲]/u.test(value)) {
     return true;
   }
-  if (/(?:thepiratebay|torrentio|torbox|1337x|rarbg|yts|eztv|orion)/i.test(value) && /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)) {
+  if (
+    /(?:thepiratebay|torrentio|torbox|1337x|rarbg|yts|eztv|orion)/i.test(value) &&
+    /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)
+  ) {
     return true;
   }
-  if (/\b(?:seed(?:ers?)?|peers?)\b/i.test(value) && /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)) {
+  if (
+    /\b(?:seed(?:ers?)?|peers?)\b/i.test(value) &&
+    /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)
+  ) {
     return true;
   }
   return false;
@@ -799,12 +815,14 @@ function getStreamDescriptionLines(stream = {}) {
     stream.title,
     stream.behaviorHints?.filename
   ].reduce((items, value) => {
-    String(value || "").split(/\r?\n/).forEach((line) => {
-      const normalized = String(line || "").trim();
-      if (normalized) {
-        items.push(normalized);
-      }
-    });
+    String(value || "")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const normalized = String(line || "").trim();
+        if (normalized) {
+          items.push(normalized);
+        }
+      });
     return items;
   }, []);
   const unique = [];
@@ -855,7 +873,9 @@ function parsedStreamDetails(stream = {}) {
 }
 
 function normalizeCodecBadge(value = "") {
-  const normalized = normalizeBadgeText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = normalizeBadgeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
   if (!normalized) return "";
   if (normalized === "av1") return "AV1";
   if (["hevc", "h265", "x265"].includes(normalized)) return "HEVC";
@@ -924,14 +944,17 @@ function fallbackLanguagesFromText(text = "") {
       matches.push(label);
     }
   };
-  if (/(^|[^a-z0-9])(pt[\s._-]?br|brazilian[\s._-]?portuguese)([^a-z0-9]|$)/i.test(value)) pushMatch("pt-br");
+  if (/(^|[^a-z0-9])(pt[\s._-]?br|brazilian[\s._-]?portuguese)([^a-z0-9]|$)/i.test(value))
+    pushMatch("pt-br");
   if (/(^|[^a-z0-9])(en|eng|english)([^a-z0-9]|$)/i.test(value)) pushMatch("en");
-  if (/(^|[^a-z0-9])(pt|por|portuguese)([^a-z0-9]|$)/i.test(value) && !matches.includes("pt-br")) pushMatch("pt");
+  if (/(^|[^a-z0-9])(pt|por|portuguese)([^a-z0-9]|$)/i.test(value) && !matches.includes("pt-br"))
+    pushMatch("pt");
   if (/(^|[^a-z0-9])(it|ita|italian)([^a-z0-9]|$)/i.test(value)) pushMatch("it");
   if (/(^|[^a-z0-9])(es|spa|spanish)([^a-z0-9]|$)/i.test(value)) pushMatch("es");
   if (/(^|[^a-z0-9])(fr|fra|fre|french)([^a-z0-9]|$)/i.test(value)) pushMatch("fr");
   if (/(^|[^a-z0-9])(de|deu|ger|german)([^a-z0-9]|$)/i.test(value)) pushMatch("de");
-  if (/(^|[^a-z0-9])(multi|multilang|multi[\s._-]?audio)([^a-z0-9]|$)/i.test(value)) pushMatch("multi");
+  if (/(^|[^a-z0-9])(multi|multilang|multi[\s._-]?audio)([^a-z0-9]|$)/i.test(value))
+    pushMatch("multi");
   return matches;
 }
 
@@ -944,7 +967,9 @@ function fallbackPresentationFromText(stream = {}) {
     stream.behaviorHints?.filename,
     stream.sourceType,
     ...(Array.isArray(parsed.languages) ? parsed.languages : [])
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
   const visualTags = [];
   if (/\b(dolby[ ._-]?vision|dovi|dv)\b/i.test(text)) visualTags.push("DV");
   if (/\bhdr10\+|hdr10plus\b/i.test(text)) visualTags.push("HDR10+");
@@ -980,11 +1005,21 @@ function getStreamPresentation(stream = {}) {
   const parsed = parsedStreamDetails(stream);
   const presentation = stream.streamPresentation || stream.raw?.streamPresentation || {};
   const fallback = fallbackPresentationFromText(stream);
-  const visualTags = toBadgeArray(presentation.visualTags?.length ? presentation.visualTags : parsed.hdr);
-  const audioTags = toBadgeArray(presentation.audioTags?.length ? presentation.audioTags : parsed.audio);
-  const audioChannels = toBadgeArray(presentation.audioChannels?.length ? presentation.audioChannels : parsed.channels);
-  const languages = toBadgeArray(presentation.languages?.length ? presentation.languages : parsed.languages);
-  const languageEmojis = toBadgeArray(presentation.languageEmojis?.length ? presentation.languageEmojis : []);
+  const visualTags = toBadgeArray(
+    presentation.visualTags?.length ? presentation.visualTags : parsed.hdr
+  );
+  const audioTags = toBadgeArray(
+    presentation.audioTags?.length ? presentation.audioTags : parsed.audio
+  );
+  const audioChannels = toBadgeArray(
+    presentation.audioChannels?.length ? presentation.audioChannels : parsed.channels
+  );
+  const languages = toBadgeArray(
+    presentation.languages?.length ? presentation.languages : parsed.languages
+  );
+  const languageEmojis = toBadgeArray(
+    presentation.languageEmojis?.length ? presentation.languageEmojis : []
+  );
   const resolvedLanguages = languages.length ? languages : fallback.languages;
   return {
     resolution: presentation.resolution || parsed.resolution || fallback.resolution,
@@ -994,7 +1029,9 @@ function getStreamPresentation(stream = {}) {
     audioTags: audioTags.length ? audioTags : fallback.audioTags,
     audioChannels: audioChannels.length ? audioChannels : fallback.audioChannels,
     languages: resolvedLanguages,
-    languageEmojis: languageEmojis.length ? languageEmojis : resolvedLanguages.map(languageBadge).filter(Boolean),
+    languageEmojis: languageEmojis.length
+      ? languageEmojis
+      : resolvedLanguages.map(languageBadge).filter(Boolean),
     size: presentation.size || stream.behaviorHints?.videoSize || fallback.size,
     cached: presentation.cached,
     serviceShortName: presentation.serviceShortName || ""
@@ -1008,14 +1045,26 @@ function buildLegacyStreamBadges(stream = {}, enabled = true, includeSizeBadge =
   const presentation = getStreamPresentation(stream);
   const badges = [];
   const seen = new Set();
-  const quality = normalizeBadgeText(presentation.resolution && presentation.resolution !== "Auto" ? presentation.resolution : getStreamQuality(stream));
+  const quality = normalizeBadgeText(
+    presentation.resolution && presentation.resolution !== "Auto"
+      ? presentation.resolution
+      : getStreamQuality(stream)
+  );
   uniquePushBadge(badges, seen, quality, "quality");
   uniquePushBadge(badges, seen, presentation.quality, "quality");
-  toBadgeArray(presentation.visualTags).slice(0, 3).forEach((tag) => uniquePushBadge(badges, seen, tag, "visual"));
+  toBadgeArray(presentation.visualTags)
+    .slice(0, 3)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "visual"));
   uniquePushBadge(badges, seen, presentation.encode, "codec");
-  toBadgeArray(presentation.languageEmojis).slice(0, 4).forEach((tag) => uniquePushBadge(badges, seen, tag, "language"));
-  toBadgeArray(presentation.audioTags).slice(0, 3).forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
-  toBadgeArray(presentation.audioChannels).slice(0, 1).forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
+  toBadgeArray(presentation.languageEmojis)
+    .slice(0, 4)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "language"));
+  toBadgeArray(presentation.audioTags)
+    .slice(0, 3)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
+  toBadgeArray(presentation.audioChannels)
+    .slice(0, 1)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
   if (includeSizeBadge) {
     uniquePushBadge(badges, seen, formatBytes(presentation.size), "size");
   }
@@ -1037,7 +1086,10 @@ function renderImageBadgeChip(badge = {}) {
   const backgroundColor = normalizeStreamBadgeChipColor(badge.tagColor);
   const outlineColor = normalizeStreamBadgeChipColor(badge.borderColor);
   const textColor = normalizeStreamBadgeChipColor(badge.textColor);
-  const filled = String(badge.tagStyle || "").trim().toLowerCase() === "filled";
+  const filled =
+    String(badge.tagStyle || "")
+      .trim()
+      .toLowerCase() === "filled";
   const fallbackImageUrl = Environment.isWebOS() ? "" : imageUrl;
   const safeImageUrl = displayImageUrl || fallbackImageUrl;
   const style = [
@@ -1047,9 +1099,11 @@ function renderImageBadgeChip(badge = {}) {
   ].join("");
   return `
     <span class="stream-route-stream-badge image${filled ? " filled" : ""}"${style ? ` style="${escapeHtml(style)}"` : ""}>
-      ${safeImageUrl
-        ? `<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
-        : ""}
+      ${
+        safeImageUrl
+          ? `<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+          : ""
+      }
     </span>
   `;
 }
@@ -1058,7 +1112,9 @@ function renderImportedStreamBadgeChips(stream = {}, badges = [], showFileSizeBa
   const sizeBytes = stream.behaviorHints?.videoSize;
   const chips = [];
   if (showFileSizeBadges && sizeBytes != null) {
-    chips.push(`<span class="stream-route-stream-badge size">${escapeHtml(t("streams_size", [formatBytes(sizeBytes)], `SIZE ${formatBytes(sizeBytes)}`))}</span>`);
+    chips.push(
+      `<span class="stream-route-stream-badge size">${escapeHtml(t("streams_size", [formatBytes(sizeBytes)], `SIZE ${formatBytes(sizeBytes)}`))}</span>`
+    );
   }
   badges.slice(0, STREAM_BADGE_LIMIT).forEach((badge) => {
     chips.push(renderImageBadgeChip(badge));
@@ -1072,10 +1128,18 @@ function renderStreamBadges(stream = {}, enabled = true, badgeSettings = null) {
   const currentBadgeSettings = badgeSettings || StreamBadgeSettingsStore.snapshot();
   const importedBadges = matchStreamBadges(stream, currentBadgeSettings.rules);
   if (importedBadges.length) {
-    return renderImportedStreamBadgeChips(stream, importedBadges, currentBadgeSettings.showFileSizeBadges !== false);
+    return renderImportedStreamBadgeChips(
+      stream,
+      importedBadges,
+      currentBadgeSettings.showFileSizeBadges !== false
+    );
   }
 
-  const badges = buildLegacyStreamBadges(stream, enabled, currentBadgeSettings.showFileSizeBadges !== false);
+  const badges = buildLegacyStreamBadges(
+    stream,
+    enabled,
+    currentBadgeSettings.showFileSizeBadges !== false
+  );
   if (!badges.length) {
     return "";
   }
@@ -1087,7 +1151,11 @@ function renderStreamBadges(stream = {}, enabled = true, badgeSettings = null) {
 }
 
 function resolveStreamBadgePlacement(badgeSettings = null) {
-  const placement = String((badgeSettings || StreamBadgeSettingsStore.snapshot()).badgePlacement || "BOTTOM").trim().toUpperCase();
+  const placement = String(
+    (badgeSettings || StreamBadgeSettingsStore.snapshot()).badgePlacement || "BOTTOM"
+  )
+    .trim()
+    .toUpperCase();
   return placement === "TOP" ? "TOP" : "BOTTOM";
 }
 
@@ -1095,7 +1163,11 @@ function getOrderedFilterNames(sourceChips = [], streams = []) {
   const ordered = [];
   const sortedChips = (sourceChips || [])
     .slice()
-    .sort((left, right) => Number(left?.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right?.orderIndex ?? Number.MAX_SAFE_INTEGER));
+    .sort(
+      (left, right) =>
+        Number(left?.orderIndex ?? Number.MAX_SAFE_INTEGER) -
+        Number(right?.orderIndex ?? Number.MAX_SAFE_INTEGER)
+    );
   sortedChips.forEach((chip) => {
     if (chip?.name && !ordered.includes(chip.name)) {
       ordered.push(chip.name);
@@ -1147,7 +1219,6 @@ function sortStreamsByAddonOrder(streams = [], sourceChips = []) {
 }
 
 export const StreamScreen = {
-
   cancelScheduledRender() {
     if (this.renderDelayTimer) {
       clearTimeout(this.renderDelayTimer);
@@ -1200,8 +1271,9 @@ export const StreamScreen = {
 
   areAddonLogosReady(streams = []) {
     return (streams || []).every((stream) => {
-      const addonLogoUrl = normalizeAddonLogoUrl(stream?.addonLogo)
-        || resolveAddonLogo(stream?.addonName, this.addonLogoLookup);
+      const addonLogoUrl =
+        normalizeAddonLogoUrl(stream?.addonLogo) ||
+        resolveAddonLogo(stream?.addonName, this.addonLogoLookup);
       if (!addonLogoUrl || failedAddonLogoUrls.has(addonLogoUrl)) {
         return true;
       }
@@ -1210,9 +1282,19 @@ export const StreamScreen = {
   },
 
   requestAddonLogoPrerender(streams = []) {
-    const urls = Array.from(new Set((streams || [])
-      .map((stream) => normalizeAddonLogoUrl(stream?.addonLogo) || resolveAddonLogo(stream?.addonName, this.addonLogoLookup))
-      .filter((url) => url && !failedAddonLogoUrls.has(url) && !getCachedAddonLogoDisplayUrl(url))));
+    const urls = Array.from(
+      new Set(
+        (streams || [])
+          .map(
+            (stream) =>
+              normalizeAddonLogoUrl(stream?.addonLogo) ||
+              resolveAddonLogo(stream?.addonName, this.addonLogoLookup)
+          )
+          .filter(
+            (url) => url && !failedAddonLogoUrls.has(url) && !getCachedAddonLogoDisplayUrl(url)
+          )
+      )
+    );
     if (!urls.length) {
       return;
     }
@@ -1222,15 +1304,14 @@ export const StreamScreen = {
     }
     const token = this.loadToken || 0;
     this.pendingAddonLogoPrerenderKey = key;
-    void preloadAddonLogoImages(streams, this.addonLogoLookup)
-      .finally(() => {
-        if (this.pendingAddonLogoPrerenderKey === key) {
-          this.pendingAddonLogoPrerenderKey = "";
-        }
-        if (this.container && Router.getCurrent() === "stream" && token === this.loadToken) {
-          this.requestRender();
-        }
-      });
+    void preloadAddonLogoImages(streams, this.addonLogoLookup).finally(() => {
+      if (this.pendingAddonLogoPrerenderKey === key) {
+        this.pendingAddonLogoPrerenderKey = "";
+      }
+      if (this.container && Router.getCurrent() === "stream" && token === this.loadToken) {
+        this.requestRender();
+      }
+    });
   },
 
   scheduleDebridPreparation() {
@@ -1253,18 +1334,19 @@ export const StreamScreen = {
           if (!this.container || Router.getCurrent() !== "stream" || token !== this.loadToken) {
             return;
           }
-          const keyFor = (stream) => [
-            stream.clientResolve?.service || "",
-            stream.clientResolve?.infoHash || stream.infoHash || "",
-            stream.clientResolve?.fileIdx ?? stream.fileIdx ?? "",
-            stream.clientResolve?.filename || stream.behaviorHints?.filename || "",
-            stream.name || "",
-            stream.title || ""
-          ].join("|");
+          const keyFor = (stream) =>
+            [
+              stream.clientResolve?.service || "",
+              stream.clientResolve?.infoHash || stream.infoHash || "",
+              stream.clientResolve?.fileIdx ?? stream.fileIdx ?? "",
+              stream.clientResolve?.filename || stream.behaviorHints?.filename || "",
+              stream.name || "",
+              stream.title || ""
+            ].join("|");
           const originalKey = keyFor(original);
-          this.streams = this.streams.map((stream) => (
+          this.streams = this.streams.map((stream) =>
             keyFor(stream) === originalKey ? { ...stream, ...prepared } : stream
-          ));
+          );
           this.requestRender();
         }
       });
@@ -1290,20 +1372,24 @@ export const StreamScreen = {
     if (!itemId) {
       return false;
     }
-    void Router.navigate("detail", {
-      itemId,
-      itemType: normalizeType(this.params?.itemType),
-      fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
-      returnHomeOnBack: Boolean(
-        this.params?.continueWatchingBackHome
-        || this.params?.returnHomeOnBack
-        || this.params?.returnToDetail
-        || this.params?.fromDetailRoute
-      )
-    }, {
-      skipStackPush: true,
-      replaceHistory: true
-    });
+    void Router.navigate(
+      "detail",
+      {
+        itemId,
+        itemType: normalizeType(this.params?.itemType),
+        fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
+        returnHomeOnBack: Boolean(
+          this.params?.continueWatchingBackHome ||
+          this.params?.returnHomeOnBack ||
+          this.params?.returnToDetail ||
+          this.params?.fromDetailRoute
+        )
+      },
+      {
+        skipStackPush: true,
+        replaceHistory: true
+      }
+    );
     return true;
   },
 
@@ -1320,7 +1406,9 @@ export const StreamScreen = {
       streams: Array.isArray(this.streams) ? this.streams.map((stream) => ({ ...stream })) : [],
       addonFilter: String(this.addonFilter || "all"),
       focusState: this.focusState ? { ...this.focusState } : { zone: "filter", index: 0 },
-      sourceChips: Array.isArray(this.sourceChips) ? this.sourceChips.map((chip) => ({ ...chip })) : [],
+      sourceChips: Array.isArray(this.sourceChips)
+        ? this.sourceChips.map((chip) => ({ ...chip }))
+        : [],
       addonLogoLookup: this.addonLogoLookup ? { ...this.addonLogoLookup } : {},
       listScrollTop: Number(list?.scrollTop || 0)
     };
@@ -1341,6 +1429,7 @@ export const StreamScreen = {
     this.addonLogoLookup = {};
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
+    this.autoResumeAttempted = false;
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
       this.releaseImageProxyReadyListener = null;
@@ -1353,19 +1442,27 @@ export const StreamScreen = {
       void ensureWebOsImageProxyReady();
     }
 
-    const restored = navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
-      ? navigationContext.restoredState
-      : null;
+    const restored =
+      navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
+        ? navigationContext.restoredState
+        : null;
     if (restored) {
       this.loading = Boolean(restored.loading);
       this.error = String(restored.error || "");
-      this.streams = Array.isArray(restored.streams) ? restored.streams.map((stream) => ({ ...stream })) : [];
+      this.streams = Array.isArray(restored.streams)
+        ? restored.streams.map((stream) => ({ ...stream }))
+        : [];
       this.addonFilter = String(restored.addonFilter || "all");
-      this.focusState = restored.focusState ? { ...restored.focusState } : { zone: "filter", index: 0 };
-      this.sourceChips = Array.isArray(restored.sourceChips) ? restored.sourceChips.map((chip) => ({ ...chip })) : [];
-      this.addonLogoLookup = restored.addonLogoLookup && typeof restored.addonLogoLookup === "object"
-        ? normalizeAddonLogoLookup(restored.addonLogoLookup)
-        : {};
+      this.focusState = restored.focusState
+        ? { ...restored.focusState }
+        : { zone: "filter", index: 0 };
+      this.sourceChips = Array.isArray(restored.sourceChips)
+        ? restored.sourceChips.map((chip) => ({ ...chip }))
+        : [];
+      this.addonLogoLookup =
+        restored.addonLogoLookup && typeof restored.addonLogoLookup === "object"
+          ? normalizeAddonLogoLookup(restored.addonLogoLookup)
+          : {};
       this.listScrollTop = Number(restored.listScrollTop || 0);
     }
 
@@ -1464,12 +1561,14 @@ export const StreamScreen = {
         .filter((entry) => entry.name);
       const successSet = new Set(entries.map((entry) => entry.name));
       const known = new Set(this.sourceChips.map((chip) => chip.name));
-      this.sourceChips = this.sourceChips.map((chip) => (
+      this.sourceChips = this.sourceChips.map((chip) =>
         successSet.has(chip.name) ? { ...chip, status: "success" } : chip
-      ));
+      );
       entries.forEach((entry) => {
         if (!known.has(entry.name)) {
-          const orderIndex = Number.isFinite(entry.orderIndex) ? entry.orderIndex : Number.MAX_SAFE_INTEGER;
+          const orderIndex = Number.isFinite(entry.orderIndex)
+            ? entry.orderIndex
+            : Number.MAX_SAFE_INTEGER;
           this.sourceChips.push({
             name: entry.name,
             logo: entry.logo || resolveAddonLogo(entry.name, this.addonLogoLookup),
@@ -1480,7 +1579,11 @@ export const StreamScreen = {
       });
       this.sourceChips = this.sourceChips
         .slice()
-        .sort((left, right) => Number(left.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right.orderIndex ?? Number.MAX_SAFE_INTEGER));
+        .sort(
+          (left, right) =>
+            Number(left.orderIndex ?? Number.MAX_SAFE_INTEGER) -
+            Number(right.orderIndex ?? Number.MAX_SAFE_INTEGER)
+        );
     };
 
     const displayChunkGroups = async (groups = []) => {
@@ -1503,11 +1606,13 @@ export const StreamScreen = {
       }
       this.streams = mergeStreamItems(this.streams, chunkStreams);
       this.scheduleDebridPreparation();
-      markSuccessfulSources(groups.map((group) => ({
-        name: group?.addonName || "",
-        logo: group?.addonLogo || "",
-        orderIndex: group?.addonOrderIndex
-      })));
+      markSuccessfulSources(
+        groups.map((group) => ({
+          name: group?.addonName || "",
+          logo: group?.addonLogo || "",
+          orderIndex: group?.addonOrderIndex
+        }))
+      );
       if (this.streams.length && this.focusState?.zone !== "card") {
         this.focusState = { zone: "card", index: 0 };
       }
@@ -1547,16 +1652,25 @@ export const StreamScreen = {
     };
 
     try {
-      const streamResult = await streamRepository.getStreamsFromAllAddons(itemType, videoId, options);
+      const streamResult = await streamRepository.getStreamsFromAllAddons(
+        itemType,
+        videoId,
+        options
+      );
       if (token !== this.loadToken) {
         return;
       }
-      const loadedStreams = mergeStreamItems([], this.applyAddonLogos(flattenStreams(streamResult)));
+      const loadedStreams = mergeStreamItems(
+        [],
+        this.applyAddonLogos(flattenStreams(streamResult))
+      );
       await Promise.allSettled(Array.from(pendingChunkTasks));
       if (token !== this.loadToken) {
         return;
       }
-      const existingKeys = new Set(this.streams.map((stream) => streamMergeKey(stream)).filter(Boolean));
+      const existingKeys = new Set(
+        this.streams.map((stream) => streamMergeKey(stream)).filter(Boolean)
+      );
       const missingStreams = loadedStreams.filter((stream) => {
         const key = streamMergeKey(stream);
         return key && !existingKeys.has(key);
@@ -1576,26 +1690,30 @@ export const StreamScreen = {
       if (this.streams.length) {
         await preloadAddonLogoImages(this.streams, this.addonLogoLookup);
       }
-      this.sourceChips = this.sourceChips.map((chip) => (
+      this.sourceChips = this.sourceChips.map((chip) =>
         chip.status === "loading" ? { ...chip, status: "error" } : chip
-      ));
+      );
       this.loading = false;
       if (this.streams.length) {
-        this.focusState = { zone: "card", index: clamp(Number(this.focusState?.index || 0), 0, this.streams.length - 1) };
+        this.focusState = {
+          zone: "card",
+          index: clamp(Number(this.focusState?.index || 0), 0, this.streams.length - 1)
+        };
       } else {
         this.focusState = { zone: "filter", index: 0 };
       }
       this.requestRender();
       this.scheduleErrorChipCleanup();
+      this.maybeAutoResumeStream();
     } catch (error) {
       if (token !== this.loadToken) {
         return;
       }
       this.loading = false;
       this.error = error?.message || "Failed to load streams.";
-      this.sourceChips = this.sourceChips.map((chip) => (
+      this.sourceChips = this.sourceChips.map((chip) =>
         chip.status === "loading" ? { ...chip, status: "error" } : chip
-      ));
+      );
       this.requestRender();
       this.scheduleErrorChipCleanup();
     }
@@ -1645,7 +1763,10 @@ export const StreamScreen = {
       this.focusState = { zone: "card", index: clamp(preferredIndex, 0, filtered.length - 1) };
     } else {
       const ordered = ["all", ...this.getOrderedFilterNames()];
-      this.focusState = { zone: "filter", index: clamp(ordered.indexOf(targetFilter), 0, Math.max(0, ordered.length - 1)) };
+      this.focusState = {
+        zone: "filter",
+        index: clamp(ordered.indexOf(targetFilter), 0, Math.max(0, ordered.length - 1))
+      };
     }
     this.listScrollTop = 0;
     this.render();
@@ -1660,7 +1781,9 @@ export const StreamScreen = {
     if (!target) {
       return false;
     }
-    this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
+    this.container
+      .querySelectorAll(".focusable")
+      .forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     try {
       target.focus({ preventScroll: true });
@@ -1695,7 +1818,10 @@ export const StreamScreen = {
     if (!listNode) {
       return;
     }
-    const maxScrollTop = Math.max(0, Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0));
+    const maxScrollTop = Math.max(
+      0,
+      Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0)
+    );
     const normalized = clamp(Number(nextScrollTop || 0), 0, maxScrollTop);
     listNode.scrollTop = normalized;
     if (typeof listNode.scrollTo === "function") {
@@ -1715,10 +1841,18 @@ export const StreamScreen = {
     const viewTop = Number(listNode.scrollTop || 0);
     let itemTop = Number(target.offsetTop || 0);
     let itemBottom = itemTop + Number(target.offsetHeight || 0);
-    if (typeof listNode.getBoundingClientRect === "function" && typeof target.getBoundingClientRect === "function") {
+    if (
+      typeof listNode.getBoundingClientRect === "function" &&
+      typeof target.getBoundingClientRect === "function"
+    ) {
       const listRect = listNode.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      if (listRect && targetRect && Number.isFinite(targetRect.top) && Number.isFinite(listRect.top)) {
+      if (
+        listRect &&
+        targetRect &&
+        Number.isFinite(targetRect.top) &&
+        Number.isFinite(listRect.top)
+      ) {
         itemTop = viewTop + (targetRect.top - listRect.top);
         itemBottom = viewTop + (targetRect.bottom - listRect.top);
       }
@@ -1793,7 +1927,9 @@ export const StreamScreen = {
     const episodeLabel = normalizeEpisodeCode(this.params?.season, this.params?.episode);
     const detailLine = isSeries
       ? ""
-      : [String(this.params?.genres || "").trim(), String(this.params?.year || "").trim()].filter(Boolean).join(" • ");
+      : [String(this.params?.genres || "").trim(), String(this.params?.year || "").trim()]
+          .filter(Boolean)
+          .join(" • ");
     return { isSeries, title, subtitle, episodeLabel, detailLine };
   },
 
@@ -1804,8 +1940,13 @@ export const StreamScreen = {
       "focusable",
       selected ? "selected" : "",
       chipStatus !== "success" ? chipStatus : ""
-    ].filter(Boolean).join(" ");
-    const spinner = chipStatus === "loading" ? '<span class="stream-route-chip-spinner" aria-hidden="true"></span>' : "";
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const spinner =
+      chipStatus === "loading"
+        ? '<span class="stream-route-chip-spinner" aria-hidden="true"></span>'
+        : "";
     return `
       <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml(name)}">
         ${spinner}
@@ -1822,7 +1963,9 @@ export const StreamScreen = {
     const topBadges = badgePlacement === "TOP" ? badges : "";
     const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
     const descriptionLines = getStreamDescriptionLines(stream);
-    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
+    const addonLogoUrl =
+      normalizeAddonLogoUrl(stream.addonLogo) ||
+      resolveAddonLogo(stream.addonName, this.addonLogoLookup);
     const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
     let displayAddonLogoUrl = cachedAddonLogoUrl || "";
     if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
@@ -1836,9 +1979,11 @@ export const StreamScreen = {
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
       renderMetaItem("source", extractIndexerName(stream))
-    ].filter(Boolean).join("");
-    const addonLogoLoading = (Environment.isWebOS() || Environment.isTizen()) ? "eager" : "lazy";
-    const addonLogoDecoding = (Environment.isWebOS() || Environment.isTizen()) ? "sync" : "async";
+    ]
+      .filter(Boolean)
+      .join("");
+    const addonLogoLoading = Environment.isWebOS() || Environment.isTizen() ? "eager" : "lazy";
+    const addonLogoDecoding = Environment.isWebOS() || Environment.isTizen() ? "sync" : "async";
     const addonBadge = displayAddonLogoUrl
       ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="${addonLogoDecoding}" loading="${addonLogoLoading}" referrerpolicy="no-referrer" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
@@ -1865,14 +2010,18 @@ export const StreamScreen = {
 
   renderLoadingCards(count = 3) {
     const safeCount = Math.max(1, Number(count || 0));
-    return Array.from({ length: safeCount }).map(() => `
+    return Array.from({ length: safeCount })
+      .map(
+        () => `
       <div class="stream-route-card skeleton">
         <div class="stream-route-skeleton-line wide"></div>
         <div class="stream-route-skeleton-line short"></div>
         <div class="stream-route-skeleton-line"></div>
         <div class="stream-route-skeleton-line"></div>
       </div>
-    `).join("");
+    `
+      )
+      .join("");
   },
 
   render() {
@@ -1885,7 +2034,10 @@ export const StreamScreen = {
     const chips = [
       this.renderChip("all", this.addonFilter === "all", "success"),
       ...orderedFilters.map((name) => {
-        const chip = this.sourceChips.find((entry) => entry.name === name) || { name, status: "success" };
+        const chip = this.sourceChips.find((entry) => entry.name === name) || {
+          name,
+          status: "success"
+        };
         return this.renderChip(name, this.addonFilter === name, chip.status);
       })
     ].join("");
@@ -1898,7 +2050,11 @@ export const StreamScreen = {
 
     let body = "";
     if (filtered.length && addonLogosReady) {
-      body = filtered.map((stream, index) => this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)).join("");
+      body = filtered
+        .map((stream, index) =>
+          this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)
+        )
+        .join("");
       if (hasPendingForFilter) {
         body += this.renderLoadingCards(1);
       }
@@ -1925,7 +2081,7 @@ export const StreamScreen = {
               ${logo ? `<img src="${logo}" class="stream-route-logo" alt="${escapeHtml(title)}" />` : `<h1 class="stream-route-title">${escapeHtml(title)}</h1>`}
               ${episodeLabel ? `<div class="stream-route-episode-code">${escapeHtml(episodeLabel)}</div>` : ""}
               ${subtitle ? `<div class="stream-route-subtitle">${escapeHtml(subtitle)}</div>` : ""}
-              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml(detailLine)}</div>` : (!isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml(subtitle)}</div>` : "")}
+              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml(detailLine)}</div>` : !isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml(subtitle)}</div>` : ""}
             </div>
           </section>
           <section class="stream-route-right">
@@ -1955,27 +2111,53 @@ export const StreamScreen = {
     if (!list) {
       return;
     }
-    list.addEventListener("scroll", () => {
-      this.listScrollTop = Number(list.scrollTop || 0);
-    }, { passive: true });
+    list.addEventListener(
+      "scroll",
+      () => {
+        this.listScrollTop = Number(list.scrollTop || 0);
+      },
+      { passive: true }
+    );
   },
 
   bindAddonLogoFallbacks() {
-    this.container?.querySelectorAll(".stream-route-addon-badge img[data-addon-logo]").forEach((node) => {
-      if (!(node instanceof HTMLImageElement) || node.dataset.fallbackBound === "true") {
-        return;
-      }
-      node.dataset.fallbackBound = "true";
-      const fallback = node.nextElementSibling;
-      const applyFallback = () => {
-        rememberFailedAddonLogo(node.dataset.addonLogo || node.getAttribute("src") || "");
-        node.hidden = true;
-        if (fallback instanceof HTMLElement) {
-          fallback.hidden = false;
+    this.container
+      ?.querySelectorAll(".stream-route-addon-badge img[data-addon-logo]")
+      .forEach((node) => {
+        if (!(node instanceof HTMLImageElement) || node.dataset.fallbackBound === "true") {
+          return;
         }
-      };
-      node.addEventListener("error", applyFallback, { once: true });
-    });
+        node.dataset.fallbackBound = "true";
+        const fallback = node.nextElementSibling;
+        const applyFallback = () => {
+          rememberFailedAddonLogo(node.dataset.addonLogo || node.getAttribute("src") || "");
+          node.hidden = true;
+          if (fallback instanceof HTMLElement) {
+            fallback.hidden = false;
+          }
+        };
+        node.addEventListener("error", applyFallback, { once: true });
+      });
+  },
+
+  // Continue Watching passes the identity of the stream that was playing. If a
+  // matching source reappears in the freshly-loaded list, resume it directly
+  // instead of forcing the user to re-pick a link (issue #232). Identities are
+  // debrid/infoHash-stable; ephemeral direct URLs simply won't match and fall
+  // back to the normal picker.
+  maybeAutoResumeStream() {
+    if (this.autoResumeAttempted) {
+      return;
+    }
+    const identity = String(this.params?.resumeStreamIdentity || "").trim();
+    if (!identity || !this.streams.length) {
+      return;
+    }
+    this.autoResumeAttempted = true;
+    const match = this.streams.find((stream) => streamMergeKey(stream) === identity);
+    if (match?.id) {
+      void this.playStream(match.id);
+    }
   },
 
   async playStream(streamId) {
@@ -1993,9 +2175,10 @@ export const StreamScreen = {
       imdbId: this.params?.imdbId || null,
       videoId: this.params?.videoId || null,
       resumePositionMs: Number(this.params?.resumePositionMs || 0) || 0,
-      episodeLabel: this.params?.season && this.params?.episode
-        ? `S${this.params.season}E${this.params.episode}`
-        : null,
+      episodeLabel:
+        this.params?.season && this.params?.episode
+          ? `S${this.params.season}E${this.params.episode}`
+          : null,
       playerTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
       playerSubtitle: this.params?.episodeTitle || this.params?.playerSubtitle || "",
       playerEpisodeTitle: this.params?.episodeTitle || "",
@@ -2082,7 +2265,11 @@ export const StreamScreen = {
             const currentFilter = ordered[clamp(index, 0, ordered.length - 1)] || "all";
             const currentPosition = ordered.indexOf(currentFilter);
             const nextFilter = ordered[clamp(currentPosition - 1, 0, ordered.length - 1)];
-            this.setAddonFilter(nextFilter, "filter", clamp(index - 1, 0, Math.max(0, chips.length - 1)));
+            this.setAddonFilter(
+              nextFilter,
+              "filter",
+              clamp(index - 1, 0, Math.max(0, chips.length - 1))
+            );
           }
           return;
         }
@@ -2092,7 +2279,11 @@ export const StreamScreen = {
             const currentFilter = ordered[clamp(index, 0, ordered.length - 1)] || "all";
             const currentPosition = ordered.indexOf(currentFilter);
             const nextFilter = ordered[clamp(currentPosition + 1, 0, ordered.length - 1)];
-            this.setAddonFilter(nextFilter, "filter", clamp(index + 1, 0, Math.max(0, chips.length - 1)));
+            this.setAddonFilter(
+              nextFilter,
+              "filter",
+              clamp(index + 1, 0, Math.max(0, chips.length - 1))
+            );
           }
           return;
         }
@@ -2112,13 +2303,20 @@ export const StreamScreen = {
           }
           this.focusState = {
             zone: "filter",
-            index: clamp(["all", ...this.getOrderedFilterNames()].indexOf(this.addonFilter), 0, Math.max(0, chips.length - 1))
+            index: clamp(
+              ["all", ...this.getOrderedFilterNames()].indexOf(this.addonFilter),
+              0,
+              Math.max(0, chips.length - 1)
+            )
           };
           this.applyFocus();
           return;
         }
         if (direction === "down") {
-          this.focusState = { zone: "card", index: clamp(index + 1, 0, Math.max(0, cards.length - 1)) };
+          this.focusState = {
+            zone: "card",
+            index: clamp(index + 1, 0, Math.max(0, cards.length - 1))
+          };
           this.applyFocus();
           return;
         }
@@ -2145,7 +2343,11 @@ export const StreamScreen = {
     const action = String(current.dataset.action || "");
     if (action === "setFilter") {
       const addon = String(current.dataset.addon || "all");
-      this.setAddonFilter(addon, "filter", Array.from(this.container.querySelectorAll(".stream-route-chip.focusable")).indexOf(current));
+      this.setAddonFilter(
+        addon,
+        "filter",
+        Array.from(this.container.querySelectorAll(".stream-route-chip.focusable")).indexOf(current)
+      );
       return;
     }
     if (action === "playStream") {
@@ -2155,7 +2357,7 @@ export const StreamScreen = {
 
   cleanup() {
     this.loadToken = (this.loadToken || 0) + 1;
-    this.playResolveToken = (Number(this.playResolveToken || 0) + 1);
+    this.playResolveToken = Number(this.playResolveToken || 0) + 1;
     this.cancelScheduledRender();
     if (this.errorChipTimer) {
       clearTimeout(this.errorChipTimer);
@@ -2167,5 +2369,4 @@ export const StreamScreen = {
     }
     ScreenUtils.hide(this.container);
   }
-
 };

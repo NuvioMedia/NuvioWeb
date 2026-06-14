@@ -100,19 +100,13 @@ function supportsAspectRatio() {
 }
 
 function applyPerformanceMode() {
-  const constrained =
-    Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
-  const webOsMajorVersion = Platform.isWebOS()
-    ? Number(Platform.getWebOsMajorVersion() || 0)
-    : 0;
+  const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
+  const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
   const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
   const legacyTizen = Platform.isTizen();
   const flexGapUnsupported = !supportsFlexGap();
   const aspectRatioUnsupported = !supportsAspectRatio();
-  document.documentElement.classList.toggle(
-    "performance-constrained",
-    constrained,
-  );
+  document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
   document.body.classList.toggle("legacy-webos", legacyWebOs);
@@ -120,18 +114,13 @@ function applyPerformanceMode() {
   document.body.classList.toggle("legacy-tizen", legacyTizen);
   document.documentElement.classList.toggle("no-flex-gap", flexGapUnsupported);
   document.body.classList.toggle("no-flex-gap", flexGapUnsupported);
-  document.documentElement.classList.toggle(
-    "no-aspect-ratio",
-    aspectRatioUnsupported,
-  );
+  document.documentElement.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
   document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
 }
 
 function isAddonRemoteMode() {
   try {
-    return (
-      new URLSearchParams(window.location.search).get("addonsRemote") === "1"
-    );
+    return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
   } catch {
     return false;
   }
@@ -143,14 +132,10 @@ async function shouldShowProfileSelection() {
   const activeProfileId = ProfileManager.getActiveProfileId();
   const pinStates = await ProfileSyncService.pullProfileLockStates();
   const activeProfileHasPin = Boolean(
-    pinStates?.[String(activeProfileId)] ||
-    pinStates?.[Number(activeProfileId)],
+    pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]
   );
 
-  return (
-    !hasSelectedProfileThisSession &&
-    (profiles.length > 1 || activeProfileHasPin)
-  );
+  return !hasSelectedProfileThisSession && (profiles.length > 1 || activeProfileHasPin);
 }
 
 async function routeAfterAuthentication() {
@@ -164,9 +149,7 @@ async function routeAfterAuthentication() {
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
   const activeProfile =
-    profiles.find(
-      (profile) => String(profile.id) === String(activeProfileId),
-    ) ||
+    profiles.find((profile) => String(profile.id) === String(activeProfileId)) ||
     profiles[0] ||
     null;
   if (activeProfile) {
@@ -175,6 +158,47 @@ async function routeAfterAuthentication() {
     await ProfileSettingsSyncService.pull(activeProfile.id);
   }
   Router.navigate("home");
+}
+
+async function setupWebOsAppLifecycle() {
+  if (!Platform.isWebOS()) {
+    return;
+  }
+  // webOS keeps the app resident when it is backgrounded (e.g. the user presses
+  // Home instead of exiting from the in-app menu). Relaunching the icon then
+  // fires `webOSRelaunch` on the existing JS context instead of reloading the
+  // page. With no handler the resident instance could stay on a stale/blank
+  // frame and ignore the remote, so the app looked impossible to reopen until a
+  // TV reboot (issue #233). Re-mounting the active route re-renders the UI and
+  // restores focus.
+  let recovering = false;
+  const recover = async () => {
+    if (recovering || !appShellRendered) {
+      return;
+    }
+    recovering = true;
+    try {
+      if (document.body) {
+        document.body.style.removeProperty("display");
+      }
+      const current = Router.getCurrent();
+      // Player/stream routes own transient playback state; send a relaunch to a
+      // safe, fully re-mountable screen instead of trying to rebuild them.
+      const isTransientRoute = current === "player" || current === "stream";
+      const target = current && !isTransientRoute ? current : "home";
+      await Router.navigate(target, target === current ? Router.currentParams || {} : {}, {
+        replaceHistory: true,
+        skipStackPush: true
+      });
+    } catch (error) {
+      console.warn("webOS relaunch recovery failed", error);
+    } finally {
+      recovering = false;
+    }
+  };
+  document.addEventListener("webOSRelaunch", () => {
+    void recover();
+  });
 }
 
 async function bootstrapApp() {
@@ -188,6 +212,7 @@ async function bootstrapApp() {
   PlayerController.init();
 
   FocusEngine.init();
+  setupWebOsAppLifecycle();
 
   ThemeManager.apply();
   I18n.apply();
@@ -202,9 +227,7 @@ async function bootstrapApp() {
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
       hasSelectedProfileThisSession = false;
-      const shouldBypassQr = Boolean(
-        LocalStore.get(GUEST_QR_BYPASS_KEY, false),
-      );
+      const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
       if (isSignedOutRouteAllowed()) {
         return;
       }
@@ -216,15 +239,15 @@ async function bootstrapApp() {
             {},
             {
               replaceHistory: true,
-              skipStackPush: true,
-            },
+              skipStackPush: true
+            }
           );
         }
         return;
       }
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       Router.navigate("authQrSignIn", {
-        onboardingMode: !hasSeenQr,
+        onboardingMode: !hasSeenQr
       });
     }
 
@@ -250,20 +273,16 @@ if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
     () => {
-      const bootstrap = isAddonRemoteMode()
-        ? bootstrapAddonRemoteMode
-        : bootstrapApp;
+      const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
       bootstrap().catch((error) => {
         console.error("App bootstrap failed", error);
         renderFatalError(error);
       });
     },
-    { once: true },
+    { once: true }
   );
 } else {
-  const bootstrap = isAddonRemoteMode()
-    ? bootstrapAddonRemoteMode
-    : bootstrapApp;
+  const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
   bootstrap().catch((error) => {
     console.error("App bootstrap failed", error);
     renderFatalError(error);

@@ -3,6 +3,8 @@ import { Router } from "../../navigation/router.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";
+import { AuthManager } from "../../../core/auth/authManager.js";
+import { LibrarySyncService } from "../../../core/profile/librarySyncService.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
 import {
   activateLegacySidebarAction,
@@ -40,7 +42,6 @@ async function getPhoneManagerUrl() {
 }
 
 export const PluginScreen = {
-
   async mount() {
     this.container = document.getElementById("plugin");
     ScreenUtils.show(this.container);
@@ -53,6 +54,7 @@ export const PluginScreen = {
     this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
     this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
     this.qrOverlayOpen = false;
+    this.syncing = false;
     const [sidebarProfile, model] = await Promise.all([
       getSidebarProfileState(),
       this.collectModel()
@@ -60,14 +62,57 @@ export const PluginScreen = {
     this.sidebarProfile = sidebarProfile;
     this.model = model;
     await this.render({ refreshModel: false });
+    // Self-heal: re-pull linked addons from the account on open. Web-enabled
+    // addons sometimes never appeared on the TV (issue #230); re-syncing here
+    // makes them show up without a restart, and surfaces a status the user can
+    // read since TVs have no console access.
+    if (AuthManager.isAuthenticated) {
+      void this.refreshAddons();
+    }
   },
 
   async collectModel() {
     const addonUrls = addonRepository.getInstalledAddonUrls();
     return {
       addonCount: addonUrls.length,
+      authenticated: AuthManager.isAuthenticated,
+      syncStatus: LibrarySyncService.getLastPullStatus(),
       phoneManagerUrl: await getPhoneManagerUrl()
     };
+  },
+
+  buildSyncStatusText() {
+    if (this.syncing) {
+      return "Syncing addons…";
+    }
+    if (!this.model?.authenticated) {
+      return "Sign in on your phone to link addons.";
+    }
+    const status = this.model?.syncStatus || {};
+    if (status.state === "error") {
+      return "Couldn't reach the addon service — check the TV's internet connection and try Refresh.";
+    }
+    if (this.model?.addonCount > 0) {
+      return "Addons are up to date.";
+    }
+    return "No addons linked yet. Add them on your phone, then press Refresh.";
+  },
+
+  async refreshAddons() {
+    if (this.syncing) {
+      return;
+    }
+    this.syncing = true;
+    await this.render({ refreshModel: true });
+    try {
+      await LibrarySyncService.pull();
+    } catch (error) {
+      console.warn("Addon refresh failed", error);
+    }
+    this.syncing = false;
+    if (Router.getCurrent() === "plugin") {
+      await this.render({ refreshModel: true });
+    }
   },
 
   setRowColumns(row, cols) {
@@ -84,10 +129,12 @@ export const PluginScreen = {
 
   normalizeFocus() {
     const rows = this.getAvailableRows();
-    this.contentRow = rows.includes(this.contentRow) ? this.contentRow : (rows[0] || 0);
+    this.contentRow = rows.includes(this.contentRow) ? this.contentRow : rows[0] || 0;
     const cols = this.getAvailableCols(this.contentRow);
     this.contentCol = cols.includes(this.contentCol) ? this.contentCol : cols[0];
-    const sidebarNodes = this.layoutPrefs?.modernSidebar ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
+    const sidebarNodes = this.layoutPrefs?.modernSidebar
+      ? getModernSidebarNodes(this.container)
+      : getLegacySidebarNodes(this.container);
     this.sidebarFocusIndex = clamp(this.sidebarFocusIndex, 0, Math.max(0, sidebarNodes.length - 1));
   },
 
@@ -96,7 +143,8 @@ export const PluginScreen = {
     if (!container || !target) {
       return;
     }
-    const anchor = target.closest(".addons-installed-card, .addons-large-row, .addons-install-card") || target;
+    const anchor =
+      target.closest(".addons-installed-card, .addons-large-row, .addons-install-card") || target;
     const pad = 56;
     const containerRect = container.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
@@ -167,12 +215,16 @@ export const PluginScreen = {
     this.actionMap = new Map();
     this.setRowColumns(0, [0]);
     this.setRowColumns(1, [0]);
+    this.setRowColumns(2, [0]);
 
     this.actionMap.set("manage_from_phone", async () => {
       await this.openQrOverlay();
     });
     this.actionMap.set("reorder_home_catalogs", async () => {
       Router.navigate("catalogOrder");
+    });
+    this.actionMap.set("refresh_addons", async () => {
+      await this.refreshAddons();
     });
     this.actionMap.set("close_qr_overlay", async () => {
       await this.closeQrOverlay();
@@ -195,6 +247,7 @@ export const PluginScreen = {
                 Manage addons and home catalogs from your phone.
               </p>
               <p class="addons-meta">${escapeHtml(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
+              <p class="addons-sync-status">${escapeHtml(this.buildSyncStatusText())}</p>
               <div role="button"
                    class="addons-large-row addons-large-row-centered addons-focusable"
                    data-zone="content"
@@ -227,10 +280,29 @@ export const PluginScreen = {
                   <span class="addons-large-row-tail material-icons" aria-hidden="true">chevron_right</span>
                 </span>
               </div>
+              <div role="button"
+                   class="addons-large-row addons-large-row-centered addons-focusable"
+                   data-zone="content"
+                   data-row="2"
+                   data-col="0"
+                   data-action-id="refresh_addons"
+                   tabindex="-1"
+                   aria-disabled="${this.syncing ? "true" : "false"}">
+                <span class="addons-large-row-icon material-icons" aria-hidden="true">${this.syncing ? "hourglass_top" : "sync"}</span>
+                <span class="addons-large-row-copy">
+                  <strong>${this.syncing ? "Refreshing…" : "Refresh addons"}</strong>
+                  <small>Re-check your account for addons you enabled on your phone</small>
+                </span>
+                <span class="addons-large-row-tail-group">
+                  <span class="addons-large-row-tail material-icons" aria-hidden="true">refresh</span>
+                </span>
+              </div>
             </section>
           </div>
         </main>
-        ${this.qrOverlayOpen ? `
+        ${
+          this.qrOverlayOpen
+            ? `
           <div class="addons-qr-overlay">
             <div class="addons-qr-dialog">
               <p class="addons-qr-instruction">Scan with your phone to manage addons, catalogs, and collections</p>
@@ -242,7 +314,9 @@ export const PluginScreen = {
               </div>
             </div>
           </div>
-        ` : ""}
+        `
+            : ""
+        }
       </div>
     `;
     this.pluginRouteEnterPending = false;
@@ -259,7 +333,9 @@ export const PluginScreen = {
   },
 
   applyFocus() {
-    this.container.querySelectorAll(".addons-focusable.focused, .focusable.focused").forEach((node) => node.classList.remove("focused"));
+    this.container
+      .querySelectorAll(".addons-focusable.focused, .focusable.focused")
+      .forEach((node) => node.classList.remove("focused"));
 
     if (this.qrOverlayOpen) {
       const closeButton = this.container.querySelector(".addons-qr-close");
@@ -271,9 +347,14 @@ export const PluginScreen = {
     }
 
     if (this.focusZone === "sidebar") {
-      const sidebarNodes = this.layoutPrefs?.modernSidebar ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
-      const node = sidebarNodes[this.sidebarFocusIndex]
-        || (this.layoutPrefs?.modernSidebar ? getModernSidebarSelectedNode(this.container) : getLegacySidebarSelectedNode(this.container));
+      const sidebarNodes = this.layoutPrefs?.modernSidebar
+        ? getModernSidebarNodes(this.container)
+        : getLegacySidebarNodes(this.container);
+      const node =
+        sidebarNodes[this.sidebarFocusIndex] ||
+        (this.layoutPrefs?.modernSidebar
+          ? getModernSidebarSelectedNode(this.container)
+          : getLegacySidebarSelectedNode(this.container));
       if (node) {
         node.classList.add("focused");
         node.focus();
@@ -288,11 +369,14 @@ export const PluginScreen = {
     if (!this.layoutPrefs?.modernSidebar) {
       setLegacySidebarExpanded(this.container, false);
     }
-    const target = this.container.querySelector(
-      `.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="${this.contentCol}"]`
-    ) || this.container.querySelector(
-      `.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="0"]`
-    ) || this.container.querySelector(".addons-focusable[data-zone='content']");
+    const target =
+      this.container.querySelector(
+        `.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="${this.contentCol}"]`
+      ) ||
+      this.container.querySelector(
+        `.addons-focusable[data-zone="content"][data-row="${this.contentRow}"][data-col="0"]`
+      ) ||
+      this.container.querySelector(".addons-focusable[data-zone='content']");
 
     if (target) {
       target.classList.add("focused");
@@ -319,14 +403,24 @@ export const PluginScreen = {
   },
 
   moveSidebar(delta) {
-    const sidebarNodes = this.layoutPrefs?.modernSidebar ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
-    this.sidebarFocusIndex = clamp(this.sidebarFocusIndex + delta, 0, Math.max(0, sidebarNodes.length - 1));
+    const sidebarNodes = this.layoutPrefs?.modernSidebar
+      ? getModernSidebarNodes(this.container)
+      : getLegacySidebarNodes(this.container);
+    this.sidebarFocusIndex = clamp(
+      this.sidebarFocusIndex + delta,
+      0,
+      Math.max(0, sidebarNodes.length - 1)
+    );
     this.applyFocus();
   },
 
   async openSidebar() {
-    const sidebarNodes = this.layoutPrefs?.modernSidebar ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
-    const selected = this.layoutPrefs?.modernSidebar ? getModernSidebarSelectedNode(this.container) : getLegacySidebarSelectedNode(this.container);
+    const sidebarNodes = this.layoutPrefs?.modernSidebar
+      ? getModernSidebarNodes(this.container)
+      : getLegacySidebarNodes(this.container);
+    const selected = this.layoutPrefs?.modernSidebar
+      ? getModernSidebarSelectedNode(this.container)
+      : getLegacySidebarSelectedNode(this.container);
     this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selected));
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
@@ -448,8 +542,12 @@ export const PluginScreen = {
         if (this.contentCol > 0) {
           this.moveContent(0, -1);
         } else {
-          const nodes = this.layoutPrefs?.modernSidebar ? getModernSidebarNodes(this.container) : getLegacySidebarNodes(this.container);
-          const selected = this.layoutPrefs?.modernSidebar ? getModernSidebarSelectedNode(this.container) : getLegacySidebarSelectedNode(this.container);
+          const nodes = this.layoutPrefs?.modernSidebar
+            ? getModernSidebarNodes(this.container)
+            : getLegacySidebarNodes(this.container);
+          const selected = this.layoutPrefs?.modernSidebar
+            ? getModernSidebarSelectedNode(this.container)
+            : getLegacySidebarSelectedNode(this.container);
           this.focusZone = "sidebar";
           this.sidebarFocusIndex = Math.max(0, nodes.indexOf(selected));
           if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
@@ -474,5 +572,4 @@ export const PluginScreen = {
   cleanup() {
     ScreenUtils.hide(this.container);
   }
-
 };
