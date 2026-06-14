@@ -3431,7 +3431,7 @@ export const PlayerScreen = {
       this.selectedManifestSubtitleTrackId = selectedParsed.subtitleTracks.find((track) => track.isDefault)?.id || null;
       this.refreshTrackDialogs();
       this.promoteHlsManifestSubtitlePlayback(selectedMasterUrl || masterUrl);
-    } catch (error) {
+    } catch (_error) {
       // Ignore parsing failures on providers that block manifest fetch.
     } finally {
       if (loadToken === this.manifestLoadToken) {
@@ -5248,6 +5248,8 @@ export const PlayerScreen = {
     let snapshot = this.subtitleCueOriginalState.get(cue);
     if (!snapshot) {
       snapshot = {
+        startTime: cue.startTime,
+        endTime: cue.endTime,
         line: cue.line,
         lineAlign: cue.lineAlign,
         position: cue.position,
@@ -5257,6 +5259,26 @@ export const PlayerScreen = {
       this.subtitleCueOriginalState.set(cue, snapshot);
     }
     return snapshot;
+  },
+
+  applySubtitleCueDelay(cue, snapshot, delayMs = 0) {
+    if (!cue || !snapshot) {
+      return;
+    }
+    const offsetSeconds = Number(delayMs || 0) / 1000;
+    const startTime = Number(snapshot.startTime);
+    const endTime = Number(snapshot.endTime);
+    if (!Number.isFinite(startTime) || !Number.isFinite(endTime)) {
+      return;
+    }
+    const nextStart = Math.max(0, startTime + offsetSeconds);
+    const nextEnd = Math.max(nextStart + 0.001, endTime + offsetSeconds);
+    try {
+      cue.startTime = nextStart;
+      cue.endTime = nextEnd;
+    } catch (_) {
+      // Some native text tracks expose readonly cue timing.
+    }
   },
 
   restoreSubtitleCueSnapshot(cue, snapshot) {
@@ -5411,6 +5433,12 @@ export const PlayerScreen = {
     try {
       const replacement = new CueCtor(cue.startTime, cue.endTime, text);
       this.copySubtitleCuePresentation(cue, replacement);
+      const snapshot = this.subtitleCueOriginalState instanceof WeakMap
+        ? this.subtitleCueOriginalState.get(cue)
+        : null;
+      if (snapshot && this.subtitleCueOriginalState instanceof WeakMap) {
+        this.subtitleCueOriginalState.set(replacement, snapshot);
+      }
       track.removeCue(cue);
       track.addCue(replacement);
       return true;
@@ -5472,14 +5500,18 @@ export const PlayerScreen = {
       return;
     }
     this.sanitizeSubtitleCuesForTrack(track);
-    const cues = track.activeCues;
-    if (!cues || typeof cues.length !== "number") {
-      return;
-    }
     const style = this.subtitleStyleSettings || {};
     const verticalOffset = normalizeSubtitleVerticalOffset(style.verticalOffset);
-    this.getSubtitleCueArray(cues).forEach((cue) => {
+    const allCues = this.getSubtitleCueArray(track.cues);
+    const activeCues = this.getSubtitleCueArray(track.activeCues);
+    const seen = new Set();
+    [...allCues, ...activeCues].forEach((cue) => {
+      if (!cue || seen.has(cue)) {
+        return;
+      }
+      seen.add(cue);
       const snapshot = this.getSubtitleCueSnapshot(cue);
+      this.applySubtitleCueDelay(cue, snapshot, this.subtitleDelayMs);
       this.applySubtitleCueVerticalOffset(cue, snapshot, verticalOffset);
     });
   },
@@ -5510,6 +5542,9 @@ export const PlayerScreen = {
   },
 
   refreshSubtitleTrackRendering() {
+    if (Environment.isWebOS()) {
+      return;
+    }
     const restoreTrackMode = typeof requestAnimationFrame === "function"
       ? requestAnimationFrame
       : (callback) => setTimeout(callback, 16);
@@ -10866,7 +10901,7 @@ export const PlayerScreen = {
       if (merged.length) {
         this.streamCandidates = merged;
       }
-    } catch (error) {
+    } catch (_error) {
       if (token === this.sourceLoadToken) {
         this.sourcesError = t("panel_failed_load_streams", {}, "Failed to load streams");
       }
@@ -11199,7 +11234,6 @@ export const PlayerScreen = {
     }
 
     const total = this.parentalWarnings.length;
-    const lineEnterDelay = PARENTAL_GUIDE_CONTAINER_IN_MS;
     const firstItemDelay = PARENTAL_GUIDE_CONTAINER_IN_MS + PARENTAL_GUIDE_LINE_IN_MS + PARENTAL_GUIDE_ITEM_STAGGER_MS;
     const lineExitDelay = Math.max(0, total * (PARENTAL_GUIDE_ITEM_EXIT_STAGGER_MS + PARENTAL_GUIDE_ITEM_EXIT_MS)) + PARENTAL_GUIDE_LINE_OUT_DELAY_MS;
     const containerExitDelay = lineExitDelay + PARENTAL_GUIDE_LINE_OUT_MS + PARENTAL_GUIDE_CONTAINER_OUT_DELAY_MS;

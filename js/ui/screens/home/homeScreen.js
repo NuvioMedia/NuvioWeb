@@ -39,47 +39,68 @@ import {
   getModernSidebarSelectedNode,
   getSidebarProfileState,
   focusWithoutAutoScroll,
-  isSelectedSidebarAction,
   renderRootSidebar,
   setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
 import { NuvioDialog } from "../../components/nuvioDialog.js";
+import {
+  CW_DAYS_CAP,
+  CW_DISPLAY_SNAPSHOT_KEY,
+  CW_DISPLAY_SNAPSHOT_MAX_AGE_MS,
+  CW_DISPLAY_SNAPSHOT_MAX_SCOPES,
+  CW_ENRICHMENT_CACHE_KEY,
+  CW_ENRICHMENT_CACHE_MAX_AGE_MS,
+  CW_ENTER_DELAY_MS,
+  CW_HOLD_DELAY_MS,
+  CW_MAX_NEXT_UP_LOOKUPS,
+  CW_MAX_VISIBLE_ITEMS,
+  CW_META_TIMEOUT_MS,
+  CW_META_TIMEOUT_TV_MS,
+  CW_NEXT_UP_META_TIMEOUT_MS,
+  CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS,
+  CW_PROGRESS_END_THRESHOLD,
+  CW_PROGRESS_START_THRESHOLD,
+  HERO_ROTATE_FIRST_DELAY_MS,
+  HERO_ROTATE_INTERVAL_MS,
+  HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS,
+  HOME_BACKGROUND_RENDER_DELAY_MS,
+  HOME_INITIAL_CATALOG_LOAD,
+  HOME_LAYOUT_SEQUENCE,
+  HOME_LOADING_ROW_ITEMS_CONSTRAINED,
+  HOME_LOADING_ROW_ITEMS_DEFAULT,
+  HOME_LOADING_ROW_ITEMS_LEGACY_TV,
+  HOME_MAX_ITEMS_PER_ROW_CONSTRAINED,
+  HOME_MAX_ITEMS_PER_ROW_DEFAULT,
+  HOME_MAX_ITEMS_PER_ROW_LEGACY_TV,
+  HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS,
+  HOME_PERF_DEBUG,
+  HOME_RETURN_FOCUS_STATE_KEY,
+  HOME_ROW_RETRY_TIMEOUT_MS,
+  HOME_ROW_TIMEOUT_MS
+} from "./homeConstants.js";
+import {
+  buildHeroBackdropSources,
+  buildImageFallbackErrorHandler,
+  encodeHeroBackdropFallbacks
+} from "./homeImageHelpers.js";
+import {
+  escapeAttribute,
+  escapeHtml,
+  firstNonEmpty,
+  formatCatalogRowTitle,
+  limitTextToWordCount,
+  parseCssPx,
+  prettyId,
+  toTitleCase,
+  uniqueNonEmptyValues
+} from "./homeUtils.js";
 
-const HERO_ROTATE_FIRST_DELAY_MS = 20000;
-const HERO_ROTATE_INTERVAL_MS = 10000;
-const HOME_LAYOUT_SEQUENCE = ["modern", "grid", "classic"];
-const CW_MAX_NEXT_UP_LOOKUPS = 24;
-const CW_MAX_VISIBLE_ITEMS = 10;
-const CW_DAYS_CAP = 60;
-const CW_PROGRESS_START_THRESHOLD = 0.02;
-const CW_PROGRESS_END_THRESHOLD = 0.85;
-const CW_ENTER_DELAY_MS = 320;
-const CW_HOLD_DELAY_MS = 650;
-const HOME_INITIAL_CATALOG_LOAD = 10;
-const HOME_MAX_ITEMS_PER_ROW_DEFAULT = 15;
-const HOME_MAX_ITEMS_PER_ROW_CONSTRAINED = 10;
-const HOME_MAX_ITEMS_PER_ROW_LEGACY_TV = 8;
-const HOME_LOADING_ROW_ITEMS_DEFAULT = 10;
-const HOME_LOADING_ROW_ITEMS_CONSTRAINED = 8;
-const HOME_LOADING_ROW_ITEMS_LEGACY_TV = 6;
-const HOME_ROW_TIMEOUT_MS = 3500;
-const HOME_ROW_RETRY_TIMEOUT_MS = 12000;
-const HOME_BACKGROUND_RENDER_DELAY_MS = 120;
-const HOME_BACKGROUND_RENDER_DELAY_LEGACY_MS = 180;
-const HOME_MODERN_HERO_BACKDROP_CROSSFADE_MS = 400;
-const CW_META_TIMEOUT_MS = 1800;
-const CW_META_TIMEOUT_TV_MS = 4200;
-const CW_NEXT_UP_META_TIMEOUT_MS = 2200;
-const CW_ENRICHMENT_CACHE_KEY = "homeContinueWatchingEnrichmentCache";
-const CW_DISPLAY_SNAPSHOT_KEY = "homeContinueWatchingDisplaySnapshot";
-const CW_DISPLAY_SNAPSHOT_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-const CW_DISPLAY_SNAPSHOT_MAX_SCOPES = 4;
-const HOME_RETURN_FOCUS_STATE_KEY = "homeReturnFocusState";
-const CW_ENRICHMENT_CACHE_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;
-const CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS = 7;
-const HOME_PERF_DEBUG = Boolean(globalThis.__NUVIO_DEBUG_HOME_PERF__);
+export { escapeAttribute, escapeHtml, formatCatalogRowTitle } from "./homeUtils.js";
+
+/** @typedef {import("./homeTypes.js").HomeMediaSourceLike} HomeMediaSourceLike */
+/** @typedef {import("./homeTypes.js").HomeHeroDisplay} HomeHeroDisplay */
 
 function homePerfNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -120,125 +141,13 @@ async function getLocalSidebarProfileState() {
   };
 }
 
-export function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-export function escapeAttribute(value) {
-  return escapeHtml(value).replace(/'/g, "&#39;");
-}
-
-function toTitleCase(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "";
-  }
-  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-}
-
-export function formatCatalogRowTitle(catalogName, type, showTypeSuffix = true) {
-  const rawBase = String(catalogName || "").trim();
-  const base = rawBase ? rawBase.charAt(0).toUpperCase() + rawBase.slice(1) : "";
-  const typeLabel = toTitleCase(type || "movie") || "Movie";
-  if (!base) {
-    return typeLabel;
-  }
-  if (!showTypeSuffix) {
-    return base;
-  }
-  return new RegExp(`\\b${typeLabel}$`, "i").test(base) ? base : `${base} - ${typeLabel}`;
-}
-
-function prettyId(value) {
-  const raw = String(value || "").trim();
-  if (!raw) {
-    return "Untitled";
-  }
-  if (raw.includes(":")) {
-    return raw.split(":").pop() || raw;
-  }
-  return raw;
-}
-
-function firstNonEmpty(...values) {
-  for (const value of values) {
-    const normalized = String(value || "").trim();
-    if (normalized) {
-      return normalized;
-    }
-  }
-  return "";
-}
-
-function uniqueNonEmptyValues(values = []) {
-  const seen = new Set();
-  const result = [];
-  values.forEach((value) => {
-    const normalized = String(value || "").trim();
-    if (!normalized || seen.has(normalized)) {
-      return;
-    }
-    seen.add(normalized);
-    result.push(normalized);
-  });
-  return result;
-}
-
-function buildHeroBackdropSources(item = null) {
-  return uniqueNonEmptyValues([
-    item?.background,
-    item?.backdrop,
-    item?.backdropUrl,
-    item?.landscapePoster,
-    item?.poster,
-    item?.thumbnail,
-    item?.episodeThumbnail
-  ]);
-}
-
-function encodeHeroBackdropFallbacks(sources = []) {
-  return sources.map((source) => encodeURIComponent(source)).join("|");
-}
-
-function getHeroBackdropErrorHandler() {
-  return "var q=(this.dataset.fallbackSrcs||'').split('|').filter(Boolean);var next=q.shift();if(next){this.dataset.fallbackSrcs=q.join('|');this.src=decodeURIComponent(next);return;}this.removeAttribute('src');this.classList.add('placeholder');";
-}
-
-function getImageFallbackErrorHandler() {
-  return "var q=(this.dataset.fallbackSrcs||'').split('|').filter(Boolean);var next=q.shift();if(next){this.dataset.fallbackSrcs=q.join('|');this.src=decodeURIComponent(next);return;}this.removeAttribute('src');this.classList.add('placeholder');";
-}
-
 function renderHeroBackdropImage(display) {
   if (!display?.backdrop) {
     return '<div class="home-hero-backdrop placeholder"></div>';
   }
   const fallbackQueue = encodeHeroBackdropFallbacks(display.backdropFallbacks || []);
   const fallbackAttribute = fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : "";
-  return `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}"${fallbackAttribute} alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" onerror="${getHeroBackdropErrorHandler()}" />`;
-}
-
-function limitTextToWordCount(value, maxWords = 0) {
-  const text = String(value || "").trim();
-  if (!text || !Number.isFinite(maxWords) || maxWords <= 0) {
-    return { text, truncated: false };
-  }
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) {
-    return { text, truncated: false };
-  }
-  return {
-    text: words.slice(0, maxWords).join(" "),
-    truncated: true
-  };
-}
-
-function parseCssPx(value, fallback = 0) {
-  const parsed = parseFloat(String(value || "").trim());
-  return Number.isFinite(parsed) ? parsed : fallback;
+  return `<img class="home-hero-backdrop" src="${escapeAttribute(display.backdrop)}"${fallbackAttribute} alt="${escapeAttribute(display.title)}" decoding="async" fetchpriority="high" onerror="${buildImageFallbackErrorHandler()}" />`;
 }
 
 export function buildModernHomeSizingStyle(layoutPrefs = {}) {
@@ -422,10 +331,6 @@ function extractReleaseDateText(item) {
     }
   }
   return extractYear(item);
-}
-
-function hasFullReleaseDateText(item) {
-  return /\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}\b/.test(extractReleaseDateText(item));
 }
 
 function formatRuntimeText(item) {
@@ -1522,6 +1427,11 @@ function buildHeroIdentity(item = null) {
   ].join("|");
 }
 
+/**
+ * @param {HomeMediaSourceLike | null | undefined} hero
+ * @param {string} layoutMode
+ * @returns {HomeHeroDisplay}
+ */
 function buildHeroDisplayModel(hero, layoutMode) {
   if (isCollectionFolderItem(hero)) {
     const normalized = normalizeCollectionFolderItem(hero);
@@ -1839,7 +1749,7 @@ function renderContinueWatchingCard(item, index, options = {}) {
              data-item-type="${escapeAttribute(normalized.type || "movie")}"
              data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
       <div class="home-continue-media">
-        ${cardImage ? `<img class="home-continue-bg" src="${escapeAttribute(cardImage)}"${fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : ""} alt="" aria-hidden="true" decoding="async" loading="lazy" onerror="${getImageFallbackErrorHandler()}" />` : ""}
+        ${cardImage ? `<img class="home-continue-bg" src="${escapeAttribute(cardImage)}"${fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : ""} alt="" aria-hidden="true" decoding="async" loading="lazy" onerror="${buildImageFallbackErrorHandler()}" />` : ""}
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || t("home.continueStatusContinue", {}, "Continue"))}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
@@ -2804,7 +2714,7 @@ export const HomeScreen = {
     return MODERN_CAMERA_PAN_EASING;
   },
 
-  shouldUseDelayedModernCameraFollow(target, direction = null) {
+  shouldUseDelayedModernCameraFollow(target, _direction = null) {
     return false;
   },
 
@@ -3416,7 +3326,7 @@ export const HomeScreen = {
     };
   },
 
-  resolvePreferredNodeForRow(rowNodes = [], fallbackCol = 0) {
+  resolvePreferredNodeForRow(rowNodes = [], _fallbackCol = 0) {
     if (!Array.isArray(rowNodes) || !rowNodes.length) {
       return null;
     }
@@ -3554,7 +3464,7 @@ export const HomeScreen = {
     const options = [
       { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") }
     ];
-    if (Boolean(this.showContinueWatchingManualPlayOption)) {
+    if (this.showContinueWatchingManualPlayOption) {
       options.push({ action: "playManually", label: t("play_manually", {}, "Play manually") });
     }
     if (!item.isNextUp) {
@@ -7926,7 +7836,6 @@ export const HomeScreen = {
     if (this.handleHomeDpad(event)) {
       return;
     }
-    const isContinueWatchingHoldTarget = this.isContinueWatchingHoldTarget(currentFocusedNode);
     const isHomeHoldTarget = this.isHomeHoldTarget(currentFocusedNode);
     if (code === 13 && isHomeHoldTarget) {
       event.preventDefault?.();
@@ -8089,8 +7998,6 @@ export const HomeScreen = {
           const layoutPrefs = this.layoutPrefs || {};
           const showPosterLabels = Boolean(layoutPrefs.showPosterLabels !== false);
           const preferLandscape = Boolean(layoutPrefs.modernLandscapePosters);
-          const showCatalogTypeSuffix = Boolean(layoutPrefs.showCatalogTypeSuffix !== false);
-          const rowItemLimit = Number(this.getRowItemLimit?.() || 15);
           const newMarkup = newItems.map((item, i) =>
             createPosterCardMarkup(
               item,

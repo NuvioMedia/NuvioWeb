@@ -17,6 +17,16 @@ function logEngineFsDebug(...args) {
   }
 }
 
+function logTizenAvPlayDebug(...args) {
+  if (globalThis.__NUVIO_DEBUG_TIZEN_AVPLAY__ || globalThis.__NUVIO_DEBUG_ENGINEFS__) {
+    console.info(...args);
+  }
+}
+
+function isValidAvPlayTrackSelectionState(state) {
+  return state === "READY" || state === "PLAYING" || state === "PAUSED";
+}
+
 export const PlayerController = {
 
   video: null,
@@ -719,7 +729,7 @@ export const PlayerController = {
       .filter((track) => this.normalizeAvPlayTrackType(track?.type) === "AUDIO")
       .map((track, index) => {
         const trackIndex = Number(track?.index);
-        const normalizedTrackIndex = Number.isFinite(trackIndex) ? trackIndex : index;
+        const normalizedTrackIndex = Number.isFinite(trackIndex) ? trackIndex : -1;
         const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
         const forcedValue = this.pickAvPlayExtraValue(extraInfo, [
           "forced",
@@ -753,7 +763,8 @@ export const PlayerController = {
           avplayTrackIndex: normalizedTrackIndex,
           avplayAudioOrdinalIndex: index
         };
-      });
+      })
+      .filter((track) => Number.isFinite(Number(track?.avplayTrackIndex)) && Number(track.avplayTrackIndex) >= 0);
 
     this.avplaySubtitleTracks = totalTracks
       .filter((track) => this.normalizeAvPlayTrackType(track?.type) === "TEXT")
@@ -774,6 +785,17 @@ export const PlayerController = {
           avplayTrackIndex: normalizedTrackIndex
         };
       });
+
+    if (Platform.isTizen()) {
+      logTizenAvPlayDebug("Tizen AVPlay tracks synced", {
+        state: this.getAvPlayState(),
+        totalTracks,
+        currentTracks,
+        audioTracks: this.avplayAudioTracks,
+        selectedAudioIndex,
+        selectedAudioTrackIndex: this.selectedAvPlayAudioTrackIndex
+      });
+    }
 
     const desiredAudioIndex = Number(this.desiredAvPlayAudioTrackIndex);
     const desiredAudioActive = Number.isFinite(desiredAudioIndex)
@@ -824,34 +846,16 @@ export const PlayerController = {
     if (exact) {
       return Number(exact.avplayTrackIndex);
     }
-    const ordinal = this.avplayAudioTracks.find((track) => Number(track?.avplayAudioOrdinalIndex) === targetIndex);
-    if (ordinal) {
-      return Number(ordinal.avplayTrackIndex);
-    }
     return -1;
   },
 
-  getAvPlayAudioTrackSelectionCandidates(trackIndex) {
+  getAvPlayAudioTrackSelectionIndex(trackIndex) {
     const targetIndex = Number(trackIndex);
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
-      return [];
+      return -1;
     }
-    const track = this.avplayAudioTracks.find((entry) => Number(entry?.avplayTrackIndex) === targetIndex)
-      || this.avplayAudioTracks.find((entry) => Number(entry?.avplayAudioOrdinalIndex) === targetIndex);
-    if (!track) {
-      return [];
-    }
-    const seen = new Set();
-    return [
-      Number(track.avplayTrackIndex),
-      Number(track.avplayAudioOrdinalIndex)
-    ].filter((value) => {
-      if (!Number.isFinite(value) || value < 0 || seen.has(value)) {
-        return false;
-      }
-      seen.add(value);
-      return true;
-    });
+    const track = this.avplayAudioTracks.find((entry) => Number(entry?.avplayTrackIndex) === targetIndex);
+    return track ? Number(track.avplayTrackIndex) : -1;
   },
 
   getCurrentAvPlayAudioTrackIndex() {
@@ -876,13 +880,35 @@ export const PlayerController = {
     if (!avplay || typeof avplay.setSelectTrack !== "function" || !Number.isFinite(targetIndex) || targetIndex < 0) {
       return false;
     }
+    const state = this.getAvPlayState();
+    if (!isValidAvPlayTrackSelectionState(state)) {
+      logTizenAvPlayDebug("Tizen AVPlay audio selection deferred; invalid state", {
+        state,
+        targetIndex
+      });
+      return false;
+    }
     try {
+      logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(AUDIO)", {
+        state,
+        targetIndex,
+        audioTracks: this.avplayAudioTracks
+      });
       avplay.setSelectTrack("AUDIO", targetIndex);
       if (nudge) {
         this.nudgeAvPlayAfterTrackSwitch();
       }
+      logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(AUDIO) succeeded", {
+        state: this.getAvPlayState(),
+        targetIndex
+      });
       return true;
-    } catch (_) {
+    } catch (error) {
+      logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(AUDIO) failed", {
+        state,
+        targetIndex,
+        error: error?.message || String(error || "")
+      });
       return false;
     }
   },
@@ -896,15 +922,11 @@ export const PlayerController = {
     if (currentIndex === canonicalIndex) {
       return true;
     }
-    const candidates = this.getAvPlayAudioTrackSelectionCandidates(canonicalIndex);
-    const retryCandidates = [...candidates.slice(1), ...candidates.slice(0, 1)];
-    let attempted = false;
-    retryCandidates.forEach((candidateIndex) => {
-      if (this.getCurrentAvPlayAudioTrackIndex() === canonicalIndex) {
-        return;
-      }
-      attempted = this.trySelectAvPlayAudioTrackIndex(candidateIndex, { nudge }) || attempted;
-    });
+    const selectionIndex = this.getAvPlayAudioTrackSelectionIndex(canonicalIndex);
+    if (selectionIndex < 0) {
+      return false;
+    }
+    const attempted = this.trySelectAvPlayAudioTrackIndex(selectionIndex, { nudge });
     return attempted || this.getCurrentAvPlayAudioTrackIndex() === canonicalIndex;
   },
 
@@ -933,8 +955,8 @@ export const PlayerController = {
       return false;
     }
 
-    const candidates = this.getAvPlayAudioTrackSelectionCandidates(targetIndex);
-    if (!candidates.length) {
+    const selectionIndex = this.getAvPlayAudioTrackSelectionIndex(targetIndex);
+    if (selectionIndex < 0) {
       return false;
     }
 
@@ -946,16 +968,27 @@ export const PlayerController = {
     this.desiredAvPlayAudioTrackIndex = targetIndex;
     this.desiredAvPlayAudioTrackUntil = Date.now() + 5000;
     const state = this.getAvPlayState();
-    const canApplyNow = state === "PLAYING" || state === "PAUSED";
+    const canApplyNow = isValidAvPlayTrackSelectionState(state);
+    logTizenAvPlayDebug("Tizen AVPlay audio track requested", {
+      state,
+      uiTrackIndex: Number(trackIndex),
+      realAvPlayTrackIndex: targetIndex,
+      selectionIndex,
+      canApplyNow,
+      audioTracks: this.avplayAudioTracks
+    });
     if (!canApplyNow) {
       this.pendingAvPlayAudioTrackIndex = targetIndex;
+      this.selectedAvPlayAudioTrackIndex = targetIndex;
+      this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
+      return true;
     }
 
     try {
-      if (!this.trySelectAvPlayAudioTrackIndex(candidates[0], { nudge: canApplyNow })) {
+      if (!this.trySelectAvPlayAudioTrackIndex(selectionIndex, { nudge: state === "PLAYING" || state === "PAUSED" })) {
         throw new Error("setSelectTrack failed");
       }
-      this.pendingAvPlayAudioTrackIndex = canApplyNow ? -1 : targetIndex;
+      this.pendingAvPlayAudioTrackIndex = -1;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
       this.syncAvPlayTrackInfo({ force: true });
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -978,13 +1011,12 @@ export const PlayerController = {
         this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       }, 1200);
       return true;
-    } catch (_) {
-      if (!canApplyNow) {
-        this.selectedAvPlayAudioTrackIndex = targetIndex;
-        this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
-        return true;
-      }
-      this.pendingAvPlayAudioTrackIndex = -1;
+    } catch (error) {
+      logTizenAvPlayDebug("Tizen AVPlay audio track request failed", {
+        state,
+        realAvPlayTrackIndex: targetIndex,
+        error: error?.message || String(error || "")
+      });
       return false;
     }
   },
@@ -1009,14 +1041,14 @@ export const PlayerController = {
     }
 
     const state = this.getAvPlayState();
-    if (state && state !== "PLAYING" && state !== "PAUSED") {
+    if (state && !isValidAvPlayTrackSelectionState(state)) {
       return false;
     }
 
     try {
       if (!this.retryAvPlayAudioTrackSelection(canonicalIndex, { nudge: true })) {
-        const candidates = this.getAvPlayAudioTrackSelectionCandidates(canonicalIndex);
-        if (!this.trySelectAvPlayAudioTrackIndex(candidates[0], { nudge: true })) {
+        const selectionIndex = this.getAvPlayAudioTrackSelectionIndex(canonicalIndex);
+        if (!this.trySelectAvPlayAudioTrackIndex(selectionIndex, { nudge: state === "PLAYING" || state === "PAUSED" })) {
           throw new Error("setSelectTrack failed");
         }
       }
@@ -2798,12 +2830,9 @@ export const PlayerController = {
 
     this.video.addEventListener("loadedmetadata", () => {
       const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks;
-      const textTrackList = this.video?.textTracks || this.video?.webkitTextTracks || this.video?.mozTextTracks;
       const audioTrackCount = Number(audioTrackList?.length || 0);
-      const textTrackCount = Number(textTrackList?.length || 0);
       const probeUrl = String(this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || "").trim();
       const isDirectFile = this.isLikelyDirectFileUrl(probeUrl);
-      const fallbackTried = this.avplayFallbackAttempts.has(probeUrl);
       if (
         this.isUsingNativePlayback()
         && isDirectFile

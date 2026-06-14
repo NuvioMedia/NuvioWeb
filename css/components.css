@@ -11759,7 +11759,7 @@ button:focus-visible {
 }
 
 .player-subtitle-overlay-grid {
-  grid-template-columns: min(20.83vw, 400px) min(31.25vw, 600px) min(29.17vw, 560px); /* ATV 200/300/280dp */
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) minmax(0, 0.95fr);
   gap: min(1.46vw, 28px); /* ATV 14dp -> 28px */
 }
 
@@ -11858,6 +11858,10 @@ button:focus-visible {
   border: min(0.21vw, 4px) solid rgba(255, 255, 255, 0.18);
   font-size: min(2.92vw, 56px);
   background: rgba(255, 255, 255, 0.08);
+}
+
+.player-subtitle-modal .player-dialog-style-item {
+  grid-template-columns: min(5.83vw, 112px) minmax(0, 1fr) min(5.83vw, 112px);
 }
 
 .player-audio-modal .player-dialog-step {

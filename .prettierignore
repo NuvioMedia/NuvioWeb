@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+assets
+res
+services/**/runtime
+*.ipk
+*.wgt
+
+# Legacy home files are adopted incrementally to avoid noisy formatting-only diffs.
+js/ui/screens/home/classicHomeLayout.js
+js/ui/screens/home/gridHomeLayout.js
+js/ui/screens/home/homeScreen.js
+js/ui/screens/home/modernHomeLayout.js
