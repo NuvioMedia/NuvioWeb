@@ -76,11 +76,11 @@ jobs:
         env:
           WEBOS_LOCAL_PROPERTIES: ${{ secrets.WEBOS_LOCAL_PROPERTIES }}
         run: |
-          if [ -z "$WEBOS_LOCAL_PROPERTIES" ]; then
-            echo "WEBOS_LOCAL_PROPERTIES not set; using repository fallback properties"
-            exit 0
+          if [ -z "${WEBOS_LOCAL_PROPERTIES//[[:space:]]/}" ]; then
+            echo "::error::WEBOS_LOCAL_PROPERTIES secret is required to build release artifacts with runtime env."
+            exit 1
           fi
-          printf '%s' "$WEBOS_LOCAL_PROPERTIES" > local.properties
+          printf '%s\n' "$WEBOS_LOCAL_PROPERTIES" > local.properties
 
       - name: Install dependencies
         run: npm ci
@@ -88,6 +88,7 @@ jobs:
       - name: Package local webOS IPK
         env:
           TAG_NAME: ${{ needs.resolve-release-payload.outputs.tag }}
+          NUVIO_REQUIRE_LOCAL_PROPERTIES: "1"
         run: npm run package:webos
 
       - name: Normalize webOS package metadata

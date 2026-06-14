@@ -17,6 +17,9 @@ const distDir = path.join(rootDir, "dist");
 const cacheDir = path.join(rootDir, ".cache");
 const bundleFileName = "app.bundle.js";
 const tempBundlePath = path.join(cacheDir, "__app.bundle.build.js");
+const requireConfiguredRuntimeEnv = /^(1|true|yes|on)$/i.test(
+  String(process.env.NUVIO_REQUIRE_LOCAL_PROPERTIES || "")
+);
 
 async function buildCSS() {
   console.log("processing CSS with PostCSS (legacy support)...");
@@ -160,10 +163,15 @@ async function runBuild() {
 
     console.log("configuring runtime env from local.properties...");
     const envResult = await writeRuntimeEnvScriptFile(path.join(distDir, "nuvio.env.js"), { rootDir });
+    const envSourceBaseName = path.basename(envResult.sourcePath || "");
+    const usingFallbackEnv = !envResult.sourcePath || envSourceBaseName === "local.example.properties";
+    if (requireConfiguredRuntimeEnv && usingFallbackEnv) {
+      throw new Error("Configured runtime env is required for this build. Provide local.properties.");
+    }
     if (!envResult.sourcePath) {
       console.warn("WARNING: generated default runtime env (unconfigured).");
-    } else if (path.basename(envResult.sourcePath) === "local.properties.example") {
-      console.warn("WARNING: using local.properties.example as fallback.");
+    } else if (envSourceBaseName === "local.example.properties") {
+      console.warn("WARNING: using local.example.properties as fallback.");
     }
 
     console.log(`\nbuild finished successfully in: ${distDir}`);

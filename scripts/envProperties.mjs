@@ -113,7 +113,7 @@ export async function resolveLocalPropertiesSource({ rootDir, sourcePath = "" } 
     candidates.push(path.resolve(process.env.NUVIO_LOCAL_PROPERTIES));
   } else {
     candidates.push(path.join(rootDir, "local.properties"));
-    candidates.push(path.join(rootDir, "local.properties.example"));
+    candidates.push(path.join(rootDir, "local.example.properties"));
   }
 
   for (const candidate of candidates) {
