@@ -4,6 +4,7 @@ const MARGIN_X = 600;
 const MARGIN_Y = 200;
 
 let activeLoads = 0;
+let loadGeneration = 0;
 const queue = [];
 let observer = null;
 
@@ -19,7 +20,11 @@ function processQueue() {
     const src = img.dataset.posterSrc;
     if (!src) continue;
     activeLoads++;
-    const done = () => { activeLoads--; processQueue(); };
+    const gen = loadGeneration;
+    const done = () => {
+      if (loadGeneration === gen && activeLoads > 0) activeLoads--;
+      processQueue();
+    };
     img.onload = done;
     img.onerror = done;
     img.src = src;
@@ -50,6 +55,18 @@ function getObserver() {
     });
   }
   return observer;
+}
+
+// Call before a full-page render to discard stale load state. Do NOT call
+// from track pagination — that would break in-flight loads for other rows.
+export function resetPosterLoader() {
+  loadGeneration++;
+  queue.length = 0;
+  activeLoads = 0;
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
 }
 
 export function observePosterImages(container) {

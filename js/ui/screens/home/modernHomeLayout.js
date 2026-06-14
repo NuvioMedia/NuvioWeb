@@ -264,6 +264,24 @@ function renderModernHeroSkeletonMarkup() {
             <div class="home-hero-backdrop placeholder home-hero-backdrop-loading"></div>
           </div>
         </div>
+        <div class="home-modern-hero-copy-skeleton">
+          <div class="home-modern-skeleton-block home-modern-hero-logo-skeleton"></div>
+          <div class="home-modern-hero-meta-skeleton">
+            <div class="home-modern-skeleton-block" style="width:72px"></div>
+            <div class="home-modern-skeleton-block" style="width:52px"></div>
+            <div class="home-modern-skeleton-block" style="width:84px"></div>
+          </div>
+          <div class="home-modern-hero-btn-skeleton">
+            <div class="home-modern-skeleton-block home-modern-hero-btn-primary-skeleton"></div>
+            <div class="home-modern-skeleton-block home-modern-hero-btn-circle-skeleton"></div>
+            <div class="home-modern-skeleton-block home-modern-hero-btn-circle-skeleton"></div>
+          </div>
+          <div class="home-modern-hero-desc-skeleton">
+            <div class="home-modern-skeleton-block" style="width:74%"></div>
+            <div class="home-modern-skeleton-block" style="width:88%"></div>
+            <div class="home-modern-skeleton-block" style="width:60%"></div>
+          </div>
+        </div>
       </article>
     </section>
   `;

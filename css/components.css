@@ -1810,6 +1810,8 @@ button:focus-visible {
   object-fit: contain;
   display: block;
   flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.2s 0.05s, transform 0.2s 0.05s;
 }
 
 .home-brand-wordmark {
@@ -1823,7 +1825,12 @@ button:focus-visible {
 
 .home-sidebar.content-expanded .home-brand-wrap {
   justify-content: flex-start;
-  padding: 0 var(--legacy-sidebar-label-end) 0 var(--legacy-sidebar-leading-offset);
+  padding: 0 36px;
+}
+
+.home-sidebar.content-expanded .home-brand-mark {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .home-sidebar.content-expanded .home-brand-wordmark {
@@ -1858,7 +1865,7 @@ button:focus-visible {
   justify-content: flex-start;
   width: 100%;
   gap: 32px;
-  padding: 0 0 0 var(--legacy-sidebar-leading-offset);
+  padding: 0 36px;
   transform: scale(1);
   transform-origin: center center;
   transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -4684,7 +4691,9 @@ button:focus-visible {
 }
 
 .home-screen-shell .home-poster-card .content-poster {
-  background: linear-gradient(180deg, rgba(26, 26, 26, 1), rgba(10, 10, 10, 1));
+  background: linear-gradient(90deg, #181818 0%, #181818 25%, #252525 50%, #181818 75%, #181818 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
   transition: opacity 280ms ease;
 }
 
@@ -5022,11 +5031,10 @@ button:focus-visible {
 }
 
 .home-screen-shell .home-continue-media-loading {
-  background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
-    linear-gradient(145deg, #262626, #101010);
-  background-size: 100% 100%, cover;
-  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
+  background: linear-gradient(90deg, #1a1c22 0%, #1a1c22 25%, #252830 50%, #1a1c22 75%, #1a1c22 100%),
+              linear-gradient(145deg, #262626, #101010);
+  background-size: 300% 100%, cover;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
 }
 
 .home-screen-shell .home-continue-card-loading {
@@ -5060,9 +5068,9 @@ button:focus-visible {
 
 .home-screen-shell .home-continue-skeleton-line {
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
-  background-size: 100% 100%;
-  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
+  background: linear-gradient(90deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.07) 25%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.07) 75%, rgba(255,255,255,0.07) 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
 }
 
 .home-screen-shell .home-continue-skeleton-kicker {
@@ -5088,9 +5096,9 @@ button:focus-visible {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
-  background-size: 100% 100%;
-  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.04) 75%, rgba(255,255,255,0.04) 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
   z-index: 2;
 }
 
@@ -5107,9 +5115,9 @@ button:focus-visible {
 
 .home-screen-shell .home-poster-skeleton-line {
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
-  background-size: 100% 100%;
-  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
+  background: linear-gradient(90deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.07) 25%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0.07) 75%, rgba(255,255,255,0.07) 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
 }
 
 .home-screen-shell .home-poster-skeleton-title {
@@ -5129,23 +5137,92 @@ button:focus-visible {
 }
 
 @keyframes homeContinueLoadingShimmer {
-  0%, 100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 0.92;
-  }
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 0.92; }
+}
+
+@keyframes nuvioShimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-card-loading {
   pointer-events: none;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-media-loading .home-hero-backdrop-loading,
+.home-screen-shell.home-layout-modern .home-modern-hero-media-loading .home-hero-backdrop-loading {
+  background: linear-gradient(90deg, #0e1018 0%, #0e1018 25%, #161a26 50%, #0e1018 75%, #0e1018 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 2.4s ease-in-out infinite;
+}
+
 .home-screen-shell.home-layout-modern .home-modern-skeleton-block {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
-  background-size: 100% 100%;
-  animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.14) 50%, rgba(255,255,255,0.05) 75%, rgba(255,255,255,0.05) 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-copy-skeleton {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: clamp(24px, 3.5vh, 52px) clamp(32px, 3.5vw, 64px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  pointer-events: none;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-copy-skeleton .home-modern-skeleton-block {
+  border-radius: 10px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-logo-skeleton {
+  width: clamp(160px, 22vw, 340px);
+  height: clamp(40px, 5.5vh, 76px);
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-meta-skeleton {
+  display: flex;
+  gap: 10px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-meta-skeleton .home-modern-skeleton-block {
+  height: 22px;
+  border-radius: 999px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-btn-skeleton {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-btn-primary-skeleton {
+  width: clamp(180px, 14vw, 260px);
+  height: clamp(56px, 5.5vh, 80px);
+  border-radius: 999px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-btn-circle-skeleton {
+  width: clamp(56px, 4.5vh, 80px);
+  height: clamp(56px, 4.5vh, 80px);
+  border-radius: 999px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-desc-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-desc-skeleton .home-modern-skeleton-block {
+  height: 16px;
+  border-radius: 999px;
 }
 
 .home-screen-shell.home-layout-modern .home-hero-backdrop-loading {
@@ -5728,7 +5805,7 @@ button:focus-visible {
   width: min(100%, var(--modern-hero-meta-max-width));
   max-width: min(100%, var(--modern-hero-meta-max-width));
   color: #b3b3b3;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1.25;
   font-weight: 500;
   opacity: 1;
@@ -13366,7 +13443,7 @@ button:focus-visible {
 .series-circle-btn::after {
   content: attr(aria-label);
   position: absolute;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 16px);
   left: 50%;
   transform: translateX(-50%) translateY(4px);
   white-space: nowrap;
@@ -14136,88 +14213,93 @@ button:focus-visible {
 }
 
 .detail-loading-shell {
+  position: fixed;
+  inset: 0;
   width: 100vw;
   height: 100vh;
-  padding: 58px 56px;
   background: #05090f;
-  color: #edf2f8;
+  overflow: hidden;
 }
 
-.detail-loading-top {
-  margin-top: 260px;
+.detail-loading-bg {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 70% 60% at 65% 35%, rgba(25, 30, 45, 0.7) 0%, transparent 70%);
 }
 
-.detail-loading-meta {
-  margin-top: 28px;
-  display: flex;
-  gap: 18px;
-}
-
-.detail-loading-copy {
-  margin-top: 22px;
+.detail-loading-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 0 clamp(40px, 4vw, 72px) clamp(48px, 5vh, 80px);
   display: flex;
   flex-direction: column;
-  gap: 14px;
-}
-
-.detail-loading-tags {
-  margin-top: 16px;
-  display: flex;
-  gap: 12px;
+  align-items: flex-start;
 }
 
 .detail-loading-block {
+  background: linear-gradient(90deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.11) 50%, rgba(255,255,255,0.04) 75%, rgba(255,255,255,0.04) 100%);
+  background-size: 300% 100%;
+  animation: nuvioShimmer 1.8s ease-in-out infinite;
+}
+
+.detail-loading-logo {
+  width: clamp(180px, 28vw, 460px);
+  height: clamp(56px, 7vh, 108px);
+  border-radius: 12px;
+  margin-bottom: clamp(18px, 2vh, 28px);
+}
+
+.detail-loading-meta-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: clamp(18px, 2vh, 26px);
+}
+
+.detail-loading-meta-chip {
+  height: 26px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(35, 39, 47, 0.66), rgba(45, 50, 60, 0.92), rgba(35, 39, 47, 0.66));
-  background-size: 220% 100%;
-  animation: detailLoadingShimmer 2.2s ease-in-out infinite;
 }
 
-.detail-loading-poster {
-  width: min(62vw, 560px);
-  height: 210px;
-  border-radius: 22px;
+.detail-loading-meta-chip:nth-child(1) { width: 72px; }
+.detail-loading-meta-chip:nth-child(2) { width: 54px; }
+.detail-loading-meta-chip:nth-child(3) { width: 86px; }
+
+.detail-loading-actions {
+  display: flex;
+  align-items: center;
+  gap: clamp(12px, 1vw, 18px);
+  margin-bottom: clamp(22px, 2.5vh, 34px);
 }
 
-.detail-loading-pill {
-  width: 144px;
-  height: 62px;
+.detail-loading-btn-primary {
+  width: clamp(200px, 16vw, 300px);
+  height: clamp(72px, 6.5vh, 96px);
+  border-radius: 999px;
 }
 
-.detail-loading-pill.short {
-  width: 82px;
+.detail-loading-btn-circle {
+  width: clamp(72px, 5.5vh, 96px);
+  height: clamp(72px, 5.5vh, 96px);
+  border-radius: 999px;
 }
 
-.detail-loading-line {
-  width: min(82vw, 760px);
-  height: 30px;
+.detail-loading-desc {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
 }
 
-.detail-loading-line.wide {
-  width: min(88vw, 900px);
-}
-
-.detail-loading-line.mid {
-  width: min(80vw, 820px);
-}
-
-.detail-loading-tag {
-  width: 110px;
-  height: 34px;
-}
-
-.detail-loading-chip {
-  width: 94px;
-  height: 28px;
+.detail-loading-desc-line {
+  height: 18px;
+  border-radius: 999px;
 }
 
 @keyframes detailLoadingShimmer {
-  0%, 100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 0.95;
-  }
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.95; }
 }
 
 .stream-screen-shell .series-detail-vignette {
@@ -14536,7 +14618,8 @@ button:focus-visible {
 .performance-constrained .home-continue-skeleton-line,
 .performance-constrained .home-modern-hero-card-loading,
 .performance-constrained .home-modern-hero-media-loading .home-hero-backdrop-loading,
-.performance-constrained .home-hero-backdrop-loading {
+.performance-constrained .home-hero-backdrop-loading,
+.performance-constrained .home-poster-card .content-poster {
   animation: none !important;
 }
 

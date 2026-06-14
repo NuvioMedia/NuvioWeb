@@ -27,7 +27,7 @@ import {
   MODERN_HOME_CONSTANTS,
   renderModernHomeLayout
 } from "./modernHomeLayout.js";
-import { observePosterImages, unobservePosterImages, optimizePosterUrl } from "./posterLoader.js";
+import { observePosterImages, unobservePosterImages, optimizePosterUrl, resetPosterLoader } from "./posterLoader.js";
 import {
   buildCatalogDisableKey,
   buildCatalogOrderKey,
@@ -2124,7 +2124,7 @@ export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowD
              data-logo-src="${escapeAttribute(normalized.logo || "")}"`}>
       <div class="home-poster-frame">
         ${(!isLoading && posterSrc)
-      ? `<img class="content-poster" data-poster-src="${escapeAttribute(optimizePosterUrl(posterSrc))}" decoding="async" alt="${escapeAttribute(normalized.name || "content")}" />`
+      ? `<img class="content-poster" data-poster-src="${escapeAttribute(optimizePosterUrl(posterSrc))}" decoding="async" alt="" aria-label="${escapeAttribute(normalized.name || "")}" />`
       : '<div class="content-poster placeholder"></div>'}
         ${(!isLoading && expandedVisualSrc)
       ? `<img class="home-poster-expanded-backdrop" data-src="${escapeAttribute(expandedVisualSrc)}" decoding="async" loading="lazy" alt="" aria-hidden="true" />`
@@ -6217,6 +6217,21 @@ export const HomeScreen = {
     const initialDescriptors = catalogDescriptors.slice(0, initialCatalogLoad);
     const deferredDescriptors = catalogDescriptors.slice(initialCatalogLoad);
 
+    if (!background && this.layoutMode === "modern" && initialDescriptors.length) {
+      const loadingCount = this.getLoadingRowItemCount();
+      const skeletonRows = initialDescriptors.map((desc) => ({
+        ...desc,
+        homeCatalogKey: buildCatalogOrderKey(desc.addonId, desc.type, desc.catalogId),
+        homeCatalogDisableKey: buildCatalogDisableKey(desc.addonBaseUrl, desc.type, desc.catalogId, desc.catalogName),
+        result: { status: "loading" },
+        loadingItems: buildCatalogLoadingItems(buildModernRowKey(desc), loadingCount)
+      }));
+      this.rows = this.sortAndFilterRows(skeletonRows, this.collections);
+      this.continueWatchingLoading = !suppressContinueWatchingLoading;
+      this.isInitialHomeLoading = false;
+      this.render();
+    }
+
     const initialRows = await this.fetchCatalogRows(initialDescriptors, { allowLoading: true });
     if (token !== this.homeLoadToken) {
       return;
@@ -6277,6 +6292,20 @@ export const HomeScreen = {
     });
 
     if (deferredDescriptors.length) {
+      if (!background && this.layoutMode === "modern") {
+        const loadingCount = this.getLoadingRowItemCount();
+        const deferredSkeletonRows = deferredDescriptors.map((desc) => ({
+          ...desc,
+          homeCatalogKey: buildCatalogOrderKey(desc.addonId, desc.type, desc.catalogId),
+          homeCatalogDisableKey: buildCatalogDisableKey(desc.addonBaseUrl, desc.type, desc.catalogId, desc.catalogName),
+          result: { status: "loading" },
+          loadingItems: buildCatalogLoadingItems(buildModernRowKey(desc), loadingCount)
+        }));
+        const skeletonByKey = new Map((this.rows || []).map((r) => [r.homeCatalogKey, r]));
+        deferredSkeletonRows.forEach((r) => skeletonByKey.set(r.homeCatalogKey, r));
+        this.rows = this.sortAndFilterRows(Array.from(skeletonByKey.values()), this.collections);
+        this.requestBackgroundRender();
+      }
       const progressiveDeferredRows = this.shouldProgressivelyRenderDeferredRows();
       this.fetchCatalogRows(deferredDescriptors, {
         allowLoading: true,
@@ -6842,6 +6871,7 @@ export const HomeScreen = {
     this.ensureHomeTruncationObservers();
     this.scheduleHomeTruncationUpdate();
     this.scheduleReturnFocusRestore();
+    resetPosterLoader();
     observePosterImages(this.container);
   },
 

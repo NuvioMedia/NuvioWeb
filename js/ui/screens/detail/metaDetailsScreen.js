@@ -1226,28 +1226,26 @@ export const MetaDetailsScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="detail-loading-shell" aria-label="Loading detail">
-        <div class="detail-loading-top">
-          <div class="detail-loading-block detail-loading-poster"></div>
-        </div>
-        <div class="detail-loading-meta">
-          <div class="detail-loading-block detail-loading-pill"></div>
-          <div class="detail-loading-block detail-loading-pill short"></div>
-        </div>
-        <div class="detail-loading-copy">
-          <div class="detail-loading-block detail-loading-line"></div>
-          <div class="detail-loading-block detail-loading-line wide"></div>
-          <div class="detail-loading-block detail-loading-line mid"></div>
-        </div>
-        <div class="detail-loading-tags">
-          <div class="detail-loading-block detail-loading-tag"></div>
-          <div class="detail-loading-block detail-loading-tag"></div>
-          <div class="detail-loading-block detail-loading-tag"></div>
-          <div class="detail-loading-block detail-loading-tag"></div>
-        </div>
-        <div class="detail-loading-tags">
-          <div class="detail-loading-block detail-loading-chip"></div>
-          <div class="detail-loading-block detail-loading-chip"></div>
+      <div class="detail-loading-shell" aria-label="Loading detail" aria-live="polite">
+        <div class="detail-loading-bg"></div>
+        <div class="detail-loading-content">
+          <div class="detail-loading-block detail-loading-logo"></div>
+          <div class="detail-loading-meta-row">
+            <div class="detail-loading-block detail-loading-meta-chip"></div>
+            <div class="detail-loading-block detail-loading-meta-chip"></div>
+            <div class="detail-loading-block detail-loading-meta-chip"></div>
+          </div>
+          <div class="detail-loading-actions">
+            <div class="detail-loading-block detail-loading-btn-primary"></div>
+            <div class="detail-loading-block detail-loading-btn-circle"></div>
+            <div class="detail-loading-block detail-loading-btn-circle"></div>
+            <div class="detail-loading-block detail-loading-btn-circle"></div>
+          </div>
+          <div class="detail-loading-desc">
+            <div class="detail-loading-block detail-loading-desc-line" style="width:78%"></div>
+            <div class="detail-loading-block detail-loading-desc-line" style="width:90%"></div>
+            <div class="detail-loading-block detail-loading-desc-line" style="width:65%"></div>
+          </div>
         </div>
       </div>
     `;
