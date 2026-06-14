@@ -13235,7 +13235,7 @@ button:focus-visible {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 0 clamp(116px, 12vh, 168px);
+  padding: 0 64px;
   box-sizing: border-box;
   scrollbar-width: none;
 }
@@ -13249,7 +13249,6 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 48px 64px;
   box-sizing: border-box;
 }
 
@@ -13356,6 +13355,32 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: visible;
+}
+
+.series-circle-btn::after {
+  content: attr(aria-label);
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%) translateY(4px);
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.92);
+  padding: 7px 16px;
+  font-size: 24px;
+  font-weight: bold;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 140ms ease;
+  z-index: 10;
+}
+
+.series-circle-btn.focused::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 .series-circle-btn.is-library-selected {
@@ -16154,7 +16179,7 @@ button:focus-visible {
 .detail-hero-section {
   min-height: 100vh;
   height: 100vh;
-  padding: 48px 64px;
+  padding-bottom: 48px;
 }
 
 .detail-hero-brand {
@@ -16185,7 +16210,7 @@ button:focus-visible {
 
 .series-detail-actions {
   gap: var(--detail-action-gap);
-  margin-bottom: 36px;
+  margin-bottom: 32px;
 }
 
 .series-primary-btn {
@@ -16234,8 +16259,8 @@ button:focus-visible {
 }
 
 .series-detail-support {
-  margin-bottom: 24px;
-  font-size: var(--detail-label-size);
+  margin-bottom: 8px;
+  font-size: 28px;
 }
 
 .series-detail-description {
@@ -16264,8 +16289,8 @@ button:focus-visible {
 }
 
 .detail-meta-row {
-  gap: 24px;
-  font-size: var(--detail-label-size);
+  gap: 16px;
+  font-size: 28px;
 }
 
 .detail-meta-row.secondary {
