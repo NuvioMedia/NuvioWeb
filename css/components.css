@@ -13349,20 +13349,20 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 
 
 .detail-bottom-shadow {
-  position: absolute;
-  right: 0;
+  position: fixed;
   bottom: 0;
   left: 0;
-  inset: auto 0 0;
-  height: 24vh;
-  z-index: 0;
+  right: 0;
+  height: 28vh;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(4, 6, 10, 0.82) 70%, rgba(4, 6, 10, 0.96) 100%);
   opacity: 0;
-  background: none;
-  transition: opacity 300ms ease;
+  transition: opacity 400ms ease;
 }
 
 .series-detail-shell.detail-scrolled .detail-bottom-shadow {
-  opacity: 0;
+  opacity: 1;
 }
 
 .series-detail-content {
@@ -13381,7 +13381,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 }
 
 .detail-hero-section {
-  min-height: clamp(620px, 60vh, 780px);
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
