@@ -1581,7 +1581,13 @@ export const StreamScreen = {
       ));
       this.loading = false;
       if (this.streams.length) {
-        this.focusState = { zone: "card", index: clamp(Number(this.focusState?.index || 0), 0, this.streams.length - 1) };
+        const preferred = String(this.params?.preferredStreamId || "").trim();
+        let initialIndex = 0;
+        if (preferred) {
+          const prefIdx = this.getFilteredStreams().findIndex((s) => String(s?.id || "") === preferred);
+          if (prefIdx >= 0) { initialIndex = prefIdx; }
+        }
+        this.focusState = { zone: "card", index: clamp(initialIndex, 0, this.streams.length - 1) };
       } else {
         this.focusState = { zone: "filter", index: 0 };
       }
