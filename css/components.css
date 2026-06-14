@@ -13076,11 +13076,6 @@ button:focus-visible {
   transition: opacity 800ms ease;
 }
 
-.series-detail-shell.detail-scrolled .series-detail-backdrop {
-  opacity: 0.15;
-  transition-duration: 300ms;
-}
-
 .detail-trailer-layer {
   position: absolute;
   top: 0;
@@ -13335,10 +13330,6 @@ button:focus-visible {
   opacity: 0;
 }
 
-.series-detail-shell.detail-scrolled .series-detail-vignette {
-  opacity: 0;
-  transition-duration: 300ms;
-}
 
 .detail-bottom-shadow {
   position: absolute;

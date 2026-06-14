@@ -3398,7 +3398,7 @@ export const MetaDetailsScreen = {
     if (season !== this.selectedSeason) {
       this.hasManualSeasonSelection = true;
       this.selectedSeason = season;
-      this.render(this.meta);
+      this.updateRenderedDetailSections(this.meta);
     }
     return true;
   },
@@ -3889,7 +3889,7 @@ export const MetaDetailsScreen = {
         if (season > 0 && season !== this.selectedSeason) {
           this.hasManualSeasonSelection = true;
           this.selectedSeason = season;
-          this.render(this.meta, { selector: `.series-season-btn[data-season="${season}"]` });
+          this.updateRenderedDetailSections(this.meta, { selector: `.series-season-btn[data-season="${season}"]` });
         }
         return;
       }
@@ -6302,7 +6302,7 @@ export const MetaDetailsScreen = {
       if (season !== this.selectedSeason) {
         this.hasManualSeasonSelection = true;
         this.selectedSeason = season;
-        this.render(this.meta);
+        this.updateRenderedDetailSections(this.meta);
       }
       return;
     }
