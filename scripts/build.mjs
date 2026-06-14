@@ -34,6 +34,24 @@ const defaultEnvFileContents = `(function defineNuvioEnv() {
 }());
 `;
 
+const defaultYoutubeProxyContents = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Nuvio YouTube Proxy Unavailable</title>
+</head>
+<body>
+<script>
+window.parent && window.parent.postMessage({
+  source: "nuvio-youtube-proxy",
+  type: "error",
+  error: "youtube-proxy.html was not included in this build."
+}, "*");
+</script>
+</body>
+</html>
+`;
+
 async function buildCSS() {
   console.log("processing CSS with PostCSS (legacy support)...");
   const cssDir = path.join(rootDir, "css");
@@ -83,6 +101,21 @@ async function copyOptionalRootFile(fileName, { fallback = null, defaultContents
 
   await writeFile(targetPath, defaultContents, "utf8");
   return "generated-default";
+}
+
+async function copyOptionalFile(sourcePath, targetPath, { defaultContents = "", warningLabel = sourcePath } = {}) {
+  try {
+    await cp(sourcePath, targetPath);
+    return true;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  await writeFile(targetPath, defaultContents, "utf8");
+  console.warn(`WARNING: generated fallback for missing optional build asset: ${warningLabel}`);
+  return false;
 }
 
 async function buildBundle() {
@@ -161,7 +194,10 @@ async function runBuild() {
     await Promise.all([
       cp(path.join(rootDir, "assets"), path.join(distDir, "assets"), { recursive: true }),
       cp(path.join(rootDir, "res"), path.join(distDir, "res"), { recursive: true }),
-      cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"))
+      copyOptionalFile(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"), {
+        defaultContents: defaultYoutubeProxyContents,
+        warningLabel: "docs/youtube-proxy.html"
+      })
     ]);
 
     if (!copiedAppInfoSource) {
