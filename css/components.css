@@ -12403,13 +12403,25 @@ button:focus-visible {
 
 .series-episode-track {
   display: flex;
+  flex-wrap: nowrap;
   gap: 14px;
-  /* overflow-x: auto;
-  overflow-y: hidden; */
+  overflow-x: auto;
+  overflow-y: hidden;
+  width: 100%;
   padding-bottom: 12px;
-  padding-left: 0;
-  padding-right: 16px;
+  padding-right: 2px;
   scrollbar-width: none;
+  
+  /* TV/DPad/Touch Optimization */
+  scroll-snap-type: x mandatory; 
+  scroll-behavior: smooth;
+
+  padding-top: 12px; 
+  padding-bottom: 24px; /* adjusted to account for your 12px layout padding */
+  
+  /* 2. Pull the container back up so it doesn't push elements below it down */
+  margin-top: -12px;
+  margin-bottom: -12px;
 }
 
 .series-episode-track::-webkit-scrollbar {
@@ -12419,7 +12431,8 @@ button:focus-visible {
 .series-episode-card {
   position: relative;
   flex: 0 0 286px;
-  border-radius: 64px;
+  scroll-snap-align: start;
+  border-radius: 24px;
   padding: 10px 10px 12px;
   background: rgba(11, 15, 22, 0.68);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -13787,6 +13800,7 @@ button:focus-visible {
 .series-episode-card.focused {
   border-color: transparent;
   box-shadow: none;
+  padding-left: 2px;
 }
 
 .series-episode-card.focused .series-episode-thumb {
@@ -13824,6 +13838,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   height: 100%;
+  justify-content: space-between;
 }
 
 .series-episode-top-row {
