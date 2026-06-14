@@ -2608,7 +2608,7 @@ button:focus-visible {
   border-radius: 64px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
-  padding: 0 32px;
+  padding: 0 36px;
   color: var(--text-color);
   font-size: 34px;
   font-weight: 500;
@@ -2619,8 +2619,8 @@ button:focus-visible {
 .search-discover-btn.focused,
 .search-voice-btn.focused,
 .search-input-field.focused {
-  border-color: var(--secondary-color);
-  box-shadow: 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.22);
+  border-color: rgb(255 255 255 / 0.10);
+  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.96);
 }
 
 .search-input-field::placeholder {
@@ -3047,7 +3047,7 @@ button:focus-visible {
   margin: 0;
   font-size: 48px;
   font-weight: 600;
-  line-height: 1.08;
+  line-height: 1.2;
   color: var(--text-color);
 }
 
@@ -3114,7 +3114,7 @@ button:focus-visible {
 
 .search-result-name {
   margin-top: 8px;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 500;
   line-height: 1.2;
   color: var(--text-color);
@@ -3194,7 +3194,7 @@ button:focus-visible {
 
 .library-page-title {
   margin: 0;
-  font-size: 56px;
+  font-size: 48px;
   font-weight: 600;
   line-height: 1;
   letter-spacing: 1px;
@@ -3202,7 +3202,7 @@ button:focus-visible {
 
 .library-page-source {
   padding-top: 10px;
-  font-size: 28px;
+  font-size: 24px;
   font-weight: 500;
   letter-spacing: 4px;
   color: var(--text-tertiary);
@@ -3248,8 +3248,8 @@ button:focus-visible {
   width: 100%;
   min-height: min(5.21vw, 100px); /* tuned to match ATV picker silhouette */
   box-sizing: border-box;
-  padding: min(0.94vw, 18px) min(1.46vw, 28px);
-  border-radius: min(1.88vw, 36px);
+  padding: 0 36px;
+  border-radius: 64px;
   border: 1px solid rgb(255 255 255 / 0.10);
   background: var(--card-bg);
   color: var(--text-color);
@@ -3277,7 +3277,7 @@ button:focus-visible {
 }
 
 .library-picker-title {
-  font-size: min(0.99vw, 19px);
+  font-size: 20px;
   line-height: min(1.25vw, 24px);
   font-weight: 500;
   color: var(--text-tertiary);
@@ -3285,7 +3285,7 @@ button:focus-visible {
 }
 
 .library-picker-value {
-  font-size: min(1.56vw, 30px);
+  font-size: 28px;
   line-height: min(2.08vw, 40px);
   font-weight: 500;
   color: var(--text-color);
@@ -3517,7 +3517,7 @@ button:focus-visible {
   width: var(--library-poster-width, 252px);
   padding: 0 4px;
   box-sizing: border-box;
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 500;
   line-height: 1.18;
   color: var(--text-color);
@@ -5900,7 +5900,7 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-row-title {
-  font-size: 26px;
+  font-size: 32px;
   line-height: 1.2;
   font-weight: 600;
 }
@@ -16154,7 +16154,7 @@ button:focus-visible {
 .detail-hero-section {
   min-height: 100vh;
   height: 100vh;
-  padding: 0 var(--detail-safe-x) 32px calc(var(--detail-safe-x) - 24px);
+  padding: 48px 64px;
 }
 
 .detail-hero-brand {
@@ -16192,16 +16192,17 @@ button:focus-visible {
   min-height: var(--detail-button-height);
   padding: 28px 48px;
   border-radius: 64px;
-  background: #ffffff;
-  color: #000000;
+  background: var(--detail-bg-card);
+  color: var(--detail-text-primary);
   border-color: transparent;
   font-size: var(--detail-label-size);
   gap: 16px;
 }
 
 .series-primary-btn.focused {
-  background: #ffffff;
-  color: #000000;
+  background: var(--secondary-color);
+  color: var(--on-secondary);
+  box-shadow: 0 0 0 4px var(--detail-focus-ring);
   border-color: var(--detail-focus-ring);
   transform: none;
 }
