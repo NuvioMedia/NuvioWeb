@@ -5603,15 +5603,22 @@ button:focus-visible {
   --home-poster-radius: 24px;
 }
 
-.home-screen-shell.home-layout-modern .home-hero,
-.home-screen-shell.home-layout-modern .home-modern-hero-card {
+.home-screen-shell.home-layout-modern .home-hero {
   position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
   inset: 0;
   z-index: 1;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-card {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: flex-start;
+  padding: var(--modern-hero-copy-top-safe) var(--modern-hero-copy-right) calc(var(--modern-rows-viewport-padding-bottom) + var(--modern-hero-copy-bottom-gap)) 104px;
+  box-sizing: border-box;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media {
@@ -5762,15 +5769,16 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-copy {
+  position: relative;
   z-index: 2;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
   align-items: flex-start;
   gap: 16px;
-  overflow: hidden;
   transition: opacity 200ms ease;
-  width: 50%;
+  width: var(--modern-hero-copy-max-width);
+  max-width: min(var(--modern-hero-copy-max-width), 680px);
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-meta-enriching .home-modern-hero-copy {
@@ -12401,16 +12409,9 @@ button:focus-visible {
   overflow-x: auto;
   overflow-y: hidden;
   width: 100%;
-  padding-bottom: 12px;
-  padding-right: 2px;
+  padding: 12px 48px 24px 0;
   scrollbar-width: none;
-  
-  /* TV/DPad/Touch Optimization */
-  scroll-snap-type: x mandatory; 
-  scroll-behavior: smooth;
-
-  padding-top: 12px; 
-  padding-bottom: 24px; /* adjusted to account for your 12px layout padding */
+  gap: 48px;
   
   /* 2. Pull the container back up so it doesn't push elements below it down */
   margin-top: -12px;
@@ -13724,14 +13725,17 @@ button:focus-visible {
   display: flex;
   flex-wrap: nowrap;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
   width: 100%;
   scrollbar-width: none;
   scroll-snap-type: x mandatory; 
   scroll-behavior: smooth;
-  padding-bottom: 32px;
+  padding-top: 12px; 
+  padding-bottom: 12px;
+  padding-left: 16px !important;
+  padding-right: 16px;
 }
 
 .series-season-row::-webkit-scrollbar,
@@ -13744,6 +13748,8 @@ button:focus-visible {
 .series-episode-track::-webkit-scrollbar,
 .series-episode-ratings-grid::-webkit-scrollbar {
   display: none;
+  width: 0;
+  height: 0;
 }
 
 .series-season-btn {
@@ -13773,10 +13779,6 @@ button:focus-visible {
   background: var(--detail-focus-fill);
   border-color: transparent;
   color: var(--detail-focus-text);
-}
-
-.series-episode-track {
-  gap: clamp(24px, 1.6vw, 34px);
 }
 
 .series-episode-card {
@@ -14723,6 +14725,10 @@ button:focus-visible {
   left: 0;
 }
 
+.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-card {
+  padding: 40px 52px calc(60vh + 40px) 104px;
+}
+
 .legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media {
   top: 0;
   right: -56px;
@@ -14745,10 +14751,6 @@ button:focus-visible {
 }
 
 .legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-copy {
-  left: 104px;
-  top: 40px;
-  right: 52px;
-  bottom: 60vh;
   width: 640px;
   max-width: 640px;
   gap: 16px;
@@ -15143,6 +15145,10 @@ button:focus-visible {
     left: 0;
   }
 
+  .home-screen-shell.home-layout-modern .home-modern-hero-card {
+    padding: 40px 52px calc(60vh + 40px) 104px;
+  }
+
   .home-screen-shell.home-layout-modern .home-modern-hero-media {
     top: 0;
     right: -56px;
@@ -15165,10 +15171,6 @@ button:focus-visible {
   }
 
   .home-screen-shell.home-layout-modern .home-modern-hero-copy {
-    left: 104px;
-    top: 40px;
-    right: 52px;
-    bottom: 60vh;
     width: 640px;
     max-width: 640px;
     gap: 16px;
@@ -16455,13 +16457,8 @@ button:focus-visible {
   padding-bottom: 48px;
 }
 
-.series-episode-track {
-  gap: 40px;
-}
-
 .series-episode-card {
-  flex-basis: 800px;
-  width: 800px;
+  flex-basis: 600px;
   border-radius: 64px;
 }
 
