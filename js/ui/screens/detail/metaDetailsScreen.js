@@ -26,6 +26,7 @@ import {
   posterItemFromNode,
   PosterOptionsDialogController
 } from "../../components/posterOptionsMenu.js";
+import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const EPISODE_HOLD_DELAY_MS = 650;
@@ -5117,6 +5118,7 @@ export const MetaDetailsScreen = {
       parentalWarnings: this.meta?.parentalWarnings || null,
       parentalGuide: this.meta?.parentalGuide || null,
       videoId: episode.id,
+      preferredStreamId: StreamPreferencesStore.get(this.params?.itemId, episode.id) || null,
       season: episode.season,
       episode: episode.episode,
       episodeTitle: episode.title || "",
@@ -5152,6 +5154,7 @@ export const MetaDetailsScreen = {
       parentalWarnings: this.meta?.parentalWarnings || null,
       parentalGuide: this.meta?.parentalGuide || null,
       videoId: this.params?.itemId || null,
+      preferredStreamId: StreamPreferencesStore.get(this.params?.itemId, this.params?.itemId) || null,
       episodes: [],
       ...extraParams
     });

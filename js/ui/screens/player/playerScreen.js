@@ -22,6 +22,7 @@ import { TraktScrobbleService } from "../../../data/repository/traktScrobbleServ
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
+import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -1556,6 +1557,13 @@ export const PlayerScreen = {
       : null;
     const initialStreamCandidate = preferredStreamCandidate || this.selectBestStreamCandidate(this.streamCandidates);
     const initialStreamUrl = params.streamUrl || initialStreamCandidate?.url || null;
+    if (initialStreamCandidate?.id) {
+      const prefContentId = String(params?.itemId || "").trim();
+      const prefVideoId = String(params?.videoId || params?.itemId || "").trim();
+      if (prefContentId) {
+        StreamPreferencesStore.set(prefContentId, prefVideoId, initialStreamCandidate.id);
+      }
+    }
     if (!this.streamCandidates.length && initialStreamUrl) {
       this.streamCandidates = this.normalizeStreamCandidates([
         {
