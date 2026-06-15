@@ -4,6 +4,7 @@ import { libraryRepository, LibrarySourceMode } from "../../data/repository/libr
 import { watchedItemsRepository } from "../../data/repository/watchedItemsRepository.js";
 import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
 import { NuvioDialog } from "./nuvioDialog.js";
+import { DIALOG_ICONS } from "./dialogIcons.js";
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -80,7 +81,7 @@ export function getPosterOptions(state, options = {}) {
   const includeLibrary = options.includeLibrary !== false;
   const includeWatched = options.includeWatched !== false && !isSeriesType(item.type);
   const actions = [
-    { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") }
+    { action: "details", label: t("cw_action_go_to_details", {}, "Go to details"), icon: DIALOG_ICONS.details }
   ];
   if (includeLibrary) {
     actions.push({
@@ -89,7 +90,8 @@ export function getPosterOptions(state, options = {}) {
         ? t("library_manage_lists", {}, "Manage Lists")
         : state.isSaved
         ? t("detail.removeFromLibrary", {}, "Remove from Library")
-        : t("detail.addToLibrary", {}, "Add to Library")
+        : t("detail.addToLibrary", {}, "Add to Library"),
+      icon: state.isSaved ? DIALOG_ICONS.removeFromLibrary : DIALOG_ICONS.toggleLibrary
     });
   }
   if (includeWatched) {
@@ -228,6 +230,7 @@ export class PosterOptionsDialogController {
       buttons: options.map((option) => ({
         label: option.label,
         key: option.action,
+        icon: option.icon,
         onAction: () => {
           void this.activateOption(option.action);
         }

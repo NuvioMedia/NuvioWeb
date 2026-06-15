@@ -1446,8 +1446,8 @@ button:focus-visible {
   width: 100%;
   padding: 0 36px;
   min-height: 80px;
-  box-sizing: border-box;
-  border-radius: 24px;
+  box-sizing: border-box; 
+  border-radius: 64px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.045);
   color: rgba(255, 255, 255, 0.9);
@@ -1459,10 +1459,28 @@ button:focus-visible {
   cursor: pointer;
   outline: none;
   font-family: inherit;
+  display: flex;
+  align-items: center;
+  gap: 24px;
   transition: background 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
               color 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
               box-shadow 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
               border-color 200ms cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+.nuvio-dialog-button-icon {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nuvio-dialog-button-icon svg {
+  width: 40px;
+  height: 40px;
+  display: block;
 }
 
 .nuvio-dialog-button.focused {
@@ -14301,7 +14319,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 }
 
 .detail-morelike-track {
-  gap: 32px;
+  gap: 48px;
   overflow-x: auto;
   padding: 16px 48px 48px 16px; 
 }

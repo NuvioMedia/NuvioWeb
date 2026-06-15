@@ -128,6 +128,12 @@ export class NuvioDialog {
           + (btn.selected ? " selected" : "")
           + (btn.className ? ` ${btn.className}` : "");
         this._setButtonSelected(el, Boolean(btn.selected));
+        if (btn.icon) {
+          const iconEl = document.createElement("span");
+          iconEl.className = "nuvio-dialog-button-icon";
+          iconEl.innerHTML = btn.icon;
+          el.appendChild(iconEl);
+        }
         const label = document.createElement("span");
         label.className = "nuvio-dialog-button-label";
         label.textContent = btn.label;

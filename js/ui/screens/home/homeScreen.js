@@ -47,6 +47,7 @@ import {
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
 import { NuvioDialog } from "../../components/nuvioDialog.js";
+import { DIALOG_ICONS } from "../../components/dialogIcons.js";
 
 const HERO_ROTATE_FIRST_DELAY_MS = 20000;
 const HERO_ROTATE_INTERVAL_MS = 10000;
@@ -3370,15 +3371,15 @@ export const HomeScreen = {
       return [];
     }
     const options = [
-      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") }
+      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details"), icon: DIALOG_ICONS.details }
     ];
     if (Boolean(this.showContinueWatchingManualPlayOption)) {
       options.push({ action: "playManually", label: t("play_manually", {}, "Play manually") });
     }
     if (!item.isNextUp) {
-      options.push({ action: "startOver", label: t("cw_action_start_from_beginning", {}, "Start from beginning") });
+      options.push({ action: "startOver", label: t("cw_action_start_from_beginning", {}, "Start from beginning"), icon: DIALOG_ICONS.startOver });
     }
-    options.push({ action: "remove", label: t("cw_action_remove", {}, "Remove") });
+    options.push({ action: "remove", label: t("cw_action_remove", {}, "Remove"), icon: DIALOG_ICONS.remove });
     return options;
   },
 
@@ -3398,14 +3399,15 @@ export const HomeScreen = {
     const isMovie = !isSeriesTypeForContinueWatching(item.type || "movie");
     const isTraktLibrary = this.posterHoldMenu?.librarySourceMode === LibrarySourceMode.TRAKT;
     const options = [
-      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details") },
+      { action: "details", label: t("cw_action_go_to_details", {}, "Go to details"), icon: DIALOG_ICONS.details },
       {
         action: isTraktLibrary ? "manageLists" : "toggleLibrary",
         label: isTraktLibrary
           ? t("library_manage_lists", {}, "Manage Lists")
           : (this.posterHoldMenu?.isSaved
           ? t("hero_remove_from_library", {}, "Remove from library")
-          : t("hero_add_to_library", {}, "Add to library"))
+          : t("hero_add_to_library", {}, "Add to library")),
+        icon: isTraktLibrary ? undefined : (this.posterHoldMenu?.isSaved ? DIALOG_ICONS.removeFromLibrary : DIALOG_ICONS.toggleLibrary)
       }
     ];
     if (isMovie) {
@@ -3528,6 +3530,7 @@ export const HomeScreen = {
       buttons: options.map((option, index) => ({
         label: option.label,
         key: option.action,
+        icon: option.icon,
         onAction: () => {
           this.continueWatchingMenu = {
             ...(this.continueWatchingMenu || {}),
@@ -3566,6 +3569,7 @@ export const HomeScreen = {
       buttons: options.map((option, index) => ({
         label: option.label,
         key: option.action,
+        icon: option.icon,
         onAction: () => {
           this.posterHoldMenu = {
             ...(this.posterHoldMenu || {}),
