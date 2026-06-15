@@ -3105,8 +3105,7 @@ export const HomeScreen = {
     const backdrop = heroNode.querySelector(".home-hero-backdrop");
     if (backdrop) {
       const src = display.backdrop || "";
-      if (isHiding && backdrop instanceof HTMLImageElement) {
-        // Everything is hidden — skip crossfade, swap src directly so image preloads while invisible
+      if ((isHiding || this.isPerformanceConstrained()) && backdrop instanceof HTMLImageElement) {
         backdrop.heroBackdropTransitionToken = (Number(backdrop.heroBackdropTransitionToken) || 0) + 1;
         heroNode.querySelectorAll(".home-hero-backdrop-transition-ghost").forEach((n) => n.remove());
         backdrop.classList.remove("home-hero-backdrop-transition-enter", "is-visible");

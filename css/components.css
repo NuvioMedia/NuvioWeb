@@ -4730,6 +4730,7 @@ button:focus-visible {
 .home-screen-shell .home-poster-card {
   border-color: transparent;
   transform: none;
+  will-change: transform;
 }
 
 .home-screen-shell .home-poster-card.focused {
@@ -5815,10 +5816,14 @@ button:focus-visible {
   z-index: 0;
 }
 
+.home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop-wrap {
+  filter: brightness(1.08) saturate(1.04);
+}
+
 .home-screen-shell.home-layout-modern .home-hero-backdrop {
   object-position: 100% 0;
   opacity: 1;
-  filter: brightness(1.08) saturate(1.04);
+  will-change: opacity;
   transition: opacity 700ms ease-in-out;
 }
 
@@ -5834,6 +5839,7 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-hero-backdrop-transition-ghost {
   opacity: 1;
+  will-change: opacity;
   transition: opacity 700ms ease-in;
 }
 
@@ -14766,8 +14772,14 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   -webkit-backdrop-filter: none !important;
 }
 
-.performance-constrained .home-screen-shell .home-hero-backdrop {
+.performance-constrained .home-screen-shell .home-hero-backdrop-wrap {
   filter: none !important;
+}
+
+.performance-constrained .home-screen-shell .home-hero-backdrop,
+.performance-constrained .home-screen-shell .home-hero-backdrop-transition-ghost {
+  transition: none !important;
+  will-change: auto !important;
 }
 
 .performance-constrained .home-screen-shell .home-poster-title,
@@ -14780,6 +14792,27 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   display: -webkit-box !important;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Kill all multi-property poster card transitions — the biggest frame-time sink */
+.performance-constrained .home-screen-shell .home-poster-card {
+  transition: none !important;
+  will-change: auto !important;
+}
+
+/* Remove heavy layered box-shadow on focused frame */
+.performance-constrained .home-screen-shell .home-poster-card.focused .home-poster-frame {
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.8) !important;
+  transition: none !important;
+}
+
+.performance-constrained .home-screen-shell .home-poster-frame {
+  transition: none !important;
+}
+
+/* Profile nav: keep grayscale states but kill the animated transition between them */
+.performance-constrained .home-nav-item.profile {
+  transition: none !important;
 }
 
 .legacy-webos .home-screen-shell.home-layout-modern {
@@ -16511,6 +16544,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   gap: 24px;
   padding-top: 48px;
   padding-bottom: 48px;
+  padding-left: 16px;
 }
 
 .series-episode-card {
