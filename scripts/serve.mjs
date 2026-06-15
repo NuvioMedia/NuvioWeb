@@ -12,6 +12,12 @@ const port = Number(process.env.PORT || 4173);
 const mediaRuntimePath = path.join(rootDir, "services", "webos", "runtime", "media-http.cjs");
 const mediaServerPorts = [2710, 2711, 2712, 2713, 2714];
 const mediaProbeTimeoutMs = 1200;
+const isProduction = process.env.NODE_ENV === "production";
+const isHerokuDyno = Boolean(process.env.DYNO);
+
+if (isHerokuDyno && process.env.NUVIO_DISABLE_MEDIA_RUNTIME == null) {
+  process.env.NUVIO_DISABLE_MEDIA_RUNTIME = "1";
+}
 let mediaRuntimeProcess = null;
 let cachedMediaServerPort = mediaServerPorts[0];
 
@@ -108,7 +114,7 @@ async function findLocalMediaServerPort() {
 }
 
 async function ensureLocalMediaRuntime() {
-  if (process.env.NUVIO_DISABLE_MEDIA_RUNTIME === "1") {
+  if (isProduction || process.env.NUVIO_DISABLE_MEDIA_RUNTIME === "1") {
     return null;
   }
   const existingPort = await findLocalMediaServerPort();

@@ -87,10 +87,59 @@ This repository expands on that foundation into a shared web app that can be reu
 ```bash
 npm install
 npm run build
-python3 -m http.server 8080 -d dist
+npm start
 ```
 
-Open `http://127.0.0.1:8080`.
+Open `http://127.0.0.1:4173`.
+
+The local server binds to `0.0.0.0` and uses `PORT` when it is set, so you can run a different port with:
+
+```bash
+PORT=8080 npm start
+```
+
+### Deploy to Heroku
+
+This repository includes Heroku support:
+
+- `Procfile` starts the web dyno with `npm start`
+- `heroku-postbuild` runs `npm run build` during the Heroku build
+- `engines.node` pins the Node runtime range used by Heroku
+- the local media runtime is disabled automatically on Heroku dynos
+
+Prerequisites:
+
+- Install the [Heroku CLI](https://devcenter.heroku.com/articles/heroku-cli)
+- Log in with `heroku login`
+- Commit your local changes before pushing to Heroku
+
+Create a new Heroku app and deploy with the Heroku Git buildpack:
+
+```bash
+heroku login
+heroku create YOUR_HEROKU_APP_NAME
+heroku buildpacks:set heroku/nodejs -a YOUR_HEROKU_APP_NAME
+git push heroku HEAD:main
+heroku ps:scale web=1 -a YOUR_HEROKU_APP_NAME
+heroku open -a YOUR_HEROKU_APP_NAME
+```
+
+If the Heroku app already exists, attach it as a Git remote instead:
+
+```bash
+heroku login
+heroku git:remote -a YOUR_HEROKU_APP_NAME
+heroku buildpacks:set heroku/nodejs -a YOUR_HEROKU_APP_NAME
+git push heroku HEAD:main
+heroku ps:scale web=1 -a YOUR_HEROKU_APP_NAME
+heroku open -a YOUR_HEROKU_APP_NAME
+```
+
+View runtime logs with:
+
+```bash
+heroku logs --tail -a YOUR_HEROKU_APP_NAME
+```
 
 ### Building Wrapper Projects Yourself
 
