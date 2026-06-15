@@ -2653,17 +2653,40 @@ button:focus-visible {
   background: var(--focus-bg);
 }
 
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
 .search-input-field {
   height: 100px;
   border-radius: 64px;
   border: 1px solid var(--border-color);
   background: var(--card-bg);
-  padding: 0 36px;
+  padding: 0 88px 0 36px;
   color: var(--text-color);
   font-size: 34px;
   font-weight: 500;
   box-sizing: border-box;
-  flex: 1;
+  width: 100%;
+}
+
+.search-input-icon {
+  position: absolute;
+  right: 36px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  color: var(--text-tertiary);
+  pointer-events: none;
+  transition: color 0.14s ease;
+}
+
+.search-input-field.focused ~ .search-input-icon {
+  color: var(--text-secondary);
 }
 
 .search-discover-btn.focused,
@@ -3539,7 +3562,7 @@ button:focus-visible {
 .library-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(var(--library-poster-width, 252px), var(--library-poster-width, 252px)));
-  gap: 32px 24px;
+  gap: 48px 24px;
   align-content: start;
 }
 
@@ -16059,8 +16082,9 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 .seeall-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
-  gap: 20px 16px;
+  gap: 48px 24px;
   align-items: start;
+  padding-bottom: 16px;
 }
 
 .seeall-card {
@@ -16086,7 +16110,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   border-radius: 12px;
   overflow: hidden;
   background: var(--card-bg);
-  margin-bottom: 8px;
+  margin-bottom: 16px;
   transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
 }
 .seeall-card.focused .seeall-card-poster-wrap {
@@ -16108,21 +16132,6 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 
 .seeall-card-poster-image {
   object-fit: cover;
-}
-
-.seeall-card-title {
-  width: 100%;
-  font-size: 28px;
-  font-weight: 500;
-  line-height: 1.2;
-  color: var(--text-color);
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0 2px;
 }
 
 .seeall-card-year {
@@ -16909,9 +16918,4 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
     0 20px 40px -4px rgba(0, 0, 0, 0.65),
     inset 0 1px 0 rgba(255, 255, 255, 0.25);
   background-color: var(--focus-bg);
-}
-
-.seeall-grid:has(.seeall-card.focused) .seeall-card:not(.focused) {
-  transform: scale(0.93);
-  filter: brightness(0.35) saturate(0.5);
 }

@@ -782,17 +782,24 @@ export const SearchScreen = {
             <h1 class="library-page-title">${escapeHtml(t("search_title", {}, "Search"))}</h1>
           </header>
           <section class="search-header${this.layoutPrefs?.searchDiscoverEnabled ? "" : " no-discover"}">
-            <input
-              id="searchInput"
-              class="search-input-field focusable"
-              type="text"
-              data-action="searchInput"
-              autocomplete="off"
-              autocapitalize="off"
-              spellcheck="false"
-              placeholder="${escapeHtml(t("search_placeholder", {}, "Search movies & series"))}"
-              value="${escapeHtml(queryText)}"
-            />
+            <div class="search-input-wrap">
+              <input
+                id="searchInput"
+                class="search-input-field focusable"
+                type="text"
+                data-action="searchInput"
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+                placeholder="${escapeHtml(t("search_placeholder", {}, "Search movies & series"))}"
+                value="${escapeHtml(queryText)}"
+              />
+              <span class="search-input-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="currentColor" viewBox="0 0 256 256">
+                  <path d="M229.66,218.34l-50.07-50.06a88.11,88.11,0,1,0-11.31,11.31l50.06,50.07a8,8,0,0,0,11.32-11.32ZM40,112a72,72,0,1,1,72,72A72.08,72.08,0,0,1,40,112Z"></path>
+                </svg>
+              </span>
+            </div>
             ${this.layoutPrefs?.searchDiscoverEnabled ? `
               <button class="search-discover-btn focusable" data-action="openDiscover" data-index="7" data-nav-zone="header" data-nav-col="0" aria-label="${escapeHtml(t("search_discover_label", {}, "Discover"))}">
                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 256 256">

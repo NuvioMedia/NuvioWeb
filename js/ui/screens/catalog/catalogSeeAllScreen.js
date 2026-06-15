@@ -560,7 +560,7 @@ export const CatalogSeeAllScreen = {
                 : `<div class="seeall-card-poster placeholder"></div>`}
             </div>
             ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
-              <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
+              <div class="library-grid-title">${escapeHtml(item.name || "Untitled")}</div>
               <div class="seeall-card-year">${escapeHtml(extractReleaseYear(item))}</div>
             ` : ""}
           </article>
