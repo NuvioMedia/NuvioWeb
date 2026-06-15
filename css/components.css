@@ -1995,6 +1995,20 @@ button:focus-visible {
   fill: currentColor;
 }
 
+.sidebar-icon-fill {
+  display: none;
+}
+
+.home-nav-item.selected .sidebar-icon-regular,
+.modern-sidebar-nav-item.selected .sidebar-icon-regular {
+  display: none;
+}
+
+.home-nav-item.selected .sidebar-icon-fill,
+.modern-sidebar-nav-item.selected .sidebar-icon-fill {
+  display: block;
+}
+
 .home-profile-pill {
   display: flex;
   width: var(--legacy-sidebar-item-expanded-width);
@@ -12717,18 +12731,6 @@ button:focus-visible {
   display: none;
 }
 
-.movie-cast-card {
-  flex: 0 0 210px;
-  border-radius: 16px;
-  padding: 8px;
-  background: rgba(11, 15, 22, 0.4);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.series-cast-card {
-  flex: 0 0 188px;
-}
-
 .movie-cast-card.focused {
   transform: none;
   border-color: #fff;
@@ -13988,7 +13990,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   align-items: center;
   gap: 0;
   margin-bottom: 0;
-  padding: 48px 0;
+  padding: 48px 48px 32px 0;
   overflow-x: auto;
 }
 
@@ -14027,17 +14029,16 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 }
 
 .movie-cast-card {
-  flex: 0 0 300px;
-  width: 300px;
   padding: 0;
   background: transparent;
   border: 0;
   transition: transform 180ms ease;
-}
-
-.series-cast-card {
-  width: 300px;
-  flex-basis: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: start;
+  width: 250px;
+  box-shadow: none !important;
 }
 
 .movie-cast-avatar {
@@ -14063,6 +14064,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   line-height: 1.35;
   font-weight: 500;
   color: var(--detail-text-secondary);
+  text-align: center;
 }
 
 .movie-cast-role {
@@ -14191,10 +14193,9 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 }
 
 .detail-morelike-track {
-  gap: clamp(22px, 1.5vw, 32px);
+  gap: 32px;
   overflow-x: auto;
-  padding-top: 8px;
-  padding-bottom: 8px;
+  padding: 16px 48px 48px 16px; 
 }
 
 .detail-morelike-card {
@@ -14236,7 +14237,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 }
 
 .detail-morelike-name {
-  margin-top: 10px;
+  margin-top: 16px;
   font-size: var(--tv-body-text);
   line-height: 1.45;
   font-weight: 500;
@@ -16536,10 +16537,6 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   letter-spacing: 2px;
 }
 
-.series-insight-tabs {
-  padding-top: 40px;
-}
-
 .series-insight-tab,
 .series-insight-divider,
 .detail-company-title {
@@ -16552,15 +16549,8 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 
 .movie-cast-track,
 .series-cast-track {
-  gap: 16px;
-  padding-top: 12px;
-  padding-bottom: 16px;
-}
-
-.movie-cast-card,
-.series-cast-card {
-  flex-basis: 300px;
-  width: 300px;
+  gap: 32px;
+  padding: 16px 48px 48px 16px;
 }
 
 .movie-cast-avatar {
@@ -16595,10 +16585,6 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 .detail-company-card img {
   max-width: calc(100% - 56px);
   max-height: 72px;
-}
-
-.detail-morelike-track {
-  gap: 24px;
 }
 
 .detail-morelike-card {

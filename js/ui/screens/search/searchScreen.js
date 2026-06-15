@@ -793,8 +793,10 @@ export const SearchScreen = {
               value="${escapeHtml(queryText)}"
             />
             ${this.layoutPrefs?.searchDiscoverEnabled ? `
-              <button class="search-discover-btn focusable" data-action="openDiscover">
-                <span class="search-action-icon material-icons" aria-hidden="true">explore</span>
+              <button class="search-discover-btn focusable" data-action="openDiscover" data-index="7" data-nav-zone="header" data-nav-col="0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" fill="currentColor" viewBox="0 0 256 256">
+                  <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM172.42,72.84l-64,32a8.05,8.05,0,0,0-3.58,3.58l-32,64A8,8,0,0,0,80,184a8.1,8.1,0,0,0,3.58-.84l64-32a8.05,8.05,0,0,0,3.58-3.58l32-64a8,8,0,0,0-10.74-10.74ZM138,138,97.89,158.11,118,118l40.15-20.07Z"></path>
+                </svg>
               </button>
             ` : ""}
             <button
@@ -802,7 +804,9 @@ export const SearchScreen = {
               data-action="openVoice"
               aria-label="Voice search"
             >
-              <span class="search-action-icon material-icons" aria-hidden="true">mic</span>
+              <svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" fill="currentColor" viewBox="0 0 256 256">
+                <path d="M128,176a48.05,48.05,0,0,0,48-48V64a48,48,0,0,0-96,0v64A48.05,48.05,0,0,0,128,176ZM96,64a32,32,0,0,1,64,0v64a32,32,0,0,1-64,0Zm40,143.6V240a8,8,0,0,1-16,0V207.6A80.11,80.11,0,0,1,48,128a8,8,0,0,1,16,0,64,64,0,0,0,128,0,8,8,0,0,1,16,0A80.11,80.11,0,0,1,136,207.6Z"></path>
+              </svg>
             </button>
           </section>
           ${this.renderRows()}
