@@ -191,12 +191,11 @@ export const PluginScreen = {
           <header class="library-page-header">
             <h1 class="library-page-title">Addons</h1>
           </header>
+          <p class="addons-lede">
+            Manage addons and home catalogs from your phone.
+          </p>
           <div class="addons-panel addons-panel-centered">
             <section class="addons-hero-card">
-              <h1 class="addons-title addons-title-centered">Addons</h1>
-              <p class="addons-lede">
-                Manage addons and home catalogs from your phone.
-              </p>
               <p class="addons-meta">${escapeHtml(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
               <div role="button"
                    class="addons-large-row addons-large-row-centered addons-focusable"

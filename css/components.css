@@ -6166,6 +6166,14 @@ button:focus-visible {
   margin-top: 0;
 }
 
+.home-screen-shell.home-layout-modern .home-row-continue .home-track {
+  /* Ensure the CW track always overflows enough for any card to be scrolled to the
+     left edge, matching how long catalog rows behave. With margin-left: -104px,
+     clientWidth = containerWidth + 104, so the required padding-right = clientWidth
+     - leftPad - cardWidth = (100% + 104) - 104 - cardWidth = 100% - cardWidth. */
+  padding-right: calc(100% - var(--home-continue-width));
+}
+
 .home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-row-continue {
   margin-bottom: 18px;
 }
@@ -9296,15 +9304,18 @@ button:focus-visible {
 }
 
 .addons-main-centered {
+  min-height: calc(100vh - 96px);
+  color: var(--text-color);
+  position: relative;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding-bottom: 56px;
+  flex-direction: column;
 }
 
 .addons-panel-centered {
   display: flex;
   justify-content: center;
+  flex: 1;
+  align-items: center;
 }
 
 .addons-hero-card {

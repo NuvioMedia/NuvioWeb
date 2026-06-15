@@ -5663,7 +5663,12 @@ export const HomeScreen = {
   },
 
   ensureTrackHorizontalVisibility(target, direction = null, layoutAdjustment = 0) {
-    if (this.layoutMode === "modern") {
+    const track = target?.closest?.(".home-track, .home-grid-track");
+    if (!track) {
+      return;
+    }
+    const isContinueTrack = track.classList.contains("home-track-continue");
+    if (this.layoutMode === "modern" || isContinueTrack) {
       const next = this.getModernTrackAlignedScrollTarget(target, layoutAdjustment);
       if (!next?.container) {
         return;
@@ -5675,10 +5680,6 @@ export const HomeScreen = {
       return;
     }
 
-    const track = target?.closest?.(".home-track, .home-grid-track");
-    if (!track) {
-      return;
-    }
     const metrics = this.getTrackViewportMetrics(track);
     const targetLeft = target.offsetLeft;
     const targetRight = targetLeft + target.offsetWidth;
