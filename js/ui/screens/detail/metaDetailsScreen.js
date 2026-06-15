@@ -51,8 +51,39 @@ const EPISODE_VIRTUALIZATION_DEFAULT_GAP = 34;
 const EPISODE_HOLD_REPEAT_INITIAL_DELAY_MS = 170;
 const EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS = 24;
 const EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS = 140;
-const EPISODE_HOLD_REPEAT_STEP_INTERVAL_MS = 220;
 const EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX = 50;
+const EPISODE_HOLD_REPEAT_PROFILE = [
+  {
+    elapsedMs: 5000,
+    stepCount: 40,
+    intervalMs: EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS,
+    stepSize: EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX
+  },
+  {
+    elapsedMs: 3200,
+    stepCount: 28,
+    intervalMs: 28,
+    stepSize: 24
+  },
+  {
+    elapsedMs: 2000,
+    stepCount: 18,
+    intervalMs: 42,
+    stepSize: 16
+  },
+  {
+    elapsedMs: 1200,
+    stepCount: 10,
+    intervalMs: 60,
+    stepSize: 10
+  },
+  {
+    elapsedMs: 650,
+    stepCount: 5,
+    intervalMs: 86,
+    stepSize: 6
+  }
+];
 const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
@@ -404,6 +435,14 @@ function getDpadDirection(event) {
   if (keyCode === 38 || key === "arrowup" || key === "up") return "up";
   if (keyCode === 40 || key === "arrowdown" || key === "down") return "down";
   return null;
+}
+
+function resolveEpisodeHoldRepeatProfile(stepCount = 0, elapsedMs = 0) {
+  return EPISODE_HOLD_REPEAT_PROFILE.find((entry) => elapsedMs >= entry.elapsedMs || stepCount >= entry.stepCount)
+    || {
+      intervalMs: EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS,
+      stepSize: 1
+    };
 }
 
 async function withTimeout(promise, ms, fallbackValue) {
@@ -1242,7 +1281,7 @@ export const MetaDetailsScreen = {
     this.resumeContentIds = [];
     this.episodeFocusIndexBySeason = {};
     this.episodeVirtualWindow = null;
-    this.episodeVirtualState = null;
+    this.episodeVirtualMetrics = null;
     this.episodeTrackScrollHandler = null;
     this.episodeTrackScrollNode = null;
     this.episodeVirtualSyncRaf = null;
@@ -1250,8 +1289,8 @@ export const MetaDetailsScreen = {
     this.episodeHoldRepeatDirection = "";
     this.episodeHoldRepeatStartedAt = 0;
     this.episodeHoldRepeatStepCount = 0;
-    this.episodeHoldRepeatTargetVideoId = "";
     this.episodeThumbnailPrefetchCache = new Set();
+    this.selectedSeasonEpisodeState = null;
     this.railFocusIndexByKey = {};
     this.watchedEpisodeKeys = new Set();
     this.autoOpenedContinueWatchingStream = false;
@@ -2825,10 +2864,36 @@ export const MetaDetailsScreen = {
   },
 
   getSelectedSeasonEpisodes() {
-    if (!Array.isArray(this.episodes) || !this.episodes.length) {
-      return [];
+    return this.getSelectedSeasonEpisodeState().episodes;
+  },
+
+  getSelectedSeasonEpisodeState() {
+    const allEpisodes = Array.isArray(this.episodes) ? this.episodes : [];
+    const season = Number(this.selectedSeason || 0);
+    const cachedState = this.selectedSeasonEpisodeState;
+    if (cachedState?.source === allEpisodes && cachedState.season === season) {
+      return cachedState;
     }
-    return this.episodes.filter((episode) => Number(episode?.season || 0) === Number(this.selectedSeason || 0));
+    const seasonEpisodes = [];
+    const indexByVideoId = new Map();
+    for (const episode of allEpisodes) {
+      if (Number(episode?.season || 0) !== season) {
+        continue;
+      }
+      const absoluteIndex = seasonEpisodes.length;
+      seasonEpisodes.push(episode);
+      const videoId = String(episode?.id || "").trim();
+      if (videoId && !indexByVideoId.has(videoId)) {
+        indexByVideoId.set(videoId, absoluteIndex);
+      }
+    }
+    this.selectedSeasonEpisodeState = {
+      source: allEpisodes,
+      season,
+      episodes: seasonEpisodes,
+      indexByVideoId
+    };
+    return this.selectedSeasonEpisodeState;
   },
 
   getEpisodeIndexByVideoId(videoId) {
@@ -2836,15 +2901,43 @@ export const MetaDetailsScreen = {
     if (!wanted) {
       return -1;
     }
-    return this.getSelectedSeasonEpisodes().findIndex((episode) => String(episode?.id || "") === wanted);
+    return this.getSelectedSeasonEpisodeState().indexByVideoId.get(wanted) ?? -1;
   },
 
   getEpisodeTrackElement() {
     return this.container?.querySelector(".series-episode-track") || null;
   },
 
+  getFocusedEpisodeCard() {
+    const target = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
+    return target instanceof HTMLElement ? target : null;
+  },
+
+  getEpisodeAbsoluteIndex(node) {
+    if (!(node instanceof HTMLElement)) {
+      return -1;
+    }
+    const explicitIndex = Number(node.dataset.episodeIndex || -1);
+    if (Number.isFinite(explicitIndex) && explicitIndex >= 0) {
+      return explicitIndex;
+    }
+    return this.getEpisodeIndexByVideoId(String(node.dataset.videoId || ""));
+  },
+
   measureEpisodeTrackMetrics(track = null) {
     const target = track instanceof HTMLElement ? track : this.getEpisodeTrackElement();
+    const season = Number(this.selectedSeason || 0);
+    const viewportWidth = Number(target?.clientWidth || 0);
+    const cachedMetrics = this.episodeVirtualMetrics;
+    if (
+      cachedMetrics
+      && cachedMetrics.season === season
+      && cachedMetrics.viewportWidth === viewportWidth
+      && cachedMetrics.cardWidth > 0
+      && cachedMetrics.stride > 0
+    ) {
+      return cachedMetrics;
+    }
     const sampleCard = target?.querySelector?.(".series-episode-card") || null;
     const sampleWindow = target?.querySelector?.(".series-episode-track-window") || target;
     const trackStyle = target && typeof getComputedStyle === "function" ? getComputedStyle(target) : null;
@@ -2852,18 +2945,16 @@ export const MetaDetailsScreen = {
     const rawGap = Number.parseFloat(windowStyle?.gap || windowStyle?.columnGap || trackStyle?.gap || trackStyle?.columnGap || "0");
     const gap = Number.isFinite(rawGap) && rawGap >= 0 ? rawGap : EPISODE_VIRTUALIZATION_DEFAULT_GAP;
     const measuredWidth = Number(sampleCard?.getBoundingClientRect?.().width || 0);
-    const cardWidth = measuredWidth > 0 ? measuredWidth : (this.episodeVirtualState?.cardWidth || EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH);
+    const cardWidth = measuredWidth > 0 ? measuredWidth : (cachedMetrics?.cardWidth || EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH);
     const stride = Math.max(1, cardWidth + gap);
-    const viewportWidth = Number(target?.clientWidth || 0);
-    this.episodeVirtualState = {
-      season: Number(this.selectedSeason || 0),
+    this.episodeVirtualMetrics = {
+      season,
       cardWidth,
       gap,
       stride,
-      viewportWidth,
-      measuredAt: Date.now()
+      viewportWidth
     };
-    return this.episodeVirtualState;
+    return this.episodeVirtualMetrics;
   },
 
   getEpisodeVirtualWindowState(episodes = this.getSelectedSeasonEpisodes(), preferredIndex = null) {
@@ -2873,8 +2964,8 @@ export const MetaDetailsScreen = {
       return null;
     }
     const virtualized = total > EPISODE_VIRTUALIZATION_THRESHOLD;
+    const metrics = this.measureEpisodeTrackMetrics();
     if (!virtualized) {
-      const metrics = this.measureEpisodeTrackMetrics();
       return {
         season: Number(this.selectedSeason || 0),
         virtualized: false,
@@ -2889,7 +2980,6 @@ export const MetaDetailsScreen = {
       };
     }
 
-    const metrics = this.measureEpisodeTrackMetrics();
     const visibleEstimate = Math.ceil(Math.max(1, metrics.viewportWidth || 0) / Math.max(1, metrics.stride || 1));
     const windowSize = Math.min(
       total,
@@ -3048,10 +3138,11 @@ export const MetaDetailsScreen = {
     if (!track) {
       return false;
     }
-    const currentFocus = this.container.querySelector(".series-episode-card.focusable.focused") || null;
+    const currentFocus = this.getFocusedEpisodeCard();
+    const currentFocusIndex = this.getEpisodeAbsoluteIndex(currentFocus);
     const focusIndex = Number.isFinite(preferredIndex)
       ? preferredIndex
-      : Number(currentFocus?.dataset?.episodeIndex || this.getRememberedEpisodeIndex(episodes));
+      : (currentFocusIndex >= 0 ? currentFocusIndex : this.getRememberedEpisodeIndex(episodes));
     const nextWindow = this.getEpisodeVirtualWindowState(episodes, focusIndex);
     if (!nextWindow) {
       return false;
@@ -3064,11 +3155,9 @@ export const MetaDetailsScreen = {
       && currentWindow.end === nextWindow.end
       && currentWindow.virtualized === nextWindow.virtualized
     ) {
-      this.episodeVirtualState = nextWindow;
       return false;
     }
     this.episodeVirtualWindow = nextWindow;
-    this.episodeVirtualState = nextWindow;
     this.refreshEpisodeTrack({ episodeIndex: focusIndex, preserveVerticalScroll: true }, focusIndex);
     return true;
   },
@@ -3771,57 +3860,25 @@ export const MetaDetailsScreen = {
     this.episodeHoldRepeatDirection = "";
     this.episodeHoldRepeatStartedAt = 0;
     this.episodeHoldRepeatStepCount = 0;
-    this.episodeHoldRepeatTargetVideoId = "";
   },
 
   getEpisodeHoldRepeatInterval(stepCount = 0, elapsedMs = 0) {
-    if (elapsedMs >= 5000 || stepCount >= 40) {
-      return EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS;
-    }
-    if (elapsedMs >= 3200 || stepCount >= 28) {
-      return 28;
-    }
-    if (elapsedMs >= 2000 || stepCount >= 18) {
-      return 42;
-    }
-    if (elapsedMs >= 1200 || stepCount >= 10) {
-      return 60;
-    }
-    if (elapsedMs >= 650 || stepCount >= 5) {
-      return 86;
-    }
-    return EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS;
+    return resolveEpisodeHoldRepeatProfile(stepCount, elapsedMs).intervalMs;
   },
 
   getEpisodeRepeatStepSize(stepCount = 0, elapsedMs = 0) {
-    if (elapsedMs >= 5000 || stepCount >= 40) {
-      return EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX;
-    }
-    if (elapsedMs >= 3200 || stepCount >= 28) {
-      return 24;
-    }
-    if (elapsedMs >= 2000 || stepCount >= 18) {
-      return 16;
-    }
-    if (elapsedMs >= 1200 || stepCount >= 10) {
-      return 10;
-    }
-    if (elapsedMs >= 650 || stepCount >= 5) {
-      return 6;
-    }
-    return 1;
+    return resolveEpisodeHoldRepeatProfile(stepCount, elapsedMs).stepSize;
   },
 
   moveEpisodeFocusWithAcceleration(direction) {
     if (direction !== "left" && direction !== "right") {
       return false;
     }
-    const current = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
+    const current = this.getFocusedEpisodeCard();
     if (!current) {
       return false;
     }
-    const videoId = String(current.dataset.videoId || "").trim();
-    const currentIndex = Number(current.dataset.episodeIndex || this.getEpisodeIndexByVideoId(videoId));
+    const currentIndex = this.getEpisodeAbsoluteIndex(current);
     if (!Number.isFinite(currentIndex) || currentIndex < 0) {
       return false;
     }
@@ -3842,12 +3899,11 @@ export const MetaDetailsScreen = {
     this.episodeHoldRepeatDirection = direction;
     this.episodeHoldRepeatStartedAt = now;
     this.episodeHoldRepeatStepCount = 0;
-    this.episodeHoldRepeatTargetVideoId = videoId;
     const tick = () => {
       if (!this.episodeHoldRepeatDirection) {
         return;
       }
-      const current = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
+      const current = this.getFocusedEpisodeCard();
       if (!current) {
         this.stopEpisodeHoldRepeat();
         return;
@@ -3861,7 +3917,8 @@ export const MetaDetailsScreen = {
       const moveCount = Math.max(1, stepSize);
       this.episodeHoldRepeatStepCount += 1;
       const step = this.episodeHoldRepeatDirection === "left" ? -moveCount : moveCount;
-      const didMove = this.focusEpisodeByIndex((Number(current.dataset.episodeIndex || this.getEpisodeIndexByVideoId(String(current.dataset.videoId || this.episodeHoldRepeatTargetVideoId || ""))) || 0) + step, {
+      const currentIndex = this.getEpisodeAbsoluteIndex(current);
+      const didMove = this.focusEpisodeByIndex((currentIndex >= 0 ? currentIndex : 0) + step, {
         preserveVerticalScroll: true,
         animated: false
       });
@@ -7170,13 +7227,14 @@ export const MetaDetailsScreen = {
     }
     this.stopEpisodeHoldRepeat();
     this.episodeThumbnailPrefetchCache = new Set();
+    this.selectedSeasonEpisodeState = null;
     if (this.episodeTrackScrollNode && this.episodeTrackScrollHandler) {
       this.episodeTrackScrollNode.removeEventListener("scroll", this.episodeTrackScrollHandler);
     }
     this.episodeTrackScrollNode = null;
     this.episodeTrackScrollHandler = null;
     this.episodeVirtualWindow = null;
-    this.episodeVirtualState = null;
+    this.episodeVirtualMetrics = null;
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
     if (this.detailScrollHandler && this.container) {
       const content = this.container.querySelector(".series-detail-content");
