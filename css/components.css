@@ -12396,7 +12396,7 @@ button:focus-visible {
   overflow-x: auto;
   overflow-y: visible;
   width: 100%;
-  padding: 16px 48px 0px 0px;
+  padding: 16px 48px 48px 16px;
   scrollbar-width: none;
   gap: 32px;
   margin-top: -16px;
