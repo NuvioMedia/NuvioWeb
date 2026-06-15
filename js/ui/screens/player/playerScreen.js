@@ -22,6 +22,7 @@ import { TraktScrobbleService } from "../../../data/repository/traktScrobbleServ
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
+import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -1612,6 +1613,17 @@ export const PlayerScreen = {
     if (this.currentStreamIndex < 0) {
       this.currentStreamIndex = 0;
     }
+    // Remember the stream that actually plays so the stream list can focus it on
+    // the next visit. Only persist when the caller provided a real candidate list
+    // (this skips trailers and synthetic single-url playback).
+    if (Array.isArray(params.streamCandidates) && params.streamCandidates.length) {
+      const playingStreamCandidate = this.streamCandidates[this.currentStreamIndex] || null;
+      const prefContentId = String(params?.itemId || "").trim();
+      const prefVideoId = String(params?.videoId || params?.itemId || "").trim();
+      if (playingStreamCandidate?.id && prefContentId) {
+        StreamPreferencesStore.set(prefContentId, prefVideoId, playingStreamCandidate.id);
+      }
+    }
     this.activePlaybackSourceContext = this.getPlaybackSourceContext(
       preferredStreamCandidate || initialStreamCandidate || this.streamCandidates[this.currentStreamIndex] || null
     ) || this.normalizePlaybackSourceContext(params.playbackSourceContext || params.sourceContext || null);
@@ -1933,7 +1945,8 @@ export const PlayerScreen = {
       background: this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
       episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
       requestHeaders,
-      mediaSourceType
+      mediaSourceType,
+      streamIdentity: streamCandidate ? streamMergeKey(streamCandidate) || null : null
     };
   },
 

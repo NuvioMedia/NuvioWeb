@@ -177,6 +177,123 @@ async function routeAfterAuthentication() {
   Router.navigate("home");
 }
 
+function setupWebOsAppLifecycle() {
+  if (!Platform.isWebOS()) {
+    return;
+  }
+
+  const appSystems = Array.from(new Set([
+    globalThis.webOSSystem || null,
+    globalThis.PalmSystem || null,
+  ].filter(Boolean)));
+
+  function activateWebOsApp() {
+    const system = appSystems.find((entry) => typeof entry?.activate === "function") || null;
+    if (!system) {
+      return;
+    }
+    try {
+      system.activate();
+    } catch (error) {
+      console.warn("webOS activate failed", error);
+    }
+  }
+
+  function installNativeCallback(system, systemName, callbackName, { recoverOnCall = false } = {}) {
+    if (!system) {
+      return;
+    }
+    const previous = typeof system[callbackName] === "function"
+      ? system[callbackName].bind(system)
+      : null;
+    try {
+      system[callbackName] = (...args) => {
+        if (previous) {
+          try {
+            previous(...args);
+          } catch (error) {
+            console.warn(`webOS callback ${systemName}.${callbackName} failed`, error);
+          }
+        }
+        if (recoverOnCall) {
+          void recover(`${systemName}.${callbackName}`);
+        }
+      };
+    } catch (error) {
+      console.warn(`webOS callback hook ${systemName}.${callbackName} failed`, error);
+    }
+  }
+
+  // webOS keeps the app resident when it is backgrounded. Re-opening can fire
+  // a launch event on the existing JS context instead of reloading the page.
+  let recovering = false;
+  const recover = async () => {
+    if (recovering || !appShellRendered) {
+      return;
+    }
+    const current = Router.getCurrent();
+    if (!current) {
+      return;
+    }
+    recovering = true;
+    try {
+      if (document.body) {
+        document.body.style.removeProperty("display");
+      }
+      const isTransientRoute = current === "player" || current === "stream";
+      const target = isTransientRoute ? "home" : current;
+      const params = target === current ? Router.currentParams || {} : {};
+      await Router.navigate(target, params, {
+        replaceHistory: true,
+        skipStackPush: true,
+      });
+      // With handlesRelaunch=true, webOS expects the app to explicitly request
+      // foreground activation after processing the relaunch callback.
+      activateWebOsApp();
+    } catch (error) {
+      console.warn("webOS relaunch recovery failed", error);
+    } finally {
+      recovering = false;
+    }
+  };
+
+  document.addEventListener("webOSRelaunch", () => {
+    void recover();
+  }, true);
+
+  // webOS 4.x may fire webOSLaunch instead of webOSRelaunch when resuming.
+  document.addEventListener("webOSLaunch", () => {
+    void recover();
+  }, true);
+
+  // Some builds only expose visibilitychange when the WebView is resumed.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void recover();
+    }
+  });
+
+  // Older webOS WebKit builds may emit only the prefixed visibility signal.
+  document.addEventListener("webkitvisibilitychange", () => {
+    if (document.webkitHidden !== true) {
+      void recover();
+    }
+  });
+
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onshow", { recoverOnCall: true });
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onhide");
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onfocus", { recoverOnCall: true });
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onblur");
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onactivate", { recoverOnCall: true });
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "ondeactivate");
+  installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onshow", { recoverOnCall: true });
+  installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onhide");
+  installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onfocus", { recoverOnCall: true });
+  installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onblur");
+  installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onactivate", { recoverOnCall: true });
+  installNativeCallback(globalThis.PalmSystem, "PalmSystem", "ondeactivate");
+}
+
 async function bootstrapApp() {
   renderAppShell();
   appShellRendered = true;
@@ -188,6 +305,7 @@ async function bootstrapApp() {
   PlayerController.init();
 
   FocusEngine.init();
+  setupWebOsAppLifecycle();
 
   ThemeManager.apply();
   I18n.apply();

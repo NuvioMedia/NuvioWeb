@@ -337,9 +337,10 @@ export const DiscoverScreen = {
     this.catalogs = [];
     addons.forEach((addon) => {
       addon.catalogs.forEach((catalog) => {
-        const isSearchOnly = (catalog.extra || []).some(
-          (extra) => extra?.name === "search" && Boolean(extra?.isRequired)
-        );
+        // Only skip catalogs that REQUIRE a search query (truly search-only).
+        // Catalogs that merely support optional search are still browsable and
+        // belong in Discover (e.g. some addons declare an optional search extra).
+        const isSearchOnly = (catalog.extra || []).some((extra) => extra?.name === "search" && Boolean(extra?.isRequired));
         if (isSearchOnly) return;
         const type = String(catalog.apiType || "").trim();
         if (!type) return;

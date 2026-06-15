@@ -25,6 +25,7 @@ import {
   posterItemFromNode,
   PosterOptionsDialogController
 } from "../../components/posterOptionsMenu.js";
+import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 import {
   WATCH_PROGRESS_COMPLETED_THRESHOLD,
   getWatchProgressFraction,
@@ -43,6 +44,47 @@ const DETAIL_SCROLL_DAMPING_RATIO = 0.95;
 const DETAIL_TAB_FOCUS_TARGET = 0.40;
 const DETAIL_ROW_FOCUS_TARGET = 0.33;
 const DETAIL_SCROLL_MAX_FRAME_SECONDS = 0.016;
+const EPISODE_VIRTUALIZATION_THRESHOLD = 72;
+const EPISODE_VIRTUALIZATION_MIN_WINDOW = 20;
+const EPISODE_VIRTUALIZATION_OVERSCAN = 8;
+const EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH = 540;
+const EPISODE_VIRTUALIZATION_DEFAULT_GAP = 34;
+const EPISODE_HOLD_REPEAT_INITIAL_DELAY_MS = 170;
+const EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS = 24;
+const EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS = 140;
+const EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX = 50;
+const EPISODE_HOLD_REPEAT_PROFILE = [
+  {
+    elapsedMs: 5000,
+    stepCount: 40,
+    intervalMs: EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS,
+    stepSize: EPISODE_HOLD_REPEAT_STEP_MULTIPLIER_MAX
+  },
+  {
+    elapsedMs: 3200,
+    stepCount: 28,
+    intervalMs: 28,
+    stepSize: 24
+  },
+  {
+    elapsedMs: 2000,
+    stepCount: 18,
+    intervalMs: 42,
+    stepSize: 16
+  },
+  {
+    elapsedMs: 1200,
+    stepCount: 10,
+    intervalMs: 60,
+    stepSize: 10
+  },
+  {
+    elapsedMs: 650,
+    stepCount: 5,
+    intervalMs: 86,
+    stepSize: 6
+  }
+];
 const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
@@ -222,6 +264,11 @@ function resolvePlayableDetailType(itemType, meta = {}) {
   if (normalizedType === "series") {
     return "series";
   }
+  // Preserve live/channel types so stream requests hit the addon's registered
+  // stream endpoint (e.g. /stream/channel/{id}.json) instead of movie.
+  if (["channel", "live", "tvchannel"].includes(normalizedType)) {
+    return normalizedType;
+  }
   return "movie";
 }
 
@@ -389,6 +436,14 @@ function getDpadDirection(event) {
   if (keyCode === 38 || key === "arrowup" || key === "up") return "up";
   if (keyCode === 40 || key === "arrowdown" || key === "down") return "down";
   return null;
+}
+
+function resolveEpisodeHoldRepeatProfile(stepCount = 0, elapsedMs = 0) {
+  return EPISODE_HOLD_REPEAT_PROFILE.find((entry) => elapsedMs >= entry.elapsedMs || stepCount >= entry.stepCount)
+    || {
+      intervalMs: EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS,
+      stepSize: 1
+    };
 }
 
 async function withTimeout(promise, ms, fallbackValue) {
@@ -1226,6 +1281,17 @@ export const MetaDetailsScreen = {
     this.resumeProgress = null;
     this.resumeContentIds = [];
     this.episodeFocusIndexBySeason = {};
+    this.episodeVirtualWindow = null;
+    this.episodeVirtualMetrics = null;
+    this.episodeTrackScrollHandler = null;
+    this.episodeTrackScrollNode = null;
+    this.episodeVirtualSyncRaf = null;
+    this.episodeHoldRepeatTimer = null;
+    this.episodeHoldRepeatDirection = "";
+    this.episodeHoldRepeatStartedAt = 0;
+    this.episodeHoldRepeatStepCount = 0;
+    this.episodeThumbnailPrefetchCache = new Set();
+    this.selectedSeasonEpisodeState = null;
     this.railFocusIndexByKey = {};
     this.watchedEpisodeKeys = new Set();
     this.autoOpenedContinueWatchingStream = false;
@@ -1895,7 +1961,8 @@ export const MetaDetailsScreen = {
       resumeDurationMs: routeStartFromBeginning ? 0 : (Number(this.params?.resumeDurationMs || this.resumeProgress?.durationMs || 0) || 0),
       startFromBeginning: routeStartFromBeginning,
       returnToDetail: true,
-      continueWatchingBackHome: true
+      continueWatchingBackHome: true,
+      resumeStreamIdentity: this.params?.resumeStreamIdentity || null
     };
     if (isSeriesDetailMeta(this.meta, this.episodes)) {
       const episode = this.findContinueWatchingEpisodeTarget();
@@ -2267,6 +2334,7 @@ export const MetaDetailsScreen = {
       ScreenUtils.setInitialFocus(this.container);
     }
     this.bindDetailChrome();
+    this.scheduleEpisodeVirtualizationSync(this.getRememberedEpisodeIndex());
   },
   renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
     const logoOrTitle = meta.logo
@@ -2627,6 +2695,7 @@ export const MetaDetailsScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.pendingFocusRestore = focusRestore;
     this.bindDetailChrome();
+    this.scheduleEpisodeVirtualizationSync(this.getRememberedEpisodeIndex());
   },
   renderMovieInsightSection(meta) {
     const trailerItems = resolveTrailerItems(meta);
@@ -2792,53 +2861,342 @@ export const MetaDetailsScreen = {
               data-season="${season}">
         ${escapeHtml(t("detail.seasonLabel", { season }, "Season {{season}}"))}
       </button>
-    `).join("");
+      `).join("");
   },
 
-  renderEpisodeCards() {
-    if (!this.episodes?.length) {
-      return `<p>${escapeHtml(t("detail.noEpisodesFound", {}, "No episodes found."))}</p>`;
+  getSelectedSeasonEpisodes() {
+    return this.getSelectedSeasonEpisodeState().episodes;
+  },
+
+  getSelectedSeasonEpisodeState() {
+    const allEpisodes = Array.isArray(this.episodes) ? this.episodes : [];
+    const season = Number(this.selectedSeason || 0);
+    const cachedState = this.selectedSeasonEpisodeState;
+    if (cachedState?.source === allEpisodes && cachedState.season === season) {
+      return cachedState;
     }
-    const selectedSeasonEpisodes = this.episodes.filter((episode) => episode.season === this.selectedSeason);
-    if (!selectedSeasonEpisodes.length) {
+    const seasonEpisodes = [];
+    const indexByVideoId = new Map();
+    for (const episode of allEpisodes) {
+      if (Number(episode?.season || 0) !== season) {
+        continue;
+      }
+      const absoluteIndex = seasonEpisodes.length;
+      seasonEpisodes.push(episode);
+      const videoId = String(episode?.id || "").trim();
+      if (videoId && !indexByVideoId.has(videoId)) {
+        indexByVideoId.set(videoId, absoluteIndex);
+      }
+    }
+    this.selectedSeasonEpisodeState = {
+      source: allEpisodes,
+      season,
+      episodes: seasonEpisodes,
+      indexByVideoId
+    };
+    return this.selectedSeasonEpisodeState;
+  },
+
+  getEpisodeIndexByVideoId(videoId) {
+    const wanted = String(videoId || "").trim();
+    if (!wanted) {
+      return -1;
+    }
+    return this.getSelectedSeasonEpisodeState().indexByVideoId.get(wanted) ?? -1;
+  },
+
+  getEpisodeTrackElement() {
+    return this.container?.querySelector(".series-episode-track") || null;
+  },
+
+  getFocusedEpisodeCard() {
+    const target = this.container?.querySelector(".series-episode-card.focusable.focused") || null;
+    return target instanceof HTMLElement ? target : null;
+  },
+
+  getEpisodeAbsoluteIndex(node) {
+    if (!(node instanceof HTMLElement)) {
+      return -1;
+    }
+    const explicitIndex = Number(node.dataset.episodeIndex || -1);
+    if (Number.isFinite(explicitIndex) && explicitIndex >= 0) {
+      return explicitIndex;
+    }
+    return this.getEpisodeIndexByVideoId(String(node.dataset.videoId || ""));
+  },
+
+  measureEpisodeTrackMetrics(track = null) {
+    const target = track instanceof HTMLElement ? track : this.getEpisodeTrackElement();
+    const season = Number(this.selectedSeason || 0);
+    const viewportWidth = Number(target?.clientWidth || 0);
+    const cachedMetrics = this.episodeVirtualMetrics;
+    if (
+      cachedMetrics
+      && cachedMetrics.season === season
+      && cachedMetrics.viewportWidth === viewportWidth
+      && cachedMetrics.cardWidth > 0
+      && cachedMetrics.stride > 0
+    ) {
+      return cachedMetrics;
+    }
+    const sampleCard = target?.querySelector?.(".series-episode-card") || null;
+    const sampleWindow = target?.querySelector?.(".series-episode-track-window") || target;
+    const trackStyle = target && typeof getComputedStyle === "function" ? getComputedStyle(target) : null;
+    const windowStyle = sampleWindow && typeof getComputedStyle === "function" ? getComputedStyle(sampleWindow) : null;
+    const rawGap = Number.parseFloat(windowStyle?.gap || windowStyle?.columnGap || trackStyle?.gap || trackStyle?.columnGap || "0");
+    const gap = Number.isFinite(rawGap) && rawGap >= 0 ? rawGap : EPISODE_VIRTUALIZATION_DEFAULT_GAP;
+    const measuredWidth = Number(sampleCard?.getBoundingClientRect?.().width || 0);
+    const cardWidth = measuredWidth > 0 ? measuredWidth : (cachedMetrics?.cardWidth || EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH);
+    const stride = Math.max(1, cardWidth + gap);
+    this.episodeVirtualMetrics = {
+      season,
+      cardWidth,
+      gap,
+      stride,
+      viewportWidth
+    };
+    return this.episodeVirtualMetrics;
+  },
+
+  getEpisodeVirtualWindowState(episodes = this.getSelectedSeasonEpisodes(), preferredIndex = null) {
+    const list = Array.isArray(episodes) ? episodes : [];
+    const total = list.length;
+    if (!total) {
+      return null;
+    }
+    const virtualized = total > EPISODE_VIRTUALIZATION_THRESHOLD;
+    const metrics = this.measureEpisodeTrackMetrics();
+    if (!virtualized) {
+      return {
+        season: Number(this.selectedSeason || 0),
+        virtualized: false,
+        start: 0,
+        end: total - 1,
+        cardWidth: metrics.cardWidth,
+        gap: metrics.gap,
+        stride: metrics.stride,
+        leftSpacer: 0,
+        rightSpacer: 0,
+        preferredIndex: Number.isFinite(preferredIndex) ? preferredIndex : null
+      };
+    }
+
+    const visibleEstimate = Math.ceil(Math.max(1, metrics.viewportWidth || 0) / Math.max(1, metrics.stride || 1));
+    const windowSize = Math.min(
+      total,
+      Math.max(
+        EPISODE_VIRTUALIZATION_MIN_WINDOW,
+        visibleEstimate + (EPISODE_VIRTUALIZATION_OVERSCAN * 2)
+      )
+    );
+    const maxStart = Math.max(0, total - windowSize);
+    const currentTrack = this.getEpisodeTrackElement();
+    const currentScrollLeft = Number(currentTrack?.scrollLeft || 0);
+    const baseIndex = Number.isFinite(preferredIndex)
+      ? preferredIndex
+      : Math.floor(currentScrollLeft / Math.max(1, metrics.stride || 1));
+    const start = Math.max(0, Math.min(maxStart, baseIndex - EPISODE_VIRTUALIZATION_OVERSCAN));
+    const end = Math.min(total - 1, start + windowSize - 1);
+    return {
+      season: Number(this.selectedSeason || 0),
+      virtualized: true,
+      start,
+      end,
+      cardWidth: metrics.cardWidth,
+      gap: metrics.gap,
+      stride: metrics.stride,
+      leftSpacer: start * metrics.stride,
+      rightSpacer: Math.max(0, (total - end - 1) * metrics.stride),
+      preferredIndex: Number.isFinite(preferredIndex) ? preferredIndex : null
+    };
+  },
+
+  renderEpisodeCard(episode, absoluteIndex) {
+    const progress = this.episodeProgressMap.get(`${episode.season}:${episode.episode}`) || null;
+    const position = Number(progress?.positionMs || 0);
+    const duration = Number(progress?.durationMs || 0);
+    const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
+    const episodeKey = `${episode.season}:${episode.episode}`;
+    const isWatched = this.enrichedWatchedState?.has(episodeKey)
+      ? Boolean(this.enrichedWatchedState.get(episodeKey)?.isWatched)
+      : this.watchedEpisodeKeys.has(episodeKey);
+    const rating = resolveEpisodeImdbRating(episode, this.seriesRatingsBySeason);
+    const dateLabel = formatEpisodeCardDate(episode.released || "");
+    const isUnavailable = episode.available === false;
+    const metaParts = [
+      episode.runtimeMinutes > 0 ? renderEpisodeRuntimeLabel(episode.runtimeMinutes) : "",
+      rating != null ? `<span class="series-episode-rating-inline">${renderImdbBadge(String(Number(rating).toFixed(1)))}</span>` : "",
+      dateLabel ? `<span class="series-episode-date">${escapeHtml(dateLabel)}</span>` : ""
+    ].filter(Boolean).join("");
+    return `
+      <article class="series-episode-card focusable${isWatched ? " watched" : ""}"
+            data-action="openEpisodeStreams"
+            data-video-id="${escapeHtml(episode.id)}"
+            data-episode-index="${absoluteIndex}">
+        <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail.replace(/'/g, "%27")}')"` : ""}>
+          <div class="series-episode-overlay"></div>
+          ${isWatched ? `<div class="series-episode-status complete">${renderWatchedBadgeGlyph()}</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
+          ${isUnavailable ? `<div class="series-episode-unavailable">${escapeHtml(t("episodes_unavailable", {}, "Unavailable").toUpperCase())}</div>` : ""}
+          <div class="series-episode-copy">
+            <div class="series-episode-badge">${escapeHtml(t("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
+            <div class="series-episode-title">${escapeHtml(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
+            <div class="series-episode-overview">${escapeHtml(episode.overview || t("episodes_episode", {}, "Episode"))}</div>
+            ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
+            ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
+          </div>
+        </div>
+      </article>
+    `;
+  },
+
+  warmEpisodeThumbnails(episodes = [], startIndex = 0, endIndex = 0) {
+    if (!Array.isArray(episodes) || !episodes.length) {
+      return;
+    }
+    const from = Math.max(0, Math.min(episodes.length - 1, Number(startIndex || 0)));
+    const to = Math.max(from, Math.min(episodes.length - 1, Number(endIndex || 0)));
+    const prefetchStart = Math.max(0, from - EPISODE_VIRTUALIZATION_OVERSCAN);
+    const prefetchEnd = Math.min(episodes.length - 1, to + EPISODE_VIRTUALIZATION_OVERSCAN);
+    for (let index = prefetchStart; index <= prefetchEnd; index += 1) {
+      const thumbnail = String(episodes[index]?.thumbnail || "").trim();
+      if (!thumbnail || this.episodeThumbnailPrefetchCache.has(thumbnail)) {
+        continue;
+      }
+      this.episodeThumbnailPrefetchCache.add(thumbnail);
+      const image = new Image();
+      image.decoding = "async";
+      image.loading = "eager";
+      image.src = thumbnail;
+    }
+  },
+
+  renderEpisodeCards(preferredIndex = null) {
+    const episodes = this.getSelectedSeasonEpisodes();
+    if (!episodes.length) {
       return `<p>${escapeHtml(t("episodes_panel_no_episodes", {}, "No episodes available"))}</p>`;
     }
-    return selectedSeasonEpisodes.map((episode) => {
-      const progress = this.episodeProgressMap.get(`${episode.season}:${episode.episode}`) || null;
-      const position = Number(progress?.positionMs || 0);
-      const duration = Number(progress?.durationMs || 0);
-      const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
-      const episodeKey = `${episode.season}:${episode.episode}`;
-      const isWatched = this.enrichedWatchedState?.has(episodeKey)
-        ? Boolean(this.enrichedWatchedState.get(episodeKey)?.isWatched)
-        : this.watchedEpisodeKeys.has(episodeKey);
-      const rating = resolveEpisodeImdbRating(episode, this.seriesRatingsBySeason);
-      const dateLabel = formatEpisodeCardDate(episode.released || "");
-      const isUnavailable = episode.available === false;
-      const metaParts = [
-        episode.runtimeMinutes > 0 ? renderEpisodeRuntimeLabel(episode.runtimeMinutes) : "",
-        rating != null ? `<span class="series-episode-rating-inline">${renderImdbBadge(String(Number(rating).toFixed(1)))}</span>` : "",
-        dateLabel ? `<span class="series-episode-date">${escapeHtml(dateLabel)}</span>` : ""
-      ].filter(Boolean).join("");
-      return `
-        <article class="series-episode-card focusable${isWatched ? " watched" : ""}"
-             data-action="openEpisodeStreams"
-             data-video-id="${episode.id}">
-          <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail.replace(/'/g, "%27")}')"` : ""}>
-            <div class="series-episode-overlay"></div>
-            ${isWatched ? `<div class="series-episode-status complete">${renderWatchedBadgeGlyph()}</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
-            ${isUnavailable ? `<div class="series-episode-unavailable">${escapeHtml(t("episodes_unavailable", {}, "Unavailable").toUpperCase())}</div>` : ""}
-            <div class="series-episode-copy">
-              <div class="series-episode-badge">${escapeHtml(t("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
-              <div class="series-episode-title">${escapeHtml(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
-             <div class="series-episode-overview">${escapeHtml(episode.overview || t("episodes_episode", {}, "Episode"))}</div>
-              ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
-              ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
-            </div>
-          </div>
-        </article>
-      `;
-    }).join("");
+    const windowState = this.getEpisodeVirtualWindowState(episodes, preferredIndex);
+    if (!windowState) {
+      return `<p>${escapeHtml(t("episodes_panel_no_episodes", {}, "No episodes available"))}</p>`;
+    }
+    this.episodeVirtualWindow = windowState;
+    const visibleEpisodes = windowState.virtualized
+      ? episodes.slice(windowState.start, windowState.end + 1)
+      : episodes;
+    this.warmEpisodeThumbnails(episodes, windowState.start, windowState.end);
+    const cards = visibleEpisodes.map((episode, offset) => this.renderEpisodeCard(episode, windowState.virtualized ? windowState.start + offset : offset)).join("");
+    if (!windowState.virtualized) {
+      return cards;
+    }
+    return `
+      <div class="series-episode-track-spacer" aria-hidden="true" style="flex-basis:${Math.max(0, windowState.leftSpacer)}px"></div>
+      <div class="series-episode-track-window" style="--episode-track-gap:${windowState.gap}px">
+        ${cards}
+      </div>
+      <div class="series-episode-track-spacer" aria-hidden="true" style="flex-basis:${Math.max(0, windowState.rightSpacer)}px"></div>
+    `;
+  },
+
+  refreshEpisodeTrack(focusRestoreOverride = null, preferredIndex = null) {
+    if (!this.container || !isSeriesDetailMeta(this.meta, this.episodes)) {
+      return false;
+    }
+    const episodeMount = this.container.querySelector("#detailEpisodeTrackMount");
+    if (!episodeMount) {
+      return false;
+    }
+    const focusRestore = focusRestoreOverride || this.captureDetailFocus();
+    this.captureRenderedChromeState();
+    episodeMount.innerHTML = `<div class="series-episode-track${this.getSelectedSeasonEpisodes().length > EPISODE_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards(preferredIndex)}</div>`;
+    ScreenUtils.indexFocusables(this.container);
+    this.pendingFocusRestore = focusRestore;
+    this.bindDetailChrome();
+    return true;
+  },
+
+  scheduleEpisodeVirtualizationSync(preferredIndex = null) {
+    if (this.episodeVirtualSyncRaf) {
+      cancelAnimationFrame(this.episodeVirtualSyncRaf);
+    }
+    const raf = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame
+      : (cb) => setTimeout(cb, 16);
+    this.episodeVirtualSyncRaf = raf(() => {
+      this.episodeVirtualSyncRaf = null;
+      this.syncEpisodeVirtualization(preferredIndex);
+    });
+  },
+
+  syncEpisodeVirtualization(preferredIndex = null) {
+    if (!this.container || !isSeriesDetailMeta(this.meta, this.episodes)) {
+      return false;
+    }
+    const episodes = this.getSelectedSeasonEpisodes();
+    if (episodes.length <= EPISODE_VIRTUALIZATION_THRESHOLD) {
+      return false;
+    }
+    const track = this.getEpisodeTrackElement();
+    if (!track) {
+      return false;
+    }
+    const currentFocus = this.getFocusedEpisodeCard();
+    const currentFocusIndex = this.getEpisodeAbsoluteIndex(currentFocus);
+    const focusIndex = Number.isFinite(preferredIndex)
+      ? preferredIndex
+      : (currentFocusIndex >= 0 ? currentFocusIndex : this.getRememberedEpisodeIndex(episodes));
+    const nextWindow = this.getEpisodeVirtualWindowState(episodes, focusIndex);
+    if (!nextWindow) {
+      return false;
+    }
+    const currentWindow = this.episodeVirtualWindow;
+    if (
+      currentWindow
+      && currentWindow.season === nextWindow.season
+      && currentWindow.start === nextWindow.start
+      && currentWindow.end === nextWindow.end
+      && currentWindow.virtualized === nextWindow.virtualized
+    ) {
+      return false;
+    }
+    this.episodeVirtualWindow = nextWindow;
+    this.refreshEpisodeTrack({ episodeIndex: focusIndex, preserveVerticalScroll: true }, focusIndex);
+    return true;
+  },
+
+  focusEpisodeByIndex(index, options = {}) {
+    const episodes = this.getSelectedSeasonEpisodes();
+    if (!episodes.length) {
+      return false;
+    }
+    const targetIndex = Math.max(0, Math.min(episodes.length - 1, Number(index || 0)));
+    const focusRestore = { episodeIndex: targetIndex, preserveVerticalScroll: Boolean(options?.preserveVerticalScroll) };
+    if (this.syncEpisodeVirtualization(targetIndex)) {
+      const target = this.container?.querySelector(`.series-episode-card[data-episode-index="${targetIndex}"]`) || null;
+      if (target instanceof HTMLElement) {
+        return this.focusInList([target], 0, {
+          animated: options?.animated !== false,
+          preserveVerticalScroll: Boolean(options?.preserveVerticalScroll)
+        });
+      }
+      this.pendingFocusRestore = focusRestore;
+      return true;
+    }
+    const target = this.container?.querySelector(`.series-episode-card[data-episode-index="${targetIndex}"]`) || null;
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    return this.focusInList([target], 0, {
+      animated: options?.animated !== false,
+      preserveVerticalScroll: Boolean(options?.preserveVerticalScroll)
+    });
+  },
+
+  focusEpisodeByVideoId(videoId, options = {}) {
+    const index = this.getEpisodeIndexByVideoId(videoId);
+    if (index < 0) {
+      return false;
+    }
+    return this.focusEpisodeByIndex(index, options);
   },
 
   syncSeriesHeroPlayButtonLabel() {
@@ -2924,7 +3282,15 @@ export const MetaDetailsScreen = {
 
   getEpisodeFocusDescriptor(videoId) {
     const value = String(videoId || "").trim();
-    return value ? { selector: `.series-episode-card[data-video-id="${escapeSelectorValue(value)}"]` } : null;
+    if (!value) {
+      return null;
+    }
+    const episodeIndex = this.getEpisodeIndexByVideoId(value);
+    return {
+      episodeVideoId: value,
+      episodeIndex: episodeIndex >= 0 ? episodeIndex : null,
+      selector: `.series-episode-card[data-video-id="${escapeSelectorValue(value)}"]`
+    };
   },
 
   getEpisodeMenuProgress(episode) {
@@ -3031,7 +3397,22 @@ export const MetaDetailsScreen = {
   },
 
   focusDetailDescriptor(descriptor) {
-    if (!descriptor?.selector || !this.container) {
+    if (!descriptor || !this.container) {
+      return false;
+    }
+    if (Number.isFinite(descriptor.episodeIndex) && descriptor.episodeIndex >= 0) {
+      return this.focusEpisodeByIndex(Number(descriptor.episodeIndex), {
+        animated: false,
+        preserveVerticalScroll: Boolean(descriptor.preserveVerticalScroll)
+      });
+    }
+    if (descriptor.episodeVideoId) {
+      return this.focusEpisodeByVideoId(descriptor.episodeVideoId, {
+        animated: false,
+        preserveVerticalScroll: Boolean(descriptor.preserveVerticalScroll)
+      });
+    }
+    if (!descriptor?.selector) {
       return false;
     }
     const target = this.container.querySelector(descriptor.selector);
@@ -3470,6 +3851,87 @@ export const MetaDetailsScreen = {
       itemType: node.dataset.itemType || "movie",
       fallbackTitle: node.dataset.itemTitle || "Untitled"
     });
+  },
+
+  stopEpisodeHoldRepeat() {
+    if (this.episodeHoldRepeatTimer) {
+      clearTimeout(this.episodeHoldRepeatTimer);
+      this.episodeHoldRepeatTimer = null;
+    }
+    this.episodeHoldRepeatDirection = "";
+    this.episodeHoldRepeatStartedAt = 0;
+    this.episodeHoldRepeatStepCount = 0;
+  },
+
+  getEpisodeHoldRepeatInterval(stepCount = 0, elapsedMs = 0) {
+    return resolveEpisodeHoldRepeatProfile(stepCount, elapsedMs).intervalMs;
+  },
+
+  getEpisodeRepeatStepSize(stepCount = 0, elapsedMs = 0) {
+    return resolveEpisodeHoldRepeatProfile(stepCount, elapsedMs).stepSize;
+  },
+
+  moveEpisodeFocusWithAcceleration(direction) {
+    if (direction !== "left" && direction !== "right") {
+      return false;
+    }
+    const current = this.getFocusedEpisodeCard();
+    if (!current) {
+      return false;
+    }
+    const currentIndex = this.getEpisodeAbsoluteIndex(current);
+    if (!Number.isFinite(currentIndex) || currentIndex < 0) {
+      return false;
+    }
+    const nextIndex = currentIndex + (direction === "left" ? -1 : 1);
+    return this.focusEpisodeByIndex(nextIndex, { preserveVerticalScroll: true });
+  },
+
+  startEpisodeHoldRepeat(direction, node) {
+    if (direction !== "left" && direction !== "right") {
+      return false;
+    }
+    const videoId = String(node?.dataset?.videoId || "").trim();
+    if (!videoId) {
+      return false;
+    }
+    const now = Date.now();
+    this.stopEpisodeHoldRepeat();
+    this.episodeHoldRepeatDirection = direction;
+    this.episodeHoldRepeatStartedAt = now;
+    this.episodeHoldRepeatStepCount = 0;
+    const tick = () => {
+      if (!this.episodeHoldRepeatDirection) {
+        return;
+      }
+      const current = this.getFocusedEpisodeCard();
+      if (!current) {
+        this.stopEpisodeHoldRepeat();
+        return;
+      }
+      if (!current.matches?.(".series-episode-card")) {
+        this.stopEpisodeHoldRepeat();
+        return;
+      }
+      const elapsedMs = Date.now() - this.episodeHoldRepeatStartedAt;
+      const stepSize = this.getEpisodeRepeatStepSize(this.episodeHoldRepeatStepCount, elapsedMs);
+      const moveCount = Math.max(1, stepSize);
+      this.episodeHoldRepeatStepCount += 1;
+      const step = this.episodeHoldRepeatDirection === "left" ? -moveCount : moveCount;
+      const currentIndex = this.getEpisodeAbsoluteIndex(current);
+      const didMove = this.focusEpisodeByIndex((currentIndex >= 0 ? currentIndex : 0) + step, {
+        preserveVerticalScroll: true,
+        animated: false
+      });
+      if (!didMove) {
+        this.stopEpisodeHoldRepeat();
+        return;
+      }
+      const nextInterval = this.getEpisodeHoldRepeatInterval(this.episodeHoldRepeatStepCount, elapsedMs);
+      this.episodeHoldRepeatTimer = setTimeout(tick, nextInterval);
+    };
+    this.episodeHoldRepeatTimer = setTimeout(tick, EPISODE_HOLD_REPEAT_INITIAL_DELAY_MS);
+    return true;
   },
 
   cancelPendingEpisodeHold() {
@@ -4093,6 +4555,19 @@ export const MetaDetailsScreen = {
       shell.classList.toggle("detail-scrolled", content.scrollTop > 160);
     };
     content.addEventListener("scroll", this.detailScrollHandler, { passive: true });
+    const episodeTrack = this.container?.querySelector(".series-episode-track");
+    if (this.episodeTrackScrollNode && this.episodeTrackScrollHandler) {
+      this.episodeTrackScrollNode.removeEventListener("scroll", this.episodeTrackScrollHandler);
+    }
+    this.episodeTrackScrollNode = episodeTrack instanceof HTMLElement ? episodeTrack : null;
+    if (this.episodeTrackScrollNode) {
+      this.episodeTrackScrollHandler = () => {
+        this.scheduleEpisodeVirtualizationSync();
+      };
+      this.episodeTrackScrollNode.addEventListener("scroll", this.episodeTrackScrollHandler, { passive: true });
+    } else {
+      this.episodeTrackScrollHandler = null;
+    }
     if (this.detailFocusHandler) {
       this.container.removeEventListener("focusin", this.detailFocusHandler, true);
     }
@@ -4274,7 +4749,12 @@ export const MetaDetailsScreen = {
     }
     if (action === "openEpisodeStreams") {
       const videoId = String(target.dataset.videoId || "");
-      return videoId ? { selector: `.series-episode-card[data-video-id="${escapeSelectorValue(videoId)}"]` } : null;
+      const episodeIndex = Number(target.dataset.episodeIndex || -1);
+      return videoId ? {
+        episodeVideoId: videoId,
+        episodeIndex: Number.isFinite(episodeIndex) && episodeIndex >= 0 ? episodeIndex : this.getEpisodeIndexByVideoId(videoId),
+        selector: `.series-episode-card[data-video-id="${escapeSelectorValue(videoId)}"]`
+      } : null;
     }
     if (action === "openCastDetail") {
       const castKey = String(target.dataset.castKey || "");
@@ -5286,6 +5766,7 @@ export const MetaDetailsScreen = {
       parentalWarnings: this.meta?.parentalWarnings || null,
       parentalGuide: this.meta?.parentalGuide || null,
       videoId: episode.id,
+      preferredStreamId: StreamPreferencesStore.get(this.params?.itemId, episode.id) || null,
       season: episode.season,
       episode: episode.episode,
       episodeTitle: episode.title || "",
@@ -5321,6 +5802,7 @@ export const MetaDetailsScreen = {
       parentalWarnings: this.meta?.parentalWarnings || null,
       parentalGuide: this.meta?.parentalGuide || null,
       videoId: this.params?.itemId || null,
+      preferredStreamId: StreamPreferencesStore.get(this.params?.itemId, this.params?.itemId) || null,
       episodes: [],
       ...extraParams
     });
@@ -5444,13 +5926,15 @@ export const MetaDetailsScreen = {
   },
 
   getRememberedEpisodeIndex(episodes = []) {
-    if (!Array.isArray(episodes) || !episodes.length) {
+    const seasonEpisodes = this.getSelectedSeasonEpisodes();
+    const total = Array.isArray(episodes) && episodes.length ? Math.max(episodes.length, seasonEpisodes.length) : seasonEpisodes.length;
+    if (!total) {
       return 0;
     }
     const seasonKey = String(Number(this.selectedSeason || 0) || 0);
     const remembered = Number(this.episodeFocusIndexBySeason?.[seasonKey]);
     if (Number.isFinite(remembered) && remembered >= 0) {
-      return Math.min(episodes.length - 1, remembered);
+      return Math.min(total - 1, remembered);
     }
     return 0;
   },
@@ -5490,6 +5974,11 @@ export const MetaDetailsScreen = {
       return;
     }
     const seasonKey = String(Number(this.selectedSeason || 0) || 0);
+    const absoluteIndex = Number(target.dataset.episodeIndex || -1);
+    if (Number.isFinite(absoluteIndex) && absoluteIndex >= 0) {
+      this.episodeFocusIndexBySeason[seasonKey] = absoluteIndex;
+      return;
+    }
     const items = Array.isArray(list) && list.length
       ? list
       : Array.from(this.container?.querySelectorAll(".series-episode-track .series-episode-card.focusable") || []);
@@ -5841,7 +6330,7 @@ export const MetaDetailsScreen = {
       }
       if (castCards.length) return this.focusInList(castCards, Math.min(index, castCards.length - 1));
       if (insightTabs.length) return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs));
-      if (episodes.length) return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes));
+      if (episodes.length) return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true });
       return false;
     };
     const focusFirstSeriesSectionBelowHero = (index = 0) => {
@@ -5867,7 +6356,7 @@ export const MetaDetailsScreen = {
     };
     const focusSeriesSectionAboveInsights = (index = 0) => {
       if (episodes.length) {
-        return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes));
+        return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true });
       }
       if (seasons.length) {
         return this.focusInList(seasons, Math.min(index, seasons.length - 1));
@@ -5891,7 +6380,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
         if (focusFirstSeriesSectionBelowHero(actionIndex)) {
           return true;
@@ -5911,7 +6400,7 @@ export const MetaDetailsScreen = {
       }
       if (direction === "down") {
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
         if (focusFirstSeriesSectionBelowHero(seasonIndex)) {
           return true;
@@ -5922,14 +6411,15 @@ export const MetaDetailsScreen = {
 
     const episodeIndex = episodes.indexOf(current);
     if (episodeIndex >= 0) {
-      if (direction === "left") return this.focusInList(episodes, episodeIndex - 1, { preserveVerticalScroll: true }) || true;
-      if (direction === "right") return this.focusInList(episodes, episodeIndex + 1, { preserveVerticalScroll: true }) || true;
+      const absoluteEpisodeIndex = Number(current.dataset.episodeIndex || episodeIndex);
+      if (direction === "left") return this.focusEpisodeByIndex(absoluteEpisodeIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusEpisodeByIndex(absoluteEpisodeIndex + 1, { preserveVerticalScroll: true }) || true;
       if (direction === "up") {
         if (seasons.length) {
           return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (actions.length) {
-          return this.focusInList(actions, Math.min(episodeIndex, actions.length - 1)) || true;
+          return this.focusInList(actions, Math.min(absoluteEpisodeIndex, actions.length - 1)) || true;
         }
       }
       if (direction === "down" && insightTabs.length) {
@@ -5987,7 +6477,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && focusCommentsEntry(castIndex)) {
@@ -6011,7 +6501,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && ratingChips.length) {
@@ -6038,7 +6528,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && focusCommentsEntry(ratingChipIndex)) {
@@ -6084,7 +6574,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, moreLikeTabIndex) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && focusCommentsEntry(moreLikeIndex)) {
@@ -6124,7 +6614,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && trackIndex < companyCards.length - 1 && companyCards[trackIndex + 1]?.length) {
@@ -6426,6 +6916,25 @@ export const MetaDetailsScreen = {
       return;
     }
 
+    const direction = getDpadDirection(event);
+    const isEpisodeDirectionKey = Boolean(direction) && isEpisodeHoldTarget && (direction === "left" || direction === "right");
+    if (isEpisodeDirectionKey) {
+      event?.preventDefault?.();
+      if (event?.repeat) {
+        if (this.episodeHoldRepeatDirection === direction) {
+          return;
+        }
+      } else {
+        this.stopEpisodeHoldRepeat();
+        if (this.moveEpisodeFocusWithAcceleration(direction)) {
+          this.startEpisodeHoldRepeat(direction, currentFocusedNode);
+          return;
+        }
+      }
+    } else if (this.episodeHoldRepeatDirection) {
+      this.stopEpisodeHoldRepeat();
+    }
+
     if (this.handleSeriesDpad(event)) {
       return;
     }
@@ -6673,6 +7182,10 @@ export const MetaDetailsScreen = {
   },
 
   async onKeyUp(event) {
+    const direction = getDpadDirection(event);
+    if (direction === "left" || direction === "right") {
+      this.stopEpisodeHoldRepeat();
+    }
     if (Number(event?.keyCode || 0) !== 13) {
       return;
     }
@@ -6711,6 +7224,20 @@ export const MetaDetailsScreen = {
     this.seasonHoldMenu = null;
     this.heroPlayMenu = null;
     this.libraryListMenu = null;
+    if (this.episodeVirtualSyncRaf) {
+      cancelAnimationFrame(this.episodeVirtualSyncRaf);
+      this.episodeVirtualSyncRaf = null;
+    }
+    this.stopEpisodeHoldRepeat();
+    this.episodeThumbnailPrefetchCache = new Set();
+    this.selectedSeasonEpisodeState = null;
+    if (this.episodeTrackScrollNode && this.episodeTrackScrollHandler) {
+      this.episodeTrackScrollNode.removeEventListener("scroll", this.episodeTrackScrollHandler);
+    }
+    this.episodeTrackScrollNode = null;
+    this.episodeTrackScrollHandler = null;
+    this.episodeVirtualWindow = null;
+    this.episodeVirtualMetrics = null;
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
     if (this.detailScrollHandler && this.container) {
       const content = this.container.querySelector(".series-detail-content");

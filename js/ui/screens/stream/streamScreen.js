@@ -223,11 +223,10 @@ function flattenStreams(streamResult) {
         sourceType: stream.sourceType || stream.mimeType || stream.type || stream.source || "",
         raw: stream
       };
-      if (
-        DirectDebridResolver.shouldListStream(entry)
+      const canList = DirectDebridResolver.shouldListStream(entry)
         || WebOsEngineFsResolver.canResolveStream(entry)
-        || TizenStreamingServerResolver.canResolveStream(entry)
-      ) {
+        || TizenStreamingServerResolver.canResolveStream(entry);
+      if (canList) {
         flattened.push(entry);
       }
     });
@@ -1334,6 +1333,7 @@ export const StreamScreen = {
     this.addonLogoLookup = {};
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
+    this.autoResumeAttempted = false;
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
       this.releaseImageProxyReadyListener = null;
@@ -1574,12 +1574,21 @@ export const StreamScreen = {
       ));
       this.loading = false;
       if (this.streams.length) {
-        this.focusState = { zone: "card", index: clamp(Number(this.focusState?.index || 0), 0, this.streams.length - 1) };
+        const visibleStreams = this.getFilteredStreams();
+        const maxCardIndex = Math.max(0, visibleStreams.length - 1);
+        let initialIndex = clamp(Number(this.focusState?.index || 0), 0, maxCardIndex);
+        const preferred = String(this.params?.preferredStreamId || "").trim();
+        if (preferred) {
+          const prefIdx = visibleStreams.findIndex((s) => String(s?.id || "") === preferred);
+          if (prefIdx >= 0) { initialIndex = prefIdx; }
+        }
+        this.focusState = { zone: "card", index: clamp(initialIndex, 0, maxCardIndex) };
       } else {
         this.focusState = { zone: "filter", index: 0 };
       }
       this.requestRender();
       this.scheduleErrorChipCleanup();
+      this.maybeAutoResumeStream();
     } catch (error) {
       if (token !== this.loadToken) {
         return;
@@ -1591,6 +1600,23 @@ export const StreamScreen = {
       ));
       this.requestRender();
       this.scheduleErrorChipCleanup();
+    }
+  },
+
+  // Continue Watching can pass the identity of the stream that was playing.
+  // If that same source shows up again, resume it directly.
+  maybeAutoResumeStream() {
+    if (this.autoResumeAttempted) {
+      return;
+    }
+    const identity = String(this.params?.resumeStreamIdentity || "").trim();
+    if (!identity || !this.streams.length) {
+      return;
+    }
+    this.autoResumeAttempted = true;
+    const match = this.streams.find((stream) => streamMergeKey(stream) === identity);
+    if (match?.id) {
+      void this.playStream(match.id);
     }
   },
 

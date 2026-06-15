@@ -6,6 +6,19 @@ import { ProfileManager } from "./profileManager.js";
 const ADDONS_TABLE = "addons";
 const TABLE = "tv_addons";
 
+// Records the outcome of the latest pull so the Addons screen can show a
+// visible sync state on TV.
+let lastPullStatus = { state: "idle", count: 0, error: null, at: 0 };
+
+function recordPullStatus(state, { count = 0, error = null } = {}) {
+  lastPullStatus = {
+    state,
+    count: Number(count) || 0,
+    error: error ? String(error.message || error) : null,
+    at: Date.now()
+  };
+}
+
 function isMissingResourceError(error) {
   if (!error) {
     return false;
@@ -104,9 +117,15 @@ function applyPulledAddons(rows = []) {
 
 export const LibrarySyncService = {
 
+  getLastPullStatus() {
+    return lastPullStatus;
+  },
+
   async pull() {
+    let readError = null;
     try {
       if (!AuthManager.isAuthenticated) {
+        recordPullStatus("signed-out");
         return [];
       }
       const localUrls = addonRepository.getInstalledAddonUrls();
@@ -122,9 +141,13 @@ export const LibrarySyncService = {
         );
         const addonUrls = applyPulledAddons(addonRows);
         await addonRepository.setAddonOrder(addonUrls, { silent: true });
+        recordPullStatus("ok", { count: addonUrls.length });
         return addonUrls;
       } catch (addonsTableError) {
         addonTableMissing = isMissingResourceError(addonsTableError);
+        if (!addonTableMissing) {
+          readError = addonsTableError;
+        }
         console.warn("Addon sync pull addons-table read failed", addonsTableError);
       }
 
@@ -137,9 +160,13 @@ export const LibrarySyncService = {
         );
         const urls = applyPulledAddons(rows);
         await addonRepository.setAddonOrder(urls, { silent: true });
+        recordPullStatus("ok", { count: urls.length });
         return urls;
       } catch (tvTableError) {
         tvTableMissing = isMissingResourceError(tvTableError);
+        if (!tvTableMissing) {
+          readError = tvTableError;
+        }
         console.warn("Addon sync pull tv-table read failed", tvTableError);
       }
 
@@ -152,17 +179,25 @@ export const LibrarySyncService = {
           );
           const urls = applyPulledAddons(rpcRows);
           await addonRepository.setAddonOrder(urls, { silent: true });
+          recordPullStatus("ok", { count: urls.length });
           return urls;
         } catch (rpcError) {
+          readError = rpcError;
           console.warn("Addon sync pull RPC failed", rpcError);
         }
       }
 
+      if (readError) {
+        recordPullStatus("error", { count: localUrls.length, error: readError });
+      } else {
+        recordPullStatus("ok", { count: localUrls.length });
+      }
       if (localUrls.length) {
         return localUrls;
       }
       return [];
     } catch (error) {
+      recordPullStatus("error", { error });
       console.warn("Library sync pull failed", error);
       return [];
     }

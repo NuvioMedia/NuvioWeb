@@ -11,6 +11,9 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const cacheDir = path.join(rootDir, ".cache");
 const stagingDir = path.join(cacheDir, "tizen-package");
+const requireConfiguredRuntimeEnv = /^(1|true|yes|on)$/i.test(
+  String(process.env.NUVIO_REQUIRE_LOCAL_PROPERTIES || "")
+);
 
 const appName = "Nuvio TV";
 const defaultTizenPackageId = "NuvioTV001";
@@ -229,6 +232,13 @@ function parseArgs(argv) {
 
 async function packageTizen() {
   const options = parseArgs(process.argv.slice(2));
+  if (requireConfiguredRuntimeEnv && !options.envSourcePath) {
+    options.envSourcePath = path.join(rootDir, "local.properties");
+  }
+  if (requireConfiguredRuntimeEnv && !(await pathExists(options.envSourcePath))) {
+    throw new Error("Configured runtime env is required for Tizen packaging. Provide local.properties or --env-source.");
+  }
+
   await syncVersionFiles();
   await assertDistExists();
 

@@ -1843,6 +1843,7 @@ function continueWatchingStreamParams(item, options = {}) {
     resumePositionMs: options.startOver ? 0 : (Number(normalized.positionMs || 0) || 0),
     resumeProgressPercent: options.startOver ? null : (normalized.progressPercent ?? null),
     resumeDurationMs: options.startOver ? 0 : (Number(normalized.durationMs || 0) || 0),
+    resumeStreamIdentity: options.startOver ? null : (normalized.streamIdentity || null),
     startFromBeginning: Boolean(options.startOver)
   };
 }
@@ -4098,7 +4099,8 @@ export const HomeScreen = {
       startFromBeginning: Boolean(params.startFromBeginning),
       resumeVideoId: normalized.videoId || null,
       resumeSeason: normalized.season ?? null,
-      resumeEpisode: normalized.episode ?? null
+      resumeEpisode: normalized.episode ?? null,
+      resumeStreamIdentity: params.resumeStreamIdentity || null
     });
     return true;
   },
@@ -7060,7 +7062,14 @@ export const HomeScreen = {
       ? (this.pendingCollectionRouteReturnAnimation ? " nuvio-route-slide-enter" : " home-route-content-enter")
       : "";
     this.pendingCollectionRouteReturnAnimation = false;
-    const sidebarFocusLocked = Boolean(this.sidebarExpanded);
+    // On Back, only keep the sidebar expanded if the restored focus actually
+    // belonged to the sidebar.
+    if (this.isRestoringFocusFromBack && retainedFocusState?.focusKind !== "sidebar") {
+      this.sidebarExpanded = false;
+    }
+    const sidebarFocusLocked = Boolean(
+      this.sidebarExpanded && retainedFocusState?.focusKind === "sidebar"
+    );
 
     this.container.innerHTML = `
       <div class="home-shell home-screen-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
@@ -7945,7 +7954,7 @@ export const HomeScreen = {
       if (!rowKey || this._trackScrollHandlers.has(track)) {
         return;
       }
-      const handler = () => {
+      const runPagination = () => {
         if (this._trackPaginationInFlight?.has(rowKey)) {
           return;
         }
@@ -8033,6 +8042,16 @@ export const HomeScreen = {
           console.warn("Home track pagination failed for", rowKey, err);
         }).finally(() => {
           this._trackPaginationInFlight?.delete(rowKey);
+        });
+      };
+      let scrollRaf = 0;
+      const handler = () => {
+        if (scrollRaf) {
+          return;
+        }
+        scrollRaf = requestAnimationFrame(() => {
+          scrollRaf = 0;
+          runPagination();
         });
       };
       this._trackScrollHandlers.set(track, handler);

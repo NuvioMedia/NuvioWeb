@@ -1109,12 +1109,8 @@ export const PlayerController = {
       return false;
     }
 
-    try {
-      avplay.setSilentSubtitle?.(false);
-    } catch (_) {
-      // Ignore subtitle unmute failures.
-    }
-
+    // Tizen AVPlay applies the chosen subtitle track reliably only when the
+    // track is selected before subtitles are unmuted.
     try {
       avplay.setSelectTrack?.("TEXT", targetIndex);
     } catch (_) {
@@ -1123,6 +1119,12 @@ export const PlayerController = {
       } catch (_) {
         return false;
       }
+    }
+
+    try {
+      avplay.setSilentSubtitle?.(false);
+    } catch (_) {
+      // Ignore subtitle unmute failures.
     }
 
     this.selectedAvPlaySubtitleTrackIndex = targetIndex;
@@ -2860,7 +2862,7 @@ export const PlayerController = {
     }
   },
 
-  async play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null } = {}) {
+  async play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null, streamIdentity = null } = {}) {
     if (!this.video) return;
 
     await this.flushCurrentProgress({ allowCloudSync: false });
@@ -2876,6 +2878,7 @@ export const PlayerController = {
     this.currentItemPoster = poster || null;
     this.currentItemBackground = background || null;
     this.currentEpisodeTitle = episodeTitle || null;
+    this.currentStreamIdentity = streamIdentity || null;
     this.currentPlaybackUrl = String(url || "").trim();
     this.currentPlaybackHeaders = { ...(requestHeaders || {}) };
     this.currentPlaybackMediaSourceType = this.resolveRuntimeSourceType(mediaSourceType);
@@ -3134,6 +3137,7 @@ export const PlayerController = {
     this.currentItemPoster = null;
     this.currentItemBackground = null;
     this.currentEpisodeTitle = null;
+    this.currentStreamIdentity = null;
     this.currentPlaybackUrl = "";
     this.currentPlaybackHeaders = {};
     this.currentPlaybackMediaSourceType = null;
@@ -3160,7 +3164,8 @@ export const PlayerController = {
       title: this.currentItemTitle || null,
       poster: this.currentItemPoster || null,
       background: this.currentItemBackground || null,
-      episodeTitle: this.currentEpisodeTitle || null
+      episodeTitle: this.currentEpisodeTitle || null,
+      streamIdentity: this.currentStreamIdentity || null
     };
   },
 
@@ -3306,6 +3311,9 @@ export const PlayerController = {
       poster: active.poster || null,
       background: active.background || null,
       episodeTitle: active.episodeTitle || null,
+      // Persist the stream identity so Continue Watching can resume the same
+      // source instead of reopening the stream picker.
+      streamIdentity: active.streamIdentity || null,
       positionMs: Math.max(0, Math.trunc(safePosition)),
       durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : 0
     });

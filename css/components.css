@@ -9101,6 +9101,15 @@ button:focus-visible {
   color: var(--addons-text-tertiary);
 }
 
+.addons-sync-status {
+  margin: 8px 0 0;
+  font-size: 18px;
+  line-height: 26px;
+  letter-spacing: 0.2px;
+  color: var(--addons-text-tertiary);
+  opacity: 0.85;
+}
+
 .addons-install-card {
   border-radius: 24px;
   background: var(--addons-card);
@@ -12502,6 +12511,21 @@ button:focus-visible {
   padding-left: 0;
   padding-right: 16px;
   scrollbar-width: none;
+}
+
+.series-episode-track.is-virtualized {
+  gap: 0 !important;
+}
+
+.series-episode-track-window {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--episode-track-gap, 14px);
+}
+
+.series-episode-track-spacer {
+  flex: 0 0 auto;
+  height: 1px;
 }
 
 .series-episode-track::-webkit-scrollbar {
