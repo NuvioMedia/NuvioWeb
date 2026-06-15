@@ -43,6 +43,11 @@ const DETAIL_SCROLL_DAMPING_RATIO = 0.95;
 const DETAIL_TAB_FOCUS_TARGET = 0.40;
 const DETAIL_ROW_FOCUS_TARGET = 0.33;
 const DETAIL_SCROLL_MAX_FRAME_SECONDS = 0.016;
+const EPISODE_VIRTUALIZATION_THRESHOLD = 72;
+const EPISODE_VIRTUALIZATION_MIN_WINDOW = 20;
+const EPISODE_VIRTUALIZATION_OVERSCAN = 8;
+const EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH = 540;
+const EPISODE_VIRTUALIZATION_DEFAULT_GAP = 34;
 const LOCAL_YOUTUBE_PROXY_URL = "youtube-proxy.html";
 
 function t(key, params = {}, fallback = key) {
@@ -1231,6 +1236,11 @@ export const MetaDetailsScreen = {
     this.resumeProgress = null;
     this.resumeContentIds = [];
     this.episodeFocusIndexBySeason = {};
+    this.episodeVirtualWindow = null;
+    this.episodeVirtualState = null;
+    this.episodeTrackScrollHandler = null;
+    this.episodeTrackScrollNode = null;
+    this.episodeVirtualSyncRaf = null;
     this.railFocusIndexByKey = {};
     this.watchedEpisodeKeys = new Set();
     this.autoOpenedContinueWatchingStream = false;
@@ -2273,6 +2283,7 @@ export const MetaDetailsScreen = {
       ScreenUtils.setInitialFocus(this.container);
     }
     this.bindDetailChrome();
+    this.scheduleEpisodeVirtualizationSync(this.getRememberedEpisodeIndex());
   },
   renderHeroSection({ meta, playLabel, creditLine = "", creditPrefix = "", showWatchedButton = false }) {
     const logoOrTitle = meta.logo
@@ -2633,6 +2644,7 @@ export const MetaDetailsScreen = {
     ScreenUtils.indexFocusables(this.container);
     this.pendingFocusRestore = focusRestore;
     this.bindDetailChrome();
+    this.scheduleEpisodeVirtualizationSync(this.getRememberedEpisodeIndex());
   },
   renderMovieInsightSection(meta) {
     const trailerItems = resolveTrailerItems(meta);
@@ -2798,53 +2810,270 @@ export const MetaDetailsScreen = {
               data-season="${season}">
         ${escapeHtml(t("detail.seasonLabel", { season }, "Season {{season}}"))}
       </button>
-    `).join("");
+      `).join("");
   },
 
-  renderEpisodeCards() {
-    if (!this.episodes?.length) {
-      return `<p>${escapeHtml(t("detail.noEpisodesFound", {}, "No episodes found."))}</p>`;
+  getSelectedSeasonEpisodes() {
+    if (!Array.isArray(this.episodes) || !this.episodes.length) {
+      return [];
     }
-    const selectedSeasonEpisodes = this.episodes.filter((episode) => episode.season === this.selectedSeason);
-    if (!selectedSeasonEpisodes.length) {
+    return this.episodes.filter((episode) => Number(episode?.season || 0) === Number(this.selectedSeason || 0));
+  },
+
+  getEpisodeIndexByVideoId(videoId) {
+    const wanted = String(videoId || "").trim();
+    if (!wanted) {
+      return -1;
+    }
+    return this.getSelectedSeasonEpisodes().findIndex((episode) => String(episode?.id || "") === wanted);
+  },
+
+  getEpisodeTrackElement() {
+    return this.container?.querySelector(".series-episode-track") || null;
+  },
+
+  measureEpisodeTrackMetrics(track = null) {
+    const target = track instanceof HTMLElement ? track : this.getEpisodeTrackElement();
+    const sampleCard = target?.querySelector?.(".series-episode-card") || null;
+    const sampleWindow = target?.querySelector?.(".series-episode-track-window") || target;
+    const trackStyle = target && typeof getComputedStyle === "function" ? getComputedStyle(target) : null;
+    const windowStyle = sampleWindow && typeof getComputedStyle === "function" ? getComputedStyle(sampleWindow) : null;
+    const rawGap = Number.parseFloat(windowStyle?.gap || windowStyle?.columnGap || trackStyle?.gap || trackStyle?.columnGap || "0");
+    const gap = Number.isFinite(rawGap) && rawGap >= 0 ? rawGap : EPISODE_VIRTUALIZATION_DEFAULT_GAP;
+    const measuredWidth = Number(sampleCard?.getBoundingClientRect?.().width || 0);
+    const cardWidth = measuredWidth > 0 ? measuredWidth : (this.episodeVirtualState?.cardWidth || EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH);
+    const stride = Math.max(1, cardWidth + gap);
+    const viewportWidth = Number(target?.clientWidth || 0);
+    this.episodeVirtualState = {
+      season: Number(this.selectedSeason || 0),
+      cardWidth,
+      gap,
+      stride,
+      viewportWidth,
+      measuredAt: Date.now()
+    };
+    return this.episodeVirtualState;
+  },
+
+  getEpisodeVirtualWindowState(episodes = this.getSelectedSeasonEpisodes(), preferredIndex = null) {
+    const list = Array.isArray(episodes) ? episodes : [];
+    const total = list.length;
+    if (!total) {
+      return null;
+    }
+    const virtualized = total > EPISODE_VIRTUALIZATION_THRESHOLD;
+    if (!virtualized) {
+      const metrics = this.measureEpisodeTrackMetrics();
+      return {
+        season: Number(this.selectedSeason || 0),
+        virtualized: false,
+        start: 0,
+        end: total - 1,
+        cardWidth: metrics.cardWidth,
+        gap: metrics.gap,
+        stride: metrics.stride,
+        leftSpacer: 0,
+        rightSpacer: 0,
+        preferredIndex: Number.isFinite(preferredIndex) ? preferredIndex : null
+      };
+    }
+
+    const metrics = this.measureEpisodeTrackMetrics();
+    const visibleEstimate = Math.ceil(Math.max(1, metrics.viewportWidth || 0) / Math.max(1, metrics.stride || 1));
+    const windowSize = Math.min(
+      total,
+      Math.max(
+        EPISODE_VIRTUALIZATION_MIN_WINDOW,
+        visibleEstimate + (EPISODE_VIRTUALIZATION_OVERSCAN * 2)
+      )
+    );
+    const maxStart = Math.max(0, total - windowSize);
+    const currentTrack = this.getEpisodeTrackElement();
+    const currentScrollLeft = Number(currentTrack?.scrollLeft || 0);
+    const baseIndex = Number.isFinite(preferredIndex)
+      ? preferredIndex
+      : Math.floor(currentScrollLeft / Math.max(1, metrics.stride || 1));
+    const start = Math.max(0, Math.min(maxStart, baseIndex - EPISODE_VIRTUALIZATION_OVERSCAN));
+    const end = Math.min(total - 1, start + windowSize - 1);
+    return {
+      season: Number(this.selectedSeason || 0),
+      virtualized: true,
+      start,
+      end,
+      cardWidth: metrics.cardWidth,
+      gap: metrics.gap,
+      stride: metrics.stride,
+      leftSpacer: start * metrics.stride,
+      rightSpacer: Math.max(0, (total - end - 1) * metrics.stride),
+      preferredIndex: Number.isFinite(preferredIndex) ? preferredIndex : null
+    };
+  },
+
+  renderEpisodeCard(episode, absoluteIndex) {
+    const progress = this.episodeProgressMap.get(`${episode.season}:${episode.episode}`) || null;
+    const position = Number(progress?.positionMs || 0);
+    const duration = Number(progress?.durationMs || 0);
+    const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
+    const episodeKey = `${episode.season}:${episode.episode}`;
+    const isWatched = this.enrichedWatchedState?.has(episodeKey)
+      ? Boolean(this.enrichedWatchedState.get(episodeKey)?.isWatched)
+      : this.watchedEpisodeKeys.has(episodeKey);
+    const rating = resolveEpisodeImdbRating(episode, this.seriesRatingsBySeason);
+    const dateLabel = formatEpisodeCardDate(episode.released || "");
+    const isUnavailable = episode.available === false;
+    const metaParts = [
+      episode.runtimeMinutes > 0 ? renderEpisodeRuntimeLabel(episode.runtimeMinutes) : "",
+      rating != null ? `<span class="series-episode-rating-inline">${renderImdbBadge(String(Number(rating).toFixed(1)))}</span>` : "",
+      dateLabel ? `<span class="series-episode-date">${escapeHtml(dateLabel)}</span>` : ""
+    ].filter(Boolean).join("");
+    return `
+      <article class="series-episode-card focusable${isWatched ? " watched" : ""}"
+            data-action="openEpisodeStreams"
+            data-video-id="${escapeHtml(episode.id)}"
+            data-episode-index="${absoluteIndex}">
+        <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail.replace(/'/g, "%27")}')"` : ""}>
+          <div class="series-episode-overlay"></div>
+          ${isWatched ? `<div class="series-episode-status complete">${renderWatchedBadgeGlyph()}</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
+          ${isUnavailable ? `<div class="series-episode-unavailable">${escapeHtml(t("episodes_unavailable", {}, "Unavailable").toUpperCase())}</div>` : ""}
+          <div class="series-episode-copy">
+            <div class="series-episode-badge">${escapeHtml(t("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
+            <div class="series-episode-title">${escapeHtml(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
+            <div class="series-episode-overview">${escapeHtml(episode.overview || t("episodes_episode", {}, "Episode"))}</div>
+            ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
+            ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
+          </div>
+        </div>
+      </article>
+    `;
+  },
+
+  renderEpisodeCards(preferredIndex = null) {
+    const episodes = this.getSelectedSeasonEpisodes();
+    if (!episodes.length) {
       return `<p>${escapeHtml(t("episodes_panel_no_episodes", {}, "No episodes available"))}</p>`;
     }
-    return selectedSeasonEpisodes.map((episode) => {
-      const progress = this.episodeProgressMap.get(`${episode.season}:${episode.episode}`) || null;
-      const position = Number(progress?.positionMs || 0);
-      const duration = Number(progress?.durationMs || 0);
-      const progressRatio = duration > 0 ? Math.min(1, Math.max(0, position / duration)) : 0;
-      const episodeKey = `${episode.season}:${episode.episode}`;
-      const isWatched = this.enrichedWatchedState?.has(episodeKey)
-        ? Boolean(this.enrichedWatchedState.get(episodeKey)?.isWatched)
-        : this.watchedEpisodeKeys.has(episodeKey);
-      const rating = resolveEpisodeImdbRating(episode, this.seriesRatingsBySeason);
-      const dateLabel = formatEpisodeCardDate(episode.released || "");
-      const isUnavailable = episode.available === false;
-      const metaParts = [
-        episode.runtimeMinutes > 0 ? renderEpisodeRuntimeLabel(episode.runtimeMinutes) : "",
-        rating != null ? `<span class="series-episode-rating-inline">${renderImdbBadge(String(Number(rating).toFixed(1)))}</span>` : "",
-        dateLabel ? `<span class="series-episode-date">${escapeHtml(dateLabel)}</span>` : ""
-      ].filter(Boolean).join("");
-      return `
-        <article class="series-episode-card focusable${isWatched ? " watched" : ""}"
-             data-action="openEpisodeStreams"
-             data-video-id="${episode.id}">
-          <div class="series-episode-thumb"${episode.thumbnail ? ` style="background-image:url('${episode.thumbnail.replace(/'/g, "%27")}')"` : ""}>
-            <div class="series-episode-overlay"></div>
-            ${isWatched ? `<div class="series-episode-status complete">${renderWatchedBadgeGlyph()}</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
-            ${isUnavailable ? `<div class="series-episode-unavailable">${escapeHtml(t("episodes_unavailable", {}, "Unavailable").toUpperCase())}</div>` : ""}
-            <div class="series-episode-copy">
-              <div class="series-episode-badge">${escapeHtml(t("episodes_episode", {}, "Episode").toUpperCase())} ${Number(episode.episode || 0)}</div>
-              <div class="series-episode-title">${escapeHtml(normalizeEpisodeTitle(episode.title, episode.episode))}</div>
-             <div class="series-episode-overview">${escapeHtml(episode.overview || t("episodes_episode", {}, "Episode"))}</div>
-              ${metaParts ? `<div class="series-episode-meta">${metaParts}</div>` : ""}
-              ${progressRatio > 0.02 && progressRatio < 0.98 ? `<div class="series-episode-progress"><span style="width:${Math.round(progressRatio * 100)}%"></span></div>` : ""}
-            </div>
-          </div>
-        </article>
-      `;
-    }).join("");
+    const windowState = this.getEpisodeVirtualWindowState(episodes, preferredIndex);
+    if (!windowState) {
+      return `<p>${escapeHtml(t("episodes_panel_no_episodes", {}, "No episodes available"))}</p>`;
+    }
+    this.episodeVirtualWindow = windowState;
+    const visibleEpisodes = windowState.virtualized
+      ? episodes.slice(windowState.start, windowState.end + 1)
+      : episodes;
+    const cards = visibleEpisodes.map((episode, offset) => this.renderEpisodeCard(episode, windowState.virtualized ? windowState.start + offset : offset)).join("");
+    if (!windowState.virtualized) {
+      return cards;
+    }
+    return `
+      <div class="series-episode-track-spacer" aria-hidden="true" style="flex-basis:${Math.max(0, windowState.leftSpacer)}px"></div>
+      <div class="series-episode-track-window" style="--episode-track-gap:${windowState.gap}px">
+        ${cards}
+      </div>
+      <div class="series-episode-track-spacer" aria-hidden="true" style="flex-basis:${Math.max(0, windowState.rightSpacer)}px"></div>
+    `;
+  },
+
+  refreshEpisodeTrack(focusRestoreOverride = null, preferredIndex = null) {
+    if (!this.container || !isSeriesDetailMeta(this.meta, this.episodes)) {
+      return false;
+    }
+    const episodeMount = this.container.querySelector("#detailEpisodeTrackMount");
+    if (!episodeMount) {
+      return false;
+    }
+    const focusRestore = focusRestoreOverride || this.captureDetailFocus();
+    this.captureRenderedChromeState();
+    episodeMount.innerHTML = `<div class="series-episode-track${this.getSelectedSeasonEpisodes().length > EPISODE_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards(preferredIndex)}</div>`;
+    ScreenUtils.indexFocusables(this.container);
+    this.pendingFocusRestore = focusRestore;
+    this.bindDetailChrome();
+    return true;
+  },
+
+  scheduleEpisodeVirtualizationSync(preferredIndex = null) {
+    if (this.episodeVirtualSyncRaf) {
+      cancelAnimationFrame(this.episodeVirtualSyncRaf);
+    }
+    const raf = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame
+      : (cb) => setTimeout(cb, 16);
+    this.episodeVirtualSyncRaf = raf(() => {
+      this.episodeVirtualSyncRaf = null;
+      this.syncEpisodeVirtualization(preferredIndex);
+    });
+  },
+
+  syncEpisodeVirtualization(preferredIndex = null) {
+    if (!this.container || !isSeriesDetailMeta(this.meta, this.episodes)) {
+      return false;
+    }
+    const episodes = this.getSelectedSeasonEpisodes();
+    if (episodes.length <= EPISODE_VIRTUALIZATION_THRESHOLD) {
+      return false;
+    }
+    const track = this.getEpisodeTrackElement();
+    if (!track) {
+      return false;
+    }
+    const currentFocus = this.container.querySelector(".series-episode-card.focusable.focused") || null;
+    const focusIndex = Number.isFinite(preferredIndex)
+      ? preferredIndex
+      : Number(currentFocus?.dataset?.episodeIndex || this.getRememberedEpisodeIndex(episodes));
+    const nextWindow = this.getEpisodeVirtualWindowState(episodes, focusIndex);
+    if (!nextWindow) {
+      return false;
+    }
+    const currentWindow = this.episodeVirtualWindow;
+    if (
+      currentWindow
+      && currentWindow.season === nextWindow.season
+      && currentWindow.start === nextWindow.start
+      && currentWindow.end === nextWindow.end
+      && currentWindow.virtualized === nextWindow.virtualized
+    ) {
+      this.episodeVirtualState = nextWindow;
+      return false;
+    }
+    this.episodeVirtualWindow = nextWindow;
+    this.episodeVirtualState = nextWindow;
+    this.refreshEpisodeTrack({ episodeIndex: focusIndex, preserveVerticalScroll: true }, focusIndex);
+    return true;
+  },
+
+  focusEpisodeByIndex(index, options = {}) {
+    const episodes = this.getSelectedSeasonEpisodes();
+    if (!episodes.length) {
+      return false;
+    }
+    const targetIndex = Math.max(0, Math.min(episodes.length - 1, Number(index || 0)));
+    const focusRestore = { episodeIndex: targetIndex, preserveVerticalScroll: Boolean(options?.preserveVerticalScroll) };
+    if (this.syncEpisodeVirtualization(targetIndex)) {
+      const target = this.container?.querySelector(`.series-episode-card[data-episode-index="${targetIndex}"]`) || null;
+      if (target instanceof HTMLElement) {
+        return this.focusInList([target], 0, {
+          animated: options?.animated !== false,
+          preserveVerticalScroll: Boolean(options?.preserveVerticalScroll)
+        });
+      }
+      this.pendingFocusRestore = focusRestore;
+      return true;
+    }
+    const target = this.container?.querySelector(`.series-episode-card[data-episode-index="${targetIndex}"]`) || null;
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    return this.focusInList([target], 0, {
+      animated: options?.animated !== false,
+      preserveVerticalScroll: Boolean(options?.preserveVerticalScroll)
+    });
+  },
+
+  focusEpisodeByVideoId(videoId, options = {}) {
+    const index = this.getEpisodeIndexByVideoId(videoId);
+    if (index < 0) {
+      return false;
+    }
+    return this.focusEpisodeByIndex(index, options);
   },
 
   syncSeriesHeroPlayButtonLabel() {
@@ -2930,7 +3159,15 @@ export const MetaDetailsScreen = {
 
   getEpisodeFocusDescriptor(videoId) {
     const value = String(videoId || "").trim();
-    return value ? { selector: `.series-episode-card[data-video-id="${escapeSelectorValue(value)}"]` } : null;
+    if (!value) {
+      return null;
+    }
+    const episodeIndex = this.getEpisodeIndexByVideoId(value);
+    return {
+      episodeVideoId: value,
+      episodeIndex: episodeIndex >= 0 ? episodeIndex : null,
+      selector: `.series-episode-card[data-video-id="${escapeSelectorValue(value)}"]`
+    };
   },
 
   getEpisodeMenuProgress(episode) {
@@ -3037,7 +3274,22 @@ export const MetaDetailsScreen = {
   },
 
   focusDetailDescriptor(descriptor) {
-    if (!descriptor?.selector || !this.container) {
+    if (!descriptor || !this.container) {
+      return false;
+    }
+    if (Number.isFinite(descriptor.episodeIndex) && descriptor.episodeIndex >= 0) {
+      return this.focusEpisodeByIndex(Number(descriptor.episodeIndex), {
+        animated: false,
+        preserveVerticalScroll: Boolean(descriptor.preserveVerticalScroll)
+      });
+    }
+    if (descriptor.episodeVideoId) {
+      return this.focusEpisodeByVideoId(descriptor.episodeVideoId, {
+        animated: false,
+        preserveVerticalScroll: Boolean(descriptor.preserveVerticalScroll)
+      });
+    }
+    if (!descriptor?.selector) {
       return false;
     }
     const target = this.container.querySelector(descriptor.selector);
@@ -4099,6 +4351,19 @@ export const MetaDetailsScreen = {
       shell.classList.toggle("detail-scrolled", content.scrollTop > 160);
     };
     content.addEventListener("scroll", this.detailScrollHandler, { passive: true });
+    const episodeTrack = this.container?.querySelector(".series-episode-track");
+    if (this.episodeTrackScrollNode && this.episodeTrackScrollHandler) {
+      this.episodeTrackScrollNode.removeEventListener("scroll", this.episodeTrackScrollHandler);
+    }
+    this.episodeTrackScrollNode = episodeTrack instanceof HTMLElement ? episodeTrack : null;
+    if (this.episodeTrackScrollNode) {
+      this.episodeTrackScrollHandler = () => {
+        this.scheduleEpisodeVirtualizationSync();
+      };
+      this.episodeTrackScrollNode.addEventListener("scroll", this.episodeTrackScrollHandler, { passive: true });
+    } else {
+      this.episodeTrackScrollHandler = null;
+    }
     if (this.detailFocusHandler) {
       this.container.removeEventListener("focusin", this.detailFocusHandler, true);
     }
@@ -4280,7 +4545,12 @@ export const MetaDetailsScreen = {
     }
     if (action === "openEpisodeStreams") {
       const videoId = String(target.dataset.videoId || "");
-      return videoId ? { selector: `.series-episode-card[data-video-id="${escapeSelectorValue(videoId)}"]` } : null;
+      const episodeIndex = Number(target.dataset.episodeIndex || -1);
+      return videoId ? {
+        episodeVideoId: videoId,
+        episodeIndex: Number.isFinite(episodeIndex) && episodeIndex >= 0 ? episodeIndex : this.getEpisodeIndexByVideoId(videoId),
+        selector: `.series-episode-card[data-video-id="${escapeSelectorValue(videoId)}"]`
+      } : null;
     }
     if (action === "openCastDetail") {
       const castKey = String(target.dataset.castKey || "");
@@ -5450,13 +5720,15 @@ export const MetaDetailsScreen = {
   },
 
   getRememberedEpisodeIndex(episodes = []) {
-    if (!Array.isArray(episodes) || !episodes.length) {
+    const seasonEpisodes = this.getSelectedSeasonEpisodes();
+    const total = Array.isArray(episodes) && episodes.length ? Math.max(episodes.length, seasonEpisodes.length) : seasonEpisodes.length;
+    if (!total) {
       return 0;
     }
     const seasonKey = String(Number(this.selectedSeason || 0) || 0);
     const remembered = Number(this.episodeFocusIndexBySeason?.[seasonKey]);
     if (Number.isFinite(remembered) && remembered >= 0) {
-      return Math.min(episodes.length - 1, remembered);
+      return Math.min(total - 1, remembered);
     }
     return 0;
   },
@@ -5496,6 +5768,11 @@ export const MetaDetailsScreen = {
       return;
     }
     const seasonKey = String(Number(this.selectedSeason || 0) || 0);
+    const absoluteIndex = Number(target.dataset.episodeIndex || -1);
+    if (Number.isFinite(absoluteIndex) && absoluteIndex >= 0) {
+      this.episodeFocusIndexBySeason[seasonKey] = absoluteIndex;
+      return;
+    }
     const items = Array.isArray(list) && list.length
       ? list
       : Array.from(this.container?.querySelectorAll(".series-episode-track .series-episode-card.focusable") || []);
@@ -5847,7 +6124,7 @@ export const MetaDetailsScreen = {
       }
       if (castCards.length) return this.focusInList(castCards, Math.min(index, castCards.length - 1));
       if (insightTabs.length) return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs));
-      if (episodes.length) return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes));
+      if (episodes.length) return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true });
       return false;
     };
     const focusFirstSeriesSectionBelowHero = (index = 0) => {
@@ -5873,7 +6150,7 @@ export const MetaDetailsScreen = {
     };
     const focusSeriesSectionAboveInsights = (index = 0) => {
       if (episodes.length) {
-        return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes));
+        return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true });
       }
       if (seasons.length) {
         return this.focusInList(seasons, Math.min(index, seasons.length - 1));
@@ -5897,7 +6174,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
         if (focusFirstSeriesSectionBelowHero(actionIndex)) {
           return true;
@@ -5917,7 +6194,7 @@ export const MetaDetailsScreen = {
       }
       if (direction === "down") {
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
         if (focusFirstSeriesSectionBelowHero(seasonIndex)) {
           return true;
@@ -5928,14 +6205,15 @@ export const MetaDetailsScreen = {
 
     const episodeIndex = episodes.indexOf(current);
     if (episodeIndex >= 0) {
-      if (direction === "left") return this.focusInList(episodes, episodeIndex - 1, { preserveVerticalScroll: true }) || true;
-      if (direction === "right") return this.focusInList(episodes, episodeIndex + 1, { preserveVerticalScroll: true }) || true;
+      const absoluteEpisodeIndex = Number(current.dataset.episodeIndex || episodeIndex);
+      if (direction === "left") return this.focusEpisodeByIndex(absoluteEpisodeIndex - 1, { preserveVerticalScroll: true }) || true;
+      if (direction === "right") return this.focusEpisodeByIndex(absoluteEpisodeIndex + 1, { preserveVerticalScroll: true }) || true;
       if (direction === "up") {
         if (seasons.length) {
           return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
         }
         if (actions.length) {
-          return this.focusInList(actions, Math.min(episodeIndex, actions.length - 1)) || true;
+          return this.focusInList(actions, Math.min(absoluteEpisodeIndex, actions.length - 1)) || true;
         }
       }
       if (direction === "down" && insightTabs.length) {
@@ -5993,7 +6271,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && focusCommentsEntry(castIndex)) {
@@ -6017,7 +6295,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && ratingChips.length) {
@@ -6044,7 +6322,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs, 1)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && focusCommentsEntry(ratingChipIndex)) {
@@ -6090,7 +6368,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, moreLikeTabIndex) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && focusCommentsEntry(moreLikeIndex)) {
@@ -6130,7 +6408,7 @@ export const MetaDetailsScreen = {
           return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs)) || true;
         }
         if (episodes.length) {
-          return this.focusInList(episodes, this.getRememberedEpisodeIndex(episodes)) || true;
+          return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), { preserveVerticalScroll: true }) || true;
         }
       }
       if (direction === "down" && trackIndex < companyCards.length - 1 && companyCards[trackIndex + 1]?.length) {
@@ -6717,6 +6995,17 @@ export const MetaDetailsScreen = {
     this.seasonHoldMenu = null;
     this.heroPlayMenu = null;
     this.libraryListMenu = null;
+    if (this.episodeVirtualSyncRaf) {
+      cancelAnimationFrame(this.episodeVirtualSyncRaf);
+      this.episodeVirtualSyncRaf = null;
+    }
+    if (this.episodeTrackScrollNode && this.episodeTrackScrollHandler) {
+      this.episodeTrackScrollNode.removeEventListener("scroll", this.episodeTrackScrollHandler);
+    }
+    this.episodeTrackScrollNode = null;
+    this.episodeTrackScrollHandler = null;
+    this.episodeVirtualWindow = null;
+    this.episodeVirtualState = null;
     this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
     if (this.detailScrollHandler && this.container) {
       const content = this.container.querySelector(".series-detail-content");

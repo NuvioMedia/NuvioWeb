@@ -12513,6 +12513,21 @@ button:focus-visible {
   scrollbar-width: none;
 }
 
+.series-episode-track.is-virtualized {
+  gap: 0 !important;
+}
+
+.series-episode-track-window {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--episode-track-gap, 14px);
+}
+
+.series-episode-track-spacer {
+  flex: 0 0 auto;
+  height: 1px;
+}
+
 .series-episode-track::-webkit-scrollbar {
   display: none;
 }
