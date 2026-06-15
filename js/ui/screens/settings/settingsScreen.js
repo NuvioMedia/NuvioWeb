@@ -1229,6 +1229,9 @@ export const SettingsScreen = {
       <div class="home-shell settings-shell">
         <div class="settings-root-sidebar-slot" data-settings-root-sidebar></div>
         <div class="settings-workspace">
+          <header class="library-page-header settings-page-header">
+            <h1 class="library-page-title">${escapeHtml(t("settings_title", {}, "Settings"))}</h1>
+          </header>
           <div class="settings-sidebar-frame">
             <aside class="settings-sidebar" data-settings-nav></aside>
             ${settingsScrollIndicatorMarkup("vertical")}

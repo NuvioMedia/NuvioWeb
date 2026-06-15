@@ -188,6 +188,9 @@ export const PluginScreen = {
           pillIconOnly: Boolean(this.pillIconOnly)
         })}
         <main class="home-main addons-main addons-main-centered">
+          <header class="library-page-header">
+            <h1 class="library-page-title">Addons</h1>
+          </header>
           <div class="addons-panel addons-panel-centered">
             <section class="addons-hero-card">
               <h1 class="addons-title addons-title-centered">Addons</h1>

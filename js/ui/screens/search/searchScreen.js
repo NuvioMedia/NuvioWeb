@@ -704,11 +704,6 @@ export const SearchScreen = {
       } else {
         innerContent = `
           <div class="search-empty-state">
-            <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
-            <h2>${escapeHtml(t("search_start_title", {}, "Start Searching"))}</h2>
-            <p>${escapeHtml(this.layoutPrefs?.searchDiscoverEnabled
-              ? t("search_start_subtitle", {}, "Enter at least 2 characters")
-              : t("search_start_subtitle_no_discover", {}, "Discover is disabled. Enter at least 2 characters"))}</p>
           </div>
         `;
       }
@@ -754,9 +749,12 @@ export const SearchScreen = {
                      data-catalog-name="${row.catalogName || ""}"
                      data-catalog-type="${row.type || "movie"}"
                      data-row-index="${rowIndex}"
-                     data-row-key="${escapeHtml(rowKey)}">
+                     data-row-key="${escapeHtml(rowKey)}"
+                     aria-label="${escapeHtml(seeAllLabel)}">
               <div class="search-seeall-inner">
-                <div class="search-seeall-arrow" aria-hidden="true">&#8594;</div>
+                <div class="search-seeall-arrow" aria-hidden="true">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" viewBox="0 0 256 256"><path d="M237.66,122.34l-96-96A8,8,0,0,0,128,32V72H48A16,16,0,0,0,32,88v80a16,16,0,0,0,16,16h80v40a8,8,0,0,0,13.66,5.66l96-96A8,8,0,0,0,237.66,122.34ZM144,204.69V176a8,8,0,0,0-8-8H48V88h88a8,8,0,0,0,8-8V51.31L220.69,128Z"></path></svg>
+                </div>
                 <div class="search-seeall-label">${escapeHtml(seeAllLabel)}</div>
               </div>
             </article>
@@ -780,6 +778,9 @@ export const SearchScreen = {
           pillIconOnly: Boolean(this.pillIconOnly)
         })}
         <main class="home-main search-content">
+          <header class="library-page-header">
+            <h1 class="library-page-title">${escapeHtml(t("search_title", {}, "Search"))}</h1>
+          </header>
           <section class="search-header${this.layoutPrefs?.searchDiscoverEnabled ? "" : " no-discover"}">
             <input
               id="searchInput"
@@ -793,8 +794,8 @@ export const SearchScreen = {
               value="${escapeHtml(queryText)}"
             />
             ${this.layoutPrefs?.searchDiscoverEnabled ? `
-              <button class="search-discover-btn focusable" data-action="openDiscover" data-index="7" data-nav-zone="header" data-nav-col="0">
-                <svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" fill="currentColor" viewBox="0 0 256 256">
+              <button class="search-discover-btn focusable" data-action="openDiscover" data-index="7" data-nav-zone="header" data-nav-col="0" aria-label="${escapeHtml(t("search_discover_label", {}, "Discover"))}">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 256 256">
                   <path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216ZM172.42,72.84l-64,32a8.05,8.05,0,0,0-3.58,3.58l-32,64A8,8,0,0,0,80,184a8.1,8.1,0,0,0,3.58-.84l64-32a8.05,8.05,0,0,0,3.58-3.58l32-64a8,8,0,0,0-10.74-10.74ZM138,138,97.89,158.11,118,118l40.15-20.07Z"></path>
                 </svg>
               </button>
@@ -804,7 +805,7 @@ export const SearchScreen = {
               data-action="openVoice"
               aria-label="Voice search"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" width="54" height="54" fill="currentColor" viewBox="0 0 256 256">
+              <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" fill="currentColor" viewBox="0 0 256 256">
                 <path d="M128,176a48.05,48.05,0,0,0,48-48V64a48,48,0,0,0-96,0v64A48.05,48.05,0,0,0,128,176ZM96,64a32,32,0,0,1,64,0v64a32,32,0,0,1-64,0Zm40,143.6V240a8,8,0,0,1-16,0V207.6A80.11,80.11,0,0,1,48,128a8,8,0,0,1,16,0,64,64,0,0,0,128,0,8,8,0,0,1,16,0A80.11,80.11,0,0,1,136,207.6Z"></path>
               </svg>
             </button>
@@ -935,9 +936,9 @@ export const SearchScreen = {
 
   buildNavigationModel() {
     const header = [
+      this.container?.querySelector("#searchInput.focusable"),
       this.container?.querySelector(".search-discover-btn.focusable"),
-      this.container?.querySelector(".search-voice-btn.focusable"),
-      this.container?.querySelector("#searchInput.focusable")
+      this.container?.querySelector(".search-voice-btn.focusable")
     ].filter(Boolean);
     const rows = Array.from(this.container?.querySelectorAll(".search-results-row .search-results-track") || [])
       .map((track) => Array.from(track.querySelectorAll(".search-result-card.focusable")))

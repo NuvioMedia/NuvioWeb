@@ -1277,9 +1277,11 @@ export const DiscoverScreen = {
     this.container.innerHTML = `
       <div class="home-shell search-screen-shell discover-shell">
         <main class="home-main discover-main${enterClass}">
+          <header class="library-page-header">
+            <h1 class="library-page-title">${escapeHtml(t("discover_title", {}, "Discover"))}</h1>
+          </header>
           <div class="seeall-shell discover-seeall-shell">
             <header class="seeall-header discover-header">
-              <h2 class="seeall-title">Discover</h2>
               <div class="seeall-subtitle" id="discoverContextLabel">${escapeHtml(contextLabel)}</div>
             </header>
             <section class="library-picker-row discover-picker-row" id="discoverPickerRow">
