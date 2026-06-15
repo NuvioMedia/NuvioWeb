@@ -5356,7 +5356,7 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  width: 100%;
+  width: 50%;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-desc-skeleton .home-modern-skeleton-block {
@@ -5746,19 +5746,6 @@ button:focus-visible {
   width: var(--modern-hero-media-width);
   height: var(--modern-hero-media-height);
   overflow: hidden;
-}
-
-.home-screen-shell.home-layout-modern .home-modern-hero-media::before,
-.home-screen-shell.home-layout-modern .home-modern-hero-media::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  inset: 0;
-  pointer-events: none;
-  z-index: 1;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
