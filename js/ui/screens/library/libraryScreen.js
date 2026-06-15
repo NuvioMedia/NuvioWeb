@@ -40,6 +40,16 @@ function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
 
+const SORT_DIR_DOWN_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M205.66,149.66l-72,72a8,8,0,0,1-11.32,0l-72-72a8,8,0,0,1,11.32-11.32L120,196.69V40a8,8,0,0,1,16,0V196.69l58.34-58.35a8,8,0,0,1,11.32,11.32Z"></path></svg>';
+const SORT_DIR_UP_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 256 256" aria-hidden="true" focusable="false"><path d="M205.66,117.66a8,8,0,0,1-11.32,0L136,59.31V216a8,8,0,0,1-16,0V59.31L61.66,117.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0l72,72A8,8,0,0,1,205.66,117.66Z"></path></svg>';
+
+function sortLabelToHtml(label) {
+  const text = String(label || "");
+  if (text.includes("↓")) return escapeHtml(text.replace("↓", "").trimEnd()) + SORT_DIR_DOWN_SVG;
+  if (text.includes("↑")) return escapeHtml(text.replace("↑", "").trimEnd()) + SORT_DIR_UP_SVG;
+  return escapeHtml(text);
+}
+
 function extractReleaseYear(item = {}) {
   const candidates = [
     item?.released,
@@ -364,6 +374,8 @@ export const LibraryScreen = {
       picker,
       title,
       value,
+      valueHtml: picker === "sort" ? sortLabelToHtml(value) : null,
+      optionFormatter: picker === "sort" ? sortLabelToHtml : null,
       options: isOpen || isClosing ? options : [],
       open: isOpen,
       closing: isClosing,
@@ -436,7 +448,11 @@ export const LibraryScreen = {
     Object.entries(valueByPicker).forEach(([picker, value]) => {
       const node = this.container?.querySelector(`.library-picker-anchor[data-picker="${selectorValue(picker)}"] .library-picker-value`);
       if (node instanceof HTMLElement) {
-        node.textContent = value;
+        if (picker === "sort") {
+          node.innerHTML = sortLabelToHtml(value);
+        } else {
+          node.textContent = value;
+        }
       }
     });
   },

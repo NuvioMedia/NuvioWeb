@@ -26,6 +26,7 @@ export function renderFilterPicker({
   picker,
   title,
   value,
+  valueHtml = null,
   options = [],
   open = false,
   closing = false,
@@ -42,6 +43,7 @@ export function renderFilterPicker({
   anchorAction = "togglePicker",
   optionAction = "selectPickerOption",
   optionFocusable = true,
+  optionFormatter = null,
   selectedIndex = -1
 } = {}) {
   const normalizedFocusIndex = Number.isFinite(Number(focusIndex)) ? Number(focusIndex) : 0;
@@ -76,7 +78,7 @@ export function renderFilterPicker({
            tabindex="-1">
         <span class="${classPrefix}-copy">
           <span class="${classPrefix}-title">${escapeHtml(title)}</span>
-          <span class="${classPrefix}-value">${escapeHtml(value)}</span>
+          <span class="${classPrefix}-value">${valueHtml !== null ? valueHtml : escapeHtml(value)}</span>
         </span>
         <span class="${classPrefix}-icon">${chevronSvg(open, chevronClassName)}</span>
       </div>
@@ -100,7 +102,7 @@ export function renderFilterPicker({
                    role="option"
                    aria-selected="${index === normalizedSelectedIndex ? "true" : "false"}"
                    tabindex="-1">
-                ${escapeHtml(option?.label ?? option?.value ?? "")}
+                ${optionFormatter ? optionFormatter(option?.label ?? option?.value ?? "") : escapeHtml(option?.label ?? option?.value ?? "")}
               </div>
             `;
           }).join("")}

@@ -3394,7 +3394,9 @@ button:focus-visible {
   line-height: min(2.08vw, 40px);
   font-weight: 500;
   color: var(--text-color);
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3471,6 +3473,7 @@ button:focus-visible {
   line-height: 1.2;
   margin-bottom: min(0.21vw, 4px);
   transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
+  gap: 8px;
 }
 
 .library-picker-option:last-child {
