@@ -3068,7 +3068,7 @@ button:focus-visible {
 .search-results-track {
   margin-top: 16px;
   display: flex;
-  gap: 16px;
+  gap: var(--home-row-gap);
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
