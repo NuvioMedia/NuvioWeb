@@ -1369,7 +1369,10 @@ button:focus-visible {
 .nuvio-dialog-panel {
   width: 100%;
   box-sizing: border-box;
-  position: relative;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 18%) top / 100% 100px no-repeat, rgba(8, 12, 24, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(52px) saturate(160%) brightness(0.85);
+  -webkit-backdrop-filter: blur(52px) saturate(160%) brightness(0.85);
   border-radius: 64px;
   padding: 48px;
   display: flex;
@@ -1378,19 +1381,6 @@ button:focus-visible {
   overflow: visible;
   transform: scale(0.9);
   opacity: 0;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 18%) top / 100% 100px no-repeat, rgba(8, 12, 24, 0.62);
-  -webkit-backdrop-filter: blur(52px) saturate(160%) brightness(0.85);
-  backdrop-filter: blur(52px) saturate(160%) brightness(0.85);
-  border: 1px solid rgba(255, 255, 255, 0.09);
-}
-
-.nuvio-dialog-panel::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: 64px;
-  pointer-events: none;
-  background: radial-gradient(120% 70% at 30% -10%, rgba(255, 255, 255, 0.07), transparent 60%);
 }
 
 .nuvio-dialog-panel.nuvio-dialog-panel-enter {
@@ -1424,7 +1414,7 @@ button:focus-visible {
   font-weight: 500;
   letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.5);
-  margin-top: -16px;
+  margin-top: -24px;
 }
 
 .nuvio-dialog-error {
@@ -1434,8 +1424,6 @@ button:focus-visible {
 }
 
 .nuvio-dialog-actions {
-  position: relative;
-  z-index: 1;
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -1443,64 +1431,64 @@ button:focus-visible {
 }
 
 .nuvio-dialog-button {
-  width: 100%;
+  width: 92%;
+  margin: 0 auto;
   padding: 0 36px;
-  min-height: 80px;
-  box-sizing: border-box; 
-  border-radius: 64px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.045);
-  color: rgba(255, 255, 255, 0.9);
+  height: 100px;
+  box-sizing: border-box;
+  border-radius: var(--modern-sidebar-button-radius);
+  border: 3px solid transparent;
+  background: transparent;
+  color: #ffffff;
   font-size: 28px;
   line-height: 40px;
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-weight: 500;
   text-align: left;
   cursor: pointer;
   outline: none;
   font-family: inherit;
   display: flex;
   align-items: center;
-  gap: 24px;
-  transition: background 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              color 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              box-shadow 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              border-color 200ms cubic-bezier(0.4, 0.0, 0.2, 1);
+  gap: var(--modern-sidebar-button-gap);
+  transform: scale(1);
+  transform-origin: center center;
+  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .nuvio-dialog-button-icon {
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .nuvio-dialog-button-icon svg {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: block;
 }
 
 .nuvio-dialog-button.focused {
   background: #ffffff;
-  color: #121212;
-  border-color: transparent;
-  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.55);
+  color: #10151f;
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.06);
 }
 
 .nuvio-dialog-button.nuvio-dialog-button-danger {
-  background: rgba(255, 80, 80, 0.12);
-  border-color: rgba(255, 80, 80, 0.18);
   color: #ff9090;
 }
 
 .nuvio-dialog-button.nuvio-dialog-button-danger.focused {
   background: #ffffff;
-  color: #121212;
-  border-color: transparent;
-  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.55);
+  color: #10151f;
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: scale(1.06);
 }
 
 .poster-list-picker-dialog-panel {
