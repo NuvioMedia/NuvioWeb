@@ -1367,24 +1367,30 @@ button:focus-visible {
    Easing: tween default = FastOutSlowIn for enter, LinearOutSlowIn doesn't apply here
    — Compose tween() default easing = FastOutSlowIn */
 .nuvio-dialog-panel {
-  /* width driven by JS maxWidth (360dp=720px for options, etc.)
-     — no fixed width here so maxWidth controls size */
   width: 100%;
   box-sizing: border-box;
-  background: rgba(18, 20, 26, 0.52);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 16px 64px rgba(0, 0, 0, 0.56), inset 0 1px 0 rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
-  -webkit-backdrop-filter: blur(36px) saturate(160%) brightness(1.06);
-  border-radius: 32px;
+  position: relative;
+  border-radius: 64px;
   padding: 48px;
   display: flex;
   flex-direction: column;
   gap: 32px;
   overflow: visible;
-  /* start state: scale(0.9) opacity(0) — matches Compose scaleIn(0.9) */
   transform: scale(0.9);
   opacity: 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06) 0%, transparent 18%) top / 100% 100px no-repeat, rgba(8, 12, 24, 0.62);
+  -webkit-backdrop-filter: blur(52px) saturate(160%) brightness(0.85);
+  backdrop-filter: blur(52px) saturate(160%) brightness(0.85);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.nuvio-dialog-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 64px;
+  pointer-events: none;
+  background: radial-gradient(120% 70% at 30% -10%, rgba(255, 255, 255, 0.07), transparent 60%);
 }
 
 .nuvio-dialog-panel.nuvio-dialog-panel-enter {
@@ -1401,20 +1407,23 @@ button:focus-visible {
               opacity 75ms linear;
 }
 
-/* Title — titleLarge: 20sp=40px, Medium(500) */
 .nuvio-dialog-title {
+  position: relative;
+  z-index: 1;
   font-size: 40px;
   line-height: 1.2;
-  font-weight: 500;
+  font-weight: 700;
   color: #ffffff;
 }
 
-/* Subtitle — bodyMedium: 14sp=28px, Normal(400) */
 .nuvio-dialog-subtitle {
-  font-size: 28px;
+  position: relative;
+  z-index: 1;
+  font-size: 26px;
   line-height: 1.45;
-  font-weight: 400;
-  color: #b3b3b3;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.5);
   margin-top: -16px;
 }
 
@@ -1424,65 +1433,56 @@ button:focus-visible {
   line-height: 1.4;
 }
 
-/* Actions column — gap=16dp=32px */
 .nuvio-dialog-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 32px;
+  gap: 24px;
   overflow: visible;
 }
 
-/* Button — TV Material3 Button (ButtonDefaults):
-   padding:    16dp h / 10dp v  → 32px / 20px
-   minHeight:  40dp             → 80px
-   text style: labelLarge = 14sp=28px Medium(500)
-   shape:      CircleShape (pill)
-   unfocused:  containerColor passed explicitly = BackgroundCard #242424
-   focused:    focusedContainerColor = onSurface = #ffffff
-               focusedContentColor  = inverseOnSurface = #121212
-   scale:      focusedScale = 1.1 (ButtonDefaults.scale default)
-   No special focused color for danger — same white/dark as normal focused */
 .nuvio-dialog-button {
   width: 100%;
-  padding: 20px 32px;
+  padding: 0 36px;
   min-height: 80px;
   box-sizing: border-box;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.07);
-  color: #ffffff;
+  border-radius: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 28px;
   line-height: 40px;
-  font-weight: 500;
-  letter-spacing: 0.1px;
+  font-weight: 600;
+  letter-spacing: -0.005em;
   text-align: left;
   cursor: pointer;
   outline: none;
-  transform: scale(1);
-  /* TV Material3 Button uses spring for scale (~300ms), tween(200ms) for color */
+  font-family: inherit;
   transition: background 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
               color 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+              box-shadow 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
+              border-color 200ms cubic-bezier(0.4, 0.0, 0.2, 1);
 }
 
-/* All focused buttons: white bg, dark text — including danger */
 .nuvio-dialog-button.focused {
   background: #ffffff;
   color: #121212;
-  transform: scale(1.1);
+  border-color: transparent;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.55);
 }
 
-/* Danger unfocused: dark red bg */
 .nuvio-dialog-button.nuvio-dialog-button-danger {
-  background: #4a2323;
-  color: #ffffff;
+  background: rgba(255, 80, 80, 0.12);
+  border-color: rgba(255, 80, 80, 0.18);
+  color: #ff9090;
 }
 
-/* Danger focused: same as any focused button — white/dark (ATV confirmed) */
 .nuvio-dialog-button.nuvio-dialog-button-danger.focused {
   background: #ffffff;
   color: #121212;
-  transform: scale(1.1);
+  border-color: transparent;
+  box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.55);
 }
 
 .poster-list-picker-dialog-panel {
@@ -12919,6 +12919,7 @@ button:focus-visible {
 .series-insight-empty {
   color: rgba(223, 233, 245, 0.66);
   font-size: 18px;
+  padding-left: 16px;
 }
 
 .series-rating-seasons {
