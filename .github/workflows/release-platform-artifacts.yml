@@ -61,16 +61,17 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Write webOS release local properties
+      - name: Write release local properties
         env:
+          NUVIO_LOCAL_PROPERTIES: ${{ secrets.NUVIO_LOCAL_PROPERTIES }}
           WEBOS_LOCAL_PROPERTIES: ${{ secrets.WEBOS_LOCAL_PROPERTIES }}
         run: |
-          if [ -z "${WEBOS_LOCAL_PROPERTIES//[[:space:]]/}" ]; then
-            echo "::error::WEBOS_LOCAL_PROPERTIES secret is required to build release artifacts with runtime env."
+          LOCAL_PROPERTIES="${NUVIO_LOCAL_PROPERTIES:-$WEBOS_LOCAL_PROPERTIES}"
+          if [ -z "${LOCAL_PROPERTIES//[[:space:]]/}" ]; then
+            echo "::error::NUVIO_LOCAL_PROPERTIES secret is required to build release artifacts with runtime env."
             exit 1
           fi
-          printf '%s\n' "$WEBOS_LOCAL_PROPERTIES" > local.properties
-
+          printf '%s\n' "$LOCAL_PROPERTIES" > local.properties
       - name: Install dependencies
         run: npm ci
 
@@ -184,18 +185,18 @@ jobs:
           node-version: 20
           cache: npm
 
-      - name: Write Tizen release local properties
+      - name: Write release local properties
         env:
+          NUVIO_LOCAL_PROPERTIES: ${{ secrets.NUVIO_LOCAL_PROPERTIES }}
           TIZEN_LOCAL_PROPERTIES: ${{ secrets.TIZEN_LOCAL_PROPERTIES }}
           WEBOS_LOCAL_PROPERTIES: ${{ secrets.WEBOS_LOCAL_PROPERTIES }}
         run: |
-          LOCAL_PROPERTIES="${TIZEN_LOCAL_PROPERTIES:-$WEBOS_LOCAL_PROPERTIES}"
+          LOCAL_PROPERTIES="${NUVIO_LOCAL_PROPERTIES:-${TIZEN_LOCAL_PROPERTIES:-$WEBOS_LOCAL_PROPERTIES}}"
           if [ -z "${LOCAL_PROPERTIES//[[:space:]]/}" ]; then
-            echo "::error::TIZEN_LOCAL_PROPERTIES or WEBOS_LOCAL_PROPERTIES secret is required to build Tizen artifacts with runtime env."
+            echo "::error::NUVIO_LOCAL_PROPERTIES secret is required to build release artifacts with runtime env."
             exit 1
           fi
           printf '%s\n' "$LOCAL_PROPERTIES" > local.properties
-
       - name: Install dependencies
         run: npm ci
 
