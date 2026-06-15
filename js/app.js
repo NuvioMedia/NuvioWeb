@@ -177,6 +177,57 @@ async function routeAfterAuthentication() {
   Router.navigate("home");
 }
 
+function setupWebOsAppLifecycle() {
+  if (!Platform.isWebOS()) {
+    return;
+  }
+  // webOS keeps the app resident when it is backgrounded. Re-opening can fire
+  // a launch event on the existing JS context instead of reloading the page.
+  let recovering = false;
+  const recover = async () => {
+    if (recovering || !appShellRendered) {
+      return;
+    }
+    const current = Router.getCurrent();
+    if (!current) {
+      return;
+    }
+    recovering = true;
+    try {
+      if (document.body) {
+        document.body.style.removeProperty("display");
+      }
+      const isTransientRoute = current === "player" || current === "stream";
+      const target = isTransientRoute ? "home" : current;
+      const params = target === current ? Router.currentParams || {} : {};
+      await Router.navigate(target, params, {
+        replaceHistory: true,
+        skipStackPush: true,
+      });
+    } catch (error) {
+      console.warn("webOS relaunch recovery failed", error);
+    } finally {
+      recovering = false;
+    }
+  };
+
+  document.addEventListener("webOSRelaunch", () => {
+    void recover();
+  });
+
+  // webOS 4.x may fire webOSLaunch instead of webOSRelaunch when resuming.
+  document.addEventListener("webOSLaunch", () => {
+    void recover();
+  });
+
+  // Some builds only expose visibilitychange when the WebView is resumed.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      void recover();
+    }
+  });
+}
+
 async function bootstrapApp() {
   renderAppShell();
   appShellRendered = true;
@@ -188,6 +239,7 @@ async function bootstrapApp() {
   PlayerController.init();
 
   FocusEngine.init();
+  setupWebOsAppLifecycle();
 
   ThemeManager.apply();
   I18n.apply();

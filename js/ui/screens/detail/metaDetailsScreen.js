@@ -1895,7 +1895,8 @@ export const MetaDetailsScreen = {
       resumeDurationMs: routeStartFromBeginning ? 0 : (Number(this.params?.resumeDurationMs || this.resumeProgress?.durationMs || 0) || 0),
       startFromBeginning: routeStartFromBeginning,
       returnToDetail: true,
-      continueWatchingBackHome: true
+      continueWatchingBackHome: true,
+      resumeStreamIdentity: this.params?.resumeStreamIdentity || null
     };
     if (isSeriesDetailMeta(this.meta, this.episodes)) {
       const episode = this.findContinueWatchingEpisodeTarget();

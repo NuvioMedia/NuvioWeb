@@ -1933,7 +1933,8 @@ export const PlayerScreen = {
       background: this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
       episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
       requestHeaders,
-      mediaSourceType
+      mediaSourceType,
+      streamIdentity: streamCandidate ? streamMergeKey(streamCandidate) || null : null
     };
   },
 

@@ -1,5 +1,7 @@
 import { ScreenUtils } from "../../navigation/screen.js";
 import { Router } from "../../navigation/router.js";
+import { AuthManager } from "../../../core/auth/authManager.js";
+import { LibrarySyncService } from "../../../core/profile/librarySyncService.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { Platform } from "../../../platform/index.js";
@@ -53,6 +55,7 @@ export const PluginScreen = {
     this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
     this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
     this.qrOverlayOpen = false;
+    this.syncing = false;
     const [sidebarProfile, model] = await Promise.all([
       getSidebarProfileState(),
       this.collectModel()
@@ -60,14 +63,53 @@ export const PluginScreen = {
     this.sidebarProfile = sidebarProfile;
     this.model = model;
     await this.render({ refreshModel: false });
+    if (AuthManager.isAuthenticated) {
+      void this.refreshAddons();
+    }
   },
 
   async collectModel() {
     const addonUrls = addonRepository.getInstalledAddonUrls();
     return {
       addonCount: addonUrls.length,
+      authenticated: AuthManager.isAuthenticated,
+      syncStatus: LibrarySyncService.getLastPullStatus(),
       phoneManagerUrl: await getPhoneManagerUrl()
     };
+  },
+
+  buildSyncStatusText() {
+    if (this.syncing) {
+      return "Syncing addons...";
+    }
+    if (!this.model?.authenticated) {
+      return "Sign in on your phone to link addons.";
+    }
+    const status = this.model?.syncStatus || {};
+    if (status.state === "error") {
+      return "Couldn't reach the addon service. Check the TV internet connection and try Refresh.";
+    }
+    if (this.model?.addonCount > 0) {
+      return "Addons are up to date.";
+    }
+    return "No addons linked yet. Add them on your phone, then press Refresh.";
+  },
+
+  async refreshAddons() {
+    if (this.syncing) {
+      return;
+    }
+    this.syncing = true;
+    await this.render({ refreshModel: true });
+    try {
+      await LibrarySyncService.pull();
+    } catch (error) {
+      console.warn("Addon refresh failed", error);
+    }
+    this.syncing = false;
+    if (Router.getCurrent() === "plugin") {
+      await this.render({ refreshModel: true });
+    }
   },
 
   setRowColumns(row, cols) {
@@ -167,12 +209,16 @@ export const PluginScreen = {
     this.actionMap = new Map();
     this.setRowColumns(0, [0]);
     this.setRowColumns(1, [0]);
+    this.setRowColumns(2, [0]);
 
     this.actionMap.set("manage_from_phone", async () => {
       await this.openQrOverlay();
     });
     this.actionMap.set("reorder_home_catalogs", async () => {
       Router.navigate("catalogOrder");
+    });
+    this.actionMap.set("refresh_addons", async () => {
+      await this.refreshAddons();
     });
     this.actionMap.set("close_qr_overlay", async () => {
       await this.closeQrOverlay();
@@ -195,6 +241,7 @@ export const PluginScreen = {
                 Manage addons and home catalogs from your phone.
               </p>
               <p class="addons-meta">${escapeHtml(`${this.model.addonCount} addon${this.model.addonCount === 1 ? "" : "s"} currently linked`)}</p>
+              <p class="addons-sync-status">${escapeHtml(this.buildSyncStatusText())}</p>
               <div role="button"
                    class="addons-large-row addons-large-row-centered addons-focusable"
                    data-zone="content"
@@ -225,6 +272,23 @@ export const PluginScreen = {
                 </span>
                 <span class="addons-large-row-tail-group">
                   <span class="addons-large-row-tail material-icons" aria-hidden="true">chevron_right</span>
+                </span>
+              </div>
+              <div role="button"
+                   class="addons-large-row addons-large-row-centered addons-focusable"
+                   data-zone="content"
+                   data-row="2"
+                   data-col="0"
+                   data-action-id="refresh_addons"
+                   tabindex="-1"
+                   aria-disabled="${this.syncing ? "true" : "false"}">
+                <span class="addons-large-row-icon material-icons" aria-hidden="true">${this.syncing ? "hourglass_top" : "sync"}</span>
+                <span class="addons-large-row-copy">
+                  <strong>${this.syncing ? "Refreshing..." : "Refresh addons"}</strong>
+                  <small>Re-check your account for addons you enabled on your phone</small>
+                </span>
+                <span class="addons-large-row-tail-group">
+                  <span class="addons-large-row-tail material-icons" aria-hidden="true">refresh</span>
                 </span>
               </div>
             </section>

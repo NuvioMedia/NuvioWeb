@@ -1334,6 +1334,7 @@ export const StreamScreen = {
     this.addonLogoLookup = {};
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
+    this.autoResumeAttempted = false;
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
       this.releaseImageProxyReadyListener = null;
@@ -1580,6 +1581,7 @@ export const StreamScreen = {
       }
       this.requestRender();
       this.scheduleErrorChipCleanup();
+      this.maybeAutoResumeStream();
     } catch (error) {
       if (token !== this.loadToken) {
         return;
@@ -1591,6 +1593,23 @@ export const StreamScreen = {
       ));
       this.requestRender();
       this.scheduleErrorChipCleanup();
+    }
+  },
+
+  // Continue Watching can pass the identity of the stream that was playing.
+  // If that same source shows up again, resume it directly.
+  maybeAutoResumeStream() {
+    if (this.autoResumeAttempted) {
+      return;
+    }
+    const identity = String(this.params?.resumeStreamIdentity || "").trim();
+    if (!identity || !this.streams.length) {
+      return;
+    }
+    this.autoResumeAttempted = true;
+    const match = this.streams.find((stream) => streamMergeKey(stream) === identity);
+    if (match?.id) {
+      void this.playStream(match.id);
     }
   },
 
