@@ -418,6 +418,16 @@ export function bindRootSidebarEvents(container, {
     };
   });
 
+  container?.addEventListener("focusin", (event) => {
+    const target = event?.target;
+    if (!target) return;
+    if (target.closest(".home-sidebar .focusable, .modern-sidebar-panel .focusable")) {
+      if (typeof onExpandSidebar === "function") {
+        onExpandSidebar(target);
+      }
+    }
+  });
+
   scheduleRootSidebarTextFit(container);
 }
 
