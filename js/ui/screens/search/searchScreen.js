@@ -984,6 +984,7 @@ export const SearchScreen = {
     const rows = Array.from(this.container?.querySelectorAll(".search-results-row .search-results-track") || [])
       .map((track) => Array.from(track.querySelectorAll(".search-result-card.focusable")))
       .filter((row) => row.length > 0);
+    const historyChips = Array.from(this.container?.querySelectorAll(".search-history-chip.focusable") || []);
 
     header.forEach((node, index) => {
       node.dataset.navZone = "header";
@@ -1002,7 +1003,12 @@ export const SearchScreen = {
       });
     });
 
-    this.navModel = { header, rows };
+    historyChips.forEach((node, index) => {
+      node.dataset.navZone = "history";
+      node.dataset.navCol = String(index);
+    });
+
+    this.navModel = { header, rows, historyChips };
     if (!this.lastContentFocus) {
       const fallback = this.getDefaultHeaderFocusTarget() || rows[0]?.[0] || null;
       if (fallback) {
@@ -1415,11 +1421,34 @@ export const SearchScreen = {
         return true;
       }
       if (direction === "down") {
+        if (nav.historyChips?.length) {
+          return this.focusNode(current, nav.historyChips[0]) || true;
+        }
         const firstRow = nav.rows?.[0] || [];
         const target = this.resolvePreferredResultsNode(firstRow, col);
         return this.focusNode(current, target) || true;
       }
       if (direction === "up") {
+        return true;
+      }
+      return true;
+    }
+
+    if (zone === "history") {
+      const col = Number(current.dataset.navCol || 0);
+      if (direction === "left") {
+        if (col > 0) return this.focusNode(current, nav.historyChips[col - 1]) || true;
+        return "sidebar";
+      }
+      if (direction === "right") {
+        const next = nav.historyChips?.[col + 1] || null;
+        return this.focusNode(current, next || current) || true;
+      }
+      if (direction === "up") {
+        const target = nav.header?.[0] || null;
+        return this.focusNode(current, target) || true;
+      }
+      if (direction === "down") {
         return true;
       }
       return true;
