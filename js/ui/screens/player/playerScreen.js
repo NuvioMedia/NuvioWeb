@@ -5192,6 +5192,16 @@ export const PlayerScreen = {
       startupErrorButton: overlay.querySelector(".player-startup-error-button"),
       startupErrorButtons: Array.from(overlay.querySelectorAll(".player-startup-error-button"))
     };
+
+    // Ensure the focused error button receives DOM focus after the overlay is rendered.
+    const focus = () => {
+      this.focusStartupErrorButton(this.startupErrorFocusIndex);
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(focus);
+    } else {
+      focus();
+    }
   },
 
   shouldUseLoadingLogoFill() {
