@@ -3202,7 +3202,6 @@ export const HomeScreen = {
   },
 
   setSidebarExpanded(expanded) {
-    RootSidebarController.expanded = Boolean(expanded);
     if (this.layoutPrefs?.modernSidebar) {
       this.sidebarExpanded = Boolean(expanded);
       return;
@@ -4209,7 +4208,60 @@ export const HomeScreen = {
       if (shouldEnrichModernHero(hero)) {
         await this.enrichCurrentHeroAsync(hero);
       }
+      if (String(this.heroItem?.id || "") === String(hero.id || "")) {
+        this._prefetchAdjacentCards(node);
+      }
     }, delay);
+  },
+
+  _prefetchAdjacentCards(node) {
+    if (!node) return;
+    const rowIndex = Number(node.dataset.rowIndex ?? -1);
+    const itemIndex = Number(node.dataset.itemIndex ?? -1);
+    if (rowIndex < 0 || itemIndex < 0) return;
+    const row = this.rows?.[rowIndex];
+    const items = Array.isArray(row?.result?.data?.items) ? row.result.data.items : null;
+    if (!items) return;
+    const total = items.length;
+    const nextIdx = itemIndex + 1;
+    if (nextIdx < total) {
+      const adjacentHero = normalizeHomeRowItem(row, items[nextIdx]);
+      if (adjacentHero?.id) this._prefetchHeroCard(adjacentHero);
+    }
+  },
+
+  _prefetchHeroCard(hero) {
+    if (!hero?.id) return;
+    if (shouldEnrichModernHero(hero)) {
+      this._prefetchHeroEnrichment(hero);
+    }
+    const display = buildModernHeroPresentation(hero);
+    if (display?.backdrop) preloadImageSource(display.backdrop);
+    if (display?.logo) preloadImageSource(display.logo);
+  },
+
+  _prefetchHeroEnrichment(hero) {
+    if (!hero?.id) return;
+    if (!this._heroMetaCache) this._heroMetaCache = new Map();
+    if (!this._heroPrefetchPending) this._heroPrefetchPending = new Set();
+    const itemId = String(hero.id);
+    const itemType = String(hero.type || hero.apiType || "movie");
+    if (this._heroMetaCache.has(itemId) || this._heroPrefetchPending.has(itemId)) return;
+    this._heroPrefetchPending.add(itemId);
+    Promise.race([
+      metaRepository.getMetaFromAllAddons(itemType, itemId),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("prefetch-timeout")), 5000))
+    ])
+      .then((result) => {
+        this._heroPrefetchPending.delete(itemId);
+        if (this._heroMetaCache.size >= 100) {
+          this._heroMetaCache.delete(this._heroMetaCache.keys().next().value);
+        }
+        this._heroMetaCache.set(itemId, result?.status === "success" && result.data ? result.data : null);
+      })
+      .catch(() => {
+        this._heroPrefetchPending.delete(itemId);
+      });
   },
 
   async enrichCurrentHeroAsync(hero) {
@@ -4220,11 +4272,23 @@ export const HomeScreen = {
     const itemType = String(hero.type || hero.apiType || "movie");
     const token = (this.heroEnrichmentToken = (Number(this.heroEnrichmentToken || 0) + 1));
     try {
-      const result = await Promise.race([
-        metaRepository.getMetaFromAllAddons(itemType, itemId),
-        new Promise((_, reject) => setTimeout(() => reject(new Error("hero-enrich-timeout")), 4000))
-      ]);
+      const cachedMeta = this._heroMetaCache?.get(itemId);
+      const result = cachedMeta !== undefined
+        ? (cachedMeta ? { status: "success", data: cachedMeta } : { status: "error" })
+        : await Promise.race([
+            metaRepository.getMetaFromAllAddons(itemType, itemId),
+            new Promise((_, reject) => setTimeout(() => reject(new Error("hero-enrich-timeout")), 4000))
+          ]);
       if (Number(this.heroEnrichmentToken) !== token) {
+        if (!this.heroCopyFadeInRaf) {
+          const stuckNode = this.container?.querySelector(".home-hero-card");
+          if (stuckNode?.classList.contains("is-hero-copy-updating")) {
+            this.heroCopyFadeInRaf = requestAnimationFrame(() => {
+              this.heroCopyFadeInRaf = null;
+              stuckNode.classList.remove("is-hero-copy-updating");
+            });
+          }
+        }
         return;
       }
       if (String(this.heroItem?.id || "") !== itemId) {
@@ -4236,6 +4300,8 @@ export const HomeScreen = {
         return;
       }
       const meta = result.data;
+      if (!this._heroMetaCache) this._heroMetaCache = new Map();
+      if (!this._heroMetaCache.has(itemId)) this._heroMetaCache.set(itemId, meta);
       const enrichedImdb = resolveImdbRating(meta);
       const enrichedRuntime = parseRuntimeMinutes(meta.runtimeMinutes ?? meta.runtime);
       const mergedHero = {
@@ -5058,13 +5124,15 @@ export const HomeScreen = {
     this.collapseFocusedPoster();
   },
 
-  openSidebar() {
+  openSidebar(skipFocus = false) {
     if (this.layoutPrefs?.modernSidebar) {
       if (this.sidebarExpanded) {
         return true;
       }
       this.sidebarExpanded = true;
+      RootSidebarController.expanded = true;
       setModernSidebarExpanded(this.container, true);
+      if (skipFocus) return true;
       const target = getModernSidebarSelectedNode(this.container);
       const current = this.container?.querySelector(".focusable.focused") || null;
       return this.focusNode(current, target) || true;
@@ -5089,10 +5157,12 @@ export const HomeScreen = {
         ? this.lastMainFocus
         : (this.navModel?.rows?.[0]?.[0] || null);
       this.sidebarExpanded = false;
+      RootSidebarController.expanded = false;
       setModernSidebarExpanded(this.container, false);
       const current = this.container?.querySelector(".focusable.focused") || null;
       return this.focusNode(current, target, "right") || true;
     }
+    RootSidebarController.expanded = false;
     const current = this.container?.querySelector(".home-sidebar .focusable.focused");
     const target = (this.lastMainFocus && this.isMainNode(this.lastMainFocus))
       ? this.lastMainFocus
@@ -6027,9 +6097,10 @@ export const HomeScreen = {
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
     RootSidebarController.register("home", {
-      onExpand: () => this.openSidebar(),
+      onExpand: (skipFocus) => this.openSidebar(skipFocus),
       onCollapse: () => this.closeSidebarToContent(),
-      onAfterInject: () => this.buildNavigationModel()
+      onAfterInject: () => this.buildNavigationModel(),
+      injectTarget: ".home-screen-shell"
     });
     this.sidebarExpanded = false;
     this.pillIconOnly = false;

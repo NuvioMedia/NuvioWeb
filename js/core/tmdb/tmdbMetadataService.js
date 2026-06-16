@@ -2,7 +2,6 @@ import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
 import { TMDB_API_KEY } from "../../config.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
 const TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US";
 
 function resolveType(contentType) {
@@ -13,11 +12,11 @@ function resolveType(contentType) {
   return "movie";
 }
 
-function toImageUrl(path) {
+function toImageUrl(path, size = "original") {
   if (!path) {
     return null;
   }
-  return `${IMAGE_BASE_URL}${path}`;
+  return `https://image.tmdb.org/t/p/${size}${path}`;
 }
 
 function normalizeTmdbTrailerLanguage(language = "") {
@@ -111,7 +110,7 @@ function mapCompanies(items = []) {
   return (Array.isArray(items) ? items : [])
     .map((company) => ({
       name: company?.name || "",
-      logo: toImageUrl(company?.logo_path || company?.logo || null)
+      logo: toImageUrl(company?.logo_path || company?.logo || null, "w185")
     }))
     .filter((company) => company.name || company.logo);
 }
@@ -164,9 +163,9 @@ export const TmdbMetadataService = {
     return {
       localizedTitle: data.title || data.name || null,
       description: data.overview || null,
-      backdrop: toImageUrl(data.backdrop_path),
-      poster: toImageUrl(data.poster_path),
-      logo: toImageUrl(logoPath),
+      backdrop: toImageUrl(data.backdrop_path, "w1280"),
+      poster: toImageUrl(data.poster_path, "w500"),
+      logo: toImageUrl(logoPath, "w500"),
       genres: Array.isArray(data.genres) ? data.genres.map((genre) => genre.name).filter(Boolean) : [],
       rating: typeof data.vote_average === "number" ? data.vote_average : null,
       releaseInfo: releaseYear || null,
@@ -226,9 +225,9 @@ export const TmdbMetadataService = {
       id: item?.id ? String(item.id) : "",
       type: "movie",
       name: item?.title || item?.name || "Untitled",
-      poster: toImageUrl(item?.poster_path || null),
-      background: toImageUrl(item?.backdrop_path || null),
-      landscapePoster: toImageUrl(item?.backdrop_path || null),
+      poster: toImageUrl(item?.poster_path || null, "w500"),
+      background: toImageUrl(item?.backdrop_path || null, "w1280"),
+      landscapePoster: toImageUrl(item?.backdrop_path || null, "w1280"),
       releaseInfo: String(item?.release_date || "").slice(0, 4) || ""
     })).filter((item) => item.id);
   }
