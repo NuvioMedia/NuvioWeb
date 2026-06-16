@@ -14289,7 +14289,13 @@ export const PlayerScreen = {
         return;
       }
       if (keyCode === 13 || keyCode === 23 || keyCode === 66) {
-        const action = actions[this.startupErrorFocusIndex]?.id || "back";
+        const focusedButton = this.uiRefs?.startupErrorButtons?.find((button) =>
+          button?.classList?.contains("focused")
+        );
+        const action =
+          focusedButton?.dataset?.playerErrorAction ||
+          actions[this.startupErrorFocusIndex]?.id ||
+          "back";
         await this.handleStartupErrorAction(action);
       }
       return;
