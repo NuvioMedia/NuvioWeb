@@ -145,6 +145,10 @@ async function runBuild() {
 
     console.log("copying static assets...");
     const copiedAppInfoSource = await copyOptionalRootFile("appinfo.json");
+    // PWA assets for the browser build. They are inert on TV (the service
+    // worker self-disables there), so copying them unconditionally is safe.
+    await copyOptionalRootFile("manifest.webmanifest");
+    await copyOptionalRootFile("sw.js");
     await Promise.all([
       cp(path.join(rootDir, "assets"), path.join(distDir, "assets"), { recursive: true }),
       cp(path.join(rootDir, "res"), path.join(distDir, "res"), { recursive: true }),

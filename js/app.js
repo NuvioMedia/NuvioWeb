@@ -14,6 +14,7 @@ import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
+import { mountMobileNavBar } from "./ui/components/mobileNavBar.js";
 import { warmStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
@@ -125,6 +126,22 @@ function applyPerformanceMode() {
     aspectRatioUnsupported,
   );
   document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
+}
+
+// Flags the browser/PWA build as a touch/handheld form factor so the responsive
+// stylesheet can enable touch affordances (momentum scrolling, larger hit
+// targets). TV builds never get the class, so the D-pad layout is untouched.
+function applyFormFactor() {
+  if (!Platform.isBrowser()) {
+    return;
+  }
+  const coarsePointer =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(pointer: coarse)").matches;
+  const narrowViewport = window.innerWidth <= 860;
+  const isTouch = coarsePointer || narrowViewport;
+  document.documentElement.classList.toggle("nuvio-touch", isTouch);
+  document.body.classList.toggle("nuvio-touch", isTouch);
 }
 
 function isAddonRemoteMode() {
@@ -299,6 +316,7 @@ async function bootstrapApp() {
   appShellRendered = true;
   Platform.init();
   applyPerformanceMode();
+  applyFormFactor();
   await I18n.init();
 
   Router.init();
@@ -306,10 +324,24 @@ async function bootstrapApp() {
 
   FocusEngine.init();
   setupWebOsAppLifecycle();
+  mountMobileNavBar();
 
   ThemeManager.apply();
   I18n.apply();
   warmStreamingLibs({ delayMs: 1400 });
+
+  if (Platform.isBrowser() && typeof window.addEventListener === "function") {
+    let formFactorRaf = 0;
+    window.addEventListener("resize", () => {
+      if (formFactorRaf) {
+        return;
+      }
+      formFactorRaf = window.requestAnimationFrame(() => {
+        formFactorRaf = 0;
+        applyFormFactor();
+      });
+    });
+  }
 
   AuthManager.subscribe((state) => {
     if (state === AuthState.LOADING) {

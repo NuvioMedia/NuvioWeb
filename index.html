@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <script>
     (function configureTizenLaunch() {
       var root = typeof globalThis !== "undefined" ? globalThis : window;
@@ -36,12 +36,24 @@
     }());
   </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Nuvio TV</title>
-  
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Nuvio">
+  <meta name="application-name" content="Nuvio">
+  <meta name="theme-color" content="#0d0d0d">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Nuvio is a modern streaming client powered by the Stremio addon ecosystem.">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/pwa/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/pwa/favicon-16.png">
+  <link rel="apple-touch-icon" href="assets/pwa/apple-touch-icon.png">
+  <title>Nuvio</title>
+
   <link rel="stylesheet" href="css/base.css?v=20260509s" />
   <link rel="stylesheet" href="css/layout.css?v=20260509s" />
   <link rel="stylesheet" href="css/components.css?v=20260531supporters2" />
   <link rel="stylesheet" href="css/themes.css?v=20260509s" />
+  <link rel="stylesheet" href="css/responsive.css?v=20260616pwa1" />
 </head>
 <body>
   <script src="nuvio.env.js"></script>
@@ -49,5 +61,54 @@
   <script src="assets/libs/qrcode-generator.js"></script>
   
   <script src="app.bundle.js?v=20260531supporters2"></script>
+  <script>
+    (function registerNuvioServiceWorker() {
+      var root = typeof globalThis !== "undefined" ? globalThis : window;
+      var userAgent = String((window.navigator && window.navigator.userAgent) || "").toLowerCase();
+      // The service worker only makes sense for the browser/PWA build. TV
+      // containers (Tizen/webOS) run packaged and must not register it.
+      var isTvLaunch = Boolean(
+        root.__NUVIO_PLATFORM__ === "tizen"
+        || root.__NUVIO_PLATFORM__ === "webos"
+        || root.tizen
+        || root.webOS
+        || root.PalmSystem
+        || root.webOSSystem
+        || userAgent.indexOf("tizen") !== -1
+        || userAgent.indexOf("webos") !== -1
+        || userAgent.indexOf("web0s") !== -1
+      );
+      if (isTvLaunch || !("serviceWorker" in navigator)) {
+        return;
+      }
+      window.addEventListener("load", function () {
+        navigator.serviceWorker.register("sw.js").then(function (registration) {
+          // Activate an updated worker as soon as it has installed so users
+          // don't get stuck on a stale shell across releases.
+          registration.addEventListener("updatefound", function () {
+            var installing = registration.installing;
+            if (!installing) {
+              return;
+            }
+            installing.addEventListener("statechange", function () {
+              if (installing.state === "installed" && navigator.serviceWorker.controller) {
+                installing.postMessage("SKIP_WAITING");
+              }
+            });
+          });
+        }).catch(function (error) {
+          console.warn("Service worker registration failed", error);
+        });
+      });
+      var reloading = false;
+      navigator.serviceWorker.addEventListener("controllerchange", function () {
+        if (reloading) {
+          return;
+        }
+        reloading = true;
+        window.location.reload();
+      });
+    }());
+  </script>
  </body>
  </html>

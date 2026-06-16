@@ -1,0 +1,382 @@
+/*
+ * Nuvio responsive layer.
+ *
+ * The core app is laid out for a 1920x1080 TV with D-pad focus. These rules
+ * adapt that layout for phones and small browser windows. Everything here is
+ * gated on viewport width (TV builds always render at 1920px wide, so they
+ * never match) or on the `.nuvio-touch` class that only the browser build sets.
+ */
+
+/* ----------------------------------------------------------------------------
+ * Mobile bottom navigation bar (browser/PWA only)
+ * ------------------------------------------------------------------------- */
+
+:root {
+  --mobile-nav-height: 58px;
+}
+
+.nuvio-mobile-nav {
+  display: none;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: stretch;
+  background: rgba(13, 13, 13, 0.92);
+  border-top: 1px solid var(--border-color);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+  backdrop-filter: blur(18px) saturate(1.2);
+}
+
+.nuvio-mobile-nav.is-hidden {
+  display: none !important;
+}
+
+.mobile-nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  margin: 0;
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: color 160ms ease;
+}
+
+.mobile-nav-item.is-active {
+  color: var(--text-color);
+}
+
+.mobile-nav-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  fill: currentColor;
+}
+
+.mobile-nav-label {
+  line-height: 1;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------------------------
+ * Layout adaptation for narrow viewports
+ * ------------------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  /* Allow vertical scrolling — the TV shell pins everything to the viewport. */
+  html,
+  body {
+    overflow: auto;
+    font-size: 16px;
+  }
+
+  .nuvio-mobile-nav {
+    display: grid;
+  }
+
+  /* Hide the TV sidebars; the bottom bar replaces them on touch devices. */
+  .modern-sidebar-shell,
+  .root-sidebar,
+  .root-sidebar-legacy,
+  .home-sidebar,
+  .home-nav {
+    display: none !important;
+  }
+
+  /* Give content the freed-up space and a comfortable mobile gutter. */
+  .home-screen-shell.home-layout-modern,
+  .home-screen-shell.home-layout-classic,
+  .home-screen-shell.home-layout-grid {
+    --home-content-start: 16px;
+    --home-track-end: 16px;
+    --home-continue-track-end: 16px;
+    --modern-track-peek-extension: 16px;
+    --home-poster-width: 124px;
+    --home-continue-width: 280px;
+    --home-continue-height: 158px;
+    --modern-hero-copy-right: 16px;
+    --modern-hero-copy-max-width: 78%;
+    --modern-hero-logo-max-width: 240px;
+    --modern-hero-logo-max-height: 120px;
+    --modern-hero-description-size: 15px;
+  }
+
+  /* Reserve room above the fixed bottom bar so nothing hides behind it. */
+  .has-mobile-nav .home-screen-shell.home-layout-modern {
+    --modern-rows-viewport-padding-bottom: calc(
+      52vh + var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px)
+    );
+  }
+
+  /* QR / account sign-in: stack the two TV columns into one scrollable page. */
+  .qr-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    align-items: start;
+    gap: 20px;
+    padding: 32px 20px calc(40px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+  }
+
+  .qr-title {
+    font-size: 30px;
+  }
+
+  .qr-description {
+    font-size: 15px;
+  }
+
+  .qr-logo {
+    max-width: 168px;
+    height: auto;
+  }
+
+  .qr-card {
+    width: 100%;
+    max-width: 420px;
+    height: auto;
+    margin: 0 auto;
+    padding: 28px 22px 22px;
+  }
+
+  .qr-code-frame {
+    width: min(264px, 68vw);
+    height: min(264px, 68vw);
+  }
+
+  .qr-actions {
+    flex-wrap: wrap;
+  }
+
+  /* Settings / list screens: relax fixed TV padding. */
+  .account-shell {
+    padding: 32px 20px calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* The inner screens (home/search/library/discover) reserve a left margin for
+     the sidebar rail. With the rail hidden, reclaim that space and switch to a
+     phone gutter so content fills the width instead of hugging the right edge. */
+  .home-main,
+  .home-screen-shell .home-main,
+  .library-main,
+  .discover-main {
+    margin-left: 0 !important;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  .library-main {
+    padding-top: 24px;
+    padding-bottom: calc(64px + var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .discover-main {
+    padding-top: 16px;
+    padding-bottom: calc(32px + var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Settings is a 440px-nav + content two-pane grid built for the TV. Collapse
+     it to a single stacked, full-width column and shrink the oversized pills. */
+  .settings-shell:has(.modern-sidebar-shell) .settings-workspace,
+  .settings-shell:has(.home-sidebar[data-collapsible="true"]) .settings-workspace,
+  .settings-workspace {
+    grid-template-columns: 1fr !important;
+    width: 100vw !important;
+    height: auto !important;
+    min-height: 100vh;
+    min-height: 100dvh;
+    margin: 0 !important;
+    padding: 16px 16px calc(24px + var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    gap: 16px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .settings-sidebar {
+    height: auto;
+    gap: 10px;
+  }
+
+  .settings-nav-item {
+    min-height: 60px;
+    padding: 0 18px;
+  }
+
+  .settings-content-frame {
+    overflow: visible;
+  }
+
+  /* Empty states and section headers use TV-scale type; bring them down so they
+     fit a phone without clipping. */
+  .search-empty-state h2 {
+    font-size: 26px;
+  }
+
+  .search-empty-icon {
+    font-size: 72px;
+  }
+
+  .library-empty-title {
+    font-size: 26px;
+  }
+
+  .library-empty-icon {
+    width: 56px;
+    height: 56px;
+  }
+
+  .discover-title {
+    font-size: 30px;
+  }
+
+  /* Search bar: the TV layout uses 110px controls in a grid that overflows a
+     phone. Reflow into a single compact row with the input leading. */
+  .search-header {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 8px;
+    padding: 16px 0 0;
+    margin-bottom: 10px;
+  }
+
+  .search-input-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 48px;
+    border-radius: 12px;
+    padding: 0 16px;
+    font-size: 16px;
+  }
+
+  .search-discover-btn,
+  .search-voice-btn {
+    flex: 0 0 auto;
+    width: 48px;
+    min-width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+
+  .search-action-icon {
+    font-size: 22px;
+  }
+
+  .search-content.home-main {
+    padding-bottom: calc(24px + var(--mobile-nav-height) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* "Who's watching?" profile picker: shrink the oversized TV typography so
+     the title, avatars and hint all fit a phone screen without overlapping. */
+  .profile-screen {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .profile-main-layer {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    justify-content: center;
+    padding: 40px 20px calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .profile-logo {
+    width: 156px;
+    height: auto;
+    margin: 0 auto 28px;
+  }
+
+  .profile-title {
+    font-size: 34px;
+    letter-spacing: -0.5px;
+  }
+
+  .profile-subtitle {
+    margin-top: 12px;
+    font-size: 16px;
+  }
+
+  .profile-grid {
+    gap: 24px;
+    min-height: 0;
+    margin-top: 32px;
+  }
+
+  .profile-avatar-ring {
+    width: 132px;
+    height: 132px;
+  }
+
+  .profile-card.focused .profile-avatar-ring {
+    width: 138px;
+    height: 138px;
+  }
+}
+
+@media (max-width: 560px) {
+  .home-screen-shell.home-layout-modern,
+  .home-screen-shell.home-layout-classic,
+  .home-screen-shell.home-layout-grid {
+    --home-poster-width: 108px;
+  }
+
+  .home-row-title,
+  .home-modern-row .home-row-title {
+    font-size: 17px;
+  }
+
+  .mobile-nav-label {
+    font-size: 9px;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ * Touch affordances (browser build, coarse pointer or narrow viewport)
+ * ------------------------------------------------------------------------- */
+
+.nuvio-touch .home-track,
+.nuvio-touch .home-modern-rows-viewport,
+.nuvio-touch [class$="-scroll"] {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Horizontal rows become swipeable carousels instead of focus-driven tracks. */
+.nuvio-touch .home-track {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nuvio-touch .home-track::-webkit-scrollbar {
+  display: none;
+}
+
+/* Touch users tap rather than focus — keep cards from sticking in a zoomed
+ * focused state when the page is scrolled. */
+.nuvio-touch .home-content-card.focused {
+  transform: none;
+}

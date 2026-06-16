@@ -4,7 +4,7 @@ import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js
 import { I18n } from "../../i18n/index.js";
 import { Platform } from "../../platform/index.js";
 
-const ROOT_SIDEBAR_ITEMS = [
+export const ROOT_SIDEBAR_ITEMS = [
   {
     action: "gotoHome",
     route: "home",
