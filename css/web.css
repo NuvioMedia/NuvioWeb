@@ -1,0 +1,215 @@
+/*
+ * Nuvio web layer.
+ *
+ * The base UI is built for a 1920x1080 TV viewed from across the room, so in a
+ * desktop browser everything reads as oversized: an icon-only rail, an 80px
+ * hero title and 210px posters. These rules bring the browser build down to
+ * web-app density and give it pointer affordances, matching the proportions and
+ * type scale of the Nuvio mobile app.
+ *
+ * Scoped to `.nuvio-web` (browser only) and `min-width: 861px` so the TV builds
+ * and the phone layout (handled in responsive.css) are unaffected.
+ */
+
+@media (min-width: 861px) {
+  /* Reclaim the rail width as a labelled sidebar. The same custom property
+     drives both the rail width and the content's left margin, so widening it
+     keeps the content aligned automatically. It is declared on the shells
+     themselves, so the override has to match that scope. */
+  .nuvio-web .home-shell,
+  .nuvio-web .home-screen-shell,
+  .nuvio-web .settings-shell {
+    --legacy-sidebar-rail-width: 232px;
+  }
+
+  .nuvio-web .root-sidebar-legacy {
+    --legacy-sidebar-item-width: 100%;
+    --legacy-sidebar-item-expanded-width: 100%;
+    --legacy-sidebar-item-height: 46px;
+    --legacy-sidebar-item-gap: 4px;
+    --sidebar-icon-size: 22px;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 18px 14px;
+    background: var(--bg-color);
+    border-right: 1px solid var(--border-color);
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-nav-list {
+    justify-content: flex-start;
+    gap: 4px;
+    margin-top: 8px;
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-nav-item {
+    width: 100%;
+    height: 46px;
+    justify-content: flex-start;
+    gap: 14px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 15px;
+    line-height: 1.2;
+    cursor: pointer;
+    transition:
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-nav-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-nav-item.selected {
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  /* The label is collapsed to 0 width in the rail; reveal it. */
+  .nuvio-web .root-sidebar-legacy .home-nav-label {
+    opacity: 1;
+    width: auto;
+    font-size: 15px;
+    font-weight: 600;
+    transform: none;
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-nav-icon-wrap {
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-profile-pill {
+    width: 100%;
+    height: 52px;
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 0 12px;
+    border-radius: 12px;
+    cursor: pointer;
+    margin: 4px 0 8px;
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-profile-pill:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-profile-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+    flex: 0 0 auto;
+  }
+
+  .nuvio-web .root-sidebar-legacy .home-profile-name {
+    font-size: 15px;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+
+  /* Home: bring the cinematic hero and oversized posters to web scale. */
+  .nuvio-web .home-screen-shell.home-layout-modern {
+    --home-content-start: 32px;
+    --home-track-end: 32px;
+    --home-continue-track-end: 32px;
+    --home-poster-width: 158px;
+    --home-continue-width: 300px;
+    --home-continue-height: 169px;
+    --modern-hero-title-size: 42px;
+    --modern-hero-meta-size: 15px;
+    --modern-hero-secondary-size: 14px;
+    --modern-hero-description-size: 16px;
+    --modern-hero-logo-max-width: 300px;
+    --modern-hero-logo-max-height: 140px;
+    --modern-hero-copy-max-width: 46%;
+  }
+
+  .nuvio-web .home-screen-shell .home-row-title,
+  .nuvio-web .home-modern-row .home-row-title {
+    font-size: 19px;
+  }
+
+  /* Pointer affordances on poster cards: a subtle hover lift instead of the
+     large TV focus zoom. */
+  .nuvio-web .home-content-card {
+    cursor: pointer;
+  }
+
+  .nuvio-web .home-content-card:hover {
+    transform: translateY(-4px);
+  }
+
+  /* Inner screens: tame the TV-scale headers and empty states so they read as
+     a web app rather than a 10-foot UI. */
+  .nuvio-web .library-main {
+    padding: 32px 40px 56px;
+  }
+
+  .nuvio-web .discover-main {
+    padding: 24px 40px 40px;
+  }
+
+  .nuvio-web .library-title,
+  .nuvio-web .discover-title {
+    font-size: 34px;
+  }
+
+  .nuvio-web .library-empty-title {
+    font-size: 26px;
+  }
+
+  .nuvio-web .library-empty-icon {
+    width: 64px;
+    height: 64px;
+  }
+
+  .nuvio-web .search-empty-state h2 {
+    font-size: 26px;
+  }
+
+  .nuvio-web .search-empty-icon {
+    font-size: 72px;
+  }
+
+  /* Search bar: shrink the 110px TV controls to a normal web input row. The
+     input is last in the DOM, so reverse the row to lead with it. */
+  .nuvio-web .search-header {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 12px;
+    padding: 24px 40px 0;
+  }
+
+  .nuvio-web .search-input-field {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 720px;
+    height: 52px;
+    border-radius: 12px;
+    font-size: 16px;
+    padding: 0 18px;
+  }
+
+  .nuvio-web .search-discover-btn,
+  .nuvio-web .search-voice-btn {
+    flex: 0 0 auto;
+    width: 52px;
+    min-width: 52px;
+    height: 52px;
+    border-radius: 12px;
+  }
+
+  .nuvio-web .search-action-icon {
+    font-size: 24px;
+  }
+
+  /* Settings: the two-pane workspace is sized for the TV; tighten it. */
+  .nuvio-web .settings-workspace {
+    border-radius: 24px;
+  }
+
+  .nuvio-web .settings-nav-item {
+    min-height: 64px;
+  }
+}

@@ -128,13 +128,16 @@ function applyPerformanceMode() {
   document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
 }
 
-// Flags the browser/PWA build as a touch/handheld form factor so the responsive
-// stylesheet can enable touch affordances (momentum scrolling, larger hit
-// targets). TV builds never get the class, so the D-pad layout is untouched.
+// Flags the browser/PWA build so the web stylesheets can adapt the TV layout.
+// `nuvio-web` is set for any browser session (desktop type/density + labelled
+// sidebar); `nuvio-touch` additionally enables touch affordances on phones.
+// TV builds never get either class, so the D-pad layout is untouched.
 function applyFormFactor() {
   if (!Platform.isBrowser()) {
     return;
   }
+  document.documentElement.classList.add("nuvio-web");
+  document.body.classList.add("nuvio-web");
   const coarsePointer =
     typeof window.matchMedia === "function" &&
     window.matchMedia("(pointer: coarse)").matches;
