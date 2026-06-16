@@ -2215,6 +2215,9 @@ export const PlayerScreen = {
       this.externalPlayerLaunchError = "";
       this.renderControlButtons();
       this.renderStartupErrorOverlay();
+      if (this.isStartupErrorVisible()) {
+        this.focusStartupErrorButton(this.startupErrorFocusIndex);
+      }
       return this.availableExternalPlayers;
     } finally {
       if (this.externalPlayersRequestToken === requestToken) {
@@ -9283,6 +9286,16 @@ export const PlayerScreen = {
     const playbackEngine = String(PlayerController.playbackEngine || "");
     if (startup) {
       if (Environment.isTizen() || Environment.isWebOS()) {
+        if (Environment.isWebOS() && !this.currentEngineFsStream) {
+          const assessment = this.getWebOsPlaybackAssessment();
+          if (assessment.preferThirdParty) {
+            return 15000;
+          }
+          if (assessment.shouldSuggestExternalPlayer && !assessment.isProfile8) {
+            return 22000;
+          }
+          return 28000;
+        }
         return playbackEngine.endsWith("avplay") ? 60000 : 45000;
       }
       return 18000;
