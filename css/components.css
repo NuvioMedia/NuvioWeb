@@ -9857,6 +9857,13 @@ button:focus-visible {
   white-space: pre-line;
 }
 
+.player-startup-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
 .player-startup-error-button {
   min-width: 220px;
   min-height: 56px;
@@ -10326,6 +10333,16 @@ button:focus-visible {
 .player-control-label {
   font-size: clamp(15px, 0.95vw, 18px);
   font-weight: 700;
+}
+
+.player-control-btn.has-text {
+  width: auto;
+  min-width: var(--player-control-size);
+  padding: 0 18px;
+}
+
+.player-control-btn.has-text .player-control-label {
+  white-space: nowrap;
 }
 
 .player-control-btn.focused {
@@ -14728,10 +14745,21 @@ button:focus-visible {
   display: none;
 }
 
+.stream-route-card-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.stream-route-card-row:last-child {
+  margin-bottom: 0;
+}
+
 .stream-route-card {
+  flex: 1 1 auto;
   width: 100%;
   min-height: 214px;
-  margin-bottom: 18px;
   padding: 28px 32px;
   border-radius: 20px;
   border: 1px solid rgb(var(--focus-color-rgb) / 0.06);
@@ -14748,8 +14776,40 @@ button:focus-visible {
   outline: none;
 }
 
-.stream-route-card:last-child {
-  margin-bottom: 0;
+.stream-route-native-button {
+  flex: 0 0 248px;
+  min-width: 248px;
+  min-height: 214px;
+  padding: 0 24px;
+  border-radius: 20px;
+  border: 1px solid rgb(var(--focus-color-rgb) / 0.08);
+  background: rgb(var(--bg-elevated-rgb) / 0.94);
+  color: var(--text-color);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 600;
+  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
+}
+
+.stream-route-native-button:focus {
+  outline: none;
+}
+
+.stream-route-native-button.focused {
+  transform: scale(1.005);
+  border-color: var(--secondary-color);
+  background: rgb(var(--card-bg-rgb) / 0.98);
+  box-shadow:
+    0 0 0 5px var(--secondary-color),
+    0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.stream-route-native-button.busy {
+  color: var(--text-secondary);
 }
 
 .performance-constrained * {
@@ -15947,6 +16007,27 @@ button:focus-visible {
   line-height: 30px;
   color: var(--text-secondary);
   text-align: center;
+}
+
+.stream-route-toast {
+  position: fixed;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 14px 24px;
+  border-radius: 18px;
+  background: rgb(var(--bg-elevated-rgb) / 0.96);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  font-size: 22px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.stream-route-toast.visible {
+  opacity: 1;
 }
 
 .stream-route-skeleton-line {

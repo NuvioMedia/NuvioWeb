@@ -16,6 +16,7 @@ import {
   onWebOsImageProxyReady
 } from "../../../core/media/imageProxy.js";
 import { Environment } from "../../../platform/environment.js";
+import { WebOsLunaService } from "../../../platform/webos/webosLunaService.js";
 import { I18n } from "../../../i18n/index.js";
 import {
   matchStreamBadges,
@@ -29,6 +30,13 @@ const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
 const ADDON_LOGO_CACHE_LIMIT = 36;
 const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
 const STREAM_BADGE_LIMIT = 9;
+const WEBOS_NATIVE_PLAYER_APP_IDS = [
+  "com.webos.app.mediadiscovery",
+  "com.webos.app.photovideo",
+  "com.webos.app.smartshare"
+];
+const WEBOS_DLNA_PROTOCOL_SUFFIX =
+  "DLNA.ORG_OP=01;DLNA.ORG_CI=0;DLNA.ORG_FLAGS=01700000000000000000000000000000";
 let addonLogoCacheHydrated = false;
 let addonLogoCachePersistTimer = null;
 
@@ -45,8 +53,81 @@ function escapeHtml(value = "") {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+function isLaunchableExternalMediaUrl(value = "") {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return (
+      parsed.protocol === "http:" || parsed.protocol === "https:" || parsed.protocol === "file:"
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function isLocalOnlyPlaybackUrl(value = "") {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    if (parsed.protocol === "file:") {
+      return false;
+    }
+    return (
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "::1"
+    );
+  } catch (_) {
+    return false;
+  }
+}
+
+function buildWebOsDlnaProtocolInfo(mimeType = "video/mp4") {
+  const normalized = String(mimeType || "video/mp4").trim() || "video/mp4";
+  return `http-get:*:${normalized}:${WEBOS_DLNA_PROTOCOL_SUFFIX}`;
+}
+
+function normalizeExternalLaunchFileName(value = "") {
+  const trimmed = String(value || "").trim();
+  return (
+    trimmed
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim() || "Nuvio"
+  );
+}
+
+function guessMimeTypeFromUrl(url = "") {
+  const value = String(url || "")
+    .trim()
+    .toLowerCase();
+  if (!value) {
+    return null;
+  }
+  const extensionMatch = value.match(
+    /\.(m3u8|mpd|mp4|m4v|mov|mkv|webm|ts|m2ts|mp3|aac|flac)(?=($|[/?#&]))/i
+  );
+  if (!extensionMatch) {
+    return null;
+  }
+  const extension = String(extensionMatch[1] || "").toLowerCase();
+  const mimeMap = {
+    aac: "audio/aac",
+    flac: "audio/flac",
+    m2ts: "video/mp2t",
+    m3u8: "application/vnd.apple.mpegurl",
+    m4v: "video/mp4",
+    mkv: "video/x-matroska",
+    mov: "video/quicktime",
+    mp3: "audio/mpeg",
+    mp4: "video/mp4",
+    mpd: "application/dash+xml",
+    ts: "video/mp2t",
+    webm: "video/webm"
+  };
+  return mimeMap[extension] || null;
 }
 
 function getDpadDirection(event) {
@@ -78,23 +159,27 @@ function detectQuality(text = "") {
 }
 
 function isMagnetUrl(value = "") {
-  return String(value || "").trim().toLowerCase().startsWith("magnet:");
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("magnet:");
 }
 
 function streamDebridIdentity(item = {}) {
   const resolve = item.clientResolve || item.raw?.clientResolve || {};
   const behaviorHints = item.behaviorHints || item.raw?.behaviorHints || {};
   const infoHash = item.infoHash || item.raw?.infoHash || resolve.infoHash || "";
-  const magnetUri = resolve.magnetUri
-    || (isMagnetUrl(item.url) ? item.url : "")
-    || (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
+  const magnetUri =
+    resolve.magnetUri ||
+    (isMagnetUrl(item.url) ? item.url : "") ||
+    (isMagnetUrl(item.externalUrl) ? item.externalUrl : "");
   const hasDebridMarker = Boolean(
-    item.clientResolve
-      || item.raw?.clientResolve
-      || item.debridCacheStatus
-      || item.raw?.debridCacheStatus
-      || infoHash
-      || magnetUri
+    item.clientResolve ||
+    item.raw?.clientResolve ||
+    item.debridCacheStatus ||
+    item.raw?.debridCacheStatus ||
+    infoHash ||
+    magnetUri
   );
   if (!hasDebridMarker) {
     return "";
@@ -105,7 +190,12 @@ function streamDebridIdentity(item = {}) {
   }
   return [
     String(item.addonName || "Addon"),
-    String(resolve.service || item.debridCacheStatus?.providerId || item.raw?.debridCacheStatus?.providerId || ""),
+    String(
+      resolve.service ||
+        item.debridCacheStatus?.providerId ||
+        item.raw?.debridCacheStatus?.providerId ||
+        ""
+    ),
     String(locator),
     String(resolve.fileIdx ?? item.fileIdx ?? item.raw?.fileIdx ?? ""),
     String(behaviorHints.filename || resolve.filename || ""),
@@ -144,7 +234,8 @@ function mergeStreamItem(previous = {}, next = {}) {
     externalUrl: next.externalUrl || previous.externalUrl || null,
     ytId: next.ytId || previous.ytId || null,
     behaviorHints: Object.keys(behaviorHints).length ? behaviorHints : null,
-    subtitles: Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
+    subtitles:
+      Array.isArray(next.subtitles) && next.subtitles.length ? next.subtitles : previous.subtitles,
     sources: Array.isArray(next.sources) && next.sources.length ? next.sources : previous.sources,
     streamPresentation: next.streamPresentation || previous.streamPresentation || null
   };
@@ -162,7 +253,7 @@ function formatBytes(value) {
     amount /= 1024;
     unitIndex += 1;
   }
-  const precision = unitIndex >= 3 ? 2 : (unitIndex >= 2 ? 1 : 0);
+  const precision = unitIndex >= 3 ? 2 : unitIndex >= 2 ? 1 : 0;
   return `${amount.toFixed(precision)} ${units[unitIndex]}`;
 }
 
@@ -186,13 +277,35 @@ function flattenStreams(streamResult) {
       const streamOrigin = {
         ...(group.streamOrigin || {}),
         ...(stream.streamOrigin || {}),
-        addonId: stream.addonId || group.addonId || group.streamOrigin?.addonId || stream.streamOrigin?.addonId || null,
-        addonBaseUrl: stream.addonBaseUrl || group.addonBaseUrl || group.streamOrigin?.addonBaseUrl || stream.streamOrigin?.addonBaseUrl || null,
-        addonName: stream.addonName || group.addonName || group.streamOrigin?.addonName || stream.streamOrigin?.addonName || groupName,
-        sourceProviderId: stream.sourceProviderId || group.sourceProviderId || stream.streamOrigin?.sourceProviderId || group.streamOrigin?.sourceProviderId || null
+        addonId:
+          stream.addonId ||
+          group.addonId ||
+          group.streamOrigin?.addonId ||
+          stream.streamOrigin?.addonId ||
+          null,
+        addonBaseUrl:
+          stream.addonBaseUrl ||
+          group.addonBaseUrl ||
+          group.streamOrigin?.addonBaseUrl ||
+          stream.streamOrigin?.addonBaseUrl ||
+          null,
+        addonName:
+          stream.addonName ||
+          group.addonName ||
+          group.streamOrigin?.addonName ||
+          stream.streamOrigin?.addonName ||
+          groupName,
+        sourceProviderId:
+          stream.sourceProviderId ||
+          group.sourceProviderId ||
+          stream.streamOrigin?.sourceProviderId ||
+          group.streamOrigin?.sourceProviderId ||
+          null
       };
       const entry = {
-        id: stream.id || `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
+        id:
+          stream.id ||
+          `${groupName}-${index}-${stream.url || stream.externalUrl || stream.ytId || ""}`,
         name: stream.name || null,
         title: stream.title || null,
         description: stream.description || null,
@@ -205,7 +318,9 @@ function flattenStreams(streamResult) {
         behaviorHints: stream.behaviorHints || null,
         sources: Array.isArray(stream.sources) ? stream.sources : [],
         quality: stream.quality || null,
-        qualityValue: Number.isFinite(Number(stream.qualityValue)) ? Number(stream.qualityValue) : -1,
+        qualityValue: Number.isFinite(Number(stream.qualityValue))
+          ? Number(stream.qualityValue)
+          : -1,
         clientResolve: stream.clientResolve || null,
         debridCacheStatus: stream.debridCacheStatus || null,
         streamPresentation: stream.streamPresentation || null,
@@ -214,7 +329,12 @@ function flattenStreams(streamResult) {
         addonBaseUrl: stream.addonBaseUrl || group.addonBaseUrl || null,
         addonName: stream.addonName || groupName,
         addonLogo: stream.addonLogo || group.addonLogo || null,
-        sourceProviderId: stream.sourceProviderId || group.sourceProviderId || stream.streamOrigin?.sourceProviderId || group.streamOrigin?.sourceProviderId || null,
+        sourceProviderId:
+          stream.sourceProviderId ||
+          group.sourceProviderId ||
+          stream.streamOrigin?.sourceProviderId ||
+          group.streamOrigin?.sourceProviderId ||
+          null,
         streamOrigin,
         addonOrderIndex: Number.isFinite(Number(stream.addonOrderIndex))
           ? Number(stream.addonOrderIndex)
@@ -223,10 +343,11 @@ function flattenStreams(streamResult) {
         sourceType: stream.sourceType || stream.mimeType || stream.type || stream.source || "",
         raw: stream
       };
-      const canList = DirectDebridResolver.shouldListStream(entry)
-        || WebOsEngineFsResolver.canResolveStream(entry)
-        || TizenStreamingServerResolver.canResolveStream(entry);
-      if (canList) {
+      if (
+        DirectDebridResolver.shouldListStream(entry) ||
+        WebOsEngineFsResolver.canResolveStream(entry) ||
+        TizenStreamingServerResolver.canResolveStream(entry)
+      ) {
         flattened.push(entry);
       }
     });
@@ -281,12 +402,14 @@ function renderMetaItem(kind, value) {
 }
 
 function extractPeerCount(stream = {}) {
-  const text = String([
-    stream.name || "",
-    stream.title || "",
-    stream.description || "",
-    stream.behaviorHints?.filename || ""
-  ].join(" "));
+  const text = String(
+    [
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      stream.behaviorHints?.filename || ""
+    ].join(" ")
+  );
   const patterns = [
     /\bseed(?:ers?)?\s*[:-]?\s*(\d{1,5})\b/i,
     /\bpeers?\s*[:-]?\s*(\d{1,5})\b/i,
@@ -310,23 +433,20 @@ function extractIndexerName(stream = {}) {
       return value;
     }
   }
-  const searchText = String([
-    stream.name || "",
-    stream.title || "",
-    stream.description || "",
-    stream.behaviorHints?.filename || ""
-  ].join(" "));
-  const known = [
-    "ThePirateBay",
-    "1337x",
-    "RARBG",
-    "YTS",
-    "EZTV",
-    "TorBox",
-    "Torrentio",
-    "Orion"
-  ];
-  return known.find((entry) => new RegExp(entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(searchText)) || "";
+  const searchText = String(
+    [
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      stream.behaviorHints?.filename || ""
+    ].join(" ")
+  );
+  const known = ["ThePirateBay", "1337x", "RARBG", "YTS", "EZTV", "TorBox", "Torrentio", "Orion"];
+  return (
+    known.find((entry) =>
+      new RegExp(entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(searchText)
+    ) || ""
+  );
 }
 
 function getAddonBadgeLabel(name = "") {
@@ -396,8 +516,7 @@ async function warmAddonLogoPreview(url = "") {
       directImage.decoding = "async";
       try {
         directImage.referrerPolicy = "no-referrer";
-      } catch (_) {
-      }
+      } catch (_) {}
       directImage.onload = () => {
         (async () => {
           await awaitImageDecoded(directImage);
@@ -425,8 +544,7 @@ async function warmAddonLogoPreview(url = "") {
               settle(true);
               return;
             }
-          } catch (_) {
-          }
+          } catch (_) {}
           finishDirect();
         })();
         return;
@@ -437,12 +555,10 @@ async function warmAddonLogoPreview(url = "") {
     image.decoding = "async";
     try {
       image.crossOrigin = "anonymous";
-    } catch (_) {
-    }
+    } catch (_) {}
     try {
       image.referrerPolicy = "no-referrer";
-    } catch (_) {
-    }
+    } catch (_) {}
     image.onload = () => finish(image);
     image.onerror = loadDirect;
     image.src = normalized;
@@ -476,7 +592,10 @@ export async function preloadStreamBadgeImages(settings = StreamBadgeSettingsSto
   await Promise.all(Array.from(urls).map((url) => requestAddonLogo(url)));
 }
 
-async function preloadMatchedStreamBadgeImages(streams = [], settings = StreamBadgeSettingsStore.snapshot()) {
+async function preloadMatchedStreamBadgeImages(
+  streams = [],
+  settings = StreamBadgeSettingsStore.snapshot()
+) {
   const urls = new Set();
   (streams || []).forEach((stream) => {
     matchStreamBadges(stream, settings?.rules)
@@ -495,9 +614,7 @@ async function preloadAddonLogoImages(streams = [], lookup = {}) {
   const urls = new Set();
   (streams || []).forEach((stream) => {
     const url = normalizeAddonLogoUrl(
-      stream?.addonLogo
-      || stream?.raw?.addonLogo
-      || resolveAddonLogo(stream?.addonName, lookup)
+      stream?.addonLogo || stream?.raw?.addonLogo || resolveAddonLogo(stream?.addonName, lookup)
     );
     if (url) {
       urls.add(url);
@@ -512,9 +629,7 @@ function hydrateAddonLogoCache() {
   }
   addonLogoCacheHydrated = true;
   const cached = LocalStore.get(ADDON_LOGO_CACHE_KEY, {});
-  const entries = cached && typeof cached === "object" && !Array.isArray(cached)
-    ? cached
-    : {};
+  const entries = cached && typeof cached === "object" && !Array.isArray(cached) ? cached : {};
   Object.keys(entries).forEach((url) => {
     const entry = entries[url];
     const dataUrl = String(entry?.dataUrl || "").trim();
@@ -532,11 +647,12 @@ function hydrateAddonLogoCache() {
 function persistAddonLogoCache() {
   addonLogoCachePersistTimer = null;
   const entries = Array.from(addonLogoCache.entries())
-    .filter(([, entry]) => (
-      entry?.status === "ready"
-      && String(entry.displayUrl || "").startsWith("data:image/")
-      && String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
-    ))
+    .filter(
+      ([, entry]) =>
+        entry?.status === "ready" &&
+        String(entry.displayUrl || "").startsWith("data:image/") &&
+        String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
+    )
     .sort((left, right) => Number(right[1].updatedAt || 0) - Number(left[1].updatedAt || 0))
     .slice(0, ADDON_LOGO_CACHE_LIMIT);
   const payload = {};
@@ -699,7 +815,9 @@ function getCachedAddonLogoDisplayUrl(url = "") {
 }
 
 function normalizeAddonLookupKey(value = "") {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function rememberAddonLogoLookup(lookup = {}, addonName = "", addonLogo = "") {
@@ -732,39 +850,43 @@ function rememberFailedAddonLogo(url = "") {
 }
 
 function getStreamHeadline(stream = {}) {
-  const primary = [
-    stream.name,
-    stream.title,
-    stream.description
-  ].find((value) => String(value || "").trim());
+  const primary = [stream.name, stream.title, stream.description].find((value) =>
+    String(value || "").trim()
+  );
   if (!primary) {
     return stream.addonName || "Unknown source";
   }
   const firstLine = String(primary).split(/\r?\n/)[0].trim();
-  return firstLine || (stream.addonName || "Unknown source");
+  return firstLine || stream.addonName || "Unknown source";
 }
 
 function getStreamQuality(stream = {}) {
   const qualityLines = [];
   [stream.name, stream.title, stream.description].forEach((value) => {
-    String(value || "").split(/\r?\n/).forEach((line) => {
-      const normalized = String(line || "").trim();
-      if (normalized) {
-        qualityLines.push(normalized);
-      }
-    });
+    String(value || "")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const normalized = String(line || "").trim();
+        if (normalized) {
+          qualityLines.push(normalized);
+        }
+      });
   });
-  const qualityCandidate = qualityLines.find((line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line));
+  const qualityCandidate = qualityLines.find(
+    (line, index) => index > 0 && /(2160|4k|1080|720|480)/i.test(line)
+  );
   if (qualityCandidate) {
     return qualityCandidate;
   }
-  return detectQuality([
-    stream.name || "",
-    stream.title || "",
-    stream.description || "",
-    stream.behaviorHints?.filename || "",
-    stream.sourceType || ""
-  ].join(" "));
+  return detectQuality(
+    [
+      stream.name || "",
+      stream.title || "",
+      stream.description || "",
+      stream.behaviorHints?.filename || "",
+      stream.sourceType || ""
+    ].join(" ")
+  );
 }
 
 function isMetaNoiseLine(line = "") {
@@ -775,10 +897,16 @@ function isMetaNoiseLine(line = "") {
   if (/[👤💾⚙🧲]/u.test(value)) {
     return true;
   }
-  if (/(?:thepiratebay|torrentio|torbox|1337x|rarbg|yts|eztv|orion)/i.test(value) && /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)) {
+  if (
+    /(?:thepiratebay|torrentio|torbox|1337x|rarbg|yts|eztv|orion)/i.test(value) &&
+    /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)
+  ) {
     return true;
   }
-  if (/\b(?:seed(?:ers?)?|peers?)\b/i.test(value) && /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)) {
+  if (
+    /\b(?:seed(?:ers?)?|peers?)\b/i.test(value) &&
+    /\b\d+(?:\.\d+)?\s*(?:mb|gb|tb)\b/i.test(value)
+  ) {
     return true;
   }
   return false;
@@ -791,12 +919,14 @@ function getStreamDescriptionLines(stream = {}) {
     stream.title,
     stream.behaviorHints?.filename
   ].reduce((items, value) => {
-    String(value || "").split(/\r?\n/).forEach((line) => {
-      const normalized = String(line || "").trim();
-      if (normalized) {
-        items.push(normalized);
-      }
-    });
+    String(value || "")
+      .split(/\r?\n/)
+      .forEach((line) => {
+        const normalized = String(line || "").trim();
+        if (normalized) {
+          items.push(normalized);
+        }
+      });
     return items;
   }, []);
   const unique = [];
@@ -847,7 +977,9 @@ function parsedStreamDetails(stream = {}) {
 }
 
 function normalizeCodecBadge(value = "") {
-  const normalized = normalizeBadgeText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = normalizeBadgeText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
   if (!normalized) return "";
   if (normalized === "av1") return "AV1";
   if (["hevc", "h265", "x265"].includes(normalized)) return "HEVC";
@@ -916,14 +1048,17 @@ function fallbackLanguagesFromText(text = "") {
       matches.push(label);
     }
   };
-  if (/(^|[^a-z0-9])(pt[\s._-]?br|brazilian[\s._-]?portuguese)([^a-z0-9]|$)/i.test(value)) pushMatch("pt-br");
+  if (/(^|[^a-z0-9])(pt[\s._-]?br|brazilian[\s._-]?portuguese)([^a-z0-9]|$)/i.test(value))
+    pushMatch("pt-br");
   if (/(^|[^a-z0-9])(en|eng|english)([^a-z0-9]|$)/i.test(value)) pushMatch("en");
-  if (/(^|[^a-z0-9])(pt|por|portuguese)([^a-z0-9]|$)/i.test(value) && !matches.includes("pt-br")) pushMatch("pt");
+  if (/(^|[^a-z0-9])(pt|por|portuguese)([^a-z0-9]|$)/i.test(value) && !matches.includes("pt-br"))
+    pushMatch("pt");
   if (/(^|[^a-z0-9])(it|ita|italian)([^a-z0-9]|$)/i.test(value)) pushMatch("it");
   if (/(^|[^a-z0-9])(es|spa|spanish)([^a-z0-9]|$)/i.test(value)) pushMatch("es");
   if (/(^|[^a-z0-9])(fr|fra|fre|french)([^a-z0-9]|$)/i.test(value)) pushMatch("fr");
   if (/(^|[^a-z0-9])(de|deu|ger|german)([^a-z0-9]|$)/i.test(value)) pushMatch("de");
-  if (/(^|[^a-z0-9])(multi|multilang|multi[\s._-]?audio)([^a-z0-9]|$)/i.test(value)) pushMatch("multi");
+  if (/(^|[^a-z0-9])(multi|multilang|multi[\s._-]?audio)([^a-z0-9]|$)/i.test(value))
+    pushMatch("multi");
   return matches;
 }
 
@@ -936,7 +1071,9 @@ function fallbackPresentationFromText(stream = {}) {
     stream.behaviorHints?.filename,
     stream.sourceType,
     ...(Array.isArray(parsed.languages) ? parsed.languages : [])
-  ].filter(Boolean).join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
   const visualTags = [];
   if (/\b(dolby[ ._-]?vision|dovi|dv)\b/i.test(text)) visualTags.push("DV");
   if (/\bhdr10\+|hdr10plus\b/i.test(text)) visualTags.push("HDR10+");
@@ -972,11 +1109,21 @@ function getStreamPresentation(stream = {}) {
   const parsed = parsedStreamDetails(stream);
   const presentation = stream.streamPresentation || stream.raw?.streamPresentation || {};
   const fallback = fallbackPresentationFromText(stream);
-  const visualTags = toBadgeArray(presentation.visualTags?.length ? presentation.visualTags : parsed.hdr);
-  const audioTags = toBadgeArray(presentation.audioTags?.length ? presentation.audioTags : parsed.audio);
-  const audioChannels = toBadgeArray(presentation.audioChannels?.length ? presentation.audioChannels : parsed.channels);
-  const languages = toBadgeArray(presentation.languages?.length ? presentation.languages : parsed.languages);
-  const languageEmojis = toBadgeArray(presentation.languageEmojis?.length ? presentation.languageEmojis : []);
+  const visualTags = toBadgeArray(
+    presentation.visualTags?.length ? presentation.visualTags : parsed.hdr
+  );
+  const audioTags = toBadgeArray(
+    presentation.audioTags?.length ? presentation.audioTags : parsed.audio
+  );
+  const audioChannels = toBadgeArray(
+    presentation.audioChannels?.length ? presentation.audioChannels : parsed.channels
+  );
+  const languages = toBadgeArray(
+    presentation.languages?.length ? presentation.languages : parsed.languages
+  );
+  const languageEmojis = toBadgeArray(
+    presentation.languageEmojis?.length ? presentation.languageEmojis : []
+  );
   const resolvedLanguages = languages.length ? languages : fallback.languages;
   return {
     resolution: presentation.resolution || parsed.resolution || fallback.resolution,
@@ -986,7 +1133,9 @@ function getStreamPresentation(stream = {}) {
     audioTags: audioTags.length ? audioTags : fallback.audioTags,
     audioChannels: audioChannels.length ? audioChannels : fallback.audioChannels,
     languages: resolvedLanguages,
-    languageEmojis: languageEmojis.length ? languageEmojis : resolvedLanguages.map(languageBadge).filter(Boolean),
+    languageEmojis: languageEmojis.length
+      ? languageEmojis
+      : resolvedLanguages.map(languageBadge).filter(Boolean),
     size: presentation.size || stream.behaviorHints?.videoSize || fallback.size,
     cached: presentation.cached,
     serviceShortName: presentation.serviceShortName || ""
@@ -1000,14 +1149,26 @@ function buildLegacyStreamBadges(stream = {}, enabled = true, includeSizeBadge =
   const presentation = getStreamPresentation(stream);
   const badges = [];
   const seen = new Set();
-  const quality = normalizeBadgeText(presentation.resolution && presentation.resolution !== "Auto" ? presentation.resolution : getStreamQuality(stream));
+  const quality = normalizeBadgeText(
+    presentation.resolution && presentation.resolution !== "Auto"
+      ? presentation.resolution
+      : getStreamQuality(stream)
+  );
   uniquePushBadge(badges, seen, quality, "quality");
   uniquePushBadge(badges, seen, presentation.quality, "quality");
-  toBadgeArray(presentation.visualTags).slice(0, 3).forEach((tag) => uniquePushBadge(badges, seen, tag, "visual"));
+  toBadgeArray(presentation.visualTags)
+    .slice(0, 3)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "visual"));
   uniquePushBadge(badges, seen, presentation.encode, "codec");
-  toBadgeArray(presentation.languageEmojis).slice(0, 4).forEach((tag) => uniquePushBadge(badges, seen, tag, "language"));
-  toBadgeArray(presentation.audioTags).slice(0, 3).forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
-  toBadgeArray(presentation.audioChannels).slice(0, 1).forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
+  toBadgeArray(presentation.languageEmojis)
+    .slice(0, 4)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "language"));
+  toBadgeArray(presentation.audioTags)
+    .slice(0, 3)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
+  toBadgeArray(presentation.audioChannels)
+    .slice(0, 1)
+    .forEach((tag) => uniquePushBadge(badges, seen, tag, "audio"));
   if (includeSizeBadge) {
     uniquePushBadge(badges, seen, formatBytes(presentation.size), "size");
   }
@@ -1029,7 +1190,10 @@ function renderImageBadgeChip(badge = {}) {
   const backgroundColor = normalizeStreamBadgeChipColor(badge.tagColor);
   const outlineColor = normalizeStreamBadgeChipColor(badge.borderColor);
   const textColor = normalizeStreamBadgeChipColor(badge.textColor);
-  const filled = String(badge.tagStyle || "").trim().toLowerCase() === "filled";
+  const filled =
+    String(badge.tagStyle || "")
+      .trim()
+      .toLowerCase() === "filled";
   const fallbackImageUrl = Environment.isWebOS() ? "" : imageUrl;
   const safeImageUrl = displayImageUrl || fallbackImageUrl;
   const style = [
@@ -1039,9 +1203,11 @@ function renderImageBadgeChip(badge = {}) {
   ].join("");
   return `
     <span class="stream-route-stream-badge image${filled ? " filled" : ""}"${style ? ` style="${escapeHtml(style)}"` : ""}>
-      ${safeImageUrl
-        ? `<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
-        : ""}
+      ${
+        safeImageUrl
+          ? `<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+          : ""
+      }
     </span>
   `;
 }
@@ -1050,7 +1216,9 @@ function renderImportedStreamBadgeChips(stream = {}, badges = [], showFileSizeBa
   const sizeBytes = stream.behaviorHints?.videoSize;
   const chips = [];
   if (showFileSizeBadges && sizeBytes != null) {
-    chips.push(`<span class="stream-route-stream-badge size">${escapeHtml(t("streams_size", [formatBytes(sizeBytes)], `SIZE ${formatBytes(sizeBytes)}`))}</span>`);
+    chips.push(
+      `<span class="stream-route-stream-badge size">${escapeHtml(t("streams_size", [formatBytes(sizeBytes)], `SIZE ${formatBytes(sizeBytes)}`))}</span>`
+    );
   }
   badges.slice(0, STREAM_BADGE_LIMIT).forEach((badge) => {
     chips.push(renderImageBadgeChip(badge));
@@ -1064,10 +1232,18 @@ function renderStreamBadges(stream = {}, enabled = true, badgeSettings = null) {
   const currentBadgeSettings = badgeSettings || StreamBadgeSettingsStore.snapshot();
   const importedBadges = matchStreamBadges(stream, currentBadgeSettings.rules);
   if (importedBadges.length) {
-    return renderImportedStreamBadgeChips(stream, importedBadges, currentBadgeSettings.showFileSizeBadges !== false);
+    return renderImportedStreamBadgeChips(
+      stream,
+      importedBadges,
+      currentBadgeSettings.showFileSizeBadges !== false
+    );
   }
 
-  const badges = buildLegacyStreamBadges(stream, enabled, currentBadgeSettings.showFileSizeBadges !== false);
+  const badges = buildLegacyStreamBadges(
+    stream,
+    enabled,
+    currentBadgeSettings.showFileSizeBadges !== false
+  );
   if (!badges.length) {
     return "";
   }
@@ -1079,7 +1255,11 @@ function renderStreamBadges(stream = {}, enabled = true, badgeSettings = null) {
 }
 
 function resolveStreamBadgePlacement(badgeSettings = null) {
-  const placement = String((badgeSettings || StreamBadgeSettingsStore.snapshot()).badgePlacement || "BOTTOM").trim().toUpperCase();
+  const placement = String(
+    (badgeSettings || StreamBadgeSettingsStore.snapshot()).badgePlacement || "BOTTOM"
+  )
+    .trim()
+    .toUpperCase();
   return placement === "TOP" ? "TOP" : "BOTTOM";
 }
 
@@ -1087,7 +1267,11 @@ function getOrderedFilterNames(sourceChips = [], streams = []) {
   const ordered = [];
   const sortedChips = (sourceChips || [])
     .slice()
-    .sort((left, right) => Number(left?.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right?.orderIndex ?? Number.MAX_SAFE_INTEGER));
+    .sort(
+      (left, right) =>
+        Number(left?.orderIndex ?? Number.MAX_SAFE_INTEGER) -
+        Number(right?.orderIndex ?? Number.MAX_SAFE_INTEGER)
+    );
   sortedChips.forEach((chip) => {
     if (chip?.name && !ordered.includes(chip.name)) {
       ordered.push(chip.name);
@@ -1139,7 +1323,6 @@ function sortStreamsByAddonOrder(streams = [], sourceChips = []) {
 }
 
 export const StreamScreen = {
-
   cancelScheduledRender() {
     if (this.renderDelayTimer) {
       clearTimeout(this.renderDelayTimer);
@@ -1192,8 +1375,9 @@ export const StreamScreen = {
 
   areAddonLogosReady(streams = []) {
     return (streams || []).every((stream) => {
-      const addonLogoUrl = normalizeAddonLogoUrl(stream?.addonLogo)
-        || resolveAddonLogo(stream?.addonName, this.addonLogoLookup);
+      const addonLogoUrl =
+        normalizeAddonLogoUrl(stream?.addonLogo) ||
+        resolveAddonLogo(stream?.addonName, this.addonLogoLookup);
       if (!addonLogoUrl || failedAddonLogoUrls.has(addonLogoUrl)) {
         return true;
       }
@@ -1202,9 +1386,19 @@ export const StreamScreen = {
   },
 
   requestAddonLogoPrerender(streams = []) {
-    const urls = Array.from(new Set((streams || [])
-      .map((stream) => normalizeAddonLogoUrl(stream?.addonLogo) || resolveAddonLogo(stream?.addonName, this.addonLogoLookup))
-      .filter((url) => url && !failedAddonLogoUrls.has(url) && !getCachedAddonLogoDisplayUrl(url))));
+    const urls = Array.from(
+      new Set(
+        (streams || [])
+          .map(
+            (stream) =>
+              normalizeAddonLogoUrl(stream?.addonLogo) ||
+              resolveAddonLogo(stream?.addonName, this.addonLogoLookup)
+          )
+          .filter(
+            (url) => url && !failedAddonLogoUrls.has(url) && !getCachedAddonLogoDisplayUrl(url)
+          )
+      )
+    );
     if (!urls.length) {
       return;
     }
@@ -1214,15 +1408,14 @@ export const StreamScreen = {
     }
     const token = this.loadToken || 0;
     this.pendingAddonLogoPrerenderKey = key;
-    void preloadAddonLogoImages(streams, this.addonLogoLookup)
-      .finally(() => {
-        if (this.pendingAddonLogoPrerenderKey === key) {
-          this.pendingAddonLogoPrerenderKey = "";
-        }
-        if (this.container && Router.getCurrent() === "stream" && token === this.loadToken) {
-          this.requestRender();
-        }
-      });
+    void preloadAddonLogoImages(streams, this.addonLogoLookup).finally(() => {
+      if (this.pendingAddonLogoPrerenderKey === key) {
+        this.pendingAddonLogoPrerenderKey = "";
+      }
+      if (this.container && Router.getCurrent() === "stream" && token === this.loadToken) {
+        this.requestRender();
+      }
+    });
   },
 
   scheduleDebridPreparation() {
@@ -1245,18 +1438,19 @@ export const StreamScreen = {
           if (!this.container || Router.getCurrent() !== "stream" || token !== this.loadToken) {
             return;
           }
-          const keyFor = (stream) => [
-            stream.clientResolve?.service || "",
-            stream.clientResolve?.infoHash || stream.infoHash || "",
-            stream.clientResolve?.fileIdx ?? stream.fileIdx ?? "",
-            stream.clientResolve?.filename || stream.behaviorHints?.filename || "",
-            stream.name || "",
-            stream.title || ""
-          ].join("|");
+          const keyFor = (stream) =>
+            [
+              stream.clientResolve?.service || "",
+              stream.clientResolve?.infoHash || stream.infoHash || "",
+              stream.clientResolve?.fileIdx ?? stream.fileIdx ?? "",
+              stream.clientResolve?.filename || stream.behaviorHints?.filename || "",
+              stream.name || "",
+              stream.title || ""
+            ].join("|");
           const originalKey = keyFor(original);
-          this.streams = this.streams.map((stream) => (
+          this.streams = this.streams.map((stream) =>
             keyFor(stream) === originalKey ? { ...stream, ...prepared } : stream
-          ));
+          );
           this.requestRender();
         }
       });
@@ -1282,20 +1476,24 @@ export const StreamScreen = {
     if (!itemId) {
       return false;
     }
-    void Router.navigate("detail", {
-      itemId,
-      itemType: normalizeType(this.params?.itemType),
-      fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
-      returnHomeOnBack: Boolean(
-        this.params?.continueWatchingBackHome
-        || this.params?.returnHomeOnBack
-        || this.params?.returnToDetail
-        || this.params?.fromDetailRoute
-      )
-    }, {
-      skipStackPush: true,
-      replaceHistory: true
-    });
+    void Router.navigate(
+      "detail",
+      {
+        itemId,
+        itemType: normalizeType(this.params?.itemType),
+        fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
+        returnHomeOnBack: Boolean(
+          this.params?.continueWatchingBackHome ||
+          this.params?.returnHomeOnBack ||
+          this.params?.returnToDetail ||
+          this.params?.fromDetailRoute
+        )
+      },
+      {
+        skipStackPush: true,
+        replaceHistory: true
+      }
+    );
     return true;
   },
 
@@ -1312,7 +1510,9 @@ export const StreamScreen = {
       streams: Array.isArray(this.streams) ? this.streams.map((stream) => ({ ...stream })) : [],
       addonFilter: String(this.addonFilter || "all"),
       focusState: this.focusState ? { ...this.focusState } : { zone: "filter", index: 0 },
-      sourceChips: Array.isArray(this.sourceChips) ? this.sourceChips.map((chip) => ({ ...chip })) : [],
+      sourceChips: Array.isArray(this.sourceChips)
+        ? this.sourceChips.map((chip) => ({ ...chip }))
+        : [],
       addonLogoLookup: this.addonLogoLookup ? { ...this.addonLogoLookup } : {},
       listScrollTop: Number(list?.scrollTop || 0)
     };
@@ -1334,6 +1534,9 @@ export const StreamScreen = {
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
     this.autoResumeAttempted = false;
+    this.webOsNativePlayerAppId = "";
+    this.nativePlayerPendingStreamId = "";
+    this.nativePlayerRequestToken = 0;
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
       this.releaseImageProxyReadyListener = null;
@@ -1344,21 +1547,30 @@ export const StreamScreen = {
         this.requestRender({ delayMs: 0 });
       });
       void ensureWebOsImageProxyReady();
+      void this.detectWebOsNativePlayerApp();
     }
 
-    const restored = navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
-      ? navigationContext.restoredState
-      : null;
+    const restored =
+      navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
+        ? navigationContext.restoredState
+        : null;
     if (restored) {
       this.loading = Boolean(restored.loading);
       this.error = String(restored.error || "");
-      this.streams = Array.isArray(restored.streams) ? restored.streams.map((stream) => ({ ...stream })) : [];
+      this.streams = Array.isArray(restored.streams)
+        ? restored.streams.map((stream) => ({ ...stream }))
+        : [];
       this.addonFilter = String(restored.addonFilter || "all");
-      this.focusState = restored.focusState ? { ...restored.focusState } : { zone: "filter", index: 0 };
-      this.sourceChips = Array.isArray(restored.sourceChips) ? restored.sourceChips.map((chip) => ({ ...chip })) : [];
-      this.addonLogoLookup = restored.addonLogoLookup && typeof restored.addonLogoLookup === "object"
-        ? normalizeAddonLogoLookup(restored.addonLogoLookup)
-        : {};
+      this.focusState = restored.focusState
+        ? { ...restored.focusState }
+        : { zone: "filter", index: 0 };
+      this.sourceChips = Array.isArray(restored.sourceChips)
+        ? restored.sourceChips.map((chip) => ({ ...chip }))
+        : [];
+      this.addonLogoLookup =
+        restored.addonLogoLookup && typeof restored.addonLogoLookup === "object"
+          ? normalizeAddonLogoLookup(restored.addonLogoLookup)
+          : {};
       this.listScrollTop = Number(restored.listScrollTop || 0);
     }
 
@@ -1457,12 +1669,14 @@ export const StreamScreen = {
         .filter((entry) => entry.name);
       const successSet = new Set(entries.map((entry) => entry.name));
       const known = new Set(this.sourceChips.map((chip) => chip.name));
-      this.sourceChips = this.sourceChips.map((chip) => (
+      this.sourceChips = this.sourceChips.map((chip) =>
         successSet.has(chip.name) ? { ...chip, status: "success" } : chip
-      ));
+      );
       entries.forEach((entry) => {
         if (!known.has(entry.name)) {
-          const orderIndex = Number.isFinite(entry.orderIndex) ? entry.orderIndex : Number.MAX_SAFE_INTEGER;
+          const orderIndex = Number.isFinite(entry.orderIndex)
+            ? entry.orderIndex
+            : Number.MAX_SAFE_INTEGER;
           this.sourceChips.push({
             name: entry.name,
             logo: entry.logo || resolveAddonLogo(entry.name, this.addonLogoLookup),
@@ -1473,7 +1687,11 @@ export const StreamScreen = {
       });
       this.sourceChips = this.sourceChips
         .slice()
-        .sort((left, right) => Number(left.orderIndex ?? Number.MAX_SAFE_INTEGER) - Number(right.orderIndex ?? Number.MAX_SAFE_INTEGER));
+        .sort(
+          (left, right) =>
+            Number(left.orderIndex ?? Number.MAX_SAFE_INTEGER) -
+            Number(right.orderIndex ?? Number.MAX_SAFE_INTEGER)
+        );
     };
 
     const displayChunkGroups = async (groups = []) => {
@@ -1496,13 +1714,15 @@ export const StreamScreen = {
       }
       this.streams = mergeStreamItems(this.streams, chunkStreams);
       this.scheduleDebridPreparation();
-      markSuccessfulSources(groups.map((group) => ({
-        name: group?.addonName || "",
-        logo: group?.addonLogo || "",
-        orderIndex: group?.addonOrderIndex
-      })));
+      markSuccessfulSources(
+        groups.map((group) => ({
+          name: group?.addonName || "",
+          logo: group?.addonLogo || "",
+          orderIndex: group?.addonOrderIndex
+        }))
+      );
       if (this.streams.length && this.focusState?.zone !== "card") {
-        this.focusState = { zone: "card", index: 0 };
+        this.focusState = { zone: "card", row: 0, action: "play" };
       }
       this.requestRender({ delayMs: 120 });
     };
@@ -1540,16 +1760,25 @@ export const StreamScreen = {
     };
 
     try {
-      const streamResult = await streamRepository.getStreamsFromAllAddons(itemType, videoId, options);
+      const streamResult = await streamRepository.getStreamsFromAllAddons(
+        itemType,
+        videoId,
+        options
+      );
       if (token !== this.loadToken) {
         return;
       }
-      const loadedStreams = mergeStreamItems([], this.applyAddonLogos(flattenStreams(streamResult)));
+      const loadedStreams = mergeStreamItems(
+        [],
+        this.applyAddonLogos(flattenStreams(streamResult))
+      );
       await Promise.allSettled(Array.from(pendingChunkTasks));
       if (token !== this.loadToken) {
         return;
       }
-      const existingKeys = new Set(this.streams.map((stream) => streamMergeKey(stream)).filter(Boolean));
+      const existingKeys = new Set(
+        this.streams.map((stream) => streamMergeKey(stream)).filter(Boolean)
+      );
       const missingStreams = loadedStreams.filter((stream) => {
         const key = streamMergeKey(stream);
         return key && !existingKeys.has(key);
@@ -1569,9 +1798,9 @@ export const StreamScreen = {
       if (this.streams.length) {
         await preloadAddonLogoImages(this.streams, this.addonLogoLookup);
       }
-      this.sourceChips = this.sourceChips.map((chip) => (
+      this.sourceChips = this.sourceChips.map((chip) =>
         chip.status === "loading" ? { ...chip, status: "error" } : chip
-      ));
+      );
       this.loading = false;
       if (this.streams.length) {
         const visibleStreams = this.getFilteredStreams();
@@ -1580,9 +1809,17 @@ export const StreamScreen = {
         const preferred = String(this.params?.preferredStreamId || "").trim();
         if (preferred) {
           const prefIdx = visibleStreams.findIndex((s) => String(s?.id || "") === preferred);
-          if (prefIdx >= 0) { initialIndex = prefIdx; }
+          if (prefIdx >= 0) {
+            initialIndex = prefIdx;
+          }
         }
-        this.focusState = { zone: "card", index: clamp(initialIndex, 0, maxCardIndex) };
+        const rowIndex = clamp(initialIndex, 0, this.streams.length - 1);
+        this.focusState = {
+          zone: "card",
+          index: clamp(initialIndex, 0, maxCardIndex),
+          row: rowIndex,
+          action: String(this.focusState?.action || "play")
+        };
       } else {
         this.focusState = { zone: "filter", index: 0 };
       }
@@ -1595,9 +1832,9 @@ export const StreamScreen = {
       }
       this.loading = false;
       this.error = error?.message || "Failed to load streams.";
-      this.sourceChips = this.sourceChips.map((chip) => (
+      this.sourceChips = this.sourceChips.map((chip) =>
         chip.status === "loading" ? { ...chip, status: "error" } : chip
-      ));
+      );
       this.requestRender();
       this.scheduleErrorChipCleanup();
     }
@@ -1661,25 +1898,59 @@ export const StreamScreen = {
     this.addonFilter = targetFilter;
     const filtered = this.getFilteredStreams(targetFilter);
     if (preferredZone === "card" && filtered.length) {
-      this.focusState = { zone: "card", index: clamp(preferredIndex, 0, filtered.length - 1) };
+      this.focusState = {
+        zone: "card",
+        row: clamp(preferredIndex, 0, filtered.length - 1),
+        action: "play"
+      };
     } else {
       const ordered = ["all", ...this.getOrderedFilterNames()];
-      this.focusState = { zone: "filter", index: clamp(ordered.indexOf(targetFilter), 0, Math.max(0, ordered.length - 1)) };
+      this.focusState = {
+        zone: "filter",
+        index: clamp(ordered.indexOf(targetFilter), 0, Math.max(0, ordered.length - 1))
+      };
     }
     this.listScrollTop = 0;
     this.render();
   },
 
-  focusList(list, index) {
-    if (!Array.isArray(list) || !list.length) {
-      return false;
+  resolveCardActionForRow(row = null, preferredAction = "play") {
+    if (!row) {
+      return null;
     }
-    const targetIndex = clamp(index, 0, list.length - 1);
-    const target = list[targetIndex];
+    if (preferredAction === "native" && row.native) {
+      return row.native;
+    }
+    return row.play || row.native || null;
+  },
+
+  getCardRows() {
+    return Array.from(
+      this.container?.querySelectorAll(".stream-route-card-row[data-stream-row]") || []
+    )
+      .map((rowNode) => ({
+        row: Number(rowNode.dataset.streamRow || 0),
+        play: rowNode.querySelector('[data-card-action="play"]'),
+        native: rowNode.querySelector('[data-card-action="native"]')
+      }))
+      .filter((row) => row.play || row.native);
+  },
+
+  isCardActionFocused(rowIndex, action) {
+    return (
+      this.focusState?.zone === "card" &&
+      Number(this.focusState?.row || 0) === Number(rowIndex) &&
+      String(this.focusState?.action || "play") === String(action || "play")
+    );
+  },
+
+  focusElement(target) {
     if (!target) {
       return false;
     }
-    this.container.querySelectorAll(".focusable").forEach((node) => node.classList.remove("focused"));
+    this.container
+      .querySelectorAll(".focusable")
+      .forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     try {
       target.focus({ preventScroll: true });
@@ -1710,11 +1981,26 @@ export const StreamScreen = {
     return true;
   },
 
+  focusList(list, index) {
+    if (!Array.isArray(list) || !list.length) {
+      return false;
+    }
+    const targetIndex = clamp(index, 0, list.length - 1);
+    const target = list[targetIndex];
+    if (!target) {
+      return false;
+    }
+    return this.focusElement(target);
+  },
+
   setListScrollTop(listNode, nextScrollTop) {
     if (!listNode) {
       return;
     }
-    const maxScrollTop = Math.max(0, Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0));
+    const maxScrollTop = Math.max(
+      0,
+      Number(listNode.scrollHeight || 0) - Number(listNode.clientHeight || 0)
+    );
     const normalized = clamp(Number(nextScrollTop || 0), 0, maxScrollTop);
     listNode.scrollTop = normalized;
     if (typeof listNode.scrollTo === "function") {
@@ -1734,10 +2020,18 @@ export const StreamScreen = {
     const viewTop = Number(listNode.scrollTop || 0);
     let itemTop = Number(target.offsetTop || 0);
     let itemBottom = itemTop + Number(target.offsetHeight || 0);
-    if (typeof listNode.getBoundingClientRect === "function" && typeof target.getBoundingClientRect === "function") {
+    if (
+      typeof listNode.getBoundingClientRect === "function" &&
+      typeof target.getBoundingClientRect === "function"
+    ) {
       const listRect = listNode.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      if (listRect && targetRect && Number.isFinite(targetRect.top) && Number.isFinite(listRect.top)) {
+      if (
+        listRect &&
+        targetRect &&
+        Number.isFinite(targetRect.top) &&
+        Number.isFinite(listRect.top)
+      ) {
         itemTop = viewTop + (targetRect.top - listRect.top);
         itemBottom = viewTop + (targetRect.bottom - listRect.top);
       }
@@ -1775,20 +2069,24 @@ export const StreamScreen = {
 
   getFocusLists() {
     const chips = Array.from(this.container.querySelectorAll(".stream-route-chip.focusable"));
-    const cards = Array.from(this.container.querySelectorAll(".stream-route-card.focusable"));
-    return { chips, cards };
+    const rows = this.getCardRows();
+    return { chips, rows };
   },
 
   applyFocus() {
-    const { chips, cards } = this.getFocusLists();
-    if (!chips.length && !cards.length) {
+    const { chips, rows } = this.getFocusLists();
+    if (!chips.length && !rows.length) {
       return;
     }
-    const zone = this.focusState?.zone || (cards.length ? "card" : "filter");
+    const zone = this.focusState?.zone || (rows.length ? "card" : "filter");
     const index = Number(this.focusState?.index || 0);
-    if (zone === "card" && cards.length) {
-      this.focusState = { zone: "card", index: clamp(index, 0, cards.length - 1) };
-      this.focusList(cards, this.focusState.index);
+    if (zone === "card" && rows.length) {
+      const rowIndex = clamp(Number(this.focusState?.row || 0), 0, rows.length - 1);
+      const preferredAction = String(this.focusState?.action || "play");
+      const target = this.resolveCardActionForRow(rows[rowIndex], preferredAction);
+      const resolvedAction = target?.dataset?.cardAction || "play";
+      this.focusState = { zone: "card", row: rowIndex, action: resolvedAction };
+      this.focusElement(target);
       return;
     }
     this.focusState = { zone: "filter", index: clamp(index, 0, Math.max(0, chips.length - 1)) };
@@ -1812,8 +2110,281 @@ export const StreamScreen = {
     const episodeLabel = normalizeEpisodeCode(this.params?.season, this.params?.episode);
     const detailLine = isSeries
       ? ""
-      : [String(this.params?.genres || "").trim(), String(this.params?.year || "").trim()].filter(Boolean).join(" • ");
+      : [String(this.params?.genres || "").trim(), String(this.params?.year || "").trim()]
+          .filter(Boolean)
+          .join(" • ");
     return { isSeries, title, subtitle, episodeLabel, detailLine };
+  },
+
+  async detectWebOsNativePlayerApp() {
+    if (!Environment.isWebOS() || !WebOsLunaService.isAvailable()) {
+      this.webOsNativePlayerAppId = "";
+      return "";
+    }
+    const requestToken = Number(this.nativePlayerRequestToken || 0) + 1;
+    this.nativePlayerRequestToken = requestToken;
+    for (const appId of WEBOS_NATIVE_PLAYER_APP_IDS) {
+      try {
+        const payload = await WebOsLunaService.request("luna://com.webos.applicationManager", {
+          method: "getAppLoadStatus",
+          parameters: { appId }
+        });
+        if (payload?.exist) {
+          if (this.nativePlayerRequestToken === requestToken) {
+            this.webOsNativePlayerAppId = appId;
+            this.requestRender({ delayMs: 0 });
+          }
+          return appId;
+        }
+      } catch (_) {
+        // Continue trying known native-player app ids.
+      }
+    }
+    if (this.nativePlayerRequestToken === requestToken) {
+      this.webOsNativePlayerAppId = "";
+      this.requestRender({ delayMs: 0 });
+    }
+    return "";
+  },
+
+  showStreamToast(message) {
+    if (!this.container) {
+      return;
+    }
+    const shell = this.container.querySelector(".stream-route-shell");
+    if (!shell) {
+      return;
+    }
+    let toast = shell.querySelector(".stream-route-toast");
+    if (!toast) {
+      toast = document.createElement("div");
+      toast.className = "stream-route-toast";
+      shell.appendChild(toast);
+    }
+    toast.textContent = String(message || "").trim();
+    toast.classList.add("visible");
+    if (this.streamToastTimer) {
+      clearTimeout(this.streamToastTimer);
+    }
+    this.streamToastTimer = setTimeout(() => {
+      toast?.classList.remove("visible");
+    }, 2600);
+  },
+
+  getStreamRequestHeaders(stream = {}) {
+    const raw = stream?.raw || stream || {};
+    const requestHeaders =
+      raw?.behaviorHints?.proxyHeaders?.request || stream?.behaviorHints?.proxyHeaders?.request;
+    return requestHeaders && typeof requestHeaders === "object" ? { ...requestHeaders } : {};
+  },
+
+  resolveStreamMimeType(stream = {}, fallbackUrl = "") {
+    const raw = stream?.raw || stream || {};
+    const candidates = [
+      stream?.mimeType,
+      raw?.mimeType,
+      stream?.sourceType,
+      raw?.sourceType,
+      raw?.type,
+      raw?.source
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    const explicit = candidates.find((value) => value.includes("/"));
+    if (explicit) {
+      return explicit;
+    }
+    const alias = String(candidates[0] || "").toLowerCase();
+    const aliasMap = {
+      dash: "application/dash+xml",
+      hls: "application/vnd.apple.mpegurl",
+      m3u8: "application/vnd.apple.mpegurl",
+      m4v: "video/mp4",
+      mkv: "video/x-matroska",
+      mov: "video/quicktime",
+      mp4: "video/mp4",
+      mpd: "application/dash+xml",
+      ts: "video/mp2t",
+      webm: "video/webm"
+    };
+    return aliasMap[alias] || guessMimeTypeFromUrl(fallbackUrl) || "video/mp4";
+  },
+
+  getWebOsNativeLaunchUrl(stream = {}) {
+    const requestHeaders = this.getStreamRequestHeaders(stream);
+    if (Object.keys(requestHeaders).length) {
+      return "";
+    }
+    const candidates = [
+      stream?.engineFs?.publicPlaybackUrl,
+      stream?.raw?.engineFs?.publicPlaybackUrl,
+      stream?.externalUrl,
+      stream?.url,
+      stream?.raw?.externalUrl,
+      stream?.raw?.url
+    ].filter(Boolean);
+    return (
+      candidates.find(
+        (value) => isLaunchableExternalMediaUrl(value) && !isLocalOnlyPlaybackUrl(value)
+      ) || ""
+    );
+  },
+
+  canOfferNativePlayerForStream(stream = {}) {
+    if (!Environment.isWebOS() || !this.webOsNativePlayerAppId) {
+      return false;
+    }
+    if (this.getWebOsNativeLaunchUrl(stream)) {
+      return true;
+    }
+    if (WebOsEngineFsResolver.canResolveStream(stream)) {
+      return true;
+    }
+    return DirectDebridResolver.canResolveStream(stream, {
+      season: this.params?.season ?? null,
+      episode: this.params?.episode ?? null
+    });
+  },
+
+  replaceStreamInList(streamId, nextStream = null) {
+    if (!streamId || !nextStream) {
+      return;
+    }
+    this.streams = this.streams.map((stream) =>
+      stream.id === streamId ? { ...stream, ...nextStream } : stream
+    );
+  },
+
+  async resolveStreamForNativePlayer(stream = {}) {
+    const directUrl = this.getWebOsNativeLaunchUrl(stream);
+    if (directUrl) {
+      return { status: "success", stream };
+    }
+    if (WebOsEngineFsResolver.canResolveStream(stream)) {
+      const result = await WebOsEngineFsResolver.resolve(stream, {});
+      if (result?.status === "success" && result.stream) {
+        return result;
+      }
+    }
+    if (
+      DirectDebridResolver.canResolveStream(stream, {
+        season: this.params?.season ?? null,
+        episode: this.params?.episode ?? null
+      })
+    ) {
+      const result = await DirectDebridResolver.resolve(stream, {
+        season: this.params?.season ?? null,
+        episode: this.params?.episode ?? null
+      });
+      if (result?.status === "success" && result.stream) {
+        return result;
+      }
+      return result || { status: "unavailable" };
+    }
+    return { status: "unavailable" };
+  },
+
+  buildWebOsNativePlayerLaunchParameters(stream = {}) {
+    const appId = String(this.webOsNativePlayerAppId || "").trim();
+    const launchUrl = this.getWebOsNativeLaunchUrl(stream);
+    if (!appId || !launchUrl) {
+      return null;
+    }
+    const filename = normalizeExternalLaunchFileName(
+      stream?.behaviorHints?.filename ||
+        stream?.raw?.behaviorHints?.filename ||
+        stream?.title ||
+        stream?.name ||
+        this.params?.itemTitle ||
+        this.params?.playerTitle
+    );
+    const mimeType = this.resolveStreamMimeType(stream, launchUrl);
+    return {
+      id: appId,
+      params: {
+        payload: [
+          {
+            fullPath: launchUrl,
+            artist: "",
+            subtitle: "",
+            dlnaInfo: {
+              flagVal: 4096,
+              cleartextSize: "-1",
+              contentLength: "-1",
+              opVal: 1,
+              protocolInfo: buildWebOsDlnaProtocolInfo(mimeType),
+              duration: 0
+            },
+            mediaType: "VIDEO",
+            thumbnail: "",
+            deviceType: "DMR",
+            album: "",
+            fileName: filename,
+            lastPlayPosition: -1
+          }
+        ]
+      }
+    };
+  },
+
+  async openStreamInNativePlayer(streamId) {
+    if (!Environment.isWebOS() || !this.webOsNativePlayerAppId || !WebOsLunaService.isAvailable()) {
+      return;
+    }
+    if (this.nativePlayerPendingStreamId) {
+      return;
+    }
+    const selected =
+      this.getFilteredStreams().find((stream) => stream.id === streamId) ||
+      this.streams.find((stream) => stream.id === streamId) ||
+      null;
+    if (!selected) {
+      return;
+    }
+
+    this.nativePlayerPendingStreamId = streamId;
+    this.requestRender({ delayMs: 0 });
+    try {
+      const result = await this.resolveStreamForNativePlayer(selected);
+      if (result?.status !== "success" || !result.stream) {
+        this.showStreamToast(
+          t(
+            "player_external_launch_unavailable",
+            {},
+            "This stream cannot be opened in Native Player"
+          )
+        );
+        return;
+      }
+
+      this.replaceStreamInList(streamId, result.stream);
+      const launchParameters = this.buildWebOsNativePlayerLaunchParameters(result.stream);
+      if (!launchParameters) {
+        this.requestRender({ delayMs: 0 });
+        this.showStreamToast(
+          t(
+            "player_external_launch_unavailable",
+            {},
+            "This stream cannot be opened in Native Player"
+          )
+        );
+        return;
+      }
+
+      await WebOsLunaService.request("luna://com.webos.applicationManager", {
+        method: "launch",
+        parameters: launchParameters
+      });
+      this.showStreamToast(
+        t("player_external_launching_media_player", {}, "Opening Native Player")
+      );
+    } catch (error) {
+      console.warn("Failed to open stream in native player", { streamId, error });
+      this.showStreamToast(t("player_external_launch_failed", {}, "Could not open Native Player"));
+    } finally {
+      this.nativePlayerPendingStreamId = "";
+      this.requestRender({ delayMs: 0 });
+    }
   },
 
   renderChip(name, selected, status) {
@@ -1823,8 +2394,13 @@ export const StreamScreen = {
       "focusable",
       selected ? "selected" : "",
       chipStatus !== "success" ? chipStatus : ""
-    ].filter(Boolean).join(" ");
-    const spinner = chipStatus === "loading" ? '<span class="stream-route-chip-spinner" aria-hidden="true"></span>' : "";
+    ]
+      .filter(Boolean)
+      .join(" ");
+    const spinner =
+      chipStatus === "loading"
+        ? '<span class="stream-route-chip-spinner" aria-hidden="true"></span>'
+        : "";
     return `
       <button class="${classes}" data-action="setFilter" data-addon="${escapeHtml(name)}">
         ${spinner}
@@ -1841,7 +2417,9 @@ export const StreamScreen = {
     const topBadges = badgePlacement === "TOP" ? badges : "";
     const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
     const descriptionLines = getStreamDescriptionLines(stream);
-    const addonLogoUrl = normalizeAddonLogoUrl(stream.addonLogo) || resolveAddonLogo(stream.addonName, this.addonLogoLookup);
+    const addonLogoUrl =
+      normalizeAddonLogoUrl(stream.addonLogo) ||
+      resolveAddonLogo(stream.addonName, this.addonLogoLookup);
     const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
     let displayAddonLogoUrl = cachedAddonLogoUrl || "";
     if (addonLogoUrl && !displayAddonLogoUrl && !failedAddonLogoUrls.has(addonLogoUrl)) {
@@ -1855,43 +2433,72 @@ export const StreamScreen = {
       renderMetaItem("peers", extractPeerCount(stream)),
       renderMetaItem("size", formatBytes(stream.behaviorHints?.videoSize)),
       renderMetaItem("source", extractIndexerName(stream))
-    ].filter(Boolean).join("");
-    const addonLogoLoading = (Environment.isWebOS() || Environment.isTizen()) ? "eager" : "lazy";
-    const addonLogoDecoding = (Environment.isWebOS() || Environment.isTizen()) ? "sync" : "async";
+    ]
+      .filter(Boolean)
+      .join("");
+    const addonLogoLoading = Environment.isWebOS() || Environment.isTizen() ? "eager" : "lazy";
+    const addonLogoDecoding = Environment.isWebOS() || Environment.isTizen() ? "sync" : "async";
     const addonBadge = displayAddonLogoUrl
       ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="${addonLogoDecoding}" loading="${addonLogoLoading}" referrerpolicy="no-referrer" /><span hidden>${addonBadgeLabel}</span>`
       : `<span>${addonBadgeLabel}</span>`;
+    const nativeActionAvailable = this.canOfferNativePlayerForStream(stream);
+    const nativeActionBusy = this.nativePlayerPendingStreamId === stream.id;
+    const nativeActionLabel = nativeActionBusy
+      ? t("stream_native_player_preparing", {}, "Preparing...")
+      : t("player_external_open_media_player", {}, "Open Native Player");
 
     return `
-      <article class="stream-route-card focusable${this.focusState.zone === "card" && this.focusState.index === index ? " focused" : ""}"
-               data-action="playStream"
-               data-stream-id="${escapeHtml(stream.id)}">
-        <div class="stream-route-card-copy">
-          <div class="stream-route-card-heading">${escapeHtml(headline)}</div>
-          ${topBadges || ""}
-          ${!badges ? `<div class="stream-route-card-quality">${escapeHtml(quality)}</div>` : ""}
-          ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml(line)}</div>`).join("")}
-          ${bottomBadges || ""}
-          ${meta ? `<div class="stream-route-card-meta">${meta}</div>` : ""}
-        </div>
-        <div class="stream-route-card-side">
-          <div class="stream-route-addon-badge">${addonBadge}</div>
-          <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
-        </div>
-      </article>
+      <div class="stream-route-card-row" data-stream-row="${index}">
+        <article class="stream-route-card stream-route-card-action focusable${this.isCardActionFocused(index, "play") ? " focused" : ""}"
+                 data-action="playStream"
+                 data-card-action="play"
+                 data-stream-id="${escapeHtml(stream.id)}"
+                 data-stream-row="${index}">
+          <div class="stream-route-card-copy">
+            <div class="stream-route-card-heading">${escapeHtml(headline)}</div>
+            ${topBadges || ""}
+            ${!badges ? `<div class="stream-route-card-quality">${escapeHtml(quality)}</div>` : ""}
+            ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml(line)}</div>`).join("")}
+            ${bottomBadges || ""}
+            ${meta ? `<div class="stream-route-card-meta">${meta}</div>` : ""}
+          </div>
+          <div class="stream-route-card-side">
+            <div class="stream-route-addon-badge">${addonBadge}</div>
+            <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
+          </div>
+        </article>
+        ${
+          nativeActionAvailable
+            ? `
+          <button class="stream-route-native-button stream-route-card-action focusable${this.isCardActionFocused(index, "native") ? " focused" : ""}${nativeActionBusy ? " busy" : ""}"
+                  type="button"
+                  data-action="openNativePlayer"
+                  data-card-action="native"
+                  data-stream-id="${escapeHtml(stream.id)}"
+                  data-stream-row="${index}">
+            ${escapeHtml(nativeActionLabel)}
+          </button>
+        `
+            : ""
+        }
+      </div>
     `;
   },
 
   renderLoadingCards(count = 3) {
     const safeCount = Math.max(1, Number(count || 0));
-    return Array.from({ length: safeCount }).map(() => `
+    return Array.from({ length: safeCount })
+      .map(
+        () => `
       <div class="stream-route-card skeleton">
         <div class="stream-route-skeleton-line wide"></div>
         <div class="stream-route-skeleton-line short"></div>
         <div class="stream-route-skeleton-line"></div>
         <div class="stream-route-skeleton-line"></div>
       </div>
-    `).join("");
+    `
+      )
+      .join("");
   },
 
   render() {
@@ -1904,7 +2511,10 @@ export const StreamScreen = {
     const chips = [
       this.renderChip("all", this.addonFilter === "all", "success"),
       ...orderedFilters.map((name) => {
-        const chip = this.sourceChips.find((entry) => entry.name === name) || { name, status: "success" };
+        const chip = this.sourceChips.find((entry) => entry.name === name) || {
+          name,
+          status: "success"
+        };
         return this.renderChip(name, this.addonFilter === name, chip.status);
       })
     ].join("");
@@ -1917,7 +2527,11 @@ export const StreamScreen = {
 
     let body = "";
     if (filtered.length && addonLogosReady) {
-      body = filtered.map((stream, index) => this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)).join("");
+      body = filtered
+        .map((stream, index) =>
+          this.renderStreamCard(stream, index, streamBadgesEnabled, badgeSettings)
+        )
+        .join("");
       if (hasPendingForFilter) {
         body += this.renderLoadingCards(1);
       }
@@ -1944,7 +2558,7 @@ export const StreamScreen = {
               ${logo ? `<img src="${logo}" class="stream-route-logo" alt="${escapeHtml(title)}" />` : `<h1 class="stream-route-title">${escapeHtml(title)}</h1>`}
               ${episodeLabel ? `<div class="stream-route-episode-code">${escapeHtml(episodeLabel)}</div>` : ""}
               ${subtitle ? `<div class="stream-route-subtitle">${escapeHtml(subtitle)}</div>` : ""}
-              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml(detailLine)}</div>` : (!isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml(subtitle)}</div>` : "")}
+              ${detailLine ? `<div class="stream-route-detail-line">${escapeHtml(detailLine)}</div>` : !isSeries && subtitle ? `<div class="stream-route-detail-line">${escapeHtml(subtitle)}</div>` : ""}
             </div>
           </section>
           <section class="stream-route-right">
@@ -1974,27 +2588,33 @@ export const StreamScreen = {
     if (!list) {
       return;
     }
-    list.addEventListener("scroll", () => {
-      this.listScrollTop = Number(list.scrollTop || 0);
-    }, { passive: true });
+    list.addEventListener(
+      "scroll",
+      () => {
+        this.listScrollTop = Number(list.scrollTop || 0);
+      },
+      { passive: true }
+    );
   },
 
   bindAddonLogoFallbacks() {
-    this.container?.querySelectorAll(".stream-route-addon-badge img[data-addon-logo]").forEach((node) => {
-      if (!(node instanceof HTMLImageElement) || node.dataset.fallbackBound === "true") {
-        return;
-      }
-      node.dataset.fallbackBound = "true";
-      const fallback = node.nextElementSibling;
-      const applyFallback = () => {
-        rememberFailedAddonLogo(node.dataset.addonLogo || node.getAttribute("src") || "");
-        node.hidden = true;
-        if (fallback instanceof HTMLElement) {
-          fallback.hidden = false;
+    this.container
+      ?.querySelectorAll(".stream-route-addon-badge img[data-addon-logo]")
+      .forEach((node) => {
+        if (!(node instanceof HTMLImageElement) || node.dataset.fallbackBound === "true") {
+          return;
         }
-      };
-      node.addEventListener("error", applyFallback, { once: true });
-    });
+        node.dataset.fallbackBound = "true";
+        const fallback = node.nextElementSibling;
+        const applyFallback = () => {
+          rememberFailedAddonLogo(node.dataset.addonLogo || node.getAttribute("src") || "");
+          node.hidden = true;
+          if (fallback instanceof HTMLElement) {
+            fallback.hidden = false;
+          }
+        };
+        node.addEventListener("error", applyFallback, { once: true });
+      });
   },
 
   async playStream(streamId) {
@@ -2006,18 +2626,20 @@ export const StreamScreen = {
     const playerStreamCandidates = this.getFilteredStreams();
     const itemType = normalizeType(this.params?.itemType);
     const startFromBeginning = Boolean(this.params?.startFromBeginning);
-    let resumePositionMs = startFromBeginning ? 0 : (Number(this.params?.resumePositionMs || 0) || 0);
+    let resumePositionMs = startFromBeginning ? 0 : Number(this.params?.resumePositionMs || 0) || 0;
     let resumeProgressPercent = startFromBeginning ? null : this.params?.resumeProgressPercent;
-    let resumeDurationMs = startFromBeginning ? 0 : (Number(this.params?.resumeDurationMs || 0) || 0);
+    let resumeDurationMs = startFromBeginning ? 0 : Number(this.params?.resumeDurationMs || 0) || 0;
     if (!startFromBeginning && resumePositionMs <= 0 && !(Number(resumeProgressPercent) > 0)) {
-      const resumeProgress = await watchProgressRepository.getResumeByContentId(this.params?.itemId, {
-        videoId: this.params?.videoId || null,
-        season: this.params?.season,
-        episode: this.params?.episode
-      }).catch((error) => {
-        console.warn("Stream resume lookup failed", error);
-        return null;
-      });
+      const resumeProgress = await watchProgressRepository
+        .getResumeByContentId(this.params?.itemId, {
+          videoId: this.params?.videoId || null,
+          season: this.params?.season,
+          episode: this.params?.episode
+        })
+        .catch((error) => {
+          console.warn("Stream resume lookup failed", error);
+          return null;
+        });
       resumePositionMs = Number(resumeProgress?.positionMs || 0) || 0;
       resumeProgressPercent = resumeProgress?.progressPercent ?? resumeProgressPercent;
       resumeDurationMs = Number(resumeProgress?.durationMs || 0) || resumeDurationMs;
@@ -2033,9 +2655,10 @@ export const StreamScreen = {
       resumeProgressPercent,
       resumeDurationMs,
       startFromBeginning,
-      episodeLabel: this.params?.season && this.params?.episode
-        ? `S${this.params.season}E${this.params.episode}`
-        : null,
+      episodeLabel:
+        this.params?.season && this.params?.episode
+          ? `S${this.params.season}E${this.params.episode}`
+          : null,
       playerTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
       playerSubtitle: this.params?.episodeTitle || this.params?.playerSubtitle || "",
       playerEpisodeTitle: this.params?.episodeTitle || "",
@@ -2053,7 +2676,9 @@ export const StreamScreen = {
         addonId: selected.addonId || "",
         addonBaseUrl: selected.addonBaseUrl || "",
         addonName: selected.addonName || "",
-        addonOrderIndex: Number.isFinite(Number(selected.addonOrderIndex)) ? Number(selected.addonOrderIndex) : null,
+        addonOrderIndex: Number.isFinite(Number(selected.addonOrderIndex))
+          ? Number(selected.addonOrderIndex)
+          : null,
         sourceProviderId: selected.sourceProviderId || "",
         sourceIds: Array.isArray(selected.sources) ? selected.sources : [],
         selectedStreamId: selected.id || ""
@@ -2073,17 +2698,22 @@ export const StreamScreen = {
     if (!target || !this.container?.contains(target)) {
       return false;
     }
-    const { chips, cards } = this.getFocusLists();
-    const chipIndex = chips.indexOf(target);
+    const { chips } = this.getFocusLists();
+    const chipTarget = target.closest?.(".stream-route-chip.focusable") || target;
+    const chipIndex = chips.indexOf(chipTarget);
     if (chipIndex >= 0) {
       this.focusState = { zone: "filter", index: chipIndex };
       this.focusList(chips, chipIndex);
       return true;
     }
-    const cardIndex = cards.indexOf(target);
-    if (cardIndex >= 0) {
-      this.focusState = { zone: "card", index: cardIndex };
-      this.focusList(cards, cardIndex);
+    const cardAction = target.closest?.("[data-stream-row][data-card-action]");
+    if (cardAction) {
+      this.focusState = {
+        zone: "card",
+        row: Math.max(0, Number(cardAction.dataset.streamRow || 0)),
+        action: String(cardAction.dataset.cardAction || "play")
+      };
+      this.focusElement(cardAction);
       return true;
     }
     return false;
@@ -2093,16 +2723,21 @@ export const StreamScreen = {
     if (!target || !this.container?.contains(target)) {
       return false;
     }
-    this.onPointerFocus(target);
-    const action = String(target.dataset.action || "");
+    const actionTarget = target.closest?.("[data-action]") || target;
+    this.onPointerFocus(actionTarget);
+    const action = String(actionTarget.dataset.action || "");
     if (action === "setFilter") {
-      const addon = String(target.dataset.addon || "all");
+      const addon = String(actionTarget.dataset.addon || "all");
       const { chips } = this.getFocusLists();
-      this.setAddonFilter(addon, "filter", Math.max(0, chips.indexOf(target)));
+      this.setAddonFilter(addon, "filter", Math.max(0, chips.indexOf(actionTarget)));
       return true;
     }
     if (action === "playStream") {
-      this.playStream(target.dataset.streamId);
+      this.playStream(actionTarget.dataset.streamId);
+      return true;
+    }
+    if (action === "openNativePlayer") {
+      void this.openStreamInNativePlayer(actionTarget.dataset.streamId);
       return true;
     }
     return false;
@@ -2119,8 +2754,8 @@ export const StreamScreen = {
 
     const direction = getDpadDirection(event);
     if (direction) {
-      const { chips, cards } = this.getFocusLists();
-      const zone = this.focusState?.zone || (cards.length ? "card" : "filter");
+      const { chips, rows } = this.getFocusLists();
+      const zone = this.focusState?.zone || (rows.length ? "card" : "filter");
       let index = Number(this.focusState?.index || 0);
       event?.preventDefault?.();
 
@@ -2131,7 +2766,11 @@ export const StreamScreen = {
             const currentFilter = ordered[clamp(index, 0, ordered.length - 1)] || "all";
             const currentPosition = ordered.indexOf(currentFilter);
             const nextFilter = ordered[clamp(currentPosition - 1, 0, ordered.length - 1)];
-            this.setAddonFilter(nextFilter, "filter", clamp(index - 1, 0, Math.max(0, chips.length - 1)));
+            this.setAddonFilter(
+              nextFilter,
+              "filter",
+              clamp(index - 1, 0, Math.max(0, chips.length - 1))
+            );
           }
           return;
         }
@@ -2141,42 +2780,82 @@ export const StreamScreen = {
             const currentFilter = ordered[clamp(index, 0, ordered.length - 1)] || "all";
             const currentPosition = ordered.indexOf(currentFilter);
             const nextFilter = ordered[clamp(currentPosition + 1, 0, ordered.length - 1)];
-            this.setAddonFilter(nextFilter, "filter", clamp(index + 1, 0, Math.max(0, chips.length - 1)));
+            this.setAddonFilter(
+              nextFilter,
+              "filter",
+              clamp(index + 1, 0, Math.max(0, chips.length - 1))
+            );
           }
           return;
         }
-        if (direction === "down" && cards.length) {
-          this.focusState = { zone: "card", index: clamp(index, 0, cards.length - 1) };
+        if (direction === "down" && rows.length) {
+          this.focusState = { zone: "card", row: clamp(index, 0, rows.length - 1), action: "play" };
           this.applyFocus();
         }
         return;
       }
 
       if (zone === "card") {
+        const rowIndex = clamp(Number(this.focusState?.row || 0), 0, Math.max(0, rows.length - 1));
+        const currentRow = rows[rowIndex] || null;
+        const currentAction = String(this.focusState?.action || "play");
         if (direction === "up") {
-          if (index > 0) {
-            this.focusState = { zone: "card", index: index - 1 };
+          if (rowIndex > 0) {
+            const previousRow = rows[rowIndex - 1] || null;
+            const target = this.resolveCardActionForRow(previousRow, currentAction);
+            this.focusState = {
+              zone: "card",
+              row: rowIndex - 1,
+              action: String(target?.dataset?.cardAction || "play")
+            };
             this.applyFocus();
             return;
           }
           this.focusState = {
             zone: "filter",
-            index: clamp(["all", ...this.getOrderedFilterNames()].indexOf(this.addonFilter), 0, Math.max(0, chips.length - 1))
+            index: clamp(
+              ["all", ...this.getOrderedFilterNames()].indexOf(this.addonFilter),
+              0,
+              Math.max(0, chips.length - 1)
+            )
           };
           this.applyFocus();
           return;
         }
         if (direction === "down") {
-          this.focusState = { zone: "card", index: clamp(index + 1, 0, Math.max(0, cards.length - 1)) };
+          const nextRowIndex = clamp(rowIndex + 1, 0, Math.max(0, rows.length - 1));
+          const nextRow = rows[nextRowIndex] || null;
+          const target = this.resolveCardActionForRow(nextRow, currentAction);
+          this.focusState = {
+            zone: "card",
+            row: nextRowIndex,
+            action: String(target?.dataset?.cardAction || "play")
+          };
           this.applyFocus();
           return;
         }
-        if (direction === "left" || direction === "right") {
+        if (direction === "left") {
+          if (currentAction === "native" && currentRow?.play) {
+            this.focusState = { zone: "card", row: rowIndex, action: "play" };
+            this.applyFocus();
+            return;
+          }
           const ordered = ["all", ...this.getOrderedFilterNames()];
           const currentIndex = Math.max(0, ordered.indexOf(this.addonFilter));
-          const delta = direction === "left" ? -1 : 1;
-          const nextFilter = ordered[clamp(currentIndex + delta, 0, ordered.length - 1)] || "all";
-          this.setAddonFilter(nextFilter, "card", index);
+          const nextFilter = ordered[clamp(currentIndex - 1, 0, ordered.length - 1)] || "all";
+          this.setAddonFilter(nextFilter, "card", rowIndex);
+          return;
+        }
+        if (direction === "right") {
+          if (currentAction === "play" && currentRow?.native) {
+            this.focusState = { zone: "card", row: rowIndex, action: "native" };
+            this.applyFocus();
+            return;
+          }
+          const ordered = ["all", ...this.getOrderedFilterNames()];
+          const currentIndex = Math.max(0, ordered.indexOf(this.addonFilter));
+          const nextFilter = ordered[clamp(currentIndex + 1, 0, ordered.length - 1)] || "all";
+          this.setAddonFilter(nextFilter, "card", rowIndex);
           return;
         }
       }
@@ -2194,21 +2873,34 @@ export const StreamScreen = {
     const action = String(current.dataset.action || "");
     if (action === "setFilter") {
       const addon = String(current.dataset.addon || "all");
-      this.setAddonFilter(addon, "filter", Array.from(this.container.querySelectorAll(".stream-route-chip.focusable")).indexOf(current));
+      this.setAddonFilter(
+        addon,
+        "filter",
+        Array.from(this.container.querySelectorAll(".stream-route-chip.focusable")).indexOf(current)
+      );
       return;
     }
     if (action === "playStream") {
       this.playStream(current.dataset.streamId);
+      return;
+    }
+    if (action === "openNativePlayer") {
+      void this.openStreamInNativePlayer(current.dataset.streamId);
     }
   },
 
   cleanup() {
     this.loadToken = (this.loadToken || 0) + 1;
-    this.playResolveToken = (Number(this.playResolveToken || 0) + 1);
+    this.playResolveToken = Number(this.playResolveToken || 0) + 1;
+    this.nativePlayerRequestToken = Number(this.nativePlayerRequestToken || 0) + 1;
     this.cancelScheduledRender();
     if (this.errorChipTimer) {
       clearTimeout(this.errorChipTimer);
       this.errorChipTimer = null;
+    }
+    if (this.streamToastTimer) {
+      clearTimeout(this.streamToastTimer);
+      this.streamToastTimer = null;
     }
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
@@ -2216,5 +2908,4 @@ export const StreamScreen = {
     }
     ScreenUtils.hide(this.container);
   }
-
 };
