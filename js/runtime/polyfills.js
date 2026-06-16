@@ -8,6 +8,53 @@
   delete Object.prototype.__magic__;
 }());
 
+// Number/Math ES2015 statics missing on older TV engines. Defined first because
+// other polyfills below (e.g. Array.prototype.flat) rely on Number.isFinite,
+// and the profile store touches Number.isFinite / Math.trunc during bootstrap.
+if (typeof Number.isNaN !== "function") {
+  Number.isNaN = function isNaN(value) {
+    return typeof value === "number" && value !== value;
+  };
+}
+
+if (typeof Number.isFinite !== "function") {
+  Number.isFinite = function isFinite(value) {
+    return typeof value === "number" && globalThis.isFinite(value);
+  };
+}
+
+if (typeof Number.isInteger !== "function") {
+  Number.isInteger = function isInteger(value) {
+    return typeof value === "number" && globalThis.isFinite(value) && Math.floor(value) === value;
+  };
+}
+
+if (typeof Number.parseInt !== "function") {
+  Number.parseInt = globalThis.parseInt;
+}
+
+if (typeof Number.parseFloat !== "function") {
+  Number.parseFloat = globalThis.parseFloat;
+}
+
+if (typeof Number.MAX_SAFE_INTEGER !== "number") {
+  Number.MAX_SAFE_INTEGER = 9007199254740991;
+}
+
+if (typeof Number.MIN_SAFE_INTEGER !== "number") {
+  Number.MIN_SAFE_INTEGER = -9007199254740991;
+}
+
+if (typeof Math.trunc !== "function") {
+  Math.trunc = function trunc(value) {
+    var number = Number(value);
+    if (Number.isNaN(number) || number === 0) {
+      return number;
+    }
+    return number < 0 ? Math.ceil(number) : Math.floor(number);
+  };
+}
+
 // ES2015-2017 builtins missing on older TV engines (webOS 3/4 ship Chromium
 // 38/53). The bundle is transpiled for syntax down to "chrome 38", but builtin
 // APIs are only available through this file, and Object.entries & friends were
