@@ -158,7 +158,7 @@ function fitRootSidebarText(container) {
   });
 }
 
-function scheduleRootSidebarTextFit(container) {
+export function scheduleRootSidebarTextFit(container) {
   if (!container) {
     return;
   }
@@ -411,7 +411,6 @@ export function bindRootSidebarEvents(container, {
       const connected = focusables.filter((n) => n.isConnected);
       connected.forEach((n) => n.classList.remove("focused"));
       node.classList.add("focused");
-      focusWithoutAutoScroll(node);
     };
   });
 
@@ -424,29 +423,25 @@ export function bindRootSidebarEvents(container, {
         onExpandSidebar(node);
       }
     };
-
-    node.addEventListener("mouseenter", () => {
-      cancelCollapse();
+    node.onmouseenter = () => {
+      if (container.__sidebarCollapseTimer) {
+        clearTimeout(container.__sidebarCollapseTimer);
+        container.__sidebarCollapseTimer = null;
+      }
       if (typeof onExpandSidebar === "function") {
         onExpandSidebar(node);
       }
-    });
+    };
   });
-
-  let sidebarCollapseTimer = null;
-
-  const cancelCollapse = () => {
-    if (sidebarCollapseTimer) {
-      clearTimeout(sidebarCollapseTimer);
-      sidebarCollapseTimer = null;
-    }
-  };
 
   container?.addEventListener("focusin", (event) => {
     const target = event?.target;
     if (!target) return;
     if (target.closest(".home-sidebar .focusable, .modern-sidebar-panel .focusable")) {
-      cancelCollapse();
+      if (container.__sidebarCollapseTimer) {
+        clearTimeout(container.__sidebarCollapseTimer);
+        container.__sidebarCollapseTimer = null;
+      }
       const alreadyExpanded = Boolean(
         container?.querySelector(".modern-sidebar-shell.panel-visible")
         || container?.querySelector(".home-sidebar.expanded")
@@ -457,18 +452,36 @@ export function bindRootSidebarEvents(container, {
     }
   });
 
-  const sidebarEl = container?.querySelector(".modern-sidebar-panel") || container?.querySelector(".home-sidebar");
-  if (sidebarEl) {
-    sidebarEl.addEventListener("mouseenter", cancelCollapse);
-    if (typeof onCollapseSidebar === "function") {
-      sidebarEl.addEventListener("mouseleave", () => {
-        cancelCollapse();
-        sidebarCollapseTimer = setTimeout(() => {
-          sidebarCollapseTimer = null;
-          onCollapseSidebar();
-        }, 120);
-      });
-    }
+  if (typeof onCollapseSidebar === "function") {
+    container.__sidebarOnCollapse = onCollapseSidebar;
+  }
+
+  if (!container.__sidebarMouseoverBound) {
+    container.__sidebarMouseoverBound = true;
+    container.addEventListener("mouseover", (event) => {
+      const target = event?.target;
+      if (!target) return;
+      if (target.closest(".home-sidebar, .modern-sidebar-panel, .modern-sidebar-shell")) {
+        // Only cancel collapse if cursor genuinely moved from outside the sidebar.
+        // Ignore animation-induced events (relatedTarget null) and internal sub-element
+        // transitions (relatedTarget inside sidebar) — both happen as the panel slides open.
+        const fromOutside = event.relatedTarget
+          && !event.relatedTarget.closest(".home-sidebar, .modern-sidebar-panel, .modern-sidebar-shell");
+        if (fromOutside && container.__sidebarCollapseTimer) {
+          clearTimeout(container.__sidebarCollapseTimer);
+          container.__sidebarCollapseTimer = null;
+        }
+        return;
+      }
+      if (container.__sidebarCollapseTimer) {
+        clearTimeout(container.__sidebarCollapseTimer);
+        container.__sidebarCollapseTimer = null;
+      }
+      container.__sidebarCollapseTimer = setTimeout(() => {
+        container.__sidebarCollapseTimer = null;
+        container.__sidebarOnCollapse?.();
+      }, 120);
+    });
   }
 
   scheduleRootSidebarTextFit(container);

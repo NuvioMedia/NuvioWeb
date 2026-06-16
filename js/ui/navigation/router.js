@@ -39,6 +39,7 @@ export const Router = {
   skipConsumeNextPopstate: false,
   ignoreNextPopstate: false,
   onNavigate: null,
+  afterNavigate: null,
 
   routes: {
     home: HomeScreen,
@@ -214,6 +215,11 @@ export const Router = {
     if (this.current !== routeName || this.currentParams !== targetParams) {
       return;
     }
+
+    // Fire after mount so chrome that must live inside the screen container
+    // (e.g. sidebar injection for LG Magic Remote pointer hit-testing) can
+    // attach after the screen has written its final HTML.
+    this.afterNavigate?.(routeName);
 
     if (window?.history && typeof window.history.pushState === "function") {
       const state = { route: this.current, params: this.currentParams };

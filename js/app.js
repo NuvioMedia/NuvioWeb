@@ -189,6 +189,7 @@ async function bootstrapApp() {
   Router.init();
   RootSidebarController.init();
   Router.onNavigate = (routeName) => RootSidebarController.update(routeName);
+  Router.afterNavigate = (routeName) => RootSidebarController.afterMount(routeName);
   PlayerController.init();
 
   FocusEngine.init();
