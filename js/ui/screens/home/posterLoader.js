@@ -25,7 +25,7 @@ function processQueue() {
       if (loadGeneration === gen && activeLoads > 0) activeLoads--;
       processQueue();
     };
-    img.onload = done;
+    img.onload = () => { img.classList.add("poster-loaded"); done(); };
     img.onerror = done;
     img.src = src;
   }
