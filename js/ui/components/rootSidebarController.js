@@ -7,12 +7,11 @@ import {
   getLegacySidebarSelectedNode,
   focusWithoutAutoScroll,
   activateLegacySidebarAction,
+  isSelectedSidebarAction,
   scheduleRootSidebarTextFit
 } from "./sidebarNavigation.js";
 import { LayoutPreferences } from "../../data/local/layoutPreferences.js";
 
-// Screens that render and manage their own sidebar internally
-const PER_SCREEN_SIDEBAR_ROUTES = new Set(["home", "library", "search", "settings", "plugin"]);
 // Routes with no sidebar at all
 const NO_SIDEBAR_ROUTES = new Set(["account", "profileSelection", "stream", "player"]);
 
@@ -28,6 +27,7 @@ export const RootSidebarController = {
   currentRoute: "",
   _observer: null, // MutationObserver to survive screen re-renders
   _screenEl: null, // Currently injected screen container
+  _callbacks: {},  // routeName → { onExpand, onCollapse, onAfterInject }
 
   init() {
     this.el = document.getElementById("root-nav-sidebar");
@@ -38,7 +38,17 @@ export const RootSidebarController = {
   },
 
   _isManaged(routeName) {
-    return !PER_SCREEN_SIDEBAR_ROUTES.has(routeName) && !NO_SIDEBAR_ROUTES.has(routeName);
+    return !NO_SIDEBAR_ROUTES.has(routeName);
+  },
+
+  // Screens that render sidebar in their own HTML call register() so the
+  // controller's app-level events can call their expand/collapse logic.
+  register(routeName, { onExpand = null, onCollapse = null, onAfterInject = null } = {}) {
+    this._callbacks[String(routeName || "")] = { onExpand, onCollapse, onAfterInject };
+  },
+
+  unregister(routeName) {
+    delete this._callbacks[String(routeName || "")];
   },
 
   // Called by Router.onNavigate (before screen mount) — clear previous state.
@@ -60,6 +70,10 @@ export const RootSidebarController = {
     if (!screenEl) return;
 
     this._screenEl = screenEl;
+
+    // Refresh profile on every navigation so profile-switch changes are reflected.
+    getSidebarProfileState().then((profile) => { this.profile = profile; }).catch(() => {});
+
     this._inject(routeName, screenEl);
 
     // Re-inject whenever the screen wipes its container with innerHTML = "..."
@@ -87,6 +101,7 @@ export const RootSidebarController = {
       if (layout2.modernSidebar) setModernSidebarExpanded(host, true);
       else setLegacySidebarExpanded(host, true);
     }
+    this._callbacks[routeName]?.onAfterInject?.();
   },
 
   _stopObserver() {
@@ -161,7 +176,10 @@ export const RootSidebarController = {
       node.onclick = (event) => {
         event?.preventDefault?.();
         event?.stopPropagation?.();
-        activateLegacySidebarAction(String(node.dataset.action || ""), routeName);
+        const action = String(node.dataset.action || "");
+        activateLegacySidebarAction(action, routeName);
+        // If user clicks the already-selected route, collapse the sidebar.
+        if (isSelectedSidebarAction(action, routeName)) this.collapse();
       };
       node.onkeydown = (event) => {
         const key = Number(event?.keyCode || 0);
@@ -191,6 +209,13 @@ export const RootSidebarController = {
     // Set flag BEFORE any focus() call — focusWithoutAutoScroll fires focusin
     // synchronously and would re-enter expand() causing infinite recursion.
     this.expanded = true;
+
+    // Screens that manage their own sidebar register an onExpand callback.
+    const cb = this._callbacks[this.currentRoute];
+    if (cb?.onExpand) {
+      cb.onExpand();
+      return;
+    }
 
     const host = this._getSidebarHost();
     if (!host) return;
@@ -223,6 +248,13 @@ export const RootSidebarController = {
   collapse() {
     if (!this.expanded) return;
     this.expanded = false;
+
+    // Screens that manage their own sidebar register an onCollapse callback.
+    const cb = this._callbacks[this.currentRoute];
+    if (cb?.onCollapse) {
+      cb.onCollapse();
+      return;
+    }
 
     const host = this._getSidebarHost();
     const layout = LayoutPreferences.get();

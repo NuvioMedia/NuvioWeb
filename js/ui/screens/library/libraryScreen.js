@@ -12,17 +12,15 @@ import {
 } from "../../components/posterOptionsMenu.js";
 import {
   activateLegacySidebarAction,
-  bindRootSidebarEvents,
   getRootSidebarNodes,
   getRootSidebarSelectedNode,
-  getSidebarProfileState,
   isSelectedSidebarAction,
   isRootSidebarNode,
-  renderRootSidebar,
   setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import { RootSidebarController } from "../../components/rootSidebarController.js";
 
 const POSTER_HOLD_DELAY_MS = 650;
 const PICKER_MENU_EXIT_MS = 160;
@@ -243,8 +241,11 @@ export const LibraryScreen = {
     ScreenUtils.show(this.container);
     this.controller = new LibraryController((state) => this.handleControllerChange(state));
     this.libraryRouteEnterPending = true;
-    this.sidebarProfile = await getSidebarProfileState();
     this.layoutPrefs = LayoutPreferences.get();
+    RootSidebarController.register("library", {
+      onExpand: () => this.focusSidebarNode(),
+      onCollapse: () => this.focusMainNode(null, { preferEntryPoint: true })
+    });
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
     this.focusZone = "content";
@@ -331,7 +332,6 @@ export const LibraryScreen = {
   renderLoading() {
     this.container.innerHTML = `
       <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}">
-        ${this.renderSidebar()}
         <main class="home-main library-main">
           <section class="library-loading-state">
             <div class="library-loading-spinner" aria-hidden="true"></div>
@@ -341,16 +341,6 @@ export const LibraryScreen = {
       </div>
     `;
     this.libraryRouteEnterPending = false;
-  },
-
-  renderSidebar() {
-    return renderRootSidebar({
-      selectedRoute: "library",
-      profile: this.sidebarProfile,
-      layout: this.layoutPrefs,
-      expanded: Boolean(this.sidebarExpanded),
-      pillIconOnly: Boolean(this.pillIconOnly)
-    });
   },
 
   renderPicker(picker, title, value, options, widthClass = "") {
@@ -509,12 +499,6 @@ export const LibraryScreen = {
     }
 
     ScreenUtils.indexFocusables(this.container);
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "library",
-      onSelectedAction: () => this.focusMainNode(null, { preferEntryPoint: true }),
-      onExpandSidebar: () => this.focusSidebarNode(),
-      onCollapseSidebar: () => this.focusMainNode(null, { preferEntryPoint: true })
-    });
 
     if (this.pendingPickerRestore) {
       const target = this.container.querySelector(`.library-picker-anchor[data-picker="${selectorValue(this.pendingPickerRestore)}"]`);
@@ -743,7 +727,6 @@ export const LibraryScreen = {
     const libraryStyle = `--library-poster-width:${posterWidth}px;--library-poster-height:${Math.round(posterWidth * 1.5)}px;--library-poster-radius:${posterRadius}px;`;
     this.container.innerHTML = `
       <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}" style="${escapeHtml(libraryStyle)}">
-        ${this.renderSidebar()}
         <main class="home-main library-main">
           <section class="library-page">
             <header class="library-page-header">
@@ -764,12 +747,6 @@ export const LibraryScreen = {
     this.libraryRouteEnterPending = false;
 
     ScreenUtils.indexFocusables(this.container);
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "library",
-      onSelectedAction: () => this.focusMainNode(null, { preferEntryPoint: true }),
-      onExpandSidebar: () => this.focusSidebarNode(),
-      onCollapseSidebar: () => this.focusMainNode(null, { preferEntryPoint: true })
-    });
     this.restoreFocus();
   },
 
@@ -1349,6 +1326,7 @@ export const LibraryScreen = {
     this.focusZone = "sidebar";
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
+      RootSidebarController.expanded = true;
       setModernSidebarExpanded(this.container, true);
     }
     const target = preferredNode
@@ -1366,6 +1344,7 @@ export const LibraryScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
+      RootSidebarController.expanded = false;
       setModernSidebarExpanded(this.container, false);
     }
     const target = preferredNode
@@ -1678,6 +1657,7 @@ export const LibraryScreen = {
   },
 
   cleanup() {
+    RootSidebarController.unregister("library");
     this.cancelScheduledRender();
     this.clearClosingPicker();
     this.lastRenderedExpandedPicker = null;

@@ -35,17 +35,15 @@ import {
 } from "../../../core/addons/homeCatalogs.js";
 import {
   activateLegacySidebarAction,
-  bindRootSidebarEvents,
   getLegacySidebarSelectedNode,
   getModernSidebarSelectedNode,
-  getSidebarProfileState,
   focusWithoutAutoScroll,
   isSelectedSidebarAction,
-  renderRootSidebar,
   setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import { RootSidebarController } from "../../components/rootSidebarController.js";
 import { NuvioDialog } from "../../components/nuvioDialog.js";
 import { DIALOG_ICONS } from "../../components/dialogIcons.js";
 
@@ -82,25 +80,6 @@ const CW_NEXT_UP_NEW_SEASON_UNAIRED_WINDOW_DAYS = 7;
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
-}
-
-async function getLocalSidebarProfileState() {
-  const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
-  const profiles = await ProfileManager.getProfiles();
-  const avatarCatalog = await AvatarRepository.getAvatarCatalog().catch(() => []);
-  const activeProfile = profiles.find((profile) => String(profile.id || profile.profileIndex || "1") === activeProfileId)
-    || profiles[0]
-    || null;
-  const name = String(activeProfile?.name || t("sidebar.profileFallback")).trim() || t("sidebar.profileFallback");
-  const avatarUrl = activeProfile?.avatarUrl || AvatarRepository.getAvatarImageUrl(activeProfile?.avatarId, avatarCatalog);
-
-  return {
-    activeProfileName: name,
-    activeProfileInitial: name ? name.charAt(0).toUpperCase() : "P",
-    activeProfileColorHex: String(activeProfile?.avatarColorHex || "#1E88E5"),
-    activeProfileAvatarUrl: String(avatarUrl || ""),
-    showProfileSelector: Boolean(activeProfile)
-  };
 }
 
 export function escapeHtml(value) {
@@ -1449,19 +1428,6 @@ function buildContinueWatchingSignature(items = []) {
       ].join("|");
     })
     .join("::");
-}
-
-function buildSidebarProfileSignature(profile = null) {
-  if (!profile || typeof profile !== "object") {
-    return "";
-  }
-  return [
-    profile.id || "",
-    profile.name || "",
-    profile.avatarColorHex || "",
-    profile.avatarId || "",
-    profile.avatarUrl || profile.activeProfileAvatarUrl || ""
-  ].join("|");
 }
 
 function buildHeroIdentity(item = null) {
@@ -3236,6 +3202,7 @@ export const HomeScreen = {
   },
 
   setSidebarExpanded(expanded) {
+    RootSidebarController.expanded = Boolean(expanded);
     if (this.layoutPrefs?.modernSidebar) {
       this.sidebarExpanded = Boolean(expanded);
       return;
@@ -6059,6 +6026,11 @@ export const HomeScreen = {
     this.container = document.getElementById("home");
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
+    RootSidebarController.register("home", {
+      onExpand: () => this.openSidebar(),
+      onCollapse: () => this.closeSidebarToContent(),
+      onAfterInject: () => this.buildNavigationModel()
+    });
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
     this.homeRouteEnterPending = true;
@@ -6095,7 +6067,6 @@ export const HomeScreen = {
     if (profileChanged || watchProgressSourceChanged || forceReload) {
       this.hasLoadedOnce = false;
       this.hasAppliedInitialContinueWatchingFocus = false;
-      this.sidebarProfile = null;
       this.savedFocusStates = {};
     }
     if (returnFocusState?.layoutMode) {
@@ -6124,7 +6095,6 @@ export const HomeScreen = {
     this.continueWatchingLoading = false;
     this.heroCandidates = [];
     this.heroItem = null;
-    this.sidebarProfile = await getLocalSidebarProfileState().catch(() => null);
     this.render();
     await this.loadData({ background: false });
   },
@@ -6145,7 +6115,6 @@ export const HomeScreen = {
 
     let progressAllError = null;
     let recentProgressError = null;
-    const sidebarProfilePromise = getSidebarProfileState().catch(() => null);
     const progressAllPromise = watchProgressRepository.getAllForContinueWatching().catch((error) => {
       progressAllError = error;
       return [];
@@ -6289,17 +6258,6 @@ export const HomeScreen = {
     this.isInitialHomeLoading = false;
     this.hasLoadedOnce = true;
     this.render();
-    const previousSidebarProfileSignature = buildSidebarProfileSignature(this.sidebarProfile);
-    sidebarProfilePromise.then((profile) => {
-      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
-        return;
-      }
-      if (profile && buildSidebarProfileSignature(profile) !== previousSidebarProfileSignature) {
-        this.sidebarProfile = profile;
-        this.requestBackgroundRender();
-      }
-    });
-
     if (deferredDescriptors.length) {
       if (!background && this.layoutMode === "modern") {
         const loadingCount = this.getLoadingRowItemCount();
@@ -6773,14 +6731,6 @@ export const HomeScreen = {
 
     this.container.innerHTML = `
       <div class="home-shell home-screen-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
-        ${renderRootSidebar({
-      selectedRoute: "home",
-      profile: this.sidebarProfile,
-      layout: this.layoutPrefs,
-      expanded: Boolean(this.sidebarExpanded),
-      pillIconOnly: Boolean(this.pillIconOnly)
-    })}
-
         <main class="home-main home-screen-main">
           <div class="home-route-content${routeEnterClass}">
             ${mainContentMarkup}
@@ -6798,13 +6748,6 @@ export const HomeScreen = {
     } else if (this.layoutMode === "modern") {
       this.applyCachedModernPortraitPosterMetrics(this.container.querySelector(".home-screen-shell.home-layout-modern:not(.home-modern-landscape-posters)"));
     }
-
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "home",
-      onSelectedAction: () => this.closeSidebarToContent(),
-      onExpandSidebar: () => this.openSidebar(),
-      onCollapseSidebar: () => this.closeSidebarToContent()
-    });
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
@@ -7740,6 +7683,7 @@ export const HomeScreen = {
   },
 
   cleanup() {
+    RootSidebarController.unregister("home");
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;

@@ -41,16 +41,14 @@ import {
 } from "../../../data/local/traktSettingsStore.js";
 import {
   activateLegacySidebarAction,
-  bindRootSidebarEvents,
   getRootSidebarNodes,
   getRootSidebarSelectedNode,
-  getSidebarProfileState,
   isSelectedSidebarAction,
   isRootSidebarNode,
-  renderRootSidebar,
   setModernSidebarExpanded,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import { RootSidebarController } from "../../components/rootSidebarController.js";
 
 const ROTATED_DPAD_KEY = "rotatedDpadMapping";
 const STRICT_DPAD_GRID_KEY = "strictDpadGridNavigation";
@@ -1227,7 +1225,6 @@ export const SettingsScreen = {
     }
     this.container.innerHTML = `
       <div class="home-shell settings-shell">
-        <div class="settings-root-sidebar-slot" data-settings-root-sidebar></div>
         <div class="settings-workspace">
           <header class="library-page-header settings-page-header">
             <h1 class="library-page-title">${escapeHtml(t("settings_title", {}, "Settings"))}</h1>
@@ -1276,12 +1273,11 @@ export const SettingsScreen = {
     this.dialogFocusIndex = Number.isFinite(this.dialogFocusIndex) ? this.dialogFocusIndex : 0;
     this.sidebarExpanded = false;
     this.pillIconOnly = false;
-    const [sidebarProfile, initialModel] = await Promise.all([
-      getSidebarProfileState(),
-      this.collectModel()
-    ]);
-    this.sidebarProfile = sidebarProfile;
-    this.model = initialModel;
+    this.model = await this.collectModel();
+    RootSidebarController.register("settings", {
+      onExpand: () => this.openSidebar(),
+      onCollapse: () => this.closeSidebarToNav()
+    });
     await this.render({ refreshModel: false });
   },
 
@@ -3783,21 +3779,9 @@ export const SettingsScreen = {
       }
     }
 
-    const rootSidebarSlot = this.container.querySelector("[data-settings-root-sidebar]");
     const navSlot = this.container.querySelector("[data-settings-nav]");
     const contentSlot = this.container.querySelector("[data-settings-content]");
     const dialogSlot = this.container.querySelector("[data-settings-dialog]");
-
-    const rootSidebarHtml = renderRootSidebar({
-      selectedRoute: "settings",
-      profile: this.sidebarProfile,
-      layout: this.layoutPrefs,
-      expanded: Boolean(this.sidebarExpanded),
-      pillIconOnly: Boolean(this.pillIconOnly)
-    });
-    if (rootSidebarSlot && rootSidebarSlot.innerHTML !== rootSidebarHtml) {
-      rootSidebarSlot.innerHTML = rootSidebarHtml;
-    }
 
     const navHtml = this.renderNav();
     if (navSlot && navSlot.innerHTML !== navHtml) {
@@ -3837,12 +3821,6 @@ export const SettingsScreen = {
     }
     this.bindTextDialogEvents();
 
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "settings",
-      onSelectedAction: () => this.closeSidebarToNav(),
-      onExpandSidebar: () => this.openSidebar(),
-      onCollapseSidebar: () => this.closeSidebarToNav()
-    });
     ScreenUtils.indexFocusables(this.container);
     bindSettingsScrollIndicators(this.container);
     this.settingsRouteEnterPending = false;
@@ -3941,6 +3919,7 @@ export const SettingsScreen = {
     this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selectedSidebarNode));
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
+      RootSidebarController.expanded = true;
       setModernSidebarExpanded(this.container, true);
     }
     this.applyFocus();
@@ -3951,6 +3930,7 @@ export const SettingsScreen = {
     this.focusZone = "nav";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
+      RootSidebarController.expanded = false;
       setModernSidebarExpanded(this.container, false);
     }
     this.applyFocus();
@@ -4422,6 +4402,7 @@ export const SettingsScreen = {
   },
 
   cleanup() {
+    RootSidebarController.unregister("settings");
     this.stopTraktPolling?.();
     LocalStore.remove(SETTINGS_UI_STATE_KEY);
     if (this.container && this.handleWheelBound) {

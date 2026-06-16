@@ -2783,6 +2783,7 @@ button:focus-visible {
   cursor: pointer;
   transition: background 150ms ease, border-color 150ms ease, color 150ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
   transform: scale(1);
+  line-height: 1;
 }
 
 .search-history-chip.focused {
@@ -2790,6 +2791,13 @@ button:focus-visible {
   color: #10151f;
   border-color: rgba(255, 255, 255, 0.4);
   transform: scale(1.06);
+}
+
+.search-history-chip svg {
+  display: block;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
 }
 
 .search-empty-state-container {
@@ -12579,7 +12587,7 @@ button:focus-visible {
   overflow-x: auto;
   overflow-y: visible;
   width: 100%;
-  padding: 16px 48px 48px 16px;
+  padding: 16px 48px 48px 64px;
   scrollbar-width: none;
   gap: 48px;
   margin-top: -16px;
@@ -13533,7 +13541,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 0 0 48px 48px;
+  padding: 0 0 48px 0;
   box-sizing: border-box;
   scrollbar-width: none;
 }
@@ -14155,6 +14163,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
 
 .series-insight-section {
   margin-top: 0;
+  padding-left: 64px;
 }
 
 .series-insight-tabs {
@@ -14162,7 +14171,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   align-items: center;
   gap: 0;
   margin-bottom: 0;
-  padding: 48px 48px 32px 16px;
+  padding: 48px 48px 32px 0;
   overflow-x: auto;
 }
 
@@ -16483,7 +16492,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   min-height: 100vh;
   height: 100vh;
   padding-bottom: 48px;
-  padding-left: 16px;
+  padding-left: 64px;
 }
 
 .detail-hero-brand {
@@ -16610,7 +16619,7 @@ body:has(#root-nav-sidebar .root-sidebar-legacy.expanded) .series-detail-shell::
   gap: 24px;
   padding-top: 48px;
   padding-bottom: 48px;
-  padding-left: 16px;
+  padding-left: 64px;
 }
 
 .series-episode-card {

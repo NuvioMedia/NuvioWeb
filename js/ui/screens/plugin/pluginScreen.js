@@ -6,19 +6,17 @@ import { Platform } from "../../../platform/index.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
 import {
   activateLegacySidebarAction,
-  bindRootSidebarEvents,
   getLegacySidebarNodes,
   getLegacySidebarSelectedNode,
   getModernSidebarNodes,
   getModernSidebarSelectedNode,
-  getSidebarProfileState,
   isSelectedSidebarAction,
   isRootSidebarNode,
-  renderRootSidebar,
   setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import { RootSidebarController } from "../../components/rootSidebarController.js";
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -53,12 +51,11 @@ export const PluginScreen = {
     this.contentRow = Number.isFinite(this.contentRow) ? this.contentRow : 0;
     this.contentCol = Number.isFinite(this.contentCol) ? this.contentCol : 0;
     this.qrOverlayOpen = false;
-    const [sidebarProfile, model] = await Promise.all([
-      getSidebarProfileState(),
-      this.collectModel()
-    ]);
-    this.sidebarProfile = sidebarProfile;
-    this.model = model;
+    this.model = await this.collectModel();
+    RootSidebarController.register("plugin", {
+      onExpand: () => this.openSidebar(),
+      onCollapse: () => this.closeSidebarToContent()
+    });
     await this.render({ refreshModel: false });
   },
 
@@ -180,13 +177,6 @@ export const PluginScreen = {
 
     this.container.innerHTML = `
       <div class="home-shell addons-shell${this.pluginRouteEnterPending ? " addons-route-enter" : ""}">
-        ${renderRootSidebar({
-          selectedRoute: "plugin",
-          profile: this.sidebarProfile,
-          layout: this.layoutPrefs,
-          expanded: Boolean(this.sidebarExpanded),
-          pillIconOnly: Boolean(this.pillIconOnly)
-        })}
         <main class="home-main addons-main addons-main-centered">
           <header class="library-page-header">
             <h1 class="library-page-title">Addons</h1>
@@ -249,12 +239,6 @@ export const PluginScreen = {
     `;
     this.pluginRouteEnterPending = false;
 
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "plugin",
-      onSelectedAction: () => this.closeSidebarToContent(),
-      onExpandSidebar: () => this.openSidebar(),
-      onCollapseSidebar: () => this.closeSidebarToContent()
-    });
     this.bindContentEvents();
     this.normalizeFocus();
     this.applyFocus();
@@ -333,6 +317,7 @@ export const PluginScreen = {
     this.sidebarFocusIndex = Math.max(0, sidebarNodes.indexOf(selected));
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
+      RootSidebarController.expanded = true;
       this.focusZone = "sidebar";
       setModernSidebarExpanded(this.container, true);
       this.applyFocus();
@@ -346,6 +331,7 @@ export const PluginScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
+      RootSidebarController.expanded = false;
       setModernSidebarExpanded(this.container, false);
       this.applyFocus();
       return;
@@ -475,6 +461,7 @@ export const PluginScreen = {
   },
 
   cleanup() {
+    RootSidebarController.unregister("plugin");
     ScreenUtils.hide(this.container);
   }
 

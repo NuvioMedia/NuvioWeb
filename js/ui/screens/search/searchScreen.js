@@ -8,18 +8,16 @@ import { Platform } from "../../../platform/index.js";
 import { MODERN_HOME_CONSTANTS } from "../home/modernHomeLayout.js";
 import {
   activateLegacySidebarAction,
-  bindRootSidebarEvents,
   focusWithoutAutoScroll,
   getRootSidebarNodes,
   getRootSidebarSelectedNode,
-  getSidebarProfileState,
   isSelectedSidebarAction,
   isRootSidebarNode,
-  renderRootSidebar,
   setModernSidebarExpanded,
   setModernSidebarPillIconOnly,
   setLegacySidebarExpanded
 } from "../../components/sidebarNavigation.js";
+import { RootSidebarController } from "../../components/rootSidebarController.js";
 import {
   PosterOptionsDialogController,
   posterItemFromNode
@@ -440,13 +438,11 @@ export const SearchScreen = {
     this.searchRouteEnterPending = true;
     this.activationGuardUntil = Date.now() + 220;
     this.layoutPrefs = LayoutPreferences.get();
-    try {
-      this.sidebarProfile = await getSidebarProfileState();
-    } catch (err) {
-      console.warn("debug: fail on load", err);
-      this.sidebarProfile = null;
-    }
     this.sidebarExpanded = false;
+    RootSidebarController.register("search", {
+      onExpand: () => this.openSidebar(),
+      onCollapse: () => this.closeSidebarToContent()
+    });
     this.focusZone = "content";
     this.sidebarFocusIndex = 0;
     this.rows = [];
@@ -497,13 +493,6 @@ export const SearchScreen = {
   renderLoading() {
     this.container.innerHTML = `
       <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
-        ${renderRootSidebar({
-          selectedRoute: "search",
-          profile: this.sidebarProfile,
-          layout: this.layoutPrefs,
-          expanded: Boolean(this.sidebarExpanded),
-          pillIconOnly: Boolean(this.pillIconOnly)
-        })}
         <main class="home-main search-content search-loading-shell">
           <div class="search-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>
         </main>
@@ -801,13 +790,6 @@ export const SearchScreen = {
     const queryText = this.query || "";
     this.container.innerHTML = `
       <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
-        ${renderRootSidebar({
-          selectedRoute: "search",
-          profile: this.sidebarProfile,
-          layout: this.layoutPrefs,
-          expanded: Boolean(this.sidebarExpanded),
-          pillIconOnly: Boolean(this.pillIconOnly)
-        })}
         <main class="home-main search-content">
           <header class="library-page-header">
             <h1 class="library-page-title">${escapeHtml(t("search_title", {}, "Search"))}</h1>
@@ -859,12 +841,6 @@ export const SearchScreen = {
 
     ScreenUtils.indexFocusables(this.container);
     this.buildNavigationModel();
-    bindRootSidebarEvents(this.container, {
-      currentRoute: "search",
-      onSelectedAction: () => this.closeSidebarToContent(),
-      onExpandSidebar: () => this.openSidebar(),
-      onCollapseSidebar: () => this.closeSidebarToContent()
-    });
     this.bindSearchInputEvents();
     this.bindActionEvents();
     const input = this.container.querySelector("#searchInput");
@@ -1089,6 +1065,7 @@ export const SearchScreen = {
     this.focusZone = "sidebar";
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       this.sidebarExpanded = true;
+      RootSidebarController.expanded = true;
       setModernSidebarExpanded(this.container, true);
     }
     const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
@@ -1100,6 +1077,7 @@ export const SearchScreen = {
     this.focusZone = "content";
     if (this.layoutPrefs?.modernSidebar && this.sidebarExpanded) {
       this.sidebarExpanded = false;
+      RootSidebarController.expanded = false;
       setModernSidebarExpanded(this.container, false);
     }
     return this.restoreContentFocus(false) || true;
@@ -1921,6 +1899,7 @@ export const SearchScreen = {
   },
 
   cleanup() {
+    RootSidebarController.unregister("search");
     this.cancelScheduledRender();
     this.cancelPendingPosterHold();
     this.posterOptionsMenu = null;
