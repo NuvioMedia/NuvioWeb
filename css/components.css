@@ -9817,6 +9817,7 @@ button:focus-visible {
   transition: opacity 180ms ease;
   box-sizing: border-box;
   padding: 48px;
+  pointer-events: auto;
 }
 
 .player-startup-error-overlay.hidden {
@@ -9866,6 +9867,7 @@ button:focus-visible {
   font-size: 22px;
   font-weight: 800;
   box-shadow: 0 0 0 2px var(--player-focus-ring);
+  pointer-events: auto;
 }
 
 .player-startup-error-button.focused,
