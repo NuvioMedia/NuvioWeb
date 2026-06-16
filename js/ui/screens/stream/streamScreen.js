@@ -2435,22 +2435,21 @@ export const StreamScreen = {
           <div class="stream-route-card-side">
             <div class="stream-route-addon-badge">${addonBadge}</div>
             <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
+            ${
+              nativeActionAvailable
+                ? `<button class="stream-route-native-button stream-route-card-action focusable${this.isCardActionFocused(index, "native") ? " focused" : ""}${nativeActionBusy ? " busy" : ""}"
+                          type="button"
+                          aria-label="${escapeHtml(nativeActionLabel)}"
+                          data-action="openNativePlayer"
+                          data-card-action="native"
+                          data-stream-id="${escapeHtml(stream.id)}"
+                          data-stream-row="${index}">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7ZM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7Z" fill="currentColor"/></svg>
+                  </button>`
+                : ""
+            }
           </div>
         </article>
-        ${
-          nativeActionAvailable
-            ? `
-          <button class="stream-route-native-button stream-route-card-action focusable${this.isCardActionFocused(index, "native") ? " focused" : ""}${nativeActionBusy ? " busy" : ""}"
-                  type="button"
-                  data-action="openNativePlayer"
-                  data-card-action="native"
-                  data-stream-id="${escapeHtml(stream.id)}"
-                  data-stream-row="${index}">
-            ${escapeHtml(nativeActionLabel)}
-          </button>
-        `
-            : ""
-        }
       </div>
     `;
   },
