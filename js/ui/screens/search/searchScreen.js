@@ -862,7 +862,8 @@ export const SearchScreen = {
     bindRootSidebarEvents(this.container, {
       currentRoute: "search",
       onSelectedAction: () => this.closeSidebarToContent(),
-      onExpandSidebar: () => this.openSidebar()
+      onExpandSidebar: () => this.openSidebar(),
+      onCollapseSidebar: () => this.closeSidebarToContent()
     });
     this.bindSearchInputEvents();
     this.bindActionEvents();

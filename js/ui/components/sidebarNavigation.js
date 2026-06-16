@@ -358,6 +358,7 @@ export function renderRootSidebar({
 export function bindRootSidebarEvents(container, {
   currentRoute = "",
   onExpandSidebar = null,
+  onCollapseSidebar = null,
   onSelectedAction = null
 } = {}) {
   const focusables = Array.from(container?.querySelectorAll(".home-sidebar .focusable, .modern-sidebar-panel .focusable") || []);
@@ -405,6 +406,13 @@ export function bindRootSidebarEvents(container, {
         moveSidebarFocus(node, 1);
       }
     };
+
+    node.onmouseenter = () => {
+      const connected = focusables.filter((n) => n.isConnected);
+      connected.forEach((n) => n.classList.remove("focused"));
+      node.classList.add("focused");
+      focusWithoutAutoScroll(node);
+    };
   });
 
   container?.querySelectorAll(".modern-sidebar-pill[data-action='expandSidebar']").forEach((node) => {
@@ -416,17 +424,52 @@ export function bindRootSidebarEvents(container, {
         onExpandSidebar(node);
       }
     };
+
+    node.addEventListener("mouseenter", () => {
+      cancelCollapse();
+      if (typeof onExpandSidebar === "function") {
+        onExpandSidebar(node);
+      }
+    });
   });
+
+  let sidebarCollapseTimer = null;
+
+  const cancelCollapse = () => {
+    if (sidebarCollapseTimer) {
+      clearTimeout(sidebarCollapseTimer);
+      sidebarCollapseTimer = null;
+    }
+  };
 
   container?.addEventListener("focusin", (event) => {
     const target = event?.target;
     if (!target) return;
     if (target.closest(".home-sidebar .focusable, .modern-sidebar-panel .focusable")) {
-      if (typeof onExpandSidebar === "function") {
+      cancelCollapse();
+      const alreadyExpanded = Boolean(
+        container?.querySelector(".modern-sidebar-shell.panel-visible")
+        || container?.querySelector(".home-sidebar.expanded")
+      );
+      if (!alreadyExpanded && typeof onExpandSidebar === "function") {
         onExpandSidebar(target);
       }
     }
   });
+
+  const sidebarEl = container?.querySelector(".modern-sidebar-panel") || container?.querySelector(".home-sidebar");
+  if (sidebarEl) {
+    sidebarEl.addEventListener("mouseenter", cancelCollapse);
+    if (typeof onCollapseSidebar === "function") {
+      sidebarEl.addEventListener("mouseleave", () => {
+        cancelCollapse();
+        sidebarCollapseTimer = setTimeout(() => {
+          sidebarCollapseTimer = null;
+          onCollapseSidebar();
+        }, 120);
+      });
+    }
+  }
 
   scheduleRootSidebarTextFit(container);
 }

@@ -252,7 +252,8 @@ export const PluginScreen = {
     bindRootSidebarEvents(this.container, {
       currentRoute: "plugin",
       onSelectedAction: () => this.closeSidebarToContent(),
-      onExpandSidebar: () => this.openSidebar()
+      onExpandSidebar: () => this.openSidebar(),
+      onCollapseSidebar: () => this.closeSidebarToContent()
     });
     this.bindContentEvents();
     this.normalizeFocus();

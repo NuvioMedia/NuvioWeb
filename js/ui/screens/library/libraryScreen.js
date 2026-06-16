@@ -512,7 +512,8 @@ export const LibraryScreen = {
     bindRootSidebarEvents(this.container, {
       currentRoute: "library",
       onSelectedAction: () => this.focusMainNode(null, { preferEntryPoint: true }),
-      onExpandSidebar: () => this.focusSidebarNode()
+      onExpandSidebar: () => this.focusSidebarNode(),
+      onCollapseSidebar: () => this.focusMainNode(null, { preferEntryPoint: true })
     });
 
     if (this.pendingPickerRestore) {
@@ -766,7 +767,8 @@ export const LibraryScreen = {
     bindRootSidebarEvents(this.container, {
       currentRoute: "library",
       onSelectedAction: () => this.focusMainNode(null, { preferEntryPoint: true }),
-      onExpandSidebar: () => this.focusSidebarNode()
+      onExpandSidebar: () => this.focusSidebarNode(),
+      onCollapseSidebar: () => this.focusMainNode(null, { preferEntryPoint: true })
     });
     this.restoreFocus();
   },
