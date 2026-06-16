@@ -109,14 +109,38 @@
     --home-track-end: 16px;
     --home-continue-track-end: 16px;
     --modern-track-peek-extension: 16px;
-    --home-poster-width: 124px;
-    --home-continue-width: 280px;
-    --home-continue-height: 158px;
+    --home-continue-width: 240px;
+    --home-continue-height: 135px;
     --modern-hero-copy-right: 16px;
-    --modern-hero-copy-max-width: 78%;
-    --modern-hero-logo-max-width: 240px;
-    --modern-hero-logo-max-height: 120px;
-    --modern-hero-description-size: 15px;
+    --modern-hero-copy-max-width: 88%;
+    --modern-hero-logo-max-width: 200px;
+    --modern-hero-logo-max-height: 96px;
+    --modern-hero-title-size: 30px;
+    --modern-hero-meta-size: 13px;
+    --modern-hero-secondary-size: 12px;
+    --modern-hero-description-size: 14px;
+  }
+
+  /* The home screen sets the poster size inline from a fixed dp value (~229px),
+     which is sized for a TV and far too big on a phone. Override the whole
+     derived set with !important so it beats the inline style and the cards,
+     hero title and meta (all calc()'d from these) come down together. */
+  .home-screen-shell.home-layout-modern {
+    --home-poster-width: 128px !important;
+    --home-poster-height: 192px !important;
+    --home-modern-portrait-poster-width: 128px !important;
+    --home-modern-portrait-poster-height: 192px !important;
+    --home-modern-portrait-expanded-width: 341px !important;
+    --home-poster-expanded-width: 341px !important;
+    --home-landscape-poster-width: 208px !important;
+    --home-landscape-poster-height: 117px !important;
+  }
+
+  .home-screen-shell.home-layout-modern .home-row-title,
+  .home-screen-shell.home-layout-classic .home-row-title,
+  .home-screen-shell.home-layout-grid .home-row-title {
+    font-size: 16px;
+    line-height: 1.2;
   }
 
   /* Reserve room above the fixed bottom bar so nothing hides behind it. */
@@ -338,15 +362,23 @@
 }
 
 @media (max-width: 560px) {
-  .home-screen-shell.home-layout-modern,
-  .home-screen-shell.home-layout-classic,
-  .home-screen-shell.home-layout-grid {
-    --home-poster-width: 108px;
+  /* Slightly smaller again on phones so ~3 posters peek per row. */
+  .home-screen-shell.home-layout-modern {
+    --home-poster-width: 112px !important;
+    --home-poster-height: 168px !important;
+    --home-modern-portrait-poster-width: 112px !important;
+    --home-modern-portrait-poster-height: 168px !important;
+    --home-modern-portrait-expanded-width: 299px !important;
+    --home-poster-expanded-width: 299px !important;
+    --home-landscape-poster-width: 184px !important;
+    --home-landscape-poster-height: 104px !important;
+    --modern-hero-title-size: 27px;
   }
 
-  .home-row-title,
-  .home-modern-row .home-row-title {
-    font-size: 17px;
+  .home-screen-shell.home-layout-modern .home-row-title,
+  .home-screen-shell.home-layout-classic .home-row-title,
+  .home-screen-shell.home-layout-grid .home-row-title {
+    font-size: 15px;
   }
 
   .mobile-nav-label {
