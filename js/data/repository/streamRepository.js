@@ -49,6 +49,16 @@ class StreamRepository {
       }
       return resource.types.some((resourceType) => resourceType === type);
     });
+    const supportsMetaType = (addon) => (addon?.resources || []).some((resource) => {
+      if (resource.name !== "meta") {
+        return false;
+      }
+      if (!resource.types || resource.types.length === 0) {
+        return true;
+      }
+      return resource.types.some((resourceType) => resourceType === type);
+    });
+
 
     const notifyAddon = (addon, orderIndex) => {
       if (!onAddon || !addon) {
@@ -73,18 +83,26 @@ class StreamRepository {
 
     const addonTasks = installedAddons.map(async (addon) => {
       try {
-        if (!supportsStreamType(addon)) {
+        const canStream = supportsStreamType(addon);
+        const canMeta = supportsMetaType(addon);
+        if (!canStream && !canMeta) {
           return null;
         }
         const orderIndex = Number(addon.orderIndex ?? Number.MAX_SAFE_INTEGER);
         notifyAddon(addon, orderIndex);
-        const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
-        if (streamsResult.status !== "success") {
-          return null;
+        let addonStreams = [];
+        if (canStream) {
+          const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
+          if (streamsResult.status === "success" && streamsResult.data.length) {
+            addonStreams = streamsResult.data;
+          }
         }
-        const addonStreams = streamsResult.data.length
-          ? streamsResult.data
-          : await this.fetchInlineStreamsFromMeta(addon, type, videoId);
+        // Some addons (e.g. debrid cloud catalogs) deliver the playable stream
+        // inline in the meta's videos[].streams[] and only expose a meta resource
+        // for the content type, not a stream resource. Fall back to that here.
+        if (addonStreams.length === 0 && canMeta) {
+          addonStreams = await this.fetchInlineStreamsFromMeta(addon, type, videoId);
+        }
         if (addonStreams.length === 0) {
           return null;
         }
@@ -242,18 +260,42 @@ class StreamRepository {
       return [];
     }
 
-    const metaId = this.buildContentLevelMetaId(rawVideoId);
-    const url = this.buildMetaUrl(addon.baseUrl, type, metaId);
-    const result = await safeApiCall(() => MetaApi.getMeta(url));
-    if (result.status !== "success") {
-      return [];
+    // Try the content-level id (handles series episode ids like tt123:1:2)
+    // and the raw id (handles content whose clicked id is the meta id itself,
+    // e.g. debrid cloud "other" items keyed dmm:<torrentId>).
+    const contentLevelId = this.buildContentLevelMetaId(rawVideoId);
+    const candidateMetaIds = [];
+    if (contentLevelId) {
+      candidateMetaIds.push(contentLevelId);
     }
-
-    const meta = result.data?.meta || null;
-    const videos = Array.isArray(meta?.videos) ? meta.videos : [];
-    const matchingVideo = videos.find((video) => String(video?.id || "") === rawVideoId);
-    const streams = Array.isArray(matchingVideo?.streams) ? matchingVideo.streams : [];
-    return streams.map((stream) => this.mapStream(stream)).filter((stream) => stream.url || stream.externalUrl || stream.ytId || stream.clientResolve || stream.infoHash);
+    if (rawVideoId && rawVideoId !== contentLevelId) {
+      candidateMetaIds.push(rawVideoId);
+    }
+    for (const metaId of candidateMetaIds) {
+      const url = this.buildMetaUrl(addon.baseUrl, type, metaId);
+      const result = await safeApiCall(() => MetaApi.getMeta(url));
+      if (result.status !== "success") {
+        continue;
+      }
+      const meta = result.data?.meta || null;
+      const videos = Array.isArray(meta?.videos) ? meta.videos : [];
+      if (!videos.length) {
+        continue;
+      }
+      // Prefer the video matching the requested id. Otherwise, when the meta
+      // has a single playable video (a single-file item), use it. Series keep
+      // exact-match only so episodes are never mixed up.
+      const matchingVideo = videos.find((video) => String(video?.id || "") === rawVideoId)
+        || (type !== "series" && videos.length === 1 ? videos[0] : null);
+      const streams = Array.isArray(matchingVideo?.streams) ? matchingVideo.streams : [];
+      const mapped = streams
+        .map((stream) => this.mapStream(stream))
+        .filter((stream) => stream.url || stream.externalUrl || stream.ytId || stream.clientResolve || stream.infoHash);
+      if (mapped.length) {
+        return mapped;
+      }
+    }
+    return [];
   }
 
   buildContentLevelMetaId(videoId) {
