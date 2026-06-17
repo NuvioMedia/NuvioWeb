@@ -913,11 +913,18 @@ function isMetaNoiseLine(line = "") {
 }
 
 function getStreamDescriptionLines(stream = {}) {
+  const descriptionText = String(stream.description || "");
+  const filename = String(stream.behaviorHints?.filename || "").trim();
+  // Only surface the filename as its own line when the description does not
+  // already include it, otherwise it shows up twice.
+  const extraFilename = filename && !descriptionText.toLowerCase().includes(filename.toLowerCase())
+    ? filename
+    : "";
   const candidates = [
     stream.name,
     stream.description,
     stream.title,
-    stream.behaviorHints?.filename
+    extraFilename
   ].reduce((items, value) => {
     String(value || "")
       .split(/\r?\n/)
@@ -942,7 +949,12 @@ function getStreamDescriptionLines(stream = {}) {
       const normalized = entry.toLowerCase();
       return normalized !== headline && normalized !== quality && !isMetaNoiseLine(entry);
     })
-    .slice(0, 2);
+    // Show the full set of description lines (codec, audio, scraper, filename,
+    // bitrate, ...) like the Android TV app does, instead of trimming to 2.
+    // The headline/quality/noise lines are already filtered out above so this
+    // only adds the remaining useful detail. A high cap guards against an addon
+    // returning a pathologically long description.
+    .slice(0, 12);
 }
 
 function normalizeBadgeText(value = "") {
