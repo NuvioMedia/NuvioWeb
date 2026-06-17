@@ -53,18 +53,13 @@ function normalizeTmdbFilters(value = {}) {
     releaseDateLte: stringOrNull(raw.releaseDateLte),
     voteAverageGte: Number.isFinite(Number(raw.voteAverageGte)) ? Number(raw.voteAverageGte) : null,
     voteAverageLte: Number.isFinite(Number(raw.voteAverageLte)) ? Number(raw.voteAverageLte) : null,
-    voteCountGte: Number.isFinite(Number(raw.voteCountGte))
-      ? Math.trunc(Number(raw.voteCountGte))
-      : null,
+    voteCountGte: Number.isFinite(Number(raw.voteCountGte)) ? Math.trunc(Number(raw.voteCountGte)) : null,
     withOriginalLanguage: stringOrNull(raw.withOriginalLanguage),
     withOriginCountry: stringOrNull(raw.withOriginCountry),
     withKeywords: stringOrNull(raw.withKeywords),
     withCompanies: stringOrNull(raw.withCompanies),
     withNetworks: stringOrNull(raw.withNetworks),
-    year:
-      Number.isFinite(Number(raw.year)) && Number(raw.year) > 0
-        ? Math.trunc(Number(raw.year))
-        : null,
+    year: Number.isFinite(Number(raw.year)) && Number(raw.year) > 0 ? Math.trunc(Number(raw.year)) : null,
     watchRegion: stringOrNull(raw.watchRegion),
     withWatchProviders: stringOrNull(raw.withWatchProviders)
   };
@@ -81,9 +76,7 @@ function normalizeCollectionSource(source = {}) {
     return {
       provider: "tmdb",
       tmdbSourceType,
-      title: stringOrEmpty(
-        raw.title || tmdbSourceType.replace(/^./, (match) => match.toUpperCase())
-      ),
+      title: stringOrEmpty(raw.title || tmdbSourceType.replace(/^./, (match) => match.toUpperCase())),
       tmdbId: Number.isFinite(Number(raw.tmdbId)) ? Math.trunc(Number(raw.tmdbId)) : null,
       mediaType: stringOrEmpty(raw.mediaType || "MOVIE").toUpperCase() === "TV" ? "TV" : "MOVIE",
       sortBy: stringOrEmpty(raw.sortBy || "popularity.desc") || "popularity.desc",
@@ -105,17 +98,22 @@ function normalizeCollectionSource(source = {}) {
     };
   }
 
-  const addonId = stringOrEmpty(raw.addonId);
-  const type = stringOrEmpty(raw.type).toLowerCase();
-  const catalogId = stringOrEmpty(raw.catalogId);
+  const addonBaseUrl = stringOrNull(raw.addonBaseUrl || raw.addon_base_url || raw.baseUrl || raw.base_url || raw.addonUrl || raw.url);
+  const addonId = stringOrEmpty(raw.addonId || raw.addon_id || addonBaseUrl);
+  const type = stringOrEmpty(raw.type || raw.apiType || raw.api_type).toLowerCase();
+  const catalogId = stringOrEmpty(raw.catalogId || raw.catalog_id);
   if (!addonId || !type || !catalogId) {
     return null;
   }
   return {
     provider: "addon",
     addonId,
+    addonBaseUrl,
+    addonName: stringOrNull(raw.addonName || raw.addon_name || raw.providerName),
     type,
     catalogId,
+    catalogName: stringOrNull(raw.catalogName || raw.catalog_name || raw.title || raw.name),
+    title: stringOrEmpty(raw.title || raw.catalogName || raw.catalog_name || raw.name),
     genre: stringOrNull(raw.genre)
   };
 }
@@ -123,7 +121,9 @@ function normalizeCollectionSource(source = {}) {
 export function getCollectionFolderSources(folder = {}) {
   const primary = Array.isArray(folder.sources) ? folder.sources : [];
   if (primary.length) {
-    return primary.map((source) => normalizeCollectionSource(source)).filter(Boolean);
+    return primary
+      .map((source) => normalizeCollectionSource(source))
+      .filter(Boolean);
   }
   const catalogSources = Array.isArray(folder.catalogSources) ? folder.catalogSources : [];
   return catalogSources
@@ -148,14 +148,16 @@ function normalizeFolder(folder = {}) {
     tileShape: normalizePosterShape(folder.tileShape),
     hideTitle: Boolean(folder.hideTitle),
     sources,
-    catalogSources: sources
-      .filter((source) => source.provider === "addon")
-      .map((source) => ({
-        addonId: source.addonId,
-        type: source.type,
-        catalogId: source.catalogId,
-        genre: source.genre || null
-      })),
+    catalogSources: sources.filter((source) => source.provider === "addon").map((source) => ({
+      addonId: source.addonId,
+      addonBaseUrl: source.addonBaseUrl || null,
+      addonName: source.addonName || null,
+      type: source.type,
+      catalogId: source.catalogId,
+      catalogName: source.catalogName || null,
+      title: source.title || source.catalogName || null,
+      genre: source.genre || null
+    })),
     heroBackdropUrl: stringOrNull(folder.heroBackdropUrl),
     heroVideoUrl: stringOrNull(folder.heroVideoUrl),
     titleLogoUrl: stringOrNull(folder.titleLogoUrl)
@@ -185,9 +187,7 @@ export function normalizeCollection(collection = {}) {
 function normalizeState(value = {}) {
   const raw = Array.isArray(value)
     ? { collections: value }
-    : value && typeof value === "object"
-      ? value
-      : {};
+    : (value && typeof value === "object" ? value : {});
   return {
     collections: (Array.isArray(raw.collections) ? raw.collections : [])
       .map((collection) => normalizeCollection(collection))
@@ -205,9 +205,7 @@ const store = createProfileScopedStore({
       ...next,
       collections: Array.isArray(next.collections)
         ? next.collections
-        : Array.isArray(current?.collections)
-          ? current.collections
-          : []
+        : (Array.isArray(current?.collections) ? current.collections : [])
     });
   }
 });

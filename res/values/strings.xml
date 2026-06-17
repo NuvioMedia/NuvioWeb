@@ -1309,6 +1309,7 @@
     <string name="debrid_missing_api_key">Add a Debrid API key in Settings.</string>
     <string name="debrid_not_cached">Not cached on this service.</string>
     <string name="debrid_resolution_failed">Could not resolve this Debrid stream.</string>
+    <string name="debrid_service_degraded">The Debrid service is currently degraded. Try again later or choose another source.</string>
     <string name="p2p_resolution_failed">Could not start this torrent stream.</string>
     <string name="enginefs_resolution_failed">Could not start this torrent stream.</string>
     <string name="stream_type_torrent">Torrent</string>

@@ -145,6 +145,7 @@ const KEY_ALIASES = {
   "settings.integration.debrid.template.reset.title": "debrid_formatter_reset_title",
   "settings.integration.debrid.template.reset.value": "debrid_formatter_reset_value",
   "stream.debrid.failed": "debrid_resolution_failed",
+  "stream.debrid.serviceDegraded": "debrid_service_degraded",
   "stream.enginefs.failed": "enginefs_resolution_failed",
   "stream.p2p.failed": "p2p_resolution_failed",
   "stream.debrid.notCached": "debrid_not_cached",

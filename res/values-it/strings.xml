@@ -2197,6 +2197,7 @@
     <string name="debrid_missing_api_key">Aggiungi una chiave API Debrid nelle Impostazioni.</string>
     <string name="debrid_not_cached">Non presente nella cache di questo servizio.</string>
     <string name="debrid_resolution_failed">Impossibile risolvere questo flusso Debrid.</string>
+    <string name="debrid_service_degraded">Il servizio Debrid è attualmente degradato. Riprova più tardi o scegli un'altra sorgente.</string>
     <string name="p2p_resolution_failed">Impossibile avviare questo stream torrent.</string>
     <string name="enginefs_resolution_failed">Impossibile avviare questo stream torrent.</string>
     <string name="audio_center_mix_label">Downmix: Livello mix centrale</string>

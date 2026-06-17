@@ -3,6 +3,7 @@ import { addonRepository } from "../data/repository/addonRepository.js";
 import { HomeCatalogStore } from "../data/local/homeCatalogStore.js";
 import { buildOrderedCatalogItems, toDisplayTypeLabel } from "../core/addons/homeCatalogs.js";
 import { LibrarySyncService } from "../core/profile/librarySyncService.js";
+import { ProfileSettingsSyncService } from "../core/profile/profileSettingsSyncService.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -377,11 +378,12 @@ const AddonRemotePage = {
 
       if (AuthManager.isAuthenticated) {
         await LibrarySyncService.push();
+        await ProfileSettingsSyncService.push();
       }
 
       this.savedState = this.buildCurrentState();
       this.statusMessage = AuthManager.isAuthenticated
-        ? "Addon changes saved and pushed to your synced profile. Home catalog changes were saved locally."
+        ? "Addon and home catalog changes saved and pushed to your synced profile."
         : "Changes saved in this browser.";
     } catch (error) {
       console.warn("Addon remote save failed", error);
@@ -459,15 +461,13 @@ const AddonRemotePage = {
     }
 
     const infoBanner = this.authReady
-      ? AuthManager.isAuthenticated
-        ? "Signed in. Addon changes can be pushed through the web sync backend. Home catalog changes stay local to this web install."
-        : "Signed out. Changes save only in this browser unless you sign in on this phone."
+      ? (AuthManager.isAuthenticated
+        ? "Signed in. Addon and home catalog changes can be pushed through the web sync backend."
+        : "Signed out. Changes save only in this browser unless you sign in on this phone.")
       : "Checking account state...";
 
     const addonCards = this.draftAddons.length
-      ? this.draftAddons
-          .map(
-            (addon, index) => `
+      ? this.draftAddons.map((addon, index) => `
           <article class="addon-remote-card">
             <div class="addon-remote-order">
               <button class="addon-remote-btn" data-addon-up="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
@@ -482,15 +482,11 @@ const AddonRemotePage = {
               <button class="addon-remote-btn addon-remote-btn-danger" data-addon-remove="${index}">Remove</button>
             </div>
           </article>
-        `
-          )
-          .join("")
+        `).join("")
       : '<div class="addon-remote-empty">No addons in this draft yet.</div>';
 
     const catalogCards = this.catalogItems.length
-      ? this.catalogItems
-          .map(
-            (item, index) => `
+      ? this.catalogItems.map((item, index) => `
           <article class="addon-remote-card">
             <div class="addon-remote-order">
               <button class="addon-remote-btn" data-catalog-up="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
@@ -507,9 +503,7 @@ const AddonRemotePage = {
               </button>
             </div>
           </article>
-        `
-          )
-          .join("")
+        `).join("")
       : '<div class="addon-remote-empty">No Home catalogs available from the current addons.</div>';
 
     this.root.innerHTML = `
