@@ -2,9 +2,9 @@ import { ThemeStore } from "../../data/local/themeStore.js";
 import { ThemeColors } from "./themeColors.js";
 
 const FONT_STACKS = {
-  INTER: "\"Inter\", \"Segoe UI\", Arial, sans-serif",
-  DM_SANS: "\"DM Sans\", \"Segoe UI\", Arial, sans-serif",
-  OPEN_SANS: "\"Open Sans\", \"Segoe UI\", Arial, sans-serif"
+  INTER: '"Inter", "Segoe UI", Arial, sans-serif',
+  DM_SANS: '"DM Sans", "Segoe UI", Arial, sans-serif',
+  OPEN_SANS: '"Open Sans", "Segoe UI", Arial, sans-serif'
 };
 
 function toRgbChannels(hex, fallback = "255 255 255") {
@@ -18,7 +18,6 @@ function toRgbChannels(hex, fallback = "255 255 255") {
 }
 
 export const ThemeManager = {
-
   apply() {
     const theme = ThemeStore.get();
     const colors = {
@@ -58,5 +57,4 @@ export const ThemeManager = {
     );
     document.documentElement.style.setProperty("color-scheme", "dark");
   }
-
 };

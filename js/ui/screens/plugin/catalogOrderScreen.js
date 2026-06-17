@@ -19,7 +19,6 @@ function escapeHtml(value) {
 }
 
 export const CatalogOrderScreen = {
-
   async mount() {
     this.container = document.getElementById("catalogOrder");
     ScreenUtils.show(this.container);
@@ -87,12 +86,17 @@ export const CatalogOrderScreen = {
   },
 
   applyFocus() {
-    this.container?.querySelectorAll(".catalog-order-focusable.focused").forEach((node) => node.classList.remove("focused"));
-    const target = this.container?.querySelector(
-      `.catalog-order-focusable[data-row="${this.focusRow}"][data-col="${this.focusCol}"]`
-    ) || this.container?.querySelector(
-      `.catalog-order-focusable[data-row="${this.focusRow}"][data-col="0"]`
-    ) || this.container?.querySelector(".catalog-order-focusable");
+    this.container
+      ?.querySelectorAll(".catalog-order-focusable.focused")
+      .forEach((node) => node.classList.remove("focused"));
+    const target =
+      this.container?.querySelector(
+        `.catalog-order-focusable[data-row="${this.focusRow}"][data-col="${this.focusCol}"]`
+      ) ||
+      this.container?.querySelector(
+        `.catalog-order-focusable[data-row="${this.focusRow}"][data-col="0"]`
+      ) ||
+      this.container?.querySelector(".catalog-order-focusable");
 
     if (!target) {
       return;
@@ -125,18 +129,19 @@ export const CatalogOrderScreen = {
   async render() {
     this.model = await this.collectModel();
     this.rowColumns = new Map();
-    const itemsHtml = this.model.items.map((item, index) => {
-      const cols = [];
-      if (item.canMoveUp) {
-        cols.push(0);
-      }
-      if (item.canMoveDown) {
-        cols.push(1);
-      }
-      cols.push(2);
-      this.setRowColumns(index, cols);
+    const itemsHtml = this.model.items
+      .map((item, index) => {
+        const cols = [];
+        if (item.canMoveUp) {
+          cols.push(0);
+        }
+        if (item.canMoveDown) {
+          cols.push(1);
+        }
+        cols.push(2);
+        this.setRowColumns(index, cols);
 
-      return `
+        return `
         <article class="catalog-order-card">
           <div class="catalog-order-card-copy">
             <h2>${escapeHtml(item.catalogName)} - ${escapeHtml(toDisplayTypeLabel(item.type))}</h2>
@@ -164,7 +169,8 @@ export const CatalogOrderScreen = {
           </div>
         </article>
       `;
-    }).join("");
+      })
+      .join("");
 
     this.container.innerHTML = `
       <div class="catalog-order-shell">
@@ -249,5 +255,4 @@ export const CatalogOrderScreen = {
   cleanup() {
     ScreenUtils.hide(this.container);
   }
-
 };

@@ -10,7 +10,8 @@ const stateDir = path.join(rootDir, ".cache");
 const defaultStateFile = path.join(stateDir, "release-build-poller.json");
 const defaultRepo = process.env.RELEASE_POLL_REPO || "NuvioMedia/NuvioWeb";
 const defaultIntervalMs = Number(process.env.RELEASE_POLL_INTERVAL_MS || 30 * 60 * 1000);
-const includePrereleases = String(process.env.RELEASE_POLL_INCLUDE_PRERELEASES || "true").toLowerCase() !== "false";
+const includePrereleases =
+  String(process.env.RELEASE_POLL_INCLUDE_PRERELEASES || "true").toLowerCase() !== "false";
 const deployDirRaw = String(process.env.RELEASE_POLL_DEPLOY_DIR || "").trim();
 const deployEnabled = Boolean(deployDirRaw);
 const deployDir = deployEnabled ? path.resolve(deployDirRaw) : "";
@@ -27,7 +28,9 @@ function validateDeployDir(targetDir) {
   }
 
   if (targetDir === "/") {
-    throw new Error("Refusing to deploy into '/'. Set RELEASE_POLL_DEPLOY_DIR to a dedicated web root.");
+    throw new Error(
+      "Refusing to deploy into '/'. Set RELEASE_POLL_DEPLOY_DIR to a dedicated web root."
+    );
   }
 }
 
@@ -92,10 +95,14 @@ async function fetchLatestRelease() {
   const latestRelease = releases
     .filter((release) => !release?.draft)
     .filter((release) => includePrereleases || !release?.prerelease)
-    .sort((a, b) => new Date(b?.published_at || 0).getTime() - new Date(a?.published_at || 0).getTime())[0];
+    .sort(
+      (a, b) => new Date(b?.published_at || 0).getTime() - new Date(a?.published_at || 0).getTime()
+    )[0];
 
   if (!latestRelease) {
-    throw new Error(`No published${includePrereleases ? "" : " stable"} releases found for ${defaultRepo}.`);
+    throw new Error(
+      `No published${includePrereleases ? "" : " stable"} releases found for ${defaultRepo}.`
+    );
   }
 
   return {
@@ -121,7 +128,9 @@ async function assertDistExists() {
 
 async function clearDirectoryContents(targetDir) {
   const entries = await readdir(targetDir, { withFileTypes: true });
-  await Promise.all(entries.map((entry) => rm(path.join(targetDir, entry.name), { recursive: true, force: true })));
+  await Promise.all(
+    entries.map((entry) => rm(path.join(targetDir, entry.name), { recursive: true, force: true }))
+  );
 }
 
 async function deployBuild() {
@@ -167,7 +176,9 @@ async function checkOnce() {
     };
 
     if (deployEnabled) {
-      log(`No poller state found. Building and deploying current release ${releaseLabel(latestRelease)}.`);
+      log(
+        `No poller state found. Building and deploying current release ${releaseLabel(latestRelease)}.`
+      );
       await syncRepoToReleaseTag(latestRelease.tag);
       await runBuild();
       await deployBuild();
@@ -204,7 +215,9 @@ async function checkOnce() {
     return;
   }
 
-  log(`New release detected: ${state.lastSeenTag || state.lastSeenReleaseId} -> ${releaseLabel(latestRelease)}.`);
+  log(
+    `New release detected: ${state.lastSeenTag || state.lastSeenReleaseId} -> ${releaseLabel(latestRelease)}.`
+  );
   await syncRepoToReleaseTag(latestRelease.tag);
   await runBuild();
   await deployBuild();
@@ -217,12 +230,16 @@ async function checkOnce() {
     lastDeployedTag: deployEnabled ? latestRelease.tag : state.lastDeployedTag || "",
     publishedAt: latestRelease.publishedAt
   });
-  log(`Build${deployEnabled ? " and deploy" : ""} completed for release ${releaseLabel(latestRelease)}.`);
+  log(
+    `Build${deployEnabled ? " and deploy" : ""} completed for release ${releaseLabel(latestRelease)}.`
+  );
 }
 
 async function main() {
   if (!Number.isFinite(defaultIntervalMs) || defaultIntervalMs <= 0) {
-    throw new Error(`Invalid RELEASE_POLL_INTERVAL_MS value: ${process.env.RELEASE_POLL_INTERVAL_MS || ""}`);
+    throw new Error(
+      `Invalid RELEASE_POLL_INTERVAL_MS value: ${process.env.RELEASE_POLL_INTERVAL_MS || ""}`
+    );
   }
 
   validateDeployDir(deployDir);

@@ -42,14 +42,13 @@ function writeEntries(profileId, entries) {
 }
 
 export const StreamPreferencesStore = {
-
   get(contentId, videoId, profileId = activeProfileId()) {
     const key = buildContentKey(contentId, videoId);
     if (!key) {
       return null;
     }
     const entry = readEntries(profileId).find((item) => item.key === key);
-    return entry ? (String(entry.streamId || "") || null) : null;
+    return entry ? String(entry.streamId || "") || null : null;
   },
 
   set(contentId, videoId, streamId, profileId = activeProfileId()) {
@@ -66,5 +65,4 @@ export const StreamPreferencesStore = {
     }
     writeEntries(profileId, entries);
   }
-
 };

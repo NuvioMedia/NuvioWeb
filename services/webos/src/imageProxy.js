@@ -29,11 +29,17 @@ function send(res, statusCode, headers, body) {
     res.end();
     return;
   }
-  res.writeHead(statusCode, Object.assign({
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type"
-  }, headers || {}));
+  res.writeHead(
+    statusCode,
+    Object.assign(
+      {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type"
+      },
+      headers || {}
+    )
+  );
   if (body) {
     res.end(body);
     return;
@@ -54,7 +60,7 @@ function ensureCacheDir() {
 }
 
 function getHost(parsed) {
-  return String(parsed && parsed.hostname || "").toLowerCase();
+  return String((parsed && parsed.hostname) || "").toLowerCase();
 }
 
 function isAllowedImgurHost(hostname) {
@@ -62,7 +68,7 @@ function isAllowedImgurHost(hostname) {
 }
 
 function getExtension(parsed) {
-  return path.extname(String(parsed && parsed.pathname || "")).toLowerCase();
+  return path.extname(String((parsed && parsed.pathname) || "")).toLowerCase();
 }
 
 function validateTargetUrl(rawUrl) {
@@ -113,7 +119,9 @@ function getCacheEntry(target, extension) {
 function readMeta(metaPath, fallbackContentType) {
   try {
     var parsed = JSON.parse(fs.readFileSync(metaPath, "utf8"));
-    var contentType = String(parsed && parsed.contentType || "").trim().toLowerCase();
+    var contentType = String((parsed && parsed.contentType) || "")
+      .trim()
+      .toLowerCase();
     if (contentType.indexOf("image/") === 0) {
       return contentType;
     }
@@ -147,7 +155,7 @@ function serveCached(entry, fallbackContentType, req, res) {
 
   res.writeHead(200, headers);
   fs.createReadStream(entry.filePath)
-    .on("error", function() {
+    .on("error", function () {
       if (!res.headersSent) {
         send(res, 502, { "Content-Type": "text/plain; charset=utf-8" }, "Image cache read failed");
         return;
@@ -166,7 +174,10 @@ function removeFileQuietly(filename) {
 }
 
 function normalizeResponseContentType(value, fallbackContentType) {
-  var contentType = String(value || "").split(";")[0].trim().toLowerCase();
+  var contentType = String(value || "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
   if (contentType.indexOf("image/") === 0) {
     return contentType;
   }
@@ -174,106 +185,121 @@ function normalizeResponseContentType(value, fallbackContentType) {
 }
 
 function downloadImage(validated, entry, redirectsLeft) {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     var target = validated.target;
     var parsed = validated.parsed;
     var transport = String(parsed.protocol || "").toLowerCase() === "http:" ? http : https;
-    var request = transport.get(target, {
-      headers: {
-        "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
-        "User-Agent": BROWSER_USER_AGENT
-      }
-    }, function(response) {
-      var statusCode = Number(response.statusCode || 0);
-      var redirectUrl = response.headers && response.headers.location;
-
-      if (statusCode >= 300 && statusCode < 400 && redirectUrl && redirectsLeft > 0) {
-        response.resume();
-        var nextTarget = new URL(redirectUrl, target).toString();
-        var nextValidated = validateTargetUrl(nextTarget);
-        if (!nextValidated.ok) {
-          reject(new Error(nextValidated.message || "Image redirect is not allowed"));
-          return;
+    var request = transport.get(
+      target,
+      {
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "User-Agent": BROWSER_USER_AGENT
         }
-        downloadImage(nextValidated, entry, redirectsLeft - 1).then(resolve, reject);
-        return;
-      }
+      },
+      function (response) {
+        var statusCode = Number(response.statusCode || 0);
+        var redirectUrl = response.headers && response.headers.location;
 
-      if (statusCode < 200 || statusCode >= 300) {
-        response.resume();
-        reject(new Error("Image request failed with HTTP " + statusCode));
-        return;
-      }
-
-      var contentLength = Number(response.headers && response.headers["content-length"] || 0);
-      if (contentLength > MAX_IMAGE_BYTES) {
-        response.resume();
-        reject(new Error("Image exceeds max size"));
-        return;
-      }
-
-      var contentType = normalizeResponseContentType(
-        response.headers && response.headers["content-type"],
-        validated.fallbackContentType
-      );
-      if (!contentType) {
-        response.resume();
-        reject(new Error("Invalid image content type"));
-        return;
-      }
-
-      ensureCacheDir();
-      var tempPath = entry.filePath + ".tmp-" + process.pid + "-" + Date.now() + "-" + Math.random().toString(36).slice(2);
-      var stream = fs.createWriteStream(tempPath);
-      var receivedBytes = 0;
-      var settled = false;
-
-      function fail(error) {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        response.removeAllListeners("data");
-        stream.destroy();
-        removeFileQuietly(tempPath);
-        reject(error);
-      }
-
-      response.on("data", function(chunk) {
-        receivedBytes += chunk.length;
-        if (receivedBytes > MAX_IMAGE_BYTES) {
-          request.abort();
-          fail(new Error("Image exceeds max size"));
-        }
-      });
-
-      response.on("error", fail);
-      stream.on("error", fail);
-      stream.on("finish", function() {
-        if (settled) {
-          return;
-        }
-        settled = true;
-        fs.rename(tempPath, entry.filePath, function(renameError) {
-          if (renameError) {
-            removeFileQuietly(tempPath);
-            reject(renameError);
+        if (statusCode >= 300 && statusCode < 400 && redirectUrl && redirectsLeft > 0) {
+          response.resume();
+          var nextTarget = new URL(redirectUrl, target).toString();
+          var nextValidated = validateTargetUrl(nextTarget);
+          if (!nextValidated.ok) {
+            reject(new Error(nextValidated.message || "Image redirect is not allowed"));
             return;
           }
-          fs.writeFile(entry.metaPath, JSON.stringify({
-            contentType: contentType,
-            source: target,
-            updatedAt: Date.now()
-          }), function() {
-            resolve();
+          downloadImage(nextValidated, entry, redirectsLeft - 1).then(resolve, reject);
+          return;
+        }
+
+        if (statusCode < 200 || statusCode >= 300) {
+          response.resume();
+          reject(new Error("Image request failed with HTTP " + statusCode));
+          return;
+        }
+
+        var contentLength = Number((response.headers && response.headers["content-length"]) || 0);
+        if (contentLength > MAX_IMAGE_BYTES) {
+          response.resume();
+          reject(new Error("Image exceeds max size"));
+          return;
+        }
+
+        var contentType = normalizeResponseContentType(
+          response.headers && response.headers["content-type"],
+          validated.fallbackContentType
+        );
+        if (!contentType) {
+          response.resume();
+          reject(new Error("Invalid image content type"));
+          return;
+        }
+
+        ensureCacheDir();
+        var tempPath =
+          entry.filePath +
+          ".tmp-" +
+          process.pid +
+          "-" +
+          Date.now() +
+          "-" +
+          Math.random().toString(36).slice(2);
+        var stream = fs.createWriteStream(tempPath);
+        var receivedBytes = 0;
+        var settled = false;
+
+        function fail(error) {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          response.removeAllListeners("data");
+          stream.destroy();
+          removeFileQuietly(tempPath);
+          reject(error);
+        }
+
+        response.on("data", function (chunk) {
+          receivedBytes += chunk.length;
+          if (receivedBytes > MAX_IMAGE_BYTES) {
+            request.abort();
+            fail(new Error("Image exceeds max size"));
+          }
+        });
+
+        response.on("error", fail);
+        stream.on("error", fail);
+        stream.on("finish", function () {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          fs.rename(tempPath, entry.filePath, function (renameError) {
+            if (renameError) {
+              removeFileQuietly(tempPath);
+              reject(renameError);
+              return;
+            }
+            fs.writeFile(
+              entry.metaPath,
+              JSON.stringify({
+                contentType: contentType,
+                source: target,
+                updatedAt: Date.now()
+              }),
+              function () {
+                resolve();
+              }
+            );
           });
         });
-      });
 
-      response.pipe(stream);
-    });
+        response.pipe(stream);
+      }
+    );
 
-    request.setTimeout(10000, function() {
+    request.setTimeout(10000, function () {
       request.abort();
       reject(new Error("Image request timed out"));
     });
@@ -299,18 +325,28 @@ function createImageProxyHandler() {
     }
 
     if (req.method !== "GET" && req.method !== "HEAD") {
-      send(res, 405, {
-        "Allow": "GET, HEAD, OPTIONS",
-        "Content-Type": "text/plain; charset=utf-8"
-      }, "Method not allowed");
+      send(
+        res,
+        405,
+        {
+          Allow: "GET, HEAD, OPTIONS",
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        "Method not allowed"
+      );
       return true;
     }
 
     var validated = validateTargetUrl(parsedRequest.searchParams.get("url"));
     if (!validated.ok) {
-      send(res, validated.statusCode || 400, {
-        "Content-Type": "text/plain; charset=utf-8"
-      }, validated.message || "Invalid image URL");
+      send(
+        res,
+        validated.statusCode || 400,
+        {
+          "Content-Type": "text/plain; charset=utf-8"
+        },
+        validated.message || "Invalid image URL"
+      );
       return true;
     }
 
@@ -323,37 +359,45 @@ function createImageProxyHandler() {
     try {
       ensureCacheDir();
     } catch (_) {
-      send(res, 502, { "Content-Type": "text/plain; charset=utf-8" }, "Image proxy cache unavailable");
+      send(
+        res,
+        502,
+        { "Content-Type": "text/plain; charset=utf-8" },
+        "Image proxy cache unavailable"
+      );
       return true;
     }
 
     if (!inflightDownloads[entry.key]) {
       inflightDownloads[entry.key] = downloadImage(validated, entry, 3)
-        .catch(function(error) {
+        .catch(function (error) {
           if (hasCachedFile(entry)) {
             return;
           }
           throw error;
         })
-        .then(function() {
+        .then(function () {
           return true;
         });
-      inflightDownloads[entry.key].then(function() {
-        delete inflightDownloads[entry.key];
-      }, function() {
-        delete inflightDownloads[entry.key];
-      });
+      inflightDownloads[entry.key].then(
+        function () {
+          delete inflightDownloads[entry.key];
+        },
+        function () {
+          delete inflightDownloads[entry.key];
+        }
+      );
     }
 
     inflightDownloads[entry.key]
-      .then(function() {
+      .then(function () {
         if (hasCachedFile(entry)) {
           serveCached(entry, validated.fallbackContentType, req, res);
           return;
         }
         send(res, 502, { "Content-Type": "text/plain; charset=utf-8" }, "Image proxy failed");
       })
-      .catch(function() {
+      .catch(function () {
         if (hasCachedFile(entry)) {
           serveCached(entry, validated.fallbackContentType, req, res);
           return;

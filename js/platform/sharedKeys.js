@@ -48,17 +48,19 @@ function isMediaKeyEvent(event, normalizedCode = null) {
   if (mediaNames.has(key) || mediaNames.has(keyName) || mediaNames.has(code)) {
     return true;
   }
-  return [179, 10252, 415, 19, 413, 178, 417, 412, 176, 177].includes(effectiveCode)
-    || [179, 10252, 415, 19, 413, 178, 417, 412, 176, 177].includes(rawCode);
+  return (
+    [179, 10252, 415, 19, 413, 178, 417, 412, 176, 177].includes(effectiveCode) ||
+    [179, 10252, 415, 19, 413, 178, 417, 412, 176, 177].includes(rawCode)
+  );
 }
 
 function isEditableTarget(target) {
   const tagName = String(target?.tagName || "").toUpperCase();
   return Boolean(
-    target?.isContentEditable
-    || tagName === "INPUT"
-    || tagName === "TEXTAREA"
-    || tagName === "SELECT"
+    target?.isContentEditable ||
+    tagName === "INPUT" ||
+    tagName === "TEXTAREA" ||
+    tagName === "SELECT"
   );
 }
 
@@ -94,7 +96,9 @@ export function normalizeKeyEvent(event, backCodes = []) {
   const code = String(event?.code || "");
   const keyNameLower = keyName.toLowerCase();
   const fallbackCode = getKeyCodeFromName(keyName || key || code);
-  const rawCode = Number(getArrowCodeFromKey(key) || event?.keyCode || event?.which || fallbackCode || 0);
+  const rawCode = Number(
+    getArrowCodeFromKey(key) || event?.keyCode || event?.which || fallbackCode || 0
+  );
   const normalizedCode = normalizeDirectionalKeyCode(rawCode);
   const isBack = isBackEvent(event, backCodes, normalizedCode);
   return {
@@ -119,7 +123,10 @@ export function isBackEvent(event, backCodes = [], normalizedCode = null) {
   const rawCode = Number(event?.keyCode || event?.which || 0);
   const effectiveCode = Number(normalizedCode || rawCode || 0);
 
-  if (isEditableTarget(target) && (key === "Backspace" || rawCode === 8 || key === "Delete" || rawCode === 46)) {
+  if (
+    isEditableTarget(target) &&
+    (key === "Backspace" || rawCode === 8 || key === "Delete" || rawCode === 46)
+  ) {
     return false;
   }
 
@@ -136,13 +143,13 @@ export function isBackEvent(event, backCodes = [], normalizedCode = null) {
   }
 
   if (
-    key === "Escape"
-    || key === "Esc"
-    || key === "Backspace"
-    || key === "GoBack"
-    || key === "XF86Back"
-    || code === "BrowserBack"
-    || code === "GoBack"
+    key === "Escape" ||
+    key === "Esc" ||
+    key === "Backspace" ||
+    key === "GoBack" ||
+    key === "XF86Back" ||
+    code === "BrowserBack" ||
+    code === "GoBack"
   ) {
     return true;
   }

@@ -10,7 +10,11 @@ export function getWebOsCompanionServiceIds() {
   return [WEBOS_COMPANION_SERVICE_ID];
 }
 
-export async function requestWebOsCompanionService({ method = "", parameters = {}, subscribe = false } = {}) {
+export async function requestWebOsCompanionService({
+  method = "",
+  parameters = {},
+  subscribe = false
+} = {}) {
   if (!isWebOsCompanionServiceAvailable()) {
     throw {
       returnValue: false,
@@ -36,14 +40,21 @@ export async function requestWebOsCompanionService({ method = "", parameters = {
     }
   }
 
-  throw lastError || {
-    returnValue: false,
-    errorCode: -1,
-    errorText: "No webOS companion service responded"
-  };
+  throw (
+    lastError || {
+      returnValue: false,
+      errorCode: -1,
+      errorText: "No webOS companion service responded"
+    }
+  );
 }
 
-export function subscribeWebOsCompanionService({ method = "", parameters = {}, onSuccess = null, onFailure = null } = {}) {
+export function subscribeWebOsCompanionService({
+  method = "",
+  parameters = {},
+  onSuccess = null,
+  onFailure = null
+} = {}) {
   if (!isWebOsCompanionServiceAvailable()) {
     throw {
       returnValue: false,

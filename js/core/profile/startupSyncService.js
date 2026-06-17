@@ -30,12 +30,18 @@ function normalizeProfileId(value) {
 async function collectKnownProfileIds(profiles = []) {
   const ids = [
     normalizeProfileId(ProfileManager.getActiveProfileId()),
-    ...(Array.isArray(profiles) ? profiles : []).map((profile) => normalizeProfileId(profile?.id ?? profile?.profileIndex))
+    ...(Array.isArray(profiles) ? profiles : []).map((profile) =>
+      normalizeProfileId(profile?.id ?? profile?.profileIndex)
+    )
   ].filter(Boolean);
 
   if (ids.length <= 1) {
     const storedProfiles = await ProfileManager.getProfiles().catch(() => []);
-    ids.push(...storedProfiles.map((profile) => normalizeProfileId(profile?.id ?? profile?.profileIndex)).filter(Boolean));
+    ids.push(
+      ...storedProfiles
+        .map((profile) => normalizeProfileId(profile?.id ?? profile?.profileIndex))
+        .filter(Boolean)
+    );
   }
 
   return Array.from(new Set(ids));
@@ -91,7 +97,8 @@ export const StartupSyncService = {
         const profiles = await ProfileSyncService.pull();
         const profileIds = await collectKnownProfileIds(profiles);
         for (const profileId of profileIds) {
-          didApplyProfileSettings = (await ProfileSettingsSyncService.pull(profileId)) || didApplyProfileSettings;
+          didApplyProfileSettings =
+            (await ProfileSettingsSyncService.pull(profileId)) || didApplyProfileSettings;
         }
         if (didApplyProfileSettings) {
           await I18n.init();

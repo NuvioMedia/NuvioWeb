@@ -6,7 +6,7 @@ function findPlaceholderEnd(text, start) {
       if (char === quote && (index === 0 || text[index - 1] !== "\\")) {
         quote = null;
       }
-    } else if (char === "'" || char === "\"") {
+    } else if (char === "'" || char === '"') {
       quote = char;
     } else if (char === "}") {
       return index;
@@ -26,7 +26,7 @@ function findTopLevelChar(text, target) {
       }
       continue;
     }
-    if (char === "'" || char === "\"") {
+    if (char === "'" || char === '"') {
       quote = char;
     } else if (char === "(") {
       parenDepth += 1;
@@ -54,7 +54,7 @@ function splitOps(text) {
       index += 1;
       continue;
     }
-    if (char === "'" || char === "\"") {
+    if (char === "'" || char === '"') {
       quote = char;
     } else if (char === "(") {
       parenDepth += 1;
@@ -82,7 +82,7 @@ function findBranchSeparator(text) {
       }
       continue;
     }
-    if (char === "'" || char === "\"") {
+    if (char === "'" || char === '"') {
       quote = char;
     } else if (char === "|" && text[index + 1] === "|") {
       return index;
@@ -93,13 +93,14 @@ function findBranchSeparator(text) {
 
 function parseQuoted(raw) {
   const trimmed = String(raw || "").trim();
-  const isQuoted = trimmed.length >= 2
-    && ((trimmed[0] === "\"" && trimmed[trimmed.length - 1] === "\"")
-      || (trimmed[0] === "'" && trimmed[trimmed.length - 1] === "'"));
+  const isQuoted =
+    trimmed.length >= 2 &&
+    ((trimmed[0] === '"' && trimmed[trimmed.length - 1] === '"') ||
+      (trimmed[0] === "'" && trimmed[trimmed.length - 1] === "'"));
   const unquoted = isQuoted ? trimmed.slice(1, -1) : trimmed;
   return unquoted
     .replace(/\\n/g, "\n")
-    .replace(/\\"/g, "\"")
+    .replace(/\\"/g, '"')
     .replace(/\\'/g, "'")
     .replace(/\\\\/g, "\\");
 }
@@ -130,7 +131,7 @@ function parseArgs(op) {
       }
       continue;
     }
-    if (char === "'" || char === "\"") {
+    if (char === "'" || char === '"') {
       quote = char;
     } else if (char === ",") {
       args.push(parseQuoted(body.slice(argStart, index)));
@@ -179,7 +180,10 @@ function asNumber(value) {
 function valueToText(value) {
   if (value == null) return "";
   if (Array.isArray(value)) {
-    return value.map((entry) => valueToText(entry)).filter((entry) => entry.trim()).join(", ");
+    return value
+      .map((entry) => valueToText(entry))
+      .filter((entry) => entry.trim())
+      .join(", ");
   }
   if (typeof value === "number") {
     return Number.isInteger(value) ? String(Math.trunc(value)) : String(value);
@@ -194,7 +198,9 @@ function compareNumber(value, rawTarget, compare) {
 }
 
 function equalsText(value, target) {
-  const normalized = String(target || "").trim().toLowerCase();
+  const normalized = String(target || "")
+    .trim()
+    .toLowerCase();
   if (Array.isArray(value)) {
     return value.some((entry) => valueToText(entry).trim().toLowerCase() === normalized);
   }
@@ -202,7 +208,9 @@ function equalsText(value, target) {
 }
 
 function containsText(value, target) {
-  const normalized = String(target || "").trim().toLowerCase();
+  const normalized = String(target || "")
+    .trim()
+    .toLowerCase();
   if (Array.isArray(value)) {
     return value.some((entry) => valueToText(entry).toLowerCase().includes(normalized));
   }
@@ -210,11 +218,14 @@ function containsText(value, target) {
 }
 
 function titleCased(value) {
-  return valueToText(value).split(/\s+/).map((word) => {
-    if (!word) return word;
-    const lowered = word.toLowerCase();
-    return lowered.charAt(0).toUpperCase() + lowered.slice(1);
-  }).join(" ");
+  return valueToText(value)
+    .split(/\s+/)
+    .map((word) => {
+      if (!word) return word;
+      const lowered = word.toLowerCase();
+      return lowered.charAt(0).toUpperCase() + lowered.slice(1);
+    })
+    .join(" ");
 }
 
 function formatBytes(value) {
@@ -229,7 +240,9 @@ function formatBytes(value) {
     unitIndex += 1;
   }
   const signed = source < 0 ? -current : current;
-  return Number.isInteger(signed) ? `${Math.trunc(signed)} ${units[unitIndex]}` : `${signed.toFixed(1)} ${units[unitIndex]}`;
+  return Number.isInteger(signed)
+    ? `${Math.trunc(signed)} ${units[unitIndex]}`
+    : `${signed.toFixed(1)} ${units[unitIndex]}`;
 }
 
 function formatTime(value) {
@@ -251,7 +264,10 @@ function applyTransform(value, op) {
   if (op.startsWith("join(")) {
     const separator = parseArgs(op)[0] ?? ", ";
     return Array.isArray(value)
-      ? value.map((entry) => valueToText(entry)).filter((entry) => entry.trim()).join(separator)
+      ? value
+          .map((entry) => valueToText(entry))
+          .filter((entry) => entry.trim())
+          .join(separator)
       : valueToText(value);
   }
   if (op.startsWith("replace(")) {
@@ -318,7 +334,12 @@ function evaluateCondition(expression, values) {
       const field = tokens[index];
       index += 1;
       const ops = [];
-      while (index < tokens.length && tokens[index] !== "and" && tokens[index] !== "or" && !isFieldPath(tokens[index])) {
+      while (
+        index < tokens.length &&
+        tokens[index] !== "and" &&
+        tokens[index] !== "or" &&
+        !isFieldPath(tokens[index])
+      ) {
         ops.push(tokens[index]);
         index += 1;
       }
@@ -334,7 +355,10 @@ function renderExpression(expression, values) {
   if (bracket >= 0 && expression.endsWith("]")) {
     const condition = expression.slice(0, bracket);
     const branches = parseBranches(expression.slice(bracket + 1, -1));
-    return DebridStreamTemplateEngine.render(evaluateCondition(condition, values) ? branches[0] : branches[1], values);
+    return DebridStreamTemplateEngine.render(
+      evaluateCondition(condition, values) ? branches[0] : branches[1],
+      values
+    );
   }
   const tokens = splitOps(expression);
   if (!tokens.length) return "";

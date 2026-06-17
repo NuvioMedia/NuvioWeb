@@ -9,8 +9,11 @@ const DEFAULT_PROFILES = [
 
 function normalizeProfile(profile, index = 0) {
   const fallbackIndex = index + 1;
-  const profileIndex = Number(profile?.profileIndex || profile?.profile_index || profile?.id || fallbackIndex);
-  const normalizedIndex = Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : fallbackIndex;
+  const profileIndex = Number(
+    profile?.profileIndex || profile?.profile_index || profile?.id || fallbackIndex
+  );
+  const normalizedIndex =
+    Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : fallbackIndex;
   return {
     ...profile,
     id: String(normalizedIndex),
@@ -25,7 +28,6 @@ function normalizeProfile(profile, index = 0) {
 }
 
 export const ProfileManager = {
-
   async getProfiles() {
     const stored = LocalStore.get(PROFILES_KEY, null);
     if (Array.isArray(stored) && stored.length) {
@@ -38,8 +40,9 @@ export const ProfileManager = {
   },
 
   async replaceProfiles(profiles) {
-    const normalized = (Array.isArray(profiles) ? profiles : [])
-      .map((profile, index) => normalizeProfile(profile, index));
+    const normalized = (Array.isArray(profiles) ? profiles : []).map((profile, index) =>
+      normalizeProfile(profile, index)
+    );
     LocalStore.set(PROFILES_KEY, normalized);
   },
 
@@ -69,20 +72,27 @@ export const ProfileManager = {
       return false;
     }
 
-    const nextIndex = profiles.reduce((max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)), 0) + 1;
+    const nextIndex =
+      profiles.reduce(
+        (max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)),
+        0
+      ) + 1;
     const nextProfiles = [
       ...profiles,
-      normalizeProfile({
-        id: nextIndex,
-        profileIndex: nextIndex,
-        name: trimmedName,
-        avatarColorHex,
-        avatarId,
-        avatarUrl,
-        isPrimary: false,
-        usesPrimaryAddons,
-        usesPrimaryPlugins
-      }, profiles.length)
+      normalizeProfile(
+        {
+          id: nextIndex,
+          profileIndex: nextIndex,
+          name: trimmedName,
+          avatarColorHex,
+          avatarId,
+          avatarUrl,
+          isPrimary: false,
+          usesPrimaryAddons,
+          usesPrimaryPlugins
+        },
+        profiles.length
+      )
     ];
     LocalStore.set(PROFILES_KEY, nextProfiles);
     return true;
@@ -94,10 +104,13 @@ export const ProfileManager = {
       if (String(entry.id) !== String(profile?.id)) {
         return entry;
       }
-      return normalizeProfile({
-        ...entry,
-        ...profile
-      }, index);
+      return normalizeProfile(
+        {
+          ...entry,
+          ...profile
+        },
+        index
+      );
     });
     LocalStore.set(PROFILES_KEY, nextProfiles);
     return true;
@@ -128,5 +141,4 @@ export const ProfileManager = {
     }
     return String(raw);
   }
-
 };

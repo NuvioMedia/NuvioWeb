@@ -29,23 +29,25 @@ export async function readAppMetadata() {
 export async function syncVersionFiles() {
   const { version } = await readAppMetadata();
 
-  await Promise.all(versionManagedJsonPaths.map(async (filePath) => {
-    let parsed;
-    try {
-      parsed = await readJson(filePath);
-    } catch (error) {
-      if (error?.code === "ENOENT") {
+  await Promise.all(
+    versionManagedJsonPaths.map(async (filePath) => {
+      let parsed;
+      try {
+        parsed = await readJson(filePath);
+      } catch (error) {
+        if (error?.code === "ENOENT") {
+          return;
+        }
+        throw error;
+      }
+
+      if (String(parsed?.version || "").trim() === version) {
         return;
       }
-      throw error;
-    }
-
-    if (String(parsed?.version || "").trim() === version) {
-      return;
-    }
-    parsed.version = version;
-    await writeJson(filePath, parsed);
-  }));
+      parsed.version = version;
+      await writeJson(filePath, parsed);
+    })
+  );
 
   return version;
 }

@@ -39,8 +39,9 @@ function normalizeProgressItems(items = []) {
         byKey.set(key, item);
       }
     });
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
+  );
 }
 
 function progressContentSignature(item = {}) {
@@ -84,11 +85,7 @@ function mergeProgressItems(localItems = [], remoteItems = [], baselineItems = [
   const localByKey = itemsByProgressKey(localItems);
   const remoteByKey = itemsByProgressKey(remoteItems);
   const baselineByKey = itemsByProgressKey(baselineItems);
-  const keys = new Set([
-    ...localByKey.keys(),
-    ...remoteByKey.keys(),
-    ...baselineByKey.keys()
-  ]);
+  const keys = new Set([...localByKey.keys(), ...remoteByKey.keys(), ...baselineByKey.keys()]);
   const merged = [];
 
   keys.forEach((key) => {
@@ -97,8 +94,12 @@ function mergeProgressItems(localItems = [], remoteItems = [], baselineItems = [
     const baselineItem = baselineByKey.get(key) || null;
 
     if (localItem && remoteItem) {
-      const localChanged = !baselineItem || progressContentSignature(localItem) !== progressContentSignature(baselineItem);
-      const remoteChanged = !baselineItem || progressContentSignature(remoteItem) !== progressContentSignature(baselineItem);
+      const localChanged =
+        !baselineItem ||
+        progressContentSignature(localItem) !== progressContentSignature(baselineItem);
+      const remoteChanged =
+        !baselineItem ||
+        progressContentSignature(remoteItem) !== progressContentSignature(baselineItem);
       if (localChanged && !remoteChanged) {
         merged.push(localItem);
         return;
@@ -107,12 +108,18 @@ function mergeProgressItems(localItems = [], remoteItems = [], baselineItems = [
         merged.push(remoteItem);
         return;
       }
-      merged.push(Number(localItem.updatedAt || 0) > Number(remoteItem.updatedAt || 0) ? localItem : remoteItem);
+      merged.push(
+        Number(localItem.updatedAt || 0) > Number(remoteItem.updatedAt || 0)
+          ? localItem
+          : remoteItem
+      );
       return;
     }
 
     if (remoteItem && !localItem) {
-      const remoteChanged = baselineItem && progressContentSignature(remoteItem) !== progressContentSignature(baselineItem);
+      const remoteChanged =
+        baselineItem &&
+        progressContentSignature(remoteItem) !== progressContentSignature(baselineItem);
       if (!baselineItem || remoteChanged) {
         merged.push(remoteItem);
       }
@@ -120,7 +127,9 @@ function mergeProgressItems(localItems = [], remoteItems = [], baselineItems = [
     }
 
     if (localItem && !remoteItem) {
-      const localChanged = baselineItem && progressContentSignature(localItem) !== progressContentSignature(baselineItem);
+      const localChanged =
+        baselineItem &&
+        progressContentSignature(localItem) !== progressContentSignature(baselineItem);
       if (!baselineItem || localChanged) {
         merged.push(localItem);
       }
@@ -157,7 +166,8 @@ function mapProgressRow(row = {}) {
   const seasonNum = Number(seasonRaw);
   const episodeNum = Number(episodeRaw);
   const rawVideoId = row.video_id || row.videoId || null;
-  const normalizedVideoId = typeof rawVideoId === "string" && rawVideoId.trim() === contentId ? null : rawVideoId;
+  const normalizedVideoId =
+    typeof rawVideoId === "string" && rawVideoId.trim() === contentId ? null : rawVideoId;
   const toMilliseconds = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n) || n <= 0) {
@@ -172,19 +182,30 @@ function mapProgressRow(row = {}) {
     }
     return Math.trunc(n > MAX_AMBIGUOUS_SECONDS_PROGRESS_VALUE ? n : n * 1000);
   };
-  const positionMs = hasPositionMs ? toMilliseconds(positionMsRaw) : normalizeAmbiguousRemoteTime(positionMsRaw);
-  const durationMs = hasDurationMs ? toMilliseconds(durationMsRaw) : normalizeAmbiguousRemoteTime(durationMsRaw);
+  const positionMs = hasPositionMs
+    ? toMilliseconds(positionMsRaw)
+    : normalizeAmbiguousRemoteTime(positionMsRaw);
+  const durationMs = hasDurationMs
+    ? toMilliseconds(durationMsRaw)
+    : normalizeAmbiguousRemoteTime(durationMsRaw);
   const normalizedTimes = normalizeInflatedProgressTimes(positionMs, durationMs);
-  const normalizedProgressPercent = Number.isFinite(progressPercent) ? Math.max(0, Math.min(100, progressPercent)) : null;
-  const completedProgressPercent = source === "trakt_history" && normalizedProgressPercent != null && normalizedProgressPercent < 100
-    ? 100
-    : normalizedProgressPercent;
+  const normalizedProgressPercent = Number.isFinite(progressPercent)
+    ? Math.max(0, Math.min(100, progressPercent))
+    : null;
+  const completedProgressPercent =
+    source === "trakt_history" &&
+    normalizedProgressPercent != null &&
+    normalizedProgressPercent < 100
+      ? 100
+      : normalizedProgressPercent;
   return {
     contentId,
     contentType,
-    videoId: typeof normalizedVideoId === "string" && normalizedVideoId.startsWith(SYNTHETIC_EPISODE_VIDEO_PREFIX)
-      ? null
-      : normalizedVideoId,
+    videoId:
+      typeof normalizedVideoId === "string" &&
+      normalizedVideoId.startsWith(SYNTHETIC_EPISODE_VIDEO_PREFIX)
+        ? null
+        : normalizedVideoId,
     season: Number.isFinite(seasonNum) && seasonNum > 0 ? seasonNum : null,
     episode: Number.isFinite(episodeNum) && episodeNum > 0 ? episodeNum : null,
     positionMs: normalizedTimes.positionMs,
@@ -199,9 +220,9 @@ function normalizeInflatedProgressTimes(positionMs = 0, durationMs = 0) {
   const position = Number(positionMs || 0);
   const duration = Number(durationMs || 0);
   if (
-    Number.isFinite(duration)
-    && duration > MAX_REASONABLE_PROGRESS_DURATION_MS
-    && (duration / 1000) <= MAX_REASONABLE_PROGRESS_DURATION_MS
+    Number.isFinite(duration) &&
+    duration > MAX_REASONABLE_PROGRESS_DURATION_MS &&
+    duration / 1000 <= MAX_REASONABLE_PROGRESS_DURATION_MS
   ) {
     return {
       positionMs: Number.isFinite(position) && position > 0 ? Math.trunc(position / 1000) : 0,
@@ -280,8 +301,9 @@ function dedupeSyncItems(items = []) {
       byKey.set(key, item);
     }
   });
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0)
+  );
 }
 
 function coalesceSyncItems(items = []) {
@@ -293,21 +315,20 @@ function coalesceSyncItems(items = []) {
       byIdentity.set(key, item);
     }
   });
-  return Array.from(byIdentity.values())
-    .sort((left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0));
+  return Array.from(byIdentity.values()).sort(
+    (left, right) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0)
+  );
 }
 
 function isSyncableProgressItem(item = {}) {
   const durationMs = Number(item?.durationMs || 0);
-  return !Number.isFinite(durationMs) || durationMs <= 0 || durationMs >= MIN_PROGRESS_SYNC_DURATION_MS;
+  return (
+    !Number.isFinite(durationMs) || durationMs <= 0 || durationMs >= MIN_PROGRESS_SYNC_DURATION_MS
+  );
 }
 
 function rowFreshness(row = {}) {
-  const candidates = [
-    row?.updated_at,
-    row?.last_watched,
-    row?.updatedAt
-  ];
+  const candidates = [row?.updated_at, row?.last_watched, row?.updatedAt];
   for (const value of candidates) {
     const numeric = Number(value);
     if (Number.isFinite(numeric)) {
@@ -353,17 +374,19 @@ function dedupeRemoteProgressEntries(rows = []) {
 }
 
 function buildRemoteProgressEntries(items = []) {
-  return dedupeRemoteProgressEntries(items.map((item) => ({
-    content_id: item.contentId,
-    content_type: item.contentType || "movie",
-    video_id: toRemoteVideoId(item),
-    season: item.season == null ? null : Number(item.season),
-    episode: item.episode == null ? null : Number(item.episode),
-    position: Math.max(0, Math.trunc(Number(item.positionMs || 0))),
-    duration: Math.max(0, Math.trunc(Number(item.durationMs || 0))),
-    last_watched: Number(item.updatedAt || Date.now()),
-    progress_key: toProgressKey(item)
-  })));
+  return dedupeRemoteProgressEntries(
+    items.map((item) => ({
+      content_id: item.contentId,
+      content_type: item.contentType || "movie",
+      video_id: toRemoteVideoId(item),
+      season: item.season == null ? null : Number(item.season),
+      episode: item.episode == null ? null : Number(item.episode),
+      position: Math.max(0, Math.trunc(Number(item.positionMs || 0))),
+      duration: Math.max(0, Math.trunc(Number(item.durationMs || 0))),
+      last_watched: Number(item.updatedAt || Date.now()),
+      progress_key: toProgressKey(item)
+    }))
+  );
 }
 
 function buildDeleteKeys(items = []) {
@@ -397,8 +420,9 @@ async function pushOnce() {
     if (!AuthManager.isAuthenticated) {
       return false;
     }
-    const items = coalesceSyncItems(await watchProgressRepository.getAll())
-      .filter((item) => isSyncableProgressItem(item));
+    const items = coalesceSyncItems(await watchProgressRepository.getAll()).filter((item) =>
+      isSyncableProgressItem(item)
+    );
     const profileId = resolveProfileId();
     const rows = buildRemoteProgressEntries(items);
     pushSignature = buildPushSignature(rows);
@@ -406,16 +430,20 @@ async function pushOnce() {
       return true;
     }
     if (
-      pushSignature
-      && pushSignature === lastFailedPushSignature
-      && (Date.now() - Number(lastFailedPushAt || 0)) < PUSH_RETRY_BACKOFF_MS
+      pushSignature &&
+      pushSignature === lastFailedPushSignature &&
+      Date.now() - Number(lastFailedPushAt || 0) < PUSH_RETRY_BACKOFF_MS
     ) {
       return false;
     }
-    await SupabaseApi.rpc(PUSH_RPC, {
-      p_profile_id: profileId,
-      p_entries: rows
-    }, true);
+    await SupabaseApi.rpc(
+      PUSH_RPC,
+      {
+        p_profile_id: profileId,
+        p_entries: rows
+      },
+      true
+    );
     lastSuccessfulPushSignature = pushSignature;
     writeBaselineItems(profileId, items);
     lastFailedPushSignature = "";
@@ -432,7 +460,6 @@ async function pushOnce() {
 }
 
 export const WatchProgressSyncService = {
-
   async pull() {
     try {
       if (!AuthManager.isAuthenticated) {
@@ -455,9 +482,9 @@ export const WatchProgressSyncService = {
       const baselineItems = readBaselineItems(profileId);
       const mergedItems = mergeProgressItems(localItems, snapshotItems, baselineItems);
       writeBaselineItems(profileId, snapshotItems);
-      lastSuccessfulPushSignature = buildPushSignature(buildRemoteProgressEntries(
-        coalesceSyncItems(snapshotItems)
-      ));
+      lastSuccessfulPushSignature = buildPushSignature(
+        buildRemoteProgressEntries(coalesceSyncItems(snapshotItems))
+      );
       await watchProgressRepository.replaceAll(mergedItems);
       return mergedItems;
     } catch (error) {
@@ -493,10 +520,14 @@ export const WatchProgressSyncService = {
       if (!keys.length) {
         return true;
       }
-      await SupabaseApi.rpc(DELETE_RPC, {
-        p_profile_id: resolveProfileId(),
-        p_keys: keys
-      }, true);
+      await SupabaseApi.rpc(
+        DELETE_RPC,
+        {
+          p_profile_id: resolveProfileId(),
+          p_keys: keys
+        },
+        true
+      );
       const profileId = resolveProfileId();
       const baselineByKey = itemsByProgressKey(readBaselineItems(profileId));
       normalizeProgressItems(items).forEach((item) => {
@@ -510,5 +541,4 @@ export const WatchProgressSyncService = {
       return false;
     }
   }
-
 };

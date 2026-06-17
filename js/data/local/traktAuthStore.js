@@ -45,7 +45,12 @@ function readEnvelope() {
   if (raw && typeof raw === "object" && raw.profiles && typeof raw.profiles === "object") {
     return {
       version: 1,
-      profiles: Object.fromEntries(Object.entries(raw.profiles).map(([profileId, value]) => [String(profileId), normalizeState(value)]))
+      profiles: Object.fromEntries(
+        Object.entries(raw.profiles).map(([profileId, value]) => [
+          String(profileId),
+          normalizeState(value)
+        ])
+      )
     };
   }
   return { version: 1, profiles: {} };
@@ -85,7 +90,7 @@ export const TraktAuthStore = {
       deviceCode: data.device_code || data.deviceCode || null,
       userCode: data.user_code || data.userCode || null,
       verificationUrl: data.verification_url || data.verificationUrl || "https://trakt.tv/activate",
-      expiresAt: now + (Number(data.expires_in || data.expiresIn || 0) * 1000),
+      expiresAt: now + Number(data.expires_in || data.expiresIn || 0) * 1000,
       pollInterval: Number(data.interval || data.pollInterval || 5) || 5
     });
   },
@@ -106,7 +111,9 @@ export const TraktAuthStore = {
       refreshToken: data.refresh_token || data.refreshToken || null,
       tokenType: data.token_type || data.tokenType || "bearer",
       createdAt: Number(data.created_at || data.createdAt || Math.floor(Date.now() / 1000)),
-      expiresIn: normalizeLifetimeSeconds(data.expires_in || data.expiresIn || TOKEN_MAX_LIFETIME_SECONDS),
+      expiresIn: normalizeLifetimeSeconds(
+        data.expires_in || data.expiresIn || TOKEN_MAX_LIFETIME_SECONDS
+      ),
       deviceCode: null,
       userCode: null,
       verificationUrl: null,

@@ -42,12 +42,12 @@ function dedupeAndSort(items = []) {
       byKey.set(key, normalized);
     }
   });
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right.watchedAt || 0) - Number(left.watchedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right.watchedAt || 0) - Number(left.watchedAt || 0)
+  );
 }
 
 export const WatchedItemsStore = {
-
   listAll() {
     const raw = LocalStore.get(WATCHED_ITEMS_KEY, []);
     return dedupeAndSort(Array.isArray(raw) ? raw : []);
@@ -67,10 +67,9 @@ export const WatchedItemsStore = {
     const key = watchedItemKey(normalized);
     const next = dedupeAndSort([
       normalized,
-      ...this.listAll().filter((entry) => !(
-        String(entry.profileId || "1") === pid
-        && watchedItemKey(entry) === key
-      ))
+      ...this.listAll().filter(
+        (entry) => !(String(entry.profileId || "1") === pid && watchedItemKey(entry) === key)
+      )
     ]).slice(0, 5000);
     LocalStore.set(WATCHED_ITEMS_KEY, next);
   },
@@ -95,11 +94,15 @@ export const WatchedItemsStore = {
 
   replaceForProfile(profileId, items = []) {
     const pid = String(profileId || 1);
-    const keepOtherProfiles = this.listAll().filter((entry) => String(entry.profileId || "1") !== pid);
+    const keepOtherProfiles = this.listAll().filter(
+      (entry) => String(entry.profileId || "1") !== pid
+    );
     const normalized = (Array.isArray(items) ? items : [])
       .map((item) => normalizeItem(item, pid))
       .filter((item) => Boolean(item.contentId));
-    LocalStore.set(WATCHED_ITEMS_KEY, dedupeAndSort([...normalized, ...keepOtherProfiles]).slice(0, 5000));
+    LocalStore.set(
+      WATCHED_ITEMS_KEY,
+      dedupeAndSort([...normalized, ...keepOtherProfiles]).slice(0, 5000)
+    );
   }
-
 };

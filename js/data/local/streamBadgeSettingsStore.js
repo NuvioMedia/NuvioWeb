@@ -15,23 +15,27 @@ const DEFAULT_STREAM_BADGE_SETTINGS = {
 };
 
 function normalizeBadgePlacement(value = "") {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   return normalized === "TOP" ? "TOP" : "BOTTOM";
 }
 
 function normalizeStreamBadgeSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
-  const rulesSource = source.rules
-    ?? source.streamBadgeRules
-    ?? source.stream_badge_rules
-    ?? source.badgeRules
-    ?? source.payload
-    ?? null;
+  const rulesSource =
+    source.rules ??
+    source.streamBadgeRules ??
+    source.stream_badge_rules ??
+    source.badgeRules ??
+    source.payload ??
+    null;
   const showFileSizeBadges = source.showFileSizeBadges ?? source.show_file_size_badges;
-  const badgePlacement = source.badgePlacement
-    ?? source.badge_placement
-    ?? source.streamBadgePlacement
-    ?? source.stream_badge_placement;
+  const badgePlacement =
+    source.badgePlacement ??
+    source.badge_placement ??
+    source.streamBadgePlacement ??
+    source.stream_badge_placement;
   return {
     rules: normalizeStreamBadgeRules(rulesSource),
     showFileSizeBadges: showFileSizeBadges !== false,
@@ -64,7 +68,9 @@ function normalizeSourceUrlInput(value = "") {
 }
 
 function sameSourceUrl(left = "", right = "") {
-  return normalizeSourceUrlInput(left).toLowerCase() === normalizeSourceUrlInput(right).toLowerCase();
+  return (
+    normalizeSourceUrlInput(left).toLowerCase() === normalizeSourceUrlInput(right).toLowerCase()
+  );
 }
 
 function parseImportInput(value = "") {
@@ -118,9 +124,14 @@ export const StreamBadgeSettingsStore = {
     const current = normalizeStreamBadgeSettings(this.get());
     const currentRules = normalizeStreamBadgeRules(current.rules);
     const normalizedSource = normalizeSourceUrlInput(value);
-    const isExistingImport = currentRules.imports.some((importItem) => sameSourceUrl(importItem.sourceUrl, parsed.sourceUrl));
+    const isExistingImport = currentRules.imports.some((importItem) =>
+      sameSourceUrl(importItem.sourceUrl, parsed.sourceUrl)
+    );
     if (!isExistingImport && currentRules.imports.length >= STREAM_BADGE_IMPORT_LIMIT) {
-      return { status: "error", message: `You can import up to ${STREAM_BADGE_IMPORT_LIMIT} badge URLs.` };
+      return {
+        status: "error",
+        message: `You can import up to ${STREAM_BADGE_IMPORT_LIMIT} badge URLs.`
+      };
     }
 
     try {
@@ -150,7 +161,10 @@ export const StreamBadgeSettingsStore = {
       store.set({ rules: nextRules });
       return { status: "success", rules: nextRules };
     } catch (error) {
-      return { status: "error", message: String(error?.message || error || "Badge import failed.") };
+      return {
+        status: "error",
+        message: String(error?.message || error || "Badge import failed.")
+      };
     }
   },
 
@@ -172,7 +186,9 @@ export const StreamBadgeSettingsStore = {
     const currentRules = normalizeStreamBadgeRules(current.rules);
     const normalizedSource = normalizeSourceUrlInput(sourceUrl);
     const nextRules = {
-      imports: currentRules.imports.filter((importItem) => !sameSourceUrl(importItem.sourceUrl, normalizedSource))
+      imports: currentRules.imports.filter(
+        (importItem) => !sameSourceUrl(importItem.sourceUrl, normalizedSource)
+      )
     };
     store.set({ rules: normalizeStreamBadgeRules(nextRules) });
   },

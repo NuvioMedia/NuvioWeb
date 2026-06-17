@@ -27,15 +27,9 @@ function shouldTryLegacyTable(error) {
 }
 
 function mapProfileRow(row = {}) {
-  const profileIndex = Number(
-    row.profile_index
-    || row.profileIndex
-    || row.id
-    || 1
-  );
-  const normalizedIndex = Number.isFinite(profileIndex) && profileIndex > 0
-    ? Math.trunc(profileIndex)
-    : 1;
+  const profileIndex = Number(row.profile_index || row.profileIndex || row.id || 1);
+  const normalizedIndex =
+    Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1;
   return {
     id: String(normalizedIndex),
     profileIndex: normalizedIndex,
@@ -43,20 +37,19 @@ function mapProfileRow(row = {}) {
     avatarColorHex: row.avatar_color_hex || row.avatarColorHex || "#1E88E5",
     avatarId: row.avatar_id || row.avatarId || null,
     avatarUrl: row.avatar_url || row.avatarUrl || null,
-    usesPrimaryAddons: typeof row.uses_primary_addons === "boolean"
-      ? row.uses_primary_addons
-      : Boolean(row.usesPrimaryAddons),
-    usesPrimaryPlugins: typeof row.uses_primary_plugins === "boolean"
-      ? row.uses_primary_plugins
-      : Boolean(row.usesPrimaryPlugins),
-    isPrimary: typeof row.is_primary === "boolean"
-      ? row.is_primary
-      : normalizedIndex === 1
+    usesPrimaryAddons:
+      typeof row.uses_primary_addons === "boolean"
+        ? row.uses_primary_addons
+        : Boolean(row.usesPrimaryAddons),
+    usesPrimaryPlugins:
+      typeof row.uses_primary_plugins === "boolean"
+        ? row.uses_primary_plugins
+        : Boolean(row.usesPrimaryPlugins),
+    isPrimary: typeof row.is_primary === "boolean" ? row.is_primary : normalizedIndex === 1
   };
 }
 
 export const ProfileSyncService = {
-
   async pull() {
     try {
       if (!AuthManager.isAuthenticated) {
@@ -102,21 +95,26 @@ export const ProfileSyncService = {
       }
       const profiles = await ProfileManager.getProfiles();
       try {
-        await SupabaseApi.rpc(PUSH_RPC, {
-          p_profiles: profiles.map((profile) => {
-            const profileIndex = Number(profile.profileIndex || profile.id || 1);
-            const avatarUrl = String(profile.avatarUrl || "").trim() || null;
-            return {
-              profile_index: Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
-              name: profile.name,
-              avatar_color_hex: profile.avatarColorHex || "#1E88E5",
-              avatar_id: avatarUrl ? null : (profile.avatarId || null),
-              avatar_url: avatarUrl,
-              uses_primary_addons: Boolean(profile.usesPrimaryAddons),
-              uses_primary_plugins: Boolean(profile.usesPrimaryPlugins)
-            };
-          })
-        }, true);
+        await SupabaseApi.rpc(
+          PUSH_RPC,
+          {
+            p_profiles: profiles.map((profile) => {
+              const profileIndex = Number(profile.profileIndex || profile.id || 1);
+              const avatarUrl = String(profile.avatarUrl || "").trim() || null;
+              return {
+                profile_index:
+                  Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
+                name: profile.name,
+                avatar_color_hex: profile.avatarColorHex || "#1E88E5",
+                avatar_id: avatarUrl ? null : profile.avatarId || null,
+                avatar_url: avatarUrl,
+                uses_primary_addons: Boolean(profile.usesPrimaryAddons),
+                uses_primary_plugins: Boolean(profile.usesPrimaryPlugins)
+              };
+            })
+          },
+          true
+        );
         return true;
       } catch (rpcError) {
         console.warn("Profile sync push RPC failed, falling back to table sync", rpcError);
@@ -129,10 +127,11 @@ export const ProfileSyncService = {
         return {
           id: profile.id,
           owner_id: ownerId,
-          profile_index: Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
+          profile_index:
+            Number.isFinite(profileIndex) && profileIndex > 0 ? Math.trunc(profileIndex) : 1,
           name: profile.name,
           avatar_color_hex: profile.avatarColorHex || "#1E88E5",
-          avatar_id: avatarUrl ? null : (profile.avatarId || null),
+          avatar_id: avatarUrl ? null : profile.avatarId || null,
           avatar_url: avatarUrl,
           uses_primary_addons: Boolean(profile.usesPrimaryAddons),
           uses_primary_plugins: Boolean(profile.usesPrimaryPlugins),
@@ -177,7 +176,9 @@ export const ProfileSyncService = {
       return (Array.isArray(rows) ? rows : []).reduce((accumulator, row) => {
         const profileIndex = Number(row?.profile_index ?? row?.profileIndex ?? row?.id ?? 0);
         if (Number.isFinite(profileIndex) && profileIndex > 0) {
-          accumulator[String(Math.trunc(profileIndex))] = Boolean(row?.pin_enabled ?? row?.pinEnabled);
+          accumulator[String(Math.trunc(profileIndex))] = Boolean(
+            row?.pin_enabled ?? row?.pinEnabled
+          );
         }
         return accumulator;
       }, {});
@@ -231,14 +232,21 @@ export const ProfileSyncService = {
       if (!AuthManager.isAuthenticated) {
         return null;
       }
-      const response = await SupabaseApi.rpc(VERIFY_PROFILE_PIN_RPC, {
-        p_profile_id: Number(profileId),
-        p_pin: String(pin || "")
-      }, true);
-      const payload = Array.isArray(response) ? (response[0] || {}) : (response || {});
+      const response = await SupabaseApi.rpc(
+        VERIFY_PROFILE_PIN_RPC,
+        {
+          p_profile_id: Number(profileId),
+          p_pin: String(pin || "")
+        },
+        true
+      );
+      const payload = Array.isArray(response) ? response[0] || {} : response || {};
       return {
         unlocked: Boolean(payload?.unlocked),
-        retryAfterSeconds: Math.max(0, Number(payload?.retry_after_seconds ?? payload?.retryAfterSeconds ?? 0) || 0)
+        retryAfterSeconds: Math.max(
+          0,
+          Number(payload?.retry_after_seconds ?? payload?.retryAfterSeconds ?? 0) || 0
+        )
       };
     } catch (error) {
       console.warn("Verify profile PIN failed", error);
@@ -251,14 +259,17 @@ export const ProfileSyncService = {
       if (!AuthManager.isAuthenticated) {
         return false;
       }
-      await SupabaseApi.rpc(DELETE_PROFILE_DATA_RPC, {
-        p_profile_id: Number(profileId)
-      }, true);
+      await SupabaseApi.rpc(
+        DELETE_PROFILE_DATA_RPC,
+        {
+          p_profile_id: Number(profileId)
+        },
+        true
+      );
       return true;
     } catch (error) {
       console.warn("Delete remote profile data failed", error);
       return false;
     }
   }
-
 };

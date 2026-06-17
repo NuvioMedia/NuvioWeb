@@ -51,7 +51,9 @@ function parseWebOsMajorVersion() {
 }
 
 function detectPlatformName() {
-  const override = String(globalThis.__NUVIO_PLATFORM__ || "").trim().toLowerCase();
+  const override = String(globalThis.__NUVIO_PLATFORM__ || "")
+    .trim()
+    .toLowerCase();
   if (override && ADAPTERS[override]) {
     return override;
   }
@@ -68,12 +70,12 @@ function detectPlatformName() {
   }
   const webapis = globalThis.webapis || {};
   if (
-    globalThis.tizen
-    || globalThis.avplay
-    || webapis.avplay
-    || webapis.avPlay
-    || webapis.productinfo
-    || userAgent.includes("tizen")
+    globalThis.tizen ||
+    globalThis.avplay ||
+    webapis.avplay ||
+    webapis.avPlay ||
+    webapis.productinfo ||
+    userAgent.includes("tizen")
   ) {
     return "tizen";
   }

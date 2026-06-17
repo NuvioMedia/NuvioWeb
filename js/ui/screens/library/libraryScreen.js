@@ -109,12 +109,12 @@ function findNearestNodeByCenterX(referenceNode, nodes = []) {
     return nodes[0] || null;
   }
   const referenceRect = referenceNode.getBoundingClientRect();
-  const referenceCenter = referenceRect.left + (referenceRect.width / 2);
+  const referenceCenter = referenceRect.left + referenceRect.width / 2;
   let bestNode = nodes[0] || null;
   let bestDistance = Number.POSITIVE_INFINITY;
   nodes.forEach((node) => {
     const rect = node.getBoundingClientRect();
-    const center = rect.left + (rect.width / 2);
+    const center = rect.left + rect.width / 2;
     const distance = Math.abs(center - referenceCenter);
     if (distance < bestDistance) {
       bestDistance = distance;
@@ -141,7 +141,9 @@ function groupNodesByRow(nodes = [], tolerance = 28) {
   });
   rows.sort((left, right) => left.top - right.top);
   rows.forEach((row) => {
-    row.nodes.sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left);
+    row.nodes.sort(
+      (left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left
+    );
   });
   return rows;
 }
@@ -155,7 +157,6 @@ function filterStructureSignature(state = {}) {
 }
 
 export const LibraryScreen = {
-
   clearClosingPicker() {
     if (this.closingPickerTimer) {
       clearTimeout(this.closingPickerTimer);
@@ -210,13 +211,13 @@ export const LibraryScreen = {
     const nextState = state || this.controller?.getState?.() || null;
     const partialRefresh = this.partialContentRefresh;
     if (
-      partialRefresh
-      && nextState
-      && !nextState.isLoading
-      && !nextState.isSyncing
-      && !nextState.showManageDialog
-      && !nextState.listEditorState
-      && !nextState.showDeleteConfirm
+      partialRefresh &&
+      nextState &&
+      !nextState.isLoading &&
+      !nextState.isSyncing &&
+      !nextState.showManageDialog &&
+      !nextState.listEditorState &&
+      !nextState.showDeleteConfirm
     ) {
       this.partialContentRefresh = null;
       this.updateRenderedLibraryContent(nextState, {
@@ -266,7 +267,9 @@ export const LibraryScreen = {
     this.container.__libraryEventsBound = true;
 
     this.container.addEventListener("click", async (event) => {
-      const target = event.target?.closest?.(".focusable, .library-dialog-input, .library-dialog-textarea");
+      const target = event.target?.closest?.(
+        ".focusable, .library-dialog-input, .library-dialog-textarea"
+      );
       if (!target || !this.container.contains(target)) {
         return;
       }
@@ -284,8 +287,14 @@ export const LibraryScreen = {
       if (!target) {
         return;
       }
-      if (target.matches(".library-dialog-input[data-editor-field], .library-dialog-textarea[data-editor-field]")) {
-        this.controller.updateEditorField(String(target.dataset.editorField || ""), target.value, { silent: true });
+      if (
+        target.matches(
+          ".library-dialog-input[data-editor-field], .library-dialog-textarea[data-editor-field]"
+        )
+      ) {
+        this.controller.updateEditorField(String(target.dataset.editorField || ""), target.value, {
+          silent: true
+        });
       }
     });
   },
@@ -353,16 +362,20 @@ export const LibraryScreen = {
     const state = this.controller.getState();
     const isOpen = state.expandedPicker === picker;
     const isClosing = this.closingPicker === picker;
-    const currentValue = picker === "list"
-      ? state.selectedListKey
-      : picker === "type"
-        ? state.selectedTypeKey
-        : picker === "genre"
-          ? (state.selectedGenre || "__all__")
-          : picker === "year"
-            ? (state.selectedYear || "__all__")
-            : state.selectedSortKey;
-    const selectedIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
+    const currentValue =
+      picker === "list"
+        ? state.selectedListKey
+        : picker === "type"
+          ? state.selectedTypeKey
+          : picker === "genre"
+            ? state.selectedGenre || "__all__"
+            : picker === "year"
+              ? state.selectedYear || "__all__"
+              : state.selectedSortKey;
+    const selectedIndex = Math.max(
+      0,
+      options.findIndex((option) => option.value === currentValue)
+    );
     return renderContentFilterPicker({
       variant: "library",
       picker,
@@ -382,20 +395,54 @@ export const LibraryScreen = {
   renderPickerGroups(state) {
     const primaryPickerMarkup = [
       state.sourceMode === "trakt"
-        ? this.renderPicker("list", t("library_filter_list", {}, "List"), this.controller.getSelectedListLabel(), this.controller.getPickerOptions("list"), "library-picker-flex")
+        ? this.renderPicker(
+            "list",
+            t("library_filter_list", {}, "List"),
+            this.controller.getSelectedListLabel(),
+            this.controller.getPickerOptions("list"),
+            "library-picker-flex"
+          )
         : "",
-      this.renderPicker("type", t("library_filter_type", {}, "Type"), this.controller.getSelectedTypeLabel(), this.controller.getPickerOptions("type"), "library-picker-flex"),
-      this.renderPicker("sort", t("library_filter_sort", {}, "Sort"), this.controller.getSelectedSortLabel(), this.controller.getPickerOptions("sort"), "library-picker-flex")
-    ].filter(Boolean).join("");
+      this.renderPicker(
+        "type",
+        t("library_filter_type", {}, "Type"),
+        this.controller.getSelectedTypeLabel(),
+        this.controller.getPickerOptions("type"),
+        "library-picker-flex"
+      ),
+      this.renderPicker(
+        "sort",
+        t("library_filter_sort", {}, "Sort"),
+        this.controller.getSelectedSortLabel(),
+        this.controller.getPickerOptions("sort"),
+        "library-picker-flex"
+      )
+    ]
+      .filter(Boolean)
+      .join("");
 
     const secondaryPickerMarkup = [
       state.availableGenres.length
-        ? this.renderPicker("genre", t("library_filter_genre", {}, "Genre"), this.controller.getSelectedGenreLabel(), this.controller.getPickerOptions("genre"), "library-picker-flex")
+        ? this.renderPicker(
+            "genre",
+            t("library_filter_genre", {}, "Genre"),
+            this.controller.getSelectedGenreLabel(),
+            this.controller.getPickerOptions("genre"),
+            "library-picker-flex"
+          )
         : "",
       state.availableYears.length
-        ? this.renderPicker("year", t("library_filter_year", {}, "Year"), this.controller.getSelectedYearLabel(), this.controller.getPickerOptions("year"), "library-picker-flex")
+        ? this.renderPicker(
+            "year",
+            t("library_filter_year", {}, "Year"),
+            this.controller.getSelectedYearLabel(),
+            this.controller.getPickerOptions("year"),
+            "library-picker-flex"
+          )
         : ""
-    ].filter(Boolean).join("");
+    ]
+      .filter(Boolean)
+      .join("");
 
     return `
       <section class="library-picker-groups" id="libraryPickerGroupsMount">
@@ -426,7 +473,9 @@ export const LibraryScreen = {
       year: this.controller.getSelectedYearLabel()
     };
     Object.entries(valueByPicker).forEach(([picker, value]) => {
-      const node = this.container?.querySelector(`.library-picker-anchor[data-picker="${selectorValue(picker)}"] .library-picker-value`);
+      const node = this.container?.querySelector(
+        `.library-picker-anchor[data-picker="${selectorValue(picker)}"] .library-picker-value`
+      );
       if (node instanceof HTMLElement) {
         node.textContent = value;
       }
@@ -439,19 +488,25 @@ export const LibraryScreen = {
     }
     this.lastRenderedExpandedPicker = null;
     this.clearClosingPicker();
-    Array.from(this.container.querySelectorAll(".library-picker-groups .library-picker")).forEach((node) => {
-      node.classList.remove("open", "closing");
-      const menu = node.querySelector(".library-picker-menu");
-      if (menu) {
-        menu.remove();
+    Array.from(this.container.querySelectorAll(".library-picker-groups .library-picker")).forEach(
+      (node) => {
+        node.classList.remove("open", "closing");
+        const menu = node.querySelector(".library-picker-menu");
+        if (menu) {
+          menu.remove();
+        }
       }
-    });
-    Array.from(this.container.querySelectorAll(".library-picker-groups .library-picker-anchor")).forEach((node) => {
+    );
+    Array.from(
+      this.container.querySelectorAll(".library-picker-groups .library-picker-anchor")
+    ).forEach((node) => {
       node.setAttribute("aria-expanded", "false");
     });
     this.syncRenderedPickerValues(this.controller.getState());
     const target = picker
-      ? this.container.querySelector(`.library-picker-anchor[data-picker="${selectorValue(picker)}"]`)
+      ? this.container.querySelector(
+          `.library-picker-anchor[data-picker="${selectorValue(picker)}"]`
+        )
       : null;
     if (target instanceof HTMLElement) {
       this.container.querySelectorAll(".focusable.focused").forEach((node) => {
@@ -499,7 +554,9 @@ export const LibraryScreen = {
     }
 
     if (this.pendingPickerRestore) {
-      const target = this.container.querySelector(`.library-picker-anchor[data-picker="${selectorValue(this.pendingPickerRestore)}"]`);
+      const target = this.container.querySelector(
+        `.library-picker-anchor[data-picker="${selectorValue(this.pendingPickerRestore)}"]`
+      );
       if (target instanceof HTMLElement) {
         this.setFocusedNode(target);
         this.pendingPickerRestore = null;
@@ -515,12 +572,15 @@ export const LibraryScreen = {
     return `
       <section class="library-grid-wrap">
         <div class="library-grid">
-          ${items.map((item) => {
-            const focusKey = `${item.type}:${item.id}`;
-            const isSeries = String(item.type || "").toLowerCase() === "series" || String(item.type || "").toLowerCase() === "tv";
-            const watchedIds = isSeries ? state.watchedSeriesIds : state.watchedMovieIds;
-            const isWatched = watchedIds?.has?.(String(item.id || ""));
-            return `
+          ${items
+            .map((item) => {
+              const focusKey = `${item.type}:${item.id}`;
+              const isSeries =
+                String(item.type || "").toLowerCase() === "series" ||
+                String(item.type || "").toLowerCase() === "tv";
+              const watchedIds = isSeries ? state.watchedSeriesIds : state.watchedMovieIds;
+              const isWatched = watchedIds?.has?.(String(item.id || ""));
+              return `
               <article class="library-grid-card focusable"
                        data-action="openDetail"
                        data-item-id="${escapeHtml(item.id)}"
@@ -535,7 +595,8 @@ export const LibraryScreen = {
                 <div class="library-grid-title">${escapeHtml(item.name || item.id || "Untitled")}</div>
               </article>
             `;
-          }).join("")}
+            })
+            .join("")}
         </div>
       </section>
     `;
@@ -557,11 +618,18 @@ export const LibraryScreen = {
     if (!picker) {
       return false;
     }
-    const options = Array.from(this.container?.querySelectorAll(`.library-picker.open .library-picker-option.focusable[data-picker="${selectorValue(picker)}"]`) || []);
+    const options = Array.from(
+      this.container?.querySelectorAll(
+        `.library-picker.open .library-picker-option.focusable[data-picker="${selectorValue(picker)}"]`
+      ) || []
+    );
     if (!options.length) {
       return false;
     }
-    const focusIndex = Math.max(0, Math.min(options.length - 1, Number(state.pickerFocusIndex || 0)));
+    const focusIndex = Math.max(
+      0,
+      Math.min(options.length - 1, Number(state.pickerFocusIndex || 0))
+    );
     options.forEach((node, index) => {
       const focused = index === focusIndex;
       node.classList.toggle("focused", focused);
@@ -607,16 +675,21 @@ export const LibraryScreen = {
             <h3 class="library-dialog-title library-manage-title">${escapeHtml(t("library_manage_trakt_lists", {}, "Manage Trakt Lists"))}</h3>
             ${state.errorMessage ? `<p class="library-dialog-error library-manage-error">${escapeHtml(state.errorMessage)}</p>` : ""}
             <div class="library-manage-list${personalTabs.length ? " has-items" : ""}">
-              ${personalTabs.length
-                ? personalTabs.map((tab) => `
+              ${
+                personalTabs.length
+                  ? personalTabs
+                      .map(
+                        (tab) => `
                     <button class="library-manage-list-button focusable${tab.key === state.manageSelectedListKey ? " selected" : ""}"
                             data-action="selectManageList"
                             data-list-key="${escapeHtml(tab.key)}"
                             ${state.pendingOperation ? "disabled" : ""}>
                       <span class="library-manage-list-label">${escapeHtml(tab.title)}</span>
                     </button>
-                  `).join("")
-                : `<div class="library-manage-empty">${escapeHtml(t("library_no_lists", {}, "No personal lists yet."))}</div>`
+                  `
+                      )
+                      .join("")
+                  : `<div class="library-manage-empty">${escapeHtml(t("library_no_lists", {}, "No personal lists yet."))}</div>`
               }
             </div>
             <div class="library-manage-actions-row">
@@ -664,14 +737,16 @@ export const LibraryScreen = {
           <div class="library-dialog-field library-privacy-field">
             <span class="library-privacy-label">${escapeHtml(t("library_list_privacy", {}, "Privacy"))}</span>
             <div class="library-privacy-row">
-              ${LIBRARY_PRIVACY_OPTIONS.map((privacy) => `
+              ${LIBRARY_PRIVACY_OPTIONS.map(
+                (privacy) => `
                 <button class="library-privacy-button focusable${privacy === editor.privacy ? " selected" : ""}"
                         data-action="selectPrivacy"
                         data-privacy="${privacy}"
                         ${state.pendingOperation ? "disabled" : ""}>
                   ${escapeHtml(privacy.charAt(0).toUpperCase() + privacy.slice(1))}
                 </button>
-              `).join("")}
+              `
+              ).join("")}
             </div>
           </div>
           <div class="library-dialog-actions library-editor-actions">
@@ -796,7 +871,10 @@ export const LibraryScreen = {
     };
     this.pendingPosterHoldTimer = setTimeout(() => {
       this.pendingPosterHoldTimer = null;
-      const current = this.container?.querySelector(".library-grid-card.focusable.focused[data-action='openDetail']") || null;
+      const current =
+        this.container?.querySelector(
+          ".library-grid-card.focusable.focused[data-action='openDetail']"
+        ) || null;
       if (!this.hasPendingPosterHold(current)) {
         return;
       }
@@ -890,17 +968,21 @@ export const LibraryScreen = {
 
   resolveLastMainFocus() {
     const selector = this.getMainFocusSelector(this.lastMainFocus);
-    return (selector ? this.container?.querySelector(selector) : null)
-      || this.container?.querySelector(".library-picker-anchor.focusable")
-      || this.container?.querySelector(".library-grid-card.focusable")
-      || this.container?.querySelector(".home-main .focusable")
-      || null;
+    return (
+      (selector ? this.container?.querySelector(selector) : null) ||
+      this.container?.querySelector(".library-picker-anchor.focusable") ||
+      this.container?.querySelector(".library-grid-card.focusable") ||
+      this.container?.querySelector(".home-main .focusable") ||
+      null
+    );
   },
 
   resolveMainEntryFocus() {
-    return this.container?.querySelector(".library-picker-row .library-picker-anchor.focusable")
-      || this.resolveLastMainFocus()
-      || null;
+    return (
+      this.container?.querySelector(".library-picker-row .library-picker-anchor.focusable") ||
+      this.resolveLastMainFocus() ||
+      null
+    );
   },
 
   restoreFocus() {
@@ -911,13 +993,13 @@ export const LibraryScreen = {
     let selector = null;
 
     if (state.listEditorState) {
-      selector = '.library-list-editor .focusable';
+      selector = ".library-list-editor .focusable";
     } else if (state.showDeleteConfirm) {
-      selector = '.library-delete-dialog .focusable';
+      selector = ".library-delete-dialog .focusable";
     } else if (state.showManageDialog) {
       selector = state.manageSelectedListKey
         ? `.library-manage-list-button[data-list-key="${selectorValue(state.manageSelectedListKey)}"]`
-        : '.library-manage-dialog .focusable';
+        : ".library-manage-dialog .focusable";
     } else if (state.expandedPicker) {
       selector = `.library-picker.open .library-picker-option[data-option-index="${Number(state.pickerFocusIndex || 0)}"]`;
     } else if (this.pendingPickerRestore) {
@@ -931,15 +1013,20 @@ export const LibraryScreen = {
     }
 
     const actionRestoreTarget = this.pendingActionRestore
-      ? this.container?.querySelector(`.focusable[data-action="${selectorValue(this.pendingActionRestore)}"]`)
+      ? this.container?.querySelector(
+          `.focusable[data-action="${selectorValue(this.pendingActionRestore)}"]`
+        )
       : null;
-    const target = (selector ? this.container?.querySelector(selector) : null)
-      || actionRestoreTarget
-      || (this.focusZone === "sidebar" ? getRootSidebarSelectedNode(this.container, this.layoutPrefs) : null)
-      || (this.focusZone === "content" ? this.resolveLastMainFocus() : null)
-      || this.container?.querySelector('.library-primary.focusable')
-      || getRootSidebarSelectedNode(this.container, this.layoutPrefs)
-      || this.container?.querySelector('.focusable');
+    const target =
+      (selector ? this.container?.querySelector(selector) : null) ||
+      actionRestoreTarget ||
+      (this.focusZone === "sidebar"
+        ? getRootSidebarSelectedNode(this.container, this.layoutPrefs)
+        : null) ||
+      (this.focusZone === "content" ? this.resolveLastMainFocus() : null) ||
+      this.container?.querySelector(".library-primary.focusable") ||
+      getRootSidebarSelectedNode(this.container, this.layoutPrefs) ||
+      this.container?.querySelector(".focusable");
     if (!target) {
       return;
     }
@@ -977,56 +1064,67 @@ export const LibraryScreen = {
     if (!scopeSelector) {
       return this.container?.querySelector(".focusable.focused") || null;
     }
-    return Array.from(this.container?.querySelectorAll(scopeSelector) || [])
-      .find((node) => node.classList?.contains("focused"))
-      || this.container?.querySelector(".focusable.focused")
-      || null;
+    return (
+      Array.from(this.container?.querySelectorAll(scopeSelector) || []).find((node) =>
+        node.classList?.contains("focused")
+      ) ||
+      this.container?.querySelector(".focusable.focused") ||
+      null
+    );
   },
 
   resolvePreferredActionsRowNode() {
-    const buttons = Array.from(this.container?.querySelectorAll(".library-actions-row .focusable") || []);
+    const buttons = Array.from(
+      this.container?.querySelectorAll(".library-actions-row .focusable") || []
+    );
     if (!buttons.length) {
       return null;
     }
-    return buttons.find((node) => String(node.dataset.action || "") === this.lastActionsRowAction && !node.disabled)
-      || buttons.find((node) => !node.disabled)
-      || buttons[0]
-      || null;
+    return (
+      buttons.find(
+        (node) => String(node.dataset.action || "") === this.lastActionsRowAction && !node.disabled
+      ) ||
+      buttons.find((node) => !node.disabled) ||
+      buttons[0] ||
+      null
+    );
   },
 
   resolvePreferredPickerRowNode(referenceNode = null) {
-    const anchors = Array.from(this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []);
+    const anchors = Array.from(
+      this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []
+    );
     if (!anchors.length) {
       return null;
     }
-    const remembered = this.lastMainFocus && this.lastMainFocus.closest?.(".library-picker-row")
-      ? this.resolveLastMainFocus()
-      : null;
-    return remembered
-      || findNearestNodeByCenterX(referenceNode, anchors)
-      || anchors[0]
-      || null;
+    const remembered =
+      this.lastMainFocus && this.lastMainFocus.closest?.(".library-picker-row")
+        ? this.resolveLastMainFocus()
+        : null;
+    return remembered || findNearestNodeByCenterX(referenceNode, anchors) || anchors[0] || null;
   },
 
   resolvePreferredGridNode(referenceNode = null) {
-    const cards = Array.from(this.container?.querySelectorAll(".library-grid-card.focusable") || []);
+    const cards = Array.from(
+      this.container?.querySelectorAll(".library-grid-card.focusable") || []
+    );
     if (!cards.length) {
       return null;
     }
-    const remembered = this.lastMainFocus && this.lastMainFocus.closest?.(".library-grid")
-      ? this.resolveLastMainFocus()
-      : null;
-    return remembered
-      || findNearestNodeByCenterX(referenceNode, cards)
-      || cards[0]
-      || null;
+    const remembered =
+      this.lastMainFocus && this.lastMainFocus.closest?.(".library-grid")
+        ? this.resolveLastMainFocus()
+        : null;
+    return remembered || findNearestNodeByCenterX(referenceNode, cards) || cards[0] || null;
   },
 
   resolveRelativeGridNode(current, direction) {
     if (!current || !current.matches?.(".library-grid-card.focusable")) {
       return null;
     }
-    const cards = Array.from(this.container?.querySelectorAll(".library-grid-card.focusable") || []);
+    const cards = Array.from(
+      this.container?.querySelectorAll(".library-grid-card.focusable") || []
+    );
     if (!cards.length) {
       return null;
     }
@@ -1035,7 +1133,7 @@ export const LibraryScreen = {
       return null;
     }
     const currentRect = current.getBoundingClientRect();
-    const currentCenterX = currentRect.left + (currentRect.width / 2);
+    const currentCenterX = currentRect.left + currentRect.width / 2;
     const rowIndex = rows.findIndex((row) => row.nodes.includes(current));
     if (rowIndex < 0) {
       return null;
@@ -1062,7 +1160,7 @@ export const LibraryScreen = {
       let bestDistance = Number.POSITIVE_INFINITY;
       nextRow.nodes.forEach((node) => {
         const rect = node.getBoundingClientRect();
-        const centerX = rect.left + (rect.width / 2);
+        const centerX = rect.left + rect.width / 2;
         const distance = Math.abs(centerX - currentCenterX);
         if (distance < bestDistance) {
           bestDistance = distance;
@@ -1078,7 +1176,9 @@ export const LibraryScreen = {
     if (!node?.matches?.(".library-grid-card.focusable")) {
       return false;
     }
-    const cards = Array.from(this.container?.querySelectorAll(".library-grid-card.focusable") || []);
+    const cards = Array.from(
+      this.container?.querySelectorAll(".library-grid-card.focusable") || []
+    );
     if (!cards.length) {
       return false;
     }
@@ -1092,13 +1192,17 @@ export const LibraryScreen = {
     }
     const code = Number(event?.keyCode || 0);
     if (code === 37 || code === 39) {
-      const buttons = Array.from(this.container?.querySelectorAll(".library-actions-row .focusable") || [])
-        .filter((node) => !node.disabled);
+      const buttons = Array.from(
+        this.container?.querySelectorAll(".library-actions-row .focusable") || []
+      ).filter((node) => !node.disabled);
       if (!buttons.length) {
         return false;
       }
       const currentIndex = Math.max(0, buttons.indexOf(current));
-      const nextIndex = Math.max(0, Math.min(buttons.length - 1, currentIndex + (code === 37 ? -1 : 1)));
+      const nextIndex = Math.max(
+        0,
+        Math.min(buttons.length - 1, currentIndex + (code === 37 ? -1 : 1))
+      );
       event?.preventDefault?.();
       this.setFocusedNode(buttons[nextIndex] || current);
       return true;
@@ -1131,13 +1235,15 @@ export const LibraryScreen = {
     }
     const code = Number(event?.keyCode || 0);
     const isTopGridRow = this.isTopGridRowNode(current);
-    const fromPickerRow = code === 40
-      && current.matches?.(".library-picker-anchor.focusable")
-      && Boolean(current.closest?.(".library-picker-row"));
-    const fromGrid = code === 38
-      && current.matches?.(".library-grid-card.focusable")
-      && Boolean(current.closest?.(".library-grid"))
-      && isTopGridRow;
+    const fromPickerRow =
+      code === 40 &&
+      current.matches?.(".library-picker-anchor.focusable") &&
+      Boolean(current.closest?.(".library-picker-row"));
+    const fromGrid =
+      code === 38 &&
+      current.matches?.(".library-grid-card.focusable") &&
+      Boolean(current.closest?.(".library-grid")) &&
+      isTopGridRow;
     const fromActionsRow = current.closest?.(".library-actions-row") || null;
     if (fromActionsRow) {
       return this.handleActionsRowNavigation(event, current);
@@ -1155,15 +1261,21 @@ export const LibraryScreen = {
   },
 
   handleFilterRowHorizontalNavigation(event, current) {
-    if (!current || !current.matches?.(".library-picker-anchor.focusable") || !current.closest?.(".library-picker-row")) {
+    if (
+      !current ||
+      !current.matches?.(".library-picker-anchor.focusable") ||
+      !current.closest?.(".library-picker-row")
+    ) {
       return false;
     }
     const code = Number(event?.keyCode || 0);
-    const delta = code === 37 ? -1 : (code === 39 ? 1 : 0);
+    const delta = code === 37 ? -1 : code === 39 ? 1 : 0;
     if (!delta) {
       return false;
     }
-    const anchors = Array.from(this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []);
+    const anchors = Array.from(
+      this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []
+    );
     if (!anchors.length) {
       return false;
     }
@@ -1183,19 +1295,16 @@ export const LibraryScreen = {
   },
 
   handleGridNavigation(event, current) {
-    if (!current || !current.matches?.(".library-grid-card.focusable") || !current.closest?.(".library-grid")) {
+    if (
+      !current ||
+      !current.matches?.(".library-grid-card.focusable") ||
+      !current.closest?.(".library-grid")
+    ) {
       return false;
     }
     const code = Number(event?.keyCode || 0);
-    const direction = code === 37
-      ? "left"
-      : code === 39
-        ? "right"
-        : code === 38
-          ? "up"
-          : code === 40
-            ? "down"
-            : "";
+    const direction =
+      code === 37 ? "left" : code === 39 ? "right" : code === 38 ? "up" : code === 40 ? "down" : "";
     if (!direction) {
       return false;
     }
@@ -1228,7 +1337,7 @@ export const LibraryScreen = {
       return false;
     }
     const code = Number(event?.keyCode || 0);
-    const delta = code === 38 ? -1 : (code === 40 ? 1 : 0);
+    const delta = code === 38 ? -1 : code === 40 ? 1 : 0;
     if (!delta) {
       return false;
     }
@@ -1244,15 +1353,22 @@ export const LibraryScreen = {
   },
 
   resolvePreferredPrivacyNode() {
-    const options = Array.from(this.container?.querySelectorAll(".library-list-editor .library-privacy-button.focusable") || []);
+    const options = Array.from(
+      this.container?.querySelectorAll(".library-list-editor .library-privacy-button.focusable") ||
+        []
+    );
     if (!options.length) {
       return null;
     }
-    return options.find((node) => String(node.dataset.privacy || "") === this.lastPrivacyFocus && !node.disabled)
-      || options.find((node) => node.classList.contains("selected") && !node.disabled)
-      || options.find((node) => !node.disabled)
-      || options[0]
-      || null;
+    return (
+      options.find(
+        (node) => String(node.dataset.privacy || "") === this.lastPrivacyFocus && !node.disabled
+      ) ||
+      options.find((node) => node.classList.contains("selected") && !node.disabled) ||
+      options.find((node) => !node.disabled) ||
+      options[0] ||
+      null
+    );
   },
 
   handlePrivacyMemoryNavigation(event, current) {
@@ -1262,8 +1378,11 @@ export const LibraryScreen = {
     }
     const code = Number(event?.keyCode || 0);
     if ((code === 37 || code === 39) && current.matches?.(".library-privacy-button.focusable")) {
-      const options = Array.from(this.container?.querySelectorAll(".library-list-editor .library-privacy-button.focusable") || [])
-        .filter((node) => !node.disabled);
+      const options = Array.from(
+        this.container?.querySelectorAll(
+          ".library-list-editor .library-privacy-button.focusable"
+        ) || []
+      ).filter((node) => !node.disabled);
       const currentIndex = options.indexOf(current);
       if (currentIndex < 0) {
         return false;
@@ -1275,10 +1394,14 @@ export const LibraryScreen = {
       this.setFocusedNode(target);
       return true;
     }
-    const fromDescription = code === 40
-      && current.matches?.(".library-dialog-textarea.focusable[data-editor-field='description']");
-    const fromActions = code === 38
-      && current.matches?.(".library-list-editor .library-action-button.focusable[data-action='saveListEditor'], .library-list-editor .library-action-button.focusable[data-action='cancelListEditor']");
+    const fromDescription =
+      code === 40 &&
+      current.matches?.(".library-dialog-textarea.focusable[data-editor-field='description']");
+    const fromActions =
+      code === 38 &&
+      current.matches?.(
+        ".library-list-editor .library-action-button.focusable[data-action='saveListEditor'], .library-list-editor .library-action-button.focusable[data-action='cancelListEditor']"
+      );
     if (!fromDescription && !fromActions) {
       return false;
     }
@@ -1292,23 +1415,30 @@ export const LibraryScreen = {
   },
 
   handleManageDialogNavigation(event, current) {
-    if (!this.controller.getState().showManageDialog || !current?.closest?.(".library-manage-dialog")) {
+    if (
+      !this.controller.getState().showManageDialog ||
+      !current?.closest?.(".library-manage-dialog")
+    ) {
       return false;
     }
     const code = Number(event?.keyCode || 0);
-    const direction = code === 37 ? "left"
-      : code === 39 ? "right"
-        : code === 38 ? "up"
-          : code === 40 ? "down"
-            : "";
+    const direction =
+      code === 37 ? "left" : code === 39 ? "right" : code === 38 ? "up" : code === 40 ? "down" : "";
     if (!direction) {
       return false;
     }
 
-    const listButtons = Array.from(this.container?.querySelectorAll(".library-manage-list-button.focusable") || [])
-      .filter((node) => !node.disabled);
-    const actionRows = Array.from(this.container?.querySelectorAll(".library-manage-actions-row") || []);
-    const rowButtons = actionRows.map((row) => Array.from(row.querySelectorAll(".library-action-button.focusable")).filter((node) => !node.disabled));
+    const listButtons = Array.from(
+      this.container?.querySelectorAll(".library-manage-list-button.focusable") || []
+    ).filter((node) => !node.disabled);
+    const actionRows = Array.from(
+      this.container?.querySelectorAll(".library-manage-actions-row") || []
+    );
+    const rowButtons = actionRows.map((row) =>
+      Array.from(row.querySelectorAll(".library-action-button.focusable")).filter(
+        (node) => !node.disabled
+      )
+    );
     const firstRow = rowButtons[0] || [];
     const secondRow = rowButtons[1] || [];
     const nearestInRow = (row) => findNearestNodeByCenterX(current, row) || row[0] || null;
@@ -1365,10 +1495,11 @@ export const LibraryScreen = {
       this.sidebarExpanded = true;
       setModernSidebarExpanded(this.container, true);
     }
-    const target = preferredNode
-      || getRootSidebarSelectedNode(this.container, this.layoutPrefs)
-      || getRootSidebarNodes(this.container, this.layoutPrefs)[0]
-      || null;
+    const target =
+      preferredNode ||
+      getRootSidebarSelectedNode(this.container, this.layoutPrefs) ||
+      getRootSidebarNodes(this.container, this.layoutPrefs)[0] ||
+      null;
     if (!target) {
       return false;
     }
@@ -1382,10 +1513,11 @@ export const LibraryScreen = {
       this.sidebarExpanded = false;
       setModernSidebarExpanded(this.container, false);
     }
-    const target = preferredNode
-      || (preferEntryPoint ? this.resolveMainEntryFocus() : null)
-      || this.resolveLastMainFocus()
-      || null;
+    const target =
+      preferredNode ||
+      (preferEntryPoint ? this.resolveMainEntryFocus() : null) ||
+      this.resolveLastMainFocus() ||
+      null;
     if (!target) {
       return false;
     }
@@ -1403,7 +1535,7 @@ export const LibraryScreen = {
     }
     const nodeRect = node.getBoundingClientRect();
     const mainRect = main.getBoundingClientRect();
-    return (nodeRect.left - mainRect.left) <= 140;
+    return nodeRect.left - mainRect.left <= 140;
   },
 
   closeTopOverlay() {
@@ -1454,7 +1586,13 @@ export const LibraryScreen = {
       }
       return;
     }
-    if (action === "gotoSearch" || action === "gotoLibrary" || action === "gotoPlugin" || action === "gotoSettings" || action === "gotoAccount") {
+    if (
+      action === "gotoSearch" ||
+      action === "gotoLibrary" ||
+      action === "gotoPlugin" ||
+      action === "gotoSettings" ||
+      action === "gotoAccount"
+    ) {
       activateLegacySidebarAction(action, "library");
       if (isSelectedSidebarAction(action, "library")) {
         await this.focusMainNode();
@@ -1486,7 +1624,9 @@ export const LibraryScreen = {
       this.closePickerMenuInDom(picker);
       if (picker === "sort") {
         requestAnimationFrame(() => {
-          this.container?.querySelector(".home-main")?.scrollTo?.({ top: 0, left: 0, behavior: "auto" });
+          this.container
+            ?.querySelector(".home-main")
+            ?.scrollTo?.({ top: 0, left: 0, behavior: "auto" });
         });
       }
       return;
@@ -1523,7 +1663,9 @@ export const LibraryScreen = {
     }
     if (action === "editList") {
       const state = this.controller.getState();
-      const selected = state.listTabs.find((item) => item.key === state.manageSelectedListKey && item.type === "personal");
+      const selected = state.listTabs.find(
+        (item) => item.key === state.manageSelectedListKey && item.type === "personal"
+      );
       this.lastPrivacyFocus = String(selected?.privacy || "private");
       this.controller.startEditList();
       return;
@@ -1606,7 +1748,11 @@ export const LibraryScreen = {
     }
 
     const current = this.container?.querySelector(".focusable.focused") || activeNode || null;
-    const sidebarLocked = state.listEditorState || state.showDeleteConfirm || state.showManageDialog || state.expandedPicker;
+    const sidebarLocked =
+      state.listEditorState ||
+      state.showDeleteConfirm ||
+      state.showManageDialog ||
+      state.expandedPicker;
 
     if (!sidebarLocked && code === 13 && this.isPosterHoldTarget(current)) {
       event?.preventDefault?.();
@@ -1689,7 +1835,10 @@ export const LibraryScreen = {
     if (Number(event?.keyCode || 0) !== 13) {
       return;
     }
-    const current = this.container?.querySelector(".library-grid-card.focusable.focused[data-action='openDetail']") || null;
+    const current =
+      this.container?.querySelector(
+        ".library-grid-card.focusable.focused[data-action='openDetail']"
+      ) || null;
     if (this.completePendingPosterHold(current, event)) {
       event?.preventDefault?.();
     }

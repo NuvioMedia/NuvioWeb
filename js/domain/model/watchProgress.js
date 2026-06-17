@@ -17,12 +17,17 @@ export function createWatchProgress({
 }
 
 export const WATCH_PROGRESS_STARTED_THRESHOLD = 0.02;
-export const WATCH_PROGRESS_COMPLETED_THRESHOLD = 0.90;
+export const WATCH_PROGRESS_COMPLETED_THRESHOLD = 0.9;
 
 export function getWatchProgressFraction(progress = {}) {
   const positionMs = Number(progress?.positionMs || 0);
   const durationMs = Number(progress?.durationMs || 0);
-  if (Number.isFinite(positionMs) && Number.isFinite(durationMs) && positionMs > 0 && durationMs > 0) {
+  if (
+    Number.isFinite(positionMs) &&
+    Number.isFinite(durationMs) &&
+    positionMs > 0 &&
+    durationMs > 0
+  ) {
     return Math.max(0, Math.min(1, positionMs / durationMs));
   }
   if (progress?.progressPercent != null && progress.progressPercent !== "") {
@@ -40,7 +45,9 @@ export function isWatchProgressCompleted(progress = {}) {
 
 export function isWatchProgressInProgress(progress = {}) {
   const fraction = getWatchProgressFraction(progress);
-  return fraction >= WATCH_PROGRESS_STARTED_THRESHOLD && fraction < WATCH_PROGRESS_COMPLETED_THRESHOLD;
+  return (
+    fraction >= WATCH_PROGRESS_STARTED_THRESHOLD && fraction < WATCH_PROGRESS_COMPLETED_THRESHOLD
+  );
 }
 
 export function hasWatchProgressStarted(progress = {}) {
@@ -56,8 +63,13 @@ export function resolveWatchProgressResumePositionMs(progress = {}, actualDurati
       : Math.trunc(positionMs);
   }
   const explicitPercent = Number(progress?.progressPercent);
-  if (Number.isFinite(explicitPercent) && explicitPercent > 0 && Number.isFinite(durationMs) && durationMs > 0) {
-    return Math.trunc(durationMs * Math.max(0, Math.min(100, explicitPercent)) / 100);
+  if (
+    Number.isFinite(explicitPercent) &&
+    explicitPercent > 0 &&
+    Number.isFinite(durationMs) &&
+    durationMs > 0
+  ) {
+    return Math.trunc((durationMs * Math.max(0, Math.min(100, explicitPercent))) / 100);
   }
   return 0;
 }

@@ -39,7 +39,7 @@ function isJwtExpired(token, leewaySeconds = 30) {
     return false;
   }
   const nowSeconds = Math.floor(Date.now() / 1000);
-  return exp <= (nowSeconds + leewaySeconds);
+  return exp <= nowSeconds + leewaySeconds;
 }
 
 function getBearerToken() {
@@ -121,14 +121,16 @@ function toEpochMillis(session) {
       return parsed;
     }
   }
-  return Date.now() + (5 * 60 * 1000);
+  return Date.now() + 5 * 60 * 1000;
 }
 
 function isLegacyStartSignatureError(text) {
   const message = String(text || "").toLowerCase();
-  return message.includes("start_tv_login_session")
-    && message.includes("could not find the function")
-    && message.includes("p_device_name");
+  return (
+    message.includes("start_tv_login_session") &&
+    message.includes("could not find the function") &&
+    message.includes("p_device_name")
+  );
 }
 
 async function parseErrorText(response) {
@@ -181,8 +183,10 @@ function extractSessionTokens(payload) {
   if (!payload || typeof payload !== "object") {
     return null;
   }
-  const accessToken = payload.access_token || payload.accessToken || payload?.session?.access_token || null;
-  const refreshToken = payload.refresh_token || payload.refreshToken || payload?.session?.refresh_token || null;
+  const accessToken =
+    payload.access_token || payload.accessToken || payload?.session?.access_token || null;
+  const refreshToken =
+    payload.refresh_token || payload.refreshToken || payload?.session?.refresh_token || null;
   if (!accessToken || !refreshToken) {
     return null;
   }
@@ -252,7 +256,9 @@ async function ensureQrSessionAuthenticated() {
     payload = await tryAnonymousSignup();
   } catch (firstError) {
     payload = await tryAnonymousToken().catch((secondError) => {
-      throw new Error(`${firstError?.message || "anonymous signup failed"} | ${secondError?.message || "anonymous token failed"}`);
+      throw new Error(
+        `${firstError?.message || "anonymous signup failed"} | ${secondError?.message || "anonymous token failed"}`
+      );
     });
   }
 
@@ -296,7 +302,6 @@ async function startRpc(deviceNonce, redirectBaseUrl, includeDeviceName = true) 
 }
 
 export const QrLoginService = {
-
   getLastError() {
     return lastError;
   },
@@ -343,7 +348,9 @@ export const QrLoginService = {
 
       if (!session) {
         if (lastStartError) {
-          throw new Error(`${lastStartError.message} | tried redirect_base_url: ${redirectCandidates.join(" , ")}`);
+          throw new Error(
+            `${lastStartError.message} | tried redirect_base_url: ${redirectCandidates.join(" , ")}`
+          );
         }
         throw new Error("Empty response from start_tv_login_session");
       }
@@ -351,7 +358,9 @@ export const QrLoginService = {
       return {
         code: session.code,
         loginUrl: session.qr_content || session.web_url || null,
-        qrImageUrl: session.qr_image_url || `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(session.qr_content || session.web_url || "")}`,
+        qrImageUrl:
+          session.qr_image_url ||
+          `https://api.qrserver.com/v1/create-qr-code/?size=260x260&data=${encodeURIComponent(session.qr_content || session.web_url || "")}`,
         expiresAt: toEpochMillis(session),
         pollIntervalSeconds: Number(session.poll_interval_seconds || 3),
         deviceNonce
@@ -450,5 +459,4 @@ export const QrLoginService = {
   cleanup() {
     // no-op: timers are owned by screen
   }
-
 };

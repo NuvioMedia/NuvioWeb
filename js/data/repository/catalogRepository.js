@@ -3,7 +3,6 @@ import { CatalogApi } from "../remote/api/catalogApi.js";
 import { addonRepository } from "./addonRepository.js";
 
 class CatalogRepository {
-
   constructor() {
     this.catalogCache = new Map();
   }
@@ -70,7 +69,8 @@ class CatalogRepository {
   buildCatalogUrl({ baseUrl, type, catalogId, skip = 0, extraArgs = {} }) {
     const cleanBaseUrl = addonRepository.canonicalizeUrl(baseUrl);
     const queryStart = cleanBaseUrl.indexOf("?");
-    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const basePath =
+      queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
     const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
     const args = { ...extraArgs };
 

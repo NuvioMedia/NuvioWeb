@@ -12,10 +12,14 @@ net.Server.prototype.listen = function patchedListen(...args) {
   }
 
   if (args[0] && typeof args[0] === "object") {
-    return originalListen.call(this, {
-      ...args[0],
-      host: normalizeHost(args[0].host)
-    }, ...args.slice(1));
+    return originalListen.call(
+      this,
+      {
+        ...args[0],
+        host: normalizeHost(args[0].host)
+      },
+      ...args.slice(1)
+    );
   }
 
   if (typeof args[0] === "number" || typeof args[0] === "string") {

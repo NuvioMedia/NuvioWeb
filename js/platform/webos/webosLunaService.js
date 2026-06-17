@@ -7,14 +7,16 @@ function getServiceRequest() {
 }
 
 function getPalmServiceBridge() {
-  return typeof globalThis.PalmServiceBridge === "function"
-    ? globalThis.PalmServiceBridge
-    : null;
+  return typeof globalThis.PalmServiceBridge === "function" ? globalThis.PalmServiceBridge : null;
 }
 
 function buildPalmServiceUrl(service, method) {
-  const normalizedService = String(service || "").trim().replace(/\/+$/, "");
-  const normalizedMethod = String(method || "").trim().replace(/^\/+/, "");
+  const normalizedService = String(service || "")
+    .trim()
+    .replace(/\/+$/, "");
+  const normalizedMethod = String(method || "")
+    .trim()
+    .replace(/^\/+/, "");
   if (!normalizedService || !normalizedMethod) {
     return "";
   }
@@ -37,7 +39,6 @@ function parseBridgePayload(payload) {
 }
 
 export const WebOsLunaService = {
-
   isAvailable() {
     return Boolean(getServiceRequest() || getPalmServiceBridge());
   },
@@ -51,11 +52,14 @@ export const WebOsLunaService = {
           parameters: parameters && typeof parameters === "object" ? { ...parameters } : {},
           subscribe: Boolean(subscribe),
           onSuccess: (result) => resolve(result || {}),
-          onFailure: (result) => reject(result || {
-            returnValue: false,
-            errorCode: -1,
-            errorText: "Luna request failed"
-          })
+          onFailure: (result) =>
+            reject(
+              result || {
+                returnValue: false,
+                errorCode: -1,
+                errorText: "Luna request failed"
+              }
+            )
         });
         return;
       }
@@ -117,11 +121,13 @@ export const WebOsLunaService = {
         },
         onFailure: (result) => {
           if (typeof onFailure === "function") {
-            onFailure(result || {
-              returnValue: false,
-              errorCode: -1,
-              errorText: "Luna subscription failed"
-            });
+            onFailure(
+              result || {
+                returnValue: false,
+                errorCode: -1,
+                errorText: "Luna subscription failed"
+              }
+            );
           }
         }
       });
@@ -147,7 +153,10 @@ export const WebOsLunaService = {
     }
 
     const bridge = new PalmServiceBridge();
-    const payload = parameters && typeof parameters === "object" ? { ...parameters, subscribe: true } : { subscribe: true };
+    const payload =
+      parameters && typeof parameters === "object"
+        ? { ...parameters, subscribe: true }
+        : { subscribe: true };
     bridge.onservicecallback = (rawResponse) => {
       const parsed = parseBridgePayload(rawResponse);
       if (parsed?.returnValue === false || parsed?.errorCode) {
@@ -169,5 +178,4 @@ export const WebOsLunaService = {
       }
     };
   }
-
 };

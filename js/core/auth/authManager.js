@@ -31,11 +31,10 @@ function isJwtExpired(token, leewaySeconds = 30) {
     return false;
   }
   const nowSeconds = Math.floor(Date.now() / 1000);
-  return exp <= (nowSeconds + leewaySeconds);
+  return exp <= nowSeconds + leewaySeconds;
 }
 
 class AuthManagerClass {
-
   constructor() {
     this.state = AuthState.LOADING;
     this.listeners = [];
@@ -57,7 +56,7 @@ class AuthManagerClass {
 
   setState(newState) {
     this.state = newState;
-    this.listeners.forEach(l => l(newState));
+    this.listeners.forEach((l) => l(newState));
   }
 
   // ------------------------------------
@@ -101,18 +100,14 @@ class AuthManagerClass {
   // EMAIL LOGIN
   // ------------------------------------
   async signInWithEmail(email, password) {
-
-    const res = await fetch(
-      `${SUPABASE_URL}/auth/v1/token?grant_type=password`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY
-        },
-        body: JSON.stringify({ email, password })
-      }
-    );
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ email, password })
+    });
 
     if (!res.ok) throw new Error("Login failed");
 
@@ -149,17 +144,14 @@ class AuthManagerClass {
 
     this.refreshPromise = (async () => {
       try {
-        const res = await fetch(
-          `${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "apikey": SUPABASE_ANON_KEY
-            },
-            body: JSON.stringify({ refresh_token: refreshToken })
-          }
-        );
+        const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY
+          },
+          body: JSON.stringify({ refresh_token: refreshToken })
+        });
         if (!res.ok) {
           return false;
         }
@@ -188,23 +180,19 @@ class AuthManagerClass {
   // ------------------------------------
 
   async startTvLoginSession(deviceNonce, deviceName, redirectBaseUrl) {
-
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/rpc/start_tv_login_session`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SessionStore.accessToken}`
-        },
-        body: JSON.stringify({
-          p_device_nonce: deviceNonce,
-          p_redirect_base_url: redirectBaseUrl,
-          ...(deviceName && { p_device_name: deviceName })
-        })
-      }
-    );
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/start_tv_login_session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SessionStore.accessToken}`
+      },
+      body: JSON.stringify({
+        p_device_nonce: deviceNonce,
+        p_redirect_base_url: redirectBaseUrl,
+        ...(deviceName && { p_device_name: deviceName })
+      })
+    });
 
     if (!res.ok) throw new Error(await res.text());
 
@@ -213,22 +201,18 @@ class AuthManagerClass {
   }
 
   async pollTvLoginSession(code, deviceNonce) {
-
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SessionStore.accessToken}`
-        },
-        body: JSON.stringify({
-          p_code: code,
-          p_device_nonce: deviceNonce
-        })
-      }
-    );
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SessionStore.accessToken}`
+      },
+      body: JSON.stringify({
+        p_code: code,
+        p_device_nonce: deviceNonce
+      })
+    });
 
     if (!res.ok) throw new Error(await res.text());
 
@@ -237,22 +221,18 @@ class AuthManagerClass {
   }
 
   async exchangeTvLoginSession(code, deviceNonce) {
-
-    const res = await fetch(
-      `${SUPABASE_URL}/functions/v1/tv-logins-exchange`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SessionStore.accessToken}`
-        },
-        body: JSON.stringify({
-          code,
-          device_nonce: deviceNonce
-        })
-      }
-    );
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/tv-logins-exchange`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SessionStore.accessToken}`
+      },
+      body: JSON.stringify({
+        code,
+        device_nonce: deviceNonce
+      })
+    });
 
     if (!res.ok) throw new Error(await res.text());
 
@@ -269,9 +249,7 @@ class AuthManagerClass {
   // ------------------------------------
 
   async getEffectiveUserId() {
-
-    if (this.cachedEffectiveUserId)
-      return this.cachedEffectiveUserId;
+    if (this.cachedEffectiveUserId) return this.cachedEffectiveUserId;
 
     if (!SessionStore.accessToken) {
       const refreshed = await this.refreshSessionIfNeeded();
@@ -283,31 +261,25 @@ class AuthManagerClass {
 
     const authHeaders = {
       "Content-Type": "application/json",
-      "apikey": SUPABASE_ANON_KEY,
-      "Authorization": `Bearer ${SessionStore.accessToken}`
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SessionStore.accessToken}`
     };
 
-    let res = await fetch(
-      `${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`,
-      {
-        method: "POST",
-        headers: authHeaders
-      }
-    );
+    let res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`, {
+      method: "POST",
+      headers: authHeaders
+    });
 
     if (res.status === 401) {
       const refreshed = await this.refreshSessionIfNeeded();
       if (refreshed) {
-        res = await fetch(
-          `${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`,
-          {
-            method: "POST",
-            headers: {
-              ...authHeaders,
-              "Authorization": `Bearer ${SessionStore.accessToken}`
-            }
+        res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_sync_owner`, {
+          method: "POST",
+          headers: {
+            ...authHeaders,
+            Authorization: `Bearer ${SessionStore.accessToken}`
           }
-        );
+        });
       }
     }
 

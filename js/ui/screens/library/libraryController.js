@@ -15,11 +15,27 @@ const SYNC_LOADING_MIN_MS = 700;
 const LEADING_ARTICLE_REGEX = /^(the|an|a)\s+/i;
 
 export const LIBRARY_SORT_OPTIONS = [
-  { key: LibrarySortOptionKey.DEFAULT, labelKey: "library_sort_trakt_order", fallback: "Trakt Order" },
-  { key: LibrarySortOptionKey.ADDED_DESC, labelKey: "library_sort_added_desc", fallback: "Added ↓" },
+  {
+    key: LibrarySortOptionKey.DEFAULT,
+    labelKey: "library_sort_trakt_order",
+    fallback: "Trakt Order"
+  },
+  {
+    key: LibrarySortOptionKey.ADDED_DESC,
+    labelKey: "library_sort_added_desc",
+    fallback: "Added ↓"
+  },
   { key: LibrarySortOptionKey.ADDED_ASC, labelKey: "library_sort_added_asc", fallback: "Added ↑" },
-  { key: LibrarySortOptionKey.TITLE_ASC, labelKey: "library_sort_title_asc", fallback: "Title A-Z" },
-  { key: LibrarySortOptionKey.TITLE_DESC, labelKey: "library_sort_title_desc", fallback: "Title Z-A" }
+  {
+    key: LibrarySortOptionKey.TITLE_ASC,
+    labelKey: "library_sort_title_asc",
+    fallback: "Title A-Z"
+  },
+  {
+    key: LibrarySortOptionKey.TITLE_DESC,
+    labelKey: "library_sort_title_desc",
+    fallback: "Title Z-A"
+  }
 ];
 
 export const LIBRARY_PRIVACY_OPTIONS = [
@@ -40,7 +56,9 @@ function makeInitialState() {
     availableTypeTabs: [{ key: ALL_KEY, label: "All" }],
     availableGenres: [],
     availableYears: [],
-    availableSortOptions: LIBRARY_SORT_OPTIONS.filter((option) => option.key !== LibrarySortOptionKey.DEFAULT),
+    availableSortOptions: LIBRARY_SORT_OPTIONS.filter(
+      (option) => option.key !== LibrarySortOptionKey.DEFAULT
+    ),
     selectedListKey: null,
     selectedTypeKey: ALL_KEY,
     selectedGenre: null,
@@ -86,7 +104,9 @@ async function allowLoadingFrame() {
 }
 
 function optionLabel(option = {}) {
-  return option.labelKey ? t(option.labelKey, {}, option.fallback || option.key) : String(option.label || option.key || "");
+  return option.labelKey
+    ? t(option.labelKey, {}, option.fallback || option.key)
+    : String(option.label || option.key || "");
 }
 
 function stripCountSuffix(value) {
@@ -97,13 +117,17 @@ function typeLabelForEmptyState(key) {
   if (!key || key === ALL_KEY) {
     return "all";
   }
-  return libraryTypeLabel(key).replace(/\s+\(\d+\)$/, "").toLowerCase();
+  return libraryTypeLabel(key)
+    .replace(/\s+\(\d+\)$/, "")
+    .toLowerCase();
 }
 
 function normalizeTypeTabs(items) {
   const byKey = new Map();
   items.forEach((item) => {
-    const key = String(item.type || "").trim().toLowerCase();
+    const key = String(item.type || "")
+      .trim()
+      .toLowerCase();
     if (!key || byKey.has(key)) {
       return;
     }
@@ -113,7 +137,14 @@ function normalizeTypeTabs(items) {
     { key: ALL_KEY, label: `${t("library_type_all", {}, "All")} (${items.length})` },
     ...Array.from(byKey.entries()).map(([key, label]) => ({
       key,
-      label: `${label} (${items.filter((item) => String(item.type || "").trim().toLowerCase() === key).length})`
+      label: `${label} (${
+        items.filter(
+          (item) =>
+            String(item.type || "")
+              .trim()
+              .toLowerCase() === key
+        ).length
+      })`
     }))
   ];
 }
@@ -124,15 +155,21 @@ function extractYear(item = {}) {
 }
 
 function titleSortKey(value) {
-  return String(value || "").trim().replace(LEADING_ARTICLE_REGEX, "").toLowerCase();
+  return String(value || "")
+    .trim()
+    .replace(LEADING_ARTICLE_REGEX, "")
+    .toLowerCase();
 }
 
 function buildFilterOptions(items = [], field) {
   const counts = new Map();
   items.forEach((item) => {
-    const values = field === "genre"
-      ? (Array.isArray(item.genres) ? item.genres : [])
-      : [extractYear(item)].filter(Boolean);
+    const values =
+      field === "genre"
+        ? Array.isArray(item.genres)
+          ? item.genres
+          : []
+        : [extractYear(item)].filter(Boolean);
     values.forEach((value) => {
       const key = String(value || "").trim();
       if (key) {
@@ -141,9 +178,11 @@ function buildFilterOptions(items = [], field) {
     });
   });
   return Array.from(counts.entries())
-    .sort((left, right) => field === "year"
-      ? String(right[0]).localeCompare(String(left[0]))
-      : String(left[0]).localeCompare(String(right[0]), undefined, { sensitivity: "base" }))
+    .sort((left, right) =>
+      field === "year"
+        ? String(right[0]).localeCompare(String(left[0]))
+        : String(left[0]).localeCompare(String(right[0]), undefined, { sensitivity: "base" })
+    )
     .map(([key, count]) => ({ key, label: key, count }));
 }
 
@@ -151,8 +190,9 @@ function itemMatchesGenre(item, genre) {
   if (!genre) {
     return true;
   }
-  return (Array.isArray(item.genres) ? item.genres : [])
-    .some((entry) => String(entry).toLowerCase() === String(genre).toLowerCase());
+  return (Array.isArray(item.genres) ? item.genres : []).some(
+    (entry) => String(entry).toLowerCase() === String(genre).toLowerCase()
+  );
 }
 
 function itemMatchesYear(item, year) {
@@ -160,14 +200,25 @@ function itemMatchesYear(item, year) {
 }
 
 function buildFacets(allItems, state) {
-  const listFiltered = state.sourceMode === LibrarySourceMode.TRAKT && state.selectedListKey
-    ? allItems.filter((item) => Array.isArray(item.listKeys) && item.listKeys.includes(state.selectedListKey))
-    : allItems;
+  const listFiltered =
+    state.sourceMode === LibrarySourceMode.TRAKT && state.selectedListKey
+      ? allItems.filter(
+          (item) => Array.isArray(item.listKeys) && item.listKeys.includes(state.selectedListKey)
+        )
+      : allItems;
   const selectedTypeKey = state.selectedTypeKey;
   const typeFiltered = listFiltered.filter((item) => {
-    return selectedTypeKey === ALL_KEY || String(item.type || "").trim().toLowerCase() === selectedTypeKey;
+    return (
+      selectedTypeKey === ALL_KEY ||
+      String(item.type || "")
+        .trim()
+        .toLowerCase() === selectedTypeKey
+    );
   });
-  const itemsForTypeCounts = listFiltered.filter((item) => itemMatchesGenre(item, state.selectedGenre) && itemMatchesYear(item, state.selectedYear));
+  const itemsForTypeCounts = listFiltered.filter(
+    (item) =>
+      itemMatchesGenre(item, state.selectedGenre) && itemMatchesYear(item, state.selectedYear)
+  );
   const itemsForGenreCounts = state.selectedYear
     ? typeFiltered.filter((item) => itemMatchesYear(item, state.selectedYear))
     : typeFiltered;
@@ -184,12 +235,20 @@ function buildFacets(allItems, state) {
 function sortForState(items, state) {
   const selectedTypeKey = state.selectedTypeKey;
   const typeFiltered = items.filter((item) => {
-    return selectedTypeKey === ALL_KEY || String(item.type || "").trim().toLowerCase() === selectedTypeKey;
+    return (
+      selectedTypeKey === ALL_KEY ||
+      String(item.type || "")
+        .trim()
+        .toLowerCase() === selectedTypeKey
+    );
   });
 
-  const listFiltered = state.sourceMode === LibrarySourceMode.TRAKT && state.selectedListKey
-    ? typeFiltered.filter((item) => Array.isArray(item.listKeys) && item.listKeys.includes(state.selectedListKey))
-    : typeFiltered;
+  const listFiltered =
+    state.sourceMode === LibrarySourceMode.TRAKT && state.selectedListKey
+      ? typeFiltered.filter(
+          (item) => Array.isArray(item.listKeys) && item.listKeys.includes(state.selectedListKey)
+        )
+      : typeFiltered;
 
   const genreFiltered = state.selectedGenre
     ? listFiltered.filter((item) => itemMatchesGenre(item, state.selectedGenre))
@@ -203,11 +262,18 @@ function sortForState(items, state) {
     if (!state.selectedListKey) {
       return field === "listedAt" ? Number(item.listedAt || 0) : item.traktRank;
     }
-    return item.listMeta?.[state.selectedListKey]?.[field] ?? (field === "listedAt" ? Number(item.listedAt || 0) : item.traktRank);
+    return (
+      item.listMeta?.[state.selectedListKey]?.[field] ??
+      (field === "listedAt" ? Number(item.listedAt || 0) : item.traktRank)
+    );
   };
 
   const byNameAsc = (left, right) => {
-    const nameResult = String(left.name || left.id).localeCompare(String(right.name || right.id), undefined, { sensitivity: "base" });
+    const nameResult = String(left.name || left.id).localeCompare(
+      String(right.name || right.id),
+      undefined,
+      { sensitivity: "base" }
+    );
     if (nameResult !== 0) {
       return nameResult;
     }
@@ -215,7 +281,11 @@ function sortForState(items, state) {
   };
 
   const byTitleSortAsc = (left, right) => {
-    const nameResult = titleSortKey(left.name || left.id).localeCompare(titleSortKey(right.name || right.id), undefined, { sensitivity: "base" });
+    const nameResult = titleSortKey(left.name || left.id).localeCompare(
+      titleSortKey(right.name || right.id),
+      undefined,
+      { sensitivity: "base" }
+    );
     if (nameResult !== 0) {
       return nameResult;
     }
@@ -226,19 +296,24 @@ function sortForState(items, state) {
   sorted.sort((left, right) => {
     switch (state.selectedSortKey) {
       case LibrarySortOptionKey.DEFAULT: {
-        const rankDiff = Number(listMetaValue(left, "traktRank") ?? Number.MAX_SAFE_INTEGER)
-          - Number(listMetaValue(right, "traktRank") ?? Number.MAX_SAFE_INTEGER);
+        const rankDiff =
+          Number(listMetaValue(left, "traktRank") ?? Number.MAX_SAFE_INTEGER) -
+          Number(listMetaValue(right, "traktRank") ?? Number.MAX_SAFE_INTEGER);
         if (rankDiff !== 0) {
           return rankDiff;
         }
-        const addedDiff = Number(listMetaValue(right, "listedAt") || 0) - Number(listMetaValue(left, "listedAt") || 0);
+        const addedDiff =
+          Number(listMetaValue(right, "listedAt") || 0) -
+          Number(listMetaValue(left, "listedAt") || 0);
         if (addedDiff !== 0) {
           return addedDiff;
         }
         return byNameAsc(left, right);
       }
       case LibrarySortOptionKey.ADDED_ASC: {
-        const addedDiff = Number(listMetaValue(left, "listedAt") || 0) - Number(listMetaValue(right, "listedAt") || 0);
+        const addedDiff =
+          Number(listMetaValue(left, "listedAt") || 0) -
+          Number(listMetaValue(right, "listedAt") || 0);
         if (addedDiff !== 0) {
           return addedDiff;
         }
@@ -250,7 +325,9 @@ function sortForState(items, state) {
         return byTitleSortAsc(right, left);
       case LibrarySortOptionKey.ADDED_DESC:
       default: {
-        const addedDiff = Number(listMetaValue(right, "listedAt") || 0) - Number(listMetaValue(left, "listedAt") || 0);
+        const addedDiff =
+          Number(listMetaValue(right, "listedAt") || 0) -
+          Number(listMetaValue(left, "listedAt") || 0);
         if (addedDiff !== 0) {
           return addedDiff;
         }
@@ -264,17 +341,16 @@ function sortForState(items, state) {
 function copyEditorState(state) {
   return state
     ? {
-      mode: state.mode,
-      listId: state.listId || null,
-      name: state.name || "",
-      description: state.description || "",
-      privacy: state.privacy || LibraryListPrivacy.PRIVATE
-    }
+        mode: state.mode,
+        listId: state.listId || null,
+        name: state.name || "",
+        description: state.description || "",
+        privacy: state.privacy || LibraryListPrivacy.PRIVATE
+      }
     : null;
 }
 
 export class LibraryController {
-
   constructor(onChange = () => {}) {
     this.onChange = onChange;
     this.state = makeInitialState();
@@ -314,21 +390,31 @@ export class LibraryController {
       ...patch
     };
     const facets = buildFacets(this.state.allItems, this.state);
-    const selectedGenre = this.state.selectedGenre && facets.availableGenres.some((item) => item.key === this.state.selectedGenre)
-      ? this.state.selectedGenre
-      : null;
-    const selectedYear = this.state.selectedYear && facets.availableYears.some((item) => item.key === this.state.selectedYear)
-      ? this.state.selectedYear
-      : null;
+    const selectedGenre =
+      this.state.selectedGenre &&
+      facets.availableGenres.some((item) => item.key === this.state.selectedGenre)
+        ? this.state.selectedGenre
+        : null;
+    const selectedYear =
+      this.state.selectedYear &&
+      facets.availableYears.some((item) => item.key === this.state.selectedYear)
+        ? this.state.selectedYear
+        : null;
     this.state = {
       ...this.state,
       ...facets,
-      selectedTypeKey: facets.availableTypeTabs.some((item) => item.key === this.state.selectedTypeKey) ? this.state.selectedTypeKey : ALL_KEY,
+      selectedTypeKey: facets.availableTypeTabs.some(
+        (item) => item.key === this.state.selectedTypeKey
+      )
+        ? this.state.selectedTypeKey
+        : ALL_KEY,
       selectedGenre,
       selectedYear
     };
     this.state.visibleItems = sortForState(this.state.allItems, this.state);
-    const hasFocusedPoster = this.state.visibleItems.some((item) => `${item.type}:${item.id}` === this.state.lastFocusedPosterKey);
+    const hasFocusedPoster = this.state.visibleItems.some(
+      (item) => `${item.type}:${item.id}` === this.state.lastFocusedPosterKey
+    );
     if (!hasFocusedPoster) {
       const firstItem = this.state.visibleItems[0] || null;
       this.state.lastFocusedPosterKey = firstItem ? `${firstItem.type}:${firstItem.id}` : null;
@@ -354,36 +440,53 @@ export class LibraryController {
       watchedItemsRepository.getAll(5000).catch(() => [])
     ]);
 
-    const nextSelectedListKey = sourceMode === LibrarySourceMode.TRAKT
-      ? (this.state.selectedListKey && listTabs.some((item) => item.key === this.state.selectedListKey)
-        ? this.state.selectedListKey
-        : (listTabs[0]?.key || null))
-      : null;
+    const nextSelectedListKey =
+      sourceMode === LibrarySourceMode.TRAKT
+        ? this.state.selectedListKey &&
+          listTabs.some((item) => item.key === this.state.selectedListKey)
+          ? this.state.selectedListKey
+          : listTabs[0]?.key || null
+        : null;
 
-    const availableSortOptions = sourceMode === LibrarySourceMode.TRAKT
-      ? LIBRARY_SORT_OPTIONS
-      : LIBRARY_SORT_OPTIONS.filter((option) => option.key !== LibrarySortOptionKey.DEFAULT);
+    const availableSortOptions =
+      sourceMode === LibrarySourceMode.TRAKT
+        ? LIBRARY_SORT_OPTIONS
+        : LIBRARY_SORT_OPTIONS.filter((option) => option.key !== LibrarySortOptionKey.DEFAULT);
     const facets = buildFacets(allItems, {
       ...this.state,
       sourceMode,
       selectedListKey: nextSelectedListKey
     });
     const availableTypeTabs = facets.availableTypeTabs;
-    const selectedTypeKey = availableTypeTabs.some((item) => item.key === this.state.selectedTypeKey)
+    const selectedTypeKey = availableTypeTabs.some(
+      (item) => item.key === this.state.selectedTypeKey
+    )
       ? this.state.selectedTypeKey
       : ALL_KEY;
-    const selectedGenre = this.state.selectedGenre && facets.availableGenres.some((item) => item.key === this.state.selectedGenre)
-      ? this.state.selectedGenre
-      : null;
-    const selectedYear = this.state.selectedYear && facets.availableYears.some((item) => item.key === this.state.selectedYear)
-      ? this.state.selectedYear
-      : null;
-    const selectedSortKey = availableSortOptions.some((item) => item.key === this.state.selectedSortKey)
+    const selectedGenre =
+      this.state.selectedGenre &&
+      facets.availableGenres.some((item) => item.key === this.state.selectedGenre)
+        ? this.state.selectedGenre
+        : null;
+    const selectedYear =
+      this.state.selectedYear &&
+      facets.availableYears.some((item) => item.key === this.state.selectedYear)
+        ? this.state.selectedYear
+        : null;
+    const selectedSortKey = availableSortOptions.some(
+      (item) => item.key === this.state.selectedSortKey
+    )
       ? this.state.selectedSortKey
-      : (sourceMode === LibrarySourceMode.TRAKT ? LibrarySortOptionKey.DEFAULT : LibrarySortOptionKey.ADDED_DESC);
-    const manageSelectedListKey = this.state.manageSelectedListKey && listTabs.some((item) => item.key === this.state.manageSelectedListKey && item.type === "personal")
-      ? this.state.manageSelectedListKey
-      : (listTabs.find((item) => item.type === "personal")?.key || null);
+      : sourceMode === LibrarySourceMode.TRAKT
+        ? LibrarySortOptionKey.DEFAULT
+        : LibrarySortOptionKey.ADDED_DESC;
+    const manageSelectedListKey =
+      this.state.manageSelectedListKey &&
+      listTabs.some(
+        (item) => item.key === this.state.manageSelectedListKey && item.type === "personal"
+      )
+        ? this.state.manageSelectedListKey
+        : listTabs.find((item) => item.type === "personal")?.key || null;
 
     this.state = {
       ...this.state,
@@ -402,8 +505,16 @@ export class LibraryController {
       manageSelectedListKey,
       isNuvioAccount: sourceMode === LibrarySourceMode.LOCAL && AuthManager.isAuthenticated,
       isTraktAuthenticated: sourceMode === LibrarySourceMode.TRAKT,
-      watchedMovieIds: new Set((watchedItems || []).filter((item) => item.season == null && item.episode == null).map((item) => String(item.contentId || ""))),
-      watchedSeriesIds: new Set((watchedItems || []).filter((item) => item.season == null && item.episode == null).map((item) => String(item.contentId || ""))),
+      watchedMovieIds: new Set(
+        (watchedItems || [])
+          .filter((item) => item.season == null && item.episode == null)
+          .map((item) => String(item.contentId || ""))
+      ),
+      watchedSeriesIds: new Set(
+        (watchedItems || [])
+          .filter((item) => item.season == null && item.episode == null)
+          .map((item) => String(item.contentId || ""))
+      ),
       isLoading: false,
       isSyncing: false,
       expandedPicker: preserveOverlay ? this.state.expandedPicker : null,
@@ -424,16 +535,24 @@ export class LibraryController {
   }
 
   getSelectedTypeLabel() {
-    const label = this.state.availableTypeTabs.find((item) => item.key === this.state.selectedTypeKey)?.label || t("library_type_all", {}, "All");
+    const label =
+      this.state.availableTypeTabs.find((item) => item.key === this.state.selectedTypeKey)?.label ||
+      t("library_type_all", {}, "All");
     return stripCountSuffix(label);
   }
 
   getSelectedSortLabel() {
-    return optionLabel(this.state.availableSortOptions.find((item) => item.key === this.state.selectedSortKey)) || t("library_sort_added_desc", {}, "Added ↓");
+    return (
+      optionLabel(
+        this.state.availableSortOptions.find((item) => item.key === this.state.selectedSortKey)
+      ) || t("library_sort_added_desc", {}, "Added ↓")
+    );
   }
 
   getSelectedListLabel() {
-    return this.state.listTabs.find((item) => item.key === this.state.selectedListKey)?.title || "Select";
+    return (
+      this.state.listTabs.find((item) => item.key === this.state.selectedListKey)?.title || "Select"
+    );
   }
 
   getSelectedGenreLabel() {
@@ -450,17 +569,29 @@ export class LibraryController {
       return t("library_empty_trakt_not_auth_title", {}, "Trakt not connected");
     }
     if (this.state.sourceMode === LibrarySourceMode.TRAKT) {
-      return t("library_empty_trakt_title", [selectedTypeLabel], `No ${selectedTypeLabel} in this list`);
+      return t(
+        "library_empty_trakt_title",
+        [selectedTypeLabel],
+        `No ${selectedTypeLabel} in this list`
+      );
     }
     return t("library_empty_local_title", [selectedTypeLabel], `No ${selectedTypeLabel} yet`);
   }
 
   getEmptyStateSubtitle() {
     if (this.state.sourceMode === LibrarySourceMode.TRAKT && !this.state.isTraktAuthenticated) {
-      return t("library_empty_trakt_not_auth_subtitle", {}, "Connect your Trakt account in Settings to view your Trakt library");
+      return t(
+        "library_empty_trakt_not_auth_subtitle",
+        {},
+        "Connect your Trakt account in Settings to view your Trakt library"
+      );
     }
     if (this.state.sourceMode === LibrarySourceMode.TRAKT) {
-      return t("library_empty_trakt_subtitle", {}, "Use + in details to add items to watchlist or lists");
+      return t(
+        "library_empty_trakt_subtitle",
+        {},
+        "Use + in details to add items to watchlist or lists"
+      );
     }
     return t("library_empty_local_subtitle", {}, "Start saving your favorites to see them here");
   }
@@ -473,18 +604,27 @@ export class LibraryController {
       return this.state.availableTypeTabs.map((item) => ({ value: item.key, label: item.label }));
     }
     if (picker === "sort") {
-      return this.state.availableSortOptions.map((item) => ({ value: item.key, label: optionLabel(item) }));
+      return this.state.availableSortOptions.map((item) => ({
+        value: item.key,
+        label: optionLabel(item)
+      }));
     }
     if (picker === "genre") {
       return [
         { value: ALL_KEY, label: t("library_type_all", {}, "All") },
-        ...this.state.availableGenres.map((item) => ({ value: item.key, label: `${item.label} (${item.count})` }))
+        ...this.state.availableGenres.map((item) => ({
+          value: item.key,
+          label: `${item.label} (${item.count})`
+        }))
       ];
     }
     if (picker === "year") {
       return [
         { value: ALL_KEY, label: t("library_type_all", {}, "All") },
-        ...this.state.availableYears.map((item) => ({ value: item.key, label: `${item.label} (${item.count})` }))
+        ...this.state.availableYears.map((item) => ({
+          value: item.key,
+          label: `${item.label} (${item.count})`
+        }))
       ];
     }
     return [];
@@ -495,16 +635,20 @@ export class LibraryController {
     const options = this.getPickerOptions(picker);
     let pickerFocusIndex = 0;
     if (nextExpanded) {
-      const currentValue = picker === "list"
-        ? this.state.selectedListKey
-        : picker === "type"
-          ? this.state.selectedTypeKey
-          : picker === "genre"
-            ? (this.state.selectedGenre || ALL_KEY)
-            : picker === "year"
-              ? (this.state.selectedYear || ALL_KEY)
-              : this.state.selectedSortKey;
-      const optionIndex = Math.max(0, options.findIndex((item) => item.value === currentValue));
+      const currentValue =
+        picker === "list"
+          ? this.state.selectedListKey
+          : picker === "type"
+            ? this.state.selectedTypeKey
+            : picker === "genre"
+              ? this.state.selectedGenre || ALL_KEY
+              : picker === "year"
+                ? this.state.selectedYear || ALL_KEY
+                : this.state.selectedSortKey;
+      const optionIndex = Math.max(
+        0,
+        options.findIndex((item) => item.value === currentValue)
+      );
       pickerFocusIndex = optionIndex;
     }
     this.setState({
@@ -530,7 +674,10 @@ export class LibraryController {
       return;
     }
     const delta = direction === "up" ? -1 : 1;
-    const nextIndex = Math.max(0, Math.min(pickerOptions.length - 1, Number(this.state.pickerFocusIndex || 0) + delta));
+    const nextIndex = Math.max(
+      0,
+      Math.min(pickerOptions.length - 1, Number(this.state.pickerFocusIndex || 0) + delta)
+    );
     if (config.silent === true) {
       this.state.pickerFocusIndex = nextIndex;
       return;
@@ -626,7 +773,10 @@ export class LibraryController {
       showManageDialog: true,
       errorMessage: null,
       expandedPicker: null,
-      manageSelectedListKey: this.state.manageSelectedListKey || this.state.listTabs.find((item) => item.type === "personal")?.key || null
+      manageSelectedListKey:
+        this.state.manageSelectedListKey ||
+        this.state.listTabs.find((item) => item.type === "personal")?.key ||
+        null
     });
   }
 
@@ -659,7 +809,9 @@ export class LibraryController {
   }
 
   startEditList() {
-    const selected = this.state.listTabs.find((item) => item.key === this.state.manageSelectedListKey && item.type === "personal");
+    const selected = this.state.listTabs.find(
+      (item) => item.key === this.state.manageSelectedListKey && item.type === "personal"
+    );
     if (!selected) {
       return;
     }
@@ -721,7 +873,11 @@ export class LibraryController {
     this.setState({ pendingOperation: true, errorMessage: null });
     try {
       if (editor.mode === "create") {
-        const newKey = await libraryRepository.createPersonalList(name, editor.description.trim() || null, editor.privacy);
+        const newKey = await libraryRepository.createPersonalList(
+          name,
+          editor.description.trim() || null,
+          editor.privacy
+        );
         this.setTransientMessage("List created");
         await this.reload({ preserveOverlay: true });
         this.setState({
@@ -730,7 +886,12 @@ export class LibraryController {
           manageSelectedListKey: newKey
         });
       } else {
-        await libraryRepository.updatePersonalList(editor.listId, name, editor.description.trim() || null, editor.privacy);
+        await libraryRepository.updatePersonalList(
+          editor.listId,
+          name,
+          editor.description.trim() || null,
+          editor.privacy
+        );
         this.setTransientMessage("List updated");
         await this.reload({ preserveOverlay: true });
         this.setState({
@@ -745,13 +906,17 @@ export class LibraryController {
   }
 
   async deleteSelectedList() {
-    const selected = this.state.listTabs.find((item) => item.key === this.state.manageSelectedListKey && item.type === "personal");
+    const selected = this.state.listTabs.find(
+      (item) => item.key === this.state.manageSelectedListKey && item.type === "personal"
+    );
     if (!selected) {
       return;
     }
     this.setState({ pendingOperation: true, errorMessage: null });
     try {
-      await libraryRepository.deletePersonalList(selected.traktListId || selected.key.replace("personal:", ""));
+      await libraryRepository.deletePersonalList(
+        selected.traktListId || selected.key.replace("personal:", "")
+      );
       this.setTransientMessage("List deleted");
       await this.reload({ preserveOverlay: true });
       this.setState({
@@ -766,7 +931,9 @@ export class LibraryController {
 
   async moveSelectedList(direction) {
     const personalTabs = this.state.listTabs.filter((item) => item.type === "personal");
-    const currentIndex = personalTabs.findIndex((item) => item.key === this.state.manageSelectedListKey);
+    const currentIndex = personalTabs.findIndex(
+      (item) => item.key === this.state.manageSelectedListKey
+    );
     if (currentIndex < 0) {
       return;
     }
@@ -780,7 +947,9 @@ export class LibraryController {
 
     this.setState({ pendingOperation: true, errorMessage: null });
     try {
-      await libraryRepository.reorderPersonalLists(reordered.map((item) => item.traktListId || item.key.replace("personal:", "")));
+      await libraryRepository.reorderPersonalLists(
+        reordered.map((item) => item.traktListId || item.key.replace("personal:", ""))
+      );
       this.setTransientMessage("List order updated");
       await this.reload({ preserveOverlay: true });
       this.setState({
@@ -808,7 +977,9 @@ export class LibraryController {
       this.setState({ isSyncing: false });
     } catch (error) {
       this.setState({ isSyncing: false });
-      this.setError(error?.message || t("library_error_refresh_failed", {}, "Failed to refresh library"));
+      this.setError(
+        error?.message || t("library_error_refresh_failed", {}, "Failed to refresh library")
+      );
     }
   }
 

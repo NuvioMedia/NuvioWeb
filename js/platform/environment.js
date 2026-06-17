@@ -1,7 +1,6 @@
 import { Platform } from "./index.js";
 
 export const Environment = {
-
   isWebOS() {
     return Platform.isWebOS();
   },
@@ -21,5 +20,4 @@ export const Environment = {
   getDeviceLabel() {
     return Platform.getDeviceLabel();
   }
-
 };

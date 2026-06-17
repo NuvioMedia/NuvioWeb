@@ -43,7 +43,6 @@ function toType(mediaType) {
 }
 
 export const CastDetailScreen = {
-
   async mount(params = {}) {
     this.container = document.getElementById("castDetail");
     ScreenUtils.show(this.container);
@@ -115,7 +114,9 @@ export const CastDetailScreen = {
         knownForDepartment: person?.known_for_department || "",
         profile: toImage(person?.profile_path || this.params?.castPhoto || "")
       };
-      const credits = Array.isArray(person?.combined_credits?.cast) ? person.combined_credits.cast : [];
+      const credits = Array.isArray(person?.combined_credits?.cast)
+        ? person.combined_credits.cast
+        : [];
       this.credits = credits
         .map((item) => ({
           id: item?.id ? String(item.id) : "",
@@ -159,7 +160,9 @@ export const CastDetailScreen = {
   render() {
     const person = this.person || {};
     const creditsHtml = this.credits.length
-      ? this.credits.map((item) => `
+      ? this.credits
+          .map(
+            (item) => `
           <article class="cast-credit-card focusable"
                    data-action="openDetail"
                    data-item-id="${item.itemId}"
@@ -171,7 +174,9 @@ export const CastDetailScreen = {
             <div class="cast-credit-title">${item.name}</div>
             <div class="cast-credit-subtitle">${item.subtitle || item.type}</div>
           </article>
-        `).join("")
+        `
+          )
+          .join("")
       : `<div class="cast-credit-empty">No titles found for this cast member.</div>`;
 
     this.container.innerHTML = `
@@ -203,9 +208,11 @@ export const CastDetailScreen = {
   },
 
   isPosterHoldTarget(node) {
-    return node instanceof HTMLElement
-      && node.classList.contains("cast-credit-card")
-      && String(node.dataset.action || "") === "openDetail";
+    return (
+      node instanceof HTMLElement &&
+      node.classList.contains("cast-credit-card") &&
+      String(node.dataset.action || "") === "openDetail"
+    );
   },
 
   cancelPendingPosterHold() {
@@ -273,7 +280,9 @@ export const CastDetailScreen = {
           const itemId = this.posterOptionsFocusRestore;
           this.posterOptionsFocusRestore = null;
           const target = itemId
-            ? this.container?.querySelector(`.cast-credit-card.focusable[data-item-id="${String(itemId).replace(/["\\]/g, "\\$&")}"]`)
+            ? this.container?.querySelector(
+                `.cast-credit-card.focusable[data-item-id="${String(itemId).replace(/["\\]/g, "\\$&")}"]`
+              )
             : null;
           if (!target) {
             return;
@@ -367,5 +376,4 @@ export const CastDetailScreen = {
     this.posterOptionsFocusRestore = null;
     ScreenUtils.hide(this.container);
   }
-
 };

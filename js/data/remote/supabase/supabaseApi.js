@@ -13,7 +13,6 @@ function buildHeaders(extra = {}, useSession = true) {
 }
 
 export const SupabaseApi = {
-
   rpc(functionName, body = {}, useSession = true) {
     return httpRequest(`${SUPABASE_URL}/rest/v1/rpc/${functionName}`, {
       method: "POST",
@@ -36,10 +35,13 @@ export const SupabaseApi = {
     const query = onConflict ? `?on_conflict=${encodeURIComponent(onConflict)}` : "";
     return httpRequest(`${SUPABASE_URL}/rest/v1/${table}${query}`, {
       method: "POST",
-      headers: buildHeaders({
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates,return=representation"
-      }, useSession),
+      headers: buildHeaders(
+        {
+          "Content-Type": "application/json",
+          Prefer: "resolution=merge-duplicates,return=representation"
+        },
+        useSession
+      ),
       includeSessionAuth: useSession,
       body: JSON.stringify(rows)
     });
@@ -52,5 +54,4 @@ export const SupabaseApi = {
       includeSessionAuth: useSession
     });
   }
-
 };

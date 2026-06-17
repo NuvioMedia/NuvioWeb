@@ -1,5 +1,4 @@
 export const SessionStore = {
-
   normalizeToken(value) {
     const text = String(value ?? "").trim();
     if (!text || text === "null" || text === "undefined") {

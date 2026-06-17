@@ -54,13 +54,14 @@ function mapRatingsPayload(payload = []) {
   });
 
   Object.keys(seasons).forEach((seasonNumber) => {
-    seasons[seasonNumber] = seasons[seasonNumber].sort((left, right) => left.episode - right.episode);
+    seasons[seasonNumber] = seasons[seasonNumber].sort(
+      (left, right) => left.episode - right.episode
+    );
   });
   return seasons;
 }
 
 export const imdbEpisodeRatingsRepository = {
-
   async getSeasonRatingsByTmdbId(tmdbId) {
     const normalizedBaseUrl = normalizeBaseUrl(IMDB_RATINGS_API_BASE_URL);
     const normalizedTmdbId = Number(tmdbId || 0);
@@ -84,5 +85,4 @@ export const imdbEpisodeRatingsRepository = {
     });
     return mapped;
   }
-
 };

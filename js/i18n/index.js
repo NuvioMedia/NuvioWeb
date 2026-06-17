@@ -132,9 +132,12 @@ const KEY_ALIASES = {
   "settings.integration.debrid.sort.subtitle": "debrid_stream_sort_subtitle",
   "settings.integration.debrid.sort.title": "debrid_stream_sort_title",
   "settings.integration.debrid.subtitle": "debrid_subtitle",
-  "settings.integration.debrid.template.description.prompt": "debrid_stream_description_template_prompt",
-  "settings.integration.debrid.template.description.subtitle": "debrid_stream_description_template_subtitle",
-  "settings.integration.debrid.template.description.title": "debrid_stream_description_template_title",
+  "settings.integration.debrid.template.description.prompt":
+    "debrid_stream_description_template_prompt",
+  "settings.integration.debrid.template.description.subtitle":
+    "debrid_stream_description_template_subtitle",
+  "settings.integration.debrid.template.description.title":
+    "debrid_stream_description_template_title",
   "settings.integration.debrid.template.name.prompt": "debrid_stream_name_template_prompt",
   "settings.integration.debrid.template.name.subtitle": "debrid_stream_name_template_subtitle",
   "settings.integration.debrid.template.name.title": "debrid_stream_name_template_title",
@@ -316,7 +319,10 @@ let baseMessagesPromise = null;
 const localeMessagesCache = new Map();
 
 function normalizeLocale(value) {
-  const raw = String(value || "").trim().toLowerCase().replace(/_/g, "-");
+  const raw = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
   if (!raw) {
     return "";
   }
@@ -359,9 +365,8 @@ function detectSystemLocale() {
 }
 
 function resolvePreferredLocale(preferred = null) {
-  const requested = preferred === null
-    ? ThemeStore.get().language || detectSystemLocale()
-    : preferred;
+  const requested =
+    preferred === null ? ThemeStore.get().language || detectSystemLocale() : preferred;
   const normalized = normalizeLocale(requested);
   if (!normalized || normalized === "system") {
     return normalizeLocale(detectSystemLocale()) || DEFAULT_LOCALE;
@@ -380,11 +385,13 @@ function interpolate(template, params = {}) {
     .replace(/%(\d+)\$[a-z]/gi, (_, index) => String(values[Number(index) - 1] ?? ""))
     .replace(/%[a-z]/gi, () => String(values[sequentialIndex++] ?? ""))
     .replace(/\\'/g, "'")
-    .replace(/\\"/g, "\"");
+    .replace(/\\"/g, '"');
 }
 
 function decodeUnicodeEscapes(value) {
-  return String(value ?? "").replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  return String(value ?? "").replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) =>
+    String.fromCharCode(Number.parseInt(hex, 16))
+  );
 }
 
 function parseStringsXml(source) {
@@ -426,17 +433,11 @@ function loadXmlFileXhr(url) {
 }
 
 async function loadXmlFile(relativePath) {
-  const candidates = [
-    `res/${relativePath}`,
-    `dist/res/${relativePath}`
-  ];
+  const candidates = [`res/${relativePath}`, `dist/res/${relativePath}`];
 
   if (relativePath.endsWith("/strings.xml")) {
     const singularRelativePath = relativePath.replace(/\/strings\.xml$/, "/string.xml");
-    candidates.push(
-      `res/${singularRelativePath}`,
-      `dist/res/${singularRelativePath}`
-    );
+    candidates.push(`res/${singularRelativePath}`, `dist/res/${singularRelativePath}`);
   }
 
   for (const candidate of candidates) {
@@ -495,7 +496,6 @@ function warnMissingKey(locale, key) {
 }
 
 export const I18n = {
-
   async init(preferred = null) {
     const locale = resolvePreferredLocale(preferred);
     if (initialized && locale === currentLocale && Object.keys(activeMessages).length > 0) {
@@ -532,7 +532,9 @@ export const I18n = {
   },
 
   t(key, params = {}, options = {}) {
-    const locale = normalizeLocale(options?.locale ?? currentLocale) || resolvePreferredLocale(options?.locale ?? null);
+    const locale =
+      normalizeLocale(options?.locale ?? currentLocale) ||
+      resolvePreferredLocale(options?.locale ?? null);
 
     if (typeof activeMessages[key] === "string") {
       return interpolate(activeMessages[key], params);
@@ -554,5 +556,4 @@ export const I18n = {
     }
     return locale;
   }
-
 };

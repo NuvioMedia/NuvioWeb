@@ -36,7 +36,12 @@ export function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKe
         seenKeys.add(key);
         defaultEntries.push({
           key,
-          disableKey: buildCatalogDisableKey(addon.baseUrl, catalog.apiType, catalog.id, catalog.name),
+          disableKey: buildCatalogDisableKey(
+            addon.baseUrl,
+            catalog.apiType,
+            catalog.id,
+            catalog.name
+          ),
           addonBaseUrl: addon.baseUrl,
           addonId: addon.id,
           addonName: addon.displayName,
@@ -50,8 +55,9 @@ export function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKe
 
   const entryByKey = new Map(defaultEntries.map((entry) => [entry.key, entry]));
   const defaultOrderKeys = defaultEntries.map((entry) => entry.key);
-  const savedValid = (savedOrderKeys || [])
-    .filter((key, index, array) => array.indexOf(key) === index && entryByKey.has(key));
+  const savedValid = (savedOrderKeys || []).filter(
+    (key, index, array) => array.indexOf(key) === index && entryByKey.has(key)
+  );
   const savedSet = new Set(savedValid);
   const effectiveOrder = [...savedValid, ...defaultOrderKeys.filter((key) => !savedSet.has(key))];
 

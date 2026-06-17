@@ -14,14 +14,18 @@ let webOsImageProxyReadyPromise = null;
 const webOsImageProxyReadyListeners = new Set();
 
 function isImgurHost(hostname = "") {
-  const host = String(hostname || "").trim().toLowerCase();
+  const host = String(hostname || "")
+    .trim()
+    .toLowerCase();
   return host === "i.imgur.com" || host.endsWith(".imgur.com");
 }
 
 function isProxyableImgurImageUrl(value = "") {
   try {
     const parsed = new URL(String(value || "").trim());
-    return (parsed.protocol === "https:" || parsed.protocol === "http:") && isImgurHost(parsed.hostname);
+    return (
+      (parsed.protocol === "https:" || parsed.protocol === "http:") && isImgurHost(parsed.hostname)
+    );
   } catch (_) {
     return false;
   }
@@ -30,9 +34,11 @@ function isProxyableImgurImageUrl(value = "") {
 export function isWebOsImageProxyUrl(value = "") {
   try {
     const parsed = new URL(String(value || "").trim());
-    return (parsed.protocol === "http:" || parsed.protocol === "https:")
-      && (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost")
-      && parsed.pathname === WEBOS_IMAGE_PROXY_PATH;
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      (parsed.hostname === "127.0.0.1" || parsed.hostname === "localhost") &&
+      parsed.pathname === WEBOS_IMAGE_PROXY_PATH
+    );
   } catch (_) {
     return false;
   }
@@ -41,8 +47,10 @@ export function isWebOsImageProxyUrl(value = "") {
 function normalizeLocalBaseUrl(value = "") {
   try {
     const parsed = new URL(String(value || "").trim());
-    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:")
-      || (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost")) {
+    if (
+      (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+      (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost")
+    ) {
       return "";
     }
     return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
@@ -68,19 +76,25 @@ function notifyWebOsImageProxyReady() {
 function withTimeout(promise, timeoutMs) {
   let timeoutId = 0;
   const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => reject(new Error("webOS image proxy status timed out")), timeoutMs);
+    timeoutId = setTimeout(
+      () => reject(new Error("webOS image proxy status timed out")),
+      timeoutMs
+    );
   });
-  return Promise.race([promise, timeoutPromise]).then((value) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
+  return Promise.race([promise, timeoutPromise]).then(
+    (value) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      return value;
+    },
+    (error) => {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      throw error;
     }
-    return value;
-  }, (error) => {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
-    throw error;
-  });
+  );
 }
 
 export function isWebOsImageProxyReady() {

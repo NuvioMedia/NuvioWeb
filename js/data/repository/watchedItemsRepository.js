@@ -38,8 +38,10 @@ function matchesWatchedTarget(item = {}, contentId, options = null) {
   if (!targetContentId || item.contentId !== targetContentId) {
     return false;
   }
-  const targetSeason = options?.season == null || options?.season === "" ? null : Number(options.season);
-  const targetEpisode = options?.episode == null || options?.episode === "" ? null : Number(options.episode);
+  const targetSeason =
+    options?.season == null || options?.season === "" ? null : Number(options.season);
+  const targetEpisode =
+    options?.episode == null || options?.episode === "" ? null : Number(options.episode);
   const hasScopedEpisode = targetSeason != null || targetEpisode != null;
   if (!hasScopedEpisode) {
     return true;
@@ -52,7 +54,8 @@ async function deleteWatchedItemsFromCloud(items = []) {
     return false;
   }
   try {
-    const { WatchedItemsSyncService } = await import("../../core/profile/watchedItemsSyncService.js");
+    const { WatchedItemsSyncService } =
+      await import("../../core/profile/watchedItemsSyncService.js");
     return WatchedItemsSyncService.deleteItems(items);
   } catch (error) {
     console.warn("Watched items cloud delete failed", error);
@@ -61,7 +64,6 @@ async function deleteWatchedItemsFromCloud(items = []) {
 }
 
 class WatchedItemsRepository {
-
   async getAll(limit = 2000) {
     return WatchedItemsStore.listForProfile(activeProfileId()).slice(0, limit);
   }
@@ -81,17 +83,21 @@ class WatchedItemsRepository {
     if (!item?.contentId) {
       return;
     }
-    WatchedItemsStore.upsert({
-      ...item,
-      watchedAt: item.watchedAt || Date.now()
-    }, activeProfileId());
+    WatchedItemsStore.upsert(
+      {
+        ...item,
+        watchedAt: item.watchedAt || Date.now()
+      },
+      activeProfileId()
+    );
     queueWatchedItemsCloudSync();
   }
 
   async unmark(contentId, options = null) {
     const pid = activeProfileId();
-    const removedItems = WatchedItemsStore.listForProfile(pid)
-      .filter((item) => matchesWatchedTarget(item, contentId, options));
+    const removedItems = WatchedItemsStore.listForProfile(pid).filter((item) =>
+      matchesWatchedTarget(item, contentId, options)
+    );
     WatchedItemsStore.remove(contentId, pid, options);
     await deleteWatchedItemsFromCloud(removedItems);
     queueWatchedItemsCloudSync();
@@ -100,7 +106,6 @@ class WatchedItemsRepository {
   async replaceAll(items) {
     WatchedItemsStore.replaceForProfile(activeProfileId(), items || []);
   }
-
 }
 
 export const watchedItemsRepository = new WatchedItemsRepository();

@@ -7,12 +7,7 @@
   "title": "Nuvio TV",
   "description": "Locally packaged LG webOS build for Nuvio TV.",
   "appDescription": "Locally packaged LG webOS build for Nuvio TV.",
-  "keywords": [
-    "streaming",
-    "video",
-    "media",
-    "tv"
-  ],
+  "keywords": ["streaming", "video", "media", "tv"],
   "category": "entertainment",
   "icon": "icon.png",
   "largeIcon": "largeIcon.png",
@@ -22,12 +17,6 @@
   "resolution": "1920x1080",
   "transparent": false,
   "requiredVersion": "5.0.0",
-  "services": [
-    "space.nuvio.webos.service"
-  ],
-  "requiredPermissions": [
-    "internet",
-    "media.operation",
-    "media.query"
-  ]
+  "services": ["space.nuvio.webos.service"],
+  "requiredPermissions": ["internet", "media.operation", "media.query"]
 }
