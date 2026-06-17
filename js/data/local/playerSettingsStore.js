@@ -29,7 +29,10 @@ const DEFAULTS = {
 
 function extractLanguageCode(value, fallback = "off") {
   if (value && typeof value === "object") {
-    return extractLanguageCode(value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode, fallback);
+    return extractLanguageCode(
+      value.id ?? value.value ?? value.code ?? value.language ?? value.languageCode,
+      fallback
+    );
   }
   const code = String(value ?? "").trim();
   if (!code || code.toLowerCase() === "[object object]") {
@@ -83,9 +86,12 @@ function normalizePlayerSettings(settings = {}) {
 
   if (preferredLanguage === "forced") {
     useForcedSubtitles = true;
-    preferredLanguage = secondaryPreferredLanguage && secondaryPreferredLanguage !== "forced" && secondaryPreferredLanguage !== "off"
-      ? secondaryPreferredLanguage
-      : "en";
+    preferredLanguage =
+      secondaryPreferredLanguage &&
+      secondaryPreferredLanguage !== "forced" &&
+      secondaryPreferredLanguage !== "off"
+        ? secondaryPreferredLanguage
+        : "en";
     secondaryPreferredLanguage = "off";
   }
   if (secondaryPreferredLanguage === "forced") {
@@ -124,7 +130,6 @@ const store = createProfileScopedStore({
 });
 
 export const PlayerSettingsStore = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -144,5 +149,4 @@ export const PlayerSettingsStore = {
   set(partial, options = {}) {
     return store.set(partial, options);
   }
-
 };

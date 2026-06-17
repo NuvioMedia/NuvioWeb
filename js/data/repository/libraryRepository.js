@@ -5,14 +5,11 @@ import { LocalStore } from "../../core/storage/localStore.js";
 import { savedLibraryRepository } from "./savedLibraryRepository.js";
 import { metaRepository } from "./metaRepository.js";
 import { TraktAuthService } from "./traktAuthService.js";
-import {
-  TraktLibrarySourceMode,
-  TraktSettingsStore,
-} from "../local/traktSettingsStore.js";
+import { TraktLibrarySourceMode, TraktSettingsStore } from "../local/traktSettingsStore.js";
 
 export const LibrarySourceMode = {
   LOCAL: "local",
-  TRAKT: "trakt",
+  TRAKT: "trakt"
 };
 
 export const LibrarySortOptionKey = {
@@ -20,19 +17,19 @@ export const LibrarySortOptionKey = {
   ADDED_DESC: "added_desc",
   ADDED_ASC: "added_asc",
   TITLE_ASC: "title_asc",
-  TITLE_DESC: "title_desc",
+  TITLE_DESC: "title_desc"
 };
 
 export const LibraryListPrivacy = {
   PRIVATE: "private",
   LINK: "link",
   FRIENDS: "friends",
-  PUBLIC: "public",
+  PUBLIC: "public"
 };
 
 export const LibraryListType = {
   WATCHLIST: "watchlist",
-  PERSONAL: "personal",
+  PERSONAL: "personal"
 };
 
 const REMOTE_STORE_KEY = "libraryTraktState";
@@ -100,7 +97,7 @@ function withTimeout(promise, ms, fallbackValue) {
     promise,
     new Promise((resolve) => {
       timer = setTimeout(() => resolve(fallbackValue), ms);
-    }),
+    })
   ]).finally(() => {
     if (timer) {
       clearTimeout(timer);
@@ -117,14 +114,10 @@ async function resolveProfileId() {
 
   const profiles = await ProfileManager.getProfiles();
   const activeProfile = profiles.find(
-    (profile) => String(profile.id || profile.profileIndex || "1") === activeId,
+    (profile) => String(profile.id || profile.profileIndex || "1") === activeId
   );
-  const candidate = Number(
-    activeProfile?.profileIndex || activeProfile?.id || 1,
-  );
-  return Number.isFinite(candidate) && candidate > 0
-    ? Math.trunc(candidate)
-    : 1;
+  const candidate = Number(activeProfile?.profileIndex || activeProfile?.id || 1);
+  return Number.isFinite(candidate) && candidate > 0 ? Math.trunc(candidate) : 1;
 }
 
 async function resolveRemoteStoreKey() {
@@ -145,7 +138,7 @@ function createEmptyRemoteState() {
     nextListId: 1,
     watchlist: [],
     lists: [],
-    listItems: {},
+    listItems: {}
   };
 }
 
@@ -155,15 +148,13 @@ function cloneState(state) {
     watchlist: Array.isArray(state?.watchlist)
       ? state.watchlist.map((entry) => ({ ...entry }))
       : [],
-    lists: Array.isArray(state?.lists)
-      ? state.lists.map((entry) => ({ ...entry }))
-      : [],
+    lists: Array.isArray(state?.lists) ? state.lists.map((entry) => ({ ...entry })) : [],
     listItems: Object.fromEntries(
       Object.entries(state?.listItems || {}).map(([key, value]) => [
         key,
-        Array.isArray(value) ? value.map((item) => ({ ...item })) : [],
-      ]),
-    ),
+        Array.isArray(value) ? value.map((item) => ({ ...item })) : []
+      ])
+    )
   };
 }
 
@@ -202,12 +193,8 @@ function makeTypeLabel(type) {
 function normalizeSavedItem(item = {}) {
   return {
     contentId: String(item.contentId || item.itemId || item.id || ""),
-    contentType: String(
-      item.contentType || item.itemType || item.type || "movie",
-    ),
-    title: String(
-      item.title || item.name || item.contentId || item.itemId || "Untitled",
-    ),
+    contentType: String(item.contentType || item.itemType || item.type || "movie"),
+    title: String(item.title || item.name || item.contentId || item.itemId || "Untitled"),
     poster: item.poster || null,
     background: item.background || null,
     description: item.description || "",
@@ -215,7 +202,7 @@ function normalizeSavedItem(item = {}) {
     imdbRating: item.imdbRating == null ? null : Number(item.imdbRating),
     genres: Array.isArray(item.genres) ? item.genres : [],
     addonBaseUrl: item.addonBaseUrl || null,
-    updatedAt: Number(item.updatedAt || item.listedAt || Date.now()),
+    updatedAt: Number(item.updatedAt || item.listedAt || Date.now())
   };
 }
 
@@ -230,9 +217,7 @@ function toSavedItemFromTraktWatchlist(entry) {
         ? `imdb:${entry.imdbId}`
         : null;
   if (!itemId) return null;
-  const listedAtMs = entry.addedAt
-    ? new Date(entry.addedAt).getTime()
-    : Date.now();
+  const listedAtMs = entry.addedAt ? new Date(entry.addedAt).getTime() : Date.now();
   return {
     itemType: entry.type === "show" ? "series" : entry.type || "movie",
     itemId,
@@ -241,7 +226,7 @@ function toSavedItemFromTraktWatchlist(entry) {
     year: entry.year || null,
     posterUrl: "",
     updatedAt: listedAtMs,
-    listedAt: listedAtMs,
+    listedAt: listedAtMs
   };
 }
 
@@ -272,9 +257,7 @@ async function batchEnrichLibraryItems(items) {
       meta = cached.meta;
     } else {
       const canonicalType = contentType === "show" ? "series" : contentType;
-      meta = await metaRepository
-        .getMetaFromAllAddons(canonicalType, lookupId)
-        .catch(() => null);
+      meta = await metaRepository.getMetaFromAllAddons(canonicalType, lookupId).catch(() => null);
       enrichedLibraryMetaCache.set(cacheKey, { meta, timestamp: now });
     }
     results.push(meta ? { ...item, enrichedMeta: meta } : item);
@@ -287,7 +270,7 @@ function toRemoteListItem(item = {}, extra = {}) {
   return {
     ...normalized,
     listedAt: Number(extra.listedAt || normalized.updatedAt || Date.now()),
-    traktRank: extra.traktRank == null ? null : Number(extra.traktRank),
+    traktRank: extra.traktRank == null ? null : Number(extra.traktRank)
   };
 }
 
@@ -298,12 +281,10 @@ function mergeItemIntoMap(target, listKey, baseItem, listedAt, traktRank) {
     ...(existing?.listMeta || {}),
     [listKey]: {
       listedAt: Number(listedAt || Date.now()),
-      traktRank: traktRank == null ? null : Number(traktRank),
-    },
+      traktRank: traktRank == null ? null : Number(traktRank)
+    }
   };
-  const nextListKeys = Array.from(
-    new Set([...(existing?.listKeys || []), listKey]),
-  );
+  const nextListKeys = Array.from(new Set([...(existing?.listKeys || []), listKey]));
   target.set(key, {
     id: baseItem.contentId,
     type: baseItem.contentType,
@@ -313,9 +294,7 @@ function mergeItemIntoMap(target, listKey, baseItem, listedAt, traktRank) {
     description: baseItem.description || existing?.description || "",
     releaseInfo: baseItem.releaseInfo || existing?.releaseInfo || "",
     imdbRating:
-      baseItem.imdbRating == null
-        ? (existing?.imdbRating ?? null)
-        : Number(baseItem.imdbRating),
+      baseItem.imdbRating == null ? (existing?.imdbRating ?? null) : Number(baseItem.imdbRating),
     genres:
       Array.isArray(baseItem.genres) && baseItem.genres.length
         ? baseItem.genres
@@ -323,9 +302,8 @@ function mergeItemIntoMap(target, listKey, baseItem, listedAt, traktRank) {
     addonBaseUrl: baseItem.addonBaseUrl || existing?.addonBaseUrl || null,
     listKeys: nextListKeys,
     listedAt: Number(listedAt || existing?.listedAt || Date.now()),
-    traktRank:
-      traktRank == null ? (existing?.traktRank ?? null) : Number(traktRank),
-    listMeta: nextListMeta,
+    traktRank: traktRank == null ? (existing?.traktRank ?? null) : Number(traktRank),
+    listMeta: nextListMeta
   });
 }
 
@@ -333,7 +311,7 @@ async function hydrateEntries(entries) {
   const nextEntries = entries.map((entry) => ({
     ...entry,
     listKeys: [...entry.listKeys],
-    listMeta: { ...(entry.listMeta || {}) },
+    listMeta: { ...(entry.listMeta || {}) }
   }));
 
   for (let index = 0; index < nextEntries.length; index += META_BATCH_SIZE) {
@@ -346,7 +324,7 @@ async function hydrateEntries(entries) {
         const result = await withTimeout(
           metaRepository.getMetaFromAllAddons(entry.type, entry.id),
           META_TIMEOUT_MS,
-          { status: "error", message: "timeout" },
+          { status: "error", message: "timeout" }
         );
         if (result?.status !== "success" || !result?.data) {
           return;
@@ -362,7 +340,7 @@ async function hydrateEntries(entries) {
           : Array.isArray(meta.genres)
             ? meta.genres
             : [];
-      }),
+      })
     );
   }
 
@@ -374,23 +352,18 @@ function buildPersonalListTab(list = {}) {
     key: String(list.key || ""),
     title: String(list.title || "Untitled"),
     type: LibraryListType.PERSONAL,
-    traktListId: String(list.traktListId || list.key || "").replace(
-      PERSONAL_KEY_PREFIX,
-      "",
-    ),
+    traktListId: String(list.traktListId || list.key || "").replace(PERSONAL_KEY_PREFIX, ""),
     slug: list.slug || null,
     description: list.description || null,
     privacy: list.privacy || LibraryListPrivacy.PRIVATE,
     sortBy: list.sortBy || null,
-    sortHow: list.sortHow || null,
+    sortHow: list.sortHow || null
   };
 }
 
 async function getRemotePersonalTabs() {
   const state = await readRemoteState();
-  return state.lists
-    .map((entry) => buildPersonalListTab(entry))
-    .slice(0, REMOTE_LIST_LIMIT);
+  return state.lists.map((entry) => buildPersonalListTab(entry)).slice(0, REMOTE_LIST_LIMIT);
 }
 
 async function getLocalEntries() {
@@ -398,13 +371,7 @@ async function getLocalEntries() {
   const entriesMap = new Map();
   savedItems.forEach((item) => {
     const normalized = normalizeSavedItem(item);
-    mergeItemIntoMap(
-      entriesMap,
-      "local",
-      normalized,
-      normalized.updatedAt,
-      null,
-    );
+    mergeItemIntoMap(entriesMap, "local", normalized, normalized.updatedAt, null);
   });
   return hydrateEntries(Array.from(entriesMap.values()));
 }
@@ -415,13 +382,7 @@ async function getRemoteEntries() {
 
   personalState.watchlist.forEach((item, index) => {
     const normalized = normalizeSavedItem(item);
-    mergeItemIntoMap(
-      entriesMap,
-      WATCHLIST_KEY,
-      normalized,
-      normalized.updatedAt,
-      index,
-    );
+    mergeItemIntoMap(entriesMap, WATCHLIST_KEY, normalized, normalized.updatedAt, index);
   });
 
   personalState.lists.forEach((list) => {
@@ -436,7 +397,7 @@ async function getRemoteEntries() {
         listKey,
         normalized,
         Number(item.listedAt || normalized.updatedAt || Date.now()),
-        index,
+        index
       );
     });
   });
@@ -448,22 +409,18 @@ function membershipMapFromEntries(entries, listTabs) {
   const allKeys = listTabs.map((tab) => tab.key);
   return (item) => {
     const itemKey = `${item.itemType || item.type || "movie"}:${item.itemId || item.id || ""}`;
-    const found = entries.find(
-      (entry) => `${entry.type}:${entry.id}` === itemKey,
-    );
+    const found = entries.find((entry) => `${entry.type}:${entry.id}` === itemKey);
     return {
       listMembership: Object.fromEntries(
-        allKeys.map((key) => [key, Boolean(found?.listKeys?.includes(key))]),
-      ),
+        allKeys.map((key) => [key, Boolean(found?.listKeys?.includes(key))])
+      )
     };
   };
 }
 
 function upsertPersonalItem(state, listKey, item) {
   const nextState = cloneState(state);
-  const list = Array.isArray(nextState.listItems[listKey])
-    ? nextState.listItems[listKey]
-    : [];
+  const list = Array.isArray(nextState.listItems[listKey]) ? nextState.listItems[listKey] : [];
   const normalized = toRemoteListItem(item, { listedAt: Date.now() });
   nextState.listItems[listKey] = [
     normalized,
@@ -472,22 +429,19 @@ function upsertPersonalItem(state, listKey, item) {
         !(
           String(entry.contentId) === normalized.contentId &&
           String(entry.contentType) === normalized.contentType
-        ),
-    ),
+        )
+    )
   ];
   return nextState;
 }
 
 function removePersonalItem(state, listKey, item) {
   const nextState = cloneState(state);
-  const current = Array.isArray(nextState.listItems[listKey])
-    ? nextState.listItems[listKey]
-    : [];
+  const current = Array.isArray(nextState.listItems[listKey]) ? nextState.listItems[listKey] : [];
   nextState.listItems[listKey] = current.filter((entry) => {
     return !(
       String(entry.contentId) === String(item.itemId || item.id || "") &&
-      String(entry.contentType || "movie") ===
-        String(item.itemType || item.type || "movie")
+      String(entry.contentType || "movie") === String(item.itemType || item.type || "movie")
     );
   });
   return nextState;
@@ -522,40 +476,31 @@ class LibraryRepository {
         description: null,
         privacy: null,
         sortBy: null,
-        sortHow: null,
+        sortHow: null
       },
-      ...personalTabs,
+      ...personalTabs
     ];
   }
 
   async getItems() {
     const sourceMode = await this.getSourceMode();
-    return sourceMode === LibrarySourceMode.TRAKT
-      ? getRemoteEntries()
-      : getLocalEntries();
+    return sourceMode === LibrarySourceMode.TRAKT ? getRemoteEntries() : getLocalEntries();
   }
 
   async getMembershipSnapshot(item) {
     const sourceMode = await this.getSourceMode();
     if (sourceMode === LibrarySourceMode.LOCAL) {
-      const exists = await savedLibraryRepository.isSaved(
-        item.itemId || item.id || "",
-      );
+      const exists = await savedLibraryRepository.isSaved(item.itemId || item.id || "");
       return { listMembership: { local: exists } };
     }
-    const [entries, listTabs] = await Promise.all([
-      this.getItems(),
-      this.getListTabs(),
-    ]);
+    const [entries, listTabs] = await Promise.all([this.getItems(), this.getListTabs()]);
     return membershipMapFromEntries(entries, listTabs)(item);
   }
 
   async applyMembershipChanges(item, changes) {
     const sourceMode = await this.getSourceMode();
     if (sourceMode === LibrarySourceMode.LOCAL) {
-      const shouldSave = Object.values(changes?.desiredMembership || {}).some(
-        Boolean,
-      );
+      const shouldSave = Object.values(changes?.desiredMembership || {}).some(Boolean);
       if (shouldSave) {
         await savedLibraryRepository.save(normalizeSavedItem(item));
       } else {
@@ -581,21 +526,19 @@ class LibraryRepository {
               ...(remoteState.watchlist || []).filter(
                 (entry) =>
                   !(
-                    String(entry.contentId) ===
-                      String(item.itemId || item.id || "") &&
+                    String(entry.contentId) === String(item.itemId || item.id || "") &&
                     String(entry.contentType || "movie") ===
                       String(item.itemType || item.type || "movie")
-                  ),
-              ),
+                  )
+              )
             ]
           : (remoteState.watchlist || []).filter(
               (entry) =>
                 !(
-                  String(entry.contentId) ===
-                    String(item.itemId || item.id || "") &&
+                  String(entry.contentId) === String(item.itemId || item.id || "") &&
                   String(entry.contentType || "movie") ===
                     String(item.itemType || item.type || "movie")
-                ),
+                )
             );
         continue;
       }
@@ -610,10 +553,7 @@ class LibraryRepository {
       try {
         await SavedLibrarySyncService.push();
       } catch (error) {
-        console.warn(
-          "LibraryRepository applyMembershipChanges push failed",
-          error,
-        );
+        console.warn("LibraryRepository applyMembershipChanges push failed", error);
       }
     }
   }
@@ -630,8 +570,8 @@ class LibraryRepository {
         title: String(name || "Untitled"),
         description: description || null,
         privacy: privacy || LibraryListPrivacy.PRIVATE,
-        traktListId: String(nextId),
-      },
+        traktListId: String(nextId)
+      }
     ];
     state.listItems[listKey] = state.listItems[listKey] || [];
     await writeRemoteState(state);
@@ -642,10 +582,7 @@ class LibraryRepository {
     const state = await readRemoteState();
     state.lists = state.lists.map((list) => {
       if (
-        String(list.traktListId || list.key).replace(
-          PERSONAL_KEY_PREFIX,
-          "",
-        ) !== String(listId)
+        String(list.traktListId || list.key).replace(PERSONAL_KEY_PREFIX, "") !== String(listId)
       ) {
         return list;
       }
@@ -653,7 +590,7 @@ class LibraryRepository {
         ...list,
         title: String(name || list.title || "Untitled"),
         description: description || null,
-        privacy: privacy || list.privacy || LibraryListPrivacy.PRIVATE,
+        privacy: privacy || list.privacy || LibraryListPrivacy.PRIVATE
       };
     });
     await writeRemoteState(state);
@@ -663,10 +600,7 @@ class LibraryRepository {
     const state = await readRemoteState();
     const match = state.lists.find((list) => {
       return (
-        String(list.traktListId || list.key).replace(
-          PERSONAL_KEY_PREFIX,
-          "",
-        ) === String(listId)
+        String(list.traktListId || list.key).replace(PERSONAL_KEY_PREFIX, "") === String(listId)
       );
     });
     if (!match) {
@@ -682,14 +616,14 @@ class LibraryRepository {
     const byId = new Map(
       state.lists.map((list) => [
         String(list.traktListId || list.key).replace(PERSONAL_KEY_PREFIX, ""),
-        list,
-      ]),
+        list
+      ])
     );
     const reordered = orderedListIds
       .map((id) => byId.get(String(id).replace(PERSONAL_KEY_PREFIX, "")))
       .filter(Boolean);
     const untouched = state.lists.filter(
-      (list) => !reordered.some((entry) => entry.key === list.key),
+      (list) => !reordered.some((entry) => entry.key === list.key)
     );
     state.lists = [...reordered, ...untouched];
     await writeRemoteState(state);
@@ -701,11 +635,9 @@ class LibraryRepository {
       if (!TraktAuthService.isAuthenticated()) return false;
       try {
         const watchlistItems = await TraktAuthService.fetchWatchlist({
-          limit: 200,
+          limit: 200
         });
-        const rawItems = watchlistItems
-          .map(toSavedItemFromTraktWatchlist)
-          .filter(Boolean);
+        const rawItems = watchlistItems.map(toSavedItemFromTraktWatchlist).filter(Boolean);
         const enrichedItems = await batchEnrichLibraryItems(rawItems);
         const state = createEmptyRemoteState();
         state.watchlist = enrichedItems;

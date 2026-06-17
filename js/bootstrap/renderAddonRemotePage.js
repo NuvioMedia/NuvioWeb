@@ -459,13 +459,15 @@ const AddonRemotePage = {
     }
 
     const infoBanner = this.authReady
-      ? (AuthManager.isAuthenticated
+      ? AuthManager.isAuthenticated
         ? "Signed in. Addon changes can be pushed through the web sync backend. Home catalog changes stay local to this web install."
-        : "Signed out. Changes save only in this browser unless you sign in on this phone.")
+        : "Signed out. Changes save only in this browser unless you sign in on this phone."
       : "Checking account state...";
 
     const addonCards = this.draftAddons.length
-      ? this.draftAddons.map((addon, index) => `
+      ? this.draftAddons
+          .map(
+            (addon, index) => `
           <article class="addon-remote-card">
             <div class="addon-remote-order">
               <button class="addon-remote-btn" data-addon-up="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
@@ -480,11 +482,15 @@ const AddonRemotePage = {
               <button class="addon-remote-btn addon-remote-btn-danger" data-addon-remove="${index}">Remove</button>
             </div>
           </article>
-        `).join("")
+        `
+          )
+          .join("")
       : '<div class="addon-remote-empty">No addons in this draft yet.</div>';
 
     const catalogCards = this.catalogItems.length
-      ? this.catalogItems.map((item, index) => `
+      ? this.catalogItems
+          .map(
+            (item, index) => `
           <article class="addon-remote-card">
             <div class="addon-remote-order">
               <button class="addon-remote-btn" data-catalog-up="${index}" ${index === 0 ? "disabled" : ""}>Up</button>
@@ -501,7 +507,9 @@ const AddonRemotePage = {
               </button>
             </div>
           </article>
-        `).join("")
+        `
+          )
+          .join("")
       : '<div class="addon-remote-empty">No Home catalogs available from the current addons.</div>';
 
     this.root.innerHTML = `

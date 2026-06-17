@@ -16,7 +16,10 @@ function normalizeItem(item = {}, profileId = 1) {
 
 function savedLibraryItemKey(item = {}) {
   const profileId = String(item.profileId || "1").trim() || "1";
-  const contentType = String(item.contentType || "movie").trim().toLowerCase() || "movie";
+  const contentType =
+    String(item.contentType || "movie")
+      .trim()
+      .toLowerCase() || "movie";
   const contentId = String(item.contentId || "").trim();
   return `${profileId}::${contentType}::${contentId}`;
 }
@@ -34,12 +37,12 @@ function dedupeAndSort(items = []) {
       byKey.set(key, normalized);
     }
   });
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
+  );
 }
 
 export const SavedLibraryStore = {
-
   listAll() {
     const raw = LocalStore.get(SAVED_LIBRARY_KEY, []);
     return dedupeAndSort(Array.isArray(raw) ? raw : []);
@@ -56,19 +59,22 @@ export const SavedLibraryStore = {
 
   upsert(item, profileId) {
     const pid = String(profileId || "1");
-    const normalized = normalizeItem({
-      ...item,
-      updatedAt: item.updatedAt || Date.now()
-    }, pid);
+    const normalized = normalizeItem(
+      {
+        ...item,
+        updatedAt: item.updatedAt || Date.now()
+      },
+      pid
+    );
     if (!normalized.contentId) {
       return;
     }
     const key = savedLibraryItemKey(normalized);
     const items = this.listAll();
-    const next = [
-      normalized,
-      ...items.filter((entry) => savedLibraryItemKey(entry) !== key)
-    ].slice(0, 1000);
+    const next = [normalized, ...items.filter((entry) => savedLibraryItemKey(entry) !== key)].slice(
+      0,
+      1000
+    );
     LocalStore.set(SAVED_LIBRARY_KEY, dedupeAndSort(next));
   },
 
@@ -92,11 +98,15 @@ export const SavedLibraryStore = {
 
   replaceForProfile(profileId, items = []) {
     const pid = String(profileId || "1");
-    const keepOtherProfiles = this.listAll().filter((item) => String(item.profileId || "1") !== pid);
+    const keepOtherProfiles = this.listAll().filter(
+      (item) => String(item.profileId || "1") !== pid
+    );
     const normalized = (Array.isArray(items) ? items : [])
       .map((item) => normalizeItem(item, pid))
       .filter((item) => Boolean(item.contentId));
-    LocalStore.set(SAVED_LIBRARY_KEY, dedupeAndSort([...normalized, ...keepOtherProfiles]).slice(0, 1000));
+    LocalStore.set(
+      SAVED_LIBRARY_KEY,
+      dedupeAndSort([...normalized, ...keepOtherProfiles]).slice(0, 1000)
+    );
   }
-
 };

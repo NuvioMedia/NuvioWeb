@@ -7,7 +7,6 @@ function shouldUseStrictDpadGrid() {
 }
 
 export const ScreenUtils = {
-
   show(container) {
     if (!container) {
       return;
@@ -43,8 +42,7 @@ export const ScreenUtils = {
         } catch (_) {
           try {
             existingFocused.focus();
-          } catch (_) {
-          }
+          } catch (_) {}
         }
         return existingFocused;
       }
@@ -57,8 +55,7 @@ export const ScreenUtils = {
       } catch (_) {
         try {
           existingFocused.focus();
-        } catch (_) {
-        }
+        } catch (_) {}
       }
       return existingFocused;
     }
@@ -95,11 +92,10 @@ export const ScreenUtils = {
     if (globalThis?.document?.body?.classList?.contains("nuvio-modal-open")) {
       return;
     }
-    const list = Array.from(container?.querySelectorAll(selector) || [])
-      .filter((node) => {
-        const rect = node.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
-      });
+    const list = Array.from(container?.querySelectorAll(selector) || []).filter((node) => {
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
     if (!list.length) {
       return;
     }
@@ -113,16 +109,16 @@ export const ScreenUtils = {
     }
 
     const currentRect = current.getBoundingClientRect();
-    const cx = currentRect.left + (currentRect.width / 2);
-    const cy = currentRect.top + (currentRect.height / 2);
+    const cx = currentRect.left + currentRect.width / 2;
+    const cy = currentRect.top + currentRect.height / 2;
     const strictDpadGrid = shouldUseStrictDpadGrid();
 
     const candidates = list
       .filter((node) => node !== current)
       .map((node) => {
         const rect = node.getBoundingClientRect();
-        const nx = rect.left + (rect.width / 2);
-        const ny = rect.top + (rect.height / 2);
+        const nx = rect.left + rect.width / 2;
+        const ny = rect.top + rect.height / 2;
         const dx = nx - cx;
         const dy = ny - cy;
         return { node, rect, dx, dy };
@@ -135,18 +131,18 @@ export const ScreenUtils = {
         return false;
       })
       .map((entry) => {
-        const primary = (direction === "up" || direction === "down")
-          ? Math.abs(entry.dy)
-          : Math.abs(entry.dx);
-        const secondary = (direction === "up" || direction === "down")
-          ? Math.abs(entry.dx)
-          : Math.abs(entry.dy);
-        const axisTolerance = (direction === "up" || direction === "down")
-          ? Math.max(currentRect.width * 0.7, entry.rect.width * 0.7, 48)
-          : Math.max(currentRect.height * 0.7, entry.rect.height * 0.7, 48);
-        const aligned = (direction === "up" || direction === "down")
-          ? secondary <= axisTolerance
-          : secondary <= axisTolerance;
+        const primary =
+          direction === "up" || direction === "down" ? Math.abs(entry.dy) : Math.abs(entry.dx);
+        const secondary =
+          direction === "up" || direction === "down" ? Math.abs(entry.dx) : Math.abs(entry.dy);
+        const axisTolerance =
+          direction === "up" || direction === "down"
+            ? Math.max(currentRect.width * 0.7, entry.rect.width * 0.7, 48)
+            : Math.max(currentRect.height * 0.7, entry.rect.height * 0.7, 48);
+        const aligned =
+          direction === "up" || direction === "down"
+            ? secondary <= axisTolerance
+            : secondary <= axisTolerance;
         return {
           ...entry,
           aligned,
@@ -170,21 +166,19 @@ export const ScreenUtils = {
         const alignedInRow = nearestRow
           .filter((entry) => entry.aligned)
           .sort((left, right) => Math.abs(left.dx) - Math.abs(right.dx));
-        const rowSorted = nearestRow
-          .sort((left, right) => {
-            const sec = Math.abs(left.dx) - Math.abs(right.dx);
-            if (sec !== 0) {
-              return sec;
-            }
-            return Math.abs(left.dy) - Math.abs(right.dy);
-          });
+        const rowSorted = nearestRow.sort((left, right) => {
+          const sec = Math.abs(left.dx) - Math.abs(right.dx);
+          if (sec !== 0) {
+            return sec;
+          }
+          return Math.abs(left.dy) - Math.abs(right.dy);
+        });
         target = alignedInRow[0]?.node || rowSorted[0]?.node || null;
       } else {
         const alignedCandidates = candidates
           .filter((entry) => entry.aligned)
           .sort((left, right) => left.score - right.score);
-        const sortedCandidates = candidates
-          .sort((left, right) => left.score - right.score);
+        const sortedCandidates = candidates.sort((left, right) => left.score - right.score);
         target = alignedCandidates[0]?.node || sortedCandidates[0]?.node || null;
       }
     } else {
@@ -201,21 +195,19 @@ export const ScreenUtils = {
         const alignedInColumn = nearestColumn
           .filter((entry) => entry.aligned)
           .sort((left, right) => Math.abs(left.dy) - Math.abs(right.dy));
-        const columnSorted = nearestColumn
-          .sort((left, right) => {
-            const sec = Math.abs(left.dy) - Math.abs(right.dy);
-            if (sec !== 0) {
-              return sec;
-            }
-            return Math.abs(left.dx) - Math.abs(right.dx);
-          });
+        const columnSorted = nearestColumn.sort((left, right) => {
+          const sec = Math.abs(left.dy) - Math.abs(right.dy);
+          if (sec !== 0) {
+            return sec;
+          }
+          return Math.abs(left.dx) - Math.abs(right.dx);
+        });
         target = alignedInColumn[0]?.node || columnSorted[0]?.node || null;
       } else {
         const alignedCandidates = candidates
           .filter((entry) => entry.aligned)
           .sort((left, right) => left.score - right.score);
-        const sortedCandidates = candidates
-          .sort((left, right) => left.score - right.score);
+        const sortedCandidates = candidates.sort((left, right) => left.score - right.score);
         target = alignedCandidates[0]?.node || sortedCandidates[0]?.node || null;
       }
     }
@@ -233,11 +225,16 @@ export const ScreenUtils = {
       return false;
     }
     const code = Number(event?.keyCode || 0);
-    const direction = code === 38 ? "up"
-      : code === 40 ? "down"
-        : code === 37 ? "left"
-          : code === 39 ? "right"
-            : null;
+    const direction =
+      code === 38
+        ? "up"
+        : code === 40
+          ? "down"
+          : code === 37
+            ? "left"
+            : code === 39
+              ? "right"
+              : null;
     if (!direction) {
       return false;
     }
@@ -260,5 +257,4 @@ export const ScreenUtils = {
       }
     });
   }
-
 };

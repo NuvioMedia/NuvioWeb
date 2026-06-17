@@ -54,7 +54,9 @@ function toTitleCase(value) {
 }
 
 function formatTypeLabel(value) {
-  const normalized = String(value || "").trim().toLowerCase();
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase();
   if (!normalized) return "Movie";
   if (normalized === "tv") return "TV";
   return toTitleCase(normalized) || "Movie";
@@ -103,15 +105,25 @@ function formatCatalogRowTitle(catalogName, addonName, type) {
 }
 
 function catalogSupportsExtra(catalog = {}, name = "") {
-  const target = String(name || "").trim().toLowerCase();
+  const target = String(name || "")
+    .trim()
+    .toLowerCase();
   if (!target) return false;
-  return Array.isArray(catalog.extra) && catalog.extra.some((entry) =>
-    String(entry?.name || "").trim().toLowerCase() === target
+  return (
+    Array.isArray(catalog.extra) &&
+    catalog.extra.some(
+      (entry) =>
+        String(entry?.name || "")
+          .trim()
+          .toLowerCase() === target
+    )
   );
 }
 
 function isSearchableCatalogType(type) {
-  const normalized = String(type || "").trim().toLowerCase();
+  const normalized = String(type || "")
+    .trim()
+    .toLowerCase();
   return normalized === "movie" || normalized === "series" || normalized === "tv";
 }
 
@@ -136,9 +148,11 @@ function buildSearchTargets(addons = []) {
 }
 
 function isPerformanceConstrainedRuntime() {
-  return Platform.isWebOS()
-    || Platform.isTizen()
-    || Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
+  return (
+    Platform.isWebOS() ||
+    Platform.isTizen() ||
+    Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"))
+  );
 }
 
 function getSearchResultsPerRow() {
@@ -164,7 +178,11 @@ function getSearchCatalogTimeoutMs() {
 }
 
 function getInputSelectionSnapshot(input = null) {
-  if (!input || typeof input.selectionStart !== "number" || typeof input.selectionEnd !== "number") {
+  if (
+    !input ||
+    typeof input.selectionStart !== "number" ||
+    typeof input.selectionEnd !== "number"
+  ) {
     return null;
   }
   return {
@@ -271,7 +289,6 @@ function buildRowStateKey(row = {}, rowIndex = 0) {
 }
 
 export const SearchScreen = {
-
   getRouteStateKey() {
     return "route:search";
   },
@@ -300,10 +317,12 @@ export const SearchScreen = {
     return {
       query: String(this.query || ""),
       mode: String(this.mode || "idle"),
-      rows: Array.isArray(this.rows) ? this.rows.map((row, index) => ({
-        ...row,
-        stateKey: row.stateKey || buildRowStateKey(row, index)
-      })) : [],
+      rows: Array.isArray(this.rows)
+        ? this.rows.map((row, index) => ({
+            ...row,
+            stateKey: row.stateKey || buildRowStateKey(row, index)
+          }))
+        : [],
       focusZone: String(this.focusZone || "content"),
       lastContentFocus: this.lastContentFocus ? { ...this.lastContentFocus } : null,
       sidebarExpanded: Boolean(this.sidebarExpanded),
@@ -329,35 +348,45 @@ export const SearchScreen = {
     const snapshot = restoredState && typeof restoredState === "object" ? restoredState : null;
     this.query = hasExplicitQuery ? incomingQuery : String(snapshot?.query || "").trim();
     this.mode = hasExplicitQuery
-      ? (incomingQuery.length >= 2 ? "search" : "idle")
+      ? incomingQuery.length >= 2
+        ? "search"
+        : "idle"
       : String(snapshot?.mode || (this.query.length >= 2 ? "search" : "idle"));
     this.rows = Array.isArray(snapshot?.rows)
       ? snapshot.rows.map((row, index) => ({
-        ...row,
-        stateKey: row.stateKey || buildRowStateKey(row, index)
-      }))
+          ...row,
+          stateKey: row.stateKey || buildRowStateKey(row, index)
+        }))
       : [];
     this.focusZone = String(snapshot?.focusZone || this.focusZone || "content");
-    this.lastContentFocus = snapshot?.lastContentFocus ? { ...snapshot.lastContentFocus } : this.lastContentFocus || null;
+    this.lastContentFocus = snapshot?.lastContentFocus
+      ? { ...snapshot.lastContentFocus }
+      : this.lastContentFocus || null;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && snapshot?.sidebarExpanded);
-    this.sidebarFocusIndex = Number.isFinite(snapshot?.sidebarFocusIndex) ? snapshot.sidebarFocusIndex : 0;
+    this.sidebarFocusIndex = Number.isFinite(snapshot?.sidebarFocusIndex)
+      ? snapshot.sidebarFocusIndex
+      : 0;
     this.pillIconOnly = Boolean(snapshot?.pillIconOnly);
     this.contentScrollTop = Number(snapshot?.contentScrollTop || 0);
-    this.rowScrollLeftByKey = snapshot?.rowScrollLeftByKey && typeof snapshot.rowScrollLeftByKey === "object"
-      ? { ...snapshot.rowScrollLeftByKey }
-      : {};
-    this.rowFocusedIndexByKey = snapshot?.rowFocusedIndexByKey && typeof snapshot.rowFocusedIndexByKey === "object"
-      ? { ...snapshot.rowFocusedIndexByKey }
-      : {};
+    this.rowScrollLeftByKey =
+      snapshot?.rowScrollLeftByKey && typeof snapshot.rowScrollLeftByKey === "object"
+        ? { ...snapshot.rowScrollLeftByKey }
+        : {};
+    this.rowFocusedIndexByKey =
+      snapshot?.rowFocusedIndexByKey && typeof snapshot.rowFocusedIndexByKey === "object"
+        ? { ...snapshot.rowFocusedIndexByKey }
+        : {};
     this.pendingAutoFocusResults = false;
-    this.restoredFocusedDescriptor = snapshot ? {
-      action: String(snapshot.focusedAction || ""),
-      rowKey: String(snapshot.focusedRowKey || ""),
-      itemId: String(snapshot.focusedItemId || ""),
-      navZone: String(snapshot.focusedNavZone || ""),
-      navRow: Number(snapshot.focusedNavRow || 0),
-      navCol: Number(snapshot.focusedNavCol || 0)
-    } : null;
+    this.restoredFocusedDescriptor = snapshot
+      ? {
+          action: String(snapshot.focusedAction || ""),
+          rowKey: String(snapshot.focusedRowKey || ""),
+          itemId: String(snapshot.focusedItemId || ""),
+          navZone: String(snapshot.focusedNavZone || ""),
+          navRow: Number(snapshot.focusedNavRow || 0),
+          navCol: Number(snapshot.focusedNavCol || 0)
+        }
+      : null;
   },
 
   cancelScheduledRender() {
@@ -432,8 +461,10 @@ export const SearchScreen = {
     this.rowScrollLeftByKey = {};
     this.rowFocusedIndexByKey = {};
     this.restoredFocusedDescriptor = null;
-    this.voiceSearchSupported = typeof window !== "undefined"
-      && (typeof window.SpeechRecognition === "function" || typeof window.webkitSpeechRecognition === "function");
+    this.voiceSearchSupported =
+      typeof window !== "undefined" &&
+      (typeof window.SpeechRecognition === "function" ||
+        typeof window.webkitSpeechRecognition === "function");
     this.voiceSearchActive = false;
     this.voiceRecognition = this.voiceRecognition || null;
     this.searchToastTimer = null;
@@ -454,8 +485,8 @@ export const SearchScreen = {
     const hasExplicitQuery = Boolean(String(params.query || "").trim());
     const restoredQuery = String(navigationContext?.restoredState?.query || "").trim();
     const shouldUseRestoredState = Boolean(
-      navigationContext?.restoredState
-      && (!hasExplicitQuery || restoredQuery === String(params.query || "").trim())
+      navigationContext?.restoredState &&
+      (!hasExplicitQuery || restoredQuery === String(params.query || "").trim())
     );
     if (shouldUseRestoredState) {
       this.render();
@@ -467,7 +498,7 @@ export const SearchScreen = {
     } catch (err) {
       console.error("searchScreen: Failed to load rows", err);
       this.rows = [];
-      this.render(); 
+      this.render();
     }
   },
 
@@ -540,9 +571,14 @@ export const SearchScreen = {
     const itemLimit = getSearchDiscoverResultsPerRow();
     addons.forEach((addon) => {
       addon.catalogs.forEach((catalog) => {
-        const requiresSearch = Array.isArray(catalog.extra) && catalog.extra.some((extra) =>
-          String(extra?.name || "").trim().toLowerCase() === "search" && Boolean(extra?.isRequired)
-        );
+        const requiresSearch =
+          Array.isArray(catalog.extra) &&
+          catalog.extra.some(
+            (extra) =>
+              String(extra?.name || "")
+                .trim()
+                .toLowerCase() === "search" && Boolean(extra?.isRequired)
+          );
         if (requiresSearch) return;
         if (!isSearchableCatalogType(catalog.apiType)) return;
         sections.push({
@@ -570,20 +606,17 @@ export const SearchScreen = {
             catalogName: section.catalogName,
             type: section.type,
             skip: 0,
-            supportsSkip: true,
+            supportsSkip: true
           }),
           getSearchCatalogTimeoutMs(),
-          { status: "error", message: "timeout" },
+          { status: "error", message: "timeout" }
         );
         return { ...section, result };
       } catch (err) {
-        console.warn(
-          `fail on load catalog ${section.catalogName}:`,
-          err,
-        );
+        console.warn(`fail on load catalog ${section.catalogName}:`, err);
         return {
           ...section,
-          result: { status: "error", message: "fetch_failed" },
+          result: { status: "error", message: "fetch_failed" }
         };
       }
     };
@@ -591,13 +624,13 @@ export const SearchScreen = {
     if (batchSize > 0 && picked.length > batchSize) {
       for (let index = 0; index < picked.length; index += batchSize) {
         const batch = picked.slice(index, index + batchSize);
-        resolved.push(...await Promise.all(batch.map(loadSection)));
-        if ((index + batchSize) < picked.length) {
+        resolved.push(...(await Promise.all(batch.map(loadSection))));
+        if (index + batchSize < picked.length) {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
       }
     } else {
-      resolved.push(...await Promise.all(picked.map(loadSection)));
+      resolved.push(...(await Promise.all(picked.map(loadSection))));
     }
 
     return resolved
@@ -637,20 +670,17 @@ export const SearchScreen = {
             type: catalog.type,
             skip: 0,
             extraArgs: { search: query },
-            supportsSkip: catalog.supportsSkip,
+            supportsSkip: catalog.supportsSkip
           }),
           getSearchCatalogTimeoutMs(),
-          { status: "error", message: "timeout" },
+          { status: "error", message: "timeout" }
         );
         return { catalog, result };
       } catch (err) {
-        console.warn(
-          `fail on search catalog ${catalog.catalogName}:`,
-          err,
-        );
+        console.warn(`fail on search catalog ${catalog.catalogName}:`, err);
         return {
           catalog,
-          result: { status: "error", message: "fetch_failed" },
+          result: { status: "error", message: "fetch_failed" }
         };
       }
     };
@@ -661,13 +691,13 @@ export const SearchScreen = {
           break;
         }
         const batch = searchableCatalogs.slice(index, index + batchSize);
-        responses.push(...await Promise.all(batch.map(runCatalogSearch)));
-        if ((index + batchSize) < searchableCatalogs.length) {
+        responses.push(...(await Promise.all(batch.map(runCatalogSearch))));
+        if (index + batchSize < searchableCatalogs.length) {
           await new Promise((resolve) => setTimeout(resolve, 0));
         }
       }
     } else {
-      responses.push(...await Promise.all(searchableCatalogs.map(runCatalogSearch)));
+      responses.push(...(await Promise.all(searchableCatalogs.map(runCatalogSearch))));
     }
 
     return responses
@@ -700,26 +730,35 @@ export const SearchScreen = {
           </div>
         `;
       }
-        return `
+      return `
         <div class="search-empty-state">
           <span class="search-empty-icon material-icons" aria-hidden="true">search</span>
           <h2>${escapeHtml(t("search_start_title", {}, "Start Searching"))}</h2>
-          <p>${escapeHtml(this.layoutPrefs?.searchDiscoverEnabled
-            ? t("search_start_subtitle", {}, "Enter at least 2 characters")
-            : t("search_start_subtitle_no_discover", {}, "Discover is disabled. Enter at least 2 characters"))}</p>
+          <p>${escapeHtml(
+            this.layoutPrefs?.searchDiscoverEnabled
+              ? t("search_start_subtitle", {}, "Enter at least 2 characters")
+              : t(
+                  "search_start_subtitle_no_discover",
+                  {},
+                  "Discover is disabled. Enter at least 2 characters"
+                )
+          )}</p>
         </div>
       `;
     }
 
-    return this.rows.map((row, rowIndex) => {
-      const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
-      const seeAllLabel = t("action_see_all", {}, "See All");
-      return `
+    return this.rows
+      .map((row, rowIndex) => {
+        const rowKey = row.stateKey || buildRowStateKey(row, rowIndex);
+        const seeAllLabel = t("action_see_all", {}, "See All");
+        return `
       <section class="search-results-row" data-row-key="${escapeHtml(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
         <div class="search-results-subtitle">${row.subtitle}</div>
         <div class="search-results-track">
-          ${(row.items || []).map((item) => `
+          ${(row.items || [])
+            .map(
+              (item) => `
             <article class="search-result-card focusable"
                      data-action="openDetail"
                      data-item-id="${item.id || ""}"
@@ -734,8 +773,12 @@ export const SearchScreen = {
               <div class="search-result-name">${item.name || "Untitled"}</div>
               <div class="search-result-date">${formatReleaseYear(item)}</div>
             </article>
-          `).join("")}
-          ${row.hasMore || (row.items || []).length >= 15 ? `
+          `
+            )
+            .join("")}
+          ${
+            row.hasMore || (row.items || []).length >= 15
+              ? `
             <article class="search-result-card search-seeall-card focusable"
                      data-action="openCatalogSeeAll"
                      data-addon-base-url="${row.addonBaseUrl || ""}"
@@ -751,11 +794,14 @@ export const SearchScreen = {
                 <div class="search-seeall-label">${escapeHtml(seeAllLabel)}</div>
               </div>
             </article>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </section>
     `;
-    }).join("");
+      })
+      .join("");
   },
 
   render() {
@@ -772,11 +818,15 @@ export const SearchScreen = {
         })}
         <main class="home-main search-content">
           <section class="search-header${this.layoutPrefs?.searchDiscoverEnabled ? "" : " no-discover"}">
-            ${this.layoutPrefs?.searchDiscoverEnabled ? `
+            ${
+              this.layoutPrefs?.searchDiscoverEnabled
+                ? `
               <button class="search-discover-btn focusable" data-action="openDiscover">
                 <span class="search-action-icon material-icons" aria-hidden="true">explore</span>
               </button>
-            ` : ""}
+            `
+                : ""
+            }
             <button
               class="search-voice-btn focusable${this.voiceSearchActive ? " listening" : ""}"
               data-action="openVoice"
@@ -814,7 +864,9 @@ export const SearchScreen = {
     const input = this.container.querySelector("#searchInput");
     input?.blur?.();
     this.restoreScrollState();
-    const shouldFocusResults = Boolean(this.pendingAutoFocusResults && this.navModel?.rows?.[0]?.[0]);
+    const shouldFocusResults = Boolean(
+      this.pendingAutoFocusResults && this.navModel?.rows?.[0]?.[0]
+    );
     if (this.focusZone === "sidebar") {
       this.focusSidebarNode();
     } else {
@@ -824,9 +876,11 @@ export const SearchScreen = {
   },
 
   isPosterHoldTarget(node) {
-    return node instanceof HTMLElement
-      && node.classList.contains("search-result-card")
-      && String(node.dataset.action || "") === "openDetail";
+    return (
+      node instanceof HTMLElement &&
+      node.classList.contains("search-result-card") &&
+      String(node.dataset.action || "") === "openDetail"
+    );
   },
 
   cancelPendingPosterHold() {
@@ -897,7 +951,9 @@ export const SearchScreen = {
           const itemId = this.pendingPosterOptionsFocusId;
           this.pendingPosterOptionsFocusId = "";
           const target = itemId
-            ? this.container?.querySelector(`.search-result-card.focusable[data-item-id="${escapeSelectorValue(itemId)}"]`)
+            ? this.container?.querySelector(
+                `.search-result-card.focusable[data-item-id="${escapeSelectorValue(itemId)}"]`
+              )
             : null;
           if (target) {
             this.focusNode(this.container?.querySelector(".focusable.focused"), target);
@@ -926,7 +982,9 @@ export const SearchScreen = {
       this.container?.querySelector(".search-voice-btn.focusable"),
       this.container?.querySelector("#searchInput.focusable")
     ].filter(Boolean);
-    const rows = Array.from(this.container?.querySelectorAll(".search-results-row .search-results-track") || [])
+    const rows = Array.from(
+      this.container?.querySelectorAll(".search-results-row .search-results-track") || []
+    )
       .map((track) => Array.from(track.querySelectorAll(".search-result-card.focusable")))
       .filter((row) => row.length > 0);
 
@@ -957,10 +1015,12 @@ export const SearchScreen = {
   },
 
   getDefaultHeaderFocusTarget() {
-    return this.container?.querySelector("#searchInput.focusable")
-      || this.container?.querySelector(".search-discover-btn.focusable")
-      || this.container?.querySelector(".search-voice-btn.focusable")
-      || null;
+    return (
+      this.container?.querySelector("#searchInput.focusable") ||
+      this.container?.querySelector(".search-discover-btn.focusable") ||
+      this.container?.querySelector(".search-voice-btn.focusable") ||
+      null
+    );
   },
 
   restoreScrollState() {
@@ -1009,10 +1069,11 @@ export const SearchScreen = {
 
   focusSidebarNode(preferredNode = null) {
     const nodes = getRootSidebarNodes(this.container, this.layoutPrefs);
-    const target = preferredNode
-      || getRootSidebarSelectedNode(this.container, this.layoutPrefs)
-      || nodes[0]
-      || null;
+    const target =
+      preferredNode ||
+      getRootSidebarSelectedNode(this.container, this.layoutPrefs) ||
+      nodes[0] ||
+      null;
     if (!target) {
       return false;
     }
@@ -1046,44 +1107,60 @@ export const SearchScreen = {
   restoreContentFocus(preferResults = false) {
     let target = null;
     if (preferResults) {
-      target = this.container?.querySelector(".search-results-row .search-result-card.focusable") || null;
+      target =
+        this.container?.querySelector(".search-results-row .search-result-card.focusable") || null;
     }
     if (!target && !preferResults && this.mode !== "search") {
       target = this.getDefaultHeaderFocusTarget();
     }
-    if (!target && this.restoredFocusedDescriptor?.rowKey && this.restoredFocusedDescriptor?.itemId) {
-      target = this.container?.querySelector(
-        `.search-result-card.focusable[data-row-key="${escapeSelectorValue(this.restoredFocusedDescriptor.rowKey)}"][data-item-id="${escapeSelectorValue(this.restoredFocusedDescriptor.itemId)}"]`
-      ) || null;
+    if (
+      !target &&
+      this.restoredFocusedDescriptor?.rowKey &&
+      this.restoredFocusedDescriptor?.itemId
+    ) {
+      target =
+        this.container?.querySelector(
+          `.search-result-card.focusable[data-row-key="${escapeSelectorValue(this.restoredFocusedDescriptor.rowKey)}"][data-item-id="${escapeSelectorValue(this.restoredFocusedDescriptor.itemId)}"]`
+        ) || null;
     }
-    if (!target && this.restoredFocusedDescriptor?.rowKey && this.restoredFocusedDescriptor?.action === "openCatalogSeeAll") {
-      target = this.container?.querySelector(
-        `.search-result-card.focusable.search-seeall-card[data-row-key="${escapeSelectorValue(this.restoredFocusedDescriptor.rowKey)}"]`
-      ) || null;
+    if (
+      !target &&
+      this.restoredFocusedDescriptor?.rowKey &&
+      this.restoredFocusedDescriptor?.action === "openCatalogSeeAll"
+    ) {
+      target =
+        this.container?.querySelector(
+          `.search-result-card.focusable.search-seeall-card[data-row-key="${escapeSelectorValue(this.restoredFocusedDescriptor.rowKey)}"]`
+        ) || null;
     }
     if (!target && this.lastContentFocus) {
       if (this.lastContentFocus.zone === "results") {
         if (this.lastContentFocus.rowKey) {
-          const rowNodes = Array.from(this.container?.querySelectorAll(
-            `.search-result-card.focusable[data-row-key="${escapeSelectorValue(this.lastContentFocus.rowKey)}"]`
-          ) || []);
+          const rowNodes = Array.from(
+            this.container?.querySelectorAll(
+              `.search-result-card.focusable[data-row-key="${escapeSelectorValue(this.lastContentFocus.rowKey)}"]`
+            ) || []
+          );
           target = this.resolvePreferredResultsNode(rowNodes, this.lastContentFocus.col);
         }
         if (!target) {
-          target = this.container?.querySelector(
-            `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
-          ) || null;
+          target =
+            this.container?.querySelector(
+              `.search-result-card.focusable[data-nav-row="${this.lastContentFocus.row}"][data-nav-col="${this.lastContentFocus.col}"]`
+            ) || null;
         }
       } else if (this.lastContentFocus.zone === "header") {
-        target = this.container?.querySelector(
-          `.focusable[data-nav-zone="header"][data-nav-col="${this.lastContentFocus.col}"]`
-        ) || null;
+        target =
+          this.container?.querySelector(
+            `.focusable[data-nav-zone="header"][data-nav-col="${this.lastContentFocus.col}"]`
+          ) || null;
       }
     }
     if (!target) {
-      target = this.getDefaultHeaderFocusTarget()
-        || this.container?.querySelector(".search-result-card.focusable")
-        || null;
+      target =
+        this.getDefaultHeaderFocusTarget() ||
+        this.container?.querySelector(".search-result-card.focusable") ||
+        null;
     }
     if (!target) {
       return false;
@@ -1150,9 +1227,10 @@ export const SearchScreen = {
       return;
     }
     const property = axis === "y" ? "scrollTop" : "scrollLeft";
-    const max = axis === "y"
-      ? Math.max(0, container.scrollHeight - container.clientHeight)
-      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const max =
+      axis === "y"
+        ? Math.max(0, container.scrollHeight - container.clientHeight)
+        : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
     const startValue = Number(container[property] || 0);
     if (Math.abs(startValue - nextValue) <= 1) {
@@ -1160,7 +1238,9 @@ export const SearchScreen = {
       return;
     }
 
-    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const prefersReducedMotion = globalThis?.matchMedia?.(
+      "(prefers-reduced-motion: reduce)"
+    )?.matches;
     if (prefersReducedMotion) {
       container[property] = nextValue;
       return;
@@ -1177,7 +1257,9 @@ export const SearchScreen = {
     const startTime = performance.now();
     const tick = (now) => {
       const progress = Math.min(1, (now - startTime) / duration);
-      container[property] = Math.round(startValue + ((nextValue - startValue) * easeOutCubic(progress)));
+      container[property] = Math.round(
+        startValue + (nextValue - startValue) * easeOutCubic(progress)
+      );
       if (progress < 1) {
         existing[key] = requestAnimationFrame(tick);
         map.set(container, existing);
@@ -1196,11 +1278,14 @@ export const SearchScreen = {
       return;
     }
     const property = axis === "y" ? "scrollTop" : "scrollLeft";
-    const max = axis === "y"
-      ? Math.max(0, container.scrollHeight - container.clientHeight)
-      : Math.max(0, container.scrollWidth - container.clientWidth);
+    const max =
+      axis === "y"
+        ? Math.max(0, container.scrollHeight - container.clientHeight)
+        : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
-    const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
+    const prefersReducedMotion = globalThis?.matchMedia?.(
+      "(prefers-reduced-motion: reduce)"
+    )?.matches;
     if (prefersReducedMotion) {
       container[property] = nextValue;
       return;
@@ -1220,8 +1305,14 @@ export const SearchScreen = {
     const active = existing[key];
     if (active) {
       active.target = nextValue;
-      active.stiffness = Number(options?.stiffness ?? active.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness);
-      active.dampingRatio = Number(options?.dampingRatio ?? active.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio);
+      active.stiffness = Number(
+        options?.stiffness ?? active.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness
+      );
+      active.dampingRatio = Number(
+        options?.dampingRatio ??
+          active.dampingRatio ??
+          MODERN_HOME_CONSTANTS.springScrollDampingRatio
+      );
       active.precision = Number(options?.precision ?? active.precision ?? 0.5);
       active.velocityEpsilon = Number(options?.velocityEpsilon ?? active.velocityEpsilon ?? 0.5);
       active.damping = 2 * active.dampingRatio * Math.sqrt(active.stiffness);
@@ -1230,7 +1321,9 @@ export const SearchScreen = {
     }
 
     const stiffness = Number(options?.stiffness ?? MODERN_HOME_CONSTANTS.springScrollStiffness);
-    const dampingRatio = Number(options?.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio);
+    const dampingRatio = Number(
+      options?.dampingRatio ?? MODERN_HOME_CONSTANTS.springScrollDampingRatio
+    );
     const state = {
       target: nextValue,
       position: Number(container[property] || 0),
@@ -1248,13 +1341,16 @@ export const SearchScreen = {
       const deltaSeconds = Math.min(0.034, Math.max(0.001, (now - state.lastTime) / 1000));
       state.lastTime = now;
       const displacement = state.position - Number(state.target || 0);
-      const acceleration = (-state.stiffness * displacement) - (state.damping * state.velocity);
+      const acceleration = -state.stiffness * displacement - state.damping * state.velocity;
       state.velocity += acceleration * deltaSeconds;
       state.position += state.velocity * deltaSeconds;
       container[property] = state.position;
 
       const remaining = Number(state.target || 0) - Number(container[property] || 0);
-      if (Math.abs(remaining) <= state.precision && Math.abs(state.velocity) <= state.velocityEpsilon) {
+      if (
+        Math.abs(remaining) <= state.precision &&
+        Math.abs(state.velocity) <= state.velocityEpsilon
+      ) {
         container[property] = state.target;
         existing[key] = null;
         springMap.set(container, existing);
@@ -1288,12 +1384,24 @@ export const SearchScreen = {
     const visibleBottom = contentRect.bottom - bottomInset;
 
     if (rowRect.top < visibleTop) {
-      this.animateScroll(content, "y", rowTop - topInset, MODERN_HOME_CONSTANTS.cameraFollowDurationYMs, { mode: "spring" });
+      this.animateScroll(
+        content,
+        "y",
+        rowTop - topInset,
+        MODERN_HOME_CONSTANTS.cameraFollowDurationYMs,
+        { mode: "spring" }
+      );
       return;
     }
 
     if (rowRect.bottom > visibleBottom) {
-      this.animateScroll(content, "y", rowBottom - content.clientHeight + bottomInset, MODERN_HOME_CONSTANTS.cameraFollowDurationYMs, { mode: "spring" });
+      this.animateScroll(
+        content,
+        "y",
+        rowBottom - content.clientHeight + bottomInset,
+        MODERN_HOME_CONSTANTS.cameraFollowDurationYMs,
+        { mode: "spring" }
+      );
     }
   },
 
@@ -1307,9 +1415,18 @@ export const SearchScreen = {
     const leftPad = Math.max(0, Number.parseFloat(styles?.paddingLeft || "0") || 0);
     const trackRect = track.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
-    const targetLeft = (targetRect.left - trackRect.left) + Number(track.scrollLeft || 0);
-    const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
-    this.animateScroll(track, "x", Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)), MODERN_HOME_CONSTANTS.cameraFollowDurationXMs, { mode: "spring" });
+    const targetLeft = targetRect.left - trackRect.left + Number(track.scrollLeft || 0);
+    const maxScrollLeft = Math.max(
+      0,
+      Number(track.scrollWidth || 0) - Number(track.clientWidth || 0)
+    );
+    this.animateScroll(
+      track,
+      "x",
+      Math.max(0, Math.min(maxScrollLeft, targetLeft - leftPad)),
+      MODERN_HOME_CONSTANTS.cameraFollowDurationXMs,
+      { mode: "spring" }
+    );
   },
 
   ensureHeaderVisible() {
@@ -1323,17 +1440,28 @@ export const SearchScreen = {
     const visibleTop = contentRect.top + topInset;
 
     if (headerRect.top < visibleTop) {
-      this.animateScroll(content, "y", content.scrollTop + (headerRect.top - visibleTop), MODERN_HOME_CONSTANTS.cameraFollowDurationYMs, { mode: "spring" });
+      this.animateScroll(
+        content,
+        "y",
+        content.scrollTop + (headerRect.top - visibleTop),
+        MODERN_HOME_CONSTANTS.cameraFollowDurationYMs,
+        { mode: "spring" }
+      );
     }
   },
 
   handleSearchDpad(event) {
     const keyCode = Number(event?.keyCode || 0);
-    const direction = keyCode === 38 ? "up"
-      : keyCode === 40 ? "down"
-        : keyCode === 37 ? "left"
-          : keyCode === 39 ? "right"
-            : null;
+    const direction =
+      keyCode === 38
+        ? "up"
+        : keyCode === 40
+          ? "down"
+          : keyCode === 37
+            ? "left"
+            : keyCode === 39
+              ? "right"
+              : null;
     if (!direction) {
       return false;
     }
@@ -1399,7 +1527,8 @@ export const SearchScreen = {
           const target = this.resolvePreferredResultsNode(prevRowNodes, col);
           return this.focusNode(current, target) || true;
         }
-        const target = nav.header?.[Math.min(col, (nav.header?.length || 1) - 1)] || nav.header?.[0] || null;
+        const target =
+          nav.header?.[Math.min(col, (nav.header?.length || 1) - 1)] || nav.header?.[0] || null;
         return this.focusNode(current, target) || true;
       }
       return true;
@@ -1482,11 +1611,13 @@ export const SearchScreen = {
       return false;
     }
     const eventTarget = event?.target || null;
-    return document.activeElement === input
-      || eventTarget === input
-      || Boolean(eventTarget?.closest?.("#searchInput"))
-      || input.classList.contains("focused")
-      || this.container?.querySelector(".focusable.focused") === input;
+    return (
+      document.activeElement === input ||
+      eventTarget === input ||
+      Boolean(eventTarget?.closest?.("#searchInput")) ||
+      input.classList.contains("focused") ||
+      this.container?.querySelector(".focusable.focused") === input
+    );
   },
 
   keepSearchInputEditingKey(event, code) {
@@ -1501,8 +1632,12 @@ export const SearchScreen = {
     // of the input, e.g. to the discover/mic buttons.
     const valueLength = String(input.value || "").length;
     const selectionSnapshot = getInputSelectionSnapshot(input);
-    const caretStart = selectionSnapshot ? clamp(Number(selectionSnapshot.start || 0), 0, valueLength) : valueLength;
-    const caretEnd = selectionSnapshot ? clamp(Number(selectionSnapshot.end || 0), 0, valueLength) : valueLength;
+    const caretStart = selectionSnapshot
+      ? clamp(Number(selectionSnapshot.start || 0), 0, valueLength)
+      : valueLength;
+    const caretEnd = selectionSnapshot
+      ? clamp(Number(selectionSnapshot.end || 0), 0, valueLength)
+      : valueLength;
     const hasSelection = caretStart !== caretEnd;
     if (code === 37 && !hasSelection && caretStart <= 0) {
       return false;
@@ -1516,7 +1651,11 @@ export const SearchScreen = {
       input.focus?.();
       if (selectionSnapshot && (code === 37 || code === 39)) {
         const delta = code === 37 ? -1 : 1;
-        const nextPosition = clamp(Number(selectionSnapshot.end || selectionSnapshot.start || 0) + delta, 0, String(input.value || "").length);
+        const nextPosition = clamp(
+          Number(selectionSnapshot.end || selectionSnapshot.start || 0) + delta,
+          0,
+          String(input.value || "").length
+        );
         restoreInputSelection(input, {
           ...selectionSnapshot,
           start: nextPosition,
@@ -1550,7 +1689,8 @@ export const SearchScreen = {
 
     if (action === "openDetail") this.openDetailFromNode(node);
     if (action === "openCatalogSeeAll") this.openCatalogSeeAllFromNode(node);
-    if (action === "openDiscover" && this.layoutPrefs?.searchDiscoverEnabled) Router.navigate("discover");
+    if (action === "openDiscover" && this.layoutPrefs?.searchDiscoverEnabled)
+      Router.navigate("discover");
     if (action === "openVoice") this.handleVoiceSearch();
   },
 
@@ -1725,7 +1865,11 @@ export const SearchScreen = {
       }
       if (code === 38 || code === 40) {
         const focusedIndex = Math.max(0, nodes.indexOf(current));
-        const nextIndex = clamp(focusedIndex + (code === 38 ? -1 : 1), 0, Math.max(0, nodes.length - 1));
+        const nextIndex = clamp(
+          focusedIndex + (code === 38 ? -1 : 1),
+          0,
+          Math.max(0, nodes.length - 1)
+        );
         const nextNode = nodes[nextIndex] || current;
         if (nextNode) {
           this.sidebarFocusIndex = nextIndex;
@@ -1773,7 +1917,12 @@ export const SearchScreen = {
     if (!current) return;
 
     const action = String(current.dataset.action || "");
-    if (action === "openDiscover" || action === "openVoice" || action === "openDetail" || action === "openCatalogSeeAll") {
+    if (
+      action === "openDiscover" ||
+      action === "openVoice" ||
+      action === "openDetail" ||
+      action === "openCatalogSeeAll"
+    ) {
       this.activateActionNode(current);
     }
     if (action === "searchInput") {

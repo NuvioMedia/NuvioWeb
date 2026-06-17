@@ -1,53 +1,61 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <script>
-    (function configureTizenLaunch() {
-      var root = typeof globalThis !== "undefined" ? globalThis : window;
-      var search = String((window.location && window.location.search) || "").toLowerCase();
-      var userAgent = String((window.navigator && window.navigator.userAgent) || "").toLowerCase();
-      var webapis = root.webapis || {};
-      var isTizenLaunch = Boolean(
-        root.__NUVIO_PLATFORM__ === "tizen"
-        || root.tizen
-        || root.avplay
-        || webapis.avplay
-        || webapis.avPlay
-        || webapis.productinfo
-        || search.indexOf("wrapper=tizen") !== -1
-        || userAgent.indexOf("tizen") !== -1
-      );
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <script>
+      (function configureTizenLaunch() {
+        var root = typeof globalThis !== "undefined" ? globalThis : window;
+        var search = String((window.location && window.location.search) || "").toLowerCase();
+        var userAgent = String(
+          (window.navigator && window.navigator.userAgent) || ""
+        ).toLowerCase();
+        var webapis = root.webapis || {};
+        var isTizenLaunch = Boolean(
+          root.__NUVIO_PLATFORM__ === "tizen" ||
+          root.tizen ||
+          root.avplay ||
+          webapis.avplay ||
+          webapis.avPlay ||
+          webapis.productinfo ||
+          search.indexOf("wrapper=tizen") !== -1 ||
+          userAgent.indexOf("tizen") !== -1
+        );
 
-      if (!isTizenLaunch) {
-        return;
-      }
+        if (!isTizenLaunch) {
+          return;
+        }
 
-      root.__NUVIO_PLATFORM__ = "tizen";
-      var viewport = document.querySelector("meta[name='viewport']");
-      if (!viewport) {
-        viewport = document.createElement("meta");
-        viewport.name = "viewport";
-        document.head.appendChild(viewport);
-      }
-      viewport.setAttribute("content", "width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no");
-    }());
-  </script>
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <title>Nuvio TV</title>
-  
-  <link rel="stylesheet" href="css/base.css?v=20260509s" />
-  <link rel="stylesheet" href="css/layout.css?v=20260509s" />
-  <link rel="stylesheet" href="css/components.css?v=20260531supporters2" />
-  <link rel="stylesheet" href="css/themes.css?v=20260509s" />
-</head>
-<body>
-  <script src="nuvio.env.js"></script>
-  
-  <script src="assets/libs/qrcode-generator.js"></script>
-  
-  <script src="app.bundle.js?v=20260531supporters2"></script>
- </body>
- </html>
+        root.__NUVIO_PLATFORM__ = "tizen";
+        var viewport = document.querySelector("meta[name='viewport']");
+        if (!viewport) {
+          viewport = document.createElement("meta");
+          viewport.name = "viewport";
+          document.head.appendChild(viewport);
+        }
+        viewport.setAttribute(
+          "content",
+          "width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        );
+      })();
+    </script>
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Nuvio TV</title>
+
+    <link rel="stylesheet" href="css/base.css?v=20260509s" />
+    <link rel="stylesheet" href="css/layout.css?v=20260509s" />
+    <link rel="stylesheet" href="css/components.css?v=20260531supporters2" />
+    <link rel="stylesheet" href="css/themes.css?v=20260509s" />
+  </head>
+  <body>
+    <script src="nuvio.env.js"></script>
+
+    <script src="assets/libs/qrcode-generator.js"></script>
+
+    <script src="app.bundle.js?v=20260531supporters2"></script>
+  </body>
+</html>

@@ -11,7 +11,6 @@ let activeQrSessionId = 0;
 const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
 
 export const AuthQrSignInScreen = {
-
   async mount({ onboardingMode = false } = {}) {
     this.container = document.getElementById("account");
     this.onboardingMode = Boolean(onboardingMode);
@@ -97,7 +96,12 @@ export const AuthQrSignInScreen = {
 
       this.renderQr(result);
       this.setStatus(I18n.t("auth.qr.scanAndSignIn"));
-      this.startPolling(result.code, result.deviceNonce, result.pollIntervalSeconds || 3, sessionId);
+      this.startPolling(
+        result.code,
+        result.deviceNonce,
+        result.pollIntervalSeconds || 3,
+        sessionId
+      );
     } finally {
       if (this.isMounted && sessionId === activeQrSessionId) {
         this.isStartingQr = false;
@@ -138,61 +142,71 @@ export const AuthQrSignInScreen = {
   },
 
   startPolling(code, deviceNonce, pollIntervalSeconds = 3, sessionId) {
-    pollInterval = setInterval(async () => {
-      const status = await QrLoginService.poll(code, deviceNonce);
-      if (!this.isMounted || sessionId !== activeQrSessionId) {
-        return;
-      }
-
-      if (status === "approved") {
-        this.setStatus(I18n.t("auth.qr.approved"));
-        clearInterval(pollInterval);
-        pollInterval = null;
-
-        const exchange = await QrLoginService.exchange(code, deviceNonce);
-        if (sessionId !== activeQrSessionId) {
+    pollInterval = setInterval(
+      async () => {
+        const status = await QrLoginService.poll(code, deviceNonce);
+        if (!this.isMounted || sessionId !== activeQrSessionId) {
           return;
         }
 
-        if (exchange) {
-          LocalStore.remove(GUEST_QR_BYPASS_KEY);
-          LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
-          this.isSignedIn = true;
-          Router.navigate("profileSelection");
-        } else {
-          this.setStatus(this.toFriendlyQrError(QrLoginService.getLastError()));
+        if (status === "approved") {
+          this.setStatus(I18n.t("auth.qr.approved"));
+          clearInterval(pollInterval);
+          pollInterval = null;
+
+          const exchange = await QrLoginService.exchange(code, deviceNonce);
+          if (sessionId !== activeQrSessionId) {
+            return;
+          }
+
+          if (exchange) {
+            LocalStore.remove(GUEST_QR_BYPASS_KEY);
+            LocalStore.set("hasSeenAuthQrOnFirstLaunch", true);
+            this.isSignedIn = true;
+            Router.navigate("profileSelection");
+          } else {
+            this.setStatus(this.toFriendlyQrError(QrLoginService.getLastError()));
+          }
         }
-      }
 
-      if (status === "pending") {
-        this.setStatus(I18n.t("auth.qr.waitingApproval"));
-      }
+        if (status === "pending") {
+          this.setStatus(I18n.t("auth.qr.waitingApproval"));
+        }
 
-      if (status === "expired") {
-        this.setStatus(I18n.t("auth.qr.expired"));
-      }
-
-    }, Math.max(2, Number(pollIntervalSeconds || 3)) * 1000);
+        if (status === "expired") {
+          this.setStatus(I18n.t("auth.qr.expired"));
+        }
+      },
+      Math.max(2, Number(pollIntervalSeconds || 3)) * 1000
+    );
   },
 
   toFriendlyQrError(rawError) {
-    const normalizedError = String(rawError || "").replace(/\s+/g, " ").trim();
-    const conciseReason = normalizedError.length > 160 ? `${normalizedError.slice(0, 157)}...` : normalizedError;
+    const normalizedError = String(rawError || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const conciseReason =
+      normalizedError.length > 160 ? `${normalizedError.slice(0, 157)}...` : normalizedError;
     const message = normalizedError.toLowerCase();
     if (!message) {
       return I18n.t("auth.qr.unavailable");
     }
-    if (message.includes("qr auth is not configured")
-      || message.includes("missing redirect_base_url configuration")
-      || message.includes("apikey")
-      || message.includes("api key")
-      || message.includes("anon key")) {
+    if (
+      message.includes("qr auth is not configured") ||
+      message.includes("missing redirect_base_url configuration") ||
+      message.includes("apikey") ||
+      message.includes("api key") ||
+      message.includes("anon key")
+    ) {
       return I18n.t("auth.qr.notConfigured");
     }
     if (message.includes("invalid tv login redirect base url")) {
       return I18n.t("auth.qr.invalidRedirect");
     }
-    if (message.includes("start_tv_login_session") && message.includes("could not find the function")) {
+    if (
+      message.includes("start_tv_login_session") &&
+      message.includes("could not find the function")
+    ) {
       return I18n.t("auth.qr.missingFunction");
     }
     if (message.includes("gen_random_bytes") && message.includes("does not exist")) {
@@ -201,11 +215,13 @@ export const AuthQrSignInScreen = {
     if (message.includes("network") || message.includes("failed to fetch")) {
       return I18n.t("auth.qr.networkError");
     }
-    if (message.includes("unsupported method")
-      || message.includes("error response")
-      || message.includes("http 5")
-      || message.includes("http 404")
-      || message.includes("http 405")) {
+    if (
+      message.includes("unsupported method") ||
+      message.includes("error response") ||
+      message.includes("http 5") ||
+      message.includes("http 404") ||
+      message.includes("http 405")
+    ) {
       return I18n.t("auth.qr.serviceUnavailable");
     }
     return I18n.t("auth.qr.unavailableWithReason", { reason: conciseReason });
@@ -256,10 +272,14 @@ export const AuthQrSignInScreen = {
       Router.back();
       return;
     }
-    Router.navigate("home", {}, {
-      replaceHistory: true,
-      skipStackPush: true
-    });
+    Router.navigate(
+      "home",
+      {},
+      {
+        replaceHistory: true,
+        skipStackPush: true
+      }
+    );
   },
 
   getLeftDescription() {

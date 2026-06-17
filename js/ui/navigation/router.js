@@ -21,7 +21,9 @@ import { FolderDetailScreen } from "../screens/collection/folderDetailScreen.js"
 import { Platform } from "../../platform/index.js";
 import { RouteStateStore } from "./routeStateStore.js";
 
-const ROUTER_PERF_DEBUG = Boolean(globalThis.__NUVIO_DEBUG_ROUTER_PERF__ || globalThis.__NUVIO_DEBUG_HOME_PERF__);
+const ROUTER_PERF_DEBUG = Boolean(
+  globalThis.__NUVIO_DEBUG_ROUTER_PERF__ || globalThis.__NUVIO_DEBUG_HOME_PERF__
+);
 
 function routerPerfNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -35,8 +37,7 @@ function logRouterPerf(stage, data = {}) {
   }
   try {
     console.info(`[router-perf] ${stage}`, data);
-  } catch (_) {
-  }
+  } catch (_) {}
 }
 
 const NON_BACKSTACK_ROUTES = new Set([
@@ -47,7 +48,6 @@ const NON_BACKSTACK_ROUTES = new Set([
 ]);
 
 export const Router = {
-
   current: null,
   currentParams: {},
   stack: [],
@@ -166,11 +166,15 @@ export const Router = {
         return;
       }
       if (this.current && this.current !== "home" && this.routes.home) {
-        await this.navigate("home", {}, {
-          fromHistory: true,
-          skipStackPush: true,
-          isBackNavigation: true
-        });
+        await this.navigate(
+          "home",
+          {},
+          {
+            fromHistory: true,
+            skipStackPush: true,
+            isBackNavigation: true
+          }
+        );
       }
     });
   },
@@ -288,7 +292,7 @@ export const Router = {
 
     const previous = this.stack.pop();
     const previousRoute = typeof previous === "string" ? previous : previous?.route;
-    const previousParams = typeof previous === "string" ? {} : (previous?.params || {});
+    const previousParams = typeof previous === "string" ? {} : previous?.params || {};
 
     if (!previousRoute || !this.routes[previousRoute]) {
       return;
@@ -315,5 +319,4 @@ export const Router = {
     }
     return this.routes[this.current] || null;
   }
-
 };

@@ -16,7 +16,10 @@ function consumeBudget() {
   const now = Date.now();
   prune(minuteStarts, now - 60 * 1000);
   prune(hourStarts, now - 60 * 60 * 1000);
-  if (minuteStarts.length >= MAX_BACKGROUND_PREPARES_PER_MINUTE || hourStarts.length >= MAX_BACKGROUND_PREPARES_PER_HOUR) {
+  if (
+    minuteStarts.length >= MAX_BACKGROUND_PREPARES_PER_MINUTE ||
+    hourStarts.length >= MAX_BACKGROUND_PREPARES_PER_HOUR
+  ) {
     return false;
   }
   minuteStarts.push(now);
@@ -35,14 +38,22 @@ function preparationKey(stream = {}) {
     resolve.magnetUri,
     stream.name,
     stream.title
-  ].map((value) => String(value ?? "").trim().toLowerCase()).join("|");
+  ]
+    .map((value) =>
+      String(value ?? "")
+        .trim()
+        .toLowerCase()
+    )
+    .join("|");
 }
 
 export const DirectDebridStreamPreparer = {
-
   async prepare(streams = [], { season = null, episode = null, onPrepared = null } = {}) {
     const settings = DebridSettingsStore.get();
-    const limit = Math.max(0, Math.min(5, Math.trunc(Number(settings.instantPlaybackPreparationLimit || 0))));
+    const limit = Math.max(
+      0,
+      Math.min(5, Math.trunc(Number(settings.instantPlaybackPreparationLimit || 0)))
+    );
     if (!settings.enabled || limit <= 0) {
       return;
     }
@@ -64,11 +75,12 @@ export const DirectDebridStreamPreparer = {
       if (!consumeBudget()) {
         return;
       }
-      const result = await DirectDebridResolver.resolve(stream, { season, episode }).catch(() => null);
+      const result = await DirectDebridResolver.resolve(stream, { season, episode }).catch(
+        () => null
+      );
       if (result?.status === "success" && result.stream?.url && typeof onPrepared === "function") {
         onPrepared(stream, result.stream);
       }
     }
   }
-
 };

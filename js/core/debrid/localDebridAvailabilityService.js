@@ -6,11 +6,17 @@ const FINAL_STATES = new Set(["CACHED", "NOT_CACHED"]);
 
 function streamUrl(stream = {}) {
   const url = stream.url || stream.externalUrl || "";
-  return String(url || "").toLowerCase().startsWith("magnet:") ? "" : url;
+  return String(url || "")
+    .toLowerCase()
+    .startsWith("magnet:")
+    ? ""
+    : url;
 }
 
 function localAvailabilityHash(stream = {}) {
-  const hash = String(stream.infoHash || "").trim().toLowerCase();
+  const hash = String(stream.infoHash || "")
+    .trim()
+    .toLowerCase();
   if (!hash || streamUrl(stream)) {
     return null;
   }
@@ -26,7 +32,10 @@ function cacheCheckCredential() {
     return null;
   }
   const credential = DebridProviders.preferredResolverService(settings);
-  if (!credential || !credential.provider.capabilities.includes(DEBRID_CAPABILITIES.LOCAL_TORRENT_CACHE_CHECK)) {
+  if (
+    !credential ||
+    !credential.provider.capabilities.includes(DEBRID_CAPABILITIES.LOCAL_TORRENT_CACHE_CHECK)
+  ) {
     return null;
   }
   return credential;
@@ -40,7 +49,13 @@ function updateGroups(groups = [], transform) {
 }
 
 async function checkCached(account, hashes = []) {
-  const normalized = (hashes || []).map((hash) => String(hash || "").trim().toLowerCase()).filter(Boolean);
+  const normalized = (hashes || [])
+    .map((hash) =>
+      String(hash || "")
+        .trim()
+        .toLowerCase()
+    )
+    .filter(Boolean);
   if (!normalized.length) {
     return {};
   }
@@ -76,7 +91,6 @@ async function checkCached(account, hashes = []) {
 }
 
 export const LocalDebridAvailabilityService = {
-
   markChecking(groups = []) {
     const account = cacheCheckCredential();
     if (!account) {
@@ -102,14 +116,20 @@ export const LocalDebridAvailabilityService = {
     if (!account) {
       return groups;
     }
-    const hashes = Array.from(new Set((groups || []).flatMap((group) => (
-      (group.streams || []).map((stream) => {
-        if (FINAL_STATES.has(stream.debridCacheStatus?.state)) {
-          return null;
-        }
-        return localAvailabilityHash(stream);
-      }).filter(Boolean)
-    ))));
+    const hashes = Array.from(
+      new Set(
+        (groups || []).flatMap((group) =>
+          (group.streams || [])
+            .map((stream) => {
+              if (FINAL_STATES.has(stream.debridCacheStatus?.state)) {
+                return null;
+              }
+              return localAvailabilityHash(stream);
+            })
+            .filter(Boolean)
+        )
+      )
+    );
     if (!hashes.length) {
       return groups;
     }
@@ -149,5 +169,4 @@ export const LocalDebridAvailabilityService = {
       };
     });
   }
-
 };

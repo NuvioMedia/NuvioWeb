@@ -20,7 +20,10 @@ function stableStringify(value) {
     return `[${value.map((entry) => stableStringify(entry)).join(",")}]`;
   }
   if (value && typeof value === "object") {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`).join(",")}}`;
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value);
 }
@@ -53,10 +56,14 @@ export const CollectionSyncService = {
     try {
       const collectionsJson = CollectionsStore.exportCurrentProfileJson(resolvedProfileId);
       const parsedJson = CollectionsStore.importFromJson(collectionsJson);
-      await SupabaseApi.rpc(PUSH_RPC, {
-        p_profile_id: resolvedProfileId,
-        p_collections_json: parsedJson
-      }, true);
+      await SupabaseApi.rpc(
+        PUSH_RPC,
+        {
+          p_profile_id: resolvedProfileId,
+          p_collections_json: parsedJson
+        },
+        true
+      );
       return true;
     } catch (error) {
       console.warn("Collection sync push failed", error);
@@ -70,10 +77,14 @@ export const CollectionSyncService = {
     }
     const resolvedProfileId = resolveProfileId(profileId);
     try {
-      const rows = await SupabaseApi.rpc(PULL_RPC, {
-        p_profile_id: resolvedProfileId
-      }, true);
-      const blob = Array.isArray(rows) ? (rows[0] || null) : (rows || null);
+      const rows = await SupabaseApi.rpc(
+        PULL_RPC,
+        {
+          p_profile_id: resolvedProfileId
+        },
+        true
+      );
+      const blob = Array.isArray(rows) ? rows[0] || null : rows || null;
       if (!blob) {
         return false;
       }
@@ -86,7 +97,9 @@ export const CollectionSyncService = {
 
       this.syncingFromRemoteProfiles.add(resolvedProfileId);
       try {
-        CollectionsStore.replaceForProfile(resolvedProfileId, remoteCollections, { silentSync: true });
+        CollectionsStore.replaceForProfile(resolvedProfileId, remoteCollections, {
+          silentSync: true
+        });
       } finally {
         this.syncingFromRemoteProfiles.delete(resolvedProfileId);
       }

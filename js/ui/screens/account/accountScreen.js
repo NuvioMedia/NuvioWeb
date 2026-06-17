@@ -4,7 +4,6 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { I18n } from "../../../i18n/index.js";
 
 export const AccountScreen = {
-
   async mount() {
     this.container = document.getElementById("account");
     this.container.style.display = "block";
@@ -102,5 +101,4 @@ export const AccountScreen = {
       }
     }
   }
-
 };

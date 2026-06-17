@@ -14,7 +14,6 @@ function escapeHtml(value) {
 }
 
 export const SyncCodeScreen = {
-
   async mount() {
     this.container = document.getElementById("account");
     ScreenUtils.show(this.container);
@@ -35,7 +34,9 @@ export const SyncCodeScreen = {
           <div class="auth-simple-card focusable" data-action="back">${I18n.t("auth.syncCode.back")}</div>
         </div>
       </div>
-      ${this.textDialog ? `
+      ${
+        this.textDialog
+          ? `
         <div class="settings-dialog-backdrop">
           <div class="settings-dialog settings-text-dialog">
             <div class="settings-dialog-title">${escapeHtml(I18n.t("auth.syncCode.prompt"))}</div>
@@ -56,7 +57,9 @@ export const SyncCodeScreen = {
             </div>
           </div>
         </div>
-      ` : ""}
+      `
+          : ""
+      }
     `;
     ScreenUtils.indexFocusables(this.container);
     if (this.textDialog) {
@@ -136,5 +139,4 @@ export const SyncCodeScreen = {
   cleanup() {
     ScreenUtils.hide(this.container);
   }
-
 };

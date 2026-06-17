@@ -12,31 +12,40 @@ const VIDEO_EXTENSIONS = new Set([
 ]);
 
 export function hasDebridVideoExtension(value) {
-  const name = String(value || "").trim().toLowerCase();
+  const name = String(value || "")
+    .trim()
+    .toLowerCase();
   return Array.from(VIDEO_EXTENSIONS).some((extension) => name.endsWith(extension));
 }
 
 function displayName(file = {}) {
-  return String(
-    file.name
-      || file.short_name
-      || file.shortName
-      || file.path
-      || file.absolute_path
-      || file.absolutePath
-      || ""
-  ).split(/[\\/]/).filter(Boolean).pop() || "";
+  return (
+    String(
+      file.name ||
+        file.short_name ||
+        file.shortName ||
+        file.path ||
+        file.absolute_path ||
+        file.absolutePath ||
+        ""
+    )
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .pop() || ""
+  );
 }
 
 function normalizedFileName(value) {
-  return String(value || "")
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .pop()
-    ?.replace(/\.[^.]+$/, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim() || "";
+  return (
+    String(value || "")
+      .split(/[\\/]/)
+      .filter(Boolean)
+      .pop()
+      ?.replace(/\.[^.]+$/, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim() || ""
+  );
 }
 
 function buildEpisodePatterns(season, episode) {
@@ -56,7 +65,9 @@ function buildEpisodePatterns(season, episode) {
 
 function looksSpecific(value, episodePatterns) {
   const lower = String(value || "").toLowerCase();
-  return hasDebridVideoExtension(lower) || episodePatterns.some((pattern) => lower.includes(pattern));
+  return (
+    hasDebridVideoExtension(lower) || episodePatterns.some((pattern) => lower.includes(pattern))
+  );
 }
 
 function specificFileNames(resolve = {}, episodePatterns = []) {
@@ -87,14 +98,21 @@ function fileSize(file = {}) {
   return Number(file.size ?? file.bytes ?? 0) || 0;
 }
 
-export function selectDebridFile(files = [], resolve = {}, { season = null, episode = null, kind = "" } = {}) {
+export function selectDebridFile(
+  files = [],
+  resolve = {},
+  { season = null, episode = null, kind = "" } = {}
+) {
   const list = Array.isArray(files) ? files : [];
   const playable = list.filter((file) => isPlayableVideo(file, kind));
   if (!playable.length) {
     return null;
   }
 
-  const episodePatterns = buildEpisodePatterns(season ?? resolve.season, episode ?? resolve.episode);
+  const episodePatterns = buildEpisodePatterns(
+    season ?? resolve.season,
+    episode ?? resolve.episode
+  );
   const names = specificFileNames(resolve, episodePatterns);
   if (names.length) {
     const matched = playable.find((file) => {
@@ -134,7 +152,10 @@ export function selectDebridFile(files = [], resolve = {}, { season = null, epis
     }
   }
 
-  return playable.reduce((best, file) => (fileSize(file) > fileSize(best) ? file : best), playable[0]);
+  return playable.reduce(
+    (best, file) => (fileSize(file) > fileSize(best) ? file : best),
+    playable[0]
+  );
 }
 
 export function getDebridFileDisplayName(file = {}) {

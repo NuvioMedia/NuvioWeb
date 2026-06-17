@@ -17,9 +17,20 @@ function warn() {
 }
 
 function probeNodeRuntime() {
-  var requiredModules = ["fs", "http", "net", "dgram", "stream", "events", "path", "url", "crypto", "buffer"];
+  var requiredModules = [
+    "fs",
+    "http",
+    "net",
+    "dgram",
+    "stream",
+    "events",
+    "path",
+    "url",
+    "crypto",
+    "buffer"
+  ];
   var missing = [];
-  requiredModules.forEach(function(moduleName) {
+  requiredModules.forEach(function (moduleName) {
     try {
       require(moduleName);
     } catch (error) {
@@ -45,7 +56,9 @@ function probeNodeRuntime() {
 }
 
 function configureRuntimeEnv() {
-  process.argv = Array.isArray(process.argv) ? process.argv : ["nuvio-enginefs-service", "runtime/media-http.cjs"];
+  process.argv = Array.isArray(process.argv)
+    ? process.argv
+    : ["nuvio-enginefs-service", "runtime/media-http.cjs"];
   process.env = process.env || {};
   if (!process.env.HOME) {
     try {
@@ -89,15 +102,17 @@ function requestRemoveAll() {
   try {
     var http = require("http");
     var port = Number(process.env.PORT || 2710) || 2710;
-    http.get("http://127.0.0.1:" + port + "/removeAll", function(response) {
-      response.resume();
-    }).on("error", function() {});
+    http
+      .get("http://127.0.0.1:" + port + "/removeAll", function (response) {
+        response.resume();
+      })
+      .on("error", function () {});
   } catch (_) {
     // Service shutdown cleanup is best-effort.
   }
 }
 
-module.exports.onStart = function() {
+module.exports.onStart = function () {
   try {
     startEngineFsRuntime();
   } catch (error) {
@@ -106,7 +121,7 @@ module.exports.onStart = function() {
   }
 };
 
-module.exports.onStop = function() {
+module.exports.onStop = function () {
   log("stopping local EngineFS runtime");
   requestRemoveAll();
 };

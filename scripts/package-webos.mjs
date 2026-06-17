@@ -72,9 +72,7 @@ async function resolveWebOsScriptPath(targetDir) {
 }
 
 function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
-  const webOsScriptTag = webOsScriptPath
-    ? `  <script src="${webOsScriptPath}"></script>\n`
-    : "";
+  const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -114,12 +112,19 @@ async function stageApp() {
 
   await Promise.all([
     cp(path.join(rootDir, "assets", "images", "icon.png"), path.join(appStageDir, "icon.png")),
-    cp(path.join(rootDir, "assets", "images", "largeIcon.png"), path.join(appStageDir, "largeIcon.png")),
+    cp(
+      path.join(rootDir, "assets", "images", "largeIcon.png"),
+      path.join(appStageDir, "largeIcon.png")
+    ),
     cp(path.join(rootDir, "assets", "images", "splash.png"), path.join(appStageDir, "splash.png"))
   ]);
 
   const webOsScriptPath = await resolveWebOsScriptPath(appStageDir);
-  await writeFile(path.join(appStageDir, "index.html"), buildWebOsIndexHtml({ webOsScriptPath }), "utf8");
+  await writeFile(
+    path.join(appStageDir, "index.html"),
+    buildWebOsIndexHtml({ webOsScriptPath }),
+    "utf8"
+  );
 }
 
 async function stageService() {
@@ -132,8 +137,15 @@ async function stageService() {
   await mkdir(path.join(serviceStageDir, "runtime"), { recursive: true });
 
   await Promise.all([
-    writeFile(path.join(serviceStageDir, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, "utf8"),
-    cp(path.join(webOsServiceSourceDir, "services.json"), path.join(serviceStageDir, "services.json")),
+    writeFile(
+      path.join(serviceStageDir, "package.json"),
+      `${JSON.stringify(packageJson, null, 2)}\n`,
+      "utf8"
+    ),
+    cp(
+      path.join(webOsServiceSourceDir, "services.json"),
+      path.join(serviceStageDir, "services.json")
+    ),
     cp(
       path.join(webOsServiceSourceDir, "runtime", "media-http.cjs"),
       path.join(serviceStageDir, "runtime", "media-http.cjs")
@@ -179,7 +191,9 @@ async function packageWebOs() {
     const { version } = await readAppMetadata();
     const expectedIpk = path.join(rootDir, `space.nuvio.webos_${version}_all.ipk`);
     if (await pathExists(expectedIpk)) {
-      console.warn(`ares-package exited with an error, but ${expectedIpk} was created successfully. Continuing.`);
+      console.warn(
+        `ares-package exited with an error, but ${expectedIpk} was created successfully. Continuing.`
+      );
     } else {
       throw error;
     }

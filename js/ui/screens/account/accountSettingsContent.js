@@ -1,5 +1,4 @@
 ﻿export class AccountSettingsContent {
-
   constructor(container) {
     this.container = container;
     this.focusIndex = 0;
@@ -35,11 +34,12 @@
       this.container.innerHTML = `
         ${this.renderStatusCard(uiState.email)}
 
-        ${syncOverview
-          ? this.renderSyncOverview(syncOverview)
-          : isSyncOverviewLoading
-            ? this.renderSyncLoading()
-            : ""
+        ${
+          syncOverview
+            ? this.renderSyncOverview(syncOverview)
+            : isSyncOverviewLoading
+              ? this.renderSyncLoading()
+              : ""
         }
 
         ${this.renderSignOut()}
@@ -179,5 +179,4 @@
 
     items[newIndex].classList.add("focused");
   }
-
 }

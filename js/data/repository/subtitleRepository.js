@@ -5,7 +5,6 @@ import { SubtitleApi } from "../remote/api/subtitleApi.js";
 const PER_ADDON_TIMEOUT_MS = 20000;
 
 class SubtitleRepository {
-
   async getSubtitles(type, id, videoId = null, options = {}) {
     const normalizedType = this.canonicalSubtitleType(type);
     const rawId = String(id || "").trim();
@@ -15,16 +14,20 @@ class SubtitleRepository {
       cacheOnly: Boolean(options?.manifestCacheOnly)
     });
 
-    const subtitleAddons = addons.filter((addon) => (addon.resources || []).some((resource) => {
-      if (!this.isSubtitleResource(resource?.name)) {
-        return false;
-      }
-      return this.supportsType(resource, normalizedType, normalizedId);
-    }));
+    const subtitleAddons = addons.filter((addon) =>
+      (addon.resources || []).some((resource) => {
+        if (!this.isSubtitleResource(resource?.name)) {
+          return false;
+        }
+        return this.supportsType(resource, normalizedType, normalizedId);
+      })
+    );
 
-    const allResults = await Promise.all(subtitleAddons.map((addon) =>
-      this.fetchSubtitlesFromAddon(addon, normalizedType, idCandidates, videoId, options)
-    ));
+    const allResults = await Promise.all(
+      subtitleAddons.map((addon) =>
+        this.fetchSubtitlesFromAddon(addon, normalizedType, idCandidates, videoId, options)
+      )
+    );
 
     const mergedResults = [];
     allResults.forEach((items) => {
@@ -53,13 +56,17 @@ class SubtitleRepository {
         continue;
       }
 
-      const subtitles = (result.data?.subtitles || []).map((subtitle) => ({
-        id: subtitle.id || `${subtitle.lang || "unk"}-${this.makeDeterministicId(subtitle.url || "")}`,
-        url: subtitle.url,
-        lang: subtitle.lang || "unknown",
-        addonName: addon.displayName,
-        addonLogo: addon.logo
-      })).filter((subtitle) => Boolean(subtitle.url));
+      const subtitles = (result.data?.subtitles || [])
+        .map((subtitle) => ({
+          id:
+            subtitle.id ||
+            `${subtitle.lang || "unk"}-${this.makeDeterministicId(subtitle.url || "")}`,
+          url: subtitle.url,
+          lang: subtitle.lang || "unknown",
+          addonName: addon.displayName,
+          addonLogo: addon.logo
+        }))
+        .filter((subtitle) => Boolean(subtitle.url));
 
       subtitles.forEach((subtitle) => {
         const key = `${subtitle.url}::${String(subtitle.lang || "").toLowerCase()}`;
@@ -69,7 +76,6 @@ class SubtitleRepository {
         seen.add(key);
         merged.push(subtitle);
       });
-
     }
 
     return merged;
@@ -81,7 +87,9 @@ class SubtitleRepository {
   }
 
   canonicalSubtitleType(type) {
-    const normalized = String(type || "").trim().toLowerCase();
+    const normalized = String(type || "")
+      .trim()
+      .toLowerCase();
     return normalized === "tv" ? "series" : normalized;
   }
 
@@ -90,7 +98,10 @@ class SubtitleRepository {
       ? resource.types.map((value) => String(value || "").toLowerCase()).filter(Boolean)
       : [];
     const compatibleTypes = this.compatibleTypes(type);
-    if (supportedTypes.length > 0 && !compatibleTypes.some((candidateType) => supportedTypes.includes(candidateType))) {
+    if (
+      supportedTypes.length > 0 &&
+      !compatibleTypes.some((candidateType) => supportedTypes.includes(candidateType))
+    ) {
       return false;
     }
 
@@ -154,9 +165,12 @@ class SubtitleRepository {
     let timeoutId = null;
     try {
       const timeoutPromise = new Promise((resolve) => {
-        timeoutId = setTimeout(() => {
-          resolve({ status: "timeout" });
-        }, Math.max(500, Number(timeoutMs || 0)));
+        timeoutId = setTimeout(
+          () => {
+            resolve({ status: "timeout" });
+          },
+          Math.max(500, Number(timeoutMs || 0))
+        );
       });
       return await Promise.race([promise, timeoutPromise]);
     } finally {
@@ -169,7 +183,8 @@ class SubtitleRepository {
   buildSubtitlesUrl(baseUrl, type, id, options = {}) {
     const cleanBaseUrl = addonRepository.canonicalizeUrl(baseUrl);
     const queryStart = cleanBaseUrl.indexOf("?");
-    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const basePath =
+      queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
     const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
     const extraParams = this.buildExtraParams(options);
     const suffix = extraParams ? `/${extraParams}` : "";
@@ -190,7 +205,7 @@ class SubtitleRepository {
     let hash = 0;
     const str = String(value || "");
     for (let index = 0; index < str.length; index += 1) {
-      hash = ((hash << 5) - hash) + str.charCodeAt(index);
+      hash = (hash << 5) - hash + str.charCodeAt(index);
       hash |= 0;
     }
     return Math.abs(hash);
@@ -213,7 +228,6 @@ class SubtitleRepository {
     push("filename", options.filename);
     return params.join("&");
   }
-
 }
 
 export const subtitleRepository = new SubtitleRepository();

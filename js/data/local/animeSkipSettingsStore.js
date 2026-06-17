@@ -20,7 +20,6 @@ const store = createProfileScopedStore({
 });
 
 export const AnimeSkipSettingsStore = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -40,5 +39,4 @@ export const AnimeSkipSettingsStore = {
   set(partial, options = {}) {
     return store.set(partial, options);
   }
-
 };

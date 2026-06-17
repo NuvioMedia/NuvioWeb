@@ -4,7 +4,6 @@ import { PluginRuntime } from "./pluginRuntime.js";
 const PLUGINS_ENABLED_KEY = "pluginsEnabled";
 
 export const PluginManager = {
-
   get pluginsEnabled() {
     return Boolean(LocalStore.get(PLUGINS_ENABLED_KEY, false));
   },
@@ -35,5 +34,4 @@ export const PluginManager = {
     }
     return PluginRuntime.execute({ tmdbId, mediaType, season, episode });
   }
-
 };

@@ -3,7 +3,9 @@ import { INTRODB_API_URL } from "../../config.js";
 const CACHE = new Map();
 
 function normalizeImdbId(value = "") {
-  const candidate = String(value || "").trim().split(":")[0];
+  const candidate = String(value || "")
+    .trim()
+    .split(":")[0];
   return /^tt\d+$/i.test(candidate) ? candidate : "";
 }
 
@@ -21,10 +23,14 @@ function toSkipInterval(segment, type) {
   }
   const start = Number.isFinite(Number(segment.start_sec))
     ? Number(segment.start_sec)
-    : (Number.isFinite(Number(segment.start_ms)) ? Number(segment.start_ms) / 1000 : NaN);
+    : Number.isFinite(Number(segment.start_ms))
+      ? Number(segment.start_ms) / 1000
+      : NaN;
   const end = Number.isFinite(Number(segment.end_sec))
     ? Number(segment.end_sec)
-    : (Number.isFinite(Number(segment.end_ms)) ? Number(segment.end_ms) / 1000 : NaN);
+    : Number.isFinite(Number(segment.end_ms))
+      ? Number(segment.end_ms) / 1000
+      : NaN;
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
     return null;
   }
@@ -58,7 +64,6 @@ async function fetchJson(url, timeoutMs = 3500) {
 }
 
 export const skipIntroRepository = {
-
   async getSkipIntervals(imdbId, season, episode) {
     const baseUrl = normalizeBaseUrl(INTRODB_API_URL);
     const normalizedImdbId = normalizeImdbId(imdbId);
@@ -83,10 +88,11 @@ export const skipIntroRepository = {
       toSkipInterval(data?.intro, "intro"),
       toSkipInterval(data?.recap, "recap"),
       toSkipInterval(data?.outro, "outro")
-    ].filter(Boolean).sort((left, right) => left.startTime - right.startTime);
+    ]
+      .filter(Boolean)
+      .sort((left, right) => left.startTime - right.startTime);
 
     CACHE.set(cacheKey, intervals);
     return intervals;
   }
-
 };

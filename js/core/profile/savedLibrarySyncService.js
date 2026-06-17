@@ -17,7 +17,14 @@ function resolveProfileId() {
 
 function mapRemoteItem(row = {}) {
   const contentId = row.content_id || row.contentId || row.id || "";
-  const updatedAtRaw = row.added_at || row.addedAt || row.updated_at || row.updatedAt || row.created_at || row.createdAt || null;
+  const updatedAtRaw =
+    row.added_at ||
+    row.addedAt ||
+    row.updated_at ||
+    row.updatedAt ||
+    row.created_at ||
+    row.createdAt ||
+    null;
   const updatedAt = Number(updatedAtRaw);
   return {
     contentId,
@@ -63,8 +70,9 @@ function mergeLibraryItems(localItems = [], remoteItems = []) {
   };
   localItems.forEach((item) => upsert(item, false));
   remoteItems.forEach((item) => upsert(item, true));
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
+  );
 }
 
 function toRemoteItem(item = {}) {
@@ -85,7 +93,6 @@ function toRemoteItem(item = {}) {
 }
 
 export const SavedLibrarySyncService = {
-
   async pull() {
     try {
       if (!AuthManager.isAuthenticated) {
@@ -95,11 +102,15 @@ export const SavedLibrarySyncService = {
       const localItems = await savedLibraryRepository.getAll(1000);
       const rows = [];
       for (let offset = 0; ; offset += PULL_PAGE_SIZE) {
-        const page = await SupabaseApi.rpc(PULL_RPC, {
-          p_profile_id: profileId,
-          p_limit: PULL_PAGE_SIZE,
-          p_offset: offset
-        }, true);
+        const page = await SupabaseApi.rpc(
+          PULL_RPC,
+          {
+            p_profile_id: profileId,
+            p_limit: PULL_PAGE_SIZE,
+            p_offset: offset
+          },
+          true
+        );
         const pageRows = Array.isArray(page) ? page : [];
         rows.push(...pageRows);
         if (pageRows.length < PULL_PAGE_SIZE) {
@@ -127,15 +138,18 @@ export const SavedLibrarySyncService = {
         return false;
       }
       const items = await savedLibraryRepository.getAll(1000);
-      await SupabaseApi.rpc(PUSH_RPC, {
-        p_profile_id: resolveProfileId(),
-        p_items: items.map((item) => toRemoteItem(item))
-      }, true);
+      await SupabaseApi.rpc(
+        PUSH_RPC,
+        {
+          p_profile_id: resolveProfileId(),
+          p_items: items.map((item) => toRemoteItem(item))
+        },
+        true
+      );
       return true;
     } catch (error) {
       console.warn("Saved library sync push failed", error);
       return false;
     }
   }
-
 };

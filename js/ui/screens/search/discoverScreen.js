@@ -25,7 +25,9 @@ function toTitleCase(value) {
 }
 
 function formatAddonTypeLabel(value) {
-  const type = String(value || "").trim().toLowerCase();
+  const type = String(value || "")
+    .trim()
+    .toLowerCase();
   if (!type) return "Movie";
   if (type === "tv") return "TV";
   if (type === "series") return "Series";
@@ -137,7 +139,11 @@ function setContainerScrollTop(container, top, behavior = "auto") {
   return resolvedTop;
 }
 
-function scrollNodeIntoContainerView(node, container, { center = false, padding = 18, behavior = "smooth" } = {}) {
+function scrollNodeIntoContainerView(
+  node,
+  container,
+  { center = false, padding = 18, behavior = "smooth" } = {}
+) {
   if (!(node instanceof HTMLElement) || !(container instanceof HTMLElement)) {
     return null;
   }
@@ -149,7 +155,7 @@ function scrollNodeIntoContainerView(node, container, { center = false, padding 
   let nextScrollTop = currentTop;
 
   if (center) {
-    nextScrollTop = itemTop - ((container.clientHeight - node.offsetHeight) / 2);
+    nextScrollTop = itemTop - (container.clientHeight - node.offsetHeight) / 2;
   } else if (itemTop < viewTop) {
     nextScrollTop = itemTop - padding;
   } else if (itemBottom > viewBottom) {
@@ -169,7 +175,6 @@ function scrollNodeIntoContainerView(node, container, { center = false, padding 
 }
 
 export const DiscoverScreen = {
-
   clearClosingPicker() {
     if (this.closingPickerTimer) {
       clearTimeout(this.closingPickerTimer);
@@ -236,11 +241,14 @@ export const DiscoverScreen = {
       hasMore: Boolean(this.hasMore),
       lastFocusedAction: String(this.lastFocusedAction || "discoverFilterType"),
       lastFocusedKey: this.lastFocusedKey ? String(this.lastFocusedKey) : null,
-      lastFocusedDiscoverItemId: this.lastFocusedDiscoverItemId ? String(this.lastFocusedDiscoverItemId) : "",
+      lastFocusedDiscoverItemId: this.lastFocusedDiscoverItemId
+        ? String(this.lastFocusedDiscoverItemId)
+        : "",
       savedScrollTop: Number(this.savedScrollTop || 0),
-      rowFocusedIndexByRow: this.rowFocusedIndexByRow && typeof this.rowFocusedIndexByRow === "object"
-        ? { ...this.rowFocusedIndexByRow }
-        : {},
+      rowFocusedIndexByRow:
+        this.rowFocusedIndexByRow && typeof this.rowFocusedIndexByRow === "object"
+          ? { ...this.rowFocusedIndexByRow }
+          : {},
       focusZone: String(this.focusZone || "content")
     };
   },
@@ -261,9 +269,10 @@ export const DiscoverScreen = {
     this.lastFocusedKey = snapshot.lastFocusedKey ? String(snapshot.lastFocusedKey) : null;
     this.lastFocusedDiscoverItemId = String(snapshot.lastFocusedDiscoverItemId || "");
     this.savedScrollTop = Number(snapshot.savedScrollTop || 0);
-    this.rowFocusedIndexByRow = snapshot.rowFocusedIndexByRow && typeof snapshot.rowFocusedIndexByRow === "object"
-      ? { ...snapshot.rowFocusedIndexByRow }
-      : {};
+    this.rowFocusedIndexByRow =
+      snapshot.rowFocusedIndexByRow && typeof snapshot.rowFocusedIndexByRow === "object"
+        ? { ...snapshot.rowFocusedIndexByRow }
+        : {};
     this.focusZone = String(snapshot.focusZone || "content");
     this.loading = false;
     this.updateCatalogOptions();
@@ -311,7 +320,10 @@ export const DiscoverScreen = {
     this.nextSkip = 0;
     this.hasMore = true;
 
-    if (navigationContext?.isBackNavigation && this.hydrateFromRouteState(navigationContext?.restoredState || null)) {
+    if (
+      navigationContext?.isBackNavigation &&
+      this.hydrateFromRouteState(navigationContext?.restoredState || null)
+    ) {
       this.render();
       return;
     }
@@ -340,7 +352,9 @@ export const DiscoverScreen = {
         // Only skip catalogs that REQUIRE a search query (truly search-only).
         // Catalogs that merely support optional search are still browsable and
         // belong in Discover (e.g. some addons declare an optional search extra).
-        const isSearchOnly = (catalog.extra || []).some((extra) => extra?.name === "search" && Boolean(extra?.isRequired));
+        const isSearchOnly = (catalog.extra || []).some(
+          (extra) => extra?.name === "search" && Boolean(extra?.isRequired)
+        );
         if (isSearchOnly) return;
         const type = String(catalog.apiType || "").trim();
         if (!type) return;
@@ -378,7 +392,8 @@ export const DiscoverScreen = {
   },
 
   updateGenreOptions() {
-    const selectedCatalog = this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
+    const selectedCatalog =
+      this.catalogOptions.find((entry) => entry.key === this.selectedCatalogKey) || null;
     const genreExtra = (selectedCatalog?.extra || []).find((extra) => extra?.name === "genre");
     const genres = Array.isArray(genreExtra?.options) ? genreExtra.options.filter(Boolean) : [];
     this.genreOptions = ["Default", ...genres];
@@ -399,7 +414,9 @@ export const DiscoverScreen = {
 
   renderDiscoverCards(selectedCatalog = null) {
     return this.items.length
-      ? this.items.map((item, index) => `
+      ? this.items
+          .map(
+            (item, index) => `
               <article class="discover-card seeall-card focusable"
                         data-action="openDetail"
                         data-item-id="${item.id || ""}"
@@ -410,24 +427,38 @@ export const DiscoverScreen = {
                         data-focus-key="item:${item.id || index}"
                         data-item-index="${index}">
                  <div class="seeall-card-poster-wrap">
-                   ${item.poster
-      ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
-      : `<div class="seeall-card-poster placeholder"></div>`}
+                   ${
+                     item.poster
+                       ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
+                       : `<div class="seeall-card-poster placeholder"></div>`
+                   }
                  </div>
-                 ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
+                 ${
+                   this.layoutPrefs?.posterLabelsEnabled !== false
+                     ? `
                    <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
                    <div class="seeall-card-year">${escapeHtml(extractReleaseYear(item))}</div>
-                 ` : ""}
+                 `
+                     : ""
+                 }
                </article>
-             `).join("")
+             `
+          )
+          .join("")
       : `<div class="seeall-empty">${escapeHtml(t("catalog_see_all_empty_title", {}, "No items available"))}</div>`;
   },
 
   renderDiscoverLoadingMarkup() {
-    return this.loading ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>` : "";
+    return this.loading
+      ? `<div class="seeall-loading">${escapeHtml(t("discover_loading", {}, "Loading..."))}</div>`
+      : "";
   },
 
-  async reloadItems({ suppressLoadingRender = false, preserveExistingItems = false, partialRender = false } = {}) {
+  async reloadItems({
+    suppressLoadingRender = false,
+    preserveExistingItems = false,
+    partialRender = false
+  } = {}) {
     const selectedCatalog = this.getSelectedCatalog();
     this.captureViewState();
     this.nextSkip = 0;
@@ -456,10 +487,21 @@ export const DiscoverScreen = {
     }
 
     this.loading = false;
-    await this.loadNextPage({ restoreFocusToGrid: false, suppressLoadingRender, replaceExistingItems: preserveExistingItems, partialRender });
+    await this.loadNextPage({
+      restoreFocusToGrid: false,
+      suppressLoadingRender,
+      replaceExistingItems: preserveExistingItems,
+      partialRender
+    });
   },
 
-  async loadNextPage({ restoreFocusToGrid = true, preserveViewport = false, suppressLoadingRender = false, replaceExistingItems = false, partialRender = false } = {}) {
+  async loadNextPage({
+    restoreFocusToGrid = true,
+    preserveViewport = false,
+    suppressLoadingRender = false,
+    replaceExistingItems = false,
+    partialRender = false
+  } = {}) {
     if (this.loading || !this.hasMore) {
       return;
     }
@@ -554,7 +596,7 @@ export const DiscoverScreen = {
     if (this.loading || !this.hasMore) {
       return false;
     }
-    const remaining = (this.items.length - 1) - Number(index || 0);
+    const remaining = this.items.length - 1 - Number(index || 0);
     return remaining <= 10;
   },
 
@@ -600,21 +642,33 @@ export const DiscoverScreen = {
       if (!value || value === this.selectedType) return;
       this.selectedType = value;
       this.updateCatalogOptions();
-      this.reloadItems({ suppressLoadingRender: true, preserveExistingItems: true, partialRender: true });
+      this.reloadItems({
+        suppressLoadingRender: true,
+        preserveExistingItems: true,
+        partialRender: true
+      });
       return;
     }
     if (kind === "catalog") {
       if (!value || value === this.selectedCatalogKey) return;
       this.selectedCatalogKey = value;
       this.updateGenreOptions();
-      this.reloadItems({ suppressLoadingRender: true, preserveExistingItems: true, partialRender: true });
+      this.reloadItems({
+        suppressLoadingRender: true,
+        preserveExistingItems: true,
+        partialRender: true
+      });
       return;
     }
     if (kind === "genre") {
       const safeValue = value || "Default";
       if (safeValue === this.selectedGenre) return;
       this.selectedGenre = safeValue;
-      this.reloadItems({ suppressLoadingRender: true, preserveExistingItems: true, partialRender: true });
+      this.reloadItems({
+        suppressLoadingRender: true,
+        preserveExistingItems: true,
+        partialRender: true
+      });
     }
   },
 
@@ -625,7 +679,9 @@ export const DiscoverScreen = {
       genre: this.selectedGenre || "Default"
     };
     Object.entries(valueByKind).forEach(([kind, value]) => {
-      const node = this.container?.querySelector(`.library-picker-anchor[data-picker="${kind}"] .library-picker-value`);
+      const node = this.container?.querySelector(
+        `.library-picker-anchor[data-picker="${kind}"] .library-picker-value`
+      );
       if (node instanceof HTMLElement) {
         node.textContent = value;
       }
@@ -638,14 +694,18 @@ export const DiscoverScreen = {
     }
     this.lastRenderedOpenPicker = null;
     this.clearClosingPicker();
-    Array.from(this.container.querySelectorAll(".discover-picker-row .library-picker")).forEach((node) => {
-      node.classList.remove("open", "closing");
-      const menu = node.querySelector(".library-picker-menu");
-      if (menu) {
-        menu.remove();
+    Array.from(this.container.querySelectorAll(".discover-picker-row .library-picker")).forEach(
+      (node) => {
+        node.classList.remove("open", "closing");
+        const menu = node.querySelector(".library-picker-menu");
+        if (menu) {
+          menu.remove();
+        }
       }
-    });
-    Array.from(this.container.querySelectorAll(".discover-picker-row .library-picker-anchor")).forEach((node) => {
+    );
+    Array.from(
+      this.container.querySelectorAll(".discover-picker-row .library-picker-anchor")
+    ).forEach((node) => {
       node.setAttribute("aria-expanded", "false");
     });
     this.syncRenderedFilterValues();
@@ -713,11 +773,17 @@ export const DiscoverScreen = {
     if (!options.length) return;
     this.openPicker = kind;
     const currentValue = this.getCurrentPickerValue(kind);
-    const currentIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
+    const currentIndex = Math.max(
+      0,
+      options.findIndex((option) => option.value === currentValue)
+    );
     this.pickerOptionIndex = currentIndex;
-    this.lastFocusedAction = kind === "type"
-      ? "discoverFilterType"
-      : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
+    this.lastFocusedAction =
+      kind === "type"
+        ? "discoverFilterType"
+        : kind === "catalog"
+          ? "discoverFilterCatalog"
+          : "discoverFilterGenre";
     this.requestRender();
   },
 
@@ -730,7 +796,9 @@ export const DiscoverScreen = {
   },
 
   isPosterHoldTarget(node) {
-    return Boolean(node?.matches?.(".discover-card.seeall-card.focusable[data-action='openDetail']"));
+    return Boolean(
+      node?.matches?.(".discover-card.seeall-card.focusable[data-action='openDetail']")
+    );
   },
 
   cancelPendingPosterHold() {
@@ -759,7 +827,10 @@ export const DiscoverScreen = {
     };
     this.pendingPosterHoldTimer = setTimeout(() => {
       this.pendingPosterHoldTimer = null;
-      const current = this.container?.querySelector(".discover-card.seeall-card.focusable.focused[data-action='openDetail']") || null;
+      const current =
+        this.container?.querySelector(
+          ".discover-card.seeall-card.focusable.focused[data-action='openDetail']"
+        ) || null;
       if (!this.hasPendingPosterHold(current)) {
         return;
       }
@@ -863,7 +934,9 @@ export const DiscoverScreen = {
     if (!this.openPicker) {
       return;
     }
-    const options = Array.from(this.container?.querySelectorAll(".library-picker.open .library-picker-option") || []);
+    const options = Array.from(
+      this.container?.querySelectorAll(".library-picker.open .library-picker-option") || []
+    );
     if (!options.length) {
       this.requestRender();
       return;
@@ -885,11 +958,18 @@ export const DiscoverScreen = {
     if (!this.openPicker) {
       return false;
     }
-    const options = Array.from(this.container?.querySelectorAll(`.library-picker.open .library-picker-option.focusable[data-picker="${this.openPicker}"]`) || []);
+    const options = Array.from(
+      this.container?.querySelectorAll(
+        `.library-picker.open .library-picker-option.focusable[data-picker="${this.openPicker}"]`
+      ) || []
+    );
     if (!options.length) {
       return false;
     }
-    const focusIndex = Math.max(0, Math.min(options.length - 1, Number(this.pickerOptionIndex || 0)));
+    const focusIndex = Math.max(
+      0,
+      Math.min(options.length - 1, Number(this.pickerOptionIndex || 0))
+    );
     options.forEach((node, index) => node.classList.toggle("focused", index === focusIndex));
     const target = options[focusIndex] || options[0] || null;
     if (!target) {
@@ -930,9 +1010,12 @@ export const DiscoverScreen = {
   },
 
   focusFilter(action) {
-    const target = this.container?.querySelector(`.discover-filter[data-action="${action}"]`) || null;
+    const target =
+      this.container?.querySelector(`.discover-filter[data-action="${action}"]`) || null;
     if (!target) return;
-    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    this.container
+      .querySelectorAll(".focusable.focused")
+      .forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusZone = "content";
     focusWithoutAutoScroll(target);
@@ -952,15 +1035,17 @@ export const DiscoverScreen = {
   },
 
   focusNearestFilterFromCard(cardNode) {
-    const filters = Array.from(this.container?.querySelectorAll(".discover-filter.focusable") || []);
+    const filters = Array.from(
+      this.container?.querySelectorAll(".discover-filter.focusable") || []
+    );
     if (!filters.length || !cardNode) return false;
     const cardRect = cardNode.getBoundingClientRect();
-    const cardCenterX = cardRect.left + (cardRect.width / 2);
+    const cardCenterX = cardRect.left + cardRect.width / 2;
     let target = null;
     let minDx = Number.POSITIVE_INFINITY;
     filters.forEach((filter) => {
       const rect = filter.getBoundingClientRect();
-      const centerX = rect.left + (rect.width / 2);
+      const centerX = rect.left + rect.width / 2;
       const dx = Math.abs(centerX - cardCenterX);
       if (dx < minDx) {
         minDx = dx;
@@ -968,7 +1053,9 @@ export const DiscoverScreen = {
       }
     });
     if (!target) return false;
-    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    this.container
+      .querySelectorAll(".focusable.focused")
+      .forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusZone = "content";
     focusWithoutAutoScroll(target);
@@ -985,7 +1072,9 @@ export const DiscoverScreen = {
     if (main) {
       this.savedScrollTop = main.scrollTop;
     }
-    const focused = this.container?.querySelector(".seeall-card.focused") || this.container?.querySelector(".discover-card.focused");
+    const focused =
+      this.container?.querySelector(".seeall-card.focused") ||
+      this.container?.querySelector(".discover-card.focused");
     if (focused?.dataset?.focusKey) {
       this.lastFocusedKey = String(focused.dataset.focusKey || "");
     }
@@ -1003,18 +1092,25 @@ export const DiscoverScreen = {
 
   restoreFocusedCard({ scrollMode = "center" } = {}) {
     this.restoreScrollState();
-    const target = (this.lastFocusedKey
-      ? this.container?.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
-      : null)
-      || (this.lastFocusedDiscoverItemId
-        ? this.container?.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
-        : null)
-      || this.container?.querySelector(".seeall-card.focusable")
-      || (this.lastFocusedAction
-        ? this.container?.querySelector(`.discover-filter.focusable[data-action="${String(this.lastFocusedAction).replace(/["\\]/g, "\\$&")}"]`)
-        : null)
-      || this.container?.querySelector(".discover-filter.focusable")
-      || null;
+    const target =
+      (this.lastFocusedKey
+        ? this.container?.querySelector(
+            `.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`
+          )
+        : null) ||
+      (this.lastFocusedDiscoverItemId
+        ? this.container?.querySelector(
+            `.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`
+          )
+        : null) ||
+      this.container?.querySelector(".seeall-card.focusable") ||
+      (this.lastFocusedAction
+        ? this.container?.querySelector(
+            `.discover-filter.focusable[data-action="${String(this.lastFocusedAction).replace(/["\\]/g, "\\$&")}"]`
+          )
+        : null) ||
+      this.container?.querySelector(".discover-filter.focusable") ||
+      null;
     if (!target) {
       return;
     }
@@ -1030,7 +1126,10 @@ export const DiscoverScreen = {
     focusWithoutAutoScroll(target);
     this.rememberRowFocus(target);
     if (scrollMode !== "none") {
-      scrollNodeIntoContainerView(target, this.getContentScroller(), { center: scrollMode === "center", padding: 20 });
+      scrollNodeIntoContainerView(target, this.getContentScroller(), {
+        center: scrollMode === "center",
+        padding: 20
+      });
     }
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
   },
@@ -1044,7 +1143,9 @@ export const DiscoverScreen = {
   },
 
   buildNavigationModel() {
-    const cards = Array.from(this.container?.querySelectorAll(".discover-grid .seeall-card.focusable") || []);
+    const cards = Array.from(
+      this.container?.querySelectorAll(".discover-grid .seeall-card.focusable") || []
+    );
     const rows = groupNodesByOffsetTop(cards);
     rows.forEach((rowNodes, rowIndex) => {
       rowNodes.forEach((node, colIndex) => {
@@ -1085,7 +1186,9 @@ export const DiscoverScreen = {
     });
     target.classList.add("focused");
     this.focusZone = "content";
-    this.lastFocusedAction = String(target.dataset.action || this.lastFocusedAction || "openDetail");
+    this.lastFocusedAction = String(
+      target.dataset.action || this.lastFocusedAction || "openDetail"
+    );
     this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
     if (target.dataset.itemId) {
       this.lastFocusedDiscoverItemId = String(target.dataset.itemId || "");
@@ -1098,10 +1201,10 @@ export const DiscoverScreen = {
     const nextScrollTop = isFirstRow
       ? setContainerScrollTop(scroller, 0, "smooth")
       : scrollNodeIntoContainerView(target, scroller, {
-        center: false,
-        padding: 20,
-        behavior: shouldLoadMore ? "auto" : "smooth"
-      });
+          center: false,
+          padding: 20,
+          behavior: shouldLoadMore ? "auto" : "smooth"
+        });
     if (Number.isFinite(nextScrollTop)) {
       this.savedScrollTop = nextScrollTop;
     }
@@ -1127,11 +1230,16 @@ export const DiscoverScreen = {
 
   handleGridDpad(event) {
     const code = Number(event?.keyCode || 0);
-    const direction = code === 38 ? "up"
-      : code === 40 ? "down"
-        : code === 37 ? "left"
-          : code === 39 ? "right"
-            : null;
+    const direction =
+      code === 38
+        ? "up"
+        : code === 40
+          ? "down"
+          : code === 37
+            ? "left"
+            : code === 39
+              ? "right"
+              : null;
     if (!direction) {
       return false;
     }
@@ -1163,11 +1271,14 @@ export const DiscoverScreen = {
   },
 
   focusFirstContentCard() {
-    const target = (this.lastFocusedKey
-      ? this.container?.querySelector(`.discover-grid .seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
-      : null)
-      || this.container?.querySelector(".discover-grid .seeall-card.focusable")
-      || null;
+    const target =
+      (this.lastFocusedKey
+        ? this.container?.querySelector(
+            `.discover-grid .seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`
+          )
+        : null) ||
+      this.container?.querySelector(".discover-grid .seeall-card.focusable") ||
+      null;
     return this.focusNode(target);
   },
 
@@ -1175,28 +1286,37 @@ export const DiscoverScreen = {
     if (this.openPicker && this.applyOpenPickerOptionFocus()) {
       return true;
     }
-    const selector = this.lastFocusedAction && this.lastFocusedAction !== "openDetail"
-      ? `.focusable[data-action="${this.lastFocusedAction}"]`
-      : "";
-    const filterTarget = this.isFilterAction(this.lastFocusedAction) && selector
-      ? this.container?.querySelector(selector)
-      : null;
+    const selector =
+      this.lastFocusedAction && this.lastFocusedAction !== "openDetail"
+        ? `.focusable[data-action="${this.lastFocusedAction}"]`
+        : "";
+    const filterTarget =
+      this.isFilterAction(this.lastFocusedAction) && selector
+        ? this.container?.querySelector(selector)
+        : null;
     const posterTarget = this.lastFocusedKey
-      ? this.container?.querySelector(`.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`)
+      ? this.container?.querySelector(
+          `.seeall-card.focusable[data-focus-key="${String(this.lastFocusedKey).replace(/["\\]/g, "\\$&")}"]`
+        )
       : null;
-    const target = filterTarget
-      || posterTarget
-      || (selector ? this.container?.querySelector(selector) : null)
-      || (this.lastFocusedDiscoverItemId
-        ? this.container?.querySelector(`.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`)
-        : null)
-      || this.container?.querySelector(".discover-filter.focusable")
-      || this.container?.querySelector(".seeall-card.focusable")
-      || null;
+    const target =
+      filterTarget ||
+      posterTarget ||
+      (selector ? this.container?.querySelector(selector) : null) ||
+      (this.lastFocusedDiscoverItemId
+        ? this.container?.querySelector(
+            `.seeall-card.focusable[data-item-id="${String(this.lastFocusedDiscoverItemId).replace(/["\\]/g, "\\$&")}"]`
+          )
+        : null) ||
+      this.container?.querySelector(".discover-filter.focusable") ||
+      this.container?.querySelector(".seeall-card.focusable") ||
+      null;
     if (!target) {
       return false;
     }
-    this.container.querySelectorAll(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    this.container
+      .querySelectorAll(".focusable.focused")
+      .forEach((node) => node.classList.remove("focused"));
     target.classList.add("focused");
     this.focusZone = "content";
     if (target.classList.contains("discover-filter")) {
@@ -1206,7 +1326,10 @@ export const DiscoverScreen = {
       focusWithoutAutoScroll(target);
       this.lastFocusedKey = target.dataset.focusKey || this.lastFocusedKey;
       if (scrollMode !== "none") {
-        scrollNodeIntoContainerView(target, this.getContentScroller(), { center: scrollMode === "center", padding: 20 });
+        scrollNodeIntoContainerView(target, this.getContentScroller(), {
+          center: scrollMode === "center",
+          padding: 20
+        });
       }
     }
     if (!this.layoutPrefs?.modernSidebar) {
@@ -1232,10 +1355,16 @@ export const DiscoverScreen = {
     const isClosing = this.closingPicker === kind;
     const options = isOpen || isClosing ? this.getPickerOptions(kind) : [];
     const currentValue = this.getCurrentPickerValue(kind);
-    const selectedIndex = Math.max(0, options.findIndex((option) => option.value === currentValue));
-    const anchorAction = kind === "type"
-      ? "discoverFilterType"
-      : (kind === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
+    const selectedIndex = Math.max(
+      0,
+      options.findIndex((option) => option.value === currentValue)
+    );
+    const anchorAction =
+      kind === "type"
+        ? "discoverFilterType"
+        : kind === "catalog"
+          ? "discoverFilterCatalog"
+          : "discoverFilterGenre";
     return renderContentFilterPicker({
       variant: "discover",
       picker: kind,
@@ -1325,12 +1454,16 @@ export const DiscoverScreen = {
       node.__boundDiscoverCardHandlers = true;
       node.addEventListener("focus", () => {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
-        this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
+        this.lastFocusedDiscoverItemId = String(
+          node.dataset.itemId || this.lastFocusedDiscoverItemId || ""
+        );
         this.savedScrollTop = this.container?.querySelector(".discover-main")?.scrollTop || 0;
       });
       node.addEventListener("mouseenter", () => {
         this.lastFocusedKey = node.dataset.focusKey || this.lastFocusedKey;
-        this.lastFocusedDiscoverItemId = String(node.dataset.itemId || this.lastFocusedDiscoverItemId || "");
+        this.lastFocusedDiscoverItemId = String(
+          node.dataset.itemId || this.lastFocusedDiscoverItemId || ""
+        );
       });
     });
   },
@@ -1341,12 +1474,16 @@ export const DiscoverScreen = {
       return;
     }
     scroller.__discoverScrollBound = true;
-    scroller.addEventListener("scroll", () => {
-      this.savedScrollTop = Number(scroller.scrollTop || 0);
-      if (this.shouldAutoLoadMoreFromScroll(scroller)) {
-        this.loadNextPage({ preserveViewport: true });
-      }
-    }, { passive: true });
+    scroller.addEventListener(
+      "scroll",
+      () => {
+        this.savedScrollTop = Number(scroller.scrollTop || 0);
+        if (this.shouldAutoLoadMoreFromScroll(scroller)) {
+          this.loadNextPage({ preserveViewport: true });
+        }
+      },
+      { passive: true }
+    );
   },
 
   bindPointerEvents() {
@@ -1448,9 +1585,12 @@ export const DiscoverScreen = {
       }
       if (isLeftKey(event) || isRightKey(event)) {
         const movingRight = isRightKey(event);
-        const action = this.openPicker === "type"
-          ? "discoverFilterType"
-          : (this.openPicker === "catalog" ? "discoverFilterCatalog" : "discoverFilterGenre");
+        const action =
+          this.openPicker === "type"
+            ? "discoverFilterType"
+            : this.openPicker === "catalog"
+              ? "discoverFilterCatalog"
+              : "discoverFilterGenre";
         this.openPicker = null;
         this.lastFocusedAction = action;
         this.moveFilterFocus(movingRight ? 1 : -1);
@@ -1526,7 +1666,10 @@ export const DiscoverScreen = {
     if (Number(event?.keyCode || 0) !== 13) {
       return;
     }
-    const current = this.container?.querySelector(".discover-card.seeall-card.focusable.focused[data-action='openDetail']") || null;
+    const current =
+      this.container?.querySelector(
+        ".discover-card.seeall-card.focusable.focused[data-action='openDetail']"
+      ) || null;
     if (this.completePendingPosterHold(current, event)) {
       event?.preventDefault?.();
     }

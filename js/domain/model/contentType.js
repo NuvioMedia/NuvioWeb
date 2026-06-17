@@ -6,7 +6,9 @@ export const ContentType = {
   ANIME: "anime",
 
   fromString(value) {
-    const normalized = String(value || "").trim().toLowerCase();
+    const normalized = String(value || "")
+      .trim()
+      .toLowerCase();
     if (!normalized) {
       return this.MOVIE;
     }

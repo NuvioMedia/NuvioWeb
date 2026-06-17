@@ -116,7 +116,7 @@ function animateScrollTop(container, clampedTarget, duration = 220) {
   const step = (now) => {
     const elapsed = Math.min(1, (now - startTime) / duration);
     const eased = 1 - Math.pow(1 - elapsed, 4);
-    container.scrollTop = startTop + (delta * eased);
+    container.scrollTop = startTop + delta * eased;
     if (elapsed < 1) {
       centeredScrollAnimations.set(container, requestAnimationFrame(step));
     } else {
@@ -140,7 +140,8 @@ function centerAvatarRowInScrollContainer(node, container, siblingNodes, behavio
   const rowBottom = Math.max(...rowRects.map((rect) => rect.bottom));
   const rowHeight = rowBottom - rowTop;
   const containerRect = container.getBoundingClientRect();
-  const targetTop = container.scrollTop + (rowTop - containerRect.top) - ((containerRect.height - rowHeight) / 2);
+  const targetTop =
+    container.scrollTop + (rowTop - containerRect.top) - (containerRect.height - rowHeight) / 2;
   const clampedTarget = Math.max(0, targetTop);
   if (behavior !== "smooth") {
     container.scrollTop = clampedTarget;
@@ -174,9 +175,9 @@ function parseHexColor(colorHex, fallback = { r: 30, g: 136, b: 229 }) {
 function mixColors(baseColor, accentColor, weight) {
   const normalizedWeight = Math.min(1, Math.max(0, Number(weight) || 0));
   return {
-    r: clampChannel((baseColor.r * (1 - normalizedWeight)) + (accentColor.r * normalizedWeight)),
-    g: clampChannel((baseColor.g * (1 - normalizedWeight)) + (accentColor.g * normalizedWeight)),
-    b: clampChannel((baseColor.b * (1 - normalizedWeight)) + (accentColor.b * normalizedWeight))
+    r: clampChannel(baseColor.r * (1 - normalizedWeight) + accentColor.r * normalizedWeight),
+    g: clampChannel(baseColor.g * (1 - normalizedWeight) + accentColor.g * normalizedWeight),
+    b: clampChannel(baseColor.b * (1 - normalizedWeight) + accentColor.b * normalizedWeight)
   };
 }
 
@@ -206,7 +207,11 @@ function categoryLabel(category) {
 
 function getAvatarCategories(avatars) {
   const normalizedCategories = (Array.isArray(avatars) ? avatars : [])
-    .map((avatar) => String(avatar?.category || "").trim().toLowerCase())
+    .map((avatar) =>
+      String(avatar?.category || "")
+        .trim()
+        .toLowerCase()
+    )
     .filter(Boolean);
   const uniqueCategories = Array.from(new Set(normalizedCategories));
   return [
@@ -231,7 +236,7 @@ function getNodeHorizontalCenter(node) {
   if (!rect) {
     return 0;
   }
-  return rect.left + (rect.width / 2);
+  return rect.left + rect.width / 2;
 }
 
 function findNearestByHorizontalCenter(referenceNode, candidates) {
@@ -240,12 +245,14 @@ function findNearestByHorizontalCenter(referenceNode, candidates) {
     return null;
   }
   const referenceCenter = getNodeHorizontalCenter(referenceNode);
-  return nodes
-    .map((node) => ({
-      node,
-      distance: Math.abs(getNodeHorizontalCenter(node) - referenceCenter)
-    }))
-    .sort((left, right) => left.distance - right.distance)[0]?.node || null;
+  return (
+    nodes
+      .map((node) => ({
+        node,
+        distance: Math.abs(getNodeHorizontalCenter(node) - referenceCenter)
+      }))
+      .sort((left, right) => left.distance - right.distance)[0]?.node || null
+  );
 }
 
 function buildVisualRows(nodes, tolerance = 18) {
@@ -264,13 +271,14 @@ function buildVisualRows(nodes, tolerance = 18) {
   });
   rows.sort((left, right) => left.top - right.top);
   rows.forEach((row) => {
-    row.nodes.sort((left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left);
+    row.nodes.sort(
+      (left, right) => left.getBoundingClientRect().left - right.getBoundingClientRect().left
+    );
   });
   return rows;
 }
 
 export const ProfileSelectionScreen = {
-
   async mount(params = {}) {
     this.container = document.getElementById("profileSelection");
     if (!this.container) {
@@ -331,7 +339,9 @@ export const ProfileSelectionScreen = {
   },
 
   getProfileById(profileId) {
-    return (this.profiles || []).find((profile) => String(profile.id) === String(profileId)) || null;
+    return (
+      (this.profiles || []).find((profile) => String(profile.id) === String(profileId)) || null
+    );
   },
 
   getVisibleProfiles() {
@@ -344,7 +354,9 @@ export const ProfileSelectionScreen = {
 
   isProfilePinEnabled(profileId) {
     const normalizedId = String(profileId || "");
-    return Boolean(this.profilePinEnabled?.[normalizedId] || this.profilePinEnabled?.[Number(normalizedId)]);
+    return Boolean(
+      this.profilePinEnabled?.[normalizedId] || this.profilePinEnabled?.[Number(normalizedId)]
+    );
   },
 
   getAvatarImageUrl(avatarId) {
@@ -359,7 +371,9 @@ export const ProfileSelectionScreen = {
     if (!this.editorState?.selectedAvatarId) {
       return null;
     }
-    return this.avatarCatalog.find((avatar) => avatar.id === this.editorState.selectedAvatarId) || null;
+    return (
+      this.avatarCatalog.find((avatar) => avatar.id === this.editorState.selectedAvatarId) || null
+    );
   },
 
   getFilteredEditorAvatars() {
@@ -367,7 +381,9 @@ export const ProfileSelectionScreen = {
     if (category === "all") {
       return this.avatarCatalog;
     }
-    return this.avatarCatalog.filter((avatar) => String(avatar.category || "").toLowerCase() === category.toLowerCase());
+    return this.avatarCatalog.filter(
+      (avatar) => String(avatar.category || "").toLowerCase() === category.toLowerCase()
+    );
   },
 
   render() {
@@ -383,7 +399,9 @@ export const ProfileSelectionScreen = {
       : t("profile_selection_hint", {}, "Hold to manage profile");
     const renderedPinState = this.getRenderedPinOverlayState();
     const isPinActive = Boolean(renderedPinState);
-    const pinScreenPhaseClass = isPinActive ? ` is-pin-${escapeHtml(this.pinOverlayPhase || "open")}` : "";
+    const pinScreenPhaseClass = isPinActive
+      ? ` is-pin-${escapeHtml(this.pinOverlayPhase || "open")}`
+      : "";
 
     this.container.innerHTML = `
       <div class="profile-screen${pinScreenPhaseClass}">
@@ -394,7 +412,9 @@ export const ProfileSelectionScreen = {
           <p class="profile-subtitle">${escapeHtml(subtitle)}</p>
 
           <div class="profile-grid" id="profileGrid">
-            ${this.getVisibleProfiles().map((profile) => this.renderProfileCard(profile)).join("")}
+            ${this.getVisibleProfiles()
+              .map((profile) => this.renderProfileCard(profile))
+              .join("")}
             ${canAddProfile ? this.renderAddProfileCard() : ""}
           </div>
 
@@ -417,7 +437,9 @@ export const ProfileSelectionScreen = {
   },
 
   renderProfileCard(profile) {
-    const avatarUrl = resolveProfileAvatarUrl(profile, (avatarId) => this.getAvatarImageUrl(avatarId));
+    const avatarUrl = resolveProfileAvatarUrl(profile, (avatarId) =>
+      this.getAvatarImageUrl(avatarId)
+    );
     return `
       <div class="profile-card profile-focusable focusable"
            data-profile-id="${escapeHtml(profile.id)}"
@@ -425,9 +447,11 @@ export const ProfileSelectionScreen = {
            tabindex="0">
         <div class="profile-avatar-ring">
           <div class="profile-avatar" style="background:${escapeHtml(profile.avatarColorHex || getDefaultProfileColor())}">
-            ${avatarUrl
-              ? `<img class="profile-avatar-image" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(profile.name)}"/>`
-              : escapeHtml(getProfileInitial(profile.name))}
+            ${
+              avatarUrl
+                ? `<img class="profile-avatar-image" src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(profile.name)}"/>`
+                : escapeHtml(getProfileInitial(profile.name))
+            }
           </div>
           ${profile.isPrimary ? `<span class="profile-primary-dot" aria-hidden="true">&#9733;</span>` : ""}
         </div>
@@ -457,27 +481,36 @@ export const ProfileSelectionScreen = {
       return "";
     }
 
-    const editorTitle = this.editorState.mode === "edit"
-      ? t("profile_edit_label", {}, "Edit")
-      : t("profile_create_title", {}, "Create Profile");
-    const editorButtonLabel = this.editorState.mode === "edit"
-      ? t("profile_save", {}, "Save")
-      : t("profile_create_btn", {}, "Create");
-    const previewName = String(this.editorState.name || "").trim() || t("profile_name_placeholder", {}, "Profile name");
+    const editorTitle =
+      this.editorState.mode === "edit"
+        ? t("profile_edit_label", {}, "Edit")
+        : t("profile_create_title", {}, "Create Profile");
+    const editorButtonLabel =
+      this.editorState.mode === "edit"
+        ? t("profile_save", {}, "Save")
+        : t("profile_create_btn", {}, "Create");
+    const previewName =
+      String(this.editorState.name || "").trim() ||
+      t("profile_name_placeholder", {}, "Profile name");
     const selectedAvatar = this.getEditorSelectedAvatar();
-    const hasChangedAvatarSelection = this.editorState.selectedAvatarId !== this.editorState.baseAvatarId;
-    const previewAvatarUrl = selectedAvatar?.imageUrl
-      || (!hasChangedAvatarSelection
-        ? (String(this.editorState.originalAvatarUrl || "").trim() || this.getAvatarImageUrl(this.editorState.baseAvatarId) || null)
+    const hasChangedAvatarSelection =
+      this.editorState.selectedAvatarId !== this.editorState.baseAvatarId;
+    const previewAvatarUrl =
+      selectedAvatar?.imageUrl ||
+      (!hasChangedAvatarSelection
+        ? String(this.editorState.originalAvatarUrl || "").trim() ||
+          this.getAvatarImageUrl(this.editorState.baseAvatarId) ||
+          null
         : null);
-    const overlayHeading = this.editorState.mode === "edit"
-      ? `
+    const overlayHeading =
+      this.editorState.mode === "edit"
+        ? `
           <div class="profile-editor-heading-stack">
             <span class="profile-editor-heading-kicker">${escapeHtml(editorTitle)}</span>
             <span class="profile-editor-heading-name">${escapeHtml(this.editorState.originalName || previewName)}</span>
           </div>
         `
-      : `<span class="profile-editor-heading-title">${escapeHtml(editorTitle)}</span>`;
+        : `<span class="profile-editor-heading-title">${escapeHtml(editorTitle)}</span>`;
     const categories = getAvatarCategories(this.avatarCatalog);
     const filteredAvatars = this.getFilteredEditorAvatars();
 
@@ -499,9 +532,11 @@ export const ProfileSelectionScreen = {
           <div class="profile-editor-body">
             <div class="profile-editor-preview">
               <div class="profile-editor-preview-avatar" style="background:${escapeHtml(this.editorState.selectedColorHex || getDefaultProfileColor())}">
-                ${previewAvatarUrl
-                  ? `<img class="profile-editor-preview-image" src="${escapeHtml(previewAvatarUrl)}" alt="${escapeHtml(previewName)}"/>`
-                  : escapeHtml(getProfileInitial(String(this.editorState.name || "").trim()))}
+                ${
+                  previewAvatarUrl
+                    ? `<img class="profile-editor-preview-image" src="${escapeHtml(previewAvatarUrl)}" alt="${escapeHtml(previewName)}"/>`
+                    : escapeHtml(getProfileInitial(String(this.editorState.name || "").trim()))
+                }
               </div>
 
               <div class="profile-editor-preview-name${String(this.editorState.name || "").trim() ? "" : " is-placeholder"}" data-role="editor-preview-name">${escapeHtml(previewName)}</div>
@@ -533,7 +568,9 @@ export const ProfileSelectionScreen = {
               <div class="profile-editor-avatar-title">${escapeHtml(t("profile_choose_avatar", {}, "Choose Avatar"))}</div>
 
               <div class="profile-editor-category-row">
-                ${categories.map((category) => `
+                ${categories
+                  .map(
+                    (category) => `
                   <button class="profile-avatar-category profile-overlay-focusable${this.editorState.category === category ? " is-selected" : ""}"
                           type="button"
                           data-action="select-avatar-category"
@@ -542,12 +579,18 @@ export const ProfileSelectionScreen = {
                           tabindex="0">
                     ${escapeHtml(categoryLabel(category))}
                   </button>
-                `).join("")}
+                `
+                  )
+                  .join("")}
               </div>
 
-              ${filteredAvatars.length ? `
+              ${
+                filteredAvatars.length
+                  ? `
                 <div class="profile-editor-avatar-grid">
-                  ${filteredAvatars.map((avatar) => `
+                  ${filteredAvatars
+                    .map(
+                      (avatar) => `
                     <button class="profile-avatar-tile profile-overlay-focusable${this.editorState.selectedAvatarId === avatar.id ? " is-selected" : ""}"
                             type="button"
                             data-action="select-avatar"
@@ -556,13 +599,17 @@ export const ProfileSelectionScreen = {
                             tabindex="0">
                       <img class="profile-avatar-tile-image" src="${escapeHtml(avatar.imageUrl)}" alt="${escapeHtml(avatar.displayName)}"/>
                     </button>
-                  `).join("")}
+                  `
+                    )
+                    .join("")}
                 </div>
-              ` : `
+              `
+                  : `
                 <div class="profile-editor-avatar-empty">
                   ${escapeHtml(t("profile_choose_avatar", {}, "Choose Avatar"))}
                 </div>
-              `}
+              `
+              }
 
               <div class="profile-editor-avatar-hint${this.editorState.focusedAvatarName ? " has-name" : ""}" data-role="editor-avatar-hint">
                 ${escapeHtml(this.editorState.focusedAvatarName || t("profile_avatar_focus_hint", {}, "Focus an avatar to view its name"))}
@@ -587,9 +634,10 @@ export const ProfileSelectionScreen = {
     const isError = Boolean(this.pinOverlayError);
     return Array.from({ length: PROFILE_PIN_LENGTH }, (_, index) => {
       const isFilled = index < this.pinValue.length;
-      const isActive = index === Math.min(this.pinValue.length, PROFILE_PIN_LENGTH - 1)
-        && this.pinValue.length < PROFILE_PIN_LENGTH
-        && !this.isPinOperationInProgress;
+      const isActive =
+        index === Math.min(this.pinValue.length, PROFILE_PIN_LENGTH - 1) &&
+        this.pinValue.length < PROFILE_PIN_LENGTH &&
+        !this.isPinOperationInProgress;
       return `
         <span class="profile-pin-box${isFilled ? " is-filled" : ""}${isActive ? " is-active" : ""}${isError ? " is-error" : ""}" aria-hidden="true">
           <span class="profile-pin-dot"></span>
@@ -605,11 +653,12 @@ export const ProfileSelectionScreen = {
     if (!state || !profile) {
       return "";
     }
-    const phaseClass = this.pinOverlayPhase === "closing"
-      ? " is-closing"
-      : this.pinOverlayPhase === "opening"
-        ? " is-opening"
-        : " is-open";
+    const phaseClass =
+      this.pinOverlayPhase === "closing"
+        ? " is-closing"
+        : this.pinOverlayPhase === "opening"
+          ? " is-opening"
+          : " is-open";
 
     const isSingleEntryMode = state.type !== "set";
     let heading = PROFILE_PIN_TEXT.headingSet(profile.name);
@@ -723,7 +772,11 @@ export const ProfileSelectionScreen = {
   },
 
   handleFocusableFocus(node) {
-    Array.from(this.container.querySelectorAll(".profile-focusable.focused, .profile-overlay-focusable.focused, .profile-pin-overlay.focused")).forEach((entry) => {
+    Array.from(
+      this.container.querySelectorAll(
+        ".profile-focusable.focused, .profile-overlay-focusable.focused, .profile-pin-overlay.focused"
+      )
+    ).forEach((entry) => {
       if (entry !== node) {
         entry.classList.remove("focused");
       }
@@ -751,11 +804,14 @@ export const ProfileSelectionScreen = {
       this.editorState.focusedAvatarName = avatar?.displayName || null;
       const hintNode = this.container.querySelector("[data-role='editor-avatar-hint']");
       if (hintNode) {
-        hintNode.textContent = this.editorState.focusedAvatarName || "Focus an avatar to view its name";
+        hintNode.textContent =
+          this.editorState.focusedAvatarName || "Focus an avatar to view its name";
         hintNode.classList.toggle("has-name", Boolean(this.editorState.focusedAvatarName));
       }
       const gridNode = node.closest(".profile-editor-avatar-grid");
-      const avatarButtons = Array.from(gridNode?.querySelectorAll("[data-action='select-avatar']") || []);
+      const avatarButtons = Array.from(
+        gridNode?.querySelectorAll("[data-action='select-avatar']") || []
+      );
       centerAvatarRowInScrollContainer(node, gridNode, avatarButtons, "smooth");
     }
 
@@ -766,10 +822,14 @@ export const ProfileSelectionScreen = {
 
   restoreFocus() {
     const defaultFocusKey = this.getDefaultFocusKey();
-    const target = this.findFocusableByKey(this.pendingFocusKey || defaultFocusKey || this.focusKey);
+    const target = this.findFocusableByKey(
+      this.pendingFocusKey || defaultFocusKey || this.focusKey
+    );
     this.pendingFocusKey = "";
     if (!target) {
-      const fallback = this.container.querySelector(".profile-pin-overlay, .profile-card, .profile-overlay-focusable, .profile-dialog-button");
+      const fallback = this.container.querySelector(
+        ".profile-pin-overlay, .profile-card, .profile-overlay-focusable, .profile-dialog-button"
+      );
       if (!fallback) {
         return;
       }
@@ -801,8 +861,11 @@ export const ProfileSelectionScreen = {
     if (!focusKey) {
       return null;
     }
-    return Array.from(this.container.querySelectorAll("[data-focus-key]"))
-      .find((node) => String(node.dataset.focusKey || "") === String(focusKey)) || null;
+    return (
+      Array.from(this.container.querySelectorAll("[data-focus-key]")).find(
+        (node) => String(node.dataset.focusKey || "") === String(focusKey)
+      ) || null
+    );
   },
 
   rememberKeyboardActivation(node) {
@@ -819,7 +882,7 @@ export const ProfileSelectionScreen = {
 
   shouldIgnoreKeyboardClick(node) {
     const suppressedFocusClick = this.suppressedFocusClick;
-    if (suppressedFocusClick && (Date.now() - Number(suppressedFocusClick.at || 0)) <= 400) {
+    if (suppressedFocusClick && Date.now() - Number(suppressedFocusClick.at || 0) <= 400) {
       if (String(node?.dataset?.focusKey || "") === String(suppressedFocusClick.focusKey || "")) {
         this.suppressedFocusClick = null;
         return true;
@@ -831,7 +894,7 @@ export const ProfileSelectionScreen = {
     if (!recentActivation) {
       return false;
     }
-    if ((Date.now() - Number(recentActivation.at || 0)) > 300) {
+    if (Date.now() - Number(recentActivation.at || 0) > 300) {
       return false;
     }
     return String(node?.dataset?.focusKey || "") === String(recentActivation.focusKey || "");
@@ -859,24 +922,34 @@ export const ProfileSelectionScreen = {
       submitButton: overlayRoot.querySelector("[data-focus-key='editor:submit']"),
       nameInput: overlayRoot.querySelector("[data-focus-key='editor:name']"),
       cancelButton: overlayRoot.querySelector("[data-focus-key='editor:cancel']"),
-      categoryButtons: Array.from(overlayRoot.querySelectorAll("[data-action='select-avatar-category']")),
+      categoryButtons: Array.from(
+        overlayRoot.querySelectorAll("[data-action='select-avatar-category']")
+      ),
       avatarButtons: Array.from(overlayRoot.querySelectorAll("[data-action='select-avatar']"))
     };
   },
 
   getPreferredEditorCategoryButton(navigationState) {
-    return navigationState?.categoryButtons.find((node) => node.classList.contains("is-selected"))
-      || navigationState?.categoryButtons[0]
-      || null;
+    return (
+      navigationState?.categoryButtons.find((node) => node.classList.contains("is-selected")) ||
+      navigationState?.categoryButtons[0] ||
+      null
+    );
   },
 
   getEditorCategoryButtonForAvatar(navigationState, avatarId) {
     const avatar = this.avatarCatalog.find((entry) => entry.id === avatarId) || null;
-    const avatarCategory = String(avatar?.category || "").trim().toLowerCase();
+    const avatarCategory = String(avatar?.category || "")
+      .trim()
+      .toLowerCase();
     if (!avatarCategory) {
       return null;
     }
-    return navigationState?.categoryButtons.find((node) => String(node.dataset.category || "") === avatarCategory) || null;
+    return (
+      navigationState?.categoryButtons.find(
+        (node) => String(node.dataset.category || "") === avatarCategory
+      ) || null
+    );
   },
 
   getPreferredEditorAvatarButton(navigationState, referenceNode = null) {
@@ -884,10 +957,12 @@ export const ProfileSelectionScreen = {
     if (!avatarButtons.length) {
       return null;
     }
-    return avatarButtons.find((node) => node.classList.contains("is-selected"))
-      || findNearestByHorizontalCenter(referenceNode, avatarButtons)
-      || avatarButtons[0]
-      || null;
+    return (
+      avatarButtons.find((node) => node.classList.contains("is-selected")) ||
+      findNearestByHorizontalCenter(referenceNode, avatarButtons) ||
+      avatarButtons[0] ||
+      null
+    );
   },
 
   getAvatarGridPosition(navigationState, node) {
@@ -908,11 +983,16 @@ export const ProfileSelectionScreen = {
 
   moveEditorFocus(event, overlayRoot) {
     const code = Number(event?.keyCode || 0);
-    const direction = code === 38 ? "up"
-      : code === 40 ? "down"
-        : code === 37 ? "left"
-          : code === 39 ? "right"
-            : null;
+    const direction =
+      code === 38
+        ? "up"
+        : code === 40
+          ? "down"
+          : code === 37
+            ? "left"
+            : code === 39
+              ? "right"
+              : null;
     if (!direction) {
       return false;
     }
@@ -922,7 +1002,8 @@ export const ProfileSelectionScreen = {
       return false;
     }
 
-    const current = overlayRoot.querySelector(".profile-overlay-focusable.focused") || document.activeElement;
+    const current =
+      overlayRoot.querySelector(".profile-overlay-focusable.focused") || document.activeElement;
     if (!current) {
       return false;
     }
@@ -955,7 +1036,8 @@ export const ProfileSelectionScreen = {
     } else if (current.matches?.("[data-action='select-avatar-category']")) {
       const index = navigationState.categoryButtons.indexOf(current);
       if (direction === "left") {
-        target = index > 0 ? navigationState.categoryButtons[index - 1] : navigationState.cancelButton;
+        target =
+          index > 0 ? navigationState.categoryButtons[index - 1] : navigationState.cancelButton;
       } else if (direction === "right") {
         target = navigationState.categoryButtons[index + 1] || null;
       } else if (direction === "up") {
@@ -976,9 +1058,9 @@ export const ProfileSelectionScreen = {
         const previousRow = position.rows[position.rowIndex - 1];
         target = previousRow
           ? findNearestByHorizontalCenter(current, previousRow.nodes)
-          : preferredCategoryButton
-            || this.getEditorCategoryButtonForAvatar(navigationState, current.dataset.avatarId)
-            || findNearestByHorizontalCenter(current, navigationState.categoryButtons);
+          : preferredCategoryButton ||
+            this.getEditorCategoryButtonForAvatar(navigationState, current.dataset.avatarId) ||
+            findNearestByHorizontalCenter(current, navigationState.categoryButtons);
       } else if (direction === "down") {
         const nextRow = position.rows[position.rowIndex + 1];
         target = nextRow ? findNearestByHorizontalCenter(current, nextRow.nodes) : null;
@@ -1015,8 +1097,12 @@ export const ProfileSelectionScreen = {
     const fastOutSlowIn = (t) => {
       // cubic-bezier(0.4, 0, 0.2, 1) approximated via the standard formula
       // Using a closed-form cubic bezier evaluator
-      const cx = 3 * 0.4, bx = 3 * (0.2 - 0.4) - 0, ax = 1 - cx - bx;
-      const cy = 3 * 0.0, by = 3 * (1.0 - 0.0) - 0, ay = 1 - cy - by;
+      const cx = 3 * 0.4,
+        bx = 3 * (0.2 - 0.4) - 0,
+        ax = 1 - cx - bx;
+      const cy = 3 * 0.0,
+        by = 3 * (1.0 - 0.0) - 0,
+        ay = 1 - cy - by;
       // Solve for x(t)=input using Newton-Raphson
       let s = t;
       for (let i = 0; i < 6; i++) {
@@ -1037,7 +1123,7 @@ export const ProfileSelectionScreen = {
       const animatedColor = {
         r: Math.round(fromColor.r + (targetColor.r - fromColor.r) * eased),
         g: Math.round(fromColor.g + (targetColor.g - fromColor.g) * eased),
-        b: Math.round(fromColor.b + (targetColor.b - fromColor.b) * eased),
+        b: Math.round(fromColor.b + (targetColor.b - fromColor.b) * eased)
       };
       this._bgCurrentColor = animatedColor;
       screen.style.background = this.buildBackgroundStyleFromColor(animatedColor);
@@ -1058,8 +1144,16 @@ export const ProfileSelectionScreen = {
 
   buildBackgroundStyleFromColor(accent) {
     const rootStyles = getComputedStyle(document.documentElement);
-    const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), { r: 13, g: 13, b: 13 });
-    const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), { r: 26, g: 26, b: 26 });
+    const background = parseHexColor(rootStyles.getPropertyValue("--bg-color"), {
+      r: 13,
+      g: 13,
+      b: 13
+    });
+    const elevated = parseHexColor(rootStyles.getPropertyValue("--bg-elevated"), {
+      r: 26,
+      g: 26,
+      b: 26
+    });
     const gradientTop = mixColors(elevated, accent, 0.3);
     const gradientMid = mixColors(background, accent, 0.14);
     return `
@@ -1077,7 +1171,10 @@ export const ProfileSelectionScreen = {
     const previewNameNode = this.container.querySelector("[data-role='editor-preview-name']");
     if (previewNameNode) {
       previewNameNode.textContent = previewName;
-      previewNameNode.classList.toggle("is-placeholder", !String(this.editorState.name || "").trim());
+      previewNameNode.classList.toggle(
+        "is-placeholder",
+        !String(this.editorState.name || "").trim()
+      );
     }
 
     const submitButton = this.container.querySelector("[data-action='submit-editor']");
@@ -1171,26 +1268,34 @@ export const ProfileSelectionScreen = {
           if (p) this.openPinOverlay(this.isProfilePinEnabled(p.id) ? "verify-change" : "set", p);
         }
       },
-      ...(pinEnabled ? [{
-        label: PROFILE_PIN_TEXT.remove,
-        key: "remove-pin",
-        onAction: () => {
-          this._optionsDialog?.destroy();
-          this._optionsDialog = null;
-          const p = this.getProfileById(profile.id);
-          if (p) this.openPinOverlay("verify-remove", p);
-        }
-      }] : []),
-      ...(!profile.isPrimary ? [{
-        label: t("profile_delete", {}, "Delete"),
-        key: "delete",
-        danger: true,
-        onAction: () => {
-          this._optionsDialog?.destroy();
-          this._optionsDialog = null;
-          this.openDeleteDialog(this.getProfileById(profile.id));
-        }
-      }] : [])
+      ...(pinEnabled
+        ? [
+            {
+              label: PROFILE_PIN_TEXT.remove,
+              key: "remove-pin",
+              onAction: () => {
+                this._optionsDialog?.destroy();
+                this._optionsDialog = null;
+                const p = this.getProfileById(profile.id);
+                if (p) this.openPinOverlay("verify-remove", p);
+              }
+            }
+          ]
+        : []),
+      ...(!profile.isPrimary
+        ? [
+            {
+              label: t("profile_delete", {}, "Delete"),
+              key: "delete",
+              danger: true,
+              onAction: () => {
+                this._optionsDialog?.destroy();
+                this._optionsDialog = null;
+                this.openDeleteDialog(this.getProfileById(profile.id));
+              }
+            }
+          ]
+        : [])
     ];
 
     this._optionsDialog = new NuvioDialog({
@@ -1209,9 +1314,11 @@ export const ProfileSelectionScreen = {
   },
 
   canHoldManageProfile(node) {
-    return !this.isManagementMode
-      && Boolean(node?.matches?.(".profile-card.focused, .profile-card"))
-      && String(node?.dataset?.profileId || "") !== "add";
+    return (
+      !this.isManagementMode &&
+      Boolean(node?.matches?.(".profile-card.focused, .profile-card")) &&
+      String(node?.dataset?.profileId || "") !== "add"
+    );
   },
 
   cancelPendingProfileHold() {
@@ -1290,7 +1397,9 @@ export const ProfileSelectionScreen = {
       this._optionsDialog.destroy();
       this._optionsDialog = null;
     }
-    this.pendingFocusKey = profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1");
+    this.pendingFocusKey = profileId
+      ? `profile:${profileId}`
+      : this.lastProfileFocusKey || "profile:1";
     this.restoreFocus();
   },
 
@@ -1348,7 +1457,8 @@ export const ProfileSelectionScreen = {
     this.pinOverlayRenderState = renderState;
     this.pinOverlayPhase = "closing";
     this.isPinOperationInProgress = false;
-    this.pendingFocusKey = focusKey || (profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1"));
+    this.pendingFocusKey =
+      focusKey || (profileId ? `profile:${profileId}` : this.lastProfileFocusKey || "profile:1");
     this.render();
     this.pinTransitionTimer = setTimeout(async () => {
       const callback = this.pinTransitionCallback;
@@ -1473,16 +1583,23 @@ export const ProfileSelectionScreen = {
       }
     }
 
-    this.pinOverlayError = verification.retryAfterSeconds > 0
-      ? PROFILE_PIN_TEXT.lockedRetry(verification.retryAfterSeconds)
-      : (state.type === "unlock" ? PROFILE_PIN_TEXT.invalidPin : PROFILE_PIN_TEXT.incorrectCurrent);
+    this.pinOverlayError =
+      verification.retryAfterSeconds > 0
+        ? PROFILE_PIN_TEXT.lockedRetry(verification.retryAfterSeconds)
+        : state.type === "unlock"
+          ? PROFILE_PIN_TEXT.invalidPin
+          : PROFILE_PIN_TEXT.incorrectCurrent;
     this.pinValue = "";
     this.render();
     this.triggerPinShake();
   },
 
   async handleCompletedPinEntry() {
-    if (this.pinValue.length !== PROFILE_PIN_LENGTH || this.isPinOperationInProgress || !this.pinOverlayState) {
+    if (
+      this.pinValue.length !== PROFILE_PIN_LENGTH ||
+      this.isPinOperationInProgress ||
+      !this.pinOverlayState
+    ) {
       return;
     }
     if (this.pinOverlayState.type !== "set") {
@@ -1551,7 +1668,11 @@ export const ProfileSelectionScreen = {
 
     this._deleteDialog = new NuvioDialog({
       title: t("profile_delete_confirm_title", {}, "Delete Profile?"),
-      subtitle: t("profile_delete_confirm_subtitle", {}, "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."),
+      subtitle: t(
+        "profile_delete_confirm_subtitle",
+        {},
+        "This will permanently delete this profile and all its data including library, watch history, and addon settings. This cannot be undone."
+      ),
       widthVw: 43.75, // 420dp / 960dp screen = 43.75vw
       buttons: [
         {
@@ -1580,7 +1701,9 @@ export const ProfileSelectionScreen = {
       this._deleteDialog.destroy();
       this._deleteDialog = null;
     }
-    this.pendingFocusKey = profileId ? `profile:${profileId}` : (this.lastProfileFocusKey || "profile:1");
+    this.pendingFocusKey = profileId
+      ? `profile:${profileId}`
+      : this.lastProfileFocusKey || "profile:1";
     this.restoreFocus();
   },
 
@@ -1591,9 +1714,15 @@ export const ProfileSelectionScreen = {
 
     const editorState = { ...this.editorState };
     const trimmedName = String(editorState.name || "").trim();
-    const focusProfileId = editorState.mode === "edit"
-      ? editorState.profileId
-      : String(this.getVisibleProfiles().reduce((max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)), 0) + 1);
+    const focusProfileId =
+      editorState.mode === "edit"
+        ? editorState.profileId
+        : String(
+            this.getVisibleProfiles().reduce(
+              (max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)),
+              0
+            ) + 1
+          );
 
     this.editorState = null;
     this.pendingFocusKey = `profile:${focusProfileId}`;
@@ -1611,9 +1740,10 @@ export const ProfileSelectionScreen = {
         name: trimmedName,
         avatarColorHex: editorState.selectedColorHex || getDefaultProfileColor(),
         avatarId: editorState.selectedAvatarId || null,
-        avatarUrl: editorState.selectedAvatarId !== editorState.baseAvatarId
-          ? null
-          : (String(existing.avatarUrl || "").trim() || null)
+        avatarUrl:
+          editorState.selectedAvatarId !== editorState.baseAvatarId
+            ? null
+            : String(existing.avatarUrl || "").trim() || null
       });
     } else {
       success = await ProfileManager.createProfile({
@@ -1648,9 +1778,14 @@ export const ProfileSelectionScreen = {
     }
 
     const remainingProfiles = await ProfileManager.getProfiles();
-    const fallbackProfile = remainingProfiles.find((entry) => Number(entry.profileIndex || entry.id || 0) < Number(profile.profileIndex || profile.id || 0))
-      || remainingProfiles[0]
-      || null;
+    const fallbackProfile =
+      remainingProfiles.find(
+        (entry) =>
+          Number(entry.profileIndex || entry.id || 0) <
+          Number(profile.profileIndex || profile.id || 0)
+      ) ||
+      remainingProfiles[0] ||
+      null;
     this.profiles = remainingProfiles;
     this.pendingFocusKey = fallbackProfile ? `profile:${fallbackProfile.id}` : "";
     this.render();
@@ -1659,7 +1794,9 @@ export const ProfileSelectionScreen = {
   async reloadProfiles(focusKey = "") {
     this.profiles = await ProfileManager.getProfiles();
     await this.refreshProfilePinStates();
-    this.activeProfileId = String(ProfileManager.getActiveProfileId() || this.activeProfileId || "1");
+    this.activeProfileId = String(
+      ProfileManager.getActiveProfileId() || this.activeProfileId || "1"
+    );
     this.pendingFocusKey = focusKey;
     this.render();
   },
@@ -1689,9 +1826,10 @@ export const ProfileSelectionScreen = {
       }
       if (this.editorState.selectedAvatarId === avatar.id) {
         this.editorState.selectedAvatarId = null;
-        this.editorState.selectedColorHex = this.editorState.mode === "edit"
-          ? this.editorState.baseColorHex || getDefaultProfileColor()
-          : getDefaultProfileColor();
+        this.editorState.selectedColorHex =
+          this.editorState.mode === "edit"
+            ? this.editorState.baseColorHex || getDefaultProfileColor()
+            : getDefaultProfileColor();
       } else {
         this.editorState.selectedAvatarId = avatar.id;
         this.editorState.selectedColorHex = avatar.bgColor || getDefaultProfileColor();
@@ -1708,7 +1846,10 @@ export const ProfileSelectionScreen = {
     if (action === "open-profile-pin") {
       const profile = this.getProfileById(profileId);
       if (profile) {
-        this.openPinOverlay(this.isProfilePinEnabled(profile.id) ? "verify-change" : "set", profile);
+        this.openPinOverlay(
+          this.isProfilePinEnabled(profile.id) ? "verify-change" : "set",
+          profile
+        );
       }
       return;
     }
@@ -1777,10 +1918,11 @@ export const ProfileSelectionScreen = {
       event?.preventDefault?.();
       return;
     }
-    const overlayRoot = this.container.querySelector("[data-overlay-root='pin']")
-      || this.container.querySelector("[data-overlay-root='delete']")
-      || this.container.querySelector("[data-overlay-root='options']")
-      || this.container.querySelector("[data-overlay-root='editor']");
+    const overlayRoot =
+      this.container.querySelector("[data-overlay-root='pin']") ||
+      this.container.querySelector("[data-overlay-root='delete']") ||
+      this.container.querySelector("[data-overlay-root='options']") ||
+      this.container.querySelector("[data-overlay-root='editor']");
     const currentProfileCard = this.container.querySelector(".profile-card.focused") || null;
 
     if (code !== 13 || !this.canHoldManageProfile(currentProfileCard)) {
@@ -1798,8 +1940,10 @@ export const ProfileSelectionScreen = {
         ? ".profile-overlay-focusable:not(.is-disabled)"
         : ".profile-dialog-button";
 
-      if ((isEditorOverlay && this.moveEditorFocus(event, overlayRoot))
-        || (!isEditorOverlay && ScreenUtils.handleDpadNavigation(event, overlayRoot, overlaySelector))) {
+      if (
+        (isEditorOverlay && this.moveEditorFocus(event, overlayRoot)) ||
+        (!isEditorOverlay && ScreenUtils.handleDpadNavigation(event, overlayRoot, overlaySelector))
+      ) {
         return;
       }
 
@@ -1807,7 +1951,8 @@ export const ProfileSelectionScreen = {
         return;
       }
 
-      const focused = overlayRoot.querySelector(`${overlaySelector}.focused`) || document.activeElement;
+      const focused =
+        overlayRoot.querySelector(`${overlaySelector}.focused`) || document.activeElement;
       if (!focused || (isTextInput(focused) && overlayRoot.dataset.overlayRoot === "editor")) {
         return;
       }
@@ -1849,7 +1994,13 @@ export const ProfileSelectionScreen = {
         return;
       }
     }
-    if (Number(event?.keyCode || 0) !== 13 || this.pinOverlayState || this.optionsProfileId || this.deleteProfileId || this.editorState) {
+    if (
+      Number(event?.keyCode || 0) !== 13 ||
+      this.pinOverlayState ||
+      this.optionsProfileId ||
+      this.deleteProfileId ||
+      this.editorState
+    ) {
       return;
     }
     const current = this.container?.querySelector(".profile-card.focused") || null;
@@ -1920,5 +2071,4 @@ export const ProfileSelectionScreen = {
     container.style.display = "none";
     container.innerHTML = "";
   }
-
 };

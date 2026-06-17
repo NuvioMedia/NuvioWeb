@@ -30,8 +30,12 @@ const DEFAULTS = {
 };
 
 function normalizeContinueWatchingSortMode(value) {
-  const normalized = String(value || "default").trim().toLowerCase();
-  return normalized === "streaming_style" || normalized === "streaming-style" || normalized === "streamingstyle"
+  const normalized = String(value || "default")
+    .trim()
+    .toLowerCase();
+  return normalized === "streaming_style" ||
+    normalized === "streaming-style" ||
+    normalized === "streamingstyle"
     ? "streaming_style"
     : "default";
 }
@@ -47,12 +51,17 @@ function normalizeLayoutPreferences(value = {}) {
     ...merged,
     modernLandscapePostersEnabled: Boolean(merged.modernLandscapePostersEnabled),
     focusedPosterBackdropExpandEnabled: Boolean(merged.focusedPosterBackdropExpandEnabled),
-    focusedPosterBackdropExpandDelaySeconds: Math.max(0, Number(merged.focusedPosterBackdropExpandDelaySeconds ?? 3) || 0),
+    focusedPosterBackdropExpandDelaySeconds: Math.max(
+      0,
+      Number(merged.focusedPosterBackdropExpandDelaySeconds ?? 3) || 0
+    ),
     focusedPosterBackdropTrailerEnabled: Boolean(merged.focusedPosterBackdropTrailerEnabled),
     focusedPosterBackdropTrailerMuted: merged.focusedPosterBackdropTrailerMuted !== false,
-    focusedPosterBackdropTrailerPlaybackTarget: String(merged.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase() === "expanded_card"
-      ? "expanded_card"
-      : "hero_media",
+    focusedPosterBackdropTrailerPlaybackTarget:
+      String(merged.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase() ===
+      "expanded_card"
+        ? "expanded_card"
+        : "hero_media",
     posterCardWidthDp: Math.max(72, Number(merged.posterCardWidthDp ?? 126) || 126),
     posterCardCornerRadiusDp: Math.max(0, Number(merged.posterCardCornerRadiusDp ?? 12) || 12),
     detailPageTrailerButtonEnabled: Boolean(merged.detailPageTrailerButtonEnabled),
@@ -63,7 +72,9 @@ function normalizeLayoutPreferences(value = {}) {
     continueWatchingSortMode: normalizeContinueWatchingSortMode(merged.continueWatchingSortMode),
     collapseSidebar: modernSidebar ? false : Boolean(merged.collapseSidebar),
     modernSidebar,
-    modernSidebarBlur: modernSidebar ? Boolean(merged.modernSidebarBlur) : Boolean(merged.modernSidebarBlur)
+    modernSidebarBlur: modernSidebar
+      ? Boolean(merged.modernSidebarBlur)
+      : Boolean(merged.modernSidebarBlur)
   };
 }
 
@@ -73,7 +84,6 @@ const store = createProfileScopedStore({
 });
 
 export const LayoutPreferences = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -93,5 +103,4 @@ export const LayoutPreferences = {
   set(partial, options = {}) {
     return store.set(partial, options);
   }
-
 };

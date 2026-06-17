@@ -26,7 +26,6 @@ function applyTemplate(template, vars) {
 }
 
 export const PluginRuntime = {
-
   listSources() {
     return normalizeSources(LocalStore.get(KEY, []));
   },
@@ -86,5 +85,4 @@ export const PluginRuntime = {
       })
       .filter(Boolean);
   }
-
 };

@@ -140,8 +140,15 @@ async function stageTizenEngineFsService() {
   const serviceDir = path.join(stagingDir, "services", "tizen");
   await mkdir(serviceDir, { recursive: true });
   await Promise.all([
-    cp(path.join(rootDir, "services", "tizen", "enginefs-service.js"), path.join(stagingDir, tizenEngineFsServiceRelativePath)),
-    cp(path.join(rootDir, "services", "tizen", "runtime"), path.join(stagingDir, tizenEngineFsRuntimeDirRelativePath), { recursive: true })
+    cp(
+      path.join(rootDir, "services", "tizen", "enginefs-service.js"),
+      path.join(stagingDir, tizenEngineFsServiceRelativePath)
+    ),
+    cp(
+      path.join(rootDir, "services", "tizen", "runtime"),
+      path.join(stagingDir, tizenEngineFsRuntimeDirRelativePath),
+      { recursive: true }
+    )
   ]);
 }
 
@@ -164,7 +171,11 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
     cp(path.join(distDir, "app.bundle.js"), path.join(stagingDir, "app.bundle.js")),
     cp(path.join(distDir, "youtube-proxy.html"), path.join(stagingDir, "youtube-proxy.html")),
     cp(path.join(rootDir, "assets", "images", "tizenIcon.png"), path.join(stagingDir, "icon.png")),
-    writeFile(path.join(stagingDir, "config.xml"), buildConfigXml({ appId, packageId, version }), "utf8"),
+    writeFile(
+      path.join(stagingDir, "config.xml"),
+      buildConfigXml({ appId, packageId, version }),
+      "utf8"
+    ),
     writeFile(path.join(stagingDir, "index.html"), buildIndexHtml(), "utf8"),
     writeFile(path.join(stagingDir, "main.js"), buildMainJs({ packageId }), "utf8")
   ]);
@@ -236,7 +247,9 @@ async function packageTizen() {
     options.envSourcePath = path.join(rootDir, "local.properties");
   }
   if (requireConfiguredRuntimeEnv && !(await pathExists(options.envSourcePath))) {
-    throw new Error("Configured runtime env is required for Tizen packaging. Provide local.properties or --env-source.");
+    throw new Error(
+      "Configured runtime env is required for Tizen packaging. Provide local.properties or --env-source."
+    );
   }
 
   await syncVersionFiles();
@@ -259,7 +272,9 @@ async function packageTizen() {
   console.log(`Tizen WGT created: ${outputPath}`);
   console.log(`Tizen application id: ${options.appId}`);
   console.log(`Tizen package id: ${options.packageId}`);
-  console.log(`Runtime env bundled from: ${options.envSourcePath || path.join(distDir, "nuvio.env.js")}`);
+  console.log(
+    `Runtime env bundled from: ${options.envSourcePath || path.join(distDir, "nuvio.env.js")}`
+  );
 }
 
 try {

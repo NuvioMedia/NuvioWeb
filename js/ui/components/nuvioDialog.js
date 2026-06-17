@@ -44,7 +44,17 @@
  */
 
 export class NuvioDialog {
-  constructor({ title, subtitle = null, error = null, widthVw = 54.2, buttons = [], onDismiss = null, panelClassName = "", actionsClassName = "", suppressEnterUntilKeyUp = false }) {
+  constructor({
+    title,
+    subtitle = null,
+    error = null,
+    widthVw = 54.2,
+    buttons = [],
+    onDismiss = null,
+    panelClassName = "",
+    actionsClassName = "",
+    suppressEnterUntilKeyUp = false
+  }) {
     this.title = title;
     this.subtitle = subtitle;
     this.error = error;
@@ -72,8 +82,9 @@ export class NuvioDialog {
     const keyCode = Number(e?.keyCode || e?.which || 0);
     const normalized = (key || keyName || code).toLowerCase();
     return {
-      isBack: keyCode === 10009
-        || ["escape", "esc", "backspace", "goback", "back", "return"].includes(normalized),
+      isBack:
+        keyCode === 10009 ||
+        ["escape", "esc", "backspace", "goback", "back", "return"].includes(normalized),
       isDown: keyCode === 40 || normalized === "arrowdown" || normalized === "down",
       isRight: keyCode === 39 || normalized === "arrowright" || normalized === "right",
       isUp: keyCode === 38 || normalized === "arrowup" || normalized === "up",
@@ -123,10 +134,11 @@ export class NuvioDialog {
 
       this.buttons.forEach((btn, i) => {
         const el = document.createElement("button");
-        el.className = "nuvio-dialog-button"
-          + (btn.danger ? " nuvio-dialog-button-danger" : "")
-          + (btn.selected ? " selected" : "")
-          + (btn.className ? ` ${btn.className}` : "");
+        el.className =
+          "nuvio-dialog-button" +
+          (btn.danger ? " nuvio-dialog-button-danger" : "") +
+          (btn.selected ? " selected" : "") +
+          (btn.className ? ` ${btn.className}` : "");
         this._setButtonSelected(el, Boolean(btn.selected));
         const label = document.createElement("span");
         label.className = "nuvio-dialog-button-label";
@@ -183,7 +195,8 @@ export class NuvioDialog {
     const check = document.createElement("span");
     check.className = "nuvio-dialog-button-check";
     check.setAttribute("aria-hidden", "true");
-    check.innerHTML = '<svg viewBox="0 0 24 24" focusable="false"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z" fill="currentColor"></path></svg>';
+    check.innerHTML =
+      '<svg viewBox="0 0 24 24" focusable="false"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z" fill="currentColor"></path></svg>';
     return check;
   }
 

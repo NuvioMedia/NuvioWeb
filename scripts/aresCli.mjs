@@ -29,7 +29,11 @@ export function resolveWebOsToolsBinary(binaryName) {
   return path.join(path.dirname(packageJsonPath), binPath);
 }
 
-export function runCommand(command, args, { cwd = rootDir, stdio = "inherit", shell = false } = {}) {
+export function runCommand(
+  command,
+  args,
+  { cwd = rootDir, stdio = "inherit", shell = false } = {}
+) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,

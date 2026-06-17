@@ -45,7 +45,6 @@ function writeForProfile(profileId, state) {
 }
 
 export const ContinueWatchingPreferences = {
-
   getDismissedNextUpKeys(profileId = activeProfileId()) {
     return readForProfile(profileId).dismissedNextUpKeys;
   },
@@ -58,7 +57,10 @@ export const ContinueWatchingPreferences = {
     const current = readForProfile(profileId);
     return writeForProfile(profileId, {
       ...current,
-      dismissedNextUpKeys: [normalizedKey, ...current.dismissedNextUpKeys.filter((entry) => entry !== normalizedKey)]
+      dismissedNextUpKeys: [
+        normalizedKey,
+        ...current.dismissedNextUpKeys.filter((entry) => entry !== normalizedKey)
+      ]
     });
   },
 
@@ -70,8 +72,9 @@ export const ContinueWatchingPreferences = {
     const current = readForProfile(profileId);
     return writeForProfile(profileId, {
       ...current,
-      dismissedNextUpKeys: current.dismissedNextUpKeys.filter((key) => !key.startsWith(`${normalizedContentId}|`))
+      dismissedNextUpKeys: current.dismissedNextUpKeys.filter(
+        (key) => !key.startsWith(`${normalizedContentId}|`)
+      )
     });
   }
-
 };

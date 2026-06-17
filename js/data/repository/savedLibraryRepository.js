@@ -34,7 +34,6 @@ function queueSavedLibraryCloudSync(delayMs = 500) {
 }
 
 class SavedLibraryRepository {
-
   async getAll(limit = 200) {
     return SavedLibraryStore.listForProfile(activeProfileId()).slice(0, limit);
   }
@@ -75,7 +74,6 @@ class SavedLibraryRepository {
   async replaceAll(items) {
     SavedLibraryStore.replaceForProfile(activeProfileId(), items || []);
   }
-
 }
 
 export const savedLibraryRepository = new SavedLibraryRepository();

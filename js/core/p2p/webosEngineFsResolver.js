@@ -14,13 +14,19 @@ function logEngineFsDebug(...args) {
 }
 
 function normalizeInfoHash(value = "") {
-  const hash = String(value || "").trim().toLowerCase();
+  const hash = String(value || "")
+    .trim()
+    .toLowerCase();
   return /^[0-9a-f]{40}$/.test(hash) ? hash : "";
 }
 
 function getInfoHash(stream = {}) {
   // Try direct infoHash fields first
-  const direct = stream.infoHash || stream.raw?.infoHash || stream.clientResolve?.infoHash || stream.raw?.clientResolve?.infoHash;
+  const direct =
+    stream.infoHash ||
+    stream.raw?.infoHash ||
+    stream.clientResolve?.infoHash ||
+    stream.raw?.clientResolve?.infoHash;
   if (normalizeInfoHash(direct)) {
     return normalizeInfoHash(direct);
   }
@@ -178,9 +184,12 @@ function buildPlaybackUrl(baseUrl, infoHash, fileIdx, sources = []) {
 function withTimeout(promise, timeoutMs, message) {
   let timeoutId = 0;
   const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(message || "Request timed out"));
-    }, Math.max(1, Number(timeoutMs || 0)));
+    timeoutId = setTimeout(
+      () => {
+        reject(new Error(message || "Request timed out"));
+      },
+      Math.max(1, Number(timeoutMs || 0))
+    );
   });
 
   return Promise.race([promise, timeoutPromise]).finally(() => {
@@ -221,9 +230,7 @@ function buildNuvioPeerSearchSources(infoHash, trackerSources = []) {
     if (!raw) {
       return;
     }
-    const source = /^tracker:/i.test(raw) || /^dht:/i.test(raw)
-      ? raw
-      : `tracker:${raw}`;
+    const source = /^tracker:/i.test(raw) || /^dht:/i.test(raw) ? raw : `tracker:${raw}`;
     const key = source.toLowerCase();
     if (!seen.has(key)) {
       seen.add(key);
@@ -237,7 +244,12 @@ function buildNuvioPeerSearchSources(infoHash, trackerSources = []) {
   return sources;
 }
 
-function buildDirectCreateBody({ infoHash, trackerSources = [], hasExplicitFileIdx = false, guessFileIdx = null } = {}) {
+function buildDirectCreateBody({
+  infoHash,
+  trackerSources = [],
+  hasExplicitFileIdx = false,
+  guessFileIdx = null
+} = {}) {
   const sources = buildNuvioPeerSearchSources(infoHash, trackerSources);
   const body = {
     torrent: { infoHash }
@@ -249,11 +261,20 @@ function buildDirectCreateBody({ infoHash, trackerSources = [], hasExplicitFileI
       max: 200
     };
   }
-  body.guessFileIdx = hasExplicitFileIdx ? false : (guessFileIdx || {});
+  body.guessFileIdx = hasExplicitFileIdx ? false : guessFileIdx || {};
   return body;
 }
 
-async function requestEngineFsCreateDirect(baseUrl, { infoHash, magnetUri = "", trackerSources = [], hasExplicitFileIdx = false, guessFileIdx = null } = {}) {
+async function requestEngineFsCreateDirect(
+  baseUrl,
+  {
+    infoHash,
+    magnetUri = "",
+    trackerSources = [],
+    hasExplicitFileIdx = false,
+    guessFileIdx = null
+  } = {}
+) {
   const baseRoot = normalizeBaseUrl(baseUrl);
   if (!baseRoot || !infoHash) {
     return null;
@@ -261,7 +282,12 @@ async function requestEngineFsCreateDirect(baseUrl, { infoHash, magnetUri = "", 
   const path = `/${encodeURIComponent(infoHash)}/create`;
   const url = `${baseRoot}${path}`;
   void magnetUri;
-  const body = buildDirectCreateBody({ infoHash, trackerSources, hasExplicitFileIdx, guessFileIdx });
+  const body = buildDirectCreateBody({
+    infoHash,
+    trackerSources,
+    hasExplicitFileIdx,
+    guessFileIdx
+  });
   const playbackSources = body.peerSearch ? body.peerSearch.sources : [];
   const response = await withTimeout(
     fetch(url, {
@@ -341,19 +367,29 @@ function getEngineFsReadinessSnapshot(stats = {}) {
 }
 
 function hasEnoughEngineFsBuffer(snapshot = {}) {
-  return finiteNumber(snapshot.downloaded) >= READINESS_MIN_BUFFER_BYTES
-    || finiteNumber(snapshot.streamProgress) >= READINESS_MIN_STREAM_PROGRESS;
+  return (
+    finiteNumber(snapshot.downloaded) >= READINESS_MIN_BUFFER_BYTES ||
+    finiteNumber(snapshot.streamProgress) >= READINESS_MIN_STREAM_PROGRESS
+  );
 }
 
 function isEngineFsSwarmActive(snapshot = {}) {
-  return finiteNumber(snapshot.downloadSpeed) > 0
-    || finiteNumber(snapshot.peers) > 0
-    || finiteNumber(snapshot.uniquePeerCount) > 0
-    || finiteNumber(snapshot.connectionTries) > 0
-    || Boolean(snapshot.peerSearchRunning);
+  return (
+    finiteNumber(snapshot.downloadSpeed) > 0 ||
+    finiteNumber(snapshot.peers) > 0 ||
+    finiteNumber(snapshot.uniquePeerCount) > 0 ||
+    finiteNumber(snapshot.connectionTries) > 0 ||
+    Boolean(snapshot.peerSearchRunning)
+  );
 }
 
-async function waitForEngineFsReady(baseCandidate, infoHash, fileIdx, playbackUrl, { collectDiagnostics = true } = {}) {
+async function waitForEngineFsReady(
+  baseCandidate,
+  infoHash,
+  fileIdx,
+  playbackUrl,
+  { collectDiagnostics = true } = {}
+) {
   const start = Date.now();
   let baseRoot = String(baseCandidate || "").replace(/\/$/, "");
   try {
@@ -385,7 +421,11 @@ async function waitForEngineFsReady(baseCandidate, infoHash, fileIdx, playbackUr
   const probeRangeAt = async (url) => {
     diag.rangeAttempts++;
     try {
-      const resp = await withTimeout(fetch(url, { method: "GET", headers: { Range: "bytes=0-1023" }, cache: "no-cache" }), PROBE_TIMEOUT_MS, "EngineFS range probe timed out");
+      const resp = await withTimeout(
+        fetch(url, { method: "GET", headers: { Range: "bytes=0-1023" }, cache: "no-cache" }),
+        PROBE_TIMEOUT_MS,
+        "EngineFS range probe timed out"
+      );
       if (!resp) return false;
       diag.rangeLastStatus = resp.status;
       if (resp.status === 200 || resp.status === 206) {
@@ -417,7 +457,11 @@ async function waitForEngineFsReady(baseCandidate, infoHash, fileIdx, playbackUr
     diag.statsAttempts++;
     try {
       const url = statsUrlFor(ih, idx);
-      const resp = await withTimeout(fetch(url, { method: "GET", cache: "no-cache" }), PROBE_TIMEOUT_MS, "EngineFS stats probe timed out");
+      const resp = await withTimeout(
+        fetch(url, { method: "GET", cache: "no-cache" }),
+        PROBE_TIMEOUT_MS,
+        "EngineFS stats probe timed out"
+      );
       if (!resp) return false;
       diag.statsLastStatus = resp.status;
       if (!resp.ok) return false;
@@ -425,7 +469,7 @@ async function waitForEngineFsReady(baseCandidate, infoHash, fileIdx, playbackUr
       diag.statsLastJson = json;
       if (!json) return false;
       diag.statsLastSnapshot = getEngineFsReadinessSnapshot(json);
-      if (json.streamName || (Number(json.streamLen) > 0)) {
+      if (json.streamName || Number(json.streamLen) > 0) {
         diag.statsSuccess = true;
         return true;
       }
@@ -465,7 +509,10 @@ async function waitForEngineFsReady(baseCandidate, infoHash, fileIdx, playbackUr
         }
 
         if (diag.statsSuccess && diag.activeSeen) {
-          if (elapsedMs >= READINESS_MIN_ACTIVE_WAIT_MS && finiteNumber(snapshot.downloaded) >= READINESS_MIN_ACTIVE_BYTES) {
+          if (
+            elapsedMs >= READINESS_MIN_ACTIVE_WAIT_MS &&
+            finiteNumber(snapshot.downloaded) >= READINESS_MIN_ACTIVE_BYTES
+          ) {
             diag.elapsedMs = Date.now() - start;
             diag.readyReason = "active-min-wait";
             return { ready: true, diag };
@@ -491,9 +538,6 @@ async function waitForEngineFsReady(baseCandidate, infoHash, fileIdx, playbackUr
   return { ready: false, diag };
 }
 
-
-
-
 function selectFileIdx(stream = {}, createJson = {}) {
   const explicitFileIdx = Number(stream.fileIdx ?? stream.raw?.fileIdx);
   if (Number.isFinite(explicitFileIdx) && explicitFileIdx >= 0) {
@@ -501,7 +545,12 @@ function selectFileIdx(stream = {}, createJson = {}) {
   }
 
   // Prefer explicit fileIdx returned by the create JSON if present
-  const createFileIdxCandidates = [createJson && createJson.fileIdx, createJson && createJson.fileIndex, createJson && createJson.idx, createJson && createJson.index];
+  const createFileIdxCandidates = [
+    createJson && createJson.fileIdx,
+    createJson && createJson.fileIndex,
+    createJson && createJson.idx,
+    createJson && createJson.index
+  ];
   for (const cand of createFileIdxCandidates) {
     const n = Number(cand);
     if (Number.isFinite(n) && n >= 0) return n;
@@ -529,7 +578,9 @@ function getFileNameFromCreateJson(createJson = {}, fileIdx) {
 function guessMimeFromPath(path) {
   try {
     const lower = String(path || "").toLowerCase();
-    const m = lower.match(/\.(mp4|m4v|mov|webm|mkv|avi|wmv|ts|m2ts|mpg|mpeg|3gp|mp3|aac|flac)(?:$|[/?#&])/i);
+    const m = lower.match(
+      /\.(mp4|m4v|mov|webm|mkv|avi|wmv|ts|m2ts|mpg|mpeg|3gp|mp3|aac|flac)(?:$|[/?#&])/i
+    );
     if (!m) return null;
     const ext = String(m[1] || "").toLowerCase();
     const map = {
@@ -577,16 +628,28 @@ function normalizeEngineFsState(value = {}) {
 }
 
 function getResolvedMimeType(stream = {}, filename = "", playbackUrl = "") {
-  return guessMimeFromPath(filename)
-    || guessMimeFromPath(playbackUrl)
-    || stream?.mimeType
-    || stream?.raw?.mimeType
-    || stream?.sourceType
-    || stream?.raw?.type
-    || null;
+  return (
+    guessMimeFromPath(filename) ||
+    guessMimeFromPath(playbackUrl) ||
+    stream?.mimeType ||
+    stream?.raw?.mimeType ||
+    stream?.sourceType ||
+    stream?.raw?.type ||
+    null
+  );
 }
 
-function buildResolvedStream(stream = {}, { infoHash, fileIdx, playbackUrl, filename = "", baseUrlKind = "public-service", publicPlaybackUrl = "" } = {}) {
+function buildResolvedStream(
+  stream = {},
+  {
+    infoHash,
+    fileIdx,
+    playbackUrl,
+    filename = "",
+    baseUrlKind = "public-service",
+    publicPlaybackUrl = ""
+  } = {}
+) {
   const finalMime = getResolvedMimeType(stream, filename, playbackUrl);
   const engineFs = {
     kind: ENGINEFS_KIND,
@@ -694,7 +757,12 @@ export const WebOsEngineFsResolver = {
 
       const settingsBase = parseSettingsBase(statusPayload);
       const statusUrl = normalizeBaseUrl(statusPayload?.url || "");
-      const publicBaseCandidate = (settingsBase && !isLocalHostUrl(settingsBase)) ? settingsBase : (statusUrl && !isLocalHostUrl(statusUrl) ? statusUrl : "");
+      const publicBaseCandidate =
+        settingsBase && !isLocalHostUrl(settingsBase)
+          ? settingsBase
+          : statusUrl && !isLocalHostUrl(statusUrl)
+            ? statusUrl
+            : "";
       const localBaseCandidate = statusUrl && isLocalHostUrl(statusUrl) ? statusUrl : "";
 
       // Use Luna only to start/discover the runtime, then call
@@ -759,7 +827,12 @@ export const WebOsEngineFsResolver = {
         : "";
 
       if (localBaseCandidate && hasSelectedFileIdx) {
-        const localPlaybackUrl = buildPlaybackUrl(localBaseCandidate, selectedInfoHash, selectedFileIdx, playbackSources);
+        const localPlaybackUrl = buildPlaybackUrl(
+          localBaseCandidate,
+          selectedInfoHash,
+          selectedFileIdx,
+          playbackSources
+        );
         const guessedMime = guessMimeFromPath(selectedFilename || localPlaybackUrl) || null;
         const diagLog = {
           playbackUrl: localPlaybackUrl,
@@ -773,13 +846,15 @@ export const WebOsEngineFsResolver = {
           settingsBaseUrl: settingsBase || null,
           createResult: {
             returnValue: createPayload?.returnValue,
-            json: createJson ? {
-              infoHash: createJson.infoHash,
-              guessedFileIdx: createJson.guessedFileIdx,
-              fileIdx: createJson.fileIdx,
-              baseUrl: createJson.baseUrl || createJson.base_url,
-              playbackUrl: createJson.playbackUrl || createJson.playback
-            } : null
+            json: createJson
+              ? {
+                  infoHash: createJson.infoHash,
+                  guessedFileIdx: createJson.guessedFileIdx,
+                  fileIdx: createJson.fileIdx,
+                  baseUrl: createJson.baseUrl || createJson.base_url,
+                  playbackUrl: createJson.playbackUrl || createJson.playback
+                }
+              : null
           },
           playbackSources,
           statsProbe: null,
@@ -802,7 +877,12 @@ export const WebOsEngineFsResolver = {
       }
 
       // Prefer playbackUrl returned directly by the create proxy if it's public
-      const candidatePlaybackFromCreate = createJson && (createJson.playbackUrl || createJson.playbackURL || createJson.playback_url || createJson.playback);
+      const candidatePlaybackFromCreate =
+        createJson &&
+        (createJson.playbackUrl ||
+          createJson.playbackURL ||
+          createJson.playback_url ||
+          createJson.playback);
       if (candidatePlaybackFromCreate) {
         const chosenInfoHash = selectedInfoHash;
         const fileIdx = selectedFileIdx;
@@ -820,7 +900,13 @@ export const WebOsEngineFsResolver = {
             } catch (_) {
               finalPlayback = buildPlaybackUrl(abs.origin, chosenInfoHash, fileIdx);
             }
-            const readyResWithDiag = await waitForEngineFsReady(new URL(finalPlayback).origin, chosenInfoHash, fileIdx, finalPlayback, { collectDiagnostics: true });
+            const readyResWithDiag = await waitForEngineFsReady(
+              new URL(finalPlayback).origin,
+              chosenInfoHash,
+              fileIdx,
+              finalPlayback,
+              { collectDiagnostics: true }
+            );
             const readyFinal = Boolean(readyResWithDiag && readyResWithDiag.ready);
             const guessedMime = guessMimeFromPath(filename || finalPlayback) || null;
             const diagLog = {
@@ -832,11 +918,34 @@ export const WebOsEngineFsResolver = {
               baseUrlKind: "public-create-playback",
               createResult: {
                 returnValue: createPayload?.returnValue,
-                json: createJson ? { infoHash: createJson.infoHash, baseUrl: createJson.baseUrl || createJson.base_url, playbackUrl: createJson.playbackUrl || createJson.playback } : null
+                json: createJson
+                  ? {
+                      infoHash: createJson.infoHash,
+                      baseUrl: createJson.baseUrl || createJson.base_url,
+                      playbackUrl: createJson.playbackUrl || createJson.playback
+                    }
+                  : null
               },
-              statsProbe: readyResWithDiag?.diag?.statsLastStatus ? { success: readyResWithDiag?.diag?.statsSuccess, attempts: readyResWithDiag?.diag?.statsAttempts, lastStatus: readyResWithDiag?.diag?.statsLastStatus, lastJson: readyResWithDiag?.diag?.statsLastJson, snapshot: readyResWithDiag?.diag?.statsLastSnapshot || null } : null,
-              rangeProbe: readyResWithDiag?.diag?.rangeLastStatus ? { success: readyResWithDiag?.diag?.rangeSuccess, attempts: readyResWithDiag?.diag?.rangeAttempts, lastStatus: readyResWithDiag?.diag?.rangeLastStatus, lastBytes: readyResWithDiag?.diag?.rangeLastBytes } : null,
-              finalReason: readyFinal ? (readyResWithDiag?.diag?.readyReason || "ready") : "timeout_or_not_ready",
+              statsProbe: readyResWithDiag?.diag?.statsLastStatus
+                ? {
+                    success: readyResWithDiag?.diag?.statsSuccess,
+                    attempts: readyResWithDiag?.diag?.statsAttempts,
+                    lastStatus: readyResWithDiag?.diag?.statsLastStatus,
+                    lastJson: readyResWithDiag?.diag?.statsLastJson,
+                    snapshot: readyResWithDiag?.diag?.statsLastSnapshot || null
+                  }
+                : null,
+              rangeProbe: readyResWithDiag?.diag?.rangeLastStatus
+                ? {
+                    success: readyResWithDiag?.diag?.rangeSuccess,
+                    attempts: readyResWithDiag?.diag?.rangeAttempts,
+                    lastStatus: readyResWithDiag?.diag?.rangeLastStatus,
+                    lastBytes: readyResWithDiag?.diag?.rangeLastBytes
+                  }
+                : null,
+              finalReason: readyFinal
+                ? readyResWithDiag?.diag?.readyReason || "ready"
+                : "timeout_or_not_ready",
               elapsedMs: readyResWithDiag?.diag?.elapsedMs ?? null
             };
             logEngineFsDebug("WebOsEngineFsResolver: EngineFS probe result", diagLog);
@@ -845,17 +954,37 @@ export const WebOsEngineFsResolver = {
             }
             return {
               status: "success",
-              stream: buildResolvedStream(stream, { infoHash: chosenInfoHash, fileIdx, playbackUrl: finalPlayback, filename, baseUrlKind: "public-create-playback", publicPlaybackUrl: finalPlayback })
+              stream: buildResolvedStream(stream, {
+                infoHash: chosenInfoHash,
+                fileIdx,
+                playbackUrl: finalPlayback,
+                filename,
+                baseUrlKind: "public-create-playback",
+                publicPlaybackUrl: finalPlayback
+              })
             };
           }
         } catch (_) {
           // relative path - try to resolve with public base candidates
-          const baseToUse = (settingsBase && !isLocalHostUrl(settingsBase)) ? settingsBase : (createJson && (createJson.baseUrl || createJson.base_url) && !isLocalHostUrl(createJson.baseUrl || createJson.base_url) ? normalizeBaseUrl(createJson.baseUrl || createJson.base_url) : publicBaseCandidate);
+          const baseToUse =
+            settingsBase && !isLocalHostUrl(settingsBase)
+              ? settingsBase
+              : createJson &&
+                  (createJson.baseUrl || createJson.base_url) &&
+                  !isLocalHostUrl(createJson.baseUrl || createJson.base_url)
+                ? normalizeBaseUrl(createJson.baseUrl || createJson.base_url)
+                : publicBaseCandidate;
           if (baseToUse) {
             const filename = selectedFilename;
             // Construct canonical playback URL: base/<infoHash>/<fileIdx> (no filename)
             let playbackUrl = buildPlaybackUrl(baseToUse, chosenInfoHash, fileIdx);
-            const readyRes = await waitForEngineFsReady(baseToUse, chosenInfoHash, fileIdx, playbackUrl, { collectDiagnostics: true });
+            const readyRes = await waitForEngineFsReady(
+              baseToUse,
+              chosenInfoHash,
+              fileIdx,
+              playbackUrl,
+              { collectDiagnostics: true }
+            );
             const ready = Boolean(readyRes && readyRes.ready);
             const guessedMime = guessMimeFromPath(filename || playbackUrl) || null;
             const diagLog = {
@@ -867,11 +996,32 @@ export const WebOsEngineFsResolver = {
               baseUrlKind: "public-create-relative",
               createResult: {
                 returnValue: createPayload?.returnValue,
-                json: createJson ? { infoHash: createJson.infoHash, baseUrl: createJson.baseUrl || createJson.base_url, playbackUrl: createJson.playbackUrl || createJson.playback } : null
+                json: createJson
+                  ? {
+                      infoHash: createJson.infoHash,
+                      baseUrl: createJson.baseUrl || createJson.base_url,
+                      playbackUrl: createJson.playbackUrl || createJson.playback
+                    }
+                  : null
               },
-              statsProbe: readyRes?.diag?.statsLastStatus ? { success: readyRes?.diag?.statsSuccess, attempts: readyRes?.diag?.statsAttempts, lastStatus: readyRes?.diag?.statsLastStatus, lastJson: readyRes?.diag?.statsLastJson, snapshot: readyRes?.diag?.statsLastSnapshot || null } : null,
-              rangeProbe: readyRes?.diag?.rangeLastStatus ? { success: readyRes?.diag?.rangeSuccess, attempts: readyRes?.diag?.rangeAttempts, lastStatus: readyRes?.diag?.rangeLastStatus, lastBytes: readyRes?.diag?.rangeLastBytes } : null,
-              finalReason: ready ? (readyRes?.diag?.readyReason || "ready") : "timeout_or_not_ready",
+              statsProbe: readyRes?.diag?.statsLastStatus
+                ? {
+                    success: readyRes?.diag?.statsSuccess,
+                    attempts: readyRes?.diag?.statsAttempts,
+                    lastStatus: readyRes?.diag?.statsLastStatus,
+                    lastJson: readyRes?.diag?.statsLastJson,
+                    snapshot: readyRes?.diag?.statsLastSnapshot || null
+                  }
+                : null,
+              rangeProbe: readyRes?.diag?.rangeLastStatus
+                ? {
+                    success: readyRes?.diag?.rangeSuccess,
+                    attempts: readyRes?.diag?.rangeAttempts,
+                    lastStatus: readyRes?.diag?.rangeLastStatus,
+                    lastBytes: readyRes?.diag?.rangeLastBytes
+                  }
+                : null,
+              finalReason: ready ? readyRes?.diag?.readyReason || "ready" : "timeout_or_not_ready",
               elapsedMs: readyRes?.diag?.elapsedMs ?? null
             };
             logEngineFsDebug("WebOsEngineFsResolver: EngineFS probe result", diagLog);
@@ -880,22 +1030,38 @@ export const WebOsEngineFsResolver = {
             }
             return {
               status: "success",
-              stream: buildResolvedStream(stream, { infoHash: chosenInfoHash, fileIdx, playbackUrl, filename, baseUrlKind: "public-create-relative", publicPlaybackUrl: playbackUrl })
+              stream: buildResolvedStream(stream, {
+                infoHash: chosenInfoHash,
+                fileIdx,
+                playbackUrl,
+                filename,
+                baseUrlKind: "public-create-relative",
+                publicPlaybackUrl: playbackUrl
+              })
             };
           }
         }
       }
 
       // If createJson exposes a baseUrl that's public, use it
-      const candidateBaseFromCreateRaw = createJson && (createJson.baseUrl || createJson.base_url || createJson.base);
-      const candidateBaseFromCreate = candidateBaseFromCreateRaw ? normalizeBaseUrl(candidateBaseFromCreateRaw) : "";
+      const candidateBaseFromCreateRaw =
+        createJson && (createJson.baseUrl || createJson.base_url || createJson.base);
+      const candidateBaseFromCreate = candidateBaseFromCreateRaw
+        ? normalizeBaseUrl(candidateBaseFromCreateRaw)
+        : "";
       if (candidateBaseFromCreate && !isLocalHostUrl(candidateBaseFromCreate)) {
         const fileIdx = selectedFileIdx;
         const chosenInfoHash = selectedInfoHash;
         const filename = selectedFilename;
         // canonical playback URL without filename
         const playbackUrl = buildPlaybackUrl(candidateBaseFromCreate, chosenInfoHash, fileIdx);
-        const readyRes = await waitForEngineFsReady(candidateBaseFromCreate, chosenInfoHash, fileIdx, playbackUrl, { collectDiagnostics: true });
+        const readyRes = await waitForEngineFsReady(
+          candidateBaseFromCreate,
+          chosenInfoHash,
+          fileIdx,
+          playbackUrl,
+          { collectDiagnostics: true }
+        );
         const ready = Boolean(readyRes && readyRes.ready);
         const guessedMime = guessMimeFromPath(filename || playbackUrl) || null;
         const diagLog = {
@@ -907,18 +1073,45 @@ export const WebOsEngineFsResolver = {
           baseUrlKind: "public-create-base",
           createResult: {
             returnValue: createPayload?.returnValue,
-            json: createJson ? { infoHash: createJson.infoHash, baseUrl: createJson.baseUrl || createJson.base_url } : null
+            json: createJson
+              ? {
+                  infoHash: createJson.infoHash,
+                  baseUrl: createJson.baseUrl || createJson.base_url
+                }
+              : null
           },
-          statsProbe: readyRes?.diag?.statsLastStatus ? { success: readyRes?.diag?.statsSuccess, attempts: readyRes?.diag?.statsAttempts, lastStatus: readyRes?.diag?.statsLastStatus, lastJson: readyRes?.diag?.statsLastJson, snapshot: readyRes?.diag?.statsLastSnapshot || null } : null,
-          rangeProbe: readyRes?.diag?.rangeLastStatus ? { success: readyRes?.diag?.rangeSuccess, attempts: readyRes?.diag?.rangeAttempts, lastStatus: readyRes?.diag?.rangeLastStatus, lastBytes: readyRes?.diag?.rangeLastBytes } : null,
-          finalReason: ready ? (readyRes?.diag?.readyReason || "ready") : "timeout_or_not_ready",
+          statsProbe: readyRes?.diag?.statsLastStatus
+            ? {
+                success: readyRes?.diag?.statsSuccess,
+                attempts: readyRes?.diag?.statsAttempts,
+                lastStatus: readyRes?.diag?.statsLastStatus,
+                lastJson: readyRes?.diag?.statsLastJson,
+                snapshot: readyRes?.diag?.statsLastSnapshot || null
+              }
+            : null,
+          rangeProbe: readyRes?.diag?.rangeLastStatus
+            ? {
+                success: readyRes?.diag?.rangeSuccess,
+                attempts: readyRes?.diag?.rangeAttempts,
+                lastStatus: readyRes?.diag?.rangeLastStatus,
+                lastBytes: readyRes?.diag?.rangeLastBytes
+              }
+            : null,
+          finalReason: ready ? readyRes?.diag?.readyReason || "ready" : "timeout_or_not_ready",
           elapsedMs: readyRes?.diag?.elapsedMs ?? null
         };
         logEngineFsDebug("WebOsEngineFsResolver: EngineFS probe result", diagLog);
         if (!ready) return { status: "unavailable" };
         return {
           status: "success",
-          stream: buildResolvedStream(stream, { infoHash: chosenInfoHash, fileIdx, playbackUrl, filename, baseUrlKind: "public-create-base", publicPlaybackUrl: playbackUrl })
+          stream: buildResolvedStream(stream, {
+            infoHash: chosenInfoHash,
+            fileIdx,
+            playbackUrl,
+            filename,
+            baseUrlKind: "public-create-base",
+            publicPlaybackUrl: playbackUrl
+          })
         };
       }
 
@@ -928,7 +1121,13 @@ export const WebOsEngineFsResolver = {
         const chosenInfoHash = selectedInfoHash;
         const filename = selectedFilename;
         const playbackUrl = buildPlaybackUrl(publicBaseCandidate, chosenInfoHash, fileIdx);
-        const readyRes = await waitForEngineFsReady(publicBaseCandidate, chosenInfoHash, fileIdx, playbackUrl, { collectDiagnostics: true });
+        const readyRes = await waitForEngineFsReady(
+          publicBaseCandidate,
+          chosenInfoHash,
+          fileIdx,
+          playbackUrl,
+          { collectDiagnostics: true }
+        );
         const ready = Boolean(readyRes && readyRes.ready);
         const guessedMime = guessMimeFromPath(filename || playbackUrl) || null;
         const diagLog = {
@@ -942,16 +1141,38 @@ export const WebOsEngineFsResolver = {
             returnValue: createPayload?.returnValue,
             json: createJson ? { infoHash: createJson.infoHash } : null
           },
-          statsProbe: readyRes?.diag?.statsLastStatus ? { success: readyRes?.diag?.statsSuccess, attempts: readyRes?.diag?.statsAttempts, lastStatus: readyRes?.diag?.statsLastStatus, lastJson: readyRes?.diag?.statsLastJson, snapshot: readyRes?.diag?.statsLastSnapshot || null } : null,
-          rangeProbe: readyRes?.diag?.rangeLastStatus ? { success: readyRes?.diag?.rangeSuccess, attempts: readyRes?.diag?.rangeAttempts, lastStatus: readyRes?.diag?.rangeLastStatus, lastBytes: readyRes?.diag?.rangeLastBytes } : null,
-          finalReason: ready ? (readyRes?.diag?.readyReason || "ready") : "timeout_or_not_ready",
+          statsProbe: readyRes?.diag?.statsLastStatus
+            ? {
+                success: readyRes?.diag?.statsSuccess,
+                attempts: readyRes?.diag?.statsAttempts,
+                lastStatus: readyRes?.diag?.statsLastStatus,
+                lastJson: readyRes?.diag?.statsLastJson,
+                snapshot: readyRes?.diag?.statsLastSnapshot || null
+              }
+            : null,
+          rangeProbe: readyRes?.diag?.rangeLastStatus
+            ? {
+                success: readyRes?.diag?.rangeSuccess,
+                attempts: readyRes?.diag?.rangeAttempts,
+                lastStatus: readyRes?.diag?.rangeLastStatus,
+                lastBytes: readyRes?.diag?.rangeLastBytes
+              }
+            : null,
+          finalReason: ready ? readyRes?.diag?.readyReason || "ready" : "timeout_or_not_ready",
           elapsedMs: readyRes?.diag?.elapsedMs ?? null
         };
         logEngineFsDebug("WebOsEngineFsResolver: EngineFS probe result", diagLog);
         if (!ready) return { status: "unavailable" };
         return {
           status: "success",
-          stream: buildResolvedStream(stream, { infoHash: chosenInfoHash, fileIdx, playbackUrl, filename, baseUrlKind: "public-status", publicPlaybackUrl: playbackUrl })
+          stream: buildResolvedStream(stream, {
+            infoHash: chosenInfoHash,
+            fileIdx,
+            playbackUrl,
+            filename,
+            baseUrlKind: "public-status",
+            publicPlaybackUrl: playbackUrl
+          })
         };
       }
 
@@ -967,13 +1188,15 @@ export const WebOsEngineFsResolver = {
           returnValue: createPayload?.returnValue,
           statusCode: createPayload?.statusCode || null,
           proxiedPath: createPayload?.proxiedPath || null,
-          json: createJson ? {
-            infoHash: createJson.infoHash,
-            guessedFileIdx: createJson.guessedFileIdx,
-            fileIdx: createJson.fileIdx,
-            baseUrl: createJson.baseUrl || createJson.base_url,
-            playbackUrl: createJson.playbackUrl || createJson.playback
-          } : null
+          json: createJson
+            ? {
+                infoHash: createJson.infoHash,
+                guessedFileIdx: createJson.guessedFileIdx,
+                fileIdx: createJson.fileIdx,
+                baseUrl: createJson.baseUrl || createJson.base_url,
+                playbackUrl: createJson.playbackUrl || createJson.playback
+              }
+            : null
         }
       });
       return { status: "unavailable" };

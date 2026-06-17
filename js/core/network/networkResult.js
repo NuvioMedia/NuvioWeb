@@ -1,5 +1,4 @@
 export const NetworkResult = {
-
   loading() {
     return { status: "loading" };
   },
@@ -15,5 +14,4 @@ export const NetworkResult = {
       code
     };
   }
-
 };

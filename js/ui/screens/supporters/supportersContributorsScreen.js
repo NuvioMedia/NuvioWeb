@@ -33,7 +33,9 @@ function escapeHtml(value = "") {
 }
 
 function normalizeBaseUrl(value) {
-  return String(value || "").trim().replace(/\/+$/, "");
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 function normalizeContributionsUrl(value) {
@@ -74,12 +76,19 @@ function formatDonationDate(rawDate) {
 }
 
 function initialsForName(name) {
-  return String(name || "").trim().charAt(0).toUpperCase() || "?";
+  return (
+    String(name || "")
+      .trim()
+      .charAt(0)
+      .toUpperCase() || "?"
+  );
 }
 
 function contributorLogin(contributor) {
   const profile = String(contributor?.profileUrl || "").trim();
-  return String(contributor?.githubLogin || profile.split("/").filter(Boolean).pop() || contributor?.name || "").trim();
+  return String(
+    contributor?.githubLogin || profile.split("/").filter(Boolean).pop() || contributor?.name || ""
+  ).trim();
 }
 
 function contributorRoleLabel(login) {
@@ -111,12 +120,11 @@ function focusNode(node) {
 }
 
 function visibleFocusableNodes(container) {
-  return Array.from(container?.querySelectorAll?.(".focusable") || [])
-    .filter((node) => {
-      if (node.disabled || node.getAttribute("aria-disabled") === "true") return false;
-      const rect = node.getBoundingClientRect?.();
-      return rect && rect.width > 0 && rect.height > 0;
-    });
+  return Array.from(container?.querySelectorAll?.(".focusable") || []).filter((node) => {
+    if (node.disabled || node.getAttribute("aria-disabled") === "true") return false;
+    const rect = node.getBoundingClientRect?.();
+    return rect && rect.width > 0 && rect.height > 0;
+  });
 }
 
 function findDirectionalTarget(nodes, current, direction) {
@@ -127,24 +135,41 @@ function findDirectionalTarget(nodes, current, direction) {
   const horizontal = direction === "left" || direction === "right";
   const sign = direction === "left" || direction === "up" ? -1 : 1;
 
-  return nodes
-    .filter((node) => node !== current)
-    .map((node) => {
-      const rect = node.getBoundingClientRect();
-      const nx = rect.left + rect.width / 2;
-      const ny = rect.top + rect.height / 2;
-      const primary = horizontal ? nx - cx : ny - cy;
-      const secondary = horizontal ? Math.abs(ny - cy) : Math.abs(nx - cx);
-      const alignedBonus = secondary <= (horizontal ? Math.max(currentRect.height, rect.height) : Math.max(currentRect.width, rect.width)) * 0.7 ? -10000 : 0;
-      return { node, primary, secondary, score: Math.abs(primary) * 1000 + secondary + alignedBonus };
-    })
-    .filter((entry) => entry.primary * sign > 2)
-    .sort((left, right) => left.score - right.score)[0]?.node || null;
+  return (
+    nodes
+      .filter((node) => node !== current)
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        const nx = rect.left + rect.width / 2;
+        const ny = rect.top + rect.height / 2;
+        const primary = horizontal ? nx - cx : ny - cy;
+        const secondary = horizontal ? Math.abs(ny - cy) : Math.abs(nx - cx);
+        const alignedBonus =
+          secondary <=
+          (horizontal
+            ? Math.max(currentRect.height, rect.height)
+            : Math.max(currentRect.width, rect.width)) *
+            0.7
+            ? -10000
+            : 0;
+        return {
+          node,
+          primary,
+          secondary,
+          score: Math.abs(primary) * 1000 + secondary + alignedBonus
+        };
+      })
+      .filter((entry) => entry.primary * sign > 2)
+      .sort((left, right) => left.score - right.score)[0]?.node || null
+  );
 }
 
 function sortedTabListItems(container, tab) {
-  return Array.from(container?.querySelectorAll?.(`.supporters-person-card[data-tab="${tab}"]`) || [])
-    .sort((left, right) => Number(left.dataset.itemIndex || 0) - Number(right.dataset.itemIndex || 0));
+  return Array.from(
+    container?.querySelectorAll?.(`.supporters-person-card[data-tab="${tab}"]`) || []
+  ).sort(
+    (left, right) => Number(left.dataset.itemIndex || 0) - Number(right.dataset.itemIndex || 0)
+  );
 }
 
 async function loadSupporters() {
@@ -152,7 +177,10 @@ async function loadSupporters() {
   if (!baseUrl) {
     throw new Error(t("supporters_error_load", {}, "Unable to load supporters."));
   }
-  const data = await requestJson(`${baseUrl}/api/donations?limit=200`, t("supporters_error_api_http", {}, "Donations API error"));
+  const data = await requestJson(
+    `${baseUrl}/api/donations?limit=200`,
+    t("supporters_error_api_http", {}, "Donations API error")
+  );
   return (Array.isArray(data?.donations) ? data.donations : [])
     .map((donation, index) => {
       const name = String(donation?.name || "").trim();
@@ -175,7 +203,10 @@ async function loadSponsors() {
   if (!baseUrl) {
     throw new Error(t("sponsors_error_load", {}, "Unable to load sponsors."));
   }
-  const data = await requestJson(`${baseUrl}/api/sponsors`, t("sponsors_error_api_http", {}, "Sponsors API error"));
+  const data = await requestJson(
+    `${baseUrl}/api/sponsors`,
+    t("sponsors_error_api_http", {}, "Sponsors API error")
+  );
   return (Array.isArray(data?.sponsors) ? data.sponsors : [])
     .map((sponsor, index) => {
       const name = String(sponsor?.name || "").trim();
@@ -196,9 +227,14 @@ async function loadSponsors() {
 async function loadContributors() {
   const url = normalizeContributionsUrl(CONTRIBUTIONS_URL);
   if (!url) {
-    throw new Error(t("contributors_error_api_not_configured", {}, "Contributors API is not configured."));
+    throw new Error(
+      t("contributors_error_api_not_configured", {}, "Contributors API is not configured.")
+    );
   }
-  const data = await requestJson(url, t("contributors_error_api_http", {}, "Contributors API error"));
+  const data = await requestJson(
+    url,
+    t("contributors_error_api_http", {}, "Contributors API error")
+  );
   return (Array.isArray(data?.contributors) ? data.contributors : [])
     .map((contributor, index) => {
       const name = String(contributor?.name || "").trim();
@@ -218,13 +254,14 @@ async function loadContributors() {
       };
     })
     .filter(Boolean)
-    .sort((left, right) => (
-      right.totalContributions - left.totalContributions
-      || right.tvContributions - left.tvContributions
-      || right.mobileContributions - left.mobileContributions
-      || right.webContributions - left.webContributions
-      || left.name.localeCompare(right.name)
-    ));
+    .sort(
+      (left, right) =>
+        right.totalContributions - left.totalContributions ||
+        right.tvContributions - left.tvContributions ||
+        right.mobileContributions - left.mobileContributions ||
+        right.webContributions - left.webContributions ||
+        left.name.localeCompare(right.name)
+    );
 }
 
 export const SupportersContributorsScreen = {
@@ -294,11 +331,12 @@ export const SupportersContributorsScreen = {
     tabState.error = null;
     await this.render();
     try {
-      const items = tab === "supporters"
-        ? await loadSupporters()
-        : tab === "sponsors"
-          ? await loadSponsors()
-          : await loadContributors();
+      const items =
+        tab === "supporters"
+          ? await loadSupporters()
+          : tab === "sponsors"
+            ? await loadSponsors()
+            : await loadContributors();
       tabState.items = items;
       tabState.loaded = true;
       tabState.error = null;
@@ -362,7 +400,8 @@ export const SupportersContributorsScreen = {
     };
     return `
       <div class="supporters-tabs" role="tablist">
-        ${TABS.map((tab) => `
+        ${TABS.map(
+          (tab) => `
           <button class="supporters-tab supporters-focusable focusable${this.selectedTab === tab ? " selected" : ""}"
                   role="tab"
                   aria-selected="${this.selectedTab === tab ? "true" : "false"}"
@@ -371,27 +410,35 @@ export const SupportersContributorsScreen = {
                   data-action="selectTab">
             ${escapeHtml(labels[tab])}
           </button>
-        `).join("")}
+        `
+        ).join("")}
       </div>
     `;
   },
 
   renderTabBody() {
-    const tabState = this.state?.[this.selectedTab] || { loading: false, loaded: false, items: [], error: null };
+    const tabState = this.state?.[this.selectedTab] || {
+      loading: false,
+      loaded: false,
+      items: [],
+      error: null
+    };
     if (tabState.loading) {
-      const loading = this.selectedTab === "supporters"
-        ? t("supporters_loading", {}, "Loading supporters...")
-        : this.selectedTab === "sponsors"
-          ? t("sponsors_loading", {}, "Loading sponsors...")
-          : t("contributors_loading", {}, "Loading GitHub contributors...");
+      const loading =
+        this.selectedTab === "supporters"
+          ? t("supporters_loading", {}, "Loading supporters...")
+          : this.selectedTab === "sponsors"
+            ? t("sponsors_loading", {}, "Loading sponsors...")
+            : t("contributors_loading", {}, "Loading GitHub contributors...");
       return `<div class="supporters-status">${escapeHtml(loading)}</div>`;
     }
     if (tabState.error) {
-      const title = this.selectedTab === "supporters"
-        ? t("supporters_error_title", {}, "Couldn't load supporters")
-        : this.selectedTab === "sponsors"
-          ? t("sponsors_error_title", {}, "Couldn't load sponsors")
-          : t("contributors_error_title", {}, "Couldn't load contributors");
+      const title =
+        this.selectedTab === "supporters"
+          ? t("supporters_error_title", {}, "Couldn't load supporters")
+          : this.selectedTab === "sponsors"
+            ? t("sponsors_error_title", {}, "Couldn't load sponsors")
+            : t("contributors_error_title", {}, "Couldn't load contributors");
       return `
         <div class="supporters-error-state">
           <h2>${escapeHtml(title)}</h2>
@@ -403,11 +450,12 @@ export const SupportersContributorsScreen = {
       `;
     }
     if (tabState.loaded && !tabState.items.length) {
-      const empty = this.selectedTab === "supporters"
-        ? t("supporters_empty", {}, "No supporters found yet.")
-        : this.selectedTab === "sponsors"
-          ? t("sponsors_empty", {}, "No sponsors found yet.")
-          : t("contributors_empty", {}, "No contributors found yet.");
+      const empty =
+        this.selectedTab === "supporters"
+          ? t("supporters_empty", {}, "No supporters found yet.")
+          : this.selectedTab === "sponsors"
+            ? t("sponsors_empty", {}, "No sponsors found yet.")
+            : t("contributors_empty", {}, "No contributors found yet.");
       return `<div class="supporters-status">${escapeHtml(empty)}</div>`;
     }
     return `
@@ -478,9 +526,11 @@ export const SupportersContributorsScreen = {
                data-tab="contributors"
                data-item-index="${index}">
         <span class="supporters-avatar supporters-avatar-image">
-          ${contributor.avatarUrl
-            ? `<img src="${escapeHtml(contributor.avatarUrl)}" alt="${escapeHtml(contributor.name)}" loading="lazy" decoding="async" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" />`
-            : ""}
+          ${
+            contributor.avatarUrl
+              ? `<img src="${escapeHtml(contributor.avatarUrl)}" alt="${escapeHtml(contributor.name)}" loading="lazy" decoding="async" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" />`
+              : ""
+          }
           <span${contributor.avatarUrl ? " hidden" : ""}>${escapeHtml(initialsForName(contributor.name))}</span>
         </span>
         <div class="supporters-card-copy">
@@ -538,7 +588,8 @@ export const SupportersContributorsScreen = {
   renderSponsorDialog(sponsor) {
     return this.renderDialogShell({
       title: sponsor.name,
-      subtitle: sponsor.channelUrl || t("sponsors_channel_unavailable", {}, "Sponsor channel unavailable."),
+      subtitle:
+        sponsor.channelUrl || t("sponsors_channel_unavailable", {}, "Sponsor channel unavailable."),
       body: `
         <div class="supporters-dialog-person-row">
           ${this.renderNameAvatar(sponsor.name)}
@@ -549,7 +600,7 @@ export const SupportersContributorsScreen = {
         </div>
       `,
       actions: `
-        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openSponsor"${sponsor.channelUrl ? "" : " disabled aria-disabled=\"true\""}>${escapeHtml(t("sponsors_open_channel", {}, "Open sponsor channel"))}</button>
+        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openSponsor"${sponsor.channelUrl ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(t("sponsors_open_channel", {}, "Open sponsor channel"))}</button>
         <button class="supporters-dialog-button focusable" data-focus-key="dialog:close" data-action="closeDialog">${escapeHtml(t("action_close", {}, "Close"))}</button>
       `
     });
@@ -559,7 +610,11 @@ export const SupportersContributorsScreen = {
     const login = contributorLogin(contributor);
     const role = contributorRoleLabel(login);
     const supportLink = contributorSupportLink(login);
-    const subtitle = t("contributors_total_contributions", [contributor.totalContributions], `${contributor.totalContributions} total contributions`);
+    const subtitle = t(
+      "contributors_total_contributions",
+      [contributor.totalContributions],
+      `${contributor.totalContributions} total contributions`
+    );
     return this.renderDialogShell({
       title: contributor.name,
       subtitle,
@@ -578,7 +633,7 @@ export const SupportersContributorsScreen = {
         ${this.dialog.showSupportQr && supportLink?.kofiUrl ? `<canvas class="supporters-dialog-qr" data-qr-content="${escapeHtml(supportLink.kofiUrl)}" aria-label="${escapeHtml(t("cd_contributor_qr", {}, "Contributor QR code"))}"></canvas>` : ""}
       `,
       actions: `
-        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openGithub"${contributor.profileUrl ? "" : " disabled aria-disabled=\"true\""}>${escapeHtml(t("contributors_open_github", {}, "Open GitHub Profile"))}</button>
+        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openGithub"${contributor.profileUrl ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(t("contributors_open_github", {}, "Open GitHub Profile"))}</button>
         ${supportLink?.kofiUrl ? `<button class="supporters-dialog-button focusable" data-focus-key="dialog:kofi" data-action="toggleContributorQr">${escapeHtml(t(this.dialog.showSupportQr ? "contributors_hide_kofi_qr" : "contributors_show_kofi_qr", {}, this.dialog.showSupportQr ? "Hide Ko-fi QR" : "Show Ko-fi QR"))}</button>` : ""}
         <button class="supporters-dialog-button focusable" data-focus-key="dialog:close" data-action="closeDialog">${escapeHtml(t("action_close", {}, "Close"))}</button>
       `
@@ -644,12 +699,17 @@ export const SupportersContributorsScreen = {
   },
 
   applyFocus() {
-    this.container?.querySelectorAll?.(".focusable.focused").forEach((node) => node.classList.remove("focused"));
+    this.container
+      ?.querySelectorAll?.(".focusable.focused")
+      .forEach((node) => node.classList.remove("focused"));
     const selector = `.focusable[data-focus-key="${String(this.focusKey || "").replace(/["\\]/g, "\\$&")}"]`;
     const fallbackSelector = this.dialog
       ? ".supporters-dialog .focusable:not([disabled])"
       : `.focusable[data-focus-key="tab:${this.selectedTab}"]`;
-    const node = this.container?.querySelector?.(selector) || this.container?.querySelector?.(fallbackSelector) || this.container?.querySelector?.(".focusable");
+    const node =
+      this.container?.querySelector?.(selector) ||
+      this.container?.querySelector?.(fallbackSelector) ||
+      this.container?.querySelector?.(".focusable");
     if (!node) return;
     node.classList.add("focused");
     focusNode(node);
@@ -659,7 +719,9 @@ export const SupportersContributorsScreen = {
 
   focusTarget(node) {
     if (!node) return;
-    this.container?.querySelectorAll?.(".focusable.focused").forEach((entry) => entry.classList.remove("focused"));
+    this.container
+      ?.querySelectorAll?.(".focusable.focused")
+      .forEach((entry) => entry.classList.remove("focused"));
     node.classList.add("focused");
     focusNode(node);
     this.focusKey = String(node.dataset.focusKey || "");
@@ -668,7 +730,9 @@ export const SupportersContributorsScreen = {
 
   getDirectionalTarget(current, direction) {
     if (!current || this.dialog) {
-      const nodes = visibleFocusableNodes(this.dialog ? this.container.querySelector(".supporters-dialog") : this.container);
+      const nodes = visibleFocusableNodes(
+        this.dialog ? this.container.querySelector(".supporters-dialog") : this.container
+      );
       return findDirectionalTarget(nodes, current, direction);
     }
 
@@ -689,7 +753,9 @@ export const SupportersContributorsScreen = {
       const tab = String(current.dataset.tab || this.selectedTab);
       const tabIndex = TABS.indexOf(tab);
       const nextTab = TABS[tabIndex + (direction === "left" ? -1 : 1)];
-      return nextTab ? this.container.querySelector(`.supporters-tab[data-tab="${nextTab}"]`) : null;
+      return nextTab
+        ? this.container.querySelector(`.supporters-tab[data-tab="${nextTab}"]`)
+        : null;
     }
 
     if (current.dataset.action === "selectTab" && direction === "down") {
@@ -710,8 +776,11 @@ export const SupportersContributorsScreen = {
   async handleClickEvent(event) {
     const target = event?.target?.closest?.(".focusable, [data-action]");
     if (!target || !this.container?.contains?.(target)) return;
-    if (target.classList?.contains("supporters-dialog-backdrop") && event?.target !== target) return;
-    const focusable = target.classList.contains("focusable") ? target : target.closest(".focusable");
+    if (target.classList?.contains("supporters-dialog-backdrop") && event?.target !== target)
+      return;
+    const focusable = target.classList.contains("focusable")
+      ? target
+      : target.closest(".focusable");
     if (focusable) this.focusTarget(focusable);
     const handled = await this.activateTarget(target);
     if (handled) {
@@ -790,14 +859,31 @@ export const SupportersContributorsScreen = {
   async onKeyDown(event) {
     const code = Number(event?.keyCode || 0);
     const key = String(event?.key || "");
-    if (Platform.isBackEvent(event) || code === 27 || key === "Escape" || key === "Esc" || key === "Backspace") {
+    if (
+      Platform.isBackEvent(event) ||
+      code === 27 ||
+      key === "Escape" ||
+      key === "Esc" ||
+      key === "Backspace"
+    ) {
       event?.preventDefault?.();
       return this.handleBack();
     }
-    const direction = code === 37 ? "left" : code === 38 ? "up" : code === 39 ? "right" : code === 40 ? "down" : null;
+    const direction =
+      code === 37
+        ? "left"
+        : code === 38
+          ? "up"
+          : code === 39
+            ? "right"
+            : code === 40
+              ? "down"
+              : null;
     if (direction) {
       event?.preventDefault?.();
-      const nodes = visibleFocusableNodes(this.dialog ? this.container.querySelector(".supporters-dialog") : this.container);
+      const nodes = visibleFocusableNodes(
+        this.dialog ? this.container.querySelector(".supporters-dialog") : this.container
+      );
       const current = this.container.querySelector(".focusable.focused") || nodes[0];
       const target = this.getDirectionalTarget(current, direction);
       if (target) {
@@ -808,7 +894,10 @@ export const SupportersContributorsScreen = {
       }
       return;
     }
-    const isActivate = code === 13 || code === 23 || ["Enter", "NumpadEnter", "OK", "Select"].includes(String(event?.key || ""));
+    const isActivate =
+      code === 13 ||
+      code === 23 ||
+      ["Enter", "NumpadEnter", "OK", "Select"].includes(String(event?.key || ""));
     if (!isActivate) return;
     event?.preventDefault?.();
     const current = this.container.querySelector(".focusable.focused");
@@ -841,7 +930,11 @@ export const SupportersContributorsScreen = {
   onPointerFocus(target) {
     if (!target) return;
     this.focusKey = String(target.dataset.focusKey || this.focusKey || "");
-    if (target.dataset.action === "selectTab" && target.dataset.tab && target.dataset.tab !== this.selectedTab) {
+    if (
+      target.dataset.action === "selectTab" &&
+      target.dataset.tab &&
+      target.dataset.tab !== this.selectedTab
+    ) {
       void this.selectTab(String(target.dataset.tab), { focus: true });
     }
   },
