@@ -44,14 +44,14 @@ const PROVIDERS = [
     shortName: "RD",
     visibleInUi: false,
     apiKeyField: "realDebridApiKey",
-    capabilities: [
-      DEBRID_CAPABILITIES.CLIENT_RESOLVE
-    ]
+    capabilities: [DEBRID_CAPABILITIES.CLIENT_RESOLVE]
   }
 ];
 
 function normalizeProviderId(providerId) {
-  const normalized = String(providerId || "").trim().toLowerCase();
+  const normalized = String(providerId || "")
+    .trim()
+    .toLowerCase();
   if (normalized === "real-debrid" || normalized === "real_debrid" || normalized === "rd") {
     return DEBRID_PROVIDER_IDS.REAL_DEBRID;
   }
@@ -69,16 +69,17 @@ function fallbackDisplayName(providerId) {
   if (!value) {
     return "Debrid";
   }
-  return value
-    .replace(/[-_]+/g, " ")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-    .join(" ") || "Debrid";
+  return (
+    value
+      .replace(/[-_]+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(" ") || "Debrid"
+  );
 }
 
 export const DebridProviders = {
-
   all() {
     return PROVIDERS.map((provider) => ({ ...provider, capabilities: [...provider.capabilities] }));
   },
@@ -114,8 +115,7 @@ export const DebridProviders = {
   },
 
   configuredServices(settings = {}) {
-    return PROVIDERS
-      .filter((provider) => provider.visibleInUi)
+    return PROVIDERS.filter((provider) => provider.visibleInUi)
       .map((provider) => ({
         provider,
         apiKey: this.apiKeyFor(settings, provider.id)
@@ -124,10 +124,11 @@ export const DebridProviders = {
   },
 
   configuredResolverServices(settings = {}) {
-    return this.configuredServices(settings).filter((credential) => (
-      credential.provider.capabilities.includes(DEBRID_CAPABILITIES.CLIENT_RESOLVE)
-        || credential.provider.capabilities.includes(DEBRID_CAPABILITIES.LOCAL_TORRENT_RESOLVE)
-    ));
+    return this.configuredServices(settings).filter(
+      (credential) =>
+        credential.provider.capabilities.includes(DEBRID_CAPABILITIES.CLIENT_RESOLVE) ||
+        credential.provider.capabilities.includes(DEBRID_CAPABILITIES.LOCAL_TORRENT_RESOLVE)
+    );
   },
 
   preferredResolverService(settings = {}) {
@@ -138,5 +139,4 @@ export const DebridProviders = {
     const preferredId = this.byId(settings.preferredResolverProviderId)?.id || "";
     return services.find((credential) => credential.provider.id === preferredId) || services[0];
   }
-
 };

@@ -2,7 +2,9 @@
   background: var(--card-bg);
   border-radius: 8px;
   padding: 12px;
-  transition: transform 0.15s ease, border 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    border 0.15s ease;
   overflow: hidden;
 }
 
@@ -202,7 +204,11 @@ button:focus-visible {
   letter-spacing: 0;
   font-family: inherit;
   transform: scale(1);
-  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), background 180ms cubic-bezier(0.22, 1, 0.36, 1), color 180ms cubic-bezier(0.22, 1, 0.36, 1), opacity 0.18s ease;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.18s ease;
 }
 
 .qr-action-btn-primary {
@@ -514,7 +520,11 @@ button:focus-visible {
   justify-content: center;
   position: relative;
   margin: 12px auto;
-  transition: border-color 210ms cubic-bezier(0.22, 1, 0.36, 1), border-width 210ms cubic-bezier(0.22, 1, 0.36, 1), width 210ms cubic-bezier(0.22, 1, 0.36, 1), height 210ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    border-color 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-width 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 210ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .profile-card.focused .profile-avatar-ring {
@@ -535,7 +545,10 @@ button:focus-visible {
   font-weight: 700;
   color: var(--text-color);
   overflow: hidden;
-  transition: width 210ms cubic-bezier(0.22, 1, 0.36, 1), height 210ms cubic-bezier(0.22, 1, 0.36, 1), background 210ms ease;
+  transition:
+    width 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 210ms ease;
 }
 
 .profile-card.focused .profile-avatar {
@@ -568,7 +581,12 @@ button:focus-visible {
 .profile-card-add .profile-avatar-ring {
   border-color: rgba(51, 51, 51, 0.5);
   background: rgba(255, 255, 255, 0.06);
-  transition: border-color 210ms cubic-bezier(0.22, 1, 0.36, 1), border-width 210ms cubic-bezier(0.22, 1, 0.36, 1), width 210ms cubic-bezier(0.22, 1, 0.36, 1), height 210ms cubic-bezier(0.22, 1, 0.36, 1), background 210ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition:
+    border-color 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-width 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 210ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 210ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .profile-card.focused.profile-card-add .profile-avatar-ring {
@@ -621,7 +639,7 @@ button:focus-visible {
   font-size: 22px;
   line-height: 1.1;
   font-weight: 600;
-  color: #FFB300;
+  color: #ffb300;
   letter-spacing: 1.6px;
 }
 
@@ -640,7 +658,7 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: #FFB300;
+  background: #ffb300;
   color: #ffffff;
   font-size: 28px;
   border: 4px solid var(--bg-color);
@@ -774,7 +792,10 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  transition: border-color 140ms ease, background-color 140ms ease, border-width 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    border-width 140ms ease;
 }
 
 .profile-pin-box.is-filled {
@@ -801,7 +822,9 @@ button:focus-visible {
   background: #fff;
   opacity: 0;
   transform: scale(0.72);
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
 }
 
 .profile-pin-cursor {
@@ -810,7 +833,9 @@ button:focus-visible {
   background: rgb(255 255 255 / 0.9);
   opacity: 0;
   transform: scaleY(0.8);
-  transition: opacity 140ms ease, transform 140ms ease;
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
 }
 
 .profile-pin-box.is-filled .profile-pin-dot {
@@ -883,13 +908,27 @@ button:focus-visible {
 }
 
 @keyframes profilePinShake {
-  0% { transform: translateX(0); }
-  18% { transform: translateX(-22px); }
-  36% { transform: translateX(18px); }
-  54% { transform: translateX(-14px); }
-  72% { transform: translateX(10px); }
-  88% { transform: translateX(-6px); }
-  100% { transform: translateX(0); }
+  0% {
+    transform: translateX(0);
+  }
+  18% {
+    transform: translateX(-22px);
+  }
+  36% {
+    transform: translateX(18px);
+  }
+  54% {
+    transform: translateX(-14px);
+  }
+  72% {
+    transform: translateX(10px);
+  }
+  88% {
+    transform: translateX(-6px);
+  }
+  100% {
+    transform: translateX(0);
+  }
 }
 
 @keyframes profilePinLayerEnter {
@@ -1091,13 +1130,18 @@ button:focus-visible {
   box-sizing: border-box;
   border: 2px solid var(--profile-editor-neutral-border, var(--border-color));
   background: var(--profile-editor-neutral-bg, rgb(var(--focus-color-rgb) / 0.05));
-  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .profile-editor-field-shell:focus-within {
   background: var(--focus-bg);
   border-color: var(--secondary-color);
-  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
+  box-shadow:
+    inset 0 0 0 2px var(--secondary-color),
+    0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
 }
 
 .profile-editor-name-input {
@@ -1175,7 +1219,11 @@ button:focus-visible {
   font-size: 26px;
   line-height: 1.2;
   font-weight: 500;
-  transition: background 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .profile-avatar-category.is-selected {
@@ -1221,7 +1269,9 @@ button:focus-visible {
   overflow: hidden;
   background: transparent;
   transform: scale(1);
-  transition: transform 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease;
 }
 
 .profile-avatar-tile.is-selected,
@@ -1271,7 +1321,11 @@ button:focus-visible {
   font-size: min(1.5625vw, 30px);
   line-height: 1.2;
   font-weight: 600;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .profile-editor-preview [data-action="cancel-editor"] {
@@ -1293,14 +1347,18 @@ button:focus-visible {
   background: var(--focus-bg);
   border-color: var(--secondary-color);
   color: var(--text-color);
-  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
+  box-shadow:
+    inset 0 0 0 2px var(--secondary-color),
+    0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
 }
 
 .profile-overlay-button.profile-overlay-button-primary.focused {
   background: var(--focus-bg);
   border-color: var(--secondary-color);
   color: var(--text-color);
-  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
+  box-shadow:
+    inset 0 0 0 2px var(--secondary-color),
+    0 0 0 2px rgb(var(--secondary-color-rgb) / 0.28);
 }
 
 .profile-overlay-button.is-disabled,
@@ -1382,15 +1440,17 @@ button:focus-visible {
 .nuvio-dialog-panel.nuvio-dialog-panel-enter {
   transform: scale(1);
   opacity: 1;
-  transition: transform 150ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              opacity 150ms linear;
+  transition:
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 150ms linear;
 }
 
 .nuvio-dialog-panel.nuvio-dialog-panel-exit {
   transform: scale(0.9);
   opacity: 0;
-  transition: transform 75ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              opacity 75ms linear;
+  transition:
+    transform 75ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 75ms linear;
 }
 
 /* Title — titleLarge: 20sp=40px, Medium(500) */
@@ -1452,9 +1512,10 @@ button:focus-visible {
   outline: none;
   transform: scale(1);
   /* TV Material3 Button uses spring for scale (~300ms), tween(200ms) for color */
-  transition: background 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              color 200ms cubic-bezier(0.4, 0.0, 0.2, 1),
-              transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition:
+    background 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /* All focused buttons: white bg, dark text — including danger */
@@ -1625,7 +1686,9 @@ button:focus-visible {
   background: var(--error-bg);
   border-color: var(--error-color);
   color: #fff;
-  box-shadow: inset 0 0 0 1px var(--error-color), 0 0 0 1px rgb(var(--focus-color-rgb) / 0.28);
+  box-shadow:
+    inset 0 0 0 1px var(--error-color),
+    0 0 0 1px rgb(var(--focus-color-rgb) / 0.28);
 }
 
 .content-poster {
@@ -1719,7 +1782,8 @@ button:focus-visible {
   --modern-sidebar-pill-chip-end: 24px;
   --modern-sidebar-pill-chip-gap: 18px;
   --focus-color: #f5f8fc;
-  background: radial-gradient(120% 90% at 75% 8%, rgba(190, 40, 18, 0.26), transparent 45%), #06090e;
+  background:
+    radial-gradient(120% 90% at 75% 8%, rgba(190, 40, 18, 0.26), transparent 45%), #06090e;
   color: #f8fbff;
   overflow: hidden;
 }
@@ -1831,7 +1895,12 @@ button:focus-visible {
   padding: 0;
   transform: scale(1);
   transform-origin: center center;
-  transition: transform 430ms cubic-bezier(0.4, 0, 0.2, 1), background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1), padding 350ms cubic-bezier(0.4, 0, 0.2, 1), width 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 430ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    padding 350ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 350ms cubic-bezier(0.4, 0, 0.2, 1);
   margin: 0;
   flex-shrink: 0;
   will-change: transform, background-color, color;
@@ -1845,7 +1914,10 @@ button:focus-visible {
 }
 
 .home-sidebar.opening .home-nav-item {
-  transition: transform 430ms cubic-bezier(0.4, 0, 0.2, 1), background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 430ms cubic-bezier(0.4, 0, 0.2, 1),
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .home-nav-item.selected {
@@ -1889,7 +1961,10 @@ button:focus-visible {
   white-space: nowrap;
   text-overflow: clip;
   transform: translateX(-12px);
-  transition: opacity 140ms cubic-bezier(0.4, 0, 0.2, 1), width 350ms cubic-bezier(0.4, 0, 0.2, 1), transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 140ms cubic-bezier(0.4, 0, 0.2, 1),
+    width 350ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
   font-family: inherit;
   font-size: clamp(24px, 1.45vw, 32px);
   font-weight: inherit;
@@ -1899,9 +1974,15 @@ button:focus-visible {
 
 .home-sidebar.content-expanded .home-nav-label {
   opacity: 1;
-  width: calc(var(--legacy-sidebar-item-expanded-width) - var(--legacy-sidebar-label-start) - var(--legacy-sidebar-label-end));
+  width: calc(
+    var(--legacy-sidebar-item-expanded-width) - var(--legacy-sidebar-label-start) -
+      var(--legacy-sidebar-label-end)
+  );
   transform: translateX(0);
-  transition: opacity 140ms cubic-bezier(0.4, 0, 0.2, 1) 70ms, width 350ms cubic-bezier(0.4, 0, 0.2, 1), transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 140ms cubic-bezier(0.4, 0, 0.2, 1) 70ms,
+    width 350ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 350ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .home-sidebar.opening .home-nav-label {
@@ -1966,7 +2047,12 @@ button:focus-visible {
   visibility: hidden;
   pointer-events: none;
   transform: translateX(-16px);
-  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1), opacity 120ms cubic-bezier(0.4, 0, 0.2, 1), transform 350ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 120ms;
+  transition:
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 120ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 350ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 120ms;
 }
 
 .home-sidebar.content-expanded .home-profile-pill {
@@ -1974,11 +2060,20 @@ button:focus-visible {
   visibility: visible;
   pointer-events: auto;
   transform: translateX(0);
-  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1), opacity 140ms cubic-bezier(0.4, 0, 0.2, 1) 70ms, transform 350ms cubic-bezier(0.4, 0, 0.2, 1), visibility 0s linear 0s;
+  transition:
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 140ms cubic-bezier(0.4, 0, 0.2, 1) 70ms,
+    transform 350ms cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0s linear 0s;
 }
 
 .home-sidebar.opening .home-profile-pill {
-  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1), opacity 140ms cubic-bezier(0.4, 0, 0.2, 1) 70ms, visibility 0s linear 0s;
+  transition:
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 140ms cubic-bezier(0.4, 0, 0.2, 1) 70ms,
+    visibility 0s linear 0s;
 }
 
 .home-profile-pill.focused {
@@ -2041,7 +2136,6 @@ button:focus-visible {
   padding: 48px 96px 64px;
 }
 
-
 .home-screen-shell,
 .search-screen-shell,
 .discover-shell,
@@ -2089,7 +2183,9 @@ button:focus-visible {
   top: var(--modern-sidebar-surface-top);
   left: var(--modern-sidebar-surface-left);
   width: var(--modern-sidebar-surface-width);
-  min-height: calc(100vh - var(--modern-sidebar-surface-top) - var(--modern-sidebar-surface-bottom));
+  min-height: calc(
+    100vh - var(--modern-sidebar-surface-top) - var(--modern-sidebar-surface-bottom)
+  );
   padding: var(--modern-sidebar-panel-padding-y) var(--modern-sidebar-panel-padding-x);
   border-radius: 60px;
   border: 2px solid rgb(51 51 51 / 0.9);
@@ -2102,7 +2198,10 @@ button:focus-visible {
   transform: translate3d(-20px, -16px, 0) scale(0.873);
   backface-visibility: hidden;
   pointer-events: none;
-  transition: opacity 345ms cubic-bezier(0.4, 0, 0.2, 1), transform 345ms cubic-bezier(0.4, 0, 0.2, 1), backdrop-filter 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 345ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 345ms cubic-bezier(0.4, 0, 0.2, 1),
+    backdrop-filter 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modern-sidebar-shell.panel-visible .modern-sidebar-panel {
@@ -2124,7 +2223,8 @@ button:focus-visible {
 
 .modern-sidebar-shell.collapsing .modern-sidebar-panel {
   transition-duration: 395ms, 395ms, 180ms;
-  transition-timing-function: cubic-bezier(0, 0, 0.2, 1), cubic-bezier(0, 0, 0.2, 1), cubic-bezier(0.4, 0, 0.2, 1);
+  transition-timing-function:
+    cubic-bezier(0, 0, 0.2, 1), cubic-bezier(0, 0, 0.2, 1), cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modern-sidebar-shell.blur-enabled .modern-sidebar-panel {
@@ -2156,7 +2256,10 @@ button:focus-visible {
   text-align: left;
   transform: translateZ(0) scale(1);
   transform-origin: center center;
-  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modern-sidebar-profile.focused {
@@ -2217,7 +2320,11 @@ button:focus-visible {
   text-align: left;
   transform: scale(1);
   transform-origin: center center;
-  transition: transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), border-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modern-sidebar-nav-item.selected {
@@ -2321,7 +2428,9 @@ button:focus-visible {
   opacity: 1;
   transform: translateY(-16px) scale(1);
   transform-origin: top left;
-  transition: opacity 145ms cubic-bezier(0.4, 0, 0.2, 1), transform 145ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    opacity 145ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 145ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modern-sidebar-shell.expanded:not(.keep-pill-expanded) .modern-sidebar-pill,
@@ -2553,7 +2662,10 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   color: var(--text-color);
-  transition: border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  transition:
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    background 0.14s ease;
 }
 
 .search-action-icon {
@@ -2858,7 +2970,9 @@ button:focus-visible {
   background: var(--card-bg);
   border: 2px solid transparent;
   box-sizing: border-box;
-  transition: transform 180ms ease, border-color 180ms ease;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease;
 }
 
 .discover-card.focused .discover-card-poster,
@@ -2925,7 +3039,9 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  transition: border-color 180ms ease, background-color 180ms ease;
+  transition:
+    border-color 180ms ease,
+    background-color 180ms ease;
 }
 
 .discover-action-card.focused .discover-action-card-inner {
@@ -3061,7 +3177,10 @@ button:focus-visible {
   border-radius: calc(var(--home-poster-radius, 24px) - 2px);
   overflow: hidden;
   background: var(--card-bg);
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 
 .search-result-card.focused .search-result-poster-wrap {
@@ -3114,7 +3233,10 @@ button:focus-visible {
   border: 1px solid var(--border-color);
   border-radius: calc(var(--home-poster-radius, 24px) - 2px);
   background: var(--card-bg);
-  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .search-seeall-card.focused .search-seeall-inner {
@@ -3215,7 +3337,7 @@ button:focus-visible {
   box-sizing: border-box;
   padding: min(0.94vw, 18px) min(1.46vw, 28px);
   border-radius: min(1.88vw, 36px);
-  border: 1px solid rgb(255 255 255 / 0.10);
+  border: 1px solid rgb(255 255 255 / 0.1);
   background: var(--card-bg);
   color: var(--text-color);
   display: flex;
@@ -3223,12 +3345,16 @@ button:focus-visible {
   justify-content: space-between;
   gap: min(1.25vw, 24px);
   text-align: left;
-  transition: border-color 160ms cubic-bezier(0.2, 0, 0, 1), box-shadow 160ms cubic-bezier(0.2, 0, 0, 1), background-color 160ms cubic-bezier(0.2, 0, 0, 1), color 160ms cubic-bezier(0.2, 0, 0, 1);
+  transition:
+    border-color 160ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0, 0, 1),
+    background-color 160ms cubic-bezier(0.2, 0, 0, 1),
+    color 160ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .library-picker-anchor.focused,
 .library-picker.open .library-picker-anchor {
-  border-color: rgb(255 255 255 / 0.10);
+  border-color: rgb(255 255 255 / 0.1);
   box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.96);
   background: var(--focus-bg);
 }
@@ -3330,7 +3456,9 @@ button:focus-visible {
   font-weight: 400;
   line-height: 1.2;
   margin-bottom: min(0.21vw, 4px);
-  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
+  transition:
+    background-color 120ms cubic-bezier(0.2, 0, 0, 1),
+    color 120ms cubic-bezier(0.2, 0, 0, 1);
 }
 
 .library-picker-option:last-child {
@@ -3381,7 +3509,8 @@ button:focus-visible {
   font-weight: 500;
   transform: scale(1);
   transform-origin: center;
-  transition: background 200ms cubic-bezier(0.4, 0, 0.2, 1),
+  transition:
+    background 200ms cubic-bezier(0.4, 0, 0.2, 1),
     color 200ms cubic-bezier(0.4, 0, 0.2, 1),
     border-color 200ms cubic-bezier(0.4, 0, 0.2, 1),
     box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
@@ -3434,7 +3563,10 @@ button:focus-visible {
 
 .library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(var(--library-poster-width, 252px), var(--library-poster-width, 252px)));
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(var(--library-poster-width, 252px), var(--library-poster-width, 252px))
+  );
   gap: 32px 24px;
   align-content: start;
 }
@@ -3471,7 +3603,9 @@ button:focus-visible {
   background: var(--card-bg) center center / cover no-repeat;
   background-origin: border-box;
   background-clip: border-box;
-  transition: border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .library-grid-poster.placeholder {
@@ -3568,7 +3702,7 @@ button:focus-visible {
 
 .library-loading-spinner-track {
   fill: none;
-  stroke: #9E9E9E;
+  stroke: #9e9e9e;
   stroke-width: 8;
   stroke-linecap: round;
   stroke-dasharray: 188 252;
@@ -3661,7 +3795,7 @@ button:focus-visible {
   min-height: 80px;
   border: none;
   border-radius: 999px;
-  background: #4A2323;
+  background: #4a2323;
   color: var(--text-color);
   font-size: 28px;
   font-weight: 500;
@@ -3787,7 +3921,8 @@ button:focus-visible {
   text-align: left;
   transform: scale(1);
   transform-origin: center;
-  transition: background 200ms cubic-bezier(0.4, 0, 0.2, 1),
+  transition:
+    background 200ms cubic-bezier(0.4, 0, 0.2, 1),
     color 200ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -3835,7 +3970,7 @@ button:focus-visible {
 }
 
 .library-manage-dialog .library-action-button.danger {
-  background: #4A2323;
+  background: #4a2323;
   color: var(--text-color);
 }
 
@@ -3963,7 +4098,8 @@ button:focus-visible {
   font-weight: 500;
   transform: scale(1);
   transform-origin: center;
-  transition: background 200ms cubic-bezier(0.4, 0, 0.2, 1),
+  transition:
+    background 200ms cubic-bezier(0.4, 0, 0.2, 1),
     color 200ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -4172,7 +4308,10 @@ button:focus-visible {
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: inherit;
   background: rgba(255, 255, 255, 0.06);
-  transition: border-color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 140ms ease;
 }
 
 .home-seeall-arrow {
@@ -4317,7 +4456,7 @@ button:focus-visible {
   --home-poster-radius: 24px;
   --home-continue-width: 432px;
   --home-continue-height: 243px;
-  background: #0D0D0D;
+  background: #0d0d0d;
   color: #fff;
 }
 
@@ -4345,7 +4484,7 @@ button:focus-visible {
   min-height: 400px;
   border: none;
   border-radius: 0;
-  background: #0D0D0D;
+  background: #0d0d0d;
   overflow: hidden;
 }
 
@@ -4382,7 +4521,13 @@ button:focus-visible {
 .home-screen-shell .home-hero-backdrop.placeholder {
   background:
     radial-gradient(circle at 72% 18%, rgba(221, 18, 26, 0.26), transparent 18%),
-    linear-gradient(110deg, rgba(8, 8, 8, 1) 0%, rgba(11, 11, 11, 0.88) 38%, rgba(17, 17, 17, 0.28) 66%, rgba(5, 5, 5, 0.18) 100%);
+    linear-gradient(
+      110deg,
+      rgba(8, 8, 8, 1) 0%,
+      rgba(11, 11, 11, 0.88) 38%,
+      rgba(17, 17, 17, 0.28) 66%,
+      rgba(5, 5, 5, 0.18) 100%
+    );
 }
 
 .home-screen-shell .home-hero-card::before,
@@ -4398,12 +4543,24 @@ button:focus-visible {
 }
 
 .home-screen-shell .home-hero-card::before {
-  background:
-    linear-gradient(90deg, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.94) 14%, rgba(0, 0, 0, 0.82) 28%, rgba(0, 0, 0, 0.32) 52%, rgba(0, 0, 0, 0.05) 72%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 0.96) 0%,
+    rgba(0, 0, 0, 0.94) 14%,
+    rgba(0, 0, 0, 0.82) 28%,
+    rgba(0, 0, 0, 0.32) 52%,
+    rgba(0, 0, 0, 0.05) 72%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 .home-screen-shell .home-hero-card::after {
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.04) 0%, rgba(0, 0, 0, 0.10) 48%, rgba(0, 0, 0, 0.86) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.1) 48%,
+    rgba(0, 0, 0, 0.86) 100%
+  );
 }
 
 .home-screen-shell .home-hero-copy {
@@ -4594,7 +4751,9 @@ button:focus-visible {
   border: 2px solid transparent;
   background: transparent;
   overflow: visible;
-  transition: transform 120ms ease-out, border-color 120ms ease;
+  transition:
+    transform 120ms ease-out,
+    border-color 120ms ease;
 }
 
 .home-screen-shell .home-content-card.focused {
@@ -4627,7 +4786,10 @@ button:focus-visible {
   border-radius: calc(var(--home-poster-radius) - 2px);
   background-color: transparent;
   overflow: hidden;
-  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
 .home-screen-shell .home-poster-card.focused .home-poster-frame {
@@ -4819,7 +4981,10 @@ button:focus-visible {
   border: 2px solid rgba(255, 255, 255, 0.12);
   border-radius: inherit;
   background: rgba(255, 255, 255, 0.06);
-  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .home-screen-shell .home-seeall-label {
@@ -4887,7 +5052,10 @@ button:focus-visible {
     linear-gradient(145deg, #393939, #111);
   background-position: center;
   background-size: cover;
-  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    background-color 140ms ease;
 }
 
 .home-screen-shell .home-continue-bg {
@@ -4914,7 +5082,9 @@ button:focus-visible {
 }
 
 .home-screen-shell .home-continue-card.focused .home-continue-media {
-  box-shadow: inset 0 0 0 2px var(--secondary-color), 0 0 0 2px var(--secondary-color);
+  box-shadow:
+    inset 0 0 0 2px var(--secondary-color),
+    0 0 0 2px var(--secondary-color);
   background-color: var(--focus-bg);
 }
 
@@ -4923,7 +5093,13 @@ button:focus-visible {
   position: absolute;
   z-index: 1;
   inset: 0;
-  background: linear-gradient(180deg, transparent 0%, transparent 45%, rgba(13, 13, 13, 0.7) 78%, rgba(13, 13, 13, 0.95) 100%);
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 45%,
+    rgba(13, 13, 13, 0.7) 78%,
+    rgba(13, 13, 13, 0.95) 100%
+  );
 }
 
 .home-screen-shell .home-continue-badge {
@@ -4992,9 +5168,16 @@ button:focus-visible {
 
 .home-screen-shell .home-continue-media-loading {
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)),
+    linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0.12),
+      rgba(255, 255, 255, 0.05)
+    ),
     linear-gradient(145deg, #262626, #101010);
-  background-size: 100% 100%, cover;
+  background-size:
+    100% 100%,
+    cover;
   animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
 
@@ -5029,7 +5212,12 @@ button:focus-visible {
 
 .home-screen-shell .home-continue-skeleton-line {
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.26),
+    rgba(255, 255, 255, 0.1)
+  );
   background-size: 100% 100%;
   animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
@@ -5057,7 +5245,12 @@ button:focus-visible {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0.06)
+  );
   background-size: 100% 100%;
   animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
   z-index: 2;
@@ -5076,7 +5269,12 @@ button:focus-visible {
 
 .home-screen-shell .home-poster-skeleton-line {
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.1));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.26),
+    rgba(255, 255, 255, 0.1)
+  );
   background-size: 100% 100%;
   animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
@@ -5098,7 +5296,8 @@ button:focus-visible {
 }
 
 @keyframes homeContinueLoadingShimmer {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.5;
   }
   50% {
@@ -5112,7 +5311,12 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media-loading .home-hero-backdrop-loading,
 .home-screen-shell.home-layout-modern .home-modern-skeleton-block {
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.06),
+    rgba(255, 255, 255, 0.14),
+    rgba(255, 255, 255, 0.06)
+  );
   background-size: 100% 100%;
   animation: homeContinueLoadingShimmer 2.2s ease-in-out infinite;
 }
@@ -5121,7 +5325,6 @@ button:focus-visible {
   width: 100%;
   height: 100%;
 }
-
 
 .home-screen-shell.home-layout-classic .home-main {
   background: #000;
@@ -5141,8 +5344,15 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-classic .home-hero-card::before {
-  background:
-    linear-gradient(90deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.98) 18%, rgba(0, 0, 0, 0.94) 34%, rgba(0, 0, 0, 0.74) 50%, rgba(0, 0, 0, 0.18) 72%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(0, 0, 0, 1) 0%,
+    rgba(0, 0, 0, 0.98) 18%,
+    rgba(0, 0, 0, 0.94) 34%,
+    rgba(0, 0, 0, 0.74) 50%,
+    rgba(0, 0, 0, 0.18) 72%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 .home-screen-shell.home-layout-classic .home-hero-copy {
@@ -5472,15 +5682,14 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
   /* Horizontal gradient: spans ~45% of media width (ATV ModernHeroGradientLayer exact stops) */
-  background:
-    linear-gradient(
-      90deg,
-      #0d0d0d 0%,
-      rgba(13, 13, 13, 0.86) 22%,
-      rgba(13, 13, 13, 0.56) 46%,
-      rgba(13, 13, 13, 0.16) 76%,
-      transparent 100%
-    );
+  background: linear-gradient(
+    90deg,
+    #0d0d0d 0%,
+    rgba(13, 13, 13, 0.86) 22%,
+    rgba(13, 13, 13, 0.56) 46%,
+    rgba(13, 13, 13, 0.16) 76%,
+    transparent 100%
+  );
   /* Restrict to left 45% so the right side of the image stays unobscured */
   width: 45%;
   right: auto;
@@ -5488,14 +5697,14 @@ button:focus-visible {
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
   /* Vertical bottom strip: starts at 82% height (ATV ModernHeroGradientLayer exact stops) */
-  background:
-    linear-gradient(180deg,
-      transparent 0%,
-      transparent 82%,
-      rgba(13, 13, 13, 0.25) 89.2%,
-      rgba(13, 13, 13, 0.65) 95.5%,
-      #0d0d0d 100%
-    );
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    transparent 82%,
+    rgba(13, 13, 13, 0.25) 89.2%,
+    rgba(13, 13, 13, 0.65) 95.5%,
+    #0d0d0d 100%
+  );
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop-wrap,
@@ -5537,7 +5746,8 @@ button:focus-visible {
   transition-duration: 400ms;
 }
 
-.home-screen-shell.home-layout-modern .home-hero-backdrop.home-hero-backdrop-transition-enter.is-visible {
+.home-screen-shell.home-layout-modern
+  .home-hero-backdrop.home-hero-backdrop-transition-enter.is-visible {
   opacity: 1;
 }
 
@@ -5582,7 +5792,9 @@ button:focus-visible {
   object-position: 50% 50%;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active .home-hero-trailer-layer {
+.home-screen-shell.home-layout-modern
+  .home-modern-hero-media.trailer-active
+  .home-hero-trailer-layer {
   opacity: 1;
 }
 
@@ -5607,12 +5819,17 @@ button:focus-visible {
   justify-content: flex-end;
   align-items: flex-start;
   gap: 16px;
-  width: min(var(--modern-hero-copy-max-width), calc(100% - var(--home-content-start) - var(--modern-hero-copy-right)));
+  width: min(
+    var(--modern-hero-copy-max-width),
+    calc(100% - var(--home-content-start) - var(--modern-hero-copy-right))
+  );
   max-width: calc(100% - var(--home-content-start) - var(--modern-hero-copy-right));
   overflow: hidden;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-card.is-hero-meta-enriching .home-modern-hero-copy {
+.home-screen-shell.home-layout-modern
+  .home-modern-hero-card.is-hero-meta-enriching
+  .home-modern-hero-copy {
   visibility: hidden;
 }
 
@@ -5768,9 +5985,18 @@ button:focus-visible {
   transition: opacity 480ms ease;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active + .home-modern-hero-copy .home-modern-hero-meta-line,
-.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active + .home-modern-hero-copy .home-modern-hero-secondary,
-.home-screen-shell.home-layout-modern .home-modern-hero-media.trailer-active + .home-modern-hero-copy .home-hero-description {
+.home-screen-shell.home-layout-modern
+  .home-modern-hero-media.trailer-active
+  + .home-modern-hero-copy
+  .home-modern-hero-meta-line,
+.home-screen-shell.home-layout-modern
+  .home-modern-hero-media.trailer-active
+  + .home-modern-hero-copy
+  .home-modern-hero-secondary,
+.home-screen-shell.home-layout-modern
+  .home-modern-hero-media.trailer-active
+  + .home-modern-hero-copy
+  .home-hero-description {
   opacity: 0;
 }
 
@@ -5918,7 +6144,9 @@ button:focus-visible {
   aspect-ratio: 16 / 9;
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-expanded-gradient {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-landscape
+  .home-poster-expanded-gradient {
   display: block;
   height: 54%;
   transition: height 180ms ease-out;
@@ -5935,7 +6163,9 @@ button:focus-visible {
   pointer-events: none;
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 180ms ease-out, transform 180ms ease-out;
+  transition:
+    opacity 180ms ease-out,
+    transform 180ms ease-out;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-copy {
@@ -5966,7 +6196,9 @@ button:focus-visible {
   max-width: var(--home-modern-portrait-poster-height);
 }
 
-.home-screen-shell.home-layout-modern .home-collection-card.is-collection-square .home-poster-frame {
+.home-screen-shell.home-layout-modern
+  .home-collection-card.is-collection-square
+  .home-poster-frame {
   height: var(--home-modern-portrait-poster-height);
 }
 
@@ -5976,7 +6208,9 @@ button:focus-visible {
   max-width: var(--home-landscape-poster-width);
 }
 
-.home-screen-shell.home-layout-modern .home-collection-card.is-collection-landscape .home-poster-frame {
+.home-screen-shell.home-layout-modern
+  .home-collection-card.is-collection-landscape
+  .home-poster-frame {
   height: var(--home-landscape-poster-height);
 }
 
@@ -6013,11 +6247,16 @@ button:focus-visible {
   margin-bottom: 18px;
 }
 
-.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-row .home-track.has-expanded-landscape .home-poster-card.is-landscape:not(.is-expanded) {
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters
+  .home-modern-row
+  .home-track.has-expanded-landscape
+  .home-poster-card.is-landscape:not(.is-expanded) {
   margin-top: calc(var(--home-poster-height) - var(--home-landscape-poster-height));
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-landscape-copy {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-landscape.is-expanded
+  .home-poster-landscape-copy {
   opacity: 0;
   transform: translateY(8px);
 }
@@ -6028,21 +6267,28 @@ button:focus-visible {
   max-width: var(--home-poster-expanded-width);
 }
 
-.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-poster-card.is-landscape.is-expanded {
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters
+  .home-poster-card.is-landscape.is-expanded {
   flex-basis: var(--home-landscape-poster-width);
   min-width: var(--home-landscape-poster-width);
   max-width: var(--home-landscape-poster-width);
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-frame {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-landscape.is-expanded
+  .home-poster-frame {
   height: var(--home-poster-height);
 }
 
-.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-poster-card.is-landscape.is-expanded .home-poster-frame {
+.home-screen-shell.home-layout-modern.home-modern-landscape-posters
+  .home-poster-card.is-landscape.is-expanded
+  .home-poster-frame {
   height: var(--home-landscape-poster-height);
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-landscape.is-expanded .home-poster-expanded-gradient {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-landscape.is-expanded
+  .home-poster-expanded-gradient {
   height: 40%;
 }
 
@@ -6063,12 +6309,18 @@ button:focus-visible {
   transform: none;
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card:not(.is-landscape).is-expanded .home-poster-frame {
+.home-screen-shell.home-layout-modern
+  .home-poster-card:not(.is-landscape).is-expanded
+  .home-poster-frame {
   height: var(--home-modern-portrait-poster-height);
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded.is-expanded-backdrop-ready .content-poster,
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded.is-expanded-backdrop-ready .content-poster.placeholder {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-expanded.is-expanded-backdrop-ready
+  .content-poster,
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-expanded.is-expanded-backdrop-ready
+  .content-poster.placeholder {
   opacity: 0;
 }
 
@@ -6076,7 +6328,9 @@ button:focus-visible {
   opacity: 0;
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-expanded.is-expanded-backdrop-ready .home-poster-expanded-backdrop {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-expanded.is-expanded-backdrop-ready
+  .home-poster-expanded-backdrop {
   opacity: 1;
 }
 
@@ -6090,7 +6344,9 @@ button:focus-visible {
   display: none;
 }
 
-.home-screen-shell.home-layout-modern .home-poster-card.is-trailer-active .home-poster-trailer-layer {
+.home-screen-shell.home-layout-modern
+  .home-poster-card.is-trailer-active
+  .home-poster-trailer-layer {
   position: absolute;
   inset: 0;
   display: block;
@@ -6157,7 +6413,11 @@ button:focus-visible {
   height: var(--home-poster-height);
   aspect-ratio: auto;
   border-radius: var(--home-poster-radius);
-  transition: height 180ms ease-out, border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    height 180ms ease-out,
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 
 .home-screen-shell.home-layout-modern .home-poster-card.focused .home-poster-frame {
@@ -6212,7 +6472,9 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 440px minmax(0, 1fr);
   gap: 32px;
-  transition: width 350ms cubic-bezier(0.4, 0, 0.2, 1), margin 350ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    width 350ms cubic-bezier(0.4, 0, 0.2, 1),
+    margin 350ms cubic-bezier(0.4, 0, 0.2, 1);
   will-change: width, margin;
 }
 
@@ -6436,7 +6698,8 @@ button:focus-visible {
   width: 36px;
   height: 36px;
   object-fit: contain;
-  filter: brightness(0) saturate(100%) invert(76%) sepia(0%) saturate(0%) hue-rotate(184deg) brightness(96%) contrast(90%);
+  filter: brightness(0) saturate(100%) invert(76%) sepia(0%) saturate(0%) hue-rotate(184deg)
+    brightness(96%) contrast(90%);
 }
 
 .settings-nav-item.selected .settings-nav-icon-image,
@@ -6670,7 +6933,10 @@ button:focus-visible {
 }
 
 .trakt-route-shell .settings-trakt-stat {
-  min-height: min(5.83vw, 112px); /* Allows ATV titleMedium + bodySmall stack without divider crowding */
+  min-height: min(
+    5.83vw,
+    112px
+  ); /* Allows ATV titleMedium + bodySmall stack without divider crowding */
   padding: min(0.625vw, 12px) 0; /* ATV 6dp -> 12px */
 }
 
@@ -6824,7 +7090,11 @@ button:focus-visible {
 .supporters-dialog-button {
   appearance: none;
   border: none;
-  min-height: min(5.21vw, 7vh, 100px); /* ATV RoundedCornerShape 50dp visual -> 100px, height-aware for browser preview */
+  min-height: min(
+    5.21vw,
+    7vh,
+    100px
+  ); /* ATV RoundedCornerShape 50dp visual -> 100px, height-aware for browser preview */
   border-radius: 999px;
   padding: 0 min(1.88vw, 36px); /* ATV 18dp -> 36px */
   color: #151515;
@@ -7808,7 +8078,9 @@ button:focus-visible {
 }
 
 .settings-theme-swatch-light {
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 255, 255, 0.18),
+    0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .settings-theme-check {
@@ -8325,7 +8597,9 @@ button:focus-visible {
   top: var(--settings-layout-grid-gap);
   left: var(--settings-layout-grid-gap);
   width: calc(100% - (var(--settings-layout-grid-gap) * 2));
-  height: calc((var(--settings-layout-grid-card-height) * 7) + (var(--settings-layout-grid-gap) * 6));
+  height: calc(
+    (var(--settings-layout-grid-card-height) * 7) + (var(--settings-layout-grid-gap) * 6)
+  );
   display: grid;
   grid-template-columns: repeat(5, var(--settings-layout-grid-card-width));
   grid-auto-rows: var(--settings-layout-grid-card-height);
@@ -8404,7 +8678,10 @@ button:focus-visible {
     left: var(--settings-layout-classic-side);
   }
   to {
-    left: calc(var(--settings-layout-classic-side) - ((var(--settings-layout-classic-card-width) + var(--settings-layout-classic-gap)) * 2));
+    left: calc(
+      var(--settings-layout-classic-side) -
+        ((var(--settings-layout-classic-card-width) + var(--settings-layout-classic-gap)) * 2)
+    );
   }
 }
 
@@ -8422,7 +8699,10 @@ button:focus-visible {
     left: var(--settings-layout-modern-side);
   }
   to {
-    left: calc(var(--settings-layout-modern-side) - ((var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap)) * 2.2));
+    left: calc(
+      var(--settings-layout-modern-side) -
+        ((var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap)) * 2.2)
+    );
   }
 }
 
@@ -8906,8 +9186,12 @@ button:focus-visible {
 }
 
 @keyframes settingsSelectionBackdropIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes settingsSelectionMenuIn {
@@ -9139,7 +9423,10 @@ button:focus-visible {
   align-items: center;
   padding: 0 24px;
   box-sizing: border-box;
-  transition: background-color 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .addons-install-surface.focused,
@@ -9173,7 +9460,10 @@ button:focus-visible {
   line-height: 40px;
   font-weight: 400;
   padding: 0 24px;
-  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .addons-install-btn.focused {
@@ -9209,7 +9499,10 @@ button:focus-visible {
   gap: 32px;
   padding: 0 40px;
   text-align: left;
-  transition: transform 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .addons-large-row-centered {
@@ -9362,7 +9655,10 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
 }
 
 .addons-action-btn .material-icons {
@@ -9826,6 +10122,7 @@ button:focus-visible {
   transition: opacity 180ms ease;
   box-sizing: border-box;
   padding: 48px;
+  pointer-events: auto;
 }
 
 .player-startup-error-overlay.hidden {
@@ -9857,6 +10154,13 @@ button:focus-visible {
   white-space: pre-line;
 }
 
+.player-startup-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
 .player-startup-error-button {
   min-width: 220px;
   min-height: 56px;
@@ -9868,6 +10172,7 @@ button:focus-visible {
   font-size: 22px;
   font-weight: 800;
   box-shadow: 0 0 0 2px var(--player-focus-ring);
+  pointer-events: auto;
 }
 
 .player-startup-error-button.focused,
@@ -9894,13 +10199,17 @@ button:focus-visible {
 .player-torrent-overlay.hidden {
   opacity: 0;
   transform: translateY(-4px);
-  transition: opacity 180ms ease, transform 180ms ease;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .player-torrent-overlay:not(.hidden) {
   opacity: 1;
   transform: translateY(0);
-  transition: opacity 180ms ease, transform 180ms ease;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
 }
 
 .player-torrent-overlay-row {
@@ -9967,7 +10276,12 @@ button:focus-visible {
   left: 0;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.58) 58%, rgba(0, 0, 0, 0.92) 100%),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.28) 0%,
+      rgba(0, 0, 0, 0.58) 58%,
+      rgba(0, 0, 0, 0.92) 100%
+    ),
     radial-gradient(120% 70% at 50% 45%, rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.55));
 }
 
@@ -10258,7 +10572,9 @@ button:focus-visible {
   border-radius: 3px;
   background: rgba(255, 255, 255, 0.3);
   overflow: hidden;
-  transition: height 120ms ease, background-color 120ms ease;
+  transition:
+    height 120ms ease,
+    background-color 120ms ease;
 }
 
 .player-progress-shell.focused .player-progress-track {
@@ -10326,6 +10642,16 @@ button:focus-visible {
 .player-control-label {
   font-size: clamp(15px, 0.95vw, 18px);
   font-weight: 700;
+}
+
+.player-control-btn.has-text {
+  width: auto;
+  min-width: var(--player-control-size);
+  padding: 0 18px;
+}
+
+.player-control-btn.has-text .player-control-label {
+  white-space: nowrap;
 }
 
 .player-control-btn.focused {
@@ -10494,8 +10820,19 @@ button:focus-visible {
   left: 0;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0.56) 46%, rgba(0, 0, 0, 0.82) 100%),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0.72) 34%, rgba(0, 0, 0, 0.36) 62%, rgba(0, 0, 0, 0.12) 100%);
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.28) 0%,
+      rgba(0, 0, 0, 0.56) 46%,
+      rgba(0, 0, 0, 0.82) 100%
+    ),
+    linear-gradient(
+      90deg,
+      rgba(0, 0, 0, 0.9) 0%,
+      rgba(0, 0, 0, 0.72) 34%,
+      rgba(0, 0, 0, 0.36) 62%,
+      rgba(0, 0, 0, 0.12) 100%
+    );
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -10632,7 +10969,9 @@ button:focus-visible {
   max-width: min(38vw, 420px);
   opacity: 1;
   pointer-events: auto;
-  transition: bottom 180ms ease, opacity 180ms ease;
+  transition:
+    bottom 180ms ease,
+    opacity 180ms ease;
 }
 
 .player-skip-intro.is-raised {
@@ -10752,7 +11091,9 @@ button:focus-visible {
   z-index: 29;
   width: clamp(470px, 34vw, 640px);
   pointer-events: none;
-  transition: bottom 180ms ease, opacity 180ms ease;
+  transition:
+    bottom 180ms ease,
+    opacity 180ms ease;
 }
 
 #playerUiRoot.controls-visible .player-next-episode-card {
@@ -11042,7 +11383,13 @@ button:focus-visible {
   pointer-events: auto;
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0) 100%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.4) 30%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0) 100%),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.6) 0%,
+      rgba(0, 0, 0, 0.4) 30%,
+      rgba(0, 0, 0, 0.2) 60%,
+      rgba(0, 0, 0, 0) 100%
+    ),
     rgba(0, 0, 0, 0.34);
   opacity: 1;
   transition: opacity 180ms ease;
@@ -11717,7 +12064,9 @@ button:focus-visible {
 .player-progress-track {
   height: min(0.625vw, 12px); /* ATV 6dp -> 12px */
   border-radius: min(0.3125vw, 6px);
-  transition: height 120ms ease, background-color 120ms ease;
+  transition:
+    height 120ms ease,
+    background-color 120ms ease;
 }
 
 .player-progress-shell.focused .player-progress-track {
@@ -11734,7 +12083,9 @@ button:focus-visible {
 }
 
 .player-control-btn {
-  transition: background-color 180ms cubic-bezier(0.4, 0, 0.2, 1), color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .player-control-btn:not(.focused) .player-control-icon:not(.player-control-icon-mask) {
@@ -11742,14 +12093,21 @@ button:focus-visible {
   height: var(--player-control-icon);
 }
 
-.player-control-btn:not(.focused):not(.is-primary) .player-control-icon:not(.player-control-icon-mask) {
+.player-control-btn:not(.focused):not(.is-primary)
+  .player-control-icon:not(.player-control-icon-mask) {
   filter: brightness(0) invert(1);
 }
 
 .player-modal-backdrop {
   background:
     linear-gradient(90deg, rgba(0, 0, 0, 0.88) 0%, rgba(0, 0, 0, 0) 100%),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0.4) 30%, rgba(0, 0, 0, 0.2) 60%, rgba(0, 0, 0, 0) 100%),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.6) 0%,
+      rgba(0, 0, 0, 0.4) 30%,
+      rgba(0, 0, 0, 0.2) 60%,
+      rgba(0, 0, 0, 0) 100%
+    ),
     rgba(0, 0, 0, 0.34);
   transition: opacity 250ms ease;
 }
@@ -11822,7 +12180,9 @@ button:focus-visible {
   border-radius: min(1.25vw, 24px); /* ATV 12dp -> 24px */
   border-width: min(0.21vw, 4px); /* ATV 2dp -> 4px */
   color: var(--player-atv-text-primary);
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 .player-dialog-item.focused:not(.selected),
@@ -11937,7 +12297,9 @@ button:focus-visible {
   border-radius: min(1.25vw, 24px);
   border: min(0.21vw, 4px) solid transparent;
   background: transparent;
-  transition: background-color 120ms ease, border-color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease;
 }
 
 .player-audio-toggle {
@@ -11983,7 +12345,9 @@ button:focus-visible {
   padding: var(--player-panel-padding);
   border-radius: min(1.67vw, 32px) 0 0 min(1.67vw, 32px); /* ATV 16dp -> 32px */
   transform: translateX(0);
-  transition: opacity 120ms ease, transform 220ms ease;
+  transition:
+    opacity 120ms ease,
+    transform 220ms ease;
 }
 
 .player-sources-panel.hidden,
@@ -12123,7 +12487,10 @@ button:focus-visible {
   border-radius: min(1.67vw, 32px); /* ATV 16dp -> 32px */
   border-width: min(0.21vw, 4px); /* ATV 2dp -> 4px */
   background: var(--player-background-card);
-  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    transform 120ms ease;
 }
 
 .player-episode-item.selected {
@@ -12188,7 +12555,9 @@ button:focus-visible {
 .player-skip-intro {
   left: min(3.33vw, 64px); /* ATV 32dp -> 64px */
   bottom: min(3.125vw, 60px); /* ATV 30dp -> 60px */
-  transition: bottom 180ms ease, opacity 180ms ease;
+  transition:
+    bottom 180ms ease,
+    opacity 180ms ease;
 }
 
 .player-skip-intro.is-raised {
@@ -12333,7 +12702,13 @@ button:focus-visible {
   left: 0;
   inset: 0;
   background:
-    linear-gradient(90deg, rgba(4, 7, 11, 0.92) 0%, rgba(8, 12, 17, 0.68) 44%, rgba(8, 12, 17, 0.34) 67%, rgba(8, 12, 17, 0.18) 100%),
+    linear-gradient(
+      90deg,
+      rgba(4, 7, 11, 0.92) 0%,
+      rgba(8, 12, 17, 0.68) 44%,
+      rgba(8, 12, 17, 0.34) 67%,
+      rgba(8, 12, 17, 0.18) 100%
+    ),
     linear-gradient(180deg, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.82));
 }
 
@@ -12409,7 +12784,9 @@ button:focus-visible {
 .series-primary-btn.focused,
 .series-circle-btn.focused {
   transform: none;
-  box-shadow: 0 0 0 3px #fff, 0 0 0 8px rgba(255, 255, 255, 0.24);
+  box-shadow:
+    0 0 0 3px #fff,
+    0 0 0 8px rgba(255, 255, 255, 0.24);
 }
 
 .series-btn-icon {
@@ -12803,7 +13180,13 @@ button:focus-visible {
 
 .movie-detail-shell .series-detail-vignette {
   background:
-    linear-gradient(90deg, rgba(4, 7, 11, 0.94) 0%, rgba(8, 12, 17, 0.72) 45%, rgba(8, 12, 17, 0.36) 68%, rgba(8, 12, 17, 0.2) 100%),
+    linear-gradient(
+      90deg,
+      rgba(4, 7, 11, 0.94) 0%,
+      rgba(8, 12, 17, 0.72) 45%,
+      rgba(8, 12, 17, 0.36) 68%,
+      rgba(8, 12, 17, 0.2) 100%
+    ),
     linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.85));
 }
 
@@ -13270,7 +13653,12 @@ button:focus-visible {
   right: 0;
   bottom: 0;
   height: min(38vh, 360px);
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.24) 40%, rgba(0, 0, 0, 0.88) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.24) 40%,
+    rgba(0, 0, 0, 0.88) 100%
+  );
 }
 
 .detail-trailer-controls-top,
@@ -13432,17 +13820,19 @@ button:focus-visible {
   inset: 0;
   z-index: 0;
   /* Android TV BackdropLayer leftGradient: fadeWidth = 78% of screen. */
-  background: linear-gradient(90deg,
+  background: linear-gradient(
+    90deg,
     rgb(var(--bg-color-rgb) / 1) 0%,
     rgb(var(--bg-color-rgb) / 0.95) 7.8%,
     rgb(var(--bg-color-rgb) / 0.84) 17.16%,
-    rgb(var(--bg-color-rgb) / 0.70) 28.08%,
+    rgb(var(--bg-color-rgb) / 0.7) 28.08%,
     rgb(var(--bg-color-rgb) / 0.52) 40.56%,
     rgb(var(--bg-color-rgb) / 0.34) 51.48%,
     rgb(var(--bg-color-rgb) / 0.18) 60.84%,
     rgb(var(--bg-color-rgb) / 0.07) 70.2%,
     rgb(var(--bg-color-rgb) / 0) 78%,
-    rgb(var(--bg-color-rgb) / 0) 100%);
+    rgb(var(--bg-color-rgb) / 0) 100%
+  );
   transition: opacity 800ms ease;
 }
 
@@ -13510,7 +13900,10 @@ button:focus-visible {
   display: block;
   margin-bottom: clamp(18px, 1.4vw, 26px);
   transform-origin: left bottom;
-  transition: max-width 600ms ease, max-height 600ms ease, margin-bottom 600ms ease;
+  transition:
+    max-width 600ms ease,
+    max-height 600ms ease,
+    margin-bottom 600ms ease;
 }
 
 .detail-trailer-active .series-detail-logo {
@@ -13550,7 +13943,9 @@ button:focus-visible {
   align-items: center;
   gap: clamp(14px, 1vw, 20px);
   margin-bottom: clamp(18px, 1.4vw, 26px);
-  transition: opacity 400ms ease, transform 400ms ease;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
 }
 
 .detail-trailer-active .series-detail-actions,
@@ -13572,7 +13967,11 @@ button:focus-visible {
   pointer-events: auto;
   outline: none;
   box-shadow: none;
-  transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+  transition:
+    transform 120ms ease,
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
 .series-primary-btn {
@@ -13735,7 +14134,9 @@ button:focus-visible {
   font-size: var(--tv-secondary-text);
   line-height: 1.45;
   color: var(--detail-text-secondary);
-  transition: opacity 400ms ease, transform 400ms ease;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
 }
 
 .detail-ratings-row {
@@ -13744,7 +14145,9 @@ button:focus-visible {
   gap: clamp(14px, 1vw, 20px);
   margin-bottom: clamp(16px, 1.2vw, 22px);
   flex-wrap: wrap;
-  transition: opacity 400ms ease, transform 400ms ease;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
 }
 
 .detail-rating-item {
@@ -13776,14 +14179,18 @@ button:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   overflow-wrap: anywhere;
-  transition: opacity 400ms ease, transform 400ms ease;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
 }
 
 .detail-meta-stack {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  transition: opacity 400ms ease, transform 400ms ease;
+  transition:
+    opacity 400ms ease,
+    transform 400ms ease;
 }
 
 .detail-meta-row {
@@ -13933,7 +14340,10 @@ button:focus-visible {
   border-radius: clamp(20px, 1.3vw, 26px);
   background: var(--detail-bg-card) center center / cover no-repeat;
   overflow: hidden;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 
 .series-episode-card.focused {
@@ -13967,7 +14377,14 @@ button:focus-visible {
   bottom: 0;
   left: 0;
   inset: 0;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0.06) 0%, rgba(0, 0, 0, 0.18) 22%, rgba(0, 0, 0, 0.62) 52%, rgba(0, 0, 0, 0.86) 82%, rgba(0, 0, 0, 0.95) 100%);
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.06) 0%,
+    rgba(0, 0, 0, 0.18) 22%,
+    rgba(0, 0, 0, 0.62) 52%,
+    rgba(0, 0, 0, 0.86) 82%,
+    rgba(0, 0, 0, 0.95) 100%
+  );
 }
 
 .series-episode-copy {
@@ -14143,7 +14560,9 @@ button:focus-visible {
   padding: 4px;
   white-space: nowrap;
   transform-origin: center;
-  transition: transform 160ms ease, color 160ms ease;
+  transition:
+    transform 160ms ease,
+    color 160ms ease;
 }
 
 .series-insight-tab.selected,
@@ -14238,7 +14657,9 @@ button:focus-visible {
   font-size: var(--tv-caption-text);
   line-height: 1.35;
   font-weight: 500;
-  transition: transform 160ms ease, background 160ms ease;
+  transition:
+    transform 160ms ease,
+    background 160ms ease;
 }
 
 .series-rating-season.selected {
@@ -14363,7 +14784,10 @@ button:focus-visible {
   border-radius: 16px;
   overflow: visible;
   background-color: transparent;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 
 .detail-morelike-poster {
@@ -14373,7 +14797,9 @@ button:focus-visible {
   background-position: center center;
   background-size: cover;
   background-repeat: no-repeat;
-  transition: box-shadow 180ms ease, transform 180ms ease;
+  transition:
+    box-shadow 180ms ease,
+    transform 180ms ease;
 }
 
 .detail-morelike-poster-image {
@@ -14437,7 +14863,12 @@ button:focus-visible {
 
 .detail-loading-block {
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(35, 39, 47, 0.66), rgba(45, 50, 60, 0.92), rgba(35, 39, 47, 0.66));
+  background: linear-gradient(
+    90deg,
+    rgba(35, 39, 47, 0.66),
+    rgba(45, 50, 60, 0.92),
+    rgba(35, 39, 47, 0.66)
+  );
   background-size: 220% 100%;
   animation: detailLoadingShimmer 2.2s ease-in-out infinite;
 }
@@ -14481,7 +14912,8 @@ button:focus-visible {
 }
 
 @keyframes detailLoadingShimmer {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 0.55;
   }
   50% {
@@ -14491,7 +14923,13 @@ button:focus-visible {
 
 .stream-screen-shell .series-detail-vignette {
   background:
-    linear-gradient(90deg, rgba(5, 9, 14, 0.9) 0%, rgba(7, 11, 16, 0.72) 44%, rgba(7, 11, 16, 0.44) 70%, rgba(7, 11, 16, 0.3) 100%),
+    linear-gradient(
+      90deg,
+      rgba(5, 9, 14, 0.9) 0%,
+      rgba(7, 11, 16, 0.72) 44%,
+      rgba(7, 11, 16, 0.44) 70%,
+      rgba(7, 11, 16, 0.3) 100%
+    ),
     linear-gradient(180deg, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.72));
 }
 
@@ -14535,11 +14973,27 @@ button:focus-visible {
 }
 
 .stream-route-left-gradient {
-  background: linear-gradient(90deg, rgba(13, 13, 13, 1) 0%, rgba(13, 13, 13, 0.96) 15%, rgba(13, 13, 13, 0.88) 31%, rgba(13, 13, 13, 0.66) 48%, rgba(13, 13, 13, 0.36) 68%, rgba(13, 13, 13, 0) 100%);
+  background: linear-gradient(
+    90deg,
+    rgba(13, 13, 13, 1) 0%,
+    rgba(13, 13, 13, 0.96) 15%,
+    rgba(13, 13, 13, 0.88) 31%,
+    rgba(13, 13, 13, 0.66) 48%,
+    rgba(13, 13, 13, 0.36) 68%,
+    rgba(13, 13, 13, 0) 100%
+  );
 }
 
 .stream-route-right-gradient {
-  background: linear-gradient(270deg, rgba(13, 13, 13, 1) 0%, rgba(13, 13, 13, 0.95) 14%, rgba(13, 13, 13, 0.82) 31%, rgba(13, 13, 13, 0.58) 48%, rgba(13, 13, 13, 0.24) 72%, rgba(13, 13, 13, 0) 100%);
+  background: linear-gradient(
+    270deg,
+    rgba(13, 13, 13, 1) 0%,
+    rgba(13, 13, 13, 0.95) 14%,
+    rgba(13, 13, 13, 0.82) 31%,
+    rgba(13, 13, 13, 0.58) 48%,
+    rgba(13, 13, 13, 0.24) 72%,
+    rgba(13, 13, 13, 0) 100%
+  );
 }
 
 .stream-route-content {
@@ -14728,10 +15182,21 @@ button:focus-visible {
   display: none;
 }
 
+.stream-route-card-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.stream-route-card-row:last-child {
+  margin-bottom: 0;
+}
+
 .stream-route-card {
+  flex: 1 1 auto;
   width: 100%;
   min-height: 214px;
-  margin-bottom: 18px;
   padding: 28px 32px;
   border-radius: 20px;
   border: 1px solid rgb(var(--focus-color-rgb) / 0.06);
@@ -14741,15 +15206,60 @@ button:focus-visible {
   align-items: center;
   gap: 30px;
   transform-origin: center;
-  transition: transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1), box-shadow 200ms ease, border-color 200ms ease, background 200ms ease;
+  transition:
+    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    background 200ms ease;
 }
 
 .stream-route-card:focus {
   outline: none;
 }
 
-.stream-route-card:last-child {
-  margin-bottom: 0;
+.stream-route-native-button {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  flex: 0 0 auto;
+  border-radius: 12px;
+  border: 1px solid rgb(var(--focus-color-rgb) / 0.12);
+  background: rgb(var(--bg-elevated-rgb) / 0.7);
+  color: var(--text-secondary);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 220ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    box-shadow 200ms ease,
+    border-color 200ms ease,
+    background 200ms ease,
+    color 200ms ease;
+}
+
+.stream-route-native-button svg {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+}
+
+.stream-route-native-button:focus {
+  outline: none;
+}
+
+.stream-route-native-button.focused {
+  transform: scale(1.08);
+  border-color: var(--secondary-color);
+  background: rgb(var(--card-bg-rgb) / 0.98);
+  color: var(--secondary-color);
+  box-shadow:
+    0 0 0 3px var(--secondary-color),
+    0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.stream-route-native-button.busy {
+  color: var(--text-tertiary);
+  opacity: 0.6;
 }
 
 .performance-constrained * {
@@ -14882,11 +15392,20 @@ button:focus-visible {
 
 .legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media::before,
 .legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media::after,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop-wrap,
+.legacy-webos
+  .home-screen-shell.home-layout-modern
+  .home-modern-hero-media
+  .home-hero-backdrop-wrap,
 .legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop,
 .legacy-webos .home-screen-shell.home-layout-modern .home-hero-trailer-layer,
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-frame,
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-video {
+.legacy-webos
+  .home-screen-shell.home-layout-modern
+  .home-hero-trailer-layer
+  .home-inline-trailer-frame,
+.legacy-webos
+  .home-screen-shell.home-layout-modern
+  .home-hero-trailer-layer
+  .home-inline-trailer-video {
   top: 0;
   right: 0;
   bottom: 0;
@@ -15271,11 +15790,17 @@ button:focus-visible {
   height: var(--home-poster-height);
 }
 
-.no-aspect-ratio .home-screen-shell.home-layout-modern .home-poster-card:not(.is-landscape) .home-poster-frame {
+.no-aspect-ratio
+  .home-screen-shell.home-layout-modern
+  .home-poster-card:not(.is-landscape)
+  .home-poster-frame {
   height: var(--home-modern-portrait-poster-height);
 }
 
-.no-aspect-ratio .home-screen-shell.home-layout-modern .home-poster-card.is-landscape .home-poster-frame {
+.no-aspect-ratio
+  .home-screen-shell.home-layout-modern
+  .home-poster-card.is-landscape
+  .home-poster-frame {
   height: var(--home-landscape-poster-height);
 }
 
@@ -15586,11 +16111,17 @@ button:focus-visible {
 .performance-constrained .home-screen-shell.home-layout-modern .home-poster-card,
 .performance-constrained .home-screen-shell.home-layout-modern .home-poster-frame,
 .performance-constrained .home-screen-shell.home-layout-modern .home-poster-card .content-poster,
-.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card .home-poster-expanded-backdrop {
+.performance-constrained
+  .home-screen-shell.home-layout-modern
+  .home-poster-card
+  .home-poster-expanded-backdrop {
   transition: none !important;
 }
 
-.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card.focused .home-poster-frame {
+.performance-constrained
+  .home-screen-shell.home-layout-modern
+  .home-poster-card.focused
+  .home-poster-frame {
   background-color: transparent !important;
 }
 
@@ -15599,7 +16130,13 @@ button:focus-visible {
 }
 
 .tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
-  background: linear-gradient(90deg, #000 0%, rgba(0, 0, 0, 0.78) 28%, rgba(0, 0, 0, 0.28) 56%, rgba(0, 0, 0, 0) 100%);
+  background: linear-gradient(
+    90deg,
+    #000 0%,
+    rgba(0, 0, 0, 0.78) 28%,
+    rgba(0, 0, 0, 0.28) 56%,
+    rgba(0, 0, 0, 0) 100%
+  );
 }
 
 .tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
@@ -15949,10 +16486,36 @@ button:focus-visible {
   text-align: center;
 }
 
+.stream-route-toast {
+  position: fixed;
+  top: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  padding: 14px 24px;
+  border-radius: 18px;
+  background: rgb(var(--bg-elevated-rgb) / 0.96);
+  color: var(--text-color);
+  border: 1px solid var(--border-color);
+  font-size: 22px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+}
+
+.stream-route-toast.visible {
+  opacity: 1;
+}
+
 .stream-route-skeleton-line {
   height: 16px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(56, 56, 56, 0.5), rgba(96, 96, 96, 0.85), rgba(56, 56, 56, 0.5));
+  background: linear-gradient(
+    90deg,
+    rgba(56, 56, 56, 0.5),
+    rgba(96, 96, 96, 0.85),
+    rgba(56, 56, 56, 0.5)
+  );
   background-size: 220% 100%;
   animation: detailLoadingShimmer 2.2s ease-in-out infinite;
   margin-bottom: 14px;
@@ -15998,7 +16561,9 @@ button:focus-visible {
   height: 100vh;
   overflow-y: auto;
   overflow-x: hidden;
-  background: radial-gradient(140% 90% at 78% 0%, rgb(var(--secondary-color-rgb) / 0.22), transparent 40%), var(--bg-color);
+  background:
+    radial-gradient(140% 90% at 78% 0%, rgb(var(--secondary-color-rgb) / 0.22), transparent 40%),
+    var(--bg-color);
   color: var(--text-color);
   padding: 26px 34px 38px;
   box-sizing: border-box;
@@ -16215,7 +16780,10 @@ button:focus-visible {
   overflow: hidden;
   background: var(--card-bg);
   margin-bottom: 8px;
-  transition: border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background-color 120ms ease;
 }
 .seeall-card.focused .seeall-card-poster-wrap {
   border-color: var(--secondary-color);
@@ -16365,7 +16933,13 @@ button:focus-visible {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, rgb(13 13 13 / 0.95) 0%, rgb(13 13 13 / 0.86) 26%, rgb(13 13 13 / 0.35) 62%, rgb(13 13 13 / 0.15) 100%);
+  background: linear-gradient(
+    90deg,
+    rgb(13 13 13 / 0.95) 0%,
+    rgb(13 13 13 / 0.86) 26%,
+    rgb(13 13 13 / 0.35) 62%,
+    rgb(13 13 13 / 0.15) 100%
+  );
   z-index: 1;
 }
 

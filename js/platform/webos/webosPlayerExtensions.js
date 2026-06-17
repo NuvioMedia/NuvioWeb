@@ -1,5 +1,4 @@
 export const WebOSPlayerExtensions = {
-
   apply(videoElement) {
     if (!videoElement) {
       return;
@@ -9,5 +8,4 @@ export const WebOSPlayerExtensions = {
     videoElement.setAttribute("webkit-playsinline", "");
     videoElement.setAttribute("preload", "auto");
   }
-
 };

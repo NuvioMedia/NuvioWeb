@@ -3,6 +3,7 @@ import { addonRepository } from "../data/repository/addonRepository.js";
 import { HomeCatalogStore } from "../data/local/homeCatalogStore.js";
 import { buildOrderedCatalogItems, toDisplayTypeLabel } from "../core/addons/homeCatalogs.js";
 import { LibrarySyncService } from "../core/profile/librarySyncService.js";
+import { ProfileSettingsSyncService } from "../core/profile/profileSettingsSyncService.js";
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -377,11 +378,12 @@ const AddonRemotePage = {
 
       if (AuthManager.isAuthenticated) {
         await LibrarySyncService.push();
+        await ProfileSettingsSyncService.push();
       }
 
       this.savedState = this.buildCurrentState();
       this.statusMessage = AuthManager.isAuthenticated
-        ? "Addon changes saved and pushed to your synced profile. Home catalog changes were saved locally."
+        ? "Addon and home catalog changes saved and pushed to your synced profile."
         : "Changes saved in this browser.";
     } catch (error) {
       console.warn("Addon remote save failed", error);
@@ -460,7 +462,7 @@ const AddonRemotePage = {
 
     const infoBanner = this.authReady
       ? (AuthManager.isAuthenticated
-        ? "Signed in. Addon changes can be pushed through the web sync backend. Home catalog changes stay local to this web install."
+        ? "Signed in. Addon and home catalog changes can be pushed through the web sync backend."
         : "Signed out. Changes save only in this browser unless you sign in on this phone.")
       : "Checking account state...";
 

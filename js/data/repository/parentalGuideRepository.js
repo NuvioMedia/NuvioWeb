@@ -3,7 +3,9 @@ import { PARENTAL_GUIDE_API_URL } from "../../config.js";
 const CACHE = new Map();
 
 function normalizeImdbId(value = "") {
-  const candidate = String(value || "").trim().split(":")[0];
+  const candidate = String(value || "")
+    .trim()
+    .split(":")[0];
   return /^tt\d+$/i.test(candidate) ? candidate : "";
 }
 
@@ -45,14 +47,17 @@ function resolveSeverity(category) {
 
   const breakdowns = category.severityBreakdowns
     .map((entry) => ({
-      severityLevel: String(entry?.severityLevel || "").trim().toLowerCase(),
+      severityLevel: String(entry?.severityLevel || "")
+        .trim()
+        .toLowerCase(),
       voteCount: Number(entry?.voteCount || 0)
     }))
     .filter((entry) => entry.severityLevel && Number.isFinite(entry.voteCount));
 
-  const dominant = breakdowns
-    .filter((entry) => entry.severityLevel !== "none")
-    .sort((left, right) => right.voteCount - left.voteCount)[0] || null;
+  const dominant =
+    breakdowns
+      .filter((entry) => entry.severityLevel !== "none")
+      .sort((left, right) => right.voteCount - left.voteCount)[0] || null;
   const noneVotes = breakdowns.find((entry) => entry.severityLevel === "none")?.voteCount || 0;
 
   if (!dominant || dominant.voteCount <= noneVotes) {
@@ -69,7 +74,12 @@ function mapParentsGuide(categories) {
 
   const categoryMap = new Map(
     categories
-      .map((category) => [String(category?.category || "").trim().toUpperCase(), category])
+      .map((category) => [
+        String(category?.category || "")
+          .trim()
+          .toUpperCase(),
+        category
+      ])
       .filter(([key]) => key)
   );
   const parentalGuide = {
@@ -100,14 +110,15 @@ async function getGuide(imdbId) {
   if (CACHE.has(cacheKey)) {
     return CACHE.get(cacheKey);
   }
-  const result = await fetchJson(`${baseUrl}titles/${encodeURIComponent(normalizedImdbId)}/parentsGuide`);
+  const result = await fetchJson(
+    `${baseUrl}titles/${encodeURIComponent(normalizedImdbId)}/parentsGuide`
+  );
   const payload = mapParentsGuide(result?.parentsGuide);
   CACHE.set(cacheKey, payload);
   return payload;
 }
 
 export const parentalGuideRepository = {
-
   async getMovieGuide(imdbId) {
     return getGuide(imdbId);
   },
@@ -115,5 +126,4 @@ export const parentalGuideRepository = {
   async getTvGuide(imdbId) {
     return getGuide(imdbId);
   }
-
 };

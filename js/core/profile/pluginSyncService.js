@@ -24,11 +24,12 @@ async function resolvePluginProfileId() {
     const id = Number(profile?.profileIndex || profile?.id || 1);
     return Number.isFinite(id) && Math.trunc(id) === profileId;
   });
-  const usesPrimaryPlugins = typeof activeProfile?.usesPrimaryPlugins === "boolean"
-    ? activeProfile.usesPrimaryPlugins
-    : (typeof activeProfile?.uses_primary_plugins === "boolean"
-      ? activeProfile.uses_primary_plugins
-      : false);
+  const usesPrimaryPlugins =
+    typeof activeProfile?.usesPrimaryPlugins === "boolean"
+      ? activeProfile.usesPrimaryPlugins
+      : typeof activeProfile?.uses_primary_plugins === "boolean"
+        ? activeProfile.uses_primary_plugins
+        : false;
   return usesPrimaryPlugins ? 1 : profileId;
 }
 
@@ -43,10 +44,12 @@ function shouldTryLegacyTable(error) {
     return true;
   }
   const message = String(error.message || "");
-  return message.includes("PGRST205")
-    || message.includes("PGRST202")
-    || message.includes("Could not find the table")
-    || message.includes("Could not find the function");
+  return (
+    message.includes("PGRST205") ||
+    message.includes("PGRST202") ||
+    message.includes("Could not find the table") ||
+    message.includes("Could not find the function")
+  );
 }
 
 function sourceIdFromUrl(url, index) {
@@ -122,7 +125,6 @@ function writeLocalSources(sources) {
 }
 
 export const PluginSyncService = {
-
   async pull() {
     try {
       if (!AuthManager.isAuthenticated) {
@@ -157,15 +159,19 @@ export const PluginSyncService = {
       const profileId = await resolvePluginProfileId();
       const sources = readLocalSources();
       try {
-        await SupabaseApi.rpc(PUSH_RPC, {
-          p_profile_id: profileId,
-          p_plugins: sources.map((source, index) => ({
-            url: source.urlTemplate,
-            name: source.name || `Plugin ${index + 1}`,
-            enabled: source.enabled !== false,
-            sort_order: index
-          }))
-        }, true);
+        await SupabaseApi.rpc(
+          PUSH_RPC,
+          {
+            p_profile_id: profileId,
+            p_plugins: sources.map((source, index) => ({
+              url: source.urlTemplate,
+              name: source.name || `Plugin ${index + 1}`,
+              enabled: source.enabled !== false,
+              sort_order: index
+            }))
+          },
+          true
+        );
         return true;
       } catch (rpcError) {
         if (!shouldTryLegacyTable(rpcError)) {
@@ -200,5 +206,4 @@ export const PluginSyncService = {
       return false;
     }
   }
-
 };

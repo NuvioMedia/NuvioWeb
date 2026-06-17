@@ -4,12 +4,17 @@ export function renderEpisodesSection(meta) {
     return `<div class="row"><p>No episodes available.</p></div>`;
   }
 
-  const rows = videos.slice(0, 20).map((video) => `
+  const rows = videos
+    .slice(0, 20)
+    .map(
+      (video) => `
     <div class="card">
       <div style="font-weight:700;">${video.title || video.id || "Episode"}</div>
       <div style="opacity:0.8;">${video.released || ""}</div>
     </div>
-  `).join("");
+  `
+    )
+    .join("");
 
   return `<div class="row"><h3>Episodes</h3>${rows}</div>`;
 }

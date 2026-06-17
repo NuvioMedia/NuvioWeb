@@ -100,19 +100,13 @@ function supportsAspectRatio() {
 }
 
 function applyPerformanceMode() {
-  const constrained =
-    Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
-  const webOsMajorVersion = Platform.isWebOS()
-    ? Number(Platform.getWebOsMajorVersion() || 0)
-    : 0;
+  const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
+  const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
   const legacyWebOs = webOsMajorVersion > 0 && webOsMajorVersion <= 6;
   const legacyTizen = Platform.isTizen();
   const flexGapUnsupported = !supportsFlexGap();
   const aspectRatioUnsupported = !supportsAspectRatio();
-  document.documentElement.classList.toggle(
-    "performance-constrained",
-    constrained,
-  );
+  document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
   document.body.classList.toggle("legacy-webos", legacyWebOs);
@@ -120,18 +114,13 @@ function applyPerformanceMode() {
   document.body.classList.toggle("legacy-tizen", legacyTizen);
   document.documentElement.classList.toggle("no-flex-gap", flexGapUnsupported);
   document.body.classList.toggle("no-flex-gap", flexGapUnsupported);
-  document.documentElement.classList.toggle(
-    "no-aspect-ratio",
-    aspectRatioUnsupported,
-  );
+  document.documentElement.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
   document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
 }
 
 function isAddonRemoteMode() {
   try {
-    return (
-      new URLSearchParams(window.location.search).get("addonsRemote") === "1"
-    );
+    return new URLSearchParams(window.location.search).get("addonsRemote") === "1";
   } catch {
     return false;
   }
@@ -143,14 +132,10 @@ async function shouldShowProfileSelection() {
   const activeProfileId = ProfileManager.getActiveProfileId();
   const pinStates = await ProfileSyncService.pullProfileLockStates();
   const activeProfileHasPin = Boolean(
-    pinStates?.[String(activeProfileId)] ||
-    pinStates?.[Number(activeProfileId)],
+    pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]
   );
 
-  return (
-    !hasSelectedProfileThisSession &&
-    (profiles.length > 1 || activeProfileHasPin)
-  );
+  return !hasSelectedProfileThisSession && (profiles.length > 1 || activeProfileHasPin);
 }
 
 async function routeAfterAuthentication() {
@@ -164,9 +149,7 @@ async function routeAfterAuthentication() {
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
   const activeProfile =
-    profiles.find(
-      (profile) => String(profile.id) === String(activeProfileId),
-    ) ||
+    profiles.find((profile) => String(profile.id) === String(activeProfileId)) ||
     profiles[0] ||
     null;
   if (activeProfile) {
@@ -182,10 +165,9 @@ function setupWebOsAppLifecycle() {
     return;
   }
 
-  const appSystems = Array.from(new Set([
-    globalThis.webOSSystem || null,
-    globalThis.PalmSystem || null,
-  ].filter(Boolean)));
+  const appSystems = Array.from(
+    new Set([globalThis.webOSSystem || null, globalThis.PalmSystem || null].filter(Boolean))
+  );
 
   function activateWebOsApp() {
     const system = appSystems.find((entry) => typeof entry?.activate === "function") || null;
@@ -203,9 +185,8 @@ function setupWebOsAppLifecycle() {
     if (!system) {
       return;
     }
-    const previous = typeof system[callbackName] === "function"
-      ? system[callbackName].bind(system)
-      : null;
+    const previous =
+      typeof system[callbackName] === "function" ? system[callbackName].bind(system) : null;
     try {
       system[callbackName] = (...args) => {
         if (previous) {
@@ -245,7 +226,7 @@ function setupWebOsAppLifecycle() {
       const params = target === current ? Router.currentParams || {} : {};
       await Router.navigate(target, params, {
         replaceHistory: true,
-        skipStackPush: true,
+        skipStackPush: true
       });
       // With handlesRelaunch=true, webOS expects the app to explicitly request
       // foreground activation after processing the relaunch callback.
@@ -257,14 +238,22 @@ function setupWebOsAppLifecycle() {
     }
   };
 
-  document.addEventListener("webOSRelaunch", () => {
-    void recover();
-  }, true);
+  document.addEventListener(
+    "webOSRelaunch",
+    () => {
+      void recover();
+    },
+    true
+  );
 
   // webOS 4.x may fire webOSLaunch instead of webOSRelaunch when resuming.
-  document.addEventListener("webOSLaunch", () => {
-    void recover();
-  }, true);
+  document.addEventListener(
+    "webOSLaunch",
+    () => {
+      void recover();
+    },
+    true
+  );
 
   // Some builds only expose visibilitychange when the WebView is resumed.
   document.addEventListener("visibilitychange", () => {
@@ -284,7 +273,9 @@ function setupWebOsAppLifecycle() {
   installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onhide");
   installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onfocus", { recoverOnCall: true });
   installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onblur");
-  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onactivate", { recoverOnCall: true });
+  installNativeCallback(globalThis.webOSSystem, "webOSSystem", "onactivate", {
+    recoverOnCall: true
+  });
   installNativeCallback(globalThis.webOSSystem, "webOSSystem", "ondeactivate");
   installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onshow", { recoverOnCall: true });
   installNativeCallback(globalThis.PalmSystem, "PalmSystem", "onhide");
@@ -320,9 +311,7 @@ async function bootstrapApp() {
     if (state === AuthState.SIGNED_OUT) {
       StartupSyncService.stop();
       hasSelectedProfileThisSession = false;
-      const shouldBypassQr = Boolean(
-        LocalStore.get(GUEST_QR_BYPASS_KEY, false),
-      );
+      const shouldBypassQr = Boolean(LocalStore.get(GUEST_QR_BYPASS_KEY, false));
       if (isSignedOutRouteAllowed()) {
         return;
       }
@@ -334,15 +323,15 @@ async function bootstrapApp() {
             {},
             {
               replaceHistory: true,
-              skipStackPush: true,
-            },
+              skipStackPush: true
+            }
           );
         }
         return;
       }
       const hasSeenQr = LocalStore.get("hasSeenAuthQrOnFirstLaunch");
       Router.navigate("authQrSignIn", {
-        onboardingMode: !hasSeenQr,
+        onboardingMode: !hasSeenQr
       });
     }
 
@@ -368,20 +357,16 @@ if (document.readyState === "loading") {
   document.addEventListener(
     "DOMContentLoaded",
     () => {
-      const bootstrap = isAddonRemoteMode()
-        ? bootstrapAddonRemoteMode
-        : bootstrapApp;
+      const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
       bootstrap().catch((error) => {
         console.error("App bootstrap failed", error);
         renderFatalError(error);
       });
     },
-    { once: true },
+    { once: true }
   );
 } else {
-  const bootstrap = isAddonRemoteMode()
-    ? bootstrapAddonRemoteMode
-    : bootstrapApp;
+  const bootstrap = isAddonRemoteMode() ? bootstrapAddonRemoteMode : bootstrapApp;
   bootstrap().catch((error) => {
     console.error("App bootstrap failed", error);
     renderFatalError(error);

@@ -43,9 +43,12 @@ function rememberLocalMediaServerUrl(value) {
 function withTimeout(promise, timeoutMs, message) {
   let timeoutId = 0;
   const timeoutPromise = new Promise((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(message || "Request timed out"));
-    }, Math.max(1, Number(timeoutMs || 0)));
+    timeoutId = setTimeout(
+      () => {
+        reject(new Error(message || "Request timed out"));
+      },
+      Math.max(1, Number(timeoutMs || 0))
+    );
   });
 
   return Promise.race([promise, timeoutPromise]).finally(() => {
@@ -101,9 +104,7 @@ async function requestTracksViaLunaWithRetry(mediaUrl) {
 
 async function fetchJson(url) {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
-  const timeoutId = controller
-    ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
-    : 0;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : 0;
 
   try {
     const response = await fetch(url, {
@@ -122,7 +123,6 @@ async function fetchJson(url) {
 }
 
 export const localMediaTracksRepository = {
-
   async getTracks(mediaUrl) {
     const targetUrl = String(mediaUrl || "").trim();
     if (!targetUrl) {
@@ -146,9 +146,9 @@ export const localMediaTracksRepository = {
           const lunaTracks = await requestTracksViaLunaWithRetry(targetUrl);
           tracksCache.set(targetUrl, {
             tracks: Array.isArray(lunaTracks) ? lunaTracks : [],
-            expiresAt: Date.now() + (lunaTracks.length > 0
-              ? TRACK_CACHE_TTL_MS
-              : WEBOS_EMPTY_TRACK_CACHE_TTL_MS)
+            expiresAt:
+              Date.now() +
+              (lunaTracks.length > 0 ? TRACK_CACHE_TTL_MS : WEBOS_EMPTY_TRACK_CACHE_TTL_MS)
           });
           return Array.isArray(lunaTracks) ? lunaTracks : [];
         } catch (_) {
@@ -212,5 +212,4 @@ export const localMediaTracksRepository = {
       inFlightTrackRequests.delete(targetUrl);
     }
   }
-
 };

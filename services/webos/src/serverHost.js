@@ -18,12 +18,12 @@ function loadCommonJsScript(filename) {
 }
 
 function patchServerRequestRegistration(server, wrapRequestListener) {
-  ["on", "addListener", "once", "prependListener"].forEach(function(methodName) {
+  ["on", "addListener", "once", "prependListener"].forEach(function (methodName) {
     if (typeof server[methodName] !== "function") {
       return;
     }
     var original = server[methodName];
-    server[methodName] = function(eventName, listener) {
+    server[methodName] = function (eventName, listener) {
       if (eventName === "request" && typeof listener === "function") {
         return original.call(this, eventName, wrapRequestListener(listener));
       }
@@ -42,7 +42,7 @@ function installImageProxyHttpHook() {
       return listener;
     }
 
-    var wrapped = function(req, res) {
+    var wrapped = function (req, res) {
       if (imageProxyHandler(req, res)) {
         return;
       }
@@ -52,7 +52,7 @@ function installImageProxyHttpHook() {
     return wrapped;
   }
 
-  http.createServer = function() {
+  http.createServer = function () {
     var args = Array.prototype.slice.call(arguments);
     if (typeof args[0] === "function") {
       args[0] = wrapRequestListener(args[0]);
@@ -85,7 +85,7 @@ function requestLocalHttp(port, pathname, options, callback) {
   var headers = Object.assign({}, requestOptions.headers || {});
   var maxBodyBytes = Number(requestOptions.maxBodyBytes || 0) || 0;
   var timeoutMs = Number(requestOptions.timeoutMs || REQUEST_TIMEOUT_MS) || REQUEST_TIMEOUT_MS;
-  var encoding = requestOptions.encoding === null ? null : (requestOptions.encoding || "utf8");
+  var encoding = requestOptions.encoding === null ? null : requestOptions.encoding || "utf8";
 
   if (body && !headers["Content-Length"] && !headers["content-length"]) {
     headers["Content-Length"] = Buffer.byteLength(body);
@@ -99,23 +99,21 @@ function requestLocalHttp(port, pathname, options, callback) {
       method: requestOptions.method || "GET",
       headers: headers
     },
-    function(res) {
+    function (res) {
       var chunks = [];
       var bodyBytes = 0;
       if (encoding) {
         res.setEncoding(encoding);
       }
-      res.on("data", function(chunk) {
+      res.on("data", function (chunk) {
         var chunkBytes = encoding ? Buffer.byteLength(chunk) : chunk.length;
         bodyBytes += chunkBytes;
         if (!maxBodyBytes || bodyBytes <= maxBodyBytes) {
           chunks.push(chunk);
         }
       });
-      res.on("end", function() {
-        var responseBody = encoding
-          ? chunks.join("")
-          : Buffer.concat(chunks);
+      res.on("end", function () {
+        var responseBody = encoding ? chunks.join("") : Buffer.concat(chunks);
         callback(null, {
           port: port,
           statusCode: res.statusCode || 0,
@@ -128,11 +126,11 @@ function requestLocalHttp(port, pathname, options, callback) {
     }
   );
 
-  req.setTimeout(timeoutMs, function() {
+  req.setTimeout(timeoutMs, function () {
     req.destroy(new Error("Local media request timed out after " + timeoutMs + "ms"));
   });
 
-  req.on("error", function(error) {
+  req.on("error", function (error) {
     callback(error);
   });
 
@@ -154,7 +152,7 @@ function probeLocalServer(callback, index) {
   }
 
   var port = PORT_CANDIDATES[candidateIndex];
-  requestLocalPath(port, "/settings", function(error, result) {
+  requestLocalPath(port, "/settings", function (error, result) {
     if (!error && result && result.statusCode >= 200 && result.statusCode < 500) {
       callback(null, result);
       return;
@@ -168,7 +166,7 @@ function requestActiveServerPath(pathname, callback) {
 }
 
 function requestActiveServerHttp(pathname, options, callback) {
-  probeLocalServer(function(error, status) {
+  probeLocalServer(function (error, status) {
     if (error) {
       callback(error);
       return;

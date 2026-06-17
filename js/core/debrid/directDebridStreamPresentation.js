@@ -2,7 +2,16 @@ import { DebridSettingsStore } from "../../data/local/debridSettingsStore.js";
 import { DEBRID_PROVIDER_IDS, DebridProviders } from "./debridProviders.js";
 import { DebridStreamTemplateEngine } from "./debridStreamTemplateEngine.js";
 
-const RESOLUTION_RANK = { P2160: 700, P1440: 600, P1080: 500, P720: 400, P576: 300, P480: 200, P360: 100, UNKNOWN: 0 };
+const RESOLUTION_RANK = {
+  P2160: 700,
+  P1440: 600,
+  P1080: 500,
+  P720: 400,
+  P576: 300,
+  P480: 200,
+  P360: 100,
+  UNKNOWN: 0
+};
 const QUALITY_RANK = {
   BLURAY_REMUX: 1200,
   BLURAY: 1100,
@@ -18,7 +27,15 @@ const QUALITY_RANK = {
   SCR: 70,
   UNKNOWN: 0
 };
-const RESOLUTION_LABELS = { P2160: "2160p", P1440: "1440p", P1080: "1080p", P720: "720p", P576: "576p", P480: "480p", P360: "360p" };
+const RESOLUTION_LABELS = {
+  P2160: "2160p",
+  P1440: "1440p",
+  P1080: "1080p",
+  P720: "720p",
+  P576: "576p",
+  P480: "480p",
+  P360: "360p"
+};
 const QUALITY_LABELS = {
   BLURAY_REMUX: "BluRay REMUX",
   BLURAY: "BluRay",
@@ -83,10 +100,64 @@ const LANGUAGE_LABELS = {
   ZH: ["zh", "Chinese"],
   MULTI: ["multi", "Multi"]
 };
-const DEFAULT_RESOLUTION_ORDER = ["P2160", "P1440", "P1080", "P720", "P576", "P480", "P360", "UNKNOWN"];
-const DEFAULT_QUALITY_ORDER = ["BLURAY_REMUX", "BLURAY", "WEB_DL", "WEBRIP", "HDRIP", "HD_RIP", "DVDRIP", "HDTV", "CAM", "TS", "TC", "SCR", "UNKNOWN"];
-const DEFAULT_VISUAL_TAG_ORDER = ["HDR_DV", "DV_ONLY", "HDR_ONLY", "HDR10_PLUS", "HDR10", "DV", "HDR", "HLG", "TEN_BIT", "IMAX", "SDR", "THREE_D", "AI", "H_OU", "H_SBS", "UNKNOWN"];
-const DEFAULT_AUDIO_TAG_ORDER = ["ATMOS", "DD_PLUS", "DD", "DTS_X", "DTS_HD_MA", "DTS_HD", "DTS_ES", "DTS", "TRUEHD", "OPUS", "FLAC", "AAC", "UNKNOWN"];
+const DEFAULT_RESOLUTION_ORDER = [
+  "P2160",
+  "P1440",
+  "P1080",
+  "P720",
+  "P576",
+  "P480",
+  "P360",
+  "UNKNOWN"
+];
+const DEFAULT_QUALITY_ORDER = [
+  "BLURAY_REMUX",
+  "BLURAY",
+  "WEB_DL",
+  "WEBRIP",
+  "HDRIP",
+  "HD_RIP",
+  "DVDRIP",
+  "HDTV",
+  "CAM",
+  "TS",
+  "TC",
+  "SCR",
+  "UNKNOWN"
+];
+const DEFAULT_VISUAL_TAG_ORDER = [
+  "HDR_DV",
+  "DV_ONLY",
+  "HDR_ONLY",
+  "HDR10_PLUS",
+  "HDR10",
+  "DV",
+  "HDR",
+  "HLG",
+  "TEN_BIT",
+  "IMAX",
+  "SDR",
+  "THREE_D",
+  "AI",
+  "H_OU",
+  "H_SBS",
+  "UNKNOWN"
+];
+const DEFAULT_AUDIO_TAG_ORDER = [
+  "ATMOS",
+  "DD_PLUS",
+  "DD",
+  "DTS_X",
+  "DTS_HD_MA",
+  "DTS_HD",
+  "DTS_ES",
+  "DTS",
+  "TRUEHD",
+  "OPUS",
+  "FLAC",
+  "AAC",
+  "UNKNOWN"
+];
 const DEFAULT_AUDIO_CHANNEL_ORDER = ["CH_7_1", "CH_6_1", "CH_5_1", "CH_2_0", "UNKNOWN"];
 const DEFAULT_ENCODE_ORDER = ["AV1", "HEVC", "AVC", "XVID", "DIVX", "UNKNOWN"];
 const DEFAULT_SORT_CRITERIA = [
@@ -100,7 +171,10 @@ const DEFAULT_SORT_CRITERIA = [
 ];
 
 function isMagnet(value) {
-  return String(value || "").trim().toLowerCase().startsWith("magnet:");
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("magnet:");
 }
 
 function getStreamUrl(stream = {}) {
@@ -110,24 +184,28 @@ function getStreamUrl(stream = {}) {
 function isDirectDebrid(stream = {}) {
   const resolve = stream.clientResolve || stream.raw?.clientResolve;
   return Boolean(
-    resolve
-      && String(resolve.type || "").toLowerCase() === "debrid"
-      && DebridProviders.isSupported(resolve.service)
-      && resolve.isCached === true
+    resolve &&
+    String(resolve.type || "").toLowerCase() === "debrid" &&
+    DebridProviders.isSupported(resolve.service) &&
+    resolve.isCached === true
   );
 }
 
 function needsLocalDebridResolve(stream = {}) {
-  return !isDirectDebrid(stream) && !getStreamUrl(stream) && Boolean(stream.infoHash || isMagnet(stream.url) || isMagnet(stream.externalUrl));
+  return (
+    !isDirectDebrid(stream) &&
+    !getStreamUrl(stream) &&
+    Boolean(stream.infoHash || isMagnet(stream.url) || isMagnet(stream.externalUrl))
+  );
 }
 
 function isManagedDebridStream(stream = {}) {
-  return isDirectDebrid(stream)
-    || (
-      needsLocalDebridResolve(stream)
-      && stream.debridCacheStatus
-      && stream.debridCacheStatus.state !== "CHECKING"
-    );
+  return (
+    isDirectDebrid(stream) ||
+    (needsLocalDebridResolve(stream) &&
+      stream.debridCacheStatus &&
+      stream.debridCacheStatus.state !== "CHECKING")
+  );
 }
 
 function isUncachedDebridStream(stream = {}) {
@@ -135,9 +213,13 @@ function isUncachedDebridStream(stream = {}) {
 }
 
 function isInactiveResolverStream(stream = {}, settings = {}) {
-  const providerId = DebridProviders.byId(stream.clientResolve?.service || stream.raw?.clientResolve?.service)?.id;
+  const providerId = DebridProviders.byId(
+    stream.clientResolve?.service || stream.raw?.clientResolve?.service
+  )?.id;
   const activeProviderId = DebridProviders.preferredResolverService(settings)?.provider?.id || "";
-  return Boolean(isDirectDebrid(stream) && providerId && activeProviderId && providerId !== activeProviderId);
+  return Boolean(
+    isDirectDebrid(stream) && providerId && activeProviderId && providerId !== activeProviderId
+  );
 }
 
 function searchText(stream = {}) {
@@ -163,7 +245,10 @@ function searchText(stream = {}) {
     ...(parsed.audio || []),
     ...(parsed.channels || []),
     ...(parsed.languages || [])
-  ].filter(Boolean).join(" ").toLowerCase();
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
 }
 
 function resolutionFromText(text = "") {
@@ -180,7 +265,13 @@ function resolutionFromText(text = "") {
 function qualityFromText(text = "") {
   const value = String(text || "").toLowerCase();
   if (value.includes("remux")) return "BLURAY_REMUX";
-  if (value.includes("blu-ray") || value.includes("bluray") || value.includes("bdrip") || value.includes("brrip")) return "BLURAY";
+  if (
+    value.includes("blu-ray") ||
+    value.includes("bluray") ||
+    value.includes("bdrip") ||
+    value.includes("brrip")
+  )
+    return "BLURAY";
   if (value.includes("web-dl") || value.includes("webdl")) return "WEB_DL";
   if (value.includes("webrip") || value.includes("web-rip")) return "WEBRIP";
   if (value.includes("hdrip")) return "HDRIP";
@@ -195,25 +286,44 @@ function qualityFromText(text = "") {
 }
 
 function hasToken(text = "", token = "") {
-  return new RegExp(`(^|[^a-z0-9])${String(token || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&").toLowerCase()}([^a-z0-9]|$)`, "i").test(String(text || ""));
+  return new RegExp(
+    `(^|[^a-z0-9])${String(token || "")
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .toLowerCase()}([^a-z0-9]|$)`,
+    "i"
+  ).test(String(text || ""));
 }
 
 function isDolbyVisionToken(value = "") {
-  const normalized = String(value || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
   return normalized === "dv" || normalized === "dovi" || normalized === "dolbyvision";
 }
 
 function isHdrToken(value = "") {
-  const normalized = String(value || "").toLowerCase().replace(/[^a-z0-9+]/g, "");
-  return normalized === "hdr" || normalized === "hdr10" || normalized === "hdr10+" || normalized === "hdr10plus" || normalized === "hlg";
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9+]/g, "");
+  return (
+    normalized === "hdr" ||
+    normalized === "hdr10" ||
+    normalized === "hdr10+" ||
+    normalized === "hdr10plus" ||
+    normalized === "hlg"
+  );
 }
 
 function visualTagsFromText(parsedHdr = [], search = "") {
   const parsed = Array.isArray(parsedHdr) ? parsedHdr : [];
   const text = [...parsed, search].join(" ").toLowerCase();
   const tags = [];
-  const hasDv = parsed.some(isDolbyVisionToken) || /(^|[^a-z0-9])(dv|dovi|dolby[ ._-]?vision)([^a-z0-9]|$)/i.test(search);
-  const hasHdr = parsed.some(isHdrToken) || /(^|[^a-z0-9])(hdr|hdr10|hdr10plus|hdr10\+|hlg)([^a-z0-9]|$)/i.test(search);
+  const hasDv =
+    parsed.some(isDolbyVisionToken) ||
+    /(^|[^a-z0-9])(dv|dovi|dolby[ ._-]?vision)([^a-z0-9]|$)/i.test(search);
+  const hasHdr =
+    parsed.some(isHdrToken) ||
+    /(^|[^a-z0-9])(hdr|hdr10|hdr10plus|hdr10\+|hlg)([^a-z0-9]|$)/i.test(search);
   if (hasDv && hasHdr) tags.push("HDR_DV");
   if (hasDv && !hasHdr) tags.push("DV_ONLY");
   if (hasHdr && !hasDv) tags.push("HDR_ONLY");
@@ -236,8 +346,10 @@ function audioTagsFromText(parsedAudio = [], search = "") {
   const text = [...(Array.isArray(parsedAudio) ? parsedAudio : []), search].join(" ").toLowerCase();
   const tags = [];
   if (hasToken(text, "atmos")) tags.push("ATMOS");
-  if (text.includes("dd+") || text.includes("ddp") || text.includes("dolby digital plus")) tags.push("DD_PLUS");
-  if (hasToken(text, "dd") || text.includes("ac3") || text.includes("dolby digital")) tags.push("DD");
+  if (text.includes("dd+") || text.includes("ddp") || text.includes("dolby digital plus"))
+    tags.push("DD_PLUS");
+  if (hasToken(text, "dd") || text.includes("ac3") || text.includes("dolby digital"))
+    tags.push("DD");
   if (text.includes("dts:x") || text.includes("dtsx")) tags.push("DTS_X");
   if (text.includes("dts-hd ma") || text.includes("dtshd ma")) tags.push("DTS_HD_MA");
   if (text.includes("dts-hd") || text.includes("dtshd")) tags.push("DTS_HD");
@@ -251,7 +363,9 @@ function audioTagsFromText(parsedAudio = [], search = "") {
 }
 
 function audioChannelsFromText(parsedChannels = [], search = "") {
-  const text = [...(Array.isArray(parsedChannels) ? parsedChannels : []), search].join(" ").toLowerCase();
+  const text = [...(Array.isArray(parsedChannels) ? parsedChannels : []), search]
+    .join(" ")
+    .toLowerCase();
   const channels = [];
   if (hasToken(text, "7.1")) channels.push("CH_7_1");
   if (hasToken(text, "6.1")) channels.push("CH_6_1");
@@ -273,26 +387,30 @@ function encodeFromText(parsedCodec, search = "") {
 function languageFor(value = "") {
   const normalized = String(value || "").toLowerCase();
   const compact = normalized.replace(/[^a-z0-9]/g, "");
-  return Object.entries(LANGUAGE_LABELS).find(([, [code, label]]) => {
-    const normalizedCode = String(code || "").toLowerCase();
-    const normalizedLabel = String(label || "").toLowerCase();
-    return normalized === normalizedCode
-      || normalized === normalizedLabel
-      || (compact && compact === normalizedCode.replace(/[^a-z0-9]/g, ""));
-  })?.[0] || null;
+  return (
+    Object.entries(LANGUAGE_LABELS).find(([, [code, label]]) => {
+      const normalizedCode = String(code || "").toLowerCase();
+      const normalizedLabel = String(label || "").toLowerCase();
+      return (
+        normalized === normalizedCode ||
+        normalized === normalizedLabel ||
+        (compact && compact === normalizedCode.replace(/[^a-z0-9]/g, ""))
+      );
+    })?.[0] || null
+  );
 }
 
 function languagesFromText(parsedLanguages = [], search = "") {
-  const fromParsed = (Array.isArray(parsedLanguages) ? parsedLanguages : []).map(languageFor).filter(Boolean);
+  const fromParsed = (Array.isArray(parsedLanguages) ? parsedLanguages : [])
+    .map(languageFor)
+    .filter(Boolean);
   if (fromParsed.length) {
     return fromParsed;
   }
   const matches = Object.entries(LANGUAGE_LABELS)
     .filter(([, [code]]) => hasToken(search, code))
     .map(([key]) => key);
-  return matches.includes("PT_BR")
-    ? matches.filter((key) => key !== "PT")
-    : matches;
+  return matches.includes("PT_BR") ? matches.filter((key) => key !== "PT") : matches;
 }
 
 function releaseGroupFromText(text = "") {
@@ -301,19 +419,23 @@ function releaseGroupFromText(text = "") {
 
 function streamSize(stream = {}) {
   const resolve = stream.clientResolve || stream.raw?.clientResolve || {};
-  return Number(
-    resolve.stream?.raw?.size
-      ?? stream.behaviorHints?.videoSize
-      ?? stream.debridCacheStatus?.cachedSize
-      ?? 0
-  ) || 0;
+  return (
+    Number(
+      resolve.stream?.raw?.size ??
+        stream.behaviorHints?.videoSize ??
+        stream.debridCacheStatus?.cachedSize ??
+        0
+    ) || 0
+  );
 }
 
 function facts(stream = {}) {
   const resolve = stream.clientResolve || stream.raw?.clientResolve || {};
   const parsed = resolve.stream?.raw?.parsed || {};
   const text = searchText(stream);
-  const resolution = resolutionFromText([parsed.resolution, parsed.quality, stream.quality, text].filter(Boolean).join(" "));
+  const resolution = resolutionFromText(
+    [parsed.resolution, parsed.quality, stream.quality, text].filter(Boolean).join(" ")
+  );
   const quality = qualityFromText([parsed.quality, text].filter(Boolean).join(" "));
   const visualTags = visualTagsFromText(parsed.hdr || [], text);
   const audioTags = audioTagsFromText(parsed.audio || [], text);
@@ -332,15 +454,25 @@ function facts(stream = {}) {
     audioChannels,
     languages,
     releaseGroup: parsed.group || releaseGroupFromText(text),
-    edition: parsed.edition || [parsed.extended ? "extended" : "", parsed.theatrical ? "theatrical" : "", parsed.remastered ? "remastered" : "", parsed.unrated ? "unrated" : ""].filter(Boolean).join(" "),
+    edition:
+      parsed.edition ||
+      [
+        parsed.extended ? "extended" : "",
+        parsed.theatrical ? "theatrical" : "",
+        parsed.remastered ? "remastered" : "",
+        parsed.unrated ? "unrated" : ""
+      ]
+        .filter(Boolean)
+        .join(" "),
     text
   };
 }
 
 function effectiveSettings(settings = {}) {
-  const preferences = settings.streamPreferences && typeof settings.streamPreferences === "object"
-    ? settings.streamPreferences
-    : null;
+  const preferences =
+    settings.streamPreferences && typeof settings.streamPreferences === "object"
+      ? settings.streamPreferences
+      : null;
   const defaultPreferences = {
     maxResults: 0,
     maxPerResolution: 0,
@@ -381,7 +513,10 @@ function effectiveSettings(settings = {}) {
       maxPerQuality: Number(preferences.maxPerQuality ?? 0) || 0,
       sizeMinGb: Number(preferences.sizeMinGb ?? 0) || 0,
       sizeMaxGb: Number(preferences.sizeMaxGb ?? 0) || 0,
-      sortCriteria: Array.isArray(preferences.sortCriteria) && preferences.sortCriteria.length ? preferences.sortCriteria : DEFAULT_SORT_CRITERIA
+      sortCriteria:
+        Array.isArray(preferences.sortCriteria) && preferences.sortCriteria.length
+          ? preferences.sortCriteria
+          : DEFAULT_SORT_CRITERIA
     };
   }
   const minQuality = String(settings.streamMinimumQuality || "ANY").toUpperCase();
@@ -392,15 +527,37 @@ function effectiveSettings(settings = {}) {
   const legacy = {
     ...defaultPreferences,
     maxResults: Number(settings.streamMaxResults ?? 0) || 0,
-    requiredResolutions: minQuality === "P2160" ? ["P2160"]
-      : minQuality === "P1080" ? ["P2160", "P1440", "P1080"]
-        : minQuality === "P720" ? ["P2160", "P1440", "P1080", "P720"]
-          : []
+    requiredResolutions:
+      minQuality === "P2160"
+        ? ["P2160"]
+        : minQuality === "P1080"
+          ? ["P2160", "P1440", "P1080"]
+          : minQuality === "P720"
+            ? ["P2160", "P1440", "P1080", "P720"]
+            : []
   };
   if (dolbyVisionFilter === "EXCLUDE") legacy.excludedVisualTags = ["DV", "DV_ONLY", "HDR_DV"];
   if (dolbyVisionFilter === "ONLY") legacy.requiredVisualTags = ["DV", "DV_ONLY", "HDR_DV"];
-  if (hdrFilter === "EXCLUDE") legacy.excludedVisualTags = [...legacy.excludedVisualTags, "HDR", "HDR10", "HDR10_PLUS", "HLG", "HDR_ONLY", "HDR_DV"];
-  if (hdrFilter === "ONLY") legacy.requiredVisualTags = [...legacy.requiredVisualTags, "HDR", "HDR10", "HDR10_PLUS", "HLG", "HDR_ONLY", "HDR_DV"];
+  if (hdrFilter === "EXCLUDE")
+    legacy.excludedVisualTags = [
+      ...legacy.excludedVisualTags,
+      "HDR",
+      "HDR10",
+      "HDR10_PLUS",
+      "HLG",
+      "HDR_ONLY",
+      "HDR_DV"
+    ];
+  if (hdrFilter === "ONLY")
+    legacy.requiredVisualTags = [
+      ...legacy.requiredVisualTags,
+      "HDR",
+      "HDR10",
+      "HDR10_PLUS",
+      "HLG",
+      "HDR_ONLY",
+      "HDR_DV"
+    ];
   if (codecFilter === "H264") legacy.requiredEncodes = ["AVC"];
   if (codecFilter === "HEVC") legacy.requiredEncodes = ["HEVC"];
   if (codecFilter === "AV1") legacy.requiredEncodes = ["AV1"];
@@ -423,28 +580,69 @@ function includesAny(values = [], required = []) {
 }
 
 function equalsAnyReleaseGroup(value = "", groups = []) {
-  return (groups || []).some((group) => String(value || "").toLowerCase() === String(group || "").trim().toLowerCase());
+  return (groups || []).some(
+    (group) =>
+      String(value || "").toLowerCase() ===
+      String(group || "")
+        .trim()
+        .toLowerCase()
+  );
 }
 
 function matchesFilters(fact, preferences) {
-  if (preferences.requiredResolutions?.length && !preferences.requiredResolutions.includes(fact.resolution)) return false;
+  if (
+    preferences.requiredResolutions?.length &&
+    !preferences.requiredResolutions.includes(fact.resolution)
+  )
+    return false;
   if (preferences.excludedResolutions?.includes(fact.resolution)) return false;
-  if (preferences.requiredQualities?.length && !preferences.requiredQualities.includes(fact.quality)) return false;
+  if (
+    preferences.requiredQualities?.length &&
+    !preferences.requiredQualities.includes(fact.quality)
+  )
+    return false;
   if (preferences.excludedQualities?.includes(fact.quality)) return false;
-  if (preferences.requiredVisualTags?.length && !includesAny(fact.visualTags, preferences.requiredVisualTags)) return false;
+  if (
+    preferences.requiredVisualTags?.length &&
+    !includesAny(fact.visualTags, preferences.requiredVisualTags)
+  )
+    return false;
   if (includesAny(fact.visualTags, preferences.excludedVisualTags)) return false;
-  if (preferences.requiredAudioTags?.length && !includesAny(fact.audioTags, preferences.requiredAudioTags)) return false;
+  if (
+    preferences.requiredAudioTags?.length &&
+    !includesAny(fact.audioTags, preferences.requiredAudioTags)
+  )
+    return false;
   if (includesAny(fact.audioTags, preferences.excludedAudioTags)) return false;
-  if (preferences.requiredAudioChannels?.length && !includesAny(fact.audioChannels, preferences.requiredAudioChannels)) return false;
+  if (
+    preferences.requiredAudioChannels?.length &&
+    !includesAny(fact.audioChannels, preferences.requiredAudioChannels)
+  )
+    return false;
   if (includesAny(fact.audioChannels, preferences.excludedAudioChannels)) return false;
-  if (preferences.requiredEncodes?.length && !preferences.requiredEncodes.includes(fact.codec)) return false;
+  if (preferences.requiredEncodes?.length && !preferences.requiredEncodes.includes(fact.codec))
+    return false;
   if (preferences.excludedEncodes?.includes(fact.codec)) return false;
-  if (preferences.requiredLanguages?.length && !includesAny(fact.languages, preferences.requiredLanguages)) return false;
-  if (fact.languages.length && fact.languages.every((language) => preferences.excludedLanguages?.includes(language))) return false;
-  if (preferences.requiredReleaseGroups?.length && !equalsAnyReleaseGroup(fact.releaseGroup, preferences.requiredReleaseGroups)) return false;
+  if (
+    preferences.requiredLanguages?.length &&
+    !includesAny(fact.languages, preferences.requiredLanguages)
+  )
+    return false;
+  if (
+    fact.languages.length &&
+    fact.languages.every((language) => preferences.excludedLanguages?.includes(language))
+  )
+    return false;
+  if (
+    preferences.requiredReleaseGroups?.length &&
+    !equalsAnyReleaseGroup(fact.releaseGroup, preferences.requiredReleaseGroups)
+  )
+    return false;
   if (equalsAnyReleaseGroup(fact.releaseGroup, preferences.excludedReleaseGroups)) return false;
-  if (preferences.sizeMinGb > 0 && fact.size && fact.size < preferences.sizeMinGb * 1000000000) return false;
-  if (preferences.sizeMaxGb > 0 && fact.size && fact.size > preferences.sizeMaxGb * 1000000000) return false;
+  if (preferences.sizeMinGb > 0 && fact.size && fact.size < preferences.sizeMinGb * 1000000000)
+    return false;
+  if (preferences.sizeMaxGb > 0 && fact.size && fact.size > preferences.sizeMaxGb * 1000000000)
+    return false;
   return true;
 }
 
@@ -454,37 +652,73 @@ function rank(value, preferred = []) {
 }
 
 function rankAny(values = [], preferred = []) {
-  return (values || []).reduce((best, value) => Math.min(best, rank(value, preferred)), Number.MAX_SAFE_INTEGER);
+  return (values || []).reduce(
+    (best, value) => Math.min(best, rank(value, preferred)),
+    Number.MAX_SAFE_INTEGER
+  );
 }
 
 function compareKey(leftFact, rightFact, criterion = {}, preferences = {}) {
   const direction = criterion.direction === "ASC" ? 1 : -1;
   switch (criterion.key) {
     case "RESOLUTION":
-      return (rank(leftFact.resolution, preferences.preferredResolutions) - rank(rightFact.resolution, preferences.preferredResolutions)) * -direction;
+      return (
+        (rank(leftFact.resolution, preferences.preferredResolutions) -
+          rank(rightFact.resolution, preferences.preferredResolutions)) *
+        -direction
+      );
     case "QUALITY":
-      return (rank(leftFact.quality, preferences.preferredQualities) - rank(rightFact.quality, preferences.preferredQualities)) * -direction;
+      return (
+        (rank(leftFact.quality, preferences.preferredQualities) -
+          rank(rightFact.quality, preferences.preferredQualities)) *
+        -direction
+      );
     case "VISUAL_TAG":
-      return (rankAny(leftFact.visualTags, preferences.preferredVisualTags) - rankAny(rightFact.visualTags, preferences.preferredVisualTags)) * -direction;
+      return (
+        (rankAny(leftFact.visualTags, preferences.preferredVisualTags) -
+          rankAny(rightFact.visualTags, preferences.preferredVisualTags)) *
+        -direction
+      );
     case "AUDIO_TAG":
-      return (rankAny(leftFact.audioTags, preferences.preferredAudioTags) - rankAny(rightFact.audioTags, preferences.preferredAudioTags)) * -direction;
+      return (
+        (rankAny(leftFact.audioTags, preferences.preferredAudioTags) -
+          rankAny(rightFact.audioTags, preferences.preferredAudioTags)) *
+        -direction
+      );
     case "AUDIO_CHANNEL":
-      return (rankAny(leftFact.audioChannels, preferences.preferredAudioChannels) - rankAny(rightFact.audioChannels, preferences.preferredAudioChannels)) * -direction;
+      return (
+        (rankAny(leftFact.audioChannels, preferences.preferredAudioChannels) -
+          rankAny(rightFact.audioChannels, preferences.preferredAudioChannels)) *
+        -direction
+      );
     case "ENCODE":
-      return (rank(leftFact.codec, preferences.preferredEncodes) - rank(rightFact.codec, preferences.preferredEncodes)) * -direction;
+      return (
+        (rank(leftFact.codec, preferences.preferredEncodes) -
+          rank(rightFact.codec, preferences.preferredEncodes)) *
+        -direction
+      );
     case "SIZE":
       return ((leftFact.size || 0) - (rightFact.size || 0)) * direction;
     case "LANGUAGE":
-      return (rankAny(leftFact.languages, preferences.preferredLanguages) - rankAny(rightFact.languages, preferences.preferredLanguages)) * -direction;
+      return (
+        (rankAny(leftFact.languages, preferences.preferredLanguages) -
+          rankAny(rightFact.languages, preferences.preferredLanguages)) *
+        -direction
+      );
     case "RELEASE_GROUP":
-      return String(leftFact.releaseGroup || "").localeCompare(String(rightFact.releaseGroup || ""));
+      return String(leftFact.releaseGroup || "").localeCompare(
+        String(rightFact.releaseGroup || "")
+      );
     default:
       return 0;
   }
 }
 
 function compareStreams(left, right, preferences) {
-  const criteria = Array.isArray(preferences.sortCriteria) && preferences.sortCriteria.length ? preferences.sortCriteria : DEFAULT_SORT_CRITERIA;
+  const criteria =
+    Array.isArray(preferences.sortCriteria) && preferences.sortCriteria.length
+      ? preferences.sortCriteria
+      : DEFAULT_SORT_CRITERIA;
   for (const criterion of criteria) {
     const comparison = compareKey(left.fact, right.fact, criterion, preferences);
     if (comparison !== 0) {
@@ -500,9 +734,20 @@ function applyLimits(entries = [], preferences = {}) {
   const result = [];
   for (const entry of entries) {
     if (preferences.maxResults > 0 && result.length >= preferences.maxResults) break;
-    if (preferences.maxPerResolution > 0 && (resolutionCounts.get(entry.fact.resolution) || 0) >= preferences.maxPerResolution) continue;
-    if (preferences.maxPerQuality > 0 && (qualityCounts.get(entry.fact.quality) || 0) >= preferences.maxPerQuality) continue;
-    resolutionCounts.set(entry.fact.resolution, (resolutionCounts.get(entry.fact.resolution) || 0) + 1);
+    if (
+      preferences.maxPerResolution > 0 &&
+      (resolutionCounts.get(entry.fact.resolution) || 0) >= preferences.maxPerResolution
+    )
+      continue;
+    if (
+      preferences.maxPerQuality > 0 &&
+      (qualityCounts.get(entry.fact.quality) || 0) >= preferences.maxPerQuality
+    )
+      continue;
+    resolutionCounts.set(
+      entry.fact.resolution,
+      (resolutionCounts.get(entry.fact.resolution) || 0) + 1
+    );
     qualityCounts.set(entry.fact.quality, (qualityCounts.get(entry.fact.quality) || 0) + 1);
     result.push(entry);
   }
@@ -514,7 +759,10 @@ function labelUnlessUnknown(value, labels) {
 }
 
 function labelsExcludingUnknown(values = [], labels = {}) {
-  return (values || []).filter((value) => value !== "UNKNOWN").map((value) => labels[value] || value).filter(Boolean);
+  return (values || [])
+    .filter((value) => value !== "UNKNOWN")
+    .map((value) => labels[value] || value)
+    .filter(Boolean);
 }
 
 function toArray(value) {
@@ -532,7 +780,9 @@ function buildSeasonEpisodeList(season, episode, seasons = [], episodes = []) {
   if (!seasons.length || !episodes.length) {
     return [];
   }
-  return seasons.flatMap((seasonEntry) => episodes.map((episodeEntry) => `S${twoDigits(seasonEntry)}E${twoDigits(episodeEntry)}`));
+  return seasons.flatMap((seasonEntry) =>
+    episodes.map((episodeEntry) => `S${twoDigits(seasonEntry)}E${twoDigits(episodeEntry)}`)
+  );
 }
 
 function formatEpisodes(episodes = []) {
@@ -629,16 +879,14 @@ function buildTemplateValues(stream = {}, fact = {}) {
   const parsed = raw.parsed || {};
   const seasons = toArray(parsed.seasons);
   const episodes = toArray(parsed.episodes);
-  const visualTags = [
-    ...toArray(parsed.hdr),
-    parsed.bitDepth
-  ].filter(Boolean);
+  const visualTags = [...toArray(parsed.hdr), parsed.bitDepth].filter(Boolean);
   const audioTags = toArray(parsed.audio);
   const audioChannels = toArray(parsed.channels);
   const languages = toArray(parsed.languages);
   const providerId = stream.debridCacheStatus?.providerId || resolve.service;
   const provider = DebridProviders.byId(providerId);
-  const serviceShortName = String(resolve.serviceExtension || "").trim() || provider?.shortName || "";
+  const serviceShortName =
+    String(resolve.serviceExtension || "").trim() || provider?.shortName || "";
   return {
     "stream.title": parsed.parsedTitle || resolve.title || stream.title || null,
     "stream.year": parsed.year ?? null,
@@ -646,26 +894,51 @@ function buildTemplateValues(stream = {}, fact = {}) {
     "stream.episode": resolve.episode ?? null,
     "stream.seasons": seasons,
     "stream.episodes": episodes,
-    "stream.seasonEpisode": buildSeasonEpisodeList(resolve.season ?? null, resolve.episode ?? null, seasons, episodes),
+    "stream.seasonEpisode": buildSeasonEpisodeList(
+      resolve.season ?? null,
+      resolve.episode ?? null,
+      seasons,
+      episodes
+    ),
     "stream.formattedEpisodes": formatEpisodes(episodes),
     "stream.formattedSeasons": formatSeasons(seasons),
-    "stream.resolution": parsed.resolution || labelUnlessUnknown(fact.resolution, RESOLUTION_LABELS),
+    "stream.resolution":
+      parsed.resolution || labelUnlessUnknown(fact.resolution, RESOLUTION_LABELS),
     "stream.library": false,
     "stream.quality": parsed.quality || labelUnlessUnknown(fact.quality, QUALITY_LABELS),
-    "stream.visualTags": visualTags.length ? visualTags : labelsExcludingUnknown(fact.visualTags, VISUAL_TAG_LABELS),
-    "stream.audioTags": audioTags.length ? audioTags : labelsExcludingUnknown(fact.audioTags, AUDIO_TAG_LABELS),
-    "stream.audioChannels": audioChannels.length ? audioChannels : labelsExcludingUnknown(fact.audioChannels, AUDIO_CHANNEL_LABELS),
-    "stream.languages": languages.length ? languages : (fact.languages || []).map((language) => LANGUAGE_LABELS[language]?.[0]).filter(Boolean),
-    "stream.languageEmojis": (languages.length ? languages : (fact.languages || []).map((language) => LANGUAGE_LABELS[language]?.[0]).filter(Boolean)).map(languageEmoji),
-    "stream.size": raw.size ?? stream.behaviorHints?.videoSize ?? stream.debridCacheStatus?.cachedSize ?? null,
+    "stream.visualTags": visualTags.length
+      ? visualTags
+      : labelsExcludingUnknown(fact.visualTags, VISUAL_TAG_LABELS),
+    "stream.audioTags": audioTags.length
+      ? audioTags
+      : labelsExcludingUnknown(fact.audioTags, AUDIO_TAG_LABELS),
+    "stream.audioChannels": audioChannels.length
+      ? audioChannels
+      : labelsExcludingUnknown(fact.audioChannels, AUDIO_CHANNEL_LABELS),
+    "stream.languages": languages.length
+      ? languages
+      : (fact.languages || []).map((language) => LANGUAGE_LABELS[language]?.[0]).filter(Boolean),
+    "stream.languageEmojis": (languages.length
+      ? languages
+      : (fact.languages || []).map((language) => LANGUAGE_LABELS[language]?.[0]).filter(Boolean)
+    ).map(languageEmoji),
+    "stream.size":
+      raw.size ?? stream.behaviorHints?.videoSize ?? stream.debridCacheStatus?.cachedSize ?? null,
     "stream.folderSize": raw.folderSize ?? null,
-    "stream.encode": parsed.codec ? String(parsed.codec).toUpperCase() : labelUnlessUnknown(fact.codec, ENCODE_LABELS),
+    "stream.encode": parsed.codec
+      ? String(parsed.codec).toUpperCase()
+      : labelUnlessUnknown(fact.codec, ENCODE_LABELS),
     "stream.indexer": raw.indexer || raw.tracker || null,
     "stream.network": parsed.network || raw.network || null,
     "stream.releaseGroup": parsed.group || fact.releaseGroup || null,
     "stream.duration": parsed.duration ?? null,
     "stream.edition": parsed.edition || fact.edition || null,
-    "stream.filename": raw.filename || resolve.filename || stream.behaviorHints?.filename || stream.debridCacheStatus?.cachedName || null,
+    "stream.filename":
+      raw.filename ||
+      resolve.filename ||
+      stream.behaviorHints?.filename ||
+      stream.debridCacheStatus?.cachedName ||
+      null,
     "stream.regexMatched": null,
     "stream.type": streamType(stream, resolve),
     "service.cached": serviceCached(stream, resolve),
@@ -698,8 +971,12 @@ function formatManagedStream(stream = {}, fact, settings = DebridSettingsStore.g
   const providerId = stream.debridCacheStatus?.providerId || resolve.service;
   const provider = DebridProviders.byId(providerId);
   const values = buildTemplateValues(stream, fact);
-  const name = formatTemplateName(DebridStreamTemplateEngine.render(settings.streamNameTemplate, values));
-  const description = formatTemplateDescription(DebridStreamTemplateEngine.render(settings.streamDescriptionTemplate, values));
+  const name = formatTemplateName(
+    DebridStreamTemplateEngine.render(settings.streamNameTemplate, values)
+  );
+  const description = formatTemplateDescription(
+    DebridStreamTemplateEngine.render(settings.streamDescriptionTemplate, values)
+  );
   return {
     ...stream,
     name: name || stream.name || `${DebridProviders.displayName(providerId)} Instant`,
@@ -728,7 +1005,6 @@ function formatManagedStream(stream = {}, fact, settings = DebridSettingsStore.g
 }
 
 export const DebridStreamPresentation = {
-
   apply(groups = [], settings = DebridSettingsStore.get()) {
     if (!settings.enabled || !DebridProviders.preferredResolverService(settings)) {
       return groups;
@@ -744,8 +1020,9 @@ export const DebridStreamPresentation = {
         .map((stream) => ({ stream, fact: facts(stream) }))
         .filter((entry) => matchesFilters(entry.fact, effective))
         .sort((left, right) => compareStreams(left, right, effective));
-      const limited = applyLimits(presented, effective)
-        .map((entry) => formatManagedStream(entry.stream, entry.fact, settings));
+      const limited = applyLimits(presented, effective).map((entry) =>
+        formatManagedStream(entry.stream, entry.fact, settings)
+      );
       return {
         ...group,
         streams: [...limited, ...passthrough]
@@ -755,5 +1032,4 @@ export const DebridStreamPresentation = {
 
   isManagedDebridStream,
   needsLocalDebridResolve
-
 };

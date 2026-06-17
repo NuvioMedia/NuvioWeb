@@ -1,7 +1,8 @@
 import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "debridSettings";
-const LEGACY_STREAM_DESCRIPTION_TEMPLATE = "{stream.title::exists[\"{stream.title::title} \"||\"\"]}{stream.year::exists[\"({stream.year})\"||\"\"]}\n{stream.quality::exists[\"{stream.quality} \"||\"\"]}{stream.visualTags::exists[\"{stream.visualTags::join(' | ')} \"||\"\"]}{stream.encode::exists[\"{stream.encode} \"||\"\"]}\n{stream.audioTags::exists[\"{stream.audioTags::join(' | ')}\"||\"\"]}{stream.audioTags::exists::and::stream.audioChannels::exists[\" | \"||\"\"]}{stream.audioChannels::exists[\"{stream.audioChannels::join(' | ')}\"||\"\"]}\n{stream.size::>0[\"{stream.size::bytes} \"||\"\"]}{stream.releaseGroup::exists[\"{stream.releaseGroup} \"||\"\"]}{stream.indexer::exists[\"{stream.indexer}\"||\"\"]}\n{service.cached::istrue[\"Ready\"||\"Not Ready\"]}{service.shortName::exists[\" ({service.shortName})\"||\"\"]}{stream.filename::exists[\"\n{stream.filename}\"||\"\"]}";
+const LEGACY_STREAM_DESCRIPTION_TEMPLATE =
+  '{stream.title::exists["{stream.title::title} "||""]}{stream.year::exists["({stream.year})"||""]}\n{stream.quality::exists["{stream.quality} "||""]}{stream.visualTags::exists["{stream.visualTags::join(\' | \')} "||""]}{stream.encode::exists["{stream.encode} "||""]}\n{stream.audioTags::exists["{stream.audioTags::join(\' | \')}"||""]}{stream.audioTags::exists::and::stream.audioChannels::exists[" | "||""]}{stream.audioChannels::exists["{stream.audioChannels::join(\' | \')}"||""]}\n{stream.size::>0["{stream.size::bytes} "||""]}{stream.releaseGroup::exists["{stream.releaseGroup} "||""]}{stream.indexer::exists["{stream.indexer}"||""]}\n{service.cached::istrue["Ready"||"Not Ready"]}{service.shortName::exists[" ({service.shortName})"||""]}{stream.filename::exists["\n{stream.filename}"||""]}';
 export const ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE = LEGACY_STREAM_DESCRIPTION_TEMPLATE;
 
 export const DEBRID_SETTINGS_DEFAULTS = {
@@ -20,7 +21,8 @@ export const DEBRID_SETTINGS_DEFAULTS = {
   streamCodecFilter: "ANY",
   streamBadgesEnabled: true,
   streamPreferences: null,
-  streamNameTemplate: "{stream.resolution::=2160p[\"4K \"||\"\"]}{stream.resolution::=1440p[\"QHD \"||\"\"]}{stream.resolution::=1080p[\"FHD \"||\"\"]}{stream.resolution::=720p[\"HD \"||\"\"]}{stream.resolution::exists[\"\"||\"Direct \"]}{service.shortName::exists[\"{service.shortName} \"||\"Debrid \"]}Instant",
+  streamNameTemplate:
+    '{stream.resolution::=2160p["4K "||""]}{stream.resolution::=1440p["QHD "||""]}{stream.resolution::=1080p["FHD "||""]}{stream.resolution::=720p["HD "||""]}{stream.resolution::exists[""||"Direct "]}{service.shortName::exists["{service.shortName} "||"Debrid "]}Instant',
   streamDescriptionTemplate: ""
 };
 
@@ -33,7 +35,9 @@ const ENUMS = {
 };
 
 function normalizeEnum(value, key) {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   return ENUMS[key]?.has(normalized) ? normalized : DEBRID_SETTINGS_DEFAULTS[key];
 }
 
@@ -59,24 +63,34 @@ function normalizeStreamDescriptionTemplate(value) {
 
 function normalizeDebridSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
-    return {
+  return {
     ...DEBRID_SETTINGS_DEFAULTS,
     enabled: Boolean(source.enabled),
     cloudLibraryEnabled: source.cloudLibraryEnabled !== false,
     torboxApiKey: String(source.torboxApiKey || "").trim(),
     premiumizeApiKey: String(source.premiumizeApiKey || "").trim(),
     realDebridApiKey: String(source.realDebridApiKey || "").trim(),
-    preferredResolverProviderId: String(source.preferredResolverProviderId || "").trim().toLowerCase(),
-    instantPlaybackPreparationLimit: Math.max(0, Math.min(5, Math.trunc(Number(source.instantPlaybackPreparationLimit || 0)))),
+    preferredResolverProviderId: String(source.preferredResolverProviderId || "")
+      .trim()
+      .toLowerCase(),
+    instantPlaybackPreparationLimit: Math.max(
+      0,
+      Math.min(5, Math.trunc(Number(source.instantPlaybackPreparationLimit || 0)))
+    ),
     streamMaxResults: Math.max(0, Math.min(100, Math.trunc(Number(source.streamMaxResults || 0)))),
     streamSortMode: normalizeEnum(source.streamSortMode, "streamSortMode"),
     streamMinimumQuality: normalizeEnum(source.streamMinimumQuality, "streamMinimumQuality"),
-    streamDolbyVisionFilter: normalizeEnum(source.streamDolbyVisionFilter, "streamDolbyVisionFilter"),
+    streamDolbyVisionFilter: normalizeEnum(
+      source.streamDolbyVisionFilter,
+      "streamDolbyVisionFilter"
+    ),
     streamHdrFilter: normalizeEnum(source.streamHdrFilter, "streamHdrFilter"),
     streamCodecFilter: normalizeEnum(source.streamCodecFilter, "streamCodecFilter"),
     streamBadgesEnabled: source.streamBadgesEnabled !== false,
     streamPreferences: normalizeStreamPreferences(source.streamPreferences),
-    streamNameTemplate: String(source.streamNameTemplate || DEBRID_SETTINGS_DEFAULTS.streamNameTemplate),
+    streamNameTemplate: String(
+      source.streamNameTemplate || DEBRID_SETTINGS_DEFAULTS.streamNameTemplate
+    ),
     streamDescriptionTemplate: normalizeStreamDescriptionTemplate(source.streamDescriptionTemplate)
   };
 }
@@ -87,7 +101,6 @@ const store = createProfileScopedStore({
 });
 
 export const DebridSettingsStore = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -107,5 +120,4 @@ export const DebridSettingsStore = {
   set(partial, options = {}) {
     return store.set(partial, options);
   }
-
 };

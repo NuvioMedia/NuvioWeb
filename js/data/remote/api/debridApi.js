@@ -60,7 +60,6 @@ function formBody(values = {}) {
 }
 
 export const DebridApi = {
-
   async validateTorboxApiKey(apiKey) {
     const response = await requestJson(TORBOX_BASE_URL, "v1/api/user/me", {
       headers: authHeaders(apiKey)
@@ -102,7 +101,13 @@ export const DebridApi = {
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
-        hashes: (hashes || []).map((hash) => String(hash || "").trim().toLowerCase()).filter(Boolean)
+        hashes: (hashes || [])
+          .map((hash) =>
+            String(hash || "")
+              .trim()
+              .toLowerCase()
+          )
+          .filter(Boolean)
       })
     });
   },
@@ -144,7 +149,11 @@ export const DebridApi = {
   async premiumizeCheckCache(apiKey, hashes = []) {
     const body = new URLSearchParams();
     (hashes || [])
-      .map((hash) => String(hash || "").trim().toLowerCase())
+      .map((hash) =>
+        String(hash || "")
+          .trim()
+          .toLowerCase()
+      )
       .filter(Boolean)
       .forEach((hash) => body.append("items[]", `magnet:?xt=urn:btih:${hash}`));
     return requestJson(PREMIUMIZE_BASE_URL, "api/cache/check", {
@@ -169,11 +178,15 @@ export const DebridApi = {
   },
 
   async realDebridSelectFiles(apiKey, torrentId, files) {
-    return requestJson(REAL_DEBRID_BASE_URL, `torrents/selectFiles/${encodeURIComponent(torrentId)}`, {
-      method: "POST",
-      headers: authHeaders(apiKey),
-      body: formBody({ files })
-    });
+    return requestJson(
+      REAL_DEBRID_BASE_URL,
+      `torrents/selectFiles/${encodeURIComponent(torrentId)}`,
+      {
+        method: "POST",
+        headers: authHeaders(apiKey),
+        body: formBody({ files })
+      }
+    );
   },
 
   async realDebridUnrestrictLink(apiKey, link) {
@@ -190,5 +203,4 @@ export const DebridApi = {
       headers: authHeaders(apiKey)
     });
   }
-
 };

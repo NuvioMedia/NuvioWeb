@@ -39,10 +39,7 @@ export async function httpRequest(url, options = {}) {
     headers["Content-Type"] = "application/json";
   }
 
-  const {
-    includeSessionAuth: _ignoredIncludeSessionAuth,
-    ...fetchOptions
-  } = options;
+  const { includeSessionAuth: _ignoredIncludeSessionAuth, ...fetchOptions } = options;
 
   let response = await fetch(url, {
     ...fetchOptions,

@@ -8,13 +8,9 @@ const ADDON_DISPLAY_NAMES_KEY = "installedAddonDisplayNames";
 const PROFILES_KEY = "profiles";
 const PROFILE_SCOPED_VERSION = 1;
 const MANIFEST_SUFFIX = "/manifest.json";
-const DEFAULT_ADDON_URLS = [
-  "https://v3-cinemeta.strem.io",
-  "https://opensubtitles-v3.strem.io"
-];
+const DEFAULT_ADDON_URLS = ["https://v3-cinemeta.strem.io", "https://opensubtitles-v3.strem.io"];
 
 class AddonRepository {
-
   constructor() {
     this.manifestCache = new Map();
     this.manifestErrorCache = new Map();
@@ -27,7 +23,9 @@ class AddonRepository {
   }
 
   canonicalizeUrl(url) {
-    const trimmed = String(url || "").trim().replace(/\/+$/, "");
+    const trimmed = String(url || "")
+      .trim()
+      .replace(/\/+$/, "");
     const queryStart = trimmed.indexOf("?");
     const path = queryStart >= 0 ? trimmed.slice(0, queryStart) : trimmed;
     const query = queryStart >= 0 ? trimmed.slice(queryStart) : "";
@@ -40,7 +38,8 @@ class AddonRepository {
   buildManifestUrl(baseUrl) {
     const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
     const queryStart = cleanBaseUrl.indexOf("?");
-    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const basePath =
+      queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
     const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
     return `${basePath}/manifest.json${baseQuery}`;
   }
@@ -59,7 +58,8 @@ class AddonRepository {
     try {
       const cleanBaseUrl = this.canonicalizeUrl(baseUrl);
       const queryStart = cleanBaseUrl.indexOf("?");
-      const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+      const basePath =
+        queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
       return new URL(raw, `${basePath}/`).href;
     } catch (_) {
       return raw;
@@ -75,8 +75,8 @@ class AddonRepository {
     const storedProfiles = LocalStore.get(PROFILES_KEY, null);
     const ids = Array.isArray(storedProfiles)
       ? storedProfiles
-        .map((profile) => String(profile?.id || profile?.profileIndex || "").trim())
-        .filter(Boolean)
+          .map((profile) => String(profile?.id || profile?.profileIndex || "").trim())
+          .filter(Boolean)
       : [];
     if (!ids.includes("1")) {
       ids.unshift("1");
@@ -86,12 +86,12 @@ class AddonRepository {
 
   isProfileScopedEnvelope(value) {
     return Boolean(
-      value
-      && typeof value === "object"
-      && value.__profileScoped === true
-      && Number(value.version || 0) === PROFILE_SCOPED_VERSION
-      && value.profiles
-      && typeof value.profiles === "object"
+      value &&
+      typeof value === "object" &&
+      value.__profileScoped === true &&
+      Number(value.version || 0) === PROFILE_SCOPED_VERSION &&
+      value.profiles &&
+      typeof value.profiles === "object"
     );
   }
 
@@ -154,13 +154,9 @@ class AddonRepository {
 
   readProfileScopedValue(key, normalizeValue, defaultValue, profileId = null) {
     const envelope = this.readProfileScopedEnvelope(key, normalizeValue);
-    return this.cloneValue(this.ensureProfileScopedValue(
-      key,
-      envelope,
-      normalizeValue,
-      defaultValue,
-      profileId
-    ));
+    return this.cloneValue(
+      this.ensureProfileScopedValue(key, envelope, normalizeValue, defaultValue, profileId)
+    );
   }
 
   writeProfileScopedValue(key, normalizeValue, value, profileId = null) {
@@ -339,21 +335,27 @@ class AddonRepository {
     }
 
     const request = (async () => {
-      const fetched = await Promise.all(urls.map((url) => this.fetchAddon(url, {
-        force,
-        preferCache: !force
-      })));
+      const fetched = await Promise.all(
+        urls.map((url) =>
+          this.fetchAddon(url, {
+            force,
+            preferCache: !force
+          })
+        )
+      );
 
       const addons = fetched
         .filter((result) => result.status === "success")
         .map((result) => result.data);
 
       const displayAddons = this.applyDisplayNames(addons);
-      if (JSON.stringify({
-        profileId: this.getActiveStorageProfileId(),
-        urls: this.getInstalledAddonUrls(),
-        displayNames: this.getAddonDisplayNameOverrides()
-      }) === cacheKey) {
+      if (
+        JSON.stringify({
+          profileId: this.getActiveStorageProfileId(),
+          urls: this.getInstalledAddonUrls(),
+          displayNames: this.getAddonDisplayNameOverrides()
+        }) === cacheKey
+      ) {
         this.installedAddonsCache = displayAddons;
         this.installedAddonsCacheKey = cacheKey;
       }
@@ -383,11 +385,10 @@ class AddonRepository {
       return false;
     }
 
-    this.writeProfileScopedValue(
-      ADDON_URLS_KEY,
-      (value) => this.normalizeAddonUrlList(value),
-      [...current, clean]
-    );
+    this.writeProfileScopedValue(ADDON_URLS_KEY, (value) => this.normalizeAddonUrlList(value), [
+      ...current,
+      clean
+    ]);
     this.manifestErrorCache.delete(clean);
     this.invalidateInstalledAddonsCache();
     this.notifyAddonsChanged("add");
@@ -431,7 +432,9 @@ class AddonRepository {
 
   async setAddonOrder(urls, options = {}) {
     const silent = Boolean(options?.silent);
-    const normalized = (urls || []).map((url) => this.normalizeCinemetaUrl(this.canonicalizeUrl(url))).filter(Boolean);
+    const normalized = (urls || [])
+      .map((url) => this.normalizeCinemetaUrl(this.canonicalizeUrl(url)))
+      .filter(Boolean);
     const current = this.getInstalledAddonUrls();
     const changed = JSON.stringify(current) !== JSON.stringify(normalized);
     this.writeProfileScopedValue(
@@ -546,25 +549,27 @@ class AddonRepository {
   }
 
   parseResources(resources, defaultTypes) {
-    return resources.map((resource) => {
-      if (typeof resource === "string") {
-        return {
-          name: resource,
-          types: [...defaultTypes],
-          idPrefixes: null
-        };
-      }
+    return resources
+      .map((resource) => {
+        if (typeof resource === "string") {
+          return {
+            name: resource,
+            types: [...defaultTypes],
+            idPrefixes: null
+          };
+        }
 
-      if (resource && typeof resource === "object") {
-        return {
-          name: resource.name || "",
-          types: Array.isArray(resource.types) ? resource.types : [...defaultTypes],
-          idPrefixes: Array.isArray(resource.idPrefixes) ? resource.idPrefixes : null
-        };
-      }
+        if (resource && typeof resource === "object") {
+          return {
+            name: resource.name || "",
+            types: Array.isArray(resource.types) ? resource.types : [...defaultTypes],
+            idPrefixes: Array.isArray(resource.idPrefixes) ? resource.idPrefixes : null
+          };
+        }
 
-      return null;
-    }).filter(Boolean);
+        return null;
+      })
+      .filter(Boolean);
   }
 
   normalizeCinemetaUrl(url) {
@@ -599,7 +604,6 @@ class AddonRepository {
       ]
     };
   }
-
 }
 
 export const addonRepository = new AddonRepository();

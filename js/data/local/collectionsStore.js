@@ -98,17 +98,22 @@ function normalizeCollectionSource(source = {}) {
     };
   }
 
-  const addonId = stringOrEmpty(raw.addonId);
-  const type = stringOrEmpty(raw.type).toLowerCase();
-  const catalogId = stringOrEmpty(raw.catalogId);
+  const addonBaseUrl = stringOrNull(raw.addonBaseUrl || raw.addon_base_url || raw.baseUrl || raw.base_url || raw.addonUrl || raw.url);
+  const addonId = stringOrEmpty(raw.addonId || raw.addon_id || addonBaseUrl);
+  const type = stringOrEmpty(raw.type || raw.apiType || raw.api_type).toLowerCase();
+  const catalogId = stringOrEmpty(raw.catalogId || raw.catalog_id);
   if (!addonId || !type || !catalogId) {
     return null;
   }
   return {
     provider: "addon",
     addonId,
+    addonBaseUrl,
+    addonName: stringOrNull(raw.addonName || raw.addon_name || raw.providerName),
     type,
     catalogId,
+    catalogName: stringOrNull(raw.catalogName || raw.catalog_name || raw.title || raw.name),
+    title: stringOrEmpty(raw.title || raw.catalogName || raw.catalog_name || raw.name),
     genre: stringOrNull(raw.genre)
   };
 }
@@ -145,8 +150,12 @@ function normalizeFolder(folder = {}) {
     sources,
     catalogSources: sources.filter((source) => source.provider === "addon").map((source) => ({
       addonId: source.addonId,
+      addonBaseUrl: source.addonBaseUrl || null,
+      addonName: source.addonName || null,
       type: source.type,
       catalogId: source.catalogId,
+      catalogName: source.catalogName || null,
+      title: source.title || source.catalogName || null,
       genre: source.genre || null
     })),
     heroBackdropUrl: stringOrNull(folder.heroBackdropUrl),

@@ -88,6 +88,16 @@ export const PlayerController = {
       || message.includes("the play() request was interrupted");
   },
 
+  isPlaybackRequestActive(playToken = null, url = null) {
+    if (playToken !== null && Number(playToken) !== Number(this.playRequestToken || 0)) {
+      return false;
+    }
+    if (url !== null && String(this.currentPlaybackUrl || "") !== String(url || "").trim()) {
+      return false;
+    }
+    return Boolean(this.video);
+  },
+
   normalizeMimeType(mimeType) {
     return String(mimeType || "").toLowerCase().split(";")[0].trim();
   },
@@ -427,6 +437,26 @@ export const PlayerController = {
     });
   },
 
+  nativeAudioTrackListToArray() {
+    const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks || null;
+    if (!audioTrackList) {
+      return [];
+    }
+    try {
+      return Array.from(audioTrackList).filter(Boolean);
+    } catch (_) {
+      const tracks = [];
+      const trackCount = Number(audioTrackList.length || 0);
+      for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
+        const track = audioTrackList[trackIndex] || audioTrackList.item?.(trackIndex) || null;
+        if (track) {
+          tracks.push(track);
+        }
+      }
+      return tracks;
+    }
+  },
+
   stopAvPlayTickTimer() {
     if (this.avplayTickTimer) {
       clearInterval(this.avplayTickTimer);
@@ -748,16 +778,35 @@ export const PlayerController = {
           ]),
           codec: this.pickAvPlayExtraValue(extraInfo, [
             "codec",
+            "codec_name",
+            "codec_id",
+            "codec_tag_string",
             "audio_type",
             "audioType",
             "audioCodec",
             "fourCC"
+          ]),
+          codecProfile: this.pickAvPlayExtraValue(extraInfo, [
+            "profile",
+            "codecProfile",
+            "codec_profile"
+          ]),
+          mimeType: this.pickAvPlayExtraValue(extraInfo, [
+            "mimeType",
+            "sampleMimeType",
+            "mime_type",
+            "sample_mime_type"
           ]),
           characteristics: this.pickAvPlayExtraValue(extraInfo, [
             "characteristics",
             "role",
             "type"
           ]),
+          sampleRate: Number(this.pickAvPlayExtraValue(extraInfo, [
+            "sampleRate",
+            "audioSampleRate",
+            "sample_rate"
+          ]) || 0) || 0,
           forced: /^(1|true|yes)$/i.test(forcedValue),
           extraInfo,
           avplayTrackIndex: normalizedTrackIndex,
@@ -969,15 +1018,17 @@ export const PlayerController = {
     this.desiredAvPlayAudioTrackUntil = Date.now() + 5000;
     const state = this.getAvPlayState();
     const canApplyNow = isValidAvPlayTrackSelectionState(state);
+    const shouldDeferUntilPlay = state === "PAUSED";
     logTizenAvPlayDebug("Tizen AVPlay audio track requested", {
       state,
       uiTrackIndex: Number(trackIndex),
       realAvPlayTrackIndex: targetIndex,
       selectionIndex,
       canApplyNow,
+      shouldDeferUntilPlay,
       audioTracks: this.avplayAudioTracks
     });
-    if (!canApplyNow) {
+    if (!canApplyNow || shouldDeferUntilPlay) {
       this.pendingAvPlayAudioTrackIndex = targetIndex;
       this.selectedAvPlayAudioTrackIndex = targetIndex;
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -1436,8 +1487,11 @@ export const PlayerController = {
     }
   },
 
-  playWithAvPlay(url, requestHeaders = {}, sourceType = null) {
+  playWithAvPlay(url, requestHeaders = {}, sourceType = null, playToken = null) {
     if (!this.canUseAvPlay()) {
+      return false;
+    }
+    if (!this.isPlaybackRequestActive(playToken, url)) {
       return false;
     }
 
@@ -1478,20 +1532,32 @@ export const PlayerController = {
     try {
       avplay.setListener?.({
         onbufferingstart: () => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
           this.avplayReady = false;
           this.emitVideoEvent("waiting", { playbackEngine: this.playbackEngine });
         },
         onbufferingcomplete: () => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
           this.avplayReady = true;
           this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
         },
         oncurrentplaytime: (currentTimeMs) => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
           const value = Number(currentTimeMs || 0);
           if (Number.isFinite(value) && value >= 0) {
             this.avplayCurrentTimeMs = value;
           }
         },
         onstreamcompleted: () => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
           this.avplayEnded = true;
           this.isPlaying = false;
           this.stopAvPlayTickTimer();
@@ -1508,6 +1574,9 @@ export const PlayerController = {
           }
         },
         onerror: (errorValue) => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
           this.avplayReady = false;
           this.isPlaying = false;
           this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(errorValue);
@@ -1524,7 +1593,7 @@ export const PlayerController = {
     }
 
     const onPrepared = () => {
-      if (!this.isUsingAvPlay()) {
+      if (!this.isUsingAvPlay() || !this.isPlaybackRequestActive(playToken, url)) {
         return;
       }
       this.avplayReady = true;
@@ -1544,6 +1613,9 @@ export const PlayerController = {
     };
 
     const onPrepareError = (errorValue) => {
+      if (!this.isPlaybackRequestActive(playToken, url)) {
+        return;
+      }
       this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(errorValue);
       this.isPlaying = false;
       this.teardownAvPlay();
@@ -2037,8 +2109,11 @@ export const PlayerController = {
     return initialLevel;
   },
 
-  playWithHlsJs(url, requestHeaders = {}) {
+  playWithHlsJs(url, requestHeaders = {}, playToken = null) {
     if (!this.video || !this.canUseHlsJs()) {
+      return false;
+    }
+    if (!this.isPlaybackRequestActive(playToken, url)) {
       return false;
     }
 
@@ -2058,6 +2133,9 @@ export const PlayerController = {
     let mediaRecoveryAttempts = 0;
 
     hls.on(Hls.Events.ERROR, (_, data = {}) => {
+      if (!this.isPlaybackRequestActive(playToken, url)) {
+        return;
+      }
       if (!data?.fatal) {
         return;
       }
@@ -2112,6 +2190,9 @@ export const PlayerController = {
     });
 
     hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      if (!this.isPlaybackRequestActive(playToken, url)) {
+        return;
+      }
       try {
         hls.loadSource(url);
       } catch (error) {
@@ -2127,6 +2208,9 @@ export const PlayerController = {
     });
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      if (!this.isPlaybackRequestActive(playToken, url)) {
+        return;
+      }
       this.primeHlsInitialLevel(hls);
       try {
         hls.startLoad();
@@ -2155,6 +2239,9 @@ export const PlayerController = {
       Hls.Events.SUBTITLE_TRACK_LOADED
     ].filter(Boolean).forEach((eventName) => {
       hls.on(eventName, () => {
+        if (!this.isPlaybackRequestActive(playToken, url)) {
+          return;
+        }
         this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
       });
     });
@@ -2164,8 +2251,11 @@ export const PlayerController = {
     return true;
   },
 
-  playWithDashJs(url) {
+  playWithDashJs(url, playToken = null) {
     if (!this.video || !this.canUseDashJs()) {
+      return false;
+    }
+    if (!this.isPlaybackRequestActive(playToken, url)) {
       return false;
     }
 
@@ -2192,9 +2282,15 @@ export const PlayerController = {
       player.initialize(this.video, url, true);
       const dashEvents = dashJsEngine.getEvents();
       const emitTracksChanged = () => {
+        if (!this.isPlaybackRequestActive(playToken, url)) {
+          return;
+        }
         this.emitVideoEvent("dashtrackschanged", { playbackEngine: "dash.js" });
       };
       const emitDashError = (event = {}) => {
+        if (!this.isPlaybackRequestActive(playToken, url)) {
+          return;
+        }
         const errorText = String(
           event?.error?.message
           || event?.event?.message
@@ -2416,21 +2512,7 @@ export const PlayerController = {
       return false;
     }
     const targetIndex = Number(index);
-    const audioTrackList = this.video.audioTracks || this.video.webkitAudioTracks || this.video.mozAudioTracks || null;
-    let tracks = [];
-    if (audioTrackList) {
-      try {
-        tracks = Array.from(audioTrackList).filter(Boolean);
-      } catch (_) {
-        const trackCount = Number(audioTrackList.length || 0);
-        for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
-          const track = audioTrackList[trackIndex] || audioTrackList.item?.(trackIndex) || null;
-          if (track) {
-            tracks.push(track);
-          }
-        }
-      }
-    }
+    const tracks = this.nativeAudioTrackListToArray();
     if (!Number.isFinite(targetIndex) || targetIndex < 0 || targetIndex >= tracks.length) {
       return false;
     }
@@ -2496,22 +2578,9 @@ export const PlayerController = {
         // Ignore Luna audio track selection failures.
       });
 
-      const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks || null;
-      if (!audioTrackList) {
+      const tracks = this.nativeAudioTrackListToArray();
+      if (!tracks.length) {
         return;
-      }
-
-      let tracks = [];
-      try {
-        tracks = Array.from(audioTrackList).filter(Boolean);
-      } catch (_) {
-        const trackCount = Number(audioTrackList.length || 0);
-        for (let trackIndex = 0; trackIndex < trackCount; trackIndex += 1) {
-          const track = audioTrackList[trackIndex] || audioTrackList.item?.(trackIndex) || null;
-          if (track) {
-            tracks.push(track);
-          }
-        }
       }
 
       tracks.forEach((track, trackListIndex) => {
@@ -2865,7 +2934,14 @@ export const PlayerController = {
   async play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null, streamIdentity = null } = {}) {
     if (!this.video) return;
 
+    const requestedUrl = String(url || "").trim();
+    const playToken = Number(this.playRequestToken || 0) + 1;
+    this.playRequestToken = playToken;
+
     await this.flushCurrentProgress({ allowCloudSync: false });
+    if (!this.isPlaybackRequestActive(playToken)) {
+      return;
+    }
 
     this.applyStartupAudioGateToVideo();
 
@@ -2879,17 +2955,15 @@ export const PlayerController = {
     this.currentItemBackground = background || null;
     this.currentEpisodeTitle = episodeTitle || null;
     this.currentStreamIdentity = streamIdentity || null;
-    this.currentPlaybackUrl = String(url || "").trim();
+    this.currentPlaybackUrl = requestedUrl;
     this.currentPlaybackHeaders = { ...(requestHeaders || {}) };
     this.currentPlaybackMediaSourceType = this.resolveRuntimeSourceType(mediaSourceType);
     this.lastPlaybackErrorCode = 0;
-    const playToken = Number(this.playRequestToken || 0) + 1;
-    this.playRequestToken = playToken;
 
     const sourceType = this.currentPlaybackMediaSourceType || this.resolveRuntimeSourceType(this.guessMediaMimeType(url)) || null;
     const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType, itemType);
     await this.ensureAdaptiveLibrariesForSource(sourceType, preferredEngine);
-    if (Number(this.playRequestToken || 0) !== playToken || String(this.currentPlaybackUrl || "") !== String(url || "").trim()) {
+    if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
       return;
     }
     try {
@@ -2930,7 +3004,7 @@ export const PlayerController = {
         : "native-file";
 
     if (preferredEngine === this.getPlatformAvplayEngineName()) {
-      const avplayStarted = this.playWithAvPlay(url, requestHeaders, sourceType);
+      const avplayStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
       if (!avplayStarted) {
         this.applyNativeSource(url, sourceType || null, nativeFallbackEngine);
         this.attemptVideoPlay({
@@ -2941,7 +3015,7 @@ export const PlayerController = {
             if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay()) {
               return false;
             }
-            const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType);
+            const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
             if (fallbackStarted) {
               this.isPlaying = true;
             }
@@ -2950,7 +3024,7 @@ export const PlayerController = {
         });
       }
     } else if (preferredEngine === "hls.js") {
-      const hlsStarted = this.playWithHlsJs(url, requestHeaders);
+      const hlsStarted = this.playWithHlsJs(url, requestHeaders, playToken);
       if (!hlsStarted) {
         this.applyNativeSource(url, sourceType || "application/vnd.apple.mpegurl", "native-hls");
         this.attemptVideoPlay({
@@ -2960,7 +3034,7 @@ export const PlayerController = {
         });
       }
     } else if (preferredEngine === "dash.js") {
-      const dashStarted = this.playWithDashJs(url);
+      const dashStarted = this.playWithDashJs(url, playToken);
       if (!dashStarted) {
         this.applyNativeSource(url, sourceType || "application/dash+xml", "native-dash");
       }
@@ -2979,7 +3053,7 @@ export const PlayerController = {
           if (!this.isUnsupportedSourceError(error)) {
             return false;
           }
-          const fallbackStarted = this.playWithHlsJs(url, requestHeaders);
+          const fallbackStarted = this.playWithHlsJs(url, requestHeaders, playToken);
           if (fallbackStarted) {
             this.isPlaying = true;
           }
@@ -2996,7 +3070,7 @@ export const PlayerController = {
           if (!this.isUnsupportedSourceError(error) || !this.canUseDashJs()) {
             return false;
           }
-          const fallbackStarted = this.playWithDashJs(url);
+          const fallbackStarted = this.playWithDashJs(url, playToken);
           if (fallbackStarted) {
             this.isPlaying = true;
           }
@@ -3020,7 +3094,7 @@ export const PlayerController = {
           if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay() || !this.isLikelyDirectFileUrl(url)) {
             return false;
           }
-          const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType);
+          const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
           if (fallbackStarted) {
             this.isPlaying = true;
           }
@@ -3116,6 +3190,7 @@ export const PlayerController = {
   stop() {
     if (!this.video) return;
 
+    this.playRequestToken = Number(this.playRequestToken || 0) + 1;
     const flushPromise = this.flushCurrentProgress({ forceCloudSync: true });
     this.setStartupAudioGate(false, { resume: false });
 
@@ -3143,7 +3218,6 @@ export const PlayerController = {
     this.currentPlaybackMediaSourceType = null;
     this.playbackEngine = "none";
     this.lastPlaybackErrorCode = 0;
-    this.playRequestToken = Number(this.playRequestToken || 0) + 1;
     this.clearPlaybackEngineAttempts();
 
     if (this.progressSaveTimer) {

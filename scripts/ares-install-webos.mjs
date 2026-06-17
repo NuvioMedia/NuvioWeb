@@ -25,9 +25,7 @@ async function resolveDefaultPackagePath() {
 
 async function main() {
   const args = process.argv.slice(2);
-  const installArgs = hasPackageArg(args)
-    ? args
-    : [await resolveDefaultPackagePath(), ...args];
+  const installArgs = hasPackageArg(args) ? args : [await resolveDefaultPackagePath(), ...args];
 
   await runAresCli("ares-install", installArgs);
 }

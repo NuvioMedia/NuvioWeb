@@ -5,11 +5,10 @@ import { MetaApi } from "../remote/api/metaApi.js";
 function normalizeDisplayText(value) {
   return String(value ?? "")
     .replace(/\\'/g, "'")
-    .replace(/\\"/g, "\"");
+    .replace(/\\"/g, '"');
 }
 
 class MetaRepository {
-
   constructor() {
     this.metaCache = new Map();
     this.inFlightMeta = new Map();
@@ -66,7 +65,9 @@ class MetaRepository {
 
     const request = (async () => {
       const addons = await addonRepository.getInstalledAddons();
-      const metaAddons = addons.filter((addon) => (addon.resources || []).some((resource) => resource?.name === "meta"));
+      const metaAddons = addons.filter((addon) =>
+        (addon.resources || []).some((resource) => resource?.name === "meta")
+      );
       const candidates = [];
       const seenCandidates = new Set();
       const addCandidate = (addon, candidateType) => {
@@ -100,7 +101,7 @@ class MetaRepository {
           ? requestedType
           : this.supportsMetaType(topMetaAddon, inferredType)
             ? inferredType
-            : (inferredType || requestedType);
+            : inferredType || requestedType;
         addCandidate(topMetaAddon, fallbackType);
       }
 
@@ -126,13 +127,16 @@ class MetaRepository {
   buildMetaUrl(baseUrl, type, id) {
     const cleanBaseUrl = addonRepository.canonicalizeUrl(baseUrl);
     const queryStart = cleanBaseUrl.indexOf("?");
-    const basePath = queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
+    const basePath =
+      queryStart >= 0 ? cleanBaseUrl.slice(0, queryStart).replace(/\/+$/, "") : cleanBaseUrl;
     const baseQuery = queryStart >= 0 ? cleanBaseUrl.slice(queryStart) : "";
     return `${basePath}/meta/${this.encode(type)}/${this.encode(id)}.json${baseQuery}`;
   }
 
   supportsMetaType(addon, type) {
-    const targetType = String(type || "").trim().toLowerCase();
+    const targetType = String(type || "")
+      .trim()
+      .toLowerCase();
     if (!targetType) {
       return false;
     }
@@ -141,7 +145,13 @@ class MetaRepository {
         return false;
       }
       const types = Array.isArray(resource.types)
-        ? resource.types.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)
+        ? resource.types
+            .map((value) =>
+              String(value || "")
+                .trim()
+                .toLowerCase()
+            )
+            .filter(Boolean)
         : [];
       return !types.length || types.includes(targetType);
     });
@@ -182,7 +192,9 @@ class MetaRepository {
       background: meta.background || null,
       logo: meta.logo || null,
       description: normalizeDisplayText(meta.description || ""),
-      genres: Array.isArray(meta.genres) ? meta.genres.map((genre) => normalizeDisplayText(genre)) : [],
+      genres: Array.isArray(meta.genres)
+        ? meta.genres.map((genre) => normalizeDisplayText(genre))
+        : [],
       videos: Array.isArray(meta.videos) ? meta.videos : [],
       releaseInfo: normalizeDisplayText(meta.releaseInfo || "")
     };
@@ -193,7 +205,6 @@ class MetaRepository {
     this.inFlightMeta.clear();
     this.inFlightMetaAll.clear();
   }
-
 }
 
 export const metaRepository = new MetaRepository();

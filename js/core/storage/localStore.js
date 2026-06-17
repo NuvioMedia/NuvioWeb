@@ -1,5 +1,4 @@
 export const LocalStore = {
-
   get(key, defaultValue = null) {
     try {
       const value = localStorage.getItem(key);

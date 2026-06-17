@@ -3,11 +3,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { transformAsync } from "@babel/core";
-import postcssGlobalData from '@csstools/postcss-global-data';
-import postcss from 'postcss';
-import cssnano from 'cssnano';
-import autoprefixer from 'autoprefixer';
-import postcssCustomProperties from 'postcss-custom-properties';
+import postcssGlobalData from "@csstools/postcss-global-data";
+import postcss from "postcss";
+import cssnano from "cssnano";
+import autoprefixer from "autoprefixer";
+import postcssCustomProperties from "postcss-custom-properties";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
@@ -25,17 +25,17 @@ async function buildCSS() {
   console.log("processing CSS with PostCSS (legacy support)...");
   const cssDir = path.join(rootDir, "css");
   const files = await readdir(cssDir);
-  const cssFiles = files.filter(f => f.endsWith(".css"));
+  const cssFiles = files.filter((f) => f.endsWith(".css"));
 
   for (const file of cssFiles) {
     const cssPath = path.join(cssDir, file);
     const outPath = path.join(distDir, "css", file);
 
-    const css = await readFile(cssPath, 'utf8');
+    const css = await readFile(cssPath, "utf8");
     const result = await postcss([
       postcssGlobalData({ files: [path.join(cssDir, "base.css")] }),
-      postcssCustomProperties({ preserve: false }), 
-      autoprefixer({ overrideBrowserslist: ['Chrome 38'], grid: "autoplace" }),
+      postcssCustomProperties({ preserve: false }),
+      autoprefixer({ overrideBrowserslist: ["Chrome 38"], grid: "autoplace" }),
       cssnano()
     ]).process(css, { from: cssPath, to: outPath });
 
@@ -84,19 +84,25 @@ async function buildBundle() {
     outfile: tempBundlePath,
     bundle: true,
     format: "iife",
-    target: ["es2015"], 
-    define: { "process.env.NODE_ENV": '"production"', __NUVIO_APP_VERSION__: JSON.stringify(version) }
+    target: ["es2015"],
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      __NUVIO_APP_VERSION__: JSON.stringify(version)
+    }
   });
 
   console.log("applying Babel transpilation...");
   const bundledCode = await readFile(tempBundlePath, "utf8");
   const babelResult = await transformAsync(bundledCode, {
     presets: [
-      ["@babel/preset-env", {
-        targets: "chrome 38",
-        useBuiltIns: "entry", 
-        corejs: 3,
-      }]
+      [
+        "@babel/preset-env",
+        {
+          targets: "chrome 38",
+          useBuiltIns: "entry",
+          corejs: 3
+        }
+      ]
     ],
     plugins: [
       // babel plugins
@@ -130,7 +136,7 @@ async function buildBundle() {
   });
 
   await cp(path.join(distDir, bundleFileName), path.join(rootDir, bundleFileName));
-  await rm(tempBundlePath).catch(() => { });
+  await rm(tempBundlePath).catch(() => {});
   console.log("bundle build complete");
 }
 async function runBuild() {
@@ -138,7 +144,7 @@ async function runBuild() {
     console.log("cleaning dist directory...");
     await rm(distDir, { recursive: true, force: true });
     await mkdir(distDir, { recursive: true });
-    
+
     console.log("building version files...");
     await syncVersionFiles();
     await buildCSS();
@@ -162,11 +168,16 @@ async function runBuild() {
     await writeFile(path.join(distDir, "index.html"), sourceIndex);
 
     console.log("configuring runtime env from local.properties...");
-    const envResult = await writeRuntimeEnvScriptFile(path.join(distDir, "nuvio.env.js"), { rootDir });
+    const envResult = await writeRuntimeEnvScriptFile(path.join(distDir, "nuvio.env.js"), {
+      rootDir
+    });
     const envSourceBaseName = path.basename(envResult.sourcePath || "");
-    const usingFallbackEnv = !envResult.sourcePath || envSourceBaseName === "local.example.properties";
+    const usingFallbackEnv =
+      !envResult.sourcePath || envSourceBaseName === "local.example.properties";
     if (requireConfiguredRuntimeEnv && usingFallbackEnv) {
-      throw new Error("Configured runtime env is required for this build. Provide local.properties.");
+      throw new Error(
+        "Configured runtime env is required for this build. Provide local.properties."
+      );
     }
     if (!envResult.sourcePath) {
       console.warn("WARNING: generated default runtime env (unconfigured).");
@@ -178,7 +189,7 @@ async function runBuild() {
   } catch (error) {
     console.error("\nbuild failed:");
     console.error(error);
-    process.exit(1); 
+    process.exit(1);
   }
 }
 

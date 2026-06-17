@@ -25,7 +25,6 @@ const store = createProfileScopedStore({
 });
 
 export const TmdbSettingsStore = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -45,5 +44,4 @@ export const TmdbSettingsStore = {
   set(partial, options = {}) {
     return store.set(partial, options);
   }
-
 };

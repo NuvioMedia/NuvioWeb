@@ -31,7 +31,6 @@ const store = createProfileScopedStore({
 });
 
 export const HomeCatalogStore = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -86,5 +85,4 @@ export const HomeCatalogStore = {
       silentSync: Boolean(options.silentSync)
     });
   }
-
 };

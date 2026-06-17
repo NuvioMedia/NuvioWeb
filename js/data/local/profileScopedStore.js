@@ -23,12 +23,12 @@ function cloneValue(value) {
 
 function isProfileScopedEnvelope(value) {
   return Boolean(
-    value
-    && typeof value === "object"
-    && value.__profileScoped === true
-    && Number(value.version || 0) === PROFILE_SCOPED_VERSION
-    && value.profiles
-    && typeof value.profiles === "object"
+    value &&
+    typeof value === "object" &&
+    value.__profileScoped === true &&
+    Number(value.version || 0) === PROFILE_SCOPED_VERSION &&
+    value.profiles &&
+    typeof value.profiles === "object"
   );
 }
 
@@ -36,8 +36,8 @@ function getKnownProfileIds() {
   const storedProfiles = LocalStore.get(PROFILES_KEY, null);
   const ids = Array.isArray(storedProfiles)
     ? storedProfiles
-      .map((profile) => String(profile?.id || profile?.profileIndex || "").trim())
-      .filter(Boolean)
+        .map((profile) => String(profile?.id || profile?.profileIndex || "").trim())
+        .filter(Boolean)
     : [];
   if (!ids.includes("1")) {
     ids.unshift("1");
@@ -128,15 +128,16 @@ function ensureProfileValue(key, envelope, normalize, profileId) {
   }
 
   const primaryValue = envelope.profiles["1"];
-  const seed = primaryValue != null
-    ? cloneValue(primaryValue)
-    : normalize({});
+  const seed = primaryValue != null ? cloneValue(primaryValue) : normalize({});
   envelope.profiles[normalizedProfileId] = normalize(seed || {});
   persistEnvelope(key, envelope);
   return envelope.profiles[normalizedProfileId];
 }
 
-export function queueProfileSettingsCloudSync(profileId = null, delayMs = SETTINGS_SYNC_DEBOUNCE_MS) {
+export function queueProfileSettingsCloudSync(
+  profileId = null,
+  delayMs = SETTINGS_SYNC_DEBOUNCE_MS
+) {
   const normalizedProfileId = normalizeProfileId(profileId);
   markProfileSettingsCloudSyncPending(normalizedProfileId);
   if (scheduledSettingsSyncTimers.has(normalizedProfileId)) {
@@ -150,7 +151,9 @@ export function queueProfileSettingsCloudSync(profileId = null, delayMs = SETTIN
         await activePush.catch(() => false);
       }
       const pushPromise = import("../../core/profile/profileSettingsSyncService.js")
-        .then(({ ProfileSettingsSyncService }) => ProfileSettingsSyncService.push(normalizedProfileId))
+        .then(({ ProfileSettingsSyncService }) =>
+          ProfileSettingsSyncService.push(normalizedProfileId)
+        )
         .catch((error) => {
           console.warn("Profile settings sync enqueue failed", error);
           return false;
@@ -169,9 +172,10 @@ export function queueProfileSettingsCloudSync(profileId = null, delayMs = SETTIN
 }
 
 export function createProfileScopedStore({ key, normalize, merge }) {
-  const mergeValues = typeof merge === "function"
-    ? merge
-    : (current, partial) => ({ ...(current || {}), ...(partial || {}) });
+  const mergeValues =
+    typeof merge === "function"
+      ? merge
+      : (current, partial) => ({ ...(current || {}), ...(partial || {}) });
 
   return {
     getForProfile(profileId) {

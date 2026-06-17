@@ -40,10 +40,10 @@ function normalizePositionMs(value, durationMs = 0) {
   const normalizedPosition = Math.trunc(positionMs);
   const normalizedDuration = Number(durationMs || 0);
   if (
-    Number.isFinite(normalizedDuration)
-    && normalizedDuration > 0
-    && normalizedPosition > normalizedDuration
-    && (normalizedPosition / 1000) <= normalizedDuration
+    Number.isFinite(normalizedDuration) &&
+    normalizedDuration > 0 &&
+    normalizedPosition > normalizedDuration &&
+    normalizedPosition / 1000 <= normalizedDuration
   ) {
     return Math.trunc(normalizedPosition / 1000);
   }
@@ -54,20 +54,27 @@ function normalizeInflatedMilliseconds(positionMs = 0, durationMs = 0) {
   const normalizedPosition = Number(positionMs || 0);
   const normalizedDuration = Number(durationMs || 0);
   if (
-    Number.isFinite(normalizedDuration)
-    && normalizedDuration > MAX_REASONABLE_PROGRESS_DURATION_MS
-    && (normalizedDuration / 1000) <= MAX_REASONABLE_PROGRESS_DURATION_MS
+    Number.isFinite(normalizedDuration) &&
+    normalizedDuration > MAX_REASONABLE_PROGRESS_DURATION_MS &&
+    normalizedDuration / 1000 <= MAX_REASONABLE_PROGRESS_DURATION_MS
   ) {
     return {
-      positionMs: Number.isFinite(normalizedPosition) && normalizedPosition > 0
-        ? Math.trunc(normalizedPosition / 1000)
-        : 0,
+      positionMs:
+        Number.isFinite(normalizedPosition) && normalizedPosition > 0
+          ? Math.trunc(normalizedPosition / 1000)
+          : 0,
       durationMs: Math.trunc(normalizedDuration / 1000)
     };
   }
   return {
-    positionMs: Number.isFinite(normalizedPosition) && normalizedPosition > 0 ? Math.trunc(normalizedPosition) : 0,
-    durationMs: Number.isFinite(normalizedDuration) && normalizedDuration > 0 ? Math.trunc(normalizedDuration) : 0
+    positionMs:
+      Number.isFinite(normalizedPosition) && normalizedPosition > 0
+        ? Math.trunc(normalizedPosition)
+        : 0,
+    durationMs:
+      Number.isFinite(normalizedDuration) && normalizedDuration > 0
+        ? Math.trunc(normalizedDuration)
+        : 0
   };
 }
 
@@ -93,12 +100,12 @@ function dedupeAndSort(items = []) {
       byKey.set(key, item);
     }
   });
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
+  );
 }
 
 export const WatchProgressStore = {
-
   listAll() {
     return dedupeAndSort(LocalStore.get(WATCH_PROGRESS_KEY, []));
   },
@@ -149,12 +156,13 @@ export const WatchProgressStore = {
 
   replaceForProfile(profileId, items = []) {
     const pid = String(profileId || "1");
-    const keepOtherProfiles = this.listAll().filter((item) => String(item.profileId || "1") !== pid);
+    const keepOtherProfiles = this.listAll().filter(
+      (item) => String(item.profileId || "1") !== pid
+    );
     const normalized = (Array.isArray(items) ? items : [])
       .map((item) => normalizeProgress(item, pid))
       .filter((item) => Boolean(item.contentId));
     const next = dedupeAndSort([...normalized, ...keepOtherProfiles]).slice(0, 5000);
     LocalStore.set(WATCH_PROGRESS_KEY, next);
   }
-
 };

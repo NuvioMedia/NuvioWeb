@@ -30,10 +30,12 @@ function isMissingResourceError(error) {
     return true;
   }
   const message = String(error.message || "");
-  return message.includes("PGRST205")
-    || message.includes("PGRST202")
-    || message.includes("Could not find the table")
-    || message.includes("Could not find the function");
+  return (
+    message.includes("PGRST205") ||
+    message.includes("PGRST202") ||
+    message.includes("Could not find the table") ||
+    message.includes("Could not find the function")
+  );
 }
 
 function isOnConflictConstraintError(error) {
@@ -44,8 +46,10 @@ function isOnConflictConstraintError(error) {
     return true;
   }
   const message = String(error.message || "");
-  return message.includes("42P10")
-    || message.includes("no unique or exclusion constraint matching the ON CONFLICT specification");
+  return (
+    message.includes("42P10") ||
+    message.includes("no unique or exclusion constraint matching the ON CONFLICT specification")
+  );
 }
 
 async function resolveProfileId() {
@@ -72,11 +76,12 @@ async function resolveAddonProfileId() {
     const id = Number(profile?.profileIndex || profile?.id || 1);
     return Number.isFinite(id) && Math.trunc(id) === profileId;
   });
-  const usesPrimaryAddons = typeof activeProfile?.usesPrimaryAddons === "boolean"
-    ? activeProfile.usesPrimaryAddons
-    : (typeof activeProfile?.uses_primary_addons === "boolean"
-      ? activeProfile.uses_primary_addons
-      : true);
+  const usesPrimaryAddons =
+    typeof activeProfile?.usesPrimaryAddons === "boolean"
+      ? activeProfile.usesPrimaryAddons
+      : typeof activeProfile?.uses_primary_addons === "boolean"
+        ? activeProfile.uses_primary_addons
+        : true;
 
   return usesPrimaryAddons ? 1 : profileId;
 }
@@ -91,13 +96,14 @@ function extractAddonEntries(rows = []) {
   return (rows || [])
     .map((row) => ({
       url: row?.url || row?.base_url || null,
-      displayName: row?.display_name
-        || row?.displayName
-        || row?.custom_name
-        || row?.customName
-        || row?.alias
-        || row?.name
-        || null,
+      displayName:
+        row?.display_name ||
+        row?.displayName ||
+        row?.custom_name ||
+        row?.customName ||
+        row?.alias ||
+        row?.name ||
+        null,
       name: row?.name || null
     }))
     .filter((entry) => entry.url);
@@ -105,9 +111,7 @@ function extractAddonEntries(rows = []) {
 
 function applyPulledAddons(rows = []) {
   const entries = extractAddonEntries(rows);
-  const urls = entries
-    .map((entry) => entry.url)
-    .filter(Boolean);
+  const urls = entries.map((entry) => entry.url).filter(Boolean);
   addonRepository.setAddonDisplayNameOverrides(
     entries.map((entry) => ({ url: entry.url, name: entry.displayName || entry.name })),
     { replace: true }
@@ -116,7 +120,6 @@ function applyPulledAddons(rows = []) {
 }
 
 export const LibrarySyncService = {
-
   getLastPullStatus() {
     return lastPullStatus;
   },
@@ -260,7 +263,10 @@ export const LibrarySyncService = {
           console.warn("Addon sync push addons-table fallback failed", addonsTableError);
           return false;
         }
-        console.warn("Addon sync push addons-table missing, trying tv_addons fallback", addonsTableError);
+        console.warn(
+          "Addon sync push addons-table missing, trying tv_addons fallback",
+          addonsTableError
+        );
       }
 
       const rows = urls.map((baseUrl, index) => ({
@@ -283,5 +289,4 @@ export const LibrarySyncService = {
       return false;
     }
   }
-
 };

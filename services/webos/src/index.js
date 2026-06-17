@@ -16,9 +16,12 @@ function createService() {
     var Service = require("webos-service");
     return new Service(SERVICE_ID);
   } catch (error) {
-    console.warn("[" + SERVICE_ID + "] webos-service unavailable, using local mock:", error.message);
+    console.warn(
+      "[" + SERVICE_ID + "] webos-service unavailable, using local mock:",
+      error.message
+    );
     return {
-      register: function() {}
+      register: function () {}
     };
   }
 }
@@ -43,7 +46,10 @@ function ensureRuntimeStarted(force) {
   try {
     if (force) {
       runtimeState.error = null;
-      console.warn("[" + SERVICE_ID + "] local media runtime unavailable; attempting reboot from", RUNTIME_PATH);
+      console.warn(
+        "[" + SERVICE_ID + "] local media runtime unavailable; attempting reboot from",
+        RUNTIME_PATH
+      );
     }
     bootLocalRuntime(RUNTIME_PATH);
     runtimeState.booted = true;
@@ -60,14 +66,14 @@ function ensureRuntimeStarted(force) {
 
 function probeLocalServerWithRecovery(callback, includeBody) {
   ensureRuntimeStarted();
-  probeLocalServer(function(_, status) {
+  probeLocalServer(function (_, status) {
     if (status || runtimeState.error) {
       callback(status);
       return;
     }
     ensureRuntimeStarted(true);
-    setTimeout(function() {
-      probeLocalServer(function(__, recoveredStatus) {
+    setTimeout(function () {
+      probeLocalServer(function (__, recoveredStatus) {
         callback(recoveredStatus);
       });
     }, 300);
@@ -96,11 +102,15 @@ function buildBasePayload() {
 }
 
 function buildErrorPayload(error, extras) {
-  return Object.assign(buildBasePayload(), {
-    returnValue: false,
-    errorCode: -1,
-    errorText: String(error && error.message ? error.message : error || "Unknown service error")
-  }, extras || {});
+  return Object.assign(
+    buildBasePayload(),
+    {
+      returnValue: false,
+      errorCode: -1,
+      errorText: String(error && error.message ? error.message : error || "Unknown service error")
+    },
+    extras || {}
+  );
 }
 
 function getMessagePayload(message) {
@@ -111,14 +121,17 @@ function getMessagePayload(message) {
 }
 
 function registerCommand(commandName, includeBody) {
-  service.register(commandName, function(message) {
-    probeLocalServerWithRecovery(function(status) {
-      respond(message, Object.assign(buildBasePayload(), {
-        url: status ? "http://127.0.0.1:" + status.port : null,
-        settingsReachable: Boolean(status),
-        settingsStatusCode: status ? status.statusCode : null,
-        settingsBody: includeBody && status ? status.body : null
-      }));
+  service.register(commandName, function (message) {
+    probeLocalServerWithRecovery(function (status) {
+      respond(
+        message,
+        Object.assign(buildBasePayload(), {
+          url: status ? "http://127.0.0.1:" + status.port : null,
+          settingsReachable: Boolean(status),
+          settingsStatusCode: status ? status.statusCode : null,
+          settingsBody: includeBody && status ? status.body : null
+        })
+      );
     });
   });
 }
@@ -145,18 +158,21 @@ function buildKeepAlivePayload(token, status) {
 }
 
 function registerEngineFsKeepAliveCommands() {
-  service.register("enginefsKeepAlive", function(message) {
+  service.register("enginefsKeepAlive", function (message) {
     var payload = getMessagePayload(message);
     var token = String(payload.token || Date.now() + "-" + Math.random()).trim();
-    var intervalMs = Math.max(5000, Math.min(30000, Math.trunc(Number(payload.intervalMs || 10000))));
+    var intervalMs = Math.max(
+      5000,
+      Math.min(30000, Math.trunc(Number(payload.intervalMs || 10000)))
+    );
 
     stopKeepAlive(token);
-    probeLocalServerWithRecovery(function(status) {
+    probeLocalServerWithRecovery(function (status) {
       respond(message, buildKeepAlivePayload(token, status));
     });
 
-    keepAliveIntervals[token] = setInterval(function() {
-      probeLocalServerWithRecovery(function(status) {
+    keepAliveIntervals[token] = setInterval(function () {
+      probeLocalServerWithRecovery(function (status) {
         try {
           respond(message, buildKeepAlivePayload(token, status));
         } catch (error) {
@@ -166,19 +182,22 @@ function registerEngineFsKeepAliveCommands() {
     }, intervalMs);
   });
 
-  service.register("enginefsKeepAliveStop", function(message) {
+  service.register("enginefsKeepAliveStop", function (message) {
     var payload = getMessagePayload(message);
     var stopped = stopKeepAlive(payload.token);
-    respond(message, Object.assign(buildBasePayload(), {
-      token: String(payload.token || "").trim(),
-      stopped: stopped,
-      activeKeepAlives: Object.keys(keepAliveIntervals).length
-    }));
+    respond(
+      message,
+      Object.assign(buildBasePayload(), {
+        token: String(payload.token || "").trim(),
+        stopped: stopped,
+        activeKeepAlives: Object.keys(keepAliveIntervals).length
+      })
+    );
   });
 }
 
 function registerTracksCommand() {
-  service.register("tracks", function(message) {
+  service.register("tracks", function (message) {
     ensureRuntimeStarted();
 
     if (runtimeState.error) {
@@ -193,38 +212,50 @@ function registerTracksCommand() {
     }
 
     var tracksPath = "/tracks/" + encodeURIComponent(mediaUrl);
-    requestActiveServerPath(tracksPath, function(error, status) {
+    requestActiveServerPath(tracksPath, function (error, status) {
       if (error) {
-        respond(message, buildErrorPayload(error, {
-          proxiedPath: tracksPath
-        }));
+        respond(
+          message,
+          buildErrorPayload(error, {
+            proxiedPath: tracksPath
+          })
+        );
         return;
       }
 
       if (!status || status.statusCode < 200 || status.statusCode >= 300) {
         var statusCode = status ? status.statusCode || 0 : 0;
-        respond(message, buildErrorPayload("Track request failed with HTTP " + statusCode, {
-          proxiedPath: tracksPath,
-          statusCode: statusCode,
-          rawBody: status ? status.body || "" : ""
-        }));
+        respond(
+          message,
+          buildErrorPayload("Track request failed with HTTP " + statusCode, {
+            proxiedPath: tracksPath,
+            statusCode: statusCode,
+            rawBody: status ? status.body || "" : ""
+          })
+        );
         return;
       }
 
       try {
         var tracks = JSON.parse(status.body || "[]");
-        respond(message, Object.assign(buildBasePayload(), {
-          url: "http://127.0.0.1:" + status.port,
-          proxiedPath: tracksPath,
-          statusCode: status.statusCode,
-          tracks: Array.isArray(tracks) ? tracks : []
-        }));
+        respond(
+          message,
+          Object.assign(buildBasePayload(), {
+            url: "http://127.0.0.1:" + status.port,
+            proxiedPath: tracksPath,
+            statusCode: status.statusCode,
+            tracks: Array.isArray(tracks) ? tracks : []
+          })
+        );
       } catch (parseError) {
-        respond(message, buildErrorPayload(parseError, {
-          proxiedPath: tracksPath,
-          statusCode: status.statusCode,
-          rawBody: status.body || ""
-        }));
+        respond(
+          message,
+          buildErrorPayload(parseError, {
+            proxiedPath: tracksPath,
+            statusCode: status.statusCode,
+            rawBody: status.body || ""
+          })
+        );
       }
     });
   });
@@ -246,7 +277,7 @@ function buildTorrentProxyPayload(result, proxiedPath) {
 }
 
 function registerTorrentProxyCommand(commandName, buildPath) {
-  service.register(commandName, function(message) {
+  service.register(commandName, function (message) {
     ensureRuntimeStarted();
 
     if (runtimeState.error) {
@@ -262,30 +293,41 @@ function registerTorrentProxyCommand(commandName, buildPath) {
     }
 
     var proxiedPath = buildPath(payload, infoHash);
-    requestActiveServerHttp(proxiedPath, {
-      method: "GET",
-      timeoutMs: Math.max(250, Math.min(60000, Math.trunc(Number(payload.timeoutMs || 10000)))),
-      maxBodyBytes: Math.max(1024, Math.min(1048576, Math.trunc(Number(payload.maxBodyBytes || 262144))))
-    }, function(error, status) {
-      if (error) {
-        respond(message, buildErrorPayload(error, {
-          proxiedPath: proxiedPath
-        }));
-        return;
-      }
+    requestActiveServerHttp(
+      proxiedPath,
+      {
+        method: "GET",
+        timeoutMs: Math.max(250, Math.min(60000, Math.trunc(Number(payload.timeoutMs || 10000)))),
+        maxBodyBytes: Math.max(
+          1024,
+          Math.min(1048576, Math.trunc(Number(payload.maxBodyBytes || 262144)))
+        )
+      },
+      function (error, status) {
+        if (error) {
+          respond(
+            message,
+            buildErrorPayload(error, {
+              proxiedPath: proxiedPath
+            })
+          );
+          return;
+        }
 
-      var responsePayload = buildTorrentProxyPayload(status, proxiedPath);
-      if (!responsePayload.returnValue) {
-        responsePayload.errorCode = status ? status.statusCode || -1 : -1;
-        responsePayload.errorText = "Torrent proxy request failed with HTTP " + (status ? status.statusCode || 0 : 0);
+        var responsePayload = buildTorrentProxyPayload(status, proxiedPath);
+        if (!responsePayload.returnValue) {
+          responsePayload.errorCode = status ? status.statusCode || -1 : -1;
+          responsePayload.errorText =
+            "Torrent proxy request failed with HTTP " + (status ? status.statusCode || 0 : 0);
+        }
+        respond(message, responsePayload);
       }
-      respond(message, responsePayload);
-    });
+    );
   });
 }
 
 function registerTorrentCreateCommand() {
-  service.register("torrentCreate", function(message) {
+  service.register("torrentCreate", function (message) {
     ensureRuntimeStarted();
 
     if (runtimeState.error) {
@@ -294,7 +336,9 @@ function registerTorrentCreateCommand() {
     }
 
     var payload = getMessagePayload(message);
-    var infoHash = normalizeInfoHash(payload.infoHash) || extractInfoHashFromMagnet(payload.magnetUri || payload.magnet);
+    var infoHash =
+      normalizeInfoHash(payload.infoHash) ||
+      extractInfoHashFromMagnet(payload.magnetUri || payload.magnet);
     if (!infoHash) {
       respond(message, buildErrorPayload("Missing or invalid required parameter: infoHash"));
       return;
@@ -303,49 +347,60 @@ function registerTorrentCreateCommand() {
     var createRequest = buildCreateRequest(payload, infoHash);
     var createBody = JSON.stringify(createRequest.body || {});
     var timeoutMs = Math.max(250, Math.min(60000, Math.trunc(Number(payload.timeoutMs || 10000))));
-    var maxBodyBytes = Math.max(1024, Math.min(1048576, Math.trunc(Number(payload.maxBodyBytes || 262144))));
+    var maxBodyBytes = Math.max(
+      1024,
+      Math.min(1048576, Math.trunc(Number(payload.maxBodyBytes || 262144)))
+    );
 
-    requestActiveServerHttp(createRequest.path, {
-      method: "POST",
-      body: createBody,
-      headers: {
-        "content-type": "application/json"
-      },
-      timeoutMs: timeoutMs,
-      maxBodyBytes: maxBodyBytes
-    }, function(error, status) {
-      if (error) {
-        respond(message, buildErrorPayload(error, {
-          proxiedPath: createRequest.path
-        }));
-        return;
-      }
-
-      var responsePayload = buildTorrentProxyPayload(status, createRequest.path);
-      responsePayload.createRequest = {
+    requestActiveServerHttp(
+      createRequest.path,
+      {
         method: "POST",
-        path: createRequest.path,
-        bodyKeys: Object.keys(createRequest.body || {})
-      };
-      if (!responsePayload.returnValue) {
-        responsePayload.errorCode = status ? status.statusCode || -1 : -1;
-        responsePayload.errorText = "Torrent create request failed with HTTP " + (status ? status.statusCode || 0 : 0);
+        body: createBody,
+        headers: {
+          "content-type": "application/json"
+        },
+        timeoutMs: timeoutMs,
+        maxBodyBytes: maxBodyBytes
+      },
+      function (error, status) {
+        if (error) {
+          respond(
+            message,
+            buildErrorPayload(error, {
+              proxiedPath: createRequest.path
+            })
+          );
+          return;
+        }
+
+        var responsePayload = buildTorrentProxyPayload(status, createRequest.path);
+        responsePayload.createRequest = {
+          method: "POST",
+          path: createRequest.path,
+          bodyKeys: Object.keys(createRequest.body || {})
+        };
+        if (!responsePayload.returnValue) {
+          responsePayload.errorCode = status ? status.statusCode || -1 : -1;
+          responsePayload.errorText =
+            "Torrent create request failed with HTTP " + (status ? status.statusCode || 0 : 0);
+        }
+        respond(message, responsePayload);
       }
-      respond(message, responsePayload);
-    });
+    );
   });
 }
 
 function registerTorrentProxyCommands() {
   registerTorrentCreateCommand();
-  registerTorrentProxyCommand("torrentStats", function(payload, infoHash) {
+  registerTorrentProxyCommand("torrentStats", function (payload, infoHash) {
     var fileIdx = Number(payload.fileIdx);
     if (Number.isFinite(fileIdx)) {
       return "/" + infoHash + "/" + fileIdx + "/stats.json";
     }
     return "/" + infoHash + "/stats.json";
   });
-  registerTorrentProxyCommand("torrentRemove", function(_, infoHash) {
+  registerTorrentProxyCommand("torrentRemove", function (_, infoHash) {
     return "/" + infoHash + "/remove";
   });
 }
@@ -359,14 +414,14 @@ function parseJsonMaybe(value) {
 }
 
 function delay(ms) {
-  return new Promise(function(resolve) {
+  return new Promise(function (resolve) {
     setTimeout(resolve, Math.max(0, Number(ms || 0)));
   });
 }
 
 function requestRuntime(pathname, options) {
-  return new Promise(function(resolve, reject) {
-    requestActiveServerHttp(pathname, options || {}, function(error, result) {
+  return new Promise(function (resolve, reject) {
+    requestActiveServerHttp(pathname, options || {}, function (error, result) {
       if (error) {
         reject(error);
         return;
@@ -377,7 +432,7 @@ function requestRuntime(pathname, options) {
 }
 
 function requestRuntimeJson(pathname, options) {
-  return requestRuntime(pathname, options).then(function(result) {
+  return requestRuntime(pathname, options).then(function (result) {
     var json = parseJsonMaybe(result.body);
     return Object.assign({}, result, {
       json: json
@@ -386,7 +441,9 @@ function requestRuntimeJson(pathname, options) {
 }
 
 function normalizeInfoHash(value) {
-  var hash = String(value || "").trim().toLowerCase();
+  var hash = String(value || "")
+    .trim()
+    .toLowerCase();
   return /^[0-9a-f]{40}$/.test(hash) ? hash : "";
 }
 
@@ -398,7 +455,7 @@ function extractInfoHashFromMagnet(value) {
 
 function normalizeStringArray(value) {
   return (Array.isArray(value) ? value : [])
-    .map(function(entry) {
+    .map(function (entry) {
       return String(entry || "").trim();
     })
     .filter(Boolean);
@@ -415,10 +472,15 @@ function buildMagnetUri(infoHash, payload) {
     return "";
   }
 
-  return "magnet:?xt=urn:btih:" + encodeURIComponent(infoHash)
-    + trackers.map(function(tracker) {
-      return "&tr=" + encodeURIComponent(tracker);
-    }).join("");
+  return (
+    "magnet:?xt=urn:btih:" +
+    encodeURIComponent(infoHash) +
+    trackers
+      .map(function (tracker) {
+        return "&tr=" + encodeURIComponent(tracker);
+      })
+      .join("")
+  );
 }
 
 function normalizePeerSearchSource(value, infoHash) {
@@ -456,7 +518,9 @@ function buildPeerSearchSources(infoHash, payload) {
 
 function sanitizeDiagnosticPayload(payload) {
   return {
-    infoHash: normalizeInfoHash(payload.infoHash) || extractInfoHashFromMagnet(payload.magnetUri || payload.magnet),
+    infoHash:
+      normalizeInfoHash(payload.infoHash) ||
+      extractInfoHashFromMagnet(payload.magnetUri || payload.magnet),
     hasMagnet: Boolean(String(payload.magnetUri || payload.magnet || "").trim()),
     hasBlob: typeof payload.blob === "string",
     blobHexLength: typeof payload.blob === "string" ? payload.blob.length : 0,
@@ -526,8 +590,8 @@ function diagnosticErrorMessage(error) {
 }
 
 function requestRuntimeOnPort(port, pathname, options) {
-  return new Promise(function(resolve, reject) {
-    requestLocalHttp(port, pathname, options || {}, function(error, result) {
+  return new Promise(function (resolve, reject) {
+    requestLocalHttp(port, pathname, options || {}, function (error, result) {
       if (error) {
         reject(error);
         return;
@@ -727,7 +791,12 @@ async function runSettingsProbeStep(report, timeoutMs) {
         report.runtimePort = port;
         report.baseUrl = "http://127.0.0.1:" + port;
         pushDiagnosticStep(report, step);
-        return { ok: true, step: step, result: Object.assign({}, result, { json: json }), json: json };
+        return {
+          ok: true,
+          step: step,
+          result: Object.assign({}, result, { json: json }),
+          json: json
+        };
       }
     } catch (error) {
       attempt.durationMs = Date.now() - attemptStartedMs;
@@ -795,7 +864,9 @@ function buildCreateRequest(payload, infoHash) {
 }
 
 function normalizeCreateMethod(value) {
-  var method = String(value || "BOTH").trim().toUpperCase();
+  var method = String(value || "BOTH")
+    .trim()
+    .toUpperCase();
   if (method === "GET" || method === "POST" || method === "BOTH") {
     return method;
   }
@@ -850,8 +921,8 @@ async function runCreateDiagnostics(report, payload, createRequest, createTimeou
 function guessDiagnosticFileIndexFromStats(files) {
   var bestIndex = -1;
   var bestLength = -1;
-  (Array.isArray(files) ? files : []).forEach(function(file, index) {
-    var length = Number(file && file.length || 0);
+  (Array.isArray(files) ? files : []).forEach(function (file, index) {
+    var length = Number((file && file.length) || 0);
     if (length > bestLength) {
       bestIndex = index;
       bestLength = length;
@@ -878,9 +949,15 @@ async function runEngineFsDiagnostic(payload) {
   var sanitized = sanitizeDiagnosticPayload(payload);
   var infoHash = sanitized.infoHash;
   var pollCount = Math.max(0, Math.min(60, Math.trunc(Number(payload.pollCount || 6))));
-  var pollIntervalMs = Math.max(250, Math.min(30000, Math.trunc(Number(payload.pollIntervalMs || 1000))));
+  var pollIntervalMs = Math.max(
+    250,
+    Math.min(30000, Math.trunc(Number(payload.pollIntervalMs || 1000)))
+  );
   var streamProbe = payload.streamProbe !== false;
-  var streamProbeBytes = Math.max(1, Math.min(1048576, Math.trunc(Number(payload.streamProbeBytes || 262144))));
+  var streamProbeBytes = Math.max(
+    1,
+    Math.min(1048576, Math.trunc(Number(payload.streamProbeBytes || 262144)))
+  );
   var settingsTimeoutMs = diagnosticTimeout(payload, "settingsTimeoutMs", 5000);
   var createTimeoutMs = diagnosticTimeout(payload, "createTimeoutMs", 10000);
   var streamProbeTimeoutMs = diagnosticTimeout(payload, "streamProbeTimeoutMs", 10000);
@@ -917,7 +994,7 @@ async function runEngineFsDiagnostic(payload) {
     completedAt: null
   };
 
-  var bootStep = await runSyncDiagnosticStep(report, "ensureRuntimeStarted", null, function() {
+  var bootStep = await runSyncDiagnosticStep(report, "ensureRuntimeStarted", null, function () {
     ensureRuntimeStarted();
     if (runtimeState.error) {
       throw new Error(runtimeState.error.message || "Runtime failed to boot");
@@ -1133,19 +1210,24 @@ async function runEngineFsDiagnostic(payload) {
 }
 
 function registerEngineFsDiagnosticCommand() {
-  service.register("enginefsDiagnostic", function(message) {
+  service.register("enginefsDiagnostic", function (message) {
     var payload = getMessagePayload(message);
-    runEngineFsDiagnostic(payload).then(function(report) {
-      respond(message, report);
-    }).catch(function(error) {
-      console.error("[" + SERVICE_ID + "] enginefs diagnostic failed:", error);
-      respond(message, buildErrorPayload(error, {
-        diagnostic: {
-          request: sanitizeDiagnosticPayload(payload),
-          failedAt: new Date().toISOString()
-        }
-      }));
-    });
+    runEngineFsDiagnostic(payload)
+      .then(function (report) {
+        respond(message, report);
+      })
+      .catch(function (error) {
+        console.error("[" + SERVICE_ID + "] enginefs diagnostic failed:", error);
+        respond(
+          message,
+          buildErrorPayload(error, {
+            diagnostic: {
+              request: sanitizeDiagnosticPayload(payload),
+              failedAt: new Date().toISOString()
+            }
+          })
+        );
+      });
   });
 }
 

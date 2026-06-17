@@ -1,13 +1,6 @@
 import { runAresCli } from "./aresCli.mjs";
 
-const defaultPatterns = [
-  "nuvio",
-  "com.nuvio",
-  "app.bundle",
-  "WebAppMgr",
-  "WAM",
-  "JS"
-];
+const defaultPatterns = ["nuvio", "com.nuvio", "app.bundle", "WebAppMgr", "WAM", "JS"];
 
 function parseArgs(args) {
   const passthrough = [];
@@ -45,7 +38,7 @@ function shellQuote(value) {
 
 async function enableDeveloperLogs(passthroughArgs) {
   const command = [
-    "luna-send -n 1 -f luna://com.webos.service.config/setConfigs '{\"configs\":{\"system.collectDevLogs\":true}}'",
+    'luna-send -n 1 -f luna://com.webos.service.config/setConfigs \'{"configs":{"system.collectDevLogs":true}}\'',
     "luna-send -n 1 -f 'luna://com.webos.pmlogd/setdevlogstatus' '{\"recordDevLogs\":true}'",
     "PmLogCtl set WAM debug"
   ].join("; ");

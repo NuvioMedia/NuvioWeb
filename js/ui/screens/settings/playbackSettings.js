@@ -1,7 +1,6 @@
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 
 export const PlaybackSettings = {
-
   getItems() {
     const settings = PlayerSettingsStore.get();
 
@@ -28,5 +27,4 @@ export const PlaybackSettings = {
       }
     ];
   }
-
 };

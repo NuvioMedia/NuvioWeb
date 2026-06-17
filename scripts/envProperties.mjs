@@ -52,22 +52,24 @@ function unescapePropertyValue(value = "") {
 
 export function parseProperties(source = "") {
   const properties = {};
-  String(source || "").split(/\r?\n/).forEach((line) => {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("!")) {
-      return;
-    }
-    const separatorIndex = trimmed.search(/[:=]/);
-    if (separatorIndex < 0) {
-      properties[trimmed] = "";
-      return;
-    }
-    const key = trimmed.slice(0, separatorIndex).trim();
-    const value = trimmed.slice(separatorIndex + 1).trim();
-    if (key) {
-      properties[key] = unescapePropertyValue(value);
-    }
-  });
+  String(source || "")
+    .split(/\r?\n/)
+    .forEach((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("!")) {
+        return;
+      }
+      const separatorIndex = trimmed.search(/[:=]/);
+      if (separatorIndex < 0) {
+        properties[trimmed] = "";
+        return;
+      }
+      const key = trimmed.slice(0, separatorIndex).trim();
+      const value = trimmed.slice(separatorIndex + 1).trim();
+      if (key) {
+        properties[key] = unescapePropertyValue(value);
+      }
+    });
   return properties;
 }
 
@@ -133,7 +135,9 @@ export async function readEnvProperties({ rootDir, sourcePath = "" } = {}) {
     };
   }
   if (/\.js$/i.test(resolvedSourcePath)) {
-    throw new Error(`Runtime env JavaScript files are no longer supported as config sources. Use local.properties instead: ${resolvedSourcePath}`);
+    throw new Error(
+      `Runtime env JavaScript files are no longer supported as config sources. Use local.properties instead: ${resolvedSourcePath}`
+    );
   }
   const properties = parseProperties(await readFile(resolvedSourcePath, "utf8"));
   return {

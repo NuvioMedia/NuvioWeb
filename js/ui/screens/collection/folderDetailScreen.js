@@ -161,9 +161,9 @@ function buildFolderSourceRows(tabs = []) {
         folderTabIndex: sourceTabIndex >= 0 ? sourceTabIndex : index,
         addonId: tab.source?.addonId || tab.source?.provider || "collection",
         addonBaseUrl: tab.source?.addonBaseUrl || "",
-        addonName: tab.source?.provider || "Collection",
+        addonName: tab.source?.addonName || tab.source?.provider || "Collection",
         catalogId: tab.source?.catalogId || tab.source?.tmdbId || tab.source?.traktListId || tab.key || `source_${index}`,
-        catalogName: tab.label || "Collection",
+        catalogName: tab.label || tab.source?.catalogName || tab.source?.title || "Collection",
         type,
         result: {
           status: tab.loading ? "loading" : (tab.error ? "error" : "success"),
@@ -245,10 +245,25 @@ function roundRobinMerge(lists = []) {
 }
 
 function buildAddonTabLabel(source = {}, addons = []) {
-  const addon = addons.find((entry) => String(entry?.id || "") === String(source.addonId || "")) || null;
+  const addon = findAddonForSource(source, addons);
   const catalog = addon?.catalogs?.find((entry) => String(entry?.id || "") === String(source.catalogId || "") && String(entry?.apiType || "") === String(source.type || "")) || null;
-  const baseName = firstNonEmpty(catalog?.name, source.title, source.catalogId || source.type || "Catalog");
+  const baseName = firstNonEmpty(catalog?.name, source.catalogName, source.title, source.catalogId || source.type || "Catalog");
   return source.genre ? `${baseName} · ${source.genre}` : baseName;
+}
+
+function sameAddonUrl(left = "", right = "") {
+  const leftUrl = String(left || "").trim();
+  const rightUrl = String(right || "").trim();
+  if (!leftUrl || !rightUrl) {
+    return false;
+  }
+  return addonRepository.canonicalizeUrl(leftUrl) === addonRepository.canonicalizeUrl(rightUrl);
+}
+
+function findAddonForSource(source = {}, addons = []) {
+  return addons.find((entry) => String(entry?.id || "") === String(source.addonId || ""))
+    || addons.find((entry) => sameAddonUrl(entry?.baseUrl, source.addonBaseUrl))
+    || null;
 }
 
 function buildTmdbTabLabel(source = {}) {
@@ -304,15 +319,16 @@ async function fetchJson(url, options = {}) {
 
 async function fetchAddonSourceItems(source = {}, page = 1) {
   const addons = await addonRepository.getInstalledAddons();
-  const addon = addons.find((entry) => String(entry?.id || "") === String(source.addonId || "")) || null;
-  if (!addon?.baseUrl) {
+  const addon = findAddonForSource(source, addons);
+  const addonBaseUrl = firstNonEmpty(addon?.baseUrl, source.addonBaseUrl);
+  if (!addonBaseUrl) {
     throw new Error("Addon not found");
   }
   const extraArgs = source.genre ? { genre: source.genre } : {};
   const result = await catalogRepository.getCatalog({
-    addonBaseUrl: addon.baseUrl,
-    addonId: addon.id,
-    addonName: addon.displayName,
+    addonBaseUrl,
+    addonId: firstNonEmpty(addon?.id, source.addonId, addonBaseUrl),
+    addonName: firstNonEmpty(addon?.displayName, addon?.name, source.addonName, "Addon"),
     catalogId: source.catalogId,
     catalogName: buildAddonTabLabel(source, addons),
     type: source.type,

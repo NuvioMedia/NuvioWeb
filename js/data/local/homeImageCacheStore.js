@@ -38,7 +38,6 @@ function writeEntries(entries) {
 }
 
 export const HomeImageCacheStore = {
-
   getUrls(limit = 120) {
     return readEntries()
       .slice(0, Math.max(0, Number(limit || 0) || 0))
@@ -46,9 +45,9 @@ export const HomeImageCacheStore = {
   },
 
   rememberUrls(urls = []) {
-    const normalizedUrls = Array.from(new Set((Array.isArray(urls) ? urls : [])
-      .map(normalizeUrl)
-      .filter(Boolean)));
+    const normalizedUrls = Array.from(
+      new Set((Array.isArray(urls) ? urls : []).map(normalizeUrl).filter(Boolean))
+    );
     if (!normalizedUrls.length) {
       return;
     }
@@ -64,5 +63,4 @@ export const HomeImageCacheStore = {
   clear() {
     LocalStore.remove(HOME_IMAGE_CACHE_KEY);
   }
-
 };

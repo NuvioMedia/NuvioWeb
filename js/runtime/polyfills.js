@@ -1,12 +1,14 @@
-(function() {
+(function () {
   if (typeof globalThis === "object") return;
   Object.defineProperty(Object.prototype, "__magic__", {
-    get: function() { return this; },
+    get: function () {
+      return this;
+    },
     configurable: true
   });
   __magic__.globalThis = __magic__;
   delete Object.prototype.__magic__;
-}());
+})();
 
 // Number/Math ES2015 statics missing on older TV engines. Defined first because
 // other polyfills below (e.g. Array.prototype.flat) rely on Number.isFinite,
@@ -88,7 +90,8 @@ if (!Array.from) {
     }
     var result = [];
     var index = 0;
-    var iteratorMethod = typeof Symbol !== "undefined" && Symbol.iterator && source[Symbol.iterator];
+    var iteratorMethod =
+      typeof Symbol !== "undefined" && Symbol.iterator && source[Symbol.iterator];
     if (typeof iteratorMethod === "function") {
       var iterator = iteratorMethod.call(source);
       var step = iterator.next();
@@ -156,8 +159,13 @@ if (!Array.prototype.includes) {
       }
       for (var index = start; index < length; index += 1) {
         var value = list[index];
-        if (value === searchElement
-          || (typeof value === "number" && typeof searchElement === "number" && isNaN(value) && isNaN(searchElement))) {
+        if (
+          value === searchElement ||
+          (typeof value === "number" &&
+            typeof searchElement === "number" &&
+            isNaN(value) &&
+            isNaN(searchElement))
+        ) {
           return true;
         }
       }
@@ -324,8 +332,7 @@ if (!String.prototype.padEnd) {
 // polyfills for older browsers
 if (!Element.prototype.matches) {
   Element.prototype.matches =
-    Element.prototype.msMatchesSelector ||
-    Element.prototype.webkitMatchesSelector;
+    Element.prototype.msMatchesSelector || Element.prototype.webkitMatchesSelector;
 }
 
 if (!Element.prototype.closest) {
@@ -344,7 +351,7 @@ if (!Object.fromEntries) {
   Object.fromEntries = function fromEntries(entries) {
     var result = {};
     if (!entries) return result;
-    
+
     var arr = Array.isArray(entries) ? entries : Array.from(entries);
     for (var i = 0; i < arr.length; i++) {
       var entry = arr[i];
@@ -381,22 +388,24 @@ if (!Promise.prototype.finally) {
 
 if (!Promise.allSettled) {
   Promise.allSettled = function allSettled(iterable) {
-    return Promise.all(Array.from(iterable || [], function mapPromise(entry) {
-      return Promise.resolve(entry).then(
-        function onFulfilled(value) {
-          return {
-            status: "fulfilled",
-            value: value
-          };
-        },
-        function onRejected(reason) {
-          return {
-            status: "rejected",
-            reason: reason
-          };
-        }
-      );
-    }));
+    return Promise.all(
+      Array.from(iterable || [], function mapPromise(entry) {
+        return Promise.resolve(entry).then(
+          function onFulfilled(value) {
+            return {
+              status: "fulfilled",
+              value: value
+            };
+          },
+          function onRejected(reason) {
+            return {
+              status: "rejected",
+              reason: reason
+            };
+          }
+        );
+      })
+    );
   };
 }
 
@@ -455,7 +464,13 @@ if (!String.prototype.replaceAll) {
     value: function replaceAll(searchValue, replaceValue) {
       var source = String(this);
       if (searchValue instanceof RegExp) {
-        return source.replace(new RegExp(searchValue.source, searchValue.flags.includes("g") ? searchValue.flags : searchValue.flags + "g"), replaceValue);
+        return source.replace(
+          new RegExp(
+            searchValue.source,
+            searchValue.flags.includes("g") ? searchValue.flags : searchValue.flags + "g"
+          ),
+          replaceValue
+        );
       }
       return source.split(String(searchValue)).join(String(replaceValue));
     },

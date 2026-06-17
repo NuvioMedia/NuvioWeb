@@ -70,7 +70,10 @@ function mergeWatchedItems(localItems = [], remoteItems = [], lastSuccessfulPush
     }
     const existingWatchedAt = Number(existing.watchedAt || 0);
     const incomingWatchedAt = Number(item.watchedAt || 0);
-    if (incomingWatchedAt > existingWatchedAt || (incomingWatchedAt === existingWatchedAt && preferIncomingOnTie)) {
+    if (
+      incomingWatchedAt > existingWatchedAt ||
+      (incomingWatchedAt === existingWatchedAt && preferIncomingOnTie)
+    ) {
       byKey.set(key, item);
     }
   };
@@ -84,8 +87,9 @@ function mergeWatchedItems(localItems = [], remoteItems = [], lastSuccessfulPush
       }
     });
   }
-  return Array.from(byKey.values())
-    .sort((left, right) => Number(right.watchedAt || 0) - Number(left.watchedAt || 0));
+  return Array.from(byKey.values()).sort(
+    (left, right) => Number(right.watchedAt || 0) - Number(left.watchedAt || 0)
+  );
 }
 
 function toRemoteItem(item = {}) {
@@ -116,11 +120,15 @@ async function pullRemoteWatchedItems(profileId) {
   const allRows = [];
   let page = 1;
   while (true) {
-    const rows = await SupabaseApi.rpc(PULL_RPC, {
-      p_profile_id: profileId,
-      p_page: page,
-      p_page_size: WATCHED_ITEMS_PAGE_SIZE
-    }, true);
+    const rows = await SupabaseApi.rpc(
+      PULL_RPC,
+      {
+        p_profile_id: profileId,
+        p_page: page,
+        p_page_size: WATCHED_ITEMS_PAGE_SIZE
+      },
+      true
+    );
     const pageRows = Array.isArray(rows) ? rows : [];
     allRows.push(...pageRows);
     if (pageRows.length < WATCHED_ITEMS_PAGE_SIZE) {
@@ -131,7 +139,6 @@ async function pullRemoteWatchedItems(profileId) {
 }
 
 export const WatchedItemsSyncService = {
-
   async pull() {
     try {
       if (!AuthManager.isAuthenticated) {
@@ -165,10 +172,14 @@ export const WatchedItemsSyncService = {
         return false;
       }
       const items = await watchedItemsRepository.getAll(5000);
-      await SupabaseApi.rpc(PUSH_RPC, {
-        p_profile_id: resolveProfileId(),
-        p_items: items.map((item) => toRemoteItem(item))
-      }, true);
+      await SupabaseApi.rpc(
+        PUSH_RPC,
+        {
+          p_profile_id: resolveProfileId(),
+          p_items: items.map((item) => toRemoteItem(item))
+        },
+        true
+      );
       writeWatchedStateForProfile(resolveProfileId(), { lastSuccessfulPushAt: Date.now() });
       return true;
     } catch (error) {
@@ -188,10 +199,14 @@ export const WatchedItemsSyncService = {
       if (!keys.length) {
         return true;
       }
-      await SupabaseApi.rpc(DELETE_RPC, {
-        p_profile_id: resolveProfileId(),
-        p_keys: keys
-      }, true);
+      await SupabaseApi.rpc(
+        DELETE_RPC,
+        {
+          p_profile_id: resolveProfileId(),
+          p_keys: keys
+        },
+        true
+      );
       writeWatchedStateForProfile(resolveProfileId(), { lastSuccessfulPushAt: Date.now() });
       return true;
     } catch (error) {
@@ -199,5 +214,4 @@ export const WatchedItemsSyncService = {
       return false;
     }
   }
-
 };

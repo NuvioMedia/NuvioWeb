@@ -32,7 +32,9 @@ function withTimeout(promise, timeoutMs, message) {
 }
 
 function getServiceId() {
-  const configured = String(TIZEN_ENGINEFS_SERVICE_ID || globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ || "").trim();
+  const configured = String(
+    TIZEN_ENGINEFS_SERVICE_ID || globalThis.__NUVIO_TIZEN_ENGINEFS_SERVICE_ID__ || ""
+  ).trim();
   if (configured) {
     return configured;
   }
@@ -74,9 +76,8 @@ function invokeCallbackApi(fn, args = []) {
 }
 
 async function startViaWrtService(serviceId) {
-  const wrtService = globalThis.wrt?.service
-    || globalThis.webapis?.wrt?.service
-    || globalThis.webapis?.service;
+  const wrtService =
+    globalThis.wrt?.service || globalThis.webapis?.wrt?.service || globalThis.webapis?.service;
   if (!wrtService) {
     throw new Error("wrt service API unavailable");
   }
@@ -84,9 +85,11 @@ async function startViaWrtService(serviceId) {
     try {
       return await invokeCallbackApi(wrtService.startService.bind(wrtService), [serviceId]);
     } catch (firstError) {
-      return invokeCallbackApi(wrtService.startService.bind(wrtService), [{ id: serviceId }]).catch(() => {
-        throw firstError;
-      });
+      return invokeCallbackApi(wrtService.startService.bind(wrtService), [{ id: serviceId }]).catch(
+        () => {
+          throw firstError;
+        }
+      );
     }
   }
   if (typeof wrtService.start === "function") {
@@ -121,10 +124,14 @@ async function requestServiceStart(serviceId) {
 }
 
 async function probeBaseUrl(baseUrl, timeoutMs = PROBE_TIMEOUT_MS) {
-  const response = await withTimeout(fetch(`${baseUrl}/settings`, {
-    method: "GET",
-    cache: "no-cache"
-  }), timeoutMs, `Tizen local EngineFS settings probe timed out for ${baseUrl}`);
+  const response = await withTimeout(
+    fetch(`${baseUrl}/settings`, {
+      method: "GET",
+      cache: "no-cache"
+    }),
+    timeoutMs,
+    `Tizen local EngineFS settings probe timed out for ${baseUrl}`
+  );
   if (!response.ok) {
     throw new Error(`Tizen local EngineFS settings failed with HTTP ${response.status}`);
   }

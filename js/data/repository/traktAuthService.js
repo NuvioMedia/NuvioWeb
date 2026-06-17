@@ -38,7 +38,10 @@ async function readResponseBody(response) {
   }
 }
 
-export async function requestJson(path, { method = "GET", body = null, authorization = null, clientId = TRAKT_CLIENT_ID } = {}) {
+export async function requestJson(
+  path,
+  { method = "GET", body = null, authorization = null, clientId = TRAKT_CLIENT_ID } = {}
+) {
   const headers = {
     "Content-Type": "application/json",
     "trakt-api-version": API_VERSION,
@@ -64,7 +67,7 @@ function isTokenExpiredOrExpiring(state) {
     return true;
   }
   const expiresAt = createdAt + expiresIn;
-  return (Date.now() / 1000) >= (expiresAt - REFRESH_LEEWAY_SECONDS);
+  return Date.now() / 1000 >= expiresAt - REFRESH_LEEWAY_SECONDS;
 }
 
 async function fetchUserSettings() {
@@ -128,7 +131,9 @@ export const TraktAuthService = {
         const minutes = Math.ceil(retryAfter / 60);
         throw new Error(`Trakt is rate limiting requests. Try again in ~${minutes} min`);
       }
-      throw new Error(normalizeAuthErrorMessage(payload, `Failed to start Trakt auth (${response.status})`));
+      throw new Error(
+        normalizeAuthErrorMessage(payload, `Failed to start Trakt auth (${response.status})`)
+      );
     }
 
     return TraktAuthStore.saveDeviceFlow(payload);
@@ -182,7 +187,10 @@ export const TraktAuthService = {
       TraktAuthStore.updatePollInterval(interval);
       return { type: "slow_down", pollIntervalSeconds: interval };
     }
-    return { type: "failed", message: normalizeAuthErrorMessage(payload, `Token polling failed (${response.status})`) };
+    return {
+      type: "failed",
+      message: normalizeAuthErrorMessage(payload, `Token polling failed (${response.status})`)
+    };
   },
 
   async refreshTokenIfNeeded(force = false) {
@@ -283,7 +291,9 @@ export const TraktAuthService = {
       moviesWatched: Number(payload.movies?.watched || 0),
       showsWatched: Number(payload.shows?.watched || 0),
       episodesWatched: Number(payload.episodes?.watched || 0),
-      totalWatchedHours: Math.round(Number(payload.movies?.minutes || 0) / 60 + Number(payload.episodes?.minutes || 0) / 60)
+      totalWatchedHours: Math.round(
+        Number(payload.movies?.minutes || 0) / 60 + Number(payload.episodes?.minutes || 0) / 60
+      )
     };
     localStorage.setItem(cacheKey, JSON.stringify({ cachedAt: Date.now(), stats }));
     return stats;
@@ -339,10 +349,9 @@ export const TraktAuthService = {
     const token = await this.getValidAccessToken();
     if (!token) return [];
 
-    const { response, payload } = await requestJson(
-      `/sync/playback?limit=${limit}`,
-      { authorization: `Bearer ${token}` }
-    );
+    const { response, payload } = await requestJson(`/sync/playback?limit=${limit}`, {
+      authorization: `Bearer ${token}`
+    });
     if (!response.ok || !Array.isArray(payload)) return [];
 
     return payload.map(normalizePlaybackItem).filter(Boolean).slice(0, limit);
@@ -504,28 +513,30 @@ function normalizeWatchedShowItem(entry) {
       aired: Number(progress.aired || 0),
       completed: Number(progress.completed || 0)
     },
-    nextEpisode: nextEpisode ? {
-      season: nextEpisode.season,
-      number: nextEpisode.number,
-      title: nextEpisode.title || ""
-    } : null
+    nextEpisode: nextEpisode
+      ? {
+          season: nextEpisode.season,
+          number: nextEpisode.number,
+          title: nextEpisode.title || ""
+        }
+      : null
   };
 }
 
 function normalizeWatchedProgress(payload) {
   const map = new Map();
-  
+
   if (!payload?.seasons || !Array.isArray(payload.seasons)) {
     return map;
   }
-  
+
   for (const season of payload.seasons) {
     const seasonNumber = season.number;
     if (!season.episodes || !Array.isArray(season.episodes)) continue;
-    
+
     for (const episode of season.episodes) {
       if (!episode.completed) continue;
-      
+
       const key = `${seasonNumber}:${episode.number}`;
       map.set(key, {
         isWatched: true,
@@ -534,7 +545,7 @@ function normalizeWatchedProgress(payload) {
       });
     }
   }
-  
+
   return map;
 }
 

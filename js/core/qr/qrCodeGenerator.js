@@ -1,10 +1,8 @@
 // js/core/qr/qrCodeGenerator.js
 
 export const QrCodeGenerator = {
-
   generate(canvas, content, size = 512) {
-
-    const qr = qrcode(0, 'M');
+    const qr = qrcode(0, "M");
     qr.addData(content);
     qr.make();
 
@@ -25,7 +23,7 @@ export const QrCodeGenerator = {
     // Match Android's ZXing output by preserving a quiet zone around the code.
     const moduleCount = qr.getModuleCount();
     const quietZoneModules = 4;
-    const totalModules = moduleCount + (quietZoneModules * 2);
+    const totalModules = moduleCount + quietZoneModules * 2;
     const moduleSize = size / totalModules;
     const moduleRadius = moduleSize * 0.08;
 
@@ -33,20 +31,11 @@ export const QrCodeGenerator = {
 
     for (let row = 0; row < moduleCount; row++) {
       for (let col = 0; col < moduleCount; col++) {
-
         if (qr.isDark(row, col)) {
-
           const x = (col + quietZoneModules) * moduleSize;
           const y = (row + quietZoneModules) * moduleSize;
 
-          this.roundRect(
-            ctx,
-            x,
-            y,
-            moduleSize,
-            moduleSize,
-            moduleRadius
-          );
+          this.roundRect(ctx, x, y, moduleSize, moduleSize, moduleRadius);
 
           ctx.fill();
         }
@@ -79,5 +68,4 @@ export const QrCodeGenerator = {
     ctx.quadraticCurveTo(x, y, x + radius, y);
     ctx.closePath();
   }
-
 };

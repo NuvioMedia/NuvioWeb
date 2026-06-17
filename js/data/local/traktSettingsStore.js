@@ -42,7 +42,9 @@ export function normalizeTraktContinueWatchingDaysCap(days) {
 
 function normalize(settings = {}) {
   return {
-    continueWatchingDaysCap: normalizeTraktContinueWatchingDaysCap(settings.continueWatchingDaysCap),
+    continueWatchingDaysCap: normalizeTraktContinueWatchingDaysCap(
+      settings.continueWatchingDaysCap
+    ),
     showMetaComments: settings.showMetaComments !== false,
     watchProgressSource: normalizeWatchProgressSource(settings.watchProgressSource),
     librarySourceMode: normalizeLibrarySourceMode(settings.librarySourceMode),

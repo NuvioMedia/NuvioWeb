@@ -4,11 +4,11 @@ import { Platform } from "../../platform/index.js";
 function buildNormalizedEvent(event) {
   const normalizedKey = Platform.normalizeKey(event);
   const normalizedCode = Number(normalizedKey.keyCode || 0);
-  
-  const safeTarget = event?.target || { 
-    nodeType: 0, 
-    parentNode: null, 
-    classList: { contains: () => false } 
+
+  const safeTarget = event?.target || {
+    nodeType: 0,
+    parentNode: null,
+    classList: { contains: () => false }
   };
   return {
     key: normalizedKey.key,
@@ -111,13 +111,14 @@ export const FocusEngine = {
       this.activeKeyDownStartedAt.set(keyIdentity, Date.now());
     }
 
-    if (Platform.isBackEvent({
+    if (
+      Platform.isBackEvent({
         target: normalizedEvent.target,
         key: normalizedEvent.key,
         code: normalizedEvent.code,
         keyName: normalizedEvent.keyName,
         keyCode: normalizedEvent.keyCode,
-        originalKeyCode: normalizedEvent.originalKeyCode,
+        originalKeyCode: normalizedEvent.originalKeyCode
       })
     ) {
       this.handleBack(event, normalizedEvent);
@@ -179,10 +180,10 @@ export const FocusEngine = {
       return null;
     }
     if (
-      target.disabled
-      || target.classList.contains("is-disabled")
-      || target.classList.contains("disabled")
-      || target.getAttribute("aria-disabled") === "true"
+      target.disabled ||
+      target.classList.contains("is-disabled") ||
+      target.classList.contains("disabled") ||
+      target.getAttribute("aria-disabled") === "true"
     ) {
       return null;
     }
@@ -201,9 +202,10 @@ export const FocusEngine = {
       return false;
     }
     const currentScreen = Router.getCurrentScreen();
-    const screenContainer = currentScreen?.container instanceof HTMLElement
-      ? currentScreen.container
-      : target.closest(".screen");
+    const screenContainer =
+      currentScreen?.container instanceof HTMLElement
+        ? currentScreen.container
+        : target.closest(".screen");
     if (screenContainer && !screenContainer.contains(target)) {
       return false;
     }
@@ -220,8 +222,7 @@ export const FocusEngine = {
     } catch (_) {
       try {
         target.focus();
-      } catch (_) {
-      }
+      } catch (_) {}
     }
     currentScreen?.onPointerFocus?.(target, event);
     this.lastPointerFocusTarget = target;
@@ -288,5 +289,5 @@ export const FocusEngine = {
       event?.stopPropagation?.();
       event?.stopImmediatePropagation?.();
     }
-  },
+  }
 };

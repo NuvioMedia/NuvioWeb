@@ -1,308 +1,329 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<style>
-html, body {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: #000;
-}
-
-#yt {
-  width: 100%;
-  height: 100%;
-}
-</style>
-</head>
-<body>
-<div id="yt"></div>
-
-<script>
-(function nuvioYoutubeProxy() {
-  var player = null;
-  var ready = false;
-  var fallbackUsed = false;
-  var readyWatchdog = null;
-  var lastStatePayload = "";
-  var stateTimer = null;
-  var pageOrigin = String((location && location.origin) || "").trim();
-  var pageOriginIsHttp = /^https?:\/\//i.test(pageOrigin);
-  var widgetReferrer = pageOriginIsHttp ? location.href : "https://www.youtube.com";
-  var params = parseQuery(String((location && location.search) || ""));
-  var cacheBuster = params._cb || (String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8));
-  var videoId = params.v || "qBg39HCJiTU";
-  var startMuted = params.muted === "1";
-  var autoplay = params.autoplay !== "0";
-  var loop = params.loop !== "0";
-
-  function parseQuery(search) {
-    var output = {};
-    var query = String(search || "").replace(/^\?/, "");
-    if (!query) {
-      return output;
-    }
-    query.split("&").forEach(function parsePair(pair) {
-      var parts = String(pair || "").split("=");
-      var key = decodeValue(parts.shift() || "");
-      var value = decodeValue(parts.join("="));
-      if (key) {
-        output[key] = value;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
       }
-    });
-    return output;
-  }
 
-  function decodeValue(value) {
-    try {
-      return decodeURIComponent(String(value || "").replace(/\+/g, " "));
-    } catch (_) {
-      return String(value || "");
-    }
-  }
-
-  function safeCall(fn, fallback) {
-    try {
-      return fn();
-    } catch (_) {
-      return fallback;
-    }
-  }
-
-  function getPlayerStatePayload() {
-    var playerState = Number(safeCall(function getPlayerState() {
-      return player && player.getPlayerState();
-    }, -1));
-    return {
-      currentTime: Number(safeCall(function getCurrentTime() {
-        return player && player.getCurrentTime();
-      }, 0) || 0),
-      duration: Number(safeCall(function getDuration() {
-        return player && player.getDuration();
-      }, 0) || 0),
-      paused: playerState !== 1,
-      muted: Boolean(safeCall(function isMuted() {
-        return player && player.isMuted();
-      }, startMuted)),
-      loading: !ready || playerState === -1 || playerState === 3,
-      controllable: true
-    };
-  }
-
-  function assign(target, source) {
-    Object.keys(source || {}).forEach(function copyKey(key) {
-      target[key] = source[key];
-    });
-    return target;
-  }
-
-  function postToParent(type, extra) {
-    var payload = assign({
-      source: "nuvio-youtube-proxy",
-      type: type
-    }, extra || {});
-    window.parent.postMessage(payload, "*");
-  }
-
-  function pushState(force) {
-    var state = getPlayerStatePayload();
-    var serialized = JSON.stringify(state);
-    if (!force && serialized === lastStatePayload) {
-      return;
-    }
-    lastStatePayload = serialized;
-    postToParent("state", { state: state });
-  }
-
-  function ensureStateTimer() {
-    if (stateTimer) {
-      clearInterval(stateTimer);
-    }
-    stateTimer = setInterval(function pushStateTick() {
-      pushState(false);
-    }, 1000);
-  }
-
-  function handleCommand(data) {
-    var command;
-    var payload;
-    var state;
-    var seconds;
-    var delta;
-    var currentTime;
-    if (!ready || !player || !data || data.type !== "command") {
-      return;
-    }
-    command = String(data.command || "");
-    payload = data.payload && typeof data.payload === "object" ? data.payload : {};
-    if (command === "play") {
-      player.playVideo();
-    } else if (command === "pause") {
-      player.pauseVideo();
-    } else if (command === "togglePlayPause") {
-      state = Number(safeCall(function readState() {
-        return player.getPlayerState();
-      }, -1));
-      if (state === 1) {
-        player.pauseVideo();
-      } else {
-        player.playVideo();
+      #yt {
+        width: 100%;
+        height: 100%;
       }
-    } else if (command === "setMuted") {
-      if (payload.muted) {
-        player.mute();
-      } else {
-        player.unMute();
-      }
-    } else if (command === "seekTo") {
-      seconds = Math.max(0, Number(payload.seconds || 0));
-      player.seekTo(seconds, true);
-    } else if (command === "seekBy") {
-      delta = Number(payload.seconds || 0);
-      currentTime = Number(safeCall(function readCurrentTime() {
-        return player.getCurrentTime();
-      }, 0) || 0);
-      player.seekTo(Math.max(0, currentTime + delta), true);
-    } else if (command === "getState") {
-      pushState(true);
-      return;
-    }
-    pushState(true);
-  }
+    </style>
+  </head>
+  <body>
+    <div id="yt"></div>
 
-  window.addEventListener("message", function onMessage(event) {
-    var data;
-    if (!event || event.source !== window.parent) {
-      return;
-    }
-    data = event.data;
-    if (!data || typeof data !== "object" || data.source !== "nuvio-detail-trailer") {
-      return;
-    }
-    handleCommand(data);
-  });
+    <script>
+      (function nuvioYoutubeProxy() {
+        var player = null;
+        var ready = false;
+        var fallbackUsed = false;
+        var readyWatchdog = null;
+        var lastStatePayload = "";
+        var stateTimer = null;
+        var pageOrigin = String((location && location.origin) || "").trim();
+        var pageOriginIsHttp = /^https?:\/\//i.test(pageOrigin);
+        var widgetReferrer = pageOriginIsHttp ? location.href : "https://www.youtube.com";
+        var params = parseQuery(String((location && location.search) || ""));
+        var cacheBuster =
+          params._cb || String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+        var videoId = params.v || "qBg39HCJiTU";
+        var startMuted = params.muted === "1";
+        var autoplay = params.autoplay !== "0";
+        var loop = params.loop !== "0";
 
-  window.addEventListener("beforeunload", function onBeforeUnload() {
-    if (stateTimer) {
-      clearInterval(stateTimer);
-      stateTimer = null;
-    }
-  });
+        function parseQuery(search) {
+          var output = {};
+          var query = String(search || "").replace(/^\?/, "");
+          if (!query) {
+            return output;
+          }
+          query.split("&").forEach(function parsePair(pair) {
+            var parts = String(pair || "").split("=");
+            var key = decodeValue(parts.shift() || "");
+            var value = decodeValue(parts.join("="));
+            if (key) {
+              output[key] = value;
+            }
+          });
+          return output;
+        }
 
-  function fallbackToDirectEmbed() {
-    if (fallbackUsed) {
-      return;
-    }
-    fallbackUsed = true;
-    if (readyWatchdog) {
-      clearTimeout(readyWatchdog);
-      readyWatchdog = null;
-    }
-    if (stateTimer) {
-      clearInterval(stateTimer);
-      stateTimer = null;
-    }
-    safeCall(function destroyPlayer() {
-      return player && player.destroy && player.destroy();
-    }, null);
-    player = null;
-    var directParams = [
-      "autoplay=" + (autoplay ? "1" : "0"),
-      "mute=" + (startMuted ? "1" : "0"),
-      "controls=0",
-      "loop=" + (loop ? "1" : "0"),
-      "playlist=" + encodeURIComponent(videoId),
-      "playsinline=1",
-      "rel=0",
-      "modestbranding=1",
-      "iv_load_policy=3",
-      "widget_referrer=" + encodeURIComponent(widgetReferrer)
-    ].join("&");
-    var src = "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?" + directParams;
-    document.body.innerHTML = '<iframe id="yt" src="' + src + '" frameborder="0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
-    postToParent("state", {
-      state: {
-        currentTime: 0,
-        duration: 0,
-        paused: false,
-        muted: startMuted,
-        loading: false,
-        controllable: false
-      }
-    });
-  }
+        function decodeValue(value) {
+          try {
+            return decodeURIComponent(String(value || "").replace(/\+/g, " "));
+          } catch (_) {
+            return String(value || "");
+          }
+        }
 
-  window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
-    player = new YT.Player("yt", {
-      videoId: videoId,
-      host: "https://www.youtube.com",
-      playerVars: {
-        autoplay: autoplay ? 1 : 0,
-        controls: 0,
-        disablekb: 1,
-        enablejsapi: 1,
-        fs: 0,
-        loop: loop ? 1 : 0,
-        modestbranding: 1,
-        origin: pageOriginIsHttp ? pageOrigin : undefined,
-        playsinline: 1,
-        playlist: loop ? videoId : undefined,
-        rel: 0,
-        widget_referrer: widgetReferrer
-      },
-      events: {
-        onReady: function onReady(event) {
-          ready = true;
+        function safeCall(fn, fallback) {
+          try {
+            return fn();
+          } catch (_) {
+            return fallback;
+          }
+        }
+
+        function getPlayerStatePayload() {
+          var playerState = Number(
+            safeCall(function getPlayerState() {
+              return player && player.getPlayerState();
+            }, -1)
+          );
+          return {
+            currentTime: Number(
+              safeCall(function getCurrentTime() {
+                return player && player.getCurrentTime();
+              }, 0) || 0
+            ),
+            duration: Number(
+              safeCall(function getDuration() {
+                return player && player.getDuration();
+              }, 0) || 0
+            ),
+            paused: playerState !== 1,
+            muted: Boolean(
+              safeCall(function isMuted() {
+                return player && player.isMuted();
+              }, startMuted)
+            ),
+            loading: !ready || playerState === -1 || playerState === 3,
+            controllable: true
+          };
+        }
+
+        function assign(target, source) {
+          Object.keys(source || {}).forEach(function copyKey(key) {
+            target[key] = source[key];
+          });
+          return target;
+        }
+
+        function postToParent(type, extra) {
+          var payload = assign(
+            {
+              source: "nuvio-youtube-proxy",
+              type: type
+            },
+            extra || {}
+          );
+          window.parent.postMessage(payload, "*");
+        }
+
+        function pushState(force) {
+          var state = getPlayerStatePayload();
+          var serialized = JSON.stringify(state);
+          if (!force && serialized === lastStatePayload) {
+            return;
+          }
+          lastStatePayload = serialized;
+          postToParent("state", { state: state });
+        }
+
+        function ensureStateTimer() {
+          if (stateTimer) {
+            clearInterval(stateTimer);
+          }
+          stateTimer = setInterval(function pushStateTick() {
+            pushState(false);
+          }, 1000);
+        }
+
+        function handleCommand(data) {
+          var command;
+          var payload;
+          var state;
+          var seconds;
+          var delta;
+          var currentTime;
+          if (!ready || !player || !data || data.type !== "command") {
+            return;
+          }
+          command = String(data.command || "");
+          payload = data.payload && typeof data.payload === "object" ? data.payload : {};
+          if (command === "play") {
+            player.playVideo();
+          } else if (command === "pause") {
+            player.pauseVideo();
+          } else if (command === "togglePlayPause") {
+            state = Number(
+              safeCall(function readState() {
+                return player.getPlayerState();
+              }, -1)
+            );
+            if (state === 1) {
+              player.pauseVideo();
+            } else {
+              player.playVideo();
+            }
+          } else if (command === "setMuted") {
+            if (payload.muted) {
+              player.mute();
+            } else {
+              player.unMute();
+            }
+          } else if (command === "seekTo") {
+            seconds = Math.max(0, Number(payload.seconds || 0));
+            player.seekTo(seconds, true);
+          } else if (command === "seekBy") {
+            delta = Number(payload.seconds || 0);
+            currentTime = Number(
+              safeCall(function readCurrentTime() {
+                return player.getCurrentTime();
+              }, 0) || 0
+            );
+            player.seekTo(Math.max(0, currentTime + delta), true);
+          } else if (command === "getState") {
+            pushState(true);
+            return;
+          }
+          pushState(true);
+        }
+
+        window.addEventListener("message", function onMessage(event) {
+          var data;
+          if (!event || event.source !== window.parent) {
+            return;
+          }
+          data = event.data;
+          if (!data || typeof data !== "object" || data.source !== "nuvio-detail-trailer") {
+            return;
+          }
+          handleCommand(data);
+        });
+
+        window.addEventListener("beforeunload", function onBeforeUnload() {
+          if (stateTimer) {
+            clearInterval(stateTimer);
+            stateTimer = null;
+          }
+        });
+
+        function fallbackToDirectEmbed() {
+          if (fallbackUsed) {
+            return;
+          }
+          fallbackUsed = true;
           if (readyWatchdog) {
             clearTimeout(readyWatchdog);
             readyWatchdog = null;
           }
-          if (startMuted) {
-            event.target.mute();
-          } else {
-            event.target.unMute();
+          if (stateTimer) {
+            clearInterval(stateTimer);
+            stateTimer = null;
           }
-          if (autoplay) {
-            event.target.playVideo();
-          }
-          postToParent("ready", { videoId: videoId });
-          ensureStateTimer();
-          pushState(true);
-        },
-        onStateChange: function onStateChange(event) {
-          if (Number(event.data) === 0 && loop) {
-            event.target.seekTo(0, true);
-            event.target.playVideo();
-          }
-          pushState(true);
-        },
-        onError: function onError(event) {
-          fallbackToDirectEmbed();
+          safeCall(function destroyPlayer() {
+            return player && player.destroy && player.destroy();
+          }, null);
+          player = null;
+          var directParams = [
+            "autoplay=" + (autoplay ? "1" : "0"),
+            "mute=" + (startMuted ? "1" : "0"),
+            "controls=0",
+            "loop=" + (loop ? "1" : "0"),
+            "playlist=" + encodeURIComponent(videoId),
+            "playsinline=1",
+            "rel=0",
+            "modestbranding=1",
+            "iv_load_policy=3",
+            "widget_referrer=" + encodeURIComponent(widgetReferrer)
+          ].join("&");
+          var src =
+            "https://www.youtube.com/embed/" + encodeURIComponent(videoId) + "?" + directParams;
+          document.body.innerHTML =
+            '<iframe id="yt" src="' +
+            src +
+            '" frameborder="0" allow="autoplay; encrypted-media; fullscreen" allowfullscreen></iframe>';
+          postToParent("state", {
+            state: {
+              currentTime: 0,
+              duration: 0,
+              paused: false,
+              muted: startMuted,
+              loading: false,
+              controllable: false
+            }
+          });
         }
-      }
-    });
 
-    // Error 153 ("configuration error") is shown on-screen by the player but is
-    // not reliably dispatched through onError, so if the player never becomes
-    // ready, recover by loading the video through a direct youtube.com embed.
-    readyWatchdog = setTimeout(function watchdogTick() {
-      readyWatchdog = null;
-      if (!ready) {
-        fallbackToDirectEmbed();
-      }
-    }, 4500);
-  };
+        window.onYouTubeIframeAPIReady = function onYouTubeIframeAPIReady() {
+          player = new YT.Player("yt", {
+            videoId: videoId,
+            host: "https://www.youtube.com",
+            playerVars: {
+              autoplay: autoplay ? 1 : 0,
+              controls: 0,
+              disablekb: 1,
+              enablejsapi: 1,
+              fs: 0,
+              loop: loop ? 1 : 0,
+              modestbranding: 1,
+              origin: pageOriginIsHttp ? pageOrigin : undefined,
+              playsinline: 1,
+              playlist: loop ? videoId : undefined,
+              rel: 0,
+              widget_referrer: widgetReferrer
+            },
+            events: {
+              onReady: function onReady(event) {
+                ready = true;
+                if (readyWatchdog) {
+                  clearTimeout(readyWatchdog);
+                  readyWatchdog = null;
+                }
+                if (startMuted) {
+                  event.target.mute();
+                } else {
+                  event.target.unMute();
+                }
+                if (autoplay) {
+                  event.target.playVideo();
+                }
+                postToParent("ready", { videoId: videoId });
+                ensureStateTimer();
+                pushState(true);
+              },
+              onStateChange: function onStateChange(event) {
+                if (Number(event.data) === 0 && loop) {
+                  event.target.seekTo(0, true);
+                  event.target.playVideo();
+                }
+                pushState(true);
+              },
+              onError: function onError(event) {
+                fallbackToDirectEmbed();
+              }
+            }
+          });
 
-  var apiScript = document.createElement("script");
-  apiScript.src = "https://www.youtube.com/iframe_api?_cb=" + encodeURIComponent(cacheBuster);
-  document.head.appendChild(apiScript);
-}());
-</script>
-</body>
+          // Error 153 ("configuration error") is shown on-screen by the player but is
+          // not reliably dispatched through onError, so if the player never becomes
+          // ready, recover by loading the video through a direct youtube.com embed.
+          readyWatchdog = setTimeout(function watchdogTick() {
+            readyWatchdog = null;
+            if (!ready) {
+              fallbackToDirectEmbed();
+            }
+          }, 4500);
+        };
+
+        var apiScript = document.createElement("script");
+        apiScript.src = "https://www.youtube.com/iframe_api?_cb=" + encodeURIComponent(cacheBuster);
+        document.head.appendChild(apiScript);
+      })();
+    </script>
+  </body>
 </html>

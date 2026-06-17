@@ -166,6 +166,19 @@ function success(url, filename = null, videoSize = null) {
   return { status: "success", url, filename, videoSize };
 }
 
+function isServiceDegradedResponse(response = {}) {
+  const status = Number(response?.status || 0);
+  return status === 502 || status === 503 || status === 504;
+}
+
+function serviceDegradedFailure(response = {}, providerName = "Debrid") {
+  if (!isServiceDegradedResponse(response)) {
+    return null;
+  }
+  const status = Number(response?.status || 0);
+  return failure("service_degraded", `${providerName} service returned HTTP ${status}.`);
+}
+
 async function resolveTorbox(resolve, apiKey, season, episode) {
   const magnet = buildMagnetUri(resolve);
   if (!magnet) {
@@ -174,11 +187,19 @@ async function resolveTorbox(resolve, apiKey, season, episode) {
   const create = await DebridApi.torboxCreateTorrent(apiKey, magnet);
   const torrentId = create.data?.data?.torrent_id ?? create.data?.data?.id;
   if (!create.ok || !torrentId) {
+    const degraded = serviceDegradedFailure(create, "Torbox");
+    if (degraded) {
+      return degraded;
+    }
     return create.status === 409 ? failure("not_cached") : failure(create.status === 401 || create.status === 403 ? "error" : "stale");
   }
   const torrent = await DebridApi.torboxGetTorrent(apiKey, torrentId);
   const files = torrent.data?.data?.files || [];
   if (!torrent.ok || !Array.isArray(files)) {
+    const degraded = serviceDegradedFailure(torrent, "Torbox");
+    if (degraded) {
+      return degraded;
+    }
     return failure("stale");
   }
   const file = selectDebridFile(files, resolve, { season, episode, kind: "torbox" });
@@ -188,6 +209,10 @@ async function resolveTorbox(resolve, apiKey, season, episode) {
   const link = await DebridApi.torboxRequestDownloadLink(apiKey, torrentId, file.id);
   const url = typeof link.data?.data === "string" ? link.data.data : "";
   if (!link.ok || !url) {
+    const degraded = serviceDegradedFailure(link, "Torbox");
+    if (degraded) {
+      return degraded;
+    }
     return failure("stale");
   }
   return success(url, getDebridFileDisplayName(file), getDebridFileSize(file));
@@ -262,26 +287,34 @@ async function resolveRealDebrid(resolve, apiKey, season, episode) {
   }
 }
 
-async function isLocalTorrentCached(provider, apiKey, hash) {
+async function getLocalTorrentCacheStatus(provider, apiKey, hash) {
   const normalized = String(hash || "").trim().toLowerCase();
   if (!normalized) {
-    return null;
+    return { status: "unknown" };
   }
   if (provider.id === DEBRID_PROVIDER_IDS.TORBOX) {
     const response = await DebridApi.torboxCheckCached(apiKey, [normalized]);
-    if (!response.ok || response.data?.success === false) {
-      return null;
+    const degraded = serviceDegradedFailure(response, "Torbox");
+    if (degraded) {
+      return degraded;
     }
-    return Boolean(response.data?.data?.[normalized]);
+    if (!response.ok || response.data?.success === false) {
+      return { status: "unknown" };
+    }
+    return { status: "success", cached: Boolean(response.data?.data?.[normalized]) };
   }
   if (provider.id === DEBRID_PROVIDER_IDS.PREMIUMIZE) {
     const response = await DebridApi.premiumizeCheckCache(apiKey, [normalized]);
-    if (!response.ok || String(response.data?.status || "").toLowerCase() === "error") {
-      return null;
+    const degraded = serviceDegradedFailure(response, "Premiumize");
+    if (degraded) {
+      return degraded;
     }
-    return response.data?.response?.[0] === true;
+    if (!response.ok || String(response.data?.status || "").toLowerCase() === "error") {
+      return { status: "unknown" };
+    }
+    return { status: "success", cached: response.data?.response?.[0] === true };
   }
-  return null;
+  return { status: "unknown" };
 }
 
 function withResolvedUrl(stream = {}, result) {
@@ -369,8 +402,11 @@ export const DirectDebridResolver = {
       && stream.debridCacheStatus?.state !== "CACHED"
       && provider.capabilities.includes(DEBRID_CAPABILITIES.LOCAL_TORRENT_CACHE_CHECK)
     ) {
-      const cached = await isLocalTorrentCached(provider, apiKey, stream.infoHash).catch(() => null);
-      if (cached === false) {
+      const cacheStatus = await getLocalTorrentCacheStatus(provider, apiKey, stream.infoHash).catch((error) => failure("error", error?.message || ""));
+      if (cacheStatus?.status === "service_degraded") {
+        return cacheStatus;
+      }
+      if (cacheStatus?.status === "success" && cacheStatus.cached === false) {
         return failure("not_cached");
       }
     }

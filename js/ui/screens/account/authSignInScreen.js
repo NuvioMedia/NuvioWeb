@@ -12,7 +12,6 @@ function escapeHtml(value) {
 }
 
 export const AuthSignInScreen = {
-
   async mount() {
     this.container = document.getElementById("account");
     ScreenUtils.show(this.container);
@@ -32,7 +31,9 @@ export const AuthSignInScreen = {
           <div class="auth-simple-card focusable" data-action="back">${I18n.t("auth.signIn.back")}</div>
         </div>
       </div>
-      ${this.textDialog ? `
+      ${
+        this.textDialog
+          ? `
         <div class="settings-dialog-backdrop">
           <div class="settings-dialog settings-text-dialog">
             <div class="settings-dialog-title">${escapeHtml(this.textDialog.title || "")}</div>
@@ -53,7 +54,9 @@ export const AuthSignInScreen = {
             </div>
           </div>
         </div>
-      ` : ""}
+      `
+          : ""
+      }
     `;
 
     ScreenUtils.indexFocusables(this.container);
@@ -181,5 +184,4 @@ export const AuthSignInScreen = {
     this.pendingEmail = "";
     ScreenUtils.hide(this.container);
   }
-
 };

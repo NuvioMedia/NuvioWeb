@@ -2,7 +2,6 @@ import { ThemeStore } from "../../../data/local/themeStore.js";
 import { ThemeManager } from "../../theme/themeManager.js";
 
 export const ThemeSettings = {
-
   getItems() {
     const theme = ThemeStore.get();
     const setAccent = (accentColor) => {
@@ -54,8 +53,7 @@ export const ThemeSettings = {
         label: "Accent Amber",
         description: "Amber accent",
         action: () => setAccent("#ffca28")
-      },
+      }
     ];
   }
-
 };

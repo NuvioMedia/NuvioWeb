@@ -11,7 +11,9 @@ const appName = "Nuvio TV";
 const tizenIconSource = path.join(rootDir, "assets", "images", "tizenIcon.png");
 
 function fail(message) {
-  throw new Error(`${message}\n\nUsage: node ./scripts/sync-tizenbrew.mjs --path /absolute/path/to/module`);
+  throw new Error(
+    `${message}\n\nUsage: node ./scripts/sync-tizenbrew.mjs --path /absolute/path/to/module`
+  );
 }
 
 function parseArgs(argv) {

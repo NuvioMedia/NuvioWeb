@@ -12,7 +12,6 @@ function getContentType(type) {
 }
 
 export const TmdbService = {
-
   async ensureTmdbId(id, type = "movie") {
     const settings = TmdbSettingsStore.get();
     const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
@@ -56,5 +55,4 @@ export const TmdbService = {
 
     return String(first.id);
   }
-
 };

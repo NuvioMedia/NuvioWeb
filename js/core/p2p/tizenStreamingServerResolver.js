@@ -12,7 +12,9 @@ function logTizenP2pDebug(...args) {
 }
 
 function normalizeInfoHash(value = "") {
-  const hash = String(value || "").trim().toLowerCase();
+  const hash = String(value || "")
+    .trim()
+    .toLowerCase();
   return /^[0-9a-f]{40}$/.test(hash) ? hash : "";
 }
 
@@ -47,10 +49,11 @@ function scanObjectForInfoHash(obj, depth = 0) {
 }
 
 function getInfoHash(stream = {}) {
-  const direct = stream.infoHash
-    || stream.raw?.infoHash
-    || stream.clientResolve?.infoHash
-    || stream.raw?.clientResolve?.infoHash;
+  const direct =
+    stream.infoHash ||
+    stream.raw?.infoHash ||
+    stream.clientResolve?.infoHash ||
+    stream.raw?.clientResolve?.infoHash;
   return normalizeInfoHash(direct) || scanObjectForInfoHash(stream.raw || stream);
 }
 
@@ -67,11 +70,21 @@ function getMagnetUri(stream = {}) {
     stream.raw?.externalUrl,
     stream.raw?.clientResolve?.magnetUri
   ];
-  return candidates.find((value) => String(value || "").trim().toLowerCase().startsWith("magnet:?")) || "";
+  return (
+    candidates.find((value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .startsWith("magnet:?")
+    ) || ""
+  );
 }
 
 function normalizeTrackerSource(value = "") {
-  return String(value || "").trim().replace(/^tracker:/i, "").trim();
+  return String(value || "")
+    .trim()
+    .replace(/^tracker:/i, "")
+    .trim();
 }
 
 function trackerSourcesFromMagnet(magnetUri = "") {
@@ -160,9 +173,11 @@ function buildPeerSearchSources(infoHash, trackerSources = []) {
     if (!normalized) {
       return;
     }
-    sources.push(normalized.startsWith("tracker:") || normalized.startsWith("dht:")
-      ? normalized
-      : `tracker:${normalized}`);
+    sources.push(
+      normalized.startsWith("tracker:") || normalized.startsWith("dht:")
+        ? normalized
+        : `tracker:${normalized}`
+    );
   });
   return sources.filter((source, index, all) => all.indexOf(source) === index);
 }
@@ -170,7 +185,9 @@ function buildPeerSearchSources(infoHash, trackerSources = []) {
 function buildPlaybackUrl(baseUrl, infoHash, fileIdx, sources = []) {
   const root = String(baseUrl || "").replace(/\/+$/, "");
   const playbackUrl = `${root}/${encodeURIComponent(infoHash)}/${encodeURIComponent(String(fileIdx))}`;
-  const cleanSources = (Array.isArray(sources) ? sources : []).map((source) => String(source || "").trim()).filter(Boolean);
+  const cleanSources = (Array.isArray(sources) ? sources : [])
+    .map((source) => String(source || "").trim())
+    .filter(Boolean);
   if (!cleanSources.length) {
     return playbackUrl;
   }
@@ -202,7 +219,12 @@ function guessMimeFromPath(path = "") {
 }
 
 function selectFileIdx(stream = {}, createJson = {}) {
-  const explicit = Number(stream.fileIdx ?? stream.raw?.fileIdx ?? stream.clientResolve?.fileIdx ?? stream.raw?.clientResolve?.fileIdx);
+  const explicit = Number(
+    stream.fileIdx ??
+      stream.raw?.fileIdx ??
+      stream.clientResolve?.fileIdx ??
+      stream.raw?.clientResolve?.fileIdx
+  );
   if (Number.isFinite(explicit) && explicit >= 0) {
     return explicit;
   }
@@ -211,11 +233,9 @@ function selectFileIdx(stream = {}, createJson = {}) {
 }
 
 function getFilename(createJson = {}, fileIdx = -1) {
-  const candidates = [
-    createJson.filename,
-    createJson.fileName,
-    createJson.streamName
-  ].map((value) => String(value || "").trim()).filter(Boolean);
+  const candidates = [createJson.filename, createJson.fileName, createJson.streamName]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
   if (candidates.length) {
     return candidates[0];
   }
@@ -224,7 +244,10 @@ function getFilename(createJson = {}, fileIdx = -1) {
   return String(file?.name || file?.filename || "").trim();
 }
 
-async function createTorrent(baseUrl, { infoHash, fileIdx, trackerSources = [], season = null, episode = null } = {}) {
+async function createTorrent(
+  baseUrl,
+  { infoHash, fileIdx, trackerSources = [], season = null, episode = null } = {}
+) {
   const body = {
     torrent: { infoHash }
   };
@@ -246,25 +269,41 @@ async function createTorrent(baseUrl, { infoHash, fileIdx, trackerSources = [], 
       body.guessFileIdx.episode = episode;
     }
   }
-  const response = await withTimeout(fetch(`${baseUrl}/${encodeURIComponent(infoHash)}/create`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body)
-  }), CREATE_TIMEOUT_MS, "Tizen streaming server create request timed out");
+  const response = await withTimeout(
+    fetch(`${baseUrl}/${encodeURIComponent(infoHash)}/create`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    }),
+    CREATE_TIMEOUT_MS,
+    "Tizen streaming server create request timed out"
+  );
   if (!response.ok) {
     throw new Error(`Tizen streaming server create failed with HTTP ${response.status}`);
   }
   return response.json();
 }
 
-function buildResolvedStream(stream = {}, { baseUrl, baseUrlKind = "local-service", infoHash, fileIdx, playbackUrl, filename = "", sources = [] } = {}) {
-  const mimeType = guessMimeFromPath(filename)
-    || guessMimeFromPath(playbackUrl)
-    || stream.mimeType
-    || stream.raw?.mimeType
-    || stream.sourceType
-    || stream.raw?.type
-    || "video/x-matroska";
+function buildResolvedStream(
+  stream = {},
+  {
+    baseUrl,
+    baseUrlKind = "local-service",
+    infoHash,
+    fileIdx,
+    playbackUrl,
+    filename = "",
+    sources = []
+  } = {}
+) {
+  const mimeType =
+    guessMimeFromPath(filename) ||
+    guessMimeFromPath(playbackUrl) ||
+    stream.mimeType ||
+    stream.raw?.mimeType ||
+    stream.sourceType ||
+    stream.raw?.type ||
+    "video/x-matroska";
   const p2p = {
     kind: TIZEN_STREAMING_KIND,
     baseUrl,
@@ -313,7 +352,8 @@ export const TizenStreamingServerResolver = {
         playbackUrl: String(state.playbackUrl || stream.url || "").trim(),
         baseUrl: normalizeBaseUrl(state.baseUrl || ""),
         baseUrlKind: String(state.baseUrlKind || "local-service"),
-        mimeType: String(state.mimeType || stream.mimeType || stream.sourceType || "").trim() || null
+        mimeType:
+          String(state.mimeType || stream.mimeType || stream.sourceType || "").trim() || null
       };
     }
     const playbackUrl = String(stream?.url || stream?.externalUrl || stream || "").trim();
@@ -352,29 +392,30 @@ export const TizenStreamingServerResolver = {
       return existingRequest;
     }
     const removeRequest = (async () => {
-    const bases = uniqueBaseUrls([
-      baseUrl,
-      ...TizenEngineFsService.getLocalBaseUrls()
-    ]);
-    let lastError = null;
-    for (const candidateBaseUrl of bases) {
-      try {
-        const response = await withTimeout(fetch(`${candidateBaseUrl}/${encodeURIComponent(normalizedHash)}/remove`, {
-          method: "GET",
-          cache: "no-cache"
-        }), timeoutMs, "Tizen EngineFS remove request timed out");
-        if (response.ok || response.status === 404) {
-          return { status: "success", baseUrl: candidateBaseUrl };
+      const bases = uniqueBaseUrls([baseUrl, ...TizenEngineFsService.getLocalBaseUrls()]);
+      let lastError = null;
+      for (const candidateBaseUrl of bases) {
+        try {
+          const response = await withTimeout(
+            fetch(`${candidateBaseUrl}/${encodeURIComponent(normalizedHash)}/remove`, {
+              method: "GET",
+              cache: "no-cache"
+            }),
+            timeoutMs,
+            "Tizen EngineFS remove request timed out"
+          );
+          if (response.ok || response.status === 404) {
+            return { status: "success", baseUrl: candidateBaseUrl };
+          }
+          lastError = new Error(`Tizen EngineFS remove failed with HTTP ${response.status}`);
+        } catch (error) {
+          lastError = error;
         }
-        lastError = new Error(`Tizen EngineFS remove failed with HTTP ${response.status}`);
-      } catch (error) {
-        lastError = error;
       }
-    }
-    return {
-      status: "unavailable",
-      detail: lastError?.message || "Tizen EngineFS remove endpoint unavailable"
-    };
+      return {
+        status: "unavailable",
+        detail: lastError?.message || "Tizen EngineFS remove endpoint unavailable"
+      };
     })().finally(() => {
       removeRequestsByInfoHash.delete(normalizedHash);
     });
@@ -409,27 +450,36 @@ export const TizenStreamingServerResolver = {
       }
       const magnetUri = getMagnetUri(stream);
       const trackerSources = getTrackerSources(stream, magnetUri);
-      const explicitFileIdx = Number(stream.fileIdx ?? stream.raw?.fileIdx ?? stream.clientResolve?.fileIdx ?? stream.raw?.clientResolve?.fileIdx);
+      const explicitFileIdx = Number(
+        stream.fileIdx ??
+          stream.raw?.fileIdx ??
+          stream.clientResolve?.fileIdx ??
+          stream.raw?.clientResolve?.fileIdx
+      );
       const hasExplicitFileIdx = Number.isFinite(explicitFileIdx) && explicitFileIdx >= 0;
       const season = Number(context?.season);
       const episode = Number(context?.episode);
       const needsCreate = !hasExplicitFileIdx || trackerSources.length > 0;
       const createJson = needsCreate
         ? await createTorrent(baseUrl, {
-          infoHash,
-          fileIdx: explicitFileIdx,
-          trackerSources,
-          season: Number.isFinite(season) ? season : null,
-          episode: Number.isFinite(episode) ? episode : null
-        })
+            infoHash,
+            fileIdx: explicitFileIdx,
+            trackerSources,
+            season: Number.isFinite(season) ? season : null,
+            episode: Number.isFinite(episode) ? episode : null
+          })
         : { infoHash, fileIdx: explicitFileIdx };
       const fileIdx = selectFileIdx(stream, createJson);
       if (!Number.isFinite(fileIdx) || fileIdx < 0) {
-        return { status: "error", detail: "Tizen streaming server did not return a playable file index" };
+        return {
+          status: "error",
+          detail: "Tizen streaming server did not return a playable file index"
+        };
       }
-      const sources = needsCreate && trackerSources.length
-        ? buildPeerSearchSources(infoHash, trackerSources)
-        : [];
+      const sources =
+        needsCreate && trackerSources.length
+          ? buildPeerSearchSources(infoHash, trackerSources)
+          : [];
       const playbackUrl = buildPlaybackUrl(baseUrl, infoHash, fileIdx, sources);
       const filename = getFilename(createJson, fileIdx);
       logTizenP2pDebug("TizenStreamingServerResolver: P2P stream resolved", {

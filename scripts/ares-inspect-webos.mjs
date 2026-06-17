@@ -8,15 +8,19 @@ function hasAppOrServiceArg(args) {
       return true;
     }
     const previous = args[index - 1] || "";
-    return !arg.startsWith("-") && previous !== "-d" && previous !== "--device" && previous !== "-P" && previous !== "--host-port";
+    return (
+      !arg.startsWith("-") &&
+      previous !== "-d" &&
+      previous !== "--device" &&
+      previous !== "-P" &&
+      previous !== "--host-port"
+    );
   });
 }
 
 async function main() {
   const args = process.argv.slice(2);
-  const inspectArgs = hasAppOrServiceArg(args)
-    ? args
-    : [defaultAppId, ...args];
+  const inspectArgs = hasAppOrServiceArg(args) ? args : [defaultAppId, ...args];
 
   await runAresCli("ares-inspect", inspectArgs);
 }

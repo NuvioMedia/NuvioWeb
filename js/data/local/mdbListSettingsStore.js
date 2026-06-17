@@ -20,7 +20,6 @@ const store = createProfileScopedStore({
 });
 
 export const MdbListSettingsStore = {
-
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },
@@ -40,5 +39,4 @@ export const MdbListSettingsStore = {
   set(partial, options = {}) {
     return store.set(partial, options);
   }
-
 };
