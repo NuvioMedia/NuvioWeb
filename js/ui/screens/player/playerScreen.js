@@ -21,6 +21,7 @@ import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.
 import { TraktScrobbleService } from "../../../data/repository/traktScrobbleService.js";
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
 import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingServerResolver.js";
+import { TizenEngineFsService } from "../../../platform/tizen/tizenEngineFsService.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 
@@ -508,6 +509,22 @@ function getTrackMetadataStrings(track = {}) {
     track?.codec,
     track?.codecs,
     track?.audioCodec,
+    track?.codecProfile,
+    track?.profile,
+    track?.codec_profile,
+    track?.codec_id,
+    track?.codec_name,
+    track?.codec_tag_string,
+    track?.mimeType,
+    track?.mime_type,
+    track?.sampleMimeType,
+    track?.sample_mime_type,
+    track?.format,
+    track?.format_name,
+    track?.format_long_name,
+    track?.channelCount,
+    track?.audioSampleRate,
+    track?.sampleRate,
     track?.extraInfo,
     track?.attrs
   ].forEach((value) => flattenTrackMetadata(value, values));
@@ -529,6 +546,22 @@ function isUnsupportedEmbeddedSubtitleTrack(track = {}) {
   }
   const searchText = getTrackMetadataStrings(track).join(" ");
   return UNSUPPORTED_EMBEDDED_SUBTITLE_CODEC_PATTERNS.some((pattern) => pattern.test(searchText));
+}
+
+function getWebOsAudioTrackCompatibilityText(track = {}) {
+  return getTrackMetadataStrings(track).join(" ");
+}
+
+function isUnsupportedWebOsAudioTrack(track = {}) {
+  if (!Environment.isWebOS()) {
+    return false;
+  }
+  if (typeof PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription !== "function") {
+    return false;
+  }
+  return PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription(
+    getWebOsAudioTrackCompatibilityText(track)
+  );
 }
 
 function normalizeTrackLanguageCode(value) {
@@ -1687,6 +1720,10 @@ export const PlayerScreen = {
     this.builtInSubtitleCount = 0;
     this.externalTrackNodes = [];
     this.externalSubtitleObjectUrls = [];
+    this.htmlSubtitleCues = [];
+    this.htmlSubtitleRenderFrame = null;
+    this.htmlSubtitleActiveCueKey = "";
+    this.htmlSubtitleSelectedId = null;
     this.subtitleCueStyleBindings = new Map();
     this.subtitleCueOriginalState = new WeakMap();
 
@@ -3177,13 +3214,7 @@ export const PlayerScreen = {
   normalizeEmbeddedAudioTracks(rawTracks = []) {
     return rawTracks
       .filter((track) => String(track?.type || "").toLowerCase() === "audio")
-      .filter((track) => !PlayerController.isLikelyUnsupportedWebOsAudioTrackDescription?.([
-        track?.label,
-        track?.codec,
-        track?.audioCodec,
-        track?.channels,
-        track?.channelCount
-      ].filter(Boolean).join(" ")))
+      .filter((track) => !isUnsupportedWebOsAudioTrack(track))
       .map((track, index) => {
         const sourceTrackId = Number(track?.id);
         return {
@@ -3944,6 +3975,8 @@ export const PlayerScreen = {
 
         <div id="playerAspectToast" class="player-aspect-toast hidden"></div>
 
+        <div id="playerHtmlSubtitles" class="player-html-subtitles hidden" aria-hidden="true"></div>
+
         <div id="playerSeekOverlay" class="player-seek-overlay hidden">
           <div class="player-seek-overlay-track"><div id="playerSeekFill" class="player-seek-fill"></div></div>
           <div class="player-seek-overlay-bottom">
@@ -4035,6 +4068,7 @@ export const PlayerScreen = {
       parentalGuide: uiRoot.querySelector("#playerParentalGuide"),
       skipIntro: uiRoot.querySelector("#playerSkipIntro"),
       aspectToast: uiRoot.querySelector("#playerAspectToast"),
+      htmlSubtitles: uiRoot.querySelector("#playerHtmlSubtitles"),
       seekOverlay: uiRoot.querySelector("#playerSeekOverlay"),
       seekDirection: uiRoot.querySelector("#playerSeekDirection"),
       seekPreview: uiRoot.querySelector("#playerSeekPreview"),
@@ -4624,7 +4658,7 @@ export const PlayerScreen = {
       showControls: Boolean(this.controlsVisible),
       showSeekOverlay: Boolean(this.seekOverlayVisible),
       pendingPreviewSeekPosition: this.seekPreviewSeconds == null ? null : Math.round(Number(this.seekPreviewSeconds || 0) * 1000),
-      playbackSpeed: Number(PlayerController.video?.playbackRate || 1),
+      playbackSpeed: this.getPlaybackSpeed(),
       showAudioOverlay: Boolean(this.audioDialogVisible),
       showSubtitleOverlay: Boolean(this.subtitleDialogVisible),
       subtitleDelayMs: Number(this.subtitleDelayMs || 0),
@@ -6374,9 +6408,10 @@ export const PlayerScreen = {
       return base;
     }
 
+    const playbackSpeed = this.getPlaybackSpeed();
     return [
       ...base.slice(0, Math.max(0, base.length - 1)),
-      { action: "speed", label: `${Number(PlayerController.video?.playbackRate || 1).toFixed(Number(PlayerController.video?.playbackRate || 1) % 1 ? 2 : 0)}x`, title: t("player_playback_speed", {}, "Playback speed") },
+      { action: "speed", label: `${playbackSpeed.toFixed(playbackSpeed % 1 ? 2 : 0)}x`, title: t("player_playback_speed", {}, "Playback speed") },
       { action: "aspect", icon: "assets/icons/ic_player_aspect_ratio.svg", title: t("player_more_aspect_ratio", {}, "Aspect Ratio") },
       { action: "backFromMore", label: "<", title: t("player_go_back", {}, "Back") }
     ];
@@ -6830,6 +6865,13 @@ export const PlayerScreen = {
       return Number(PlayerController.getDurationSeconds() || 0);
     }
     return Number(PlayerController.video?.duration || 0);
+  },
+
+  getPlaybackSpeed() {
+    if (typeof PlayerController.getPlaybackRate === "function") {
+      return Number(PlayerController.getPlaybackRate() || 1);
+    }
+    return Number(PlayerController.video?.playbackRate || 1);
   },
 
   hasKnownPlaybackDuration() {
@@ -8500,7 +8542,9 @@ export const PlayerScreen = {
     if (this.selectedEmbeddedSubtitleTrackIndex < 0) {
       return;
     }
-    if (typeof PlayerController.setWebOsEmbeddedSubtitleTrack === "function") {
+    if (Environment.isTizen() && typeof PlayerController.setAvPlaySubtitleTrack === "function") {
+      PlayerController.setAvPlaySubtitleTrack(-1);
+    } else if (typeof PlayerController.setWebOsEmbeddedSubtitleTrack === "function") {
       PlayerController.setWebOsEmbeddedSubtitleTrack(-1);
     }
     this.selectedEmbeddedSubtitleTrackIndex = -1;
@@ -8673,7 +8717,7 @@ export const PlayerScreen = {
   },
 
   mergeEmbeddedAudioTrackMetadata(track, index) {
-    const embeddedTrack = this.getEmbeddedAudioTrack(index);
+    const embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(index) || this.getEmbeddedAudioTrack(index);
     if (!embeddedTrack) {
       return track;
     }
@@ -8949,6 +8993,205 @@ export const PlayerScreen = {
         clearTimeout(requestTimeoutId);
       }
     }
+  },
+
+  async resolveTizenAvPlaySubtitleUrl(url) {
+    const original = String(url || "").trim();
+    if (!original || !Environment.isTizen()) {
+      return "";
+    }
+    if (!/^https?:\/\//i.test(original)) {
+      return original;
+    }
+    try {
+      const service = await TizenEngineFsService.ensureStarted();
+      const baseUrl = String(service?.baseUrl || "").replace(/\/+$/, "");
+      if (service?.status !== "success" || !baseUrl) {
+        return original;
+      }
+      return `${baseUrl}/subtitles.vtt?from=${encodeURIComponent(original)}`;
+    } catch (error) {
+      console.warn("Tizen subtitle proxy unavailable", {
+        subtitleUrl: original,
+        error: error?.message || String(error || "")
+      });
+      return original;
+    }
+  },
+
+  parseSubtitleTimestamp(value = "") {
+    const match = String(value || "").trim().match(/(?:(\d+):)?(\d{1,2}):(\d{2})[,.](\d{1,3})/);
+    if (!match) {
+      return NaN;
+    }
+    const hours = Number(match[1] || 0);
+    const minutes = Number(match[2] || 0);
+    const seconds = Number(match[3] || 0);
+    const milliseconds = Number(String(match[4] || "0").padEnd(3, "0").slice(0, 3));
+    return (hours * 3600) + (minutes * 60) + seconds + (milliseconds / 1000);
+  },
+
+  decodeSubtitleEntities(value = "") {
+    const text = String(value || "");
+    if (!text.includes("&")) {
+      return text;
+    }
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.innerHTML = text;
+      return textarea.value;
+    } catch (_) {
+      return text
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+    }
+  },
+
+  parseSubtitleCueText(text = "") {
+    return this.decodeSubtitleEntities(
+      this.sanitizeSubtitleText(String(text || ""), { preserveBasicStyle: false })
+        .replace(/<[^>]*>/g, "")
+    ).trim();
+  },
+
+  parseSubtitleCues(content = "") {
+    const normalized = this.convertSrtToVtt(content)
+      .replace(/^\uFEFF/, "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+    return normalized
+      .split(/\n{2,}/)
+      .map((block) => {
+        const lines = block.split("\n").map((line) => line.trimEnd());
+        const timingIndex = lines.findIndex((line) => line.includes("-->"));
+        if (timingIndex < 0) {
+          return null;
+        }
+        const timingParts = String(lines[timingIndex] || "").split("-->");
+        const start = this.parseSubtitleTimestamp(timingParts[0]);
+        const end = this.parseSubtitleTimestamp(timingParts[1]);
+        if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+          return null;
+        }
+        const text = this.parseSubtitleCueText(lines.slice(timingIndex + 1).join("\n"));
+        if (!text) {
+          return null;
+        }
+        return { start, end, text };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.start - right.start || left.end - right.end);
+  },
+
+  clearHtmlSubtitleOverlay() {
+    if (this.htmlSubtitleRenderFrame != null) {
+      if (typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(this.htmlSubtitleRenderFrame);
+      } else {
+        clearTimeout(this.htmlSubtitleRenderFrame);
+      }
+    }
+    this.htmlSubtitleRenderFrame = null;
+    this.htmlSubtitleCues = [];
+    this.htmlSubtitleActiveCueKey = "";
+    this.htmlSubtitleSelectedId = null;
+    const node = this.uiRefs?.htmlSubtitles || document.getElementById("playerHtmlSubtitles");
+    if (node) {
+      node.replaceChildren();
+      node.classList.add("hidden");
+      node.setAttribute("aria-hidden", "true");
+    }
+  },
+
+  renderHtmlSubtitleOverlayCue(activeCues = []) {
+    const node = this.uiRefs?.htmlSubtitles || document.getElementById("playerHtmlSubtitles");
+    if (!node) {
+      return;
+    }
+    const cueKey = activeCues.map((cue) => `${cue.start}-${cue.end}-${cue.text}`).join("|");
+    if (cueKey === this.htmlSubtitleActiveCueKey) {
+      return;
+    }
+    this.htmlSubtitleActiveCueKey = cueKey;
+    node.replaceChildren();
+    if (!activeCues.length) {
+      node.classList.add("hidden");
+      node.setAttribute("aria-hidden", "true");
+      return;
+    }
+    activeCues.forEach((cue) => {
+      String(cue.text || "").split("\n").forEach((line) => {
+        const cleanLine = line.trim();
+        if (!cleanLine) {
+          return;
+        }
+        const lineNode = document.createElement("span");
+        lineNode.className = "player-html-subtitle-line";
+        lineNode.textContent = cleanLine;
+        node.appendChild(lineNode);
+      });
+    });
+    node.classList.remove("hidden");
+    node.setAttribute("aria-hidden", "false");
+  },
+
+  scheduleHtmlSubtitleOverlayRender() {
+    if (!Array.isArray(this.htmlSubtitleCues) || !this.htmlSubtitleCues.length) {
+      return;
+    }
+    const render = () => {
+      const currentTime = Number(this.getPlaybackCurrentSeconds() || 0);
+      const delaySeconds = Number(this.subtitleDelayMs || 0) / 1000;
+      const subtitleTime = currentTime - delaySeconds;
+      const activeCues = this.htmlSubtitleCues.filter((cue) => (
+        subtitleTime >= cue.start && subtitleTime < cue.end
+      ));
+      this.renderHtmlSubtitleOverlayCue(activeCues);
+      this.htmlSubtitleRenderFrame = typeof requestAnimationFrame === "function"
+        ? requestAnimationFrame(render)
+        : setTimeout(render, 80);
+    };
+    this.htmlSubtitleRenderFrame = typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame(render)
+      : setTimeout(render, 80);
+  },
+
+  async applyTizenHtmlAddonSubtitle(subtitle, subtitleIndex) {
+    const subtitleId = subtitle?.id || subtitle?.url || `subtitle-${subtitleIndex}`;
+    const subtitleUrl = await this.resolveTizenAvPlaySubtitleUrl(subtitle?.url);
+    if (!subtitleUrl) {
+      return false;
+    }
+    const response = await fetch(subtitleUrl, { cache: "no-cache" });
+    if (!response.ok) {
+      throw new Error(`Tizen subtitle proxy failed with HTTP ${response.status}`);
+    }
+    const text = await response.text();
+    const cues = this.parseSubtitleCues(text);
+    if (!cues.length) {
+      throw new Error("Tizen subtitle proxy returned no cues");
+    }
+    this.clearMountedExternalSubtitleTracks();
+    this.clearHtmlSubtitleOverlay();
+    if (typeof PlayerController.setAvPlaySubtitleTrack === "function") {
+      PlayerController.setAvPlaySubtitleTrack(-1);
+    }
+    this.htmlSubtitleCues = cues;
+    this.htmlSubtitleSelectedId = subtitleId;
+    this.selectedAddonSubtitleId = subtitleId;
+    this.selectedSubtitleTrackIndex = -1;
+    this.selectedEmbeddedSubtitleTrackIndex = -1;
+    this.selectedManifestSubtitleTrackId = null;
+    this.renderHtmlSubtitleOverlayCue([]);
+    this.scheduleHtmlSubtitleOverlayRender();
+    this.invalidateTrackDialogCaches();
+    this.refreshSubtitleCueStyles();
+    this.renderControlButtons();
+    this.renderSubtitleDialog();
+    return true;
   },
 
   activateMountedExternalSubtitleTrack(trackNode) {
@@ -10207,6 +10450,7 @@ export const PlayerScreen = {
     if (this.externalTrackNodes.length) {
       this.clearMountedExternalSubtitleTracks();
     }
+    this.clearHtmlSubtitleOverlay();
 
     let applied = false;
     if (Environment.isTizen() && typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay()) {
@@ -10253,6 +10497,9 @@ export const PlayerScreen = {
 
     if (!entry.fallbackAddonSubtitle && this.externalTrackNodes.length) {
       this.clearMountedExternalSubtitleTracks();
+    }
+    if (!entry.fallbackAddonSubtitle) {
+      this.clearHtmlSubtitleOverlay();
     }
 
     if (Object.prototype.hasOwnProperty.call(entry, "avplaySubtitleTrackIndex")) {
@@ -10404,10 +10651,24 @@ export const PlayerScreen = {
     const usingAvPlay = typeof PlayerController.isUsingAvPlay === "function"
       ? PlayerController.isUsingAvPlay()
       : false;
+    if (usingAvPlay && Environment.isTizen()) {
+      try {
+        if (await this.applyTizenHtmlAddonSubtitle(subtitle, subtitleIndex)) {
+          return;
+        }
+      } catch (error) {
+        console.warn("Tizen HTML subtitle overlay failed", {
+          subtitleUrl: subtitle.url,
+          error: error?.message || String(error || "")
+        });
+      }
+    }
     if (usingAvPlay) {
       let avPlaySubtitleUrl = subtitle.url;
       try {
-        avPlaySubtitleUrl = await this.resolveSubtitlePlaybackUrl(subtitle.url) || subtitle.url;
+        avPlaySubtitleUrl = Environment.isTizen()
+          ? await this.resolveTizenAvPlaySubtitleUrl(subtitle.url) || subtitle.url
+          : await this.resolveSubtitlePlaybackUrl(subtitle.url) || subtitle.url;
       } catch (_) {
         avPlaySubtitleUrl = subtitle.url;
       }
@@ -10697,6 +10958,9 @@ export const PlayerScreen = {
       }
 
       const mergedTrack = this.mergeEmbeddedAudioTrackMetadata(track, index);
+      if (isUnsupportedWebOsAudioTrack(mergedTrack)) {
+        return;
+      }
       const display = formatAudioTrackDisplay(mergedTrack, index);
       entries.push({
         id: `audio-track-${index}`,
@@ -10711,6 +10975,9 @@ export const PlayerScreen = {
     });
 
     this.embeddedAudioTracks.forEach((track, index) => {
+      if (isUnsupportedWebOsAudioTrack(track)) {
+        return;
+      }
       const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
       const normalizedEmbeddedIndex = Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0
         ? embeddedTrackIndex
@@ -10770,7 +11037,7 @@ export const PlayerScreen = {
           avplayAudioTrackIndex: normalizedTrackIndex,
           track: mergedTrack
         };
-      });
+      }).filter((entry) => !isUnsupportedWebOsAudioTrack(entry.track));
     } else {
       const dashAudioTracks = typeof PlayerController.getDashAudioTracks === "function"
         ? PlayerController.getDashAudioTracks()
@@ -10915,6 +11182,11 @@ export const PlayerScreen = {
     const entries = this.getAudioEntries();
     const selectedEntry = entries[index] || null;
     if (!selectedEntry) {
+      return;
+    }
+    if (isUnsupportedWebOsAudioTrack(selectedEntry.track)) {
+      this.invalidateTrackDialogCaches();
+      this.renderAudioDialog();
       return;
     }
 
@@ -11225,7 +11497,7 @@ export const PlayerScreen = {
   },
 
   openSpeedDialog() {
-    const currentSpeed = Number(PlayerController.video?.playbackRate || 1);
+    const currentSpeed = this.getPlaybackSpeed();
     this.speedDialogVisible = true;
     this.subtitleDialogVisible = false;
     this.audioDialogVisible = false;
@@ -11246,11 +11518,12 @@ export const PlayerScreen = {
   },
 
   applyPlaybackSpeed(speed = 1) {
-    const video = PlayerController.video;
-    if (!video) {
+    const applied = typeof PlayerController.setPlaybackRate === "function"
+      ? PlayerController.setPlaybackRate(speed)
+      : false;
+    if (!applied) {
       return;
     }
-    video.playbackRate = Number(speed || 1);
     this.renderControlButtons();
     this.renderSpeedDialog();
   },
@@ -11265,7 +11538,7 @@ export const PlayerScreen = {
       dialog.innerHTML = "";
       return;
     }
-    const currentSpeed = Number(PlayerController.video?.playbackRate || 1);
+    const currentSpeed = this.getPlaybackSpeed();
     this.speedDialogIndex = clamp(this.speedDialogIndex, 0, PLAYER_SPEEDS.length - 1);
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("player_playback_speed", {}, "Playback speed"))}</div>
@@ -13005,6 +13278,7 @@ export const PlayerScreen = {
     this.trackDiscoveryDeadline = 0;
     this.subtitleLoading = false;
     this.manifestLoading = false;
+    this.clearHtmlSubtitleOverlay();
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
       this.releaseImageProxyReadyListener = null;

@@ -966,6 +966,15 @@ function formatTemplateDescription(value = "") {
     .trim();
 }
 
+function resolveManagedStreamDescription(templateDescription = "", stream = {}, displayedName = "") {
+  const displayed = String(displayedName || "").trim().toLowerCase();
+  return (
+    [templateDescription, stream.description, stream.title]
+      .map((value) => formatTemplateDescription(value))
+      .find((value) => value && value.toLowerCase() !== displayed) || null
+  );
+}
+
 function formatManagedStream(stream = {}, fact, settings = DebridSettingsStore.get()) {
   const resolve = stream.clientResolve || stream.raw?.clientResolve || {};
   const providerId = stream.debridCacheStatus?.providerId || resolve.service;
@@ -980,7 +989,11 @@ function formatManagedStream(stream = {}, fact, settings = DebridSettingsStore.g
   return {
     ...stream,
     name: name || stream.name || `${DebridProviders.displayName(providerId)} Instant`,
-    description: description || stream.description || stream.title || null,
+    description: resolveManagedStreamDescription(
+      description,
+      stream,
+      name || stream.name || `${DebridProviders.displayName(providerId)} Instant`
+    ),
     addonName: stream.addonName || null,
     addonLogo: stream.addonLogo ?? null,
     debridProviderName: provider?.displayName || DebridProviders.displayName(providerId),

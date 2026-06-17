@@ -10076,6 +10076,39 @@ button:focus-visible {
   transform: translateY(var(--player-subtitle-offset));
 }
 
+.player-html-subtitles {
+  position: absolute;
+  right: 5vw;
+  bottom: calc(8vh + var(--player-subtitle-offset));
+  left: 5vw;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.18em;
+  color: var(--player-subtitle-color);
+  font-size: var(--player-subtitle-font-size);
+  font-weight: var(--player-subtitle-font-weight);
+  line-height: 1.28;
+  text-align: center;
+  text-shadow: var(--player-subtitle-shadow);
+  pointer-events: none;
+}
+
+.player-html-subtitles.hidden {
+  display: none;
+}
+
+.player-html-subtitle-line {
+  display: inline-block;
+  max-width: min(86vw, 1500px);
+  padding: 0.06em 0.28em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+}
+
 .player-loading-overlay {
   position: absolute;
   top: 0;

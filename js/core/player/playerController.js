@@ -326,12 +326,22 @@ export const PlayerController = {
   },
 
   getWebOsUnsupportedAudioPenalty(text = "") {
-    const normalizedText = String(text || "").toLowerCase();
+    const normalizedText = String(text || "")
+      .toLowerCase()
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
     let penalty = 0;
-    if (this.webosUnsupportedAudioCodecs.has("dts") && /\b(dts-hd|dts:x|dts)\b/.test(normalizedText)) {
+    if (
+      this.webosUnsupportedAudioCodecs.has("dts")
+      && /\b(dts hd|dts hd ma|dts x|dtsx|dts)\b/.test(normalizedText)
+    ) {
       penalty -= 45;
     }
-    if (this.webosUnsupportedAudioCodecs.has("truehd") && /\btruehd\b/.test(normalizedText)) {
+    if (
+      this.webosUnsupportedAudioCodecs.has("truehd")
+      && /\b(truehd|true hd|dolby truehd|mlp fba|a truehd)\b/.test(normalizedText)
+    ) {
       penalty -= 45;
     }
     return penalty;
@@ -2505,6 +2515,39 @@ export const PlayerController = {
       this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
     }
     return applied;
+  },
+
+  getPlaybackRate() {
+    return Number(this.video?.playbackRate || 1);
+  },
+
+  setPlaybackRate(speed = 1) {
+    if (!this.video) {
+      return false;
+    }
+    const targetSpeed = Number(speed || 1);
+    if (!Number.isFinite(targetSpeed) || targetSpeed <= 0) {
+      return false;
+    }
+
+    try {
+      this.video.playbackRate = targetSpeed;
+    } catch (_) {
+      // webOS native playback can still accept the Luna play-rate command.
+    }
+
+    const mediaId = this.syncNativeMediaId();
+    if (Platform.isWebOS() && mediaId) {
+      this.requestWebOsMediaCommand("setPlayRate", {
+        mediaId,
+        playRate: targetSpeed,
+        audioOutput: true
+      }).catch(() => {
+        // Keep the media-element playbackRate fallback.
+      });
+    }
+
+    return true;
   },
 
   setNativeAudioTrack(index) {

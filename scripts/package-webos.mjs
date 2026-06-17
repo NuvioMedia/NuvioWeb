@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import { transformAsync } from "@babel/core";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
-import { resolveWebOsToolsBinary, runCommand } from "./aresCli.mjs";
+import { runWebOsToolsBinary } from "./aresCli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -184,9 +184,13 @@ async function packageWebOs() {
   await Promise.all([stageApp(), stageService()]);
 
   console.log("creating webOS IPK...");
-  const aresPackage = resolveWebOsToolsBinary("ares-package");
   try {
-    await runCommand(aresPackage, [appStageDir, serviceStageDir, "--outdir", rootDir]);
+    await runWebOsToolsBinary("ares-package", [
+      appStageDir,
+      serviceStageDir,
+      "--outdir",
+      rootDir
+    ]);
   } catch (error) {
     const { version } = await readAppMetadata();
     const expectedIpk = path.join(rootDir, `space.nuvio.webos_${version}_all.ipk`);

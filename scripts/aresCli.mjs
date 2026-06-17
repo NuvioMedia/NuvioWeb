@@ -52,6 +52,25 @@ export function runCommand(
   });
 }
 
+export function runWebOsToolsBinary(binaryName, args, { cwd = rootDir, stdio = "inherit" } = {}) {
+  return new Promise((resolve, reject) => {
+    const executablePath = resolveWebOsToolsBinary(binaryName);
+    const child = spawn(process.execPath, ["--require", compatPath, executablePath, ...args], {
+      cwd,
+      stdio
+    });
+
+    child.on("error", reject);
+    child.on("exit", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(`${binaryName} exited with code ${code}`));
+    });
+  });
+}
+
 export function runAresCli(command, args, { pipeStdout = false, pipeStderr = false } = {}) {
   return new Promise((resolve, reject) => {
     const executablePath = findExecutable(command);
