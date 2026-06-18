@@ -1,7 +1,13 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
+import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import {
+  selectAutoPlayStream,
+  isAutoPlayEffectivelyEnabled
+} from "../../../core/streams/streamAutoPlaySelector.js";
 import { DirectDebridResolver } from "../../../core/debrid/directDebridResolver.js";
 import { DirectDebridStreamPreparer } from "../../../core/debrid/directDebridStreamPreparer.js";
 import { WebOsEngineFsResolver } from "../../../core/p2p/webosEngineFsResolver.js";
@@ -1360,6 +1366,8 @@ export const StreamScreen = {
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
     this.autoResumeAttempted = false;
+    this.autoPlayAttempted = false;
+    this.cancelAutoPlayCountdown();
     this.webOsNativePlayerAppId = "";
     this.nativePlayerPendingStreamId = "";
     this.nativePlayerRequestToken = 0;
@@ -1652,6 +1660,7 @@ export const StreamScreen = {
       this.requestRender();
       this.scheduleErrorChipCleanup();
       this.maybeAutoResumeStream();
+      this.maybeAutoPlayStream();
     } catch (error) {
       if (token !== this.loadToken) {
         return;
@@ -1681,6 +1690,97 @@ export const StreamScreen = {
     if (match?.id) {
       void this.playStream(match.id);
     }
+  },
+
+  maybeAutoPlayStream() {
+    if (this.autoPlayAttempted || this.autoPlayCountdown) {
+      return;
+    }
+    // Resume already navigated away, or there is nothing to play.
+    if (Router.getCurrent() !== "stream" || !this.streams.length) {
+      return;
+    }
+    const settings = PlayerSettingsStore.get();
+    if (!isAutoPlayEffectivelyEnabled(settings)) {
+      return;
+    }
+    this.autoPlayAttempted = true;
+    const installedAddonNames = new Set(
+      (addonRepository.getCachedInstalledAddons() || [])
+        .map((addon) => String(addon?.displayName || addon?.name || "").trim())
+        .filter(Boolean)
+    );
+    const selected = selectAutoPlayStream(this.getFilteredStreams(), {
+      mode: settings.streamAutoPlayMode,
+      source: settings.streamAutoPlaySource,
+      regexPattern: settings.streamAutoPlayRegex,
+      installedAddonNames
+    });
+    if (!selected?.id) {
+      return;
+    }
+    this.startAutoPlayCountdown(selected, Number(settings.streamAutoPlayTimeoutSeconds || 0));
+  },
+
+  startAutoPlayCountdown(stream, seconds) {
+    this.cancelAutoPlayCountdown();
+    // Focus the chosen stream so cancelling leaves the user on it.
+    const visible = this.getFilteredStreams();
+    const idx = visible.findIndex((entry) => String(entry?.id || "") === String(stream.id || ""));
+    if (idx >= 0) {
+      this.focusState = { zone: "card", index: idx, row: idx, action: "play" };
+    }
+    const total = Math.max(0, Math.trunc(Number(seconds) || 0));
+    if (total <= 0) {
+      void this.playStream(stream.id);
+      return;
+    }
+    this.autoPlayCountdown = {
+      streamId: stream.id,
+      label: getStreamHeadline(stream) || stream.addonName || "stream",
+      secondsLeft: total
+    };
+    this.requestRender({ delayMs: 0 });
+    this.autoPlayTimer = setInterval(() => {
+      if (!this.autoPlayCountdown) {
+        return;
+      }
+      this.autoPlayCountdown.secondsLeft -= 1;
+      if (this.autoPlayCountdown.secondsLeft <= 0) {
+        const targetId = this.autoPlayCountdown.streamId;
+        this.cancelAutoPlayCountdown();
+        void this.playStream(targetId);
+        return;
+      }
+      this.requestRender({ delayMs: 0 });
+    }, 1000);
+  },
+
+  cancelAutoPlayCountdown() {
+    if (this.autoPlayTimer) {
+      clearInterval(this.autoPlayTimer);
+      this.autoPlayTimer = null;
+    }
+    if (this.autoPlayCountdown) {
+      this.autoPlayCountdown = null;
+      this.requestRender({ delayMs: 0 });
+    }
+  },
+
+  renderAutoPlayOverlay() {
+    if (!this.autoPlayCountdown) {
+      return "";
+    }
+    const { label, secondsLeft } = this.autoPlayCountdown;
+    return `
+      <div class="stream-route-autoplay">
+        <div class="stream-route-autoplay-card">
+          <div class="stream-route-autoplay-title">${escapeHtml(t("stream_autoplay_title", {}, "Auto-playing"))}</div>
+          <div class="stream-route-autoplay-name">${escapeHtml(label)}</div>
+          <div class="stream-route-autoplay-count">${escapeHtml(t("stream_autoplay_countdown", [secondsLeft], `Starting in ${secondsLeft}s`))}</div>
+          <div class="stream-route-autoplay-hint">${escapeHtml(t("stream_autoplay_hint", {}, "Press OK to play now, or any key to choose manually"))}</div>
+        </div>
+      </div>`;
   },
 
   scheduleErrorChipCleanup() {
@@ -2371,6 +2471,7 @@ export const StreamScreen = {
             </div>
           </section>
         </div>
+        ${this.renderAutoPlayOverlay()}
       </div>
     `;
 
@@ -2417,6 +2518,7 @@ export const StreamScreen = {
   },
 
   async playStream(streamId) {
+    this.cancelAutoPlayCountdown();
     const filtered = this.getFilteredStreams();
     const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
     if (!selected) {
@@ -2543,6 +2645,17 @@ export const StreamScreen = {
   },
 
   onKeyDown(event) {
+    // Any key during the auto-play countdown hands control back to the user.
+    // Back just cancels and stays on the picker; other keys cancel and then do
+    // their normal thing (OK on the highlighted stream plays it right away).
+    if (this.autoPlayCountdown) {
+      this.cancelAutoPlayCountdown();
+      if (isBackEvent(event)) {
+        event?.preventDefault?.();
+        return;
+      }
+    }
+
     if (isBackEvent(event)) {
       event?.preventDefault?.();
       if (!this.navigateBackFromStream()) {
@@ -2689,6 +2802,7 @@ export const StreamScreen = {
   },
 
   cleanup() {
+    this.cancelAutoPlayCountdown();
     this.loadToken = (this.loadToken || 0) + 1;
     this.playResolveToken = Number(this.playResolveToken || 0) + 1;
     this.nativePlayerRequestToken = Number(this.nativePlayerRequestToken || 0) + 1;

@@ -864,7 +864,14 @@ const FEATURE_ADAPTERS = {
         ),
         persist_audio_amplification: Boolean(settings.persistAudioAmplification),
         skip_intro_enabled: Boolean(settings.skipIntroEnabled),
-        stream_auto_play_next_episode_enabled: Boolean(settings.autoplayNextEpisode)
+        stream_auto_play_next_episode_enabled: Boolean(settings.autoplayNextEpisode),
+        stream_auto_play_mode: String(settings.streamAutoPlayMode || "MANUAL"),
+        stream_auto_play_source: String(settings.streamAutoPlaySource || "ALL_SOURCES"),
+        stream_auto_play_regex: String(settings.streamAutoPlayRegex || ""),
+        stream_auto_play_timeout_seconds: Math.max(
+          0,
+          Math.trunc(Number(settings.streamAutoPlayTimeoutSeconds ?? 3) || 0)
+        )
       };
     },
     project(rawFeature = {}) {
@@ -910,6 +917,21 @@ const FEATURE_ADAPTERS = {
           projected[key] = Math.trunc(Number(raw[key]));
         }
       });
+      [
+        "stream_auto_play_mode",
+        "stream_auto_play_source",
+        "stream_auto_play_regex"
+      ].forEach((key) => {
+        if (raw[key] != null) {
+          projected[key] = String(raw[key]);
+        }
+      });
+      if (numberOrNull(raw.stream_auto_play_timeout_seconds) != null) {
+        projected.stream_auto_play_timeout_seconds = Math.max(
+          0,
+          Math.trunc(Number(raw.stream_auto_play_timeout_seconds))
+        );
+      }
       return projected;
     },
     import(profileId, rawFeature = {}) {
@@ -984,6 +1006,18 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.stream_auto_play_next_episode_enabled) != null) {
         partial.autoplayNextEpisode = Boolean(raw.stream_auto_play_next_episode_enabled);
+      }
+      if (raw.stream_auto_play_mode != null) {
+        partial.streamAutoPlayMode = String(raw.stream_auto_play_mode);
+      }
+      if (raw.stream_auto_play_source != null) {
+        partial.streamAutoPlaySource = String(raw.stream_auto_play_source);
+      }
+      if (raw.stream_auto_play_regex != null) {
+        partial.streamAutoPlayRegex = String(raw.stream_auto_play_regex);
+      }
+      if (numberOrNull(raw.stream_auto_play_timeout_seconds) != null) {
+        partial.streamAutoPlayTimeoutSeconds = Math.max(0, Math.trunc(Number(raw.stream_auto_play_timeout_seconds)));
       }
       if (Object.keys(subtitleStyle).length) {
         partial.subtitleStyle = subtitleStyle;

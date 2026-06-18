@@ -262,6 +262,31 @@ const PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
   ...AVAILABLE_LANGUAGES
 ];
 
+const STREAM_AUTOPLAY_MODE_OPTIONS = [
+  { id: "MANUAL", label: "Off (choose manually)" },
+  { id: "FIRST_STREAM", label: "First stream" },
+  { id: "REGEX_MATCH", label: "Regex match" }
+];
+
+const STREAM_AUTOPLAY_SOURCE_OPTIONS = [
+  { id: "ALL_SOURCES", label: "All sources" },
+  { id: "INSTALLED_ADDONS_ONLY", label: "Installed addons only" },
+  { id: "ENABLED_PLUGINS_ONLY", label: "Plugins only" }
+];
+
+const STREAM_AUTOPLAY_TIMEOUT_OPTIONS = [
+  { id: 0, label: "Instant" },
+  { id: 3, label: "3 seconds" },
+  { id: 5, label: "5 seconds" },
+  { id: 10, label: "10 seconds" },
+  { id: 15, label: "15 seconds" }
+];
+
+function labelForOptionId(options, id, fallback) {
+  const match = options.find((option) => String(option.id) === String(id));
+  return match ? match.label : fallback;
+}
+
 const TMDB_LANGUAGE_OPTIONS = [
   { id: "en-US", label: "English" },
   { id: "en-AU", label: "English (Australia)" },
@@ -3828,6 +3853,50 @@ export const SettingsScreen = {
     this.actionMap.set("playback:skipIntro", () => {
       PlayerSettingsStore.set({ skipIntroEnabled: !PlayerSettingsStore.get().skipIntroEnabled });
     });
+    this.actionMap.set("playback:autoStreamMode", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.autoStream.title", {}, "Auto Stream Selection"),
+        options: STREAM_AUTOPLAY_MODE_OPTIONS,
+        selectedId: PlayerSettingsStore.get().streamAutoPlayMode,
+        returnFocusKey: "playback:autoStreamMode",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ streamAutoPlayMode: option.id });
+        }
+      });
+    });
+    this.actionMap.set("playback:autoStreamTimeout", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.autoStreamTimeout.title", {}, "Auto-play countdown"),
+        options: STREAM_AUTOPLAY_TIMEOUT_OPTIONS,
+        selectedId: PlayerSettingsStore.get().streamAutoPlayTimeoutSeconds,
+        returnFocusKey: "playback:autoStreamTimeout",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ streamAutoPlayTimeoutSeconds: Number(option.id) });
+        }
+      });
+    });
+    this.actionMap.set("playback:autoStreamSource", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.autoStreamSource.title", {}, "Auto-play source"),
+        options: STREAM_AUTOPLAY_SOURCE_OPTIONS,
+        selectedId: PlayerSettingsStore.get().streamAutoPlaySource,
+        returnFocusKey: "playback:autoStreamSource",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ streamAutoPlaySource: option.id });
+        }
+      });
+    });
+    this.actionMap.set("playback:autoStreamRegex", () => {
+      this.openTextDialog({
+        title: t("settings.playback.autoStreamRegex.title", {}, "Auto-play regex"),
+        value: PlayerSettingsStore.get().streamAutoPlayRegex || "",
+        returnFocusKey: "playback:autoStreamRegex",
+        onSubmit: (value) => {
+          PlayerSettingsStore.set({ streamAutoPlayRegex: String(value || "").trim() });
+          return true;
+        }
+      });
+    });
     this.actionMap.set("playback:audioLanguage", () => {
       this.openOptionDialog({
         title: t("settings.dialogs.preferredAudioLanguage"),
@@ -3933,6 +4002,32 @@ export const SettingsScreen = {
           ),
           checked: Boolean(model.player.skipIntroEnabled)
         })}
+        ${this.renderActionRow({
+          focusKey: "playback:autoStreamMode",
+          title: t("settings.playback.autoStream.title", {}, "Auto Stream Selection"),
+          subtitle: t("settings.playback.autoStream.subtitle", {}, "Automatically play a stream when you press play"),
+          value: labelForOptionId(STREAM_AUTOPLAY_MODE_OPTIONS, model.player.streamAutoPlayMode, "Off (choose manually)")
+        })}
+        ${String(model.player.streamAutoPlayMode || "MANUAL") !== "MANUAL" ? `
+        ${this.renderActionRow({
+          focusKey: "playback:autoStreamTimeout",
+          title: t("settings.playback.autoStreamTimeout.title", {}, "Auto-play countdown"),
+          subtitle: t("settings.playback.autoStreamTimeout.subtitle", {}, "How long to wait before playing the selected stream"),
+          value: labelForOptionId(STREAM_AUTOPLAY_TIMEOUT_OPTIONS, model.player.streamAutoPlayTimeoutSeconds, `${model.player.streamAutoPlayTimeoutSeconds}s`)
+        })}
+        ${this.renderActionRow({
+          focusKey: "playback:autoStreamSource",
+          title: t("settings.playback.autoStreamSource.title", {}, "Auto-play source"),
+          subtitle: t("settings.playback.autoStreamSource.subtitle", {}, "Which sources auto-play can pick from"),
+          value: labelForOptionId(STREAM_AUTOPLAY_SOURCE_OPTIONS, model.player.streamAutoPlaySource, "All sources")
+        })}` : ""}
+        ${String(model.player.streamAutoPlayMode || "MANUAL") === "REGEX_MATCH" ? `
+        ${this.renderActionRow({
+          focusKey: "playback:autoStreamRegex",
+          title: t("settings.playback.autoStreamRegex.title", {}, "Auto-play regex"),
+          subtitle: t("settings.playback.autoStreamRegex.subtitle", {}, "Play the first stream whose details match this pattern"),
+          value: String(model.player.streamAutoPlayRegex || "").trim() || t("common.notSet", {}, "Not set")
+        })}` : ""}
       </div>
     `;
 

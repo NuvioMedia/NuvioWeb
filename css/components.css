@@ -14987,6 +14987,56 @@ button:focus-visible {
   color: var(--text-color);
 }
 
+.stream-route-autoplay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 64px;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.stream-route-autoplay-card {
+  min-width: 520px;
+  max-width: 70%;
+  padding: 24px 36px;
+  border-radius: 18px;
+  background: rgb(var(--card-bg-rgb) / 0.96);
+  border: 1px solid var(--secondary-color);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  text-align: center;
+}
+
+.stream-route-autoplay-title {
+  font-size: 20px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.stream-route-autoplay-name {
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stream-route-autoplay-count {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--secondary-color);
+  margin-bottom: 10px;
+}
+
+.stream-route-autoplay-hint {
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
 .stream-route-backdrop,
 .stream-route-backdrop-dim,
 .stream-route-left-gradient,
