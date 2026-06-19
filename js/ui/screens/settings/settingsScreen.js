@@ -287,6 +287,67 @@ function labelForOptionId(options, id, fallback) {
   return match ? match.label : fallback;
 }
 
+// Subtitle appearance options, kept in sync with the in-player subtitle style
+// rail (playerScreen.js): same colour palettes, same size/offset ranges so the
+// settings screen and the player edit the exact same values. Mirrors the Android
+// TV app, which exposes these under Settings > Playback > Subtitles.
+const SUBTITLE_SIZE_OPTIONS = [
+  { id: 70, label: "70%" },
+  { id: 85, label: "85%" },
+  { id: 100, label: "100%" },
+  { id: 115, label: "115%" },
+  { id: 130, label: "130%" },
+  { id: 150, label: "150%" },
+  { id: 180, label: "180%" }
+];
+
+const SUBTITLE_OFFSET_OPTIONS = [
+  { id: -12, label: "Lowest" },
+  { id: -8, label: "Lower" },
+  { id: -4, label: "Low" },
+  { id: 0, label: "Default" },
+  { id: 4, label: "High" },
+  { id: 8, label: "Higher" },
+  { id: 12, label: "Highest" }
+];
+
+const SUBTITLE_TEXT_COLOR_OPTIONS = [
+  { id: "#FFFFFF", label: "White" },
+  { id: "#D9D9D9", label: "Silver" },
+  { id: "#FFD700", label: "Gold" },
+  { id: "#00E5FF", label: "Cyan" },
+  { id: "#FF5C5C", label: "Red" },
+  { id: "#00FF88", label: "Green" }
+];
+
+const SUBTITLE_OUTLINE_COLOR_OPTIONS = [
+  { id: "#000000", label: "Black" },
+  { id: "#FFFFFF", label: "White" },
+  { id: "#00E5FF", label: "Cyan" },
+  { id: "#FF5C5C", label: "Red" }
+];
+
+function normalizeSubtitleStyleHex(value, fallback) {
+  const hex = String(value || "").trim().toUpperCase();
+  return /^#[0-9A-F]{6}$/.test(hex) ? hex : fallback;
+}
+
+function clampSubtitleSize(value) {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed)) {
+    return 100;
+  }
+  return Math.min(180, Math.max(70, parsed));
+}
+
+function clampSubtitleOffset(value) {
+  const parsed = Math.round(Number(value));
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.min(12, Math.max(-12, parsed));
+}
+
 const TMDB_LANGUAGE_OPTIONS = [
   { id: "en-US", label: "English" },
   { id: "en-AU", label: "English (Australia)" },
@@ -3958,6 +4019,62 @@ export const SettingsScreen = {
         }
       });
     });
+    const updateSubtitleStyle = (partial) => {
+      const current = PlayerSettingsStore.get();
+      PlayerSettingsStore.set({
+        subtitleStyle: { ...current.subtitleStyle, ...partial }
+      });
+    };
+    this.actionMap.set("playback:subtitleSize", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.subtitleSize.title", {}, "Subtitle size"),
+        options: SUBTITLE_SIZE_OPTIONS,
+        selectedId: clampSubtitleSize(PlayerSettingsStore.get().subtitleStyle?.fontSize ?? 100),
+        returnFocusKey: "playback:subtitleSize",
+        onSelect: (option) => {
+          updateSubtitleStyle({ fontSize: clampSubtitleSize(option.id) });
+        }
+      });
+    });
+    this.actionMap.set("playback:subtitleOffset", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.subtitleOffset.title", {}, "Subtitle position"),
+        options: SUBTITLE_OFFSET_OPTIONS,
+        selectedId: clampSubtitleOffset(PlayerSettingsStore.get().subtitleStyle?.verticalOffset ?? 0),
+        returnFocusKey: "playback:subtitleOffset",
+        onSelect: (option) => {
+          updateSubtitleStyle({ verticalOffset: clampSubtitleOffset(option.id) });
+        }
+      });
+    });
+    this.actionMap.set("playback:subtitleBold", () => {
+      updateSubtitleStyle({ bold: !PlayerSettingsStore.get().subtitleStyle?.bold });
+    });
+    this.actionMap.set("playback:subtitleTextColor", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.subtitleTextColor.title", {}, "Subtitle color"),
+        options: SUBTITLE_TEXT_COLOR_OPTIONS,
+        selectedId: normalizeSubtitleStyleHex(PlayerSettingsStore.get().subtitleStyle?.textColor, "#FFFFFF"),
+        returnFocusKey: "playback:subtitleTextColor",
+        onSelect: (option) => {
+          updateSubtitleStyle({ textColor: normalizeSubtitleStyleHex(option.id, "#FFFFFF") });
+        }
+      });
+    });
+    this.actionMap.set("playback:subtitleOutline", () => {
+      updateSubtitleStyle({ outlineEnabled: !PlayerSettingsStore.get().subtitleStyle?.outlineEnabled });
+    });
+    this.actionMap.set("playback:subtitleOutlineColor", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.subtitleOutlineColor.title", {}, "Outline color"),
+        options: SUBTITLE_OUTLINE_COLOR_OPTIONS,
+        selectedId: normalizeSubtitleStyleHex(PlayerSettingsStore.get().subtitleStyle?.outlineColor, "#000000"),
+        returnFocusKey: "playback:subtitleOutlineColor",
+        onSelect: (option) => {
+          updateSubtitleStyle({ outlineColor: normalizeSubtitleStyleHex(option.id, "#000000") });
+        }
+      });
+    });
     this.actionMap.set("playback:p2pEnabled", () => {
       const current = TorrentSettingsStore.get();
       if (current.p2pEnabled) {
@@ -4072,6 +4189,58 @@ export const SettingsScreen = {
           ),
           checked: Boolean(model.player.subtitleStyle?.useForcedSubtitles)
         })}
+        ${this.renderActionRow({
+          focusKey: "playback:subtitleSize",
+          title: t("settings.playback.subtitleSize.title", {}, "Subtitle size"),
+          subtitle: t("settings.playback.subtitleSize.subtitle", {}, "Text size used for subtitles during playback."),
+          value: labelForOptionId(
+            SUBTITLE_SIZE_OPTIONS,
+            clampSubtitleSize(model.player.subtitleStyle?.fontSize ?? 100),
+            `${clampSubtitleSize(model.player.subtitleStyle?.fontSize ?? 100)}%`
+          )
+        })}
+        ${this.renderActionRow({
+          focusKey: "playback:subtitleOffset",
+          title: t("settings.playback.subtitleOffset.title", {}, "Subtitle position"),
+          subtitle: t("settings.playback.subtitleOffset.subtitle", {}, "Move subtitles up or down on the screen."),
+          value: labelForOptionId(
+            SUBTITLE_OFFSET_OPTIONS,
+            clampSubtitleOffset(model.player.subtitleStyle?.verticalOffset ?? 0),
+            t("settings.playback.subtitleOffset.default", {}, "Default")
+          )
+        })}
+        ${this.renderToggleRow({
+          focusKey: "playback:subtitleBold",
+          title: t("settings.playback.subtitleBold.title", {}, "Bold subtitles"),
+          subtitle: t("settings.playback.subtitleBold.subtitle", {}, "Show subtitle text in bold."),
+          checked: Boolean(model.player.subtitleStyle?.bold)
+        })}
+        ${this.renderActionRow({
+          focusKey: "playback:subtitleTextColor",
+          title: t("settings.playback.subtitleTextColor.title", {}, "Subtitle color"),
+          subtitle: t("settings.playback.subtitleTextColor.subtitle", {}, "Color of the subtitle text."),
+          value: labelForOptionId(
+            SUBTITLE_TEXT_COLOR_OPTIONS,
+            normalizeSubtitleStyleHex(model.player.subtitleStyle?.textColor, "#FFFFFF"),
+            normalizeSubtitleStyleHex(model.player.subtitleStyle?.textColor, "#FFFFFF")
+          )
+        })}
+        ${this.renderToggleRow({
+          focusKey: "playback:subtitleOutline",
+          title: t("settings.playback.subtitleOutline.title", {}, "Subtitle outline"),
+          subtitle: t("settings.playback.subtitleOutline.subtitle", {}, "Draw an outline around subtitle text for readability."),
+          checked: Boolean(model.player.subtitleStyle?.outlineEnabled)
+        })}
+        ${model.player.subtitleStyle?.outlineEnabled ? this.renderActionRow({
+          focusKey: "playback:subtitleOutlineColor",
+          title: t("settings.playback.subtitleOutlineColor.title", {}, "Outline color"),
+          subtitle: t("settings.playback.subtitleOutlineColor.subtitle", {}, "Color of the subtitle outline."),
+          value: labelForOptionId(
+            SUBTITLE_OUTLINE_COLOR_OPTIONS,
+            normalizeSubtitleStyleHex(model.player.subtitleStyle?.outlineColor, "#000000"),
+            normalizeSubtitleStyleHex(model.player.subtitleStyle?.outlineColor, "#000000")
+          )
+        }) : ""}
         ${this.renderActionRow({
           focusKey: "playback:renderMode",
           title: t("settings.playback.renderMode.title"),
