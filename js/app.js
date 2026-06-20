@@ -137,16 +137,25 @@ async function shouldShowProfileSelection() {
     pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]
   );
 
-  return !hasSelectedProfileThisSession && (profiles.length > 1 || activeProfileHasPin);
-}
-
-async function routeAfterAuthentication() {
-  const showProfileSelection = await shouldShowProfileSelection();
-  if (showProfileSelection) {
-    Router.navigate("profileSelection");
-    return;
+  if (hasSelectedProfileThisSession) {
+    return false;
   }
 
+  // Remember last profile: when enabled and the last used profile has no PIN,
+  // skip the picker and go straight in, matching the Android TV app. A profile
+  // with a PIN always shows the picker so the PIN can be entered.
+  if (
+    ProfileManager.isRememberLastProfileEnabled() &&
+    ProfileManager.hasEverSelectedProfile() &&
+    !activeProfileHasPin
+  ) {
+    return false;
+  }
+
+  return profiles.length > 1 || activeProfileHasPin;
+}
+
+async function enterWithLastProfile() {
   hasSelectedProfileThisSession = true;
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
@@ -162,6 +171,16 @@ async function routeAfterAuthentication() {
     await HomeCatalogSettingsSyncService.pull(activeProfile.id);
   }
   Router.navigate("home");
+}
+
+async function routeAfterAuthentication() {
+  const showProfileSelection = await shouldShowProfileSelection();
+  if (showProfileSelection) {
+    Router.navigate("profileSelection");
+    return;
+  }
+
+  await enterWithLastProfile();
 }
 
 function setupWebOsAppLifecycle() {
@@ -320,6 +339,21 @@ async function bootstrapApp() {
         return;
       }
       if (shouldBypassQr) {
+        // Honor "remember last profile" for guests too: skip the picker and go
+        // straight in with the last profile (guests have no PIN).
+        if (
+          ProfileManager.isRememberLastProfileEnabled() &&
+          ProfileManager.hasEverSelectedProfile()
+        ) {
+          enterWithLastProfile().catch((error) => {
+            console.warn("Failed to enter with last profile", error);
+            ProfileManager.clearActiveProfile();
+            if (Router.getCurrent() !== "profileSelection") {
+              Router.navigate("profileSelection", {}, { replaceHistory: true, skipStackPush: true });
+            }
+          });
+          return;
+        }
         ProfileManager.clearActiveProfile();
         if (Router.getCurrent() !== "profileSelection") {
           Router.navigate(

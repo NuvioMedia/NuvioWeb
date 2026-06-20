@@ -2,6 +2,8 @@ import { LocalStore } from "../storage/localStore.js";
 
 const PROFILES_KEY = "profiles";
 const ACTIVE_PROFILE_ID_KEY = "activeProfileId";
+const REMEMBER_LAST_PROFILE_KEY = "rememberLastProfile";
+const HAS_EVER_SELECTED_PROFILE_KEY = "hasEverSelectedProfile";
 
 const DEFAULT_PROFILES = [
   { id: "1", profileIndex: 1, name: "Profile 1", avatarColorHex: "#1E88E5", isPrimary: true }
@@ -48,6 +50,19 @@ export const ProfileManager = {
 
   async setActiveProfile(id) {
     LocalStore.set(ACTIVE_PROFILE_ID_KEY, String(id));
+    LocalStore.set(HAS_EVER_SELECTED_PROFILE_KEY, true);
+  },
+
+  isRememberLastProfileEnabled() {
+    return Boolean(LocalStore.get(REMEMBER_LAST_PROFILE_KEY, false));
+  },
+
+  setRememberLastProfileEnabled(enabled) {
+    LocalStore.set(REMEMBER_LAST_PROFILE_KEY, Boolean(enabled));
+  },
+
+  hasEverSelectedProfile() {
+    return Boolean(LocalStore.get(HAS_EVER_SELECTED_PROFILE_KEY, false));
   },
 
   clearActiveProfile() {
