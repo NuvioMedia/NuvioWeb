@@ -48,8 +48,6 @@ export const tizenAdapter = {
     }
 
     const mediaKeys = [
-      "Back",
-      "Return",
       "MediaPlayPause",
       "MediaPlay",
       "MediaPause",

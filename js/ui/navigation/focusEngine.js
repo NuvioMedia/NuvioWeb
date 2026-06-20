@@ -5,11 +5,6 @@ function buildNormalizedEvent(event) {
   const normalizedKey = Platform.normalizeKey(event);
   const normalizedCode = Number(normalizedKey.keyCode || 0);
 
-  const safeTarget = event?.target || {
-    nodeType: 0,
-    parentNode: null,
-    classList: { contains: () => false }
-  };
   return {
     key: normalizedKey.key,
     code: normalizedKey.code,
@@ -57,14 +52,10 @@ export const FocusEngine = {
   init() {
     this.boundHandleKey = this.handleKey.bind(this);
     this.boundHandleKeyUp = this.handleKeyUp.bind(this);
-    this.boundHandleTizenHardwareKey = this.handleTizenHardwareKey.bind(this);
     this.boundHandlePointerMove = this.handlePointerMove.bind(this);
     this.boundHandlePointerClick = this.handlePointerClick.bind(this);
     document.addEventListener("keydown", this.boundHandleKey, true);
     document.addEventListener("keyup", this.boundHandleKeyUp, true);
-    if (Platform.isTizen()) {
-      document.addEventListener("tizenhwkey", this.boundHandleTizenHardwareKey, true);
-    }
     if (Platform.isWebOS()) {
       document.addEventListener("mousemove", this.boundHandlePointerMove, true);
       document.addEventListener("pointermove", this.boundHandlePointerMove, true);
@@ -156,13 +147,6 @@ export const FocusEngine = {
     Promise.resolve(currentScreen.onKeyUp(normalizedEvent)).catch((error) => {
       console.warn("Screen keyup handler failed", error);
     });
-  },
-
-  handleTizenHardwareKey(event) {
-    if (!Platform.isBackEvent(event)) {
-      return;
-    }
-    this.handleBack(event, buildNormalizedEvent(event));
   },
 
   getKeyIdentity(event) {

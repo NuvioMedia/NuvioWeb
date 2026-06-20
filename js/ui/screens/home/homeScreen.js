@@ -2957,6 +2957,21 @@ export const HomeScreen = {
     return baseline + 40;
   },
 
+  shouldUseImmediateHorizontalScrollForNode(node) {
+    return Boolean(
+      node?.matches?.(".home-continue-card.focusable")
+      && (Platform.isWebOS() || this.isPerformanceConstrained() || this.isLegacyTvRuntime())
+    );
+  },
+
+  shouldDeferContinueWatchingFocusEffects(node, direction = null, inputMeta = null) {
+    return Boolean(
+      inputMeta?.repeat
+      && (direction === "left" || direction === "right")
+      && this.shouldUseImmediateHorizontalScrollForNode(node)
+    );
+  },
+
   getBackgroundRenderDelay() {
     if (this.isLegacyTvRuntime()) {
       const collectionCount = Array.isArray(this.collections) ? this.collections.length : 0;
@@ -5869,6 +5884,11 @@ export const HomeScreen = {
         if (Math.abs(Number(next.container.scrollLeft || 0) - Number(next.value || 0)) <= 1) {
           return;
         }
+        if (this.shouldUseImmediateHorizontalScrollForNode(_target)) {
+          this.cancelScrollAnimation(next.container, "x");
+          next.container.scrollLeft = Math.round(Number(next.value || 0));
+          return;
+        }
         this.animateSpringScroll(next.container, "x", next.value);
       });
       return;
@@ -5885,16 +5905,36 @@ export const HomeScreen = {
     const visibleRight = metrics.visibleRight;
 
     if (targetLeft < visibleLeft) {
+      if (this.shouldUseImmediateHorizontalScrollForNode(target)) {
+        this.cancelScrollAnimation(track, "x");
+        track.scrollLeft = Math.max(0, Math.round(targetLeft - metrics.leftPadding));
+        return;
+      }
       this.animateScroll(track, "x", targetLeft - metrics.leftPadding, this.getScrollDuration(160));
       return;
     }
     if (targetRight > visibleRight) {
+      if (this.shouldUseImmediateHorizontalScrollForNode(target)) {
+        this.cancelScrollAnimation(track, "x");
+        const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+        track.scrollLeft = Math.max(
+          0,
+          Math.min(maxScrollLeft, Math.round(targetRight - track.clientWidth + metrics.safeRightPadding))
+        );
+        return;
+      }
       this.animateScroll(track, "x", targetRight - track.clientWidth + metrics.safeRightPadding, this.getScrollDuration(160));
       return;
     }
     if (this.layoutMode !== "modern" && !direction) {
       const targetCenter = targetLeft + (target.offsetWidth / 2);
       const centeredLeft = targetCenter - (track.clientWidth / 2);
+      if (this.shouldUseImmediateHorizontalScrollForNode(target)) {
+        this.cancelScrollAnimation(track, "x");
+        const maxScrollLeft = Math.max(0, Number(track.scrollWidth || 0) - Number(track.clientWidth || 0));
+        track.scrollLeft = Math.max(0, Math.min(maxScrollLeft, Math.round(centeredLeft)));
+        return;
+      }
       this.animateScroll(track, "x", centeredLeft, this.getScrollDuration(160));
     }
   },
@@ -5929,13 +5969,20 @@ export const HomeScreen = {
     if (this.isMainNode(target)) {
       this.lastMainFocus = target;
       this.rememberMainRowFocus(target);
+      const shouldDeferFocusEffects = this.shouldDeferContinueWatchingFocusEffects(
+        target,
+        direction,
+        inputMeta
+      );
       const usingDelayedCameraFollow = this.scheduleModernCameraFollow(target, direction, current, scrollAdjustments, inputMeta);
       if (!usingDelayedCameraFollow) {
         this.ensureTrackHorizontalVisibility(target, direction, scrollAdjustments.horizontal);
         this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
       }
-      this.scheduleModernHeroUpdate(target);
-      this.scheduleFocusedPosterFlow(target);
+      if (!shouldDeferFocusEffects) {
+        this.scheduleModernHeroUpdate(target);
+        this.scheduleFocusedPosterFlow(target);
+      }
     } else {
       this.cancelModernCameraFollow({ stopAnimations: true });
       this.cancelPendingHeroFocus();
@@ -6812,13 +6859,15 @@ export const HomeScreen = {
     const allKeys = Array.from(rowMap.keys());
     const orderedKeys = HomeCatalogStore.ensureOrderKeys(allKeys);
     const disabledKeys = new Set(HomeCatalogStore.get().disabled || []);
-    const pinnedTopRows = collectionRows.filter((row) => row.pinToTop && !disabledKeys.has(row.homeCatalogDisableKey));
+    const isRowDisabled = (row) =>
+      disabledKeys.has(row.homeCatalogDisableKey) || disabledKeys.has(row.homeCatalogKey);
+    const pinnedTopRows = collectionRows.filter((row) => row.pinToTop && !isRowDisabled(row));
     const pinnedKeys = new Set(pinnedTopRows.map((row) => row.homeCatalogKey));
     const orderedRows = orderedKeys
       .filter((key) => !pinnedKeys.has(key))
       .map((key) => rowMap.get(key))
       .filter(Boolean)
-      .filter((row) => !disabledKeys.has(row.homeCatalogDisableKey));
+      .filter((row) => !isRowDisabled(row));
     return [...pinnedTopRows, ...orderedRows];
   },
 
@@ -7862,14 +7911,22 @@ export const HomeScreen = {
     if (this._homeHoldDialog) {
       return true;
     }
+    const keyCode = Number(event?.keyCode || 0);
+    if ((keyCode === 37 || keyCode === 39) && this.layoutMode === "modern") {
+      const current = this.getCurrentFocusedNode();
+      if (this.shouldUseImmediateHorizontalScrollForNode(current)) {
+        this.scheduleModernHeroUpdate(current);
+        this.scheduleFocusedPosterFlow(current);
+      }
+    }
     if (this.suppressHoldMenuEnterUntilKeyUp) {
       this.suppressHoldMenuEnterUntilKeyUp = false;
-      if (Number(event?.keyCode || 0) === 13) {
+      if (keyCode === 13) {
         event?.preventDefault?.();
         return;
       }
     }
-    if (Number(event?.keyCode || 0) !== 13) {
+    if (keyCode !== 13) {
       return;
     }
     const current = this.getCurrentFocusedNode();

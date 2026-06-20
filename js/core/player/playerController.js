@@ -673,7 +673,10 @@ export const PlayerController = {
 
   normalizeAvPlayTrackType(typeValue) {
     const type = String(typeValue || "").trim().toUpperCase();
-    if (type === "AUDIO" || type === "TEXT" || type === "SUBTITLE" || type === "VIDEO") {
+    if (type === "SUBTITLE") {
+      return "TEXT";
+    }
+    if (type === "AUDIO" || type === "TEXT" || type === "VIDEO") {
       return type;
     }
     if (type.includes("AUDIO")) {
@@ -1068,11 +1071,17 @@ export const PlayerController = {
       });
       return false;
     }
-    this.clearAvPlayExternalSubtitlePath();
+    try {
+      this.clearAvPlayExternalSubtitlePath();
+    } catch (_) {
+      // Internal subtitle selection can still work without clearing the external path.
+    }
     try {
       avplay.setSilentSubtitle?.(true);
+      this.avplaySubtitlesSilent = false;
     } catch (_) {
-      // Some AVPlay builds accept track changes without an explicit subtitle mute.
+      this.avplaySubtitlesSilent = false;
+      // Some AVPlay builds still emit subtitle callbacks after track selection.
     }
     try {
       logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(TEXT)", {
@@ -1099,7 +1108,7 @@ export const PlayerController = {
       }
     }
     try {
-      avplay.setSilentSubtitle?.(false);
+      avplay.setSilentSubtitle?.(true);
       this.avplaySubtitlesSilent = false;
     } catch (_) {
       this.avplaySubtitlesSilent = false;
@@ -1799,6 +1808,18 @@ export const PlayerController = {
           } catch (_) {
             // Ignore stream-complete stop failures.
           }
+        },
+        onsubtitlechange: (duration, subtitles, type, attributes) => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
+          this.emitVideoEvent("avplaysubtitlechange", {
+            playbackEngine: this.playbackEngine,
+            duration,
+            subtitles,
+            type,
+            attributes
+          });
         },
         onerror: (errorValue) => {
           if (!this.isPlaybackRequestActive(playToken, url)) {

@@ -3,6 +3,8 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "../../core/profile/profileSettingsSyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
+import { CollectionSyncService } from "../../core/profile/collectionSyncService.js";
+import { HomeCatalogSettingsSyncService } from "../../core/profile/homeCatalogSettingsSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
@@ -1899,6 +1901,8 @@ export const ProfileSelectionScreen = {
     await ProfileManager.setActiveProfile(profileId);
     detailWatchedEnrichmentService.invalidateAllCache();
     await ProfileSettingsSyncService.pull(profileId);
+    await CollectionSyncService.pull(profileId);
+    await HomeCatalogSettingsSyncService.pull(profileId);
     StartupSyncService.syncPull().catch((error) => {
       console.warn("Profile startup sync failed", error);
     });

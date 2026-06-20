@@ -11,6 +11,8 @@ import { ProfileManager } from "./core/profile/profileManager.js";
 import { ProfileSyncService } from "./core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "./core/profile/profileSettingsSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
+import { CollectionSyncService } from "./core/profile/collectionSyncService.js";
+import { HomeCatalogSettingsSyncService } from "./core/profile/homeCatalogSettingsSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
@@ -156,6 +158,8 @@ async function routeAfterAuthentication() {
     await ProfileManager.setActiveProfile(activeProfile.id);
     detailWatchedEnrichmentService.invalidateAllCache();
     await ProfileSettingsSyncService.pull(activeProfile.id);
+    await CollectionSyncService.pull(activeProfile.id);
+    await HomeCatalogSettingsSyncService.pull(activeProfile.id);
   }
   Router.navigate("home");
 }

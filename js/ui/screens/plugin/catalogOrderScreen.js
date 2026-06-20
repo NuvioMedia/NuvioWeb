@@ -2,7 +2,11 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
-import { buildOrderedCatalogItems, toDisplayTypeLabel } from "../../../core/addons/homeCatalogs.js";
+import { CollectionsStore } from "../../../data/local/collectionsStore.js";
+import {
+  buildOrderedHomeCatalogItems,
+  toDisplayTypeLabel
+} from "../../../core/addons/homeCatalogs.js";
 import { Platform } from "../../../platform/index.js";
 
 function clamp(value, min, max) {
@@ -29,9 +33,10 @@ export const CatalogOrderScreen = {
 
   async collectModel() {
     const addons = await addonRepository.getInstalledAddons();
+    const collections = CollectionsStore.get();
     const prefs = HomeCatalogStore.get();
     return {
-      items: buildOrderedCatalogItems(addons, prefs.order, prefs.disabled)
+      items: buildOrderedHomeCatalogItems(addons, collections, prefs.order, prefs.disabled)
     };
   },
 

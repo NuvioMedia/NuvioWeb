@@ -43,6 +43,10 @@ function isBackEvent(event) {
   return Environment.isBackEvent(event);
 }
 
+function isSelectKeyCode(keyCode) {
+  return keyCode === 13 || keyCode === 23;
+}
+
 function logEngineFsDebug(...args) {
   if (globalThis.__NUVIO_DEBUG_ENGINEFS__) {
     console.info(...args);
@@ -1722,6 +1726,7 @@ export const PlayerScreen = {
     this.externalSubtitleObjectUrls = [];
     this.htmlSubtitleCues = [];
     this.htmlSubtitleRenderFrame = null;
+    this.avPlaySubtitleOverlayTimer = null;
     this.htmlSubtitleActiveCueKey = "";
     this.htmlSubtitleSelectedId = null;
     this.subtitleCueStyleBindings = new Map();
@@ -1773,6 +1778,7 @@ export const PlayerScreen = {
     this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0);
     this.pauseOverlayMeta = null;
     this.nextEpisodeLaunching = false;
+    this.playerBackNavigationInProgress = false;
     this.nextEpisodeCardDismissed = false;
     this.nextEpisodeBackExitArmed = false;
 
@@ -5159,14 +5165,24 @@ export const PlayerScreen = {
   },
 
   navigateBackToStreamScreen() {
-    if (!this.params?.itemId && !this.params?.videoId) {
-      return false;
+    if (this.playerBackNavigationInProgress) {
+      return true;
     }
+    this.playerBackNavigationInProgress = true;
+    Router.suppressNextPopstate?.(1500);
+    Router.ignoreSinglePopstate?.();
     this.releaseCurrentEngineFsStreamBestEffort("back-to-stream", {
       removeTorrent: true,
       deferRemoveMs: ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS
     });
-    void Router.navigate("stream", this.buildStreamRouteParamsFromPlayer(), {
+    const streamParams = this.buildStreamRouteParamsFromPlayer();
+    const targetRoute = streamParams.itemId || streamParams.videoId
+      ? "stream"
+      : (this.params?.itemId ? "detail" : "home");
+    const targetParams = targetRoute === "stream"
+      ? streamParams
+      : (targetRoute === "detail" ? this.buildDetailRouteParamsFromPlayer() : {});
+    void Router.navigate(targetRoute, targetParams, {
       skipStackPush: true,
       replaceHistory: true,
       isBackNavigation: true
@@ -6171,6 +6187,10 @@ export const PlayerScreen = {
       }
     };
 
+    const onAvPlaySubtitleChange = (event) => {
+      this.renderAvPlaySubtitleChange(event?.detail || {});
+    };
+
     const onError = async (event) => {
       if (this.isStartupErrorVisible()) {
         return;
@@ -6335,6 +6355,7 @@ export const PlayerScreen = {
       ["loadeddata", onPlayable],
       ["canplay", onPlayable],
       ["avplaytrackschanged", onTrackListChanged],
+      ["avplaysubtitlechange", onAvPlaySubtitleChange],
       ["hlstrackschanged", onTrackListChanged],
       ["dashtrackschanged", onTrackListChanged]
     ];
@@ -9095,6 +9116,10 @@ export const PlayerScreen = {
       }
     }
     this.htmlSubtitleRenderFrame = null;
+    if (this.avPlaySubtitleOverlayTimer) {
+      clearTimeout(this.avPlaySubtitleOverlayTimer);
+      this.avPlaySubtitleOverlayTimer = null;
+    }
     this.htmlSubtitleCues = [];
     this.htmlSubtitleActiveCueKey = "";
     this.htmlSubtitleSelectedId = null;
@@ -9157,6 +9182,46 @@ export const PlayerScreen = {
     this.htmlSubtitleRenderFrame = typeof requestAnimationFrame === "function"
       ? requestAnimationFrame(render)
       : setTimeout(render, 80);
+  },
+
+  renderAvPlaySubtitleChange(detail = {}) {
+    if (
+      !Environment.isTizen()
+      || typeof PlayerController.isUsingAvPlay !== "function"
+      || !PlayerController.isUsingAvPlay()
+    ) {
+      return;
+    }
+    const selectedTrackIndex = typeof PlayerController.getSelectedAvPlaySubtitleTrackIndex === "function"
+      ? PlayerController.getSelectedAvPlaySubtitleTrackIndex()
+      : this.selectedSubtitleTrackIndex;
+    if (!Number.isFinite(Number(selectedTrackIndex)) || Number(selectedTrackIndex) < 0) {
+      return;
+    }
+    if (this.avPlaySubtitleOverlayTimer) {
+      clearTimeout(this.avPlaySubtitleOverlayTimer);
+      this.avPlaySubtitleOverlayTimer = null;
+    }
+    const rawText = String(detail?.subtitles || "")
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+    const text = this.parseSubtitleCueText(rawText);
+    if (!text) {
+      this.renderHtmlSubtitleOverlayCue([]);
+      return;
+    }
+    this.htmlSubtitleCues = [];
+    this.htmlSubtitleSelectedId = "avplay-native";
+    this.renderHtmlSubtitleOverlayCue([{ start: 0, end: 0, text }]);
+    const durationMs = Number(detail?.duration || 0);
+    const hideDelayMs = Number.isFinite(durationMs) && durationMs > 0
+      ? clamp(durationMs, 250, 12000)
+      : 2500;
+    this.avPlaySubtitleOverlayTimer = setTimeout(() => {
+      this.avPlaySubtitleOverlayTimer = null;
+      this.renderHtmlSubtitleOverlayCue([]);
+    }, hideDelayMs);
   },
 
   async applyTizenHtmlAddonSubtitle(subtitle, subtitleIndex) {
@@ -10902,7 +10967,7 @@ export const PlayerScreen = {
       }
       return true;
     }
-    if (keyCode === 13) {
+    if (isSelectKeyCode(keyCode)) {
       if (this.subtitleFocusedRail === "language") {
         const language = languages[this.subtitleLanguageRailIndex];
         if (!language) {
@@ -10943,7 +11008,7 @@ export const PlayerScreen = {
       this.renderSubtitleDialog();
       return true;
     }
-    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
+    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || isSelectKeyCode(keyCode);
   },
 
   getMergedAudioTrackEntries(audioTracks = []) {
@@ -11435,7 +11500,7 @@ export const PlayerScreen = {
   handleAudioDialogKey(event) {
     const keyCode = Number(event?.keyCode || 0);
     const entries = this.getAudioEntries();
-    const isNavigationKey = keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
+    const isNavigationKey = keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || isSelectKeyCode(keyCode);
 
     if (keyCode === 37) {
       if (this.audioFocusedColumn === "controls") {
@@ -11484,7 +11549,7 @@ export const PlayerScreen = {
       return true;
     }
 
-    if (keyCode === 13) {
+    if (isSelectKeyCode(keyCode)) {
       if (this.audioFocusedColumn === "tracks") {
         this.applyAudioTrack(this.audioDialogIndex);
       } else {
@@ -11566,11 +11631,11 @@ export const PlayerScreen = {
       this.renderSpeedDialog();
       return true;
     }
-    if (keyCode === 13) {
+    if (isSelectKeyCode(keyCode)) {
       this.applyPlaybackSpeed(PLAYER_SPEEDS[this.speedDialogIndex] || 1);
       return true;
     }
-    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13;
+    return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || isSelectKeyCode(keyCode);
   },
 
   getSourceFilters() {
@@ -11928,7 +11993,7 @@ export const PlayerScreen = {
       this.renderSourcesPanel();
       return true;
     }
-    if (keyCode === 13) {
+    if (isSelectKeyCode(keyCode)) {
       await this.activateSourcesFocus();
       return true;
     }
@@ -12767,12 +12832,8 @@ export const PlayerScreen = {
       return true;
     }
 
-    if (this.pauseOverlayVisible) {
-      this.dismissPauseOverlay({ revealControls: true, focus: false });
-      if (this.paused) {
-        this.schedulePauseOverlay();
-      }
-      return true;
+    if (this.pauseOverlayVisible || this.pauseOverlayTimer) {
+      this.dismissPauseOverlay({ revealControls: false, focus: false });
     }
 
     if (this.seekOverlayVisible || this.seekPreviewSeconds != null) {
@@ -12823,20 +12884,28 @@ export const PlayerScreen = {
 
   async onKeyDown(event) {
     const keyCode = Number(event?.keyCode || 0);
+    const isBackKey = isBackEvent(event);
     if (this.isStartupErrorVisible()) {
       event?.preventDefault?.();
       event?.stopPropagation?.();
-      if (isBackEvent(event) || keyCode === 13 || keyCode === 23 || keyCode === 66) {
+      if (isBackKey || isSelectKeyCode(keyCode) || keyCode === 66) {
         if (!this.navigateBackToStreamScreen()) {
           Router.back();
         }
       }
       return;
     }
+    if (isBackKey) {
+      event?.preventDefault?.();
+      event?.stopPropagation?.();
+      event?.stopImmediatePropagation?.();
+      this.consumeBackRequest();
+      return;
+    }
     if (this.nextEpisodeBackExitArmed) {
       this.nextEpisodeBackExitArmed = false;
     }
-    if (keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || keyCode === 13) {
+    if (keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || isSelectKeyCode(keyCode)) {
       event?.preventDefault?.();
     }
     const mediaAction = this.resolveMediaAction(event);
@@ -12844,7 +12913,7 @@ export const PlayerScreen = {
       event?.preventDefault?.();
       event?.stopPropagation?.();
       event?.stopImmediatePropagation?.();
-      if (mediaAction === "play" || mediaAction === "toggle" || keyCode === 13) {
+      if (mediaAction === "play" || mediaAction === "toggle" || isSelectKeyCode(keyCode)) {
         this.dismissPauseOverlay();
         this.togglePause();
         this.renderControlButtons();
@@ -12938,14 +13007,14 @@ export const PlayerScreen = {
         this.moveEpisodePanel(1);
         return;
       }
-      if (keyCode === 13) {
+      if (isSelectKeyCode(keyCode)) {
         this.playEpisodeFromPanel();
         return;
       }
     }
 
     if (!this.controlsVisible && this.activeSkipInterval && !this.skipIntervalDismissed) {
-      if (keyCode === 13) {
+      if (isSelectKeyCode(keyCode)) {
         if (this.skipActiveInterval()) {
           return;
         }
@@ -12953,7 +13022,7 @@ export const PlayerScreen = {
     }
 
     if (!this.controlsVisible && this.isNextEpisodeCardVisible()) {
-      if (keyCode === 13) {
+      if (isSelectKeyCode(keyCode)) {
         await this.playNextEpisode();
         return;
       }
@@ -12990,7 +13059,7 @@ export const PlayerScreen = {
         this.setControlsVisible(true, { focus: true });
         return;
       }
-      if (keyCode === 13) {
+      if (isSelectKeyCode(keyCode)) {
         this.autoHideControlsAfterSeek = false;
         this.cancelSeekPreview({ commit: true });
         this.setControlsVisible(true, { focus: true });
@@ -13001,7 +13070,7 @@ export const PlayerScreen = {
     }
 
     if (this.controlFocusZone === "skipIntro") {
-      if (keyCode === 13) {
+      if (isSelectKeyCode(keyCode)) {
         if (this.skipActiveInterval()) {
           return;
         }
@@ -13041,7 +13110,7 @@ export const PlayerScreen = {
         this.renderControlButtons();
         return;
       }
-      if (keyCode === 13) {
+      if (isSelectKeyCode(keyCode)) {
         this.autoHideControlsAfterSeek = false;
         this.togglePause();
         this.focusProgressBar();
@@ -13066,7 +13135,7 @@ export const PlayerScreen = {
       this.setControlsVisible(false);
       return;
     }
-    if (keyCode === 13) {
+    if (isSelectKeyCode(keyCode)) {
       this.performFocusedControl();
       return;
     }
