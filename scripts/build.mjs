@@ -34,7 +34,7 @@ async function buildCSS() {
     const css = await readFile(cssPath, "utf8");
     const result = await postcss([
       postcssGlobalData({ files: [path.join(cssDir, "base.css")] }),
-      postcssCustomProperties({ preserve: false }),
+      postcssCustomProperties({ preserve: true }),
       autoprefixer({ overrideBrowserslist: ["Chrome 38"], grid: "autoplace" }),
       cssnano()
     ]).process(css, { from: cssPath, to: outPath });
