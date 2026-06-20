@@ -36,7 +36,11 @@ function normalizeAddonUrl(input) {
 function clonePrefs(prefs = {}) {
   return {
     order: Array.isArray(prefs.order) ? [...prefs.order] : [],
-    disabled: Array.isArray(prefs.disabled) ? [...prefs.disabled] : []
+    disabled: Array.isArray(prefs.disabled) ? [...prefs.disabled] : [],
+    customTitles:
+      prefs.customTitles && typeof prefs.customTitles === "object" && !Array.isArray(prefs.customTitles)
+        ? { ...prefs.customTitles }
+        : {}
   };
 }
 
@@ -268,12 +272,14 @@ const AddonRemotePage = {
       this.draftAddons,
       this.collections,
       this.catalogPrefs.order,
-      this.catalogPrefs.disabled
+      this.catalogPrefs.disabled,
+      this.catalogPrefs.customTitles
     );
     this.catalogItems = nextItems;
     this.catalogPrefs = {
       order: nextItems.map((item) => item.key),
-      disabled: nextItems.filter((item) => item.isDisabled).map((item) => item.disableKey)
+      disabled: nextItems.filter((item) => item.isDisabled).map((item) => item.disableKey),
+      customTitles: this.catalogPrefs.customTitles || {}
     };
   },
 

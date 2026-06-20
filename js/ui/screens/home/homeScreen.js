@@ -89,11 +89,11 @@ import {
   escapeAttribute,
   escapeHtml,
   firstNonEmpty,
+  formatContentTypeLabel,
   formatCatalogRowTitle,
   limitTextToWordCount,
   parseCssPx,
   prettyId,
-  toTitleCase,
   uniqueNonEmptyValues
 } from "./homeUtils.js";
 
@@ -1449,7 +1449,7 @@ function buildHeroDisplayModel(hero, layoutMode) {
   const year = extractYear(hero);
   const imdb = resolveImdbRating(hero);
   const genres = Array.isArray(hero?.genres) ? hero.genres.filter(Boolean).slice(0, 3) : [];
-  const typeLabel = toTitleCase(hero?.type || hero?.apiType || "movie") || "Movie";
+  const typeLabel = formatContentTypeLabel(hero?.type || hero?.apiType || "movie", "movie");
   const isContinueWatchingHero = hero?.heroSource === "continueWatching";
   const metaPrimary = [];
   const metaSecondary = [];
@@ -1524,7 +1524,7 @@ export function buildModernHeroPresentation(hero) {
 
   const isSeries = String(normalized.type || normalized.apiType || "").toLowerCase() === "series";
   const genres = Array.isArray(normalized.genres) ? normalized.genres.filter(Boolean) : [];
-  const contentTypeText = toTitleCase(normalized.type || normalized.apiType || "movie");
+  const contentTypeText = formatContentTypeLabel(normalized.type || normalized.apiType || "movie", "movie");
   const runtimeText = formatRuntimeText(normalized);
   const yearText = extractReleaseDateText(normalized);
   const imdbText = resolveImdbRating(normalized);
@@ -2965,11 +2965,33 @@ export const HomeScreen = {
   },
 
   shouldDeferContinueWatchingFocusEffects(node, direction = null, inputMeta = null) {
+    void inputMeta;
     return Boolean(
-      inputMeta?.repeat
-      && (direction === "left" || direction === "right")
+      (direction === "left" || direction === "right")
       && this.shouldUseImmediateHorizontalScrollForNode(node)
     );
+  },
+
+  scheduleDeferredContinueWatchingFocusEffects(node) {
+    if (this.deferredContinueWatchingFocusTimer) {
+      clearTimeout(this.deferredContinueWatchingFocusTimer);
+      this.deferredContinueWatchingFocusTimer = null;
+    }
+    const target = node instanceof HTMLElement ? node : null;
+    if (!target) {
+      return;
+    }
+    this.deferredContinueWatchingFocusTimer = setTimeout(() => {
+      this.deferredContinueWatchingFocusTimer = null;
+      if (
+        Router.getCurrent() !== "home"
+        || !target.isConnected
+        || this.getCurrentFocusedNode() !== target
+      ) {
+        return;
+      }
+      this.scheduleModernHeroUpdate(target);
+    }, this.isLegacyTvRuntime() ? 260 : 220);
   },
 
   getBackgroundRenderDelay() {
@@ -3077,6 +3099,10 @@ export const HomeScreen = {
     if (this.heroFocusDelayTimer) {
       clearTimeout(this.heroFocusDelayTimer);
       this.heroFocusDelayTimer = null;
+    }
+    if (this.deferredContinueWatchingFocusTimer) {
+      clearTimeout(this.deferredContinueWatchingFocusTimer);
+      this.deferredContinueWatchingFocusTimer = null;
     }
     this.heroFocusToken = Number(this.heroFocusToken || 0) + 1;
   },
@@ -5869,6 +5895,17 @@ export const HomeScreen = {
     if (this.layoutMode === "modern") {
       if (this._trackHorizRaf) {
         cancelAnimationFrame(this._trackHorizRaf);
+        this._trackHorizRaf = null;
+      }
+      if (this.shouldUseImmediateHorizontalScrollForNode(target)) {
+        const next = this.getModernTrackAlignedScrollTarget(target, layoutAdjustment);
+        if (next?.container) {
+          this.cancelScrollAnimation(next.container, "x");
+          if (Math.abs(Number(next.container.scrollLeft || 0) - Number(next.value || 0)) > 1) {
+            next.container.scrollLeft = Math.round(Number(next.value || 0));
+          }
+        }
+        return;
       }
       const _target = target;
       const _adj = layoutAdjustment;
@@ -5977,9 +6014,15 @@ export const HomeScreen = {
       const usingDelayedCameraFollow = this.scheduleModernCameraFollow(target, direction, current, scrollAdjustments, inputMeta);
       if (!usingDelayedCameraFollow) {
         this.ensureTrackHorizontalVisibility(target, direction, scrollAdjustments.horizontal);
-        this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
+        if (!shouldDeferFocusEffects) {
+          this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
+        }
       }
-      if (!shouldDeferFocusEffects) {
+      if (shouldDeferFocusEffects) {
+        this.cancelPendingHeroFocus();
+        this.cancelFocusedPosterFlow();
+        this.scheduleDeferredContinueWatchingFocusEffects(target);
+      } else {
         this.scheduleModernHeroUpdate(target);
         this.scheduleFocusedPosterFlow(target);
       }
@@ -6858,16 +6901,25 @@ export const HomeScreen = {
     const rowMap = new Map([...catalogRows, ...collectionRows].map((row) => [row.homeCatalogKey, row]));
     const allKeys = Array.from(rowMap.keys());
     const orderedKeys = HomeCatalogStore.ensureOrderKeys(allKeys);
-    const disabledKeys = new Set(HomeCatalogStore.get().disabled || []);
+    const homeCatalogPrefs = HomeCatalogStore.get();
+    const disabledKeys = new Set(homeCatalogPrefs.disabled || []);
+    const customTitles = homeCatalogPrefs.customTitles || {};
+    const applyCustomTitle = (row) => {
+      const customTitle = String(customTitles[row?.homeCatalogKey] || "").trim();
+      return customTitle ? { ...row, catalogName: customTitle } : row;
+    };
     const isRowDisabled = (row) =>
       disabledKeys.has(row.homeCatalogDisableKey) || disabledKeys.has(row.homeCatalogKey);
-    const pinnedTopRows = collectionRows.filter((row) => row.pinToTop && !isRowDisabled(row));
+    const pinnedTopRows = collectionRows
+      .filter((row) => row.pinToTop && !isRowDisabled(row))
+      .map(applyCustomTitle);
     const pinnedKeys = new Set(pinnedTopRows.map((row) => row.homeCatalogKey));
     const orderedRows = orderedKeys
       .filter((key) => !pinnedKeys.has(key))
       .map((key) => rowMap.get(key))
       .filter(Boolean)
-      .filter((row) => !isRowDisabled(row));
+      .filter((row) => !isRowDisabled(row))
+      .map(applyCustomTitle);
     return [...pinnedTopRows, ...orderedRows];
   },
 

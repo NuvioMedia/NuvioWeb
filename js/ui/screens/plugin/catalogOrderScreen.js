@@ -36,7 +36,13 @@ export const CatalogOrderScreen = {
     const collections = CollectionsStore.get();
     const prefs = HomeCatalogStore.get();
     return {
-      items: buildOrderedHomeCatalogItems(addons, collections, prefs.order, prefs.disabled)
+      items: buildOrderedHomeCatalogItems(
+        addons,
+        collections,
+        prefs.order,
+        prefs.disabled,
+        prefs.customTitles
+      )
     };
   },
 

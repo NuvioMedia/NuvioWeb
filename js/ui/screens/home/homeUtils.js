@@ -1,3 +1,5 @@
+import { I18n } from "../../../i18n/index.js";
+
 export function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -18,17 +20,58 @@ export function toTitleCase(value) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
+function normalizedCatalogType(value) {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  if (normalized === "tv" || normalized === "show" || normalized === "shows") {
+    return "series";
+  }
+  if (normalized === "movies") {
+    return "movie";
+  }
+  if (["channel", "channels", "live", "tvchannel", "tvchannels"].includes(normalized)) {
+    return "channel";
+  }
+  return normalized;
+}
+
+export function formatContentTypeLabel(type, fallback = "") {
+  const normalized = normalizedCatalogType(type || fallback || "movie");
+  const fallbackLabel = toTitleCase(type || fallback || "movie") || "Movie";
+  if (normalized === "movie") {
+    return I18n.t("type_movie", {}, { fallback: "Movie" });
+  }
+  if (normalized === "series") {
+    return I18n.t("type_series", {}, { fallback: "Series" });
+  }
+  if (normalized === "channel") {
+    return I18n.t("stream_info_channels", {}, { fallback: "Channels" });
+  }
+  if (normalized === "anime") {
+    return I18n.t("profile_avatar_category_anime", {}, { fallback: "Anime" });
+  }
+  return fallbackLabel;
+}
+
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 export function formatCatalogRowTitle(catalogName, type, showTypeSuffix = true) {
   const rawBase = String(catalogName || "").trim();
   const base = rawBase ? rawBase.charAt(0).toUpperCase() + rawBase.slice(1) : "";
-  const typeLabel = toTitleCase(type || "movie") || "Movie";
+  const typeLabel = formatContentTypeLabel(type || "movie", "movie");
   if (!base) {
     return typeLabel;
   }
   if (!showTypeSuffix) {
     return base;
   }
-  return new RegExp(`\\b${typeLabel}$`, "i").test(base) ? base : `${base} - ${typeLabel}`;
+  const rawTypeLabel = toTitleCase(type || "movie") || "Movie";
+  const suffixPattern = new RegExp(`\\b(${escapeRegExp(typeLabel)}|${escapeRegExp(rawTypeLabel)})$`, "i");
+  return suffixPattern.test(base) ? base : `${base} - ${typeLabel}`;
 }
 
 export function prettyId(value) {

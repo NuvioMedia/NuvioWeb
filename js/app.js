@@ -166,9 +166,14 @@ async function enterWithLastProfile() {
   if (activeProfile) {
     await ProfileManager.setActiveProfile(activeProfile.id);
     detailWatchedEnrichmentService.invalidateAllCache();
-    await ProfileSettingsSyncService.pull(activeProfile.id);
+    const didApplyProfileSettings = await ProfileSettingsSyncService.pull(activeProfile.id);
     await CollectionSyncService.pull(activeProfile.id);
     await HomeCatalogSettingsSyncService.pull(activeProfile.id);
+    if (didApplyProfileSettings) {
+      await I18n.init();
+      ThemeManager.apply();
+      I18n.apply();
+    }
   }
   Router.navigate("home");
 }

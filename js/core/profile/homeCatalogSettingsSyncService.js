@@ -170,6 +170,7 @@ function buildLocalPayload(profileId = null) {
     const collections = CollectionsStore.getForProfile(resolvedProfileId);
     const prefs = HomeCatalogStore.getForProfile(resolvedProfileId);
     const layout = LayoutPreferences.getForProfile(resolvedProfileId);
+    const customTitles = prefs.customTitles || {};
     const catalogEntries = buildCatalogEntries(addons);
     const collectionEntries = buildCollectionEntries(collections);
     const entryByKey = new Map([
@@ -200,7 +201,7 @@ function buildLocalPayload(profileId = null) {
             catalog_id: "",
             enabled: !disabledSet.has(entry.key),
             order: index,
-            custom_title: "",
+            custom_title: normalizeString(customTitles[entry.key]),
             is_collection: true,
             collection_id: entry.collectionId
           };
@@ -211,7 +212,7 @@ function buildLocalPayload(profileId = null) {
           catalog_id: entry.catalogId,
           enabled: !disabledSet.has(entry.disableKey) && !disabledSet.has(entry.key),
           order: index,
-          custom_title: "",
+          custom_title: normalizeString(customTitles[entry.key]),
           is_collection: false,
           collection_id: ""
         };
@@ -313,7 +314,8 @@ function payloadSignature(payload = {}) {
     items: (payload.items || []).map((item) => ({
       key: syncItemKey(item),
       enabled: item.enabled !== false,
-      order: Number(item.order || 0)
+      order: Number(item.order || 0),
+      custom_title: normalizeString(item.custom_title ?? item.customTitle)
     }))
   });
 }
@@ -431,6 +433,14 @@ function applyPayload(profileId, payload = {}) {
     .filter((item) => item.enabled === false)
     .map((item) => syncItemKey(item))
     .filter(Boolean);
+  const customTitles = sortedItems.reduce((accumulator, item) => {
+    const key = syncItemKey(item);
+    const title = normalizeString(item.custom_title ?? item.customTitle);
+    if (key && title) {
+      accumulator[key] = title;
+    }
+    return accumulator;
+  }, {});
 
   HomeCatalogSettingsSyncService.syncingFromRemoteProfiles.add(resolveProfileId(profileId));
   try {
@@ -438,7 +448,8 @@ function applyPayload(profileId, payload = {}) {
       profileId,
       {
         order,
-        disabled
+        disabled,
+        customTitles
       },
       { silentSync: true }
     );

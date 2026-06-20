@@ -2585,6 +2585,7 @@ export const StreamScreen = {
         selectedStreamId: selected.id || ""
       },
       returnToStreamOnBack: true,
+      streamRouteParams: this.params ? { ...this.params } : null,
       fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       nextEpisodeVideoId: this.params?.nextEpisodeVideoId || null,
       nextEpisodeLabel: this.params?.nextEpisodeLabel || null,

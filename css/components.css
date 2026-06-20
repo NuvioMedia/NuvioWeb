@@ -4456,8 +4456,8 @@ button:focus-visible {
   --home-poster-radius: 24px;
   --home-continue-width: 432px;
   --home-continue-height: 243px;
-  background: #0d0d0d;
-  color: #fff;
+  background: var(--bg-color);
+  color: var(--text-color);
 }
 
 .home-screen-shell .home-main {
@@ -4484,7 +4484,7 @@ button:focus-visible {
   min-height: 400px;
   border: none;
   border-radius: 0;
-  background: #0d0d0d;
+  background: var(--bg-color);
   overflow: hidden;
 }
 
@@ -5072,8 +5072,8 @@ button:focus-visible {
     180deg,
     transparent 0%,
     transparent 45%,
-    rgba(13, 13, 13, 0.7) 78%,
-    rgba(13, 13, 13, 0.95) 100%
+    rgb(var(--bg-color-rgb) / 0.7) 78%,
+    rgb(var(--bg-color-rgb) / 0.95) 100%
   );
 }
 
@@ -5659,10 +5659,10 @@ button:focus-visible {
   /* Horizontal gradient: spans ~45% of media width (ATV ModernHeroGradientLayer exact stops) */
   background: linear-gradient(
     90deg,
-    #0d0d0d 0%,
-    rgba(13, 13, 13, 0.86) 22%,
-    rgba(13, 13, 13, 0.56) 46%,
-    rgba(13, 13, 13, 0.16) 76%,
+    var(--bg-color) 0%,
+    rgb(var(--bg-color-rgb) / 0.86) 22%,
+    rgb(var(--bg-color-rgb) / 0.56) 46%,
+    rgb(var(--bg-color-rgb) / 0.16) 76%,
     transparent 100%
   );
   /* Restrict to left 45% so the right side of the image stays unobscured */
@@ -5676,9 +5676,9 @@ button:focus-visible {
     180deg,
     transparent 0%,
     transparent 82%,
-    rgba(13, 13, 13, 0.25) 89.2%,
-    rgba(13, 13, 13, 0.65) 95.5%,
-    #0d0d0d 100%
+    rgb(var(--bg-color-rgb) / 0.25) 89.2%,
+    rgb(var(--bg-color-rgb) / 0.65) 95.5%,
+    var(--bg-color) 100%
   );
 }
 
@@ -10702,17 +10702,53 @@ button:focus-visible {
   top: 0;
   width: clamp(560px, 36vw, 760px);
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
   z-index: 35;
   border-radius: var(--tv-card-radius) 0 0 var(--tv-card-radius);
   padding: clamp(28px, 2.2vw, 40px);
   background: var(--player-background-elevated);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-episode-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
 }
 
 .player-episode-panel-title {
   font-size: clamp(32px, 2vw, 40px);
   font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-episode-close-btn {
+  height: 42px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--player-background-card);
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 16px;
+  font-weight: 700;
+  flex: 0 0 auto;
+  pointer-events: auto;
+}
+
+.player-episode-close-btn.focused {
+  background: var(--player-focus-background);
+  color: var(--player-on-secondary);
+  box-shadow: 0 0 0 2px var(--player-focus-ring);
 }
 
 .player-episode-panel-hint {
@@ -10722,15 +10758,76 @@ button:focus-visible {
   font-size: var(--tv-secondary-text);
 }
 
+.player-episode-season-tabs {
+  margin-top: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  flex: 0 0 auto;
+}
+
+.player-episode-season-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.player-episode-season-tab {
+  height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--player-background-card);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  pointer-events: auto;
+}
+
+.player-episode-season-tab.selected {
+  color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.player-episode-season-tab.focused {
+  background: var(--player-focus-background);
+  color: var(--player-on-secondary);
+  border-color: var(--player-focus-ring);
+}
+
+.player-episode-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: 14px;
+  padding: 4px 4px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scroll-padding-top: 12px;
+  scroll-padding-bottom: 18px;
+  scrollbar-width: none;
+}
+
+.player-episode-list::-webkit-scrollbar {
+  display: none;
+}
+
 .player-episode-item {
   border-radius: var(--tv-card-radius);
   padding: clamp(14px, 1vw, 20px);
   margin-bottom: 10px;
   background: transparent;
   border: 1px solid transparent;
+  scroll-margin-block: 12px;
 }
 
-.player-episode-item.selected {
+.player-episode-item.selected,
+.player-episode-item.focused {
   border-color: var(--player-focus-ring);
   background: var(--player-focus-background);
 }
@@ -11643,6 +11740,8 @@ button:focus-visible {
 
 .player-audio-modal {
   width: min(724px, calc(100vw - 88px));
+  height: min(72vh, calc(100vh - 128px));
+  overflow: hidden;
 }
 
 .player-speed-modal {
@@ -12122,7 +12221,11 @@ button:focus-visible {
 
 .player-audio-track-list {
   width: 444px;
-  max-height: 620px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-top: 10px;
+  scroll-padding-bottom: 10px;
 }
 
 .player-audio-track-list .player-dialog-item {
@@ -12270,6 +12373,12 @@ button:focus-visible {
   color: var(--player-atv-text-secondary);
 }
 
+.player-episode-close-btn,
+.player-episode-season-tab {
+  font-size: min(1.46vw, 28px);
+  line-height: 1.2;
+}
+
 .player-progress-track {
   height: min(0.625vw, 12px); /* ATV 6dp -> 12px */
   border-radius: min(0.3125vw, 6px);
@@ -12331,6 +12440,11 @@ button:focus-visible {
   bottom: min(6.67vw, 128px); /* ATV audio scaffold bottom 64dp -> 128px */
   width: min(75.42vw, 1448px); /* ATV 724dp -> 1448px */
   max-height: calc(100vh - min(9.58vw, 184px));
+}
+
+.player-audio-modal {
+  height: min(72vh, calc(100vh - min(9.58vw, 184px)));
+  overflow: hidden;
 }
 
 .player-subtitle-modal {
@@ -12476,12 +12590,18 @@ button:focus-visible {
   display: grid;
   grid-template-columns: min(46.25vw, 888px) min(27.92vw, 536px); /* ATV 444/268dp */
   gap: min(1.25vw, 24px); /* ATV 12dp -> 24px */
-  align-items: end;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .player-audio-track-list {
   width: min(46.25vw, 888px); /* ATV 444dp -> 888px */
-  max-height: min(64.58vw, 1240px); /* ATV 620dp -> 1240px */
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  overflow-y: auto;
   gap: min(0.625vw, 12px);
   padding: min(0.83vw, 16px) 0;
 }
@@ -12499,6 +12619,9 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   gap: min(1.04vw, 20px); /* ATV 10dp -> 20px */
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .player-audio-control-card {
@@ -12683,8 +12806,52 @@ button:focus-visible {
   background: var(--player-background-elevated);
 }
 
-.player-episode-panel-hint {
-  margin: min(1.67vw, 32px) 0 min(1.67vw, 32px); /* ATV 16dp spacers -> 32px */
+.player-episode-panel-header {
+  gap: min(1.46vw, 28px);
+}
+
+.player-episode-close-btn {
+  height: min(4.17vw, 80px);
+  padding: 0 min(1.67vw, 32px);
+  border-radius: min(1.25vw, 24px);
+  background: var(--player-background-card);
+  color: var(--player-atv-text-primary);
+}
+
+.player-episode-close-btn.focused {
+  background: var(--player-secondary);
+  color: var(--player-on-secondary);
+  box-shadow: 0 0 0 min(0.21vw, 4px) var(--player-focus-ring);
+}
+
+.player-episode-season-tabs {
+  margin-top: min(1.67vw, 32px);
+  gap: min(1.67vw, 32px);
+  padding: min(0.42vw, 8px) min(0.83vw, 16px);
+}
+
+.player-episode-season-tab {
+  height: min(4.58vw, 88px);
+  padding: 0 min(2.08vw, 40px);
+  border: min(0.104vw, 2px) solid var(--player-atv-border);
+  background: var(--player-background-card);
+  color: var(--player-atv-text-secondary);
+}
+
+.player-episode-season-tab.selected {
+  border-color: var(--player-atv-primary);
+}
+
+.player-episode-season-tab.focused,
+.player-episode-season-tab.selected.focused {
+  background: var(--player-secondary);
+  color: var(--player-on-secondary);
+  border-color: var(--player-focus-ring);
+}
+
+.player-episode-list {
+  margin-top: min(1.67vw, 32px);
+  padding: min(0.42vw, 8px) min(0.83vw, 16px) min(0.83vw, 16px);
 }
 
 .player-episode-item {
@@ -12696,15 +12863,20 @@ button:focus-visible {
   border-radius: min(1.67vw, 32px); /* ATV 16dp -> 32px */
   border-width: min(0.21vw, 4px); /* ATV 2dp -> 4px */
   background: var(--player-background-card);
+  transform-origin: center center;
   transition:
     background-color 120ms ease,
     border-color 120ms ease,
     transform 120ms ease;
 }
 
-.player-episode-item.selected {
+.player-episode-item.selected,
+.player-episode-item.focused {
   background: var(--player-focus-background);
   border-color: var(--player-focus-ring);
+}
+
+.player-episode-item.focused {
   transform: scale(1.01);
 }
 
@@ -12876,11 +13048,26 @@ button:focus-visible {
   }
 
   .player-audio-overlay-grid {
-    grid-template-columns: 444px 268px;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 268px);
   }
 
   .player-audio-track-list {
-    width: 444px;
+    width: auto;
+  }
+
+  .player-episode-close-btn {
+    min-width: 92px;
+  }
+
+  .player-episode-list {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .player-episode-thumb-wrap {
+    width: min(16vw, 180px);
+    min-width: min(16vw, 180px);
+    height: min(11vw, 124px);
   }
 }
 
@@ -15228,30 +15415,30 @@ button:focus-visible {
 }
 
 .stream-route-backdrop-dim {
-  background: rgba(13, 13, 13, 0.24);
+  background: rgb(var(--bg-color-rgb) / 0.24);
 }
 
 .stream-route-left-gradient {
   background: linear-gradient(
     90deg,
-    rgba(13, 13, 13, 1) 0%,
-    rgba(13, 13, 13, 0.96) 15%,
-    rgba(13, 13, 13, 0.88) 31%,
-    rgba(13, 13, 13, 0.66) 48%,
-    rgba(13, 13, 13, 0.36) 68%,
-    rgba(13, 13, 13, 0) 100%
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.96) 15%,
+    rgb(var(--bg-color-rgb) / 0.88) 31%,
+    rgb(var(--bg-color-rgb) / 0.66) 48%,
+    rgb(var(--bg-color-rgb) / 0.36) 68%,
+    rgb(var(--bg-color-rgb) / 0) 100%
   );
 }
 
 .stream-route-right-gradient {
   background: linear-gradient(
     270deg,
-    rgba(13, 13, 13, 1) 0%,
-    rgba(13, 13, 13, 0.95) 14%,
-    rgba(13, 13, 13, 0.82) 31%,
-    rgba(13, 13, 13, 0.58) 48%,
-    rgba(13, 13, 13, 0.24) 72%,
-    rgba(13, 13, 13, 0) 100%
+    rgb(var(--bg-color-rgb) / 1) 0%,
+    rgb(var(--bg-color-rgb) / 0.95) 14%,
+    rgb(var(--bg-color-rgb) / 0.82) 31%,
+    rgb(var(--bg-color-rgb) / 0.58) 48%,
+    rgb(var(--bg-color-rgb) / 0.24) 72%,
+    rgb(var(--bg-color-rgb) / 0) 100%
   );
 }
 
@@ -15900,6 +16087,84 @@ button:focus-visible {
 }
 
 .legacy-webos .player-next-episode-title {
+  font-size: 22px;
+}
+
+.legacy-webos .player-episode-panel {
+  width: 760px;
+  padding: 36px;
+  border-radius: 28px 0 0 28px;
+}
+
+.legacy-webos .player-episode-panel-header {
+  gap: 24px;
+}
+
+.legacy-webos .player-episode-panel-title {
+  font-size: 44px;
+}
+
+.legacy-webos .player-episode-close-btn {
+  height: 64px;
+  padding: 0 24px;
+  border-radius: 20px;
+  font-size: 22px;
+}
+
+.legacy-webos .player-episode-season-tabs {
+  margin-top: 24px;
+  gap: 18px;
+  padding: 8px 12px;
+}
+
+.legacy-webos .player-episode-season-tab {
+  height: 62px;
+  padding: 0 26px;
+  font-size: 22px;
+  border-radius: 999px;
+}
+
+.legacy-webos .player-episode-list {
+  margin-top: 24px;
+  padding: 8px 12px 16px;
+}
+
+.legacy-webos .player-episode-item {
+  gap: 20px;
+  padding: 16px;
+  margin-bottom: 18px;
+  border-radius: 26px;
+}
+
+.legacy-webos .player-episode-thumb-wrap {
+  width: 208px;
+  min-width: 208px;
+  height: 144px;
+  border-radius: 20px;
+}
+
+.legacy-webos .player-episode-item-title {
+  font-size: 27px;
+}
+
+.legacy-webos .player-episode-date,
+.legacy-webos .player-episode-item-subtitle {
+  font-size: 20px;
+}
+
+.legacy-webos .player-episode-code {
+  left: 12px;
+  bottom: 12px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 20px;
+}
+
+.legacy-webos .player-episode-current {
+  width: 36px;
+  height: 36px;
+  right: 10px;
+  top: 10px;
   font-size: 22px;
 }
 

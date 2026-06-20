@@ -25,15 +25,25 @@ export function toDisplayTypeLabel(value) {
   return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
 }
 
-export function buildOrderedCatalogItems(addons, savedOrderKeys = [], disabledKeys = []) {
-  return buildOrderedHomeCatalogItems(addons, [], savedOrderKeys, disabledKeys);
+function customTitleForKey(customTitles = {}, key = "") {
+  return String(customTitles?.[key] || "").trim();
+}
+
+export function buildOrderedCatalogItems(
+  addons,
+  savedOrderKeys = [],
+  disabledKeys = [],
+  customTitles = {}
+) {
+  return buildOrderedHomeCatalogItems(addons, [], savedOrderKeys, disabledKeys, customTitles);
 }
 
 export function buildOrderedHomeCatalogItems(
   addons,
   collections = [],
   savedOrderKeys = [],
-  disabledKeys = []
+  disabledKeys = [],
+  customTitles = {}
 ) {
   const defaultEntries = [];
   const seenKeys = new Set();
@@ -60,7 +70,8 @@ export function buildOrderedHomeCatalogItems(
           addonId: addon.id,
           addonName: addon.displayName,
           catalogId: catalog.id,
-          catalogName: catalog.name,
+          catalogName: customTitleForKey(customTitles, key) || catalog.name,
+          originalCatalogName: catalog.name,
           type: catalog.apiType,
           isDisabled: false
         });
@@ -81,7 +92,8 @@ export function buildOrderedHomeCatalogItems(
       addonId: "",
       addonName: folderCount === 1 ? "1 folder" : `${folderCount} folders`,
       catalogId: collection.id,
-      catalogName: collection.title,
+      catalogName: customTitleForKey(customTitles, key) || collection.title,
+      originalCatalogName: collection.title,
       type: "collection",
       isCollection: true,
       collectionId: collection.id,

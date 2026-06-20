@@ -52,10 +52,15 @@ export const FocusEngine = {
   init() {
     this.boundHandleKey = this.handleKey.bind(this);
     this.boundHandleKeyUp = this.handleKeyUp.bind(this);
+    this.boundHandleTizenHardwareKey = this.handleTizenHardwareKey.bind(this);
     this.boundHandlePointerMove = this.handlePointerMove.bind(this);
     this.boundHandlePointerClick = this.handlePointerClick.bind(this);
     document.addEventListener("keydown", this.boundHandleKey, true);
     document.addEventListener("keyup", this.boundHandleKeyUp, true);
+    if (Platform.isTizen()) {
+      document.addEventListener("tizenhwkey", this.boundHandleTizenHardwareKey, true);
+      window.addEventListener("tizenhwkey", this.boundHandleTizenHardwareKey, true);
+    }
     if (Platform.isWebOS()) {
       document.addEventListener("mousemove", this.boundHandlePointerMove, true);
       document.addEventListener("pointermove", this.boundHandlePointerMove, true);
@@ -63,6 +68,22 @@ export const FocusEngine = {
       document.documentElement?.classList?.add("webos-pointer-remote");
       document.body?.classList?.add("webos-pointer-remote");
     }
+  },
+
+  handleTizenHardwareKey(event) {
+    const normalizedEvent = buildNormalizedEvent(event);
+    if (!Platform.isBackEvent({
+      target: normalizedEvent.target,
+      key: normalizedEvent.key,
+      code: normalizedEvent.code,
+      keyName: normalizedEvent.keyName,
+      keyCode: normalizedEvent.keyCode,
+      originalKeyCode: normalizedEvent.originalKeyCode,
+      detail: event?.detail || null
+    })) {
+      return;
+    }
+    this.handleBack(event, normalizedEvent);
   },
 
   handleBack(event, normalizedEvent = buildNormalizedEvent(event)) {

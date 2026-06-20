@@ -80,6 +80,7 @@ export const AuthQrSignInScreen = {
     this.stopIntervals();
     const sessionId = activeQrSessionId + 1;
     activeQrSessionId = sessionId;
+    this.clearQr();
     this.setStatus(I18n.t("auth.qr.preparing"));
 
     try {
@@ -123,6 +124,17 @@ export const AuthQrSignInScreen = {
     `;
 
     codeText.innerText = I18n.t("auth.qr.codeLabel", { code });
+  },
+
+  clearQr() {
+    const qrContainer = this.container?.querySelector("#qr-container");
+    const codeText = this.container?.querySelector("#qr-code-text");
+    if (qrContainer) {
+      qrContainer.innerHTML = "";
+    }
+    if (codeText) {
+      codeText.innerText = "";
+    }
   },
 
   startCountdown(expiresAt) {

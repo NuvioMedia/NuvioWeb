@@ -133,6 +133,16 @@ function isLegacyStartSignatureError(text) {
   );
 }
 
+function isCallerSessionRejected(text) {
+  const message = String(text || "").toLowerCase();
+  return (
+    message.includes("http 401") ||
+    message.includes("invalid caller session") ||
+    message.includes("jwt expired") ||
+    message.includes("invalid jwt")
+  );
+}
+
 async function parseErrorText(response) {
   const status = Number(response?.status || 0);
   try {
@@ -193,7 +203,20 @@ function extractSessionTokens(payload) {
   return { accessToken, refreshToken };
 }
 
-async function ensureQrSessionAuthenticated() {
+async function ensureQrSessionAuthenticated({ forceNewAnonymous = false } = {}) {
+  if (forceNewAnonymous) {
+    const wasAnonymous = SessionStore.isAnonymousSession;
+    if (!wasAnonymous && SessionStore.refreshToken) {
+      const refreshed = await AuthManager.refreshSessionIfNeeded({ force: true });
+      if (refreshed && SessionStore.accessToken && !isJwtExpired(SessionStore.accessToken, 0)) {
+        return true;
+      }
+    }
+    SessionStore.accessToken = null;
+    SessionStore.refreshToken = null;
+    SessionStore.isAnonymousSession = false;
+  }
+
   if (SessionStore.accessToken && !isJwtLike(SessionStore.accessToken)) {
     SessionStore.accessToken = null;
     SessionStore.refreshToken = null;
@@ -273,6 +296,22 @@ async function ensureQrSessionAuthenticated() {
   return true;
 }
 
+async function fetchWithCallerSessionRecovery(requestFactory) {
+  await ensureQrSessionAuthenticated();
+  let response = await requestFactory();
+  if (response.ok || response.status !== 401) {
+    return response;
+  }
+
+  const firstErrorText = await parseErrorText(response);
+  if (!isCallerSessionRejected(firstErrorText)) {
+    throw new Error(firstErrorText || `HTTP ${response.status}`);
+  }
+
+  await ensureQrSessionAuthenticated({ forceNewAnonymous: true });
+  return requestFactory();
+}
+
 async function startRpc(deviceNonce, redirectBaseUrl, includeDeviceName = true) {
   const payload = {
     p_device_nonce: deviceNonce,
@@ -282,15 +321,17 @@ async function startRpc(deviceNonce, redirectBaseUrl, includeDeviceName = true) 
     payload.p_device_name = Environment.getDeviceLabel();
   }
 
-  const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/start_tv_login_session`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: SUPABASE_ANON_KEY,
-      Authorization: `Bearer ${getBearerToken()}`
-    },
-    body: JSON.stringify(payload)
-  });
+  const response = await fetchWithCallerSessionRecovery(() =>
+    fetch(`${SUPABASE_URL}/rest/v1/rpc/start_tv_login_session`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${getBearerToken()}`
+      },
+      body: JSON.stringify(payload)
+    })
+  );
 
   if (!response.ok) {
     const errorText = await parseErrorText(response);
@@ -379,19 +420,20 @@ export const QrLoginService = {
         lastError = "QR auth is not configured";
         return null;
       }
-      await ensureQrSessionAuthenticated();
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${getBearerToken()}`
-        },
-        body: JSON.stringify({
-          p_code: code,
-          p_device_nonce: deviceNonce
+      const response = await fetchWithCallerSessionRecovery(() =>
+        fetch(`${SUPABASE_URL}/rest/v1/rpc/poll_tv_login_session`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${getBearerToken()}`
+          },
+          body: JSON.stringify({
+            p_code: code,
+            p_device_nonce: deviceNonce
+          })
         })
-      });
+      );
 
       if (!response.ok) {
         lastError = await parseErrorText(response);
@@ -414,20 +456,20 @@ export const QrLoginService = {
         lastError = "QR auth is not configured";
         return false;
       }
-      await ensureQrSessionAuthenticated();
-      const token = getBearerToken();
-      const response = await fetch(`${SUPABASE_URL}/functions/v1/tv-logins-exchange`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          code,
-          device_nonce: deviceNonce
+      const response = await fetchWithCallerSessionRecovery(() =>
+        fetch(`${SUPABASE_URL}/functions/v1/tv-logins-exchange`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${getBearerToken()}`
+          },
+          body: JSON.stringify({
+            code,
+            device_nonce: deviceNonce
+          })
         })
-      });
+      );
 
       if (!response.ok) {
         lastError = await parseErrorText(response);

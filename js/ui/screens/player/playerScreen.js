@@ -1045,6 +1045,34 @@ function buildEpisodePanelHint() {
   return `UP/DOWN ${t("discover_select_catalog", {}, "Select")} | OK ${t("episodes_play", {}, "Play")} | BACK ${t("episodes_panel_close", {}, "Close")}`;
 }
 
+function formatEpisodePanelDate(value = "") {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const localDateMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})(?:$|T)/);
+  const parsed =
+    localDateMatch && !raw.includes("T")
+      ? new Date(
+          Number(localDateMatch[1]),
+          Number(localDateMatch[2]) - 1,
+          Number(localDateMatch[3])
+        )
+      : new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return "";
+  }
+  try {
+    return parsed.toLocaleDateString(undefined, {
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    });
+  } catch (_) {
+    return localDateMatch ? `${localDateMatch[1]}-${localDateMatch[2]}-${localDateMatch[3]}` : raw;
+  }
+}
+
 function episodeDisplayCode(episode = {}) {
   const season = Number(episode?.season);
   const episodeNumber = Number(episode?.episode);
@@ -1763,6 +1791,9 @@ export const PlayerScreen = {
       return seasonMatch && episodeMatch;
     });
     this.episodePanelIndex = Math.max(0, explicitEpisodeIndex >= 0 ? explicitEpisodeIndex : fallbackEpisodeIndex);
+    this.episodePanelFocusZone = "episodes";
+    this.episodePanelSeason = null;
+    this.episodePanelSeasonIndex = 0;
     this.switchingEpisode = false;
 
     this.seekOverlayVisible = false;
@@ -5120,6 +5151,22 @@ export const PlayerScreen = {
     };
   },
 
+  buildReturnStreamRouteParamsFromPlayer() {
+    const derivedParams = this.buildStreamRouteParamsFromPlayer();
+    const originalParams = this.params?.streamRouteParams && typeof this.params.streamRouteParams === "object"
+      ? { ...this.params.streamRouteParams }
+      : null;
+    if (!originalParams) {
+      return derivedParams;
+    }
+    return {
+      ...derivedParams,
+      ...originalParams,
+      resumePositionMs: derivedParams.resumePositionMs,
+      startFromBeginning: false
+    };
+  },
+
   buildDetailRouteParamsFromPlayer() {
     const itemType = normalizeItemType(this.params?.itemType || "movie");
     const currentEpisode = itemType === "series" ? this.resolveCurrentEpisodeEntry() : null;
@@ -5175,8 +5222,14 @@ export const PlayerScreen = {
       removeTorrent: true,
       deferRemoveMs: ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS
     });
-    const streamParams = this.buildStreamRouteParamsFromPlayer();
-    const targetRoute = streamParams.itemId || streamParams.videoId
+    const streamParams = this.buildReturnStreamRouteParamsFromPlayer();
+    const shouldReturnToStream = Boolean(
+      this.params?.returnToStreamOnBack
+      || this.params?.streamRouteParams
+      || streamParams.itemId
+      || streamParams.videoId
+    );
+    const targetRoute = shouldReturnToStream
       ? "stream"
       : (this.params?.itemId ? "detail" : "home");
     const targetParams = targetRoute === "stream"
@@ -12305,6 +12358,8 @@ export const PlayerScreen = {
     this.audioDialogVisible = false;
     this.speedDialogVisible = false;
     this.sourcesPanelVisible = false;
+    this.syncEpisodePanelSeasonToIndex();
+    this.episodePanelFocusZone = "episodes";
     this.updateModalBackdrop();
     this.setControlsVisible(true, { focus: false });
     this.renderSubtitleDialog();
@@ -12314,13 +12369,179 @@ export const PlayerScreen = {
     this.renderEpisodePanel();
   },
 
+  getEpisodePanelSeasons() {
+    const seen = new Set();
+    const seasons = [];
+    this.episodes.forEach((episode) => {
+      const season = Number(episode?.season);
+      if (!Number.isFinite(season) || seen.has(season)) {
+        return;
+      }
+      seen.add(season);
+      seasons.push(season);
+    });
+    seasons.sort((left, right) => left - right);
+    return seasons;
+  },
+
+  getEpisodePanelSeasonLabel(season) {
+    if (!Number.isFinite(Number(season))) {
+      return t("episodes_panel_title", {}, "Episodes");
+    }
+    return `${t("episodes_season", {}, "Season")} ${Number(season)}`;
+  },
+
+  syncEpisodePanelSeasonToIndex() {
+    const seasons = this.getEpisodePanelSeasons();
+    if (seasons.length <= 1) {
+      this.episodePanelSeason = null;
+      this.episodePanelSeasonIndex = 0;
+      return;
+    }
+    const selectedEpisode = this.episodes[this.episodePanelIndex] || null;
+    const selectedSeason = Number(selectedEpisode?.season);
+    const fallbackSeason = Number(this.params?.season);
+    const resolvedSeason = Number.isFinite(selectedSeason)
+      ? selectedSeason
+      : (Number.isFinite(fallbackSeason) ? fallbackSeason : seasons[0]);
+    const seasonIndex = Math.max(0, seasons.indexOf(resolvedSeason));
+    this.episodePanelSeasonIndex = seasonIndex;
+    this.episodePanelSeason = seasons[seasonIndex] ?? seasons[0];
+  },
+
+  getEpisodePanelEntries() {
+    const seasons = this.getEpisodePanelSeasons();
+    const activeSeason = seasons.length > 1 ? Number(this.episodePanelSeason) : null;
+    return this.episodes
+      .map((episode, index) => ({ episode, index }))
+      .filter(({ episode }) => (
+        activeSeason == null
+        || Number(episode?.season) === activeSeason
+      ));
+  },
+
   moveEpisodePanel(delta) {
     if (!this.episodePanelVisible || !this.episodes.length) {
       return;
     }
-    const lastIndex = this.episodes.length - 1;
-    this.episodePanelIndex = clamp(this.episodePanelIndex + delta, 0, lastIndex);
+    const entries = this.getEpisodePanelEntries();
+    if (!entries.length) {
+      return;
+    }
+    const currentPosition = Math.max(0, entries.findIndex((entry) => entry.index === this.episodePanelIndex));
+    const nextPosition = clamp(currentPosition + delta, 0, entries.length - 1);
+    this.episodePanelIndex = entries[nextPosition]?.index ?? this.episodePanelIndex;
+    this.episodePanelFocusZone = "episodes";
     this.renderEpisodePanel();
+  },
+
+  moveEpisodePanelSeason(delta) {
+    const seasons = this.getEpisodePanelSeasons();
+    if (seasons.length <= 1) {
+      return;
+    }
+    const currentIndex = seasons.indexOf(Number(this.episodePanelSeason));
+    const nextIndex = clamp((currentIndex >= 0 ? currentIndex : this.episodePanelSeasonIndex) + delta, 0, seasons.length - 1);
+    this.episodePanelSeasonIndex = nextIndex;
+    this.episodePanelSeason = seasons[nextIndex];
+    const firstEntry = this.getEpisodePanelEntries()[0];
+    if (firstEntry) {
+      this.episodePanelIndex = firstEntry.index;
+    }
+    this.episodePanelFocusZone = "seasons";
+    this.renderEpisodePanel();
+  },
+
+  handleEpisodePanelKey(event) {
+    if (!this.episodePanelVisible) {
+      return false;
+    }
+    const keyCode = Number(event?.keyCode || event?.which || event?.originalKeyCode || 0);
+    const isNavigationKey = keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || isSelectKeyCode(keyCode);
+    if (!isNavigationKey) {
+      return false;
+    }
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    event?.stopImmediatePropagation?.();
+
+    const seasons = this.getEpisodePanelSeasons();
+    const hasSeasonTabs = seasons.length > 1;
+    const entries = this.getEpisodePanelEntries();
+    const currentPosition = Math.max(0, entries.findIndex((entry) => entry.index === this.episodePanelIndex));
+
+    if (keyCode === 38) {
+      if (this.episodePanelFocusZone === "episodes") {
+        if (currentPosition > 0) {
+          this.moveEpisodePanel(-1);
+        } else {
+          this.episodePanelFocusZone = hasSeasonTabs ? "seasons" : "close";
+          this.renderEpisodePanel();
+        }
+        return true;
+      }
+      if (this.episodePanelFocusZone === "seasons") {
+        this.episodePanelFocusZone = "close";
+        this.renderEpisodePanel();
+        return true;
+      }
+      return true;
+    }
+
+    if (keyCode === 40) {
+      if (this.episodePanelFocusZone === "close") {
+        this.episodePanelFocusZone = hasSeasonTabs ? "seasons" : "episodes";
+        this.renderEpisodePanel();
+        return true;
+      }
+      if (this.episodePanelFocusZone === "seasons") {
+        this.episodePanelFocusZone = "episodes";
+        this.renderEpisodePanel();
+        return true;
+      }
+      this.moveEpisodePanel(1);
+      return true;
+    }
+
+    if (keyCode === 37 || keyCode === 39) {
+      if (this.episodePanelFocusZone === "seasons") {
+        this.moveEpisodePanelSeason(keyCode === 37 ? -1 : 1);
+      }
+      return true;
+    }
+
+    if (isSelectKeyCode(keyCode)) {
+      if (this.episodePanelFocusZone === "close") {
+        this.hideEpisodePanel();
+        return true;
+      }
+      if (this.episodePanelFocusZone === "seasons") {
+        this.episodePanelFocusZone = "episodes";
+        this.renderEpisodePanel();
+        return true;
+      }
+      this.playEpisodeFromPanel();
+      return true;
+    }
+
+    return true;
+  },
+
+  scrollEpisodePanelIntoView() {
+    const panel = this.container?.querySelector("#episodeSidePanel");
+    if (!panel || !this.episodePanelVisible) {
+      return;
+    }
+    const selected = panel.querySelector(".player-episode-item.focused") || panel.querySelector(".player-episode-item.selected");
+    selected?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const focusedSeason = panel.querySelector(".player-episode-season-tab.focused");
+    focusedSeason?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    try {
+      const focused = panel.querySelector(".focused");
+      focused?.focus?.({ preventScroll: true });
+    } catch (_) {
+      // Some TV WebKit builds reject programmatic focus during DOM replacement.
+    }
   },
 
   renderEpisodePanel() {
@@ -12332,14 +12553,39 @@ export const PlayerScreen = {
     panel.id = "episodeSidePanel";
     panel.className = "player-episode-panel";
 
-    const cards = this.episodes.slice(0, 80).map((episode, index) => {
+    this.syncEpisodePanelSeasonToIndex();
+    const seasons = this.getEpisodePanelSeasons();
+    const hasSeasonTabs = seasons.length > 1;
+    const focusedZone = this.episodePanelFocusZone || "episodes";
+    const seasonTabs = hasSeasonTabs
+      ? `<div class="player-episode-season-tabs">
+          ${seasons.map((season, index) => {
+            const selected = Number(season) === Number(this.episodePanelSeason);
+            const focused = focusedZone === "seasons" && selected;
+            return `
+              <button
+                type="button"
+                class="player-episode-season-tab focusable${selected ? " selected" : ""}${focused ? " focused" : ""}"
+                tabindex="-1"
+                data-episode-season-index="${index}"
+                data-episode-season="${escapeAttribute(season)}"
+              >${escapeHtml(this.getEpisodePanelSeasonLabel(season))}</button>
+            `;
+          }).join("")}
+        </div>`
+      : "";
+    const entries = this.getEpisodePanelEntries();
+    const cards = entries.map(({ episode, index }) => {
       const selected = index === this.episodePanelIndex;
-      const selectedClass = selected ? " selected" : "";
-      const current = Number(episode?.season) === Number(this.params?.season) && Number(episode?.episode) === Number(this.params?.episode);
+      const focused = focusedZone === "episodes" && selected;
+      const selectedClass = `${selected ? " selected" : ""}${focused ? " focused" : ""}`;
+      const current = (episode?.id && episode.id === this.params?.videoId)
+        || (Number(episode?.season) === Number(this.params?.season) && Number(episode?.episode) === Number(this.params?.episode));
       const code = episodeDisplayCode(episode);
       const thumbnail = episodeThumbnailUrl(episode);
+      const date = formatEpisodePanelDate(episode.released);
       return `
-        <div class="player-episode-item focusable${selectedClass}" data-episode-index="${index}">
+        <div class="player-episode-item focusable${selectedClass}" tabindex="-1" data-episode-index="${index}">
           <div class="player-episode-thumb-wrap">
             ${thumbnail ? `<img class="player-episode-thumb" src="${escapeAttribute(thumbnail)}" alt="" />` : `<div class="player-episode-thumb-fallback"></div>`}
             ${code ? `<div class="player-episode-code">${escapeHtml(code)}</div>` : ""}
@@ -12347,7 +12593,7 @@ export const PlayerScreen = {
           </div>
           <div class="player-episode-copy">
             <div class="player-episode-item-title">${escapeHtml(episode.title || t("episodes_episode", {}, "Episode"))}</div>
-            ${episode.released ? `<div class="player-episode-date">${escapeHtml(episode.released)}</div>` : ""}
+            ${date ? `<div class="player-episode-date">${escapeHtml(date)}</div>` : ""}
             <div class="player-episode-item-subtitle">${escapeHtml(episode.overview || "")}</div>
           </div>
         </div>
@@ -12355,11 +12601,19 @@ export const PlayerScreen = {
     }).join("");
 
     panel.innerHTML = `
-      <div class="player-episode-panel-title">${escapeHtml(t("episodes_panel_title", {}, "Episodes"))}</div>
-      <div class="player-episode-panel-hint">${escapeHtml(buildEpisodePanelHint())}</div>
-      ${cards}
+      <div class="player-episode-panel-header">
+        <div class="player-episode-panel-title">${escapeHtml(t("episodes_panel_title", {}, "Episodes"))}</div>
+        <button type="button" class="player-episode-close-btn focusable${focusedZone === "close" ? " focused" : ""}" tabindex="-1" data-episode-action="close">
+          ${escapeHtml(t("episodes_panel_close", {}, "Close"))}
+        </button>
+      </div>
+      ${seasonTabs}
+      <div class="player-episode-list">
+        ${cards}
+      </div>
     `;
     this.container.appendChild(panel);
+    this.scrollEpisodePanelIntoView();
   },
 
   hideEpisodePanel() {
@@ -12693,9 +12947,30 @@ export const PlayerScreen = {
       return;
     }
 
+    const episodeCloseNode = target?.closest?.("[data-episode-action='close']");
+    if (episodeCloseNode && this.episodePanelVisible) {
+      this.episodePanelFocusZone = "close";
+      return;
+    }
+
+    const episodeSeasonNode = target?.closest?.("[data-episode-season-index]");
+    if (episodeSeasonNode && this.episodePanelVisible) {
+      const seasonIndex = Number(episodeSeasonNode.dataset.episodeSeasonIndex || 0);
+      const seasons = this.getEpisodePanelSeasons();
+      this.episodePanelSeasonIndex = clamp(seasonIndex, 0, Math.max(0, seasons.length - 1));
+      this.episodePanelSeason = seasons[this.episodePanelSeasonIndex] ?? this.episodePanelSeason;
+      const firstEntry = this.getEpisodePanelEntries()[0];
+      if (firstEntry) {
+        this.episodePanelIndex = firstEntry.index;
+      }
+      this.episodePanelFocusZone = "seasons";
+      return;
+    }
+
     const episodeNode = target?.closest?.("[data-episode-index]");
     if (episodeNode && this.episodePanelVisible) {
       this.episodePanelIndex = Number(episodeNode.dataset.episodeIndex || 0);
+      this.episodePanelFocusZone = "episodes";
     }
   },
 
@@ -12795,6 +13070,19 @@ export const PlayerScreen = {
     const speedNode = target.closest?.("[data-speed-index]");
     if (speedNode && this.speedDialogVisible) {
       this.applyPlaybackSpeed(PLAYER_SPEEDS[this.speedDialogIndex] || 1);
+      return true;
+    }
+
+    const episodeCloseNode = target.closest?.("[data-episode-action='close']");
+    if (episodeCloseNode && this.episodePanelVisible) {
+      this.hideEpisodePanel();
+      return true;
+    }
+
+    const episodeSeasonNode = target.closest?.("[data-episode-season-index]");
+    if (episodeSeasonNode && this.episodePanelVisible) {
+      this.episodePanelFocusZone = "episodes";
+      this.renderEpisodePanel();
       return true;
     }
 
@@ -12928,6 +13216,11 @@ export const PlayerScreen = {
     if (this.paused) {
       this.schedulePauseOverlay();
     }
+
+    if (this.episodePanelVisible && this.handleEpisodePanelKey(event)) {
+      return;
+    }
+
     if (mediaAction) {
       event?.preventDefault?.();
       event?.stopPropagation?.();
@@ -12996,21 +13289,6 @@ export const PlayerScreen = {
       this.togglePause();
       this.renderControlButtons();
       return;
-    }
-
-    if (this.episodePanelVisible) {
-      if (keyCode === 38) {
-        this.moveEpisodePanel(-1);
-        return;
-      }
-      if (keyCode === 40) {
-        this.moveEpisodePanel(1);
-        return;
-      }
-      if (isSelectKeyCode(keyCode)) {
-        this.playEpisodeFromPanel();
-        return;
-      }
     }
 
     if (!this.controlsVisible && this.activeSkipInterval && !this.skipIntervalDismissed) {
