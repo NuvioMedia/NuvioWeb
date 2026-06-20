@@ -2356,6 +2356,9 @@ export const SettingsScreen = {
         returnRoute: "settings"
       })
     );
+    this.actionMap.set("profiles:rememberLast", () => {
+      ProfileManager.setRememberLastProfileEnabled(!ProfileManager.isRememberLastProfileEnabled());
+    });
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "profiles"))}
@@ -2367,6 +2370,16 @@ export const SettingsScreen = {
             subtitle: "",
             icon: null,
             classes: "settings-profile-manage-row"
+          })}
+          ${this.renderToggleRow({
+            focusKey: "profiles:rememberLast",
+            title: t("settings.profiles.rememberLast.title", {}, "Remember Last Profile"),
+            subtitle: t(
+              "settings.profiles.rememberLast.subtitle",
+              {},
+              "Skip the profile picker at startup and use the last selected profile. Profiles with a PIN are always asked."
+            ),
+            checked: ProfileManager.isRememberLastProfileEnabled()
           })}
         </div>
       </div>
