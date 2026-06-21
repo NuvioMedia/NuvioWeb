@@ -13,6 +13,12 @@ export function getArrowCodeFromKey(key) {
 function getKeyCodeFromName(keyName) {
   const normalized = String(keyName || "").toLowerCase();
   const keyMap = {
+    ok: 13,
+    select: 13,
+    enter: 13,
+    dpadcenter: 13,
+    dpad_center: 13,
+    center: 13,
     back: 10009,
     return: 10009,
     mediaplaypause: 10252,
@@ -99,7 +105,8 @@ export function normalizeKeyEvent(event, backCodes = []) {
   const rawCode = Number(
     getArrowCodeFromKey(key) || event?.keyCode || event?.which || fallbackCode || 0
   );
-  const normalizedCode = normalizeDirectionalKeyCode(rawCode);
+  const selectCode = rawCode === 23 ? 13 : rawCode;
+  const normalizedCode = normalizeDirectionalKeyCode(selectCode);
   const isBack = isBackEvent(event, backCodes, normalizedCode);
   return {
     key: key || (keyNameLower === "back" ? "Back" : keyName),

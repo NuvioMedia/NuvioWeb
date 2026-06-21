@@ -11,9 +11,6 @@ export const ENV_PROPERTY_KEYS = [
   "INTRODB_API_URL",
   "IMDB_RATINGS_API_BASE_URL",
   "AVATAR_PUBLIC_BASE_URL",
-  "ADDON_REMOTE_BASE_URL",
-  "ENABLE_REMOTE_WRAPPER_MODE",
-  "PREFERRED_PLAYBACK_ORDER",
   "TMDB_API_KEY"
 ];
 
@@ -26,9 +23,6 @@ const DEFAULT_ENV_VALUES = {
   INTRODB_API_URL: "",
   IMDB_RATINGS_API_BASE_URL: "",
   AVATAR_PUBLIC_BASE_URL: "",
-  ADDON_REMOTE_BASE_URL: "",
-  ENABLE_REMOTE_WRAPPER_MODE: false,
-  PREFERRED_PLAYBACK_ORDER: ["native-hls", "hls.js", "dash.js", "native-file", "platform-avplay"],
   TMDB_API_KEY: ""
 };
 
@@ -73,36 +67,13 @@ export function parseProperties(source = "") {
   return properties;
 }
 
-function normalizeBoolean(value) {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  return /^(1|true|yes|on)$/i.test(String(value || "").trim());
-}
-
-function normalizePlaybackOrder(value) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => String(entry || "").trim()).filter(Boolean);
-  }
-  return String(value || "")
-    .split(",")
-    .map((entry) => entry.trim())
-    .filter(Boolean);
-}
-
 export function normalizeEnvProperties(properties = {}) {
   const env = {};
   ENV_PROPERTY_KEYS.forEach((key) => {
     const rawValue = Object.prototype.hasOwnProperty.call(properties, key)
       ? properties[key]
       : DEFAULT_ENV_VALUES[key];
-    if (key === "ENABLE_REMOTE_WRAPPER_MODE") {
-      env[key] = normalizeBoolean(rawValue);
-    } else if (key === "PREFERRED_PLAYBACK_ORDER") {
-      env[key] = normalizePlaybackOrder(rawValue);
-    } else {
-      env[key] = String(rawValue ?? "");
-    }
+    env[key] = String(rawValue ?? "");
   });
   return env;
 }

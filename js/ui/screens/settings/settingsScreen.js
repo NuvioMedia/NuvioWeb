@@ -2667,8 +2667,9 @@ export const SettingsScreen = {
     const selectedLayout = String(model.layout.homeLayout || "").toLowerCase();
     const isModernLayout = selectedLayout === "modern";
     const isModernLandscape = isModernLayout && Boolean(model.layout.modernLandscapePostersEnabled);
+    const cardExpansionEnabled = Boolean(model.layout.focusedPosterBackdropExpandEnabled);
     const showAutoplayRow =
-      Boolean(model.layout.focusedPosterBackdropExpandEnabled) || isModernLandscape;
+      cardExpansionEnabled || isModernLandscape;
     const continueWatchingSortMode = String(model.layout.continueWatchingSortMode || "default");
     const continueWatchingSortLabel =
       continueWatchingSortMode === "streaming_style"

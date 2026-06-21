@@ -6222,13 +6222,6 @@ button:focus-visible {
   margin-bottom: 18px;
 }
 
-.home-screen-shell.home-layout-modern.home-modern-landscape-posters
-  .home-modern-row
-  .home-track.has-expanded-landscape
-  .home-poster-card.is-landscape:not(.is-expanded) {
-  margin-top: calc(var(--home-poster-height) - var(--home-landscape-poster-height));
-}
-
 .home-screen-shell.home-layout-modern
   .home-poster-card.is-landscape.is-expanded
   .home-poster-landscape-copy {

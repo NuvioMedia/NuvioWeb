@@ -4775,6 +4775,27 @@ export const HomeScreen = {
     return true;
   },
 
+  getFocusedPosterFlowConfig(prefs = this.layoutPrefs || {}) {
+    const useLandscapePosters = Boolean(prefs.modernLandscapePostersEnabled);
+    const expandSettingEnabled = Boolean(prefs.focusedPosterBackdropExpandEnabled);
+    const requestedTrailerTarget =
+      String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase() === "expanded_card"
+        ? "expanded_card"
+        : "hero_media";
+    const trailerEnabled =
+      Boolean(prefs.focusedPosterBackdropTrailerEnabled) && !this.shouldSuppressAutomaticTrailerPlayback();
+    const shouldPreviewTrailer = trailerEnabled && (useLandscapePosters || expandSettingEnabled);
+    const landscapeExpandedCardMode =
+      useLandscapePosters && shouldPreviewTrailer && requestedTrailerTarget === "expanded_card";
+    const shouldExpand =
+      (expandSettingEnabled && !useLandscapePosters) || landscapeExpandedCardMode;
+    return {
+      shouldExpand,
+      shouldPreviewTrailer,
+      trailerTarget: shouldExpand ? requestedTrailerTarget : "hero_media"
+    };
+  },
+
   mountTrailerLayer(container, source, onReady = null) {
     if (!container || !source) {
       return;
@@ -4849,7 +4870,6 @@ export const HomeScreen = {
       if (instant && frame instanceof HTMLElement) {
         frame.style.transition = "none";
       }
-      target.closest(".home-track")?.classList.remove("has-expanded-landscape");
       target.classList.remove("is-expanded", "is-trailer-active", "is-expanded-backdrop-ready");
       this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
       if (instant && target instanceof HTMLElement) {
@@ -4882,9 +4902,6 @@ export const HomeScreen = {
     ).some((card) => card !== node);
     if ((this.expandedPosterNode && this.expandedPosterNode !== node) || hasOtherExpandedPosters) {
       this.collapseFocusedPoster(this.expandedPosterNode, { excludeNode: node });
-    }
-    if (node.classList.contains("is-landscape")) {
-      node.closest(".home-track")?.classList.add("has-expanded-landscape");
     }
     node.classList.add("is-expanded");
     this.hydrateFocusedPosterAssets(node);
@@ -4952,9 +4969,7 @@ export const HomeScreen = {
       return;
     }
     const prefs = this.layoutPrefs || {};
-    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
-    const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled) && !this.shouldSuppressAutomaticTrailerPlayback();
-    const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
+    const { shouldExpand, shouldPreviewTrailer, trailerTarget } = this.getFocusedPosterFlowConfig(prefs);
     if (shouldExpand) {
       this.expandFocusedPoster(node);
     }
@@ -5190,10 +5205,7 @@ export const HomeScreen = {
     }
     this.cancelFocusedPosterFlow();
     const prefs = this.layoutPrefs || {};
-    const shouldExpand = Boolean(prefs.focusedPosterBackdropExpandEnabled || prefs.modernLandscapePostersEnabled);
-    const shouldPreviewTrailer = Boolean(prefs.focusedPosterBackdropTrailerEnabled)
-      && !this.shouldSuppressAutomaticTrailerPlayback();
-    const trailerTarget = String(prefs.focusedPosterBackdropTrailerPlaybackTarget || "hero_media").toLowerCase();
+    const { shouldExpand, shouldPreviewTrailer, trailerTarget } = this.getFocusedPosterFlowConfig(prefs);
     const shouldRun = Boolean(shouldExpand || shouldPreviewTrailer);
     if (!shouldRun) {
       this.clearFocusedPosterFlowState();
@@ -7048,8 +7060,9 @@ export const HomeScreen = {
     const focusState = !this.homeHoldFocusLocked && retainedFocusState && retainedFocusState.focusKind === "item"
       ? retainedFocusState
       : null;
+    const focusedPosterFlowConfig = this.getFocusedPosterFlowConfig(this.layoutPrefs || {});
     const expandFocusedPoster = this.layoutMode === "modern"
-      && Boolean(this.layoutPrefs?.focusedPosterBackdropExpandEnabled || modernLandscapePostersEnabled)
+      && Boolean(focusedPosterFlowConfig.shouldExpand)
       && Number(this.layoutPrefs?.focusedPosterBackdropExpandDelaySeconds ?? 3) <= 0
       && Boolean(focusState);
     const rowItemLimit = this.getRowItemLimit();
