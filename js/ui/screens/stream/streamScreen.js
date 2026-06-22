@@ -2744,7 +2744,7 @@ export const StreamScreen = {
           return;
         }
         if (direction === "down" && rows.length) {
-          this.focusState = { zone: "card", row: clamp(index, 0, rows.length - 1), action: "play" };
+          this.focusState = { zone: "card", row: 0, action: "play" };
           this.applyFocus();
         }
         return;

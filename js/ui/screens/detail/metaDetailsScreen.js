@@ -6903,7 +6903,7 @@ export const MetaDetailsScreen = {
         return this.applyStreamChooserFocus() || true;
       }
       if (direction === "down" && cards.length) {
-        this.streamChooserFocus = { zone: "card", index: Math.min(index, cards.length - 1) };
+        this.streamChooserFocus = { zone: "card", index: 0 };
         return this.applyStreamChooserFocus() || true;
       }
       return true;
