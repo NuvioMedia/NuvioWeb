@@ -338,12 +338,14 @@ export const CatalogSeeAllScreen = {
     const shell = this.container?.querySelector(".seeall-shell") || null;
     const isFirstRow = Number(target.dataset.navRow || 0) === 0;
     const shouldLoadMore = this.shouldAutoLoadMore(target.dataset.itemIndex);
+    // Instant scroll on per-keypress focus: a smooth scrollTo restarts its easing
+    // on every held-down repeat, so the view jittered and only caught up on release.
     const nextScrollTop = isFirstRow
-      ? setContainerScrollTop(shell, 0, "smooth")
+      ? setContainerScrollTop(shell, 0, "auto")
       : scrollNodeIntoContainerView(target, shell, {
           center: false,
           padding: 20,
-          behavior: shouldLoadMore ? "auto" : "smooth"
+          behavior: "auto"
         });
     if (Number.isFinite(nextScrollTop)) {
       this.savedScrollTop = nextScrollTop;

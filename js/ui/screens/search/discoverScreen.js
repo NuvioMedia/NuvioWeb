@@ -1198,12 +1198,13 @@ export const DiscoverScreen = {
     const scroller = this.getContentScroller();
     const isFirstRow = Number(target.dataset.navRow || 0) === 0;
     const shouldLoadMore = this.shouldAutoLoadMore(target.dataset.itemIndex);
+    // Instant scroll on per-keypress focus (smooth scrollTo jittered on held repeats).
     const nextScrollTop = isFirstRow
-      ? setContainerScrollTop(scroller, 0, "smooth")
+      ? setContainerScrollTop(scroller, 0, "auto")
       : scrollNodeIntoContainerView(target, scroller, {
           center: false,
           padding: 20,
-          behavior: shouldLoadMore ? "auto" : "smooth"
+          behavior: "auto"
         });
     if (Number.isFinite(nextScrollTop)) {
       this.savedScrollTop = nextScrollTop;
