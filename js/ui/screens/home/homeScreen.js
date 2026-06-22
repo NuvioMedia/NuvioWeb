@@ -5350,6 +5350,18 @@ export const HomeScreen = {
     return this.focusNode(current, target, "right") || true;
   },
 
+  // Selecting Home while already on Home scrolls back to the top, matching the
+  // Android TV app. Clears the remembered content focus so we land on the very
+  // first row, resets the scroll position, then moves focus into the content.
+  onSidebarReselect() {
+    const viewport = this.getHomeViewport();
+    if (viewport) {
+      viewport.scrollTop = 0;
+    }
+    this.lastMainFocus = null;
+    this.closeSidebarToContent();
+  },
+
   getMainFocusAnchor(node) {
     if (!node) {
       return null;

@@ -243,7 +243,13 @@ export function activateLegacySidebarAction(action, currentRoute = "") {
   }
 
   const target = getItemForAction(normalizedAction);
-  if (!target || target.route === currentRoute) {
+  if (!target) {
+    return;
+  }
+  if (target.route === currentRoute) {
+    // Re-selecting the tab you are already on. Let the screen react, e.g. Home
+    // scrolls back to the top, matching the Android TV app.
+    Router.getCurrentScreen()?.onSidebarReselect?.();
     return;
   }
   Router.navigate(target.route);
