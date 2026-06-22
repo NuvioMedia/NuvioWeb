@@ -1791,7 +1791,6 @@ button:focus-visible {
   --modern-sidebar-pill-chip-start: 10px;
   --modern-sidebar-pill-chip-end: 24px;
   --modern-sidebar-pill-chip-gap: 18px;
-  --focus-color: #f5f8fc;
   background:
     radial-gradient(120% 90% at 75% 8%, rgba(190, 40, 18, 0.26), transparent 45%), #06090e;
   color: #f8fbff;
@@ -3364,8 +3363,8 @@ button:focus-visible {
 
 .library-picker-anchor.focused,
 .library-picker.open .library-picker-anchor {
-  border-color: rgb(255 255 255 / 0.1);
-  box-shadow: inset 0 0 0 3px rgb(255 255 255 / 0.96);
+  border-color: var(--focus-color);
+  box-shadow: inset 0 0 0 3px var(--focus-color);
   background: var(--focus-bg);
 }
 
