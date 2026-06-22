@@ -4576,14 +4576,18 @@ export const SettingsScreen = {
         : 0;
 
     if (isAwaitingApproval) {
-      this.startTraktPolling();
+      if (!this.deferTraktAutoWork?.("polling")) {
+        this.startTraktPolling();
+      }
     }
     if (isConnected && !this.traktStats && !this.traktStatsLoading) {
-      void this.loadTraktStats(false).then(() => {
-        if (this.container && this.activeSection === "trakt") {
-          void this.render();
-        }
-      });
+      if (!this.deferTraktAutoWork?.("stats")) {
+        void this.loadTraktStats(false).then(() => {
+          if (this.container && this.activeSection === "trakt") {
+            void this.render();
+          }
+        });
+      }
     }
 
     this.actionMap.set("trakt:back", () => {

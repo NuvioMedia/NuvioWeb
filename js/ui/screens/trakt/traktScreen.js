@@ -49,6 +49,8 @@ function formatCountdown(valueMs) {
   return `${seconds}s`;
 }
 
+const TRAKT_ROUTE_ENTER_DURATION_MS = 350;
+
 export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
   async mount() {
     this.container = document.getElementById("trakt");
@@ -59,12 +61,58 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
     this.optionDialog = this.optionDialog || null;
     this.dialogFocusIndex = Number.isFinite(this.dialogFocusIndex) ? this.dialogFocusIndex : 0;
     this.traktRouteEnterPending = true;
+    this.traktRouteAutoWorkDeferred = true;
     if (!this.handleClickBound) {
       this.handleClickBound = this.handleClickEvent.bind(this);
       this.container.addEventListener("click", this.handleClickBound);
     }
     await this.render();
-    this.startTraktClock();
+    this.deferTraktAutoWork("clock");
+  },
+
+  deferTraktAutoWork(kind) {
+    const key = String(kind || "");
+    if (!key || Router.getCurrent() !== "trakt" || !this.traktRouteAutoWorkDeferred) {
+      return false;
+    }
+    this.pendingTraktAutoWork = {
+      ...(this.pendingTraktAutoWork || {}),
+      [key]: true
+    };
+    this.scheduleTraktRouteAutoWork();
+    return true;
+  },
+
+  scheduleTraktRouteAutoWork() {
+    if (this.traktRouteAutoWorkTimer) {
+      return;
+    }
+    this.traktRouteAutoWorkTimer = setTimeout(() => {
+      this.traktRouteAutoWorkTimer = null;
+      this.runTraktRouteAutoWork();
+    }, TRAKT_ROUTE_ENTER_DURATION_MS + 80);
+  },
+
+  runTraktRouteAutoWork() {
+    const pending = this.pendingTraktAutoWork || {};
+    this.pendingTraktAutoWork = null;
+    this.traktRouteAutoWorkDeferred = false;
+    if (Router.getCurrent() !== "trakt") {
+      return;
+    }
+    if (pending.clock) {
+      this.startTraktClock();
+    }
+    if (pending.polling) {
+      this.startTraktPolling();
+    }
+    if (pending.stats && !this.traktStats && !this.traktStatsLoading) {
+      void this.loadTraktStats(false).then(() => {
+        if (Router.getCurrent() === "trakt" && this.container && this.activeSection === "trakt") {
+          void this.render();
+        }
+      });
+    }
   },
 
   async render({ refreshModel = true } = {}) {
@@ -373,6 +421,12 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
   },
 
   cleanup() {
+    if (this.traktRouteAutoWorkTimer) {
+      clearTimeout(this.traktRouteAutoWorkTimer);
+      this.traktRouteAutoWorkTimer = null;
+    }
+    this.pendingTraktAutoWork = null;
+    this.traktRouteAutoWorkDeferred = false;
     this.stopTraktPolling?.();
     this.stopTraktClock();
     if (this.container && this.handleClickBound) {
