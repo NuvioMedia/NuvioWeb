@@ -407,7 +407,7 @@ function flexGapFallbackPlugin() {
 
       const scopedSelectors = rule.selectors.map((selector) => `html.no-flex-gap ${selector}`);
       const isColumnDirection = flexDirection.includes("column");
-      const wraps = flexWrap.includes("wrap");
+      const wraps = flexWrap.includes("wrap") && !flexWrap.includes("nowrap");
       const childFallback = postcss.rule({
         selectors: scopedSelectors.map((selector) => `${selector} > * + *`)
       });

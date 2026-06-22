@@ -8,6 +8,7 @@ import { buildRuntimeEnvScript, readEnvProperties } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
+const distDir = path.join(rootDir, "dist");
 const host = process.env.HOST || "0.0.0.0";
 const port = Number(process.env.PORT || 4173);
 const mediaRuntimePath = path.join(rootDir, "services", "webos", "runtime", "media-http.cjs");
@@ -60,6 +61,35 @@ function resolveRequestPath(urlPathname) {
   }
   const normalized = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
   return path.join(rootDir, normalized);
+}
+
+function resolveDistPathForRootFile(rootFilePath) {
+  const relativePath = path.relative(rootDir, rootFilePath);
+  if (!relativePath || relativePath.startsWith("..") || path.isAbsolute(relativePath)) {
+    return "";
+  }
+  return path.join(distDir, relativePath);
+}
+
+async function resolveRequestFile(pathname) {
+  const rootPath = resolveRequestPath(pathname);
+  const rootStat = await stat(rootPath).catch(() => null);
+
+  if (!String(pathname || "").startsWith("/css/")) {
+    return { filePath: rootPath, fileStat: rootStat };
+  }
+
+  const distPath = resolveDistPathForRootFile(rootPath);
+  const distStat = distPath ? await stat(distPath).catch(() => null) : null;
+  if (!distStat?.isFile()) {
+    return { filePath: rootPath, fileStat: rootStat };
+  }
+
+  if (!rootStat?.isFile() || distStat.mtimeMs >= rootStat.mtimeMs) {
+    return { filePath: distPath, fileStat: distStat };
+  }
+
+  return { filePath: rootPath, fileStat: rootStat };
 }
 
 function requestLocalMediaPath(
@@ -189,8 +219,7 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
-    let filePath = resolveRequestPath(requestUrl.pathname);
-    let fileStat = await stat(filePath).catch(() => null);
+    let { filePath, fileStat } = await resolveRequestFile(requestUrl.pathname);
 
     if (fileStat?.isDirectory()) {
       filePath = path.join(filePath, "index.html");

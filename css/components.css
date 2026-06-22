@@ -16776,6 +16776,288 @@ html.no-css-grid .cast-detail-meta {
   font-size: 32px;
 }
 
+.no-css-math .library-picker-title {
+  font-size: 19px;
+  line-height: 24px;
+}
+
+.no-css-math .library-picker-value {
+  font-size: 30px;
+  line-height: 40px;
+}
+
+.no-css-math .library-picker-icon {
+  width: 40px;
+  height: 40px;
+}
+
+.no-css-math .library-picker-chevron {
+  width: 32px;
+  height: 32px;
+}
+
+.no-css-math .library-picker-menu {
+  max-height: 640px;
+  padding: 4px 10px;
+  border-radius: 36px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.38);
+}
+
+.no-css-math .library-picker-option {
+  min-height: 84px;
+  padding: 0 20px;
+  border-radius: 24px;
+  font-size: 26px;
+}
+
+/* Chromium 68 and older ignore flex gap. Keep these source-level fallbacks
+   scoped to legacy feature classes so modern Chromium keeps the authored UI. */
+.no-flex-gap .search-sidebar > * + *,
+.no-flex-gap .settings-sidebar > * + * {
+  margin-top: 28px;
+}
+
+.no-flex-gap .search-sidebar > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .library-actions-row > * + *,
+.no-flex-gap .library-picker-row > .library-picker + .library-picker {
+  margin-left: 24px;
+}
+
+.no-flex-gap .search-results-track > * + * {
+  margin-left: 16px;
+}
+
+.no-flex-gap .settings-theme-row > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .search-seeall-inner > * + * {
+  margin-top: 14px;
+}
+
+.no-flex-gap .discover-content > * + *,
+.no-flex-gap .settings-account-list > * + *,
+.no-flex-gap .settings-trakt-header-row + *,
+.no-flex-gap .settings-trakt-footer-row + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .discover-hero > * + *,
+.no-flex-gap .settings-action-row > * + *,
+.no-flex-gap .settings-collapsible-trigger > * + *,
+.no-flex-gap .settings-subsection-card .settings-action-row > * + * {
+  margin-left: 24px;
+}
+
+.no-flex-gap .discover-hero-copy > * + *,
+.no-flex-gap .discover-loading-state > * + *,
+.no-flex-gap .discover-empty-state > * + *,
+.no-flex-gap .settings-collapsible > * + *,
+.no-flex-gap .settings-trakt-scroll-area > * + *,
+.no-flex-gap .settings-trakt-options-stack > * + *,
+.no-flex-gap .settings-stream-badge-preview-section > * + * {
+  margin-top: 8px;
+}
+
+.no-flex-gap .discover-meta-line > *,
+.no-flex-gap .settings-profile-summary > * {
+  margin-right: 8px;
+  margin-bottom: 8px;
+}
+
+.no-flex-gap .settings-profile-summary > * {
+  margin-right: 12px;
+  margin-bottom: 12px;
+}
+
+.no-flex-gap .discover-results-head > * + *,
+.no-flex-gap .settings-account-signout-button > * + *,
+.no-flex-gap .settings-row-tail > * + *,
+.no-flex-gap .settings-collapsible-trigger .settings-row-tail > * + *,
+.no-flex-gap .settings-subsection-card .settings-row-tail > * + *,
+.no-flex-gap .settings-plugin-repo-card > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .library-picker-groups > .library-picker-row + .library-picker-row,
+.no-flex-gap .settings-stack > * + *,
+.no-flex-gap .settings-subsection-card .settings-stack > * + *,
+.no-flex-gap .settings-appearance-group-card > * + * {
+  margin-top: 20px;
+}
+
+.no-flex-gap .library-picker-anchor > .library-picker-icon,
+.no-flex-gap .settings-account-action-button > * + * {
+  margin-left: 24px;
+}
+
+.no-flex-gap .library-picker-copy > * + *,
+.no-flex-gap .settings-row-copy > * + *,
+.no-flex-gap .settings-collapsible-trigger .settings-row-copy > * + *,
+.no-flex-gap .settings-subsection-card .settings-row-copy > * + * {
+  margin-top: 4px;
+}
+
+.no-flex-gap .library-dialog-field > * + *,
+.no-flex-gap .settings-account-status-card > * + *,
+.no-flex-gap .settings-language-option-meta > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-account-status-card > * + *,
+.no-flex-gap .settings-language-option-meta > * + * {
+  margin-top: 0;
+}
+
+.no-flex-gap .settings-account-status-card > * + * {
+  margin-left: 16px;
+}
+
+.no-flex-gap .settings-language-option-meta > * + * {
+  margin-left: 12px;
+}
+
+.no-flex-gap .library-grid-card > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-layout-card > * + *,
+.no-flex-gap .settings-dialog-list > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .library-empty-state > * + * {
+  margin-top: 18px;
+}
+
+.no-flex-gap .library-loading-state > * + *,
+.no-flex-gap .library-manage-stack > * + *,
+.no-flex-gap .library-dialog-title + *,
+.no-flex-gap .settings-dialog > * + * {
+  margin-top: 28px;
+}
+
+.no-flex-gap .library-delete-dialog > * + * {
+  margin-top: 32px;
+}
+
+.no-flex-gap .library-manage-list > * + *,
+.no-flex-gap .library-manage-actions-row > * + *,
+.no-flex-gap .library-dialog-actions > * + *,
+.no-flex-gap .library-privacy-row > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .library-manage-list > * + *,
+.no-flex-gap .library-dialog-actions.stacked > * + *,
+.no-flex-gap .library-dialog-field > * + *,
+.no-flex-gap .settings-content > * + * {
+  margin-left: 0;
+  margin-top: 20px;
+}
+
+.no-flex-gap .settings-plugin-repo-list > * + * {
+  margin-top: 14px;
+}
+
+.no-flex-gap .settings-content > * + * {
+  margin-top: 24px;
+}
+
+.no-flex-gap .settings-content-header > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .settings-group-heading > * + *,
+.no-flex-gap .settings-plugin-repo-copy > * + * {
+  margin-top: 6px;
+}
+
+.no-flex-gap .settings-nav-leading > * + *,
+.no-flex-gap .settings-nav-label-wrap > * + * {
+  margin-left: 20px;
+}
+
+.no-flex-gap .settings-nav-label-wrap > * + * {
+  margin-left: 12px;
+}
+
+.no-flex-gap .settings-account-button-copy > * + *,
+.no-flex-gap .settings-account-stat > * + *,
+.no-flex-gap .settings-trakt-stat > * + * {
+  margin-top: 2px;
+}
+
+.no-flex-gap .settings-account-sync-overview > * + * {
+  margin-top: 12px;
+}
+
+.no-flex-gap .settings-theme-card > * + * {
+  margin-top: 16px;
+}
+
+.no-flex-gap .settings-profile-pill > * + *,
+.no-flex-gap .settings-plugin-repo-actions > * + * {
+  margin-left: 10px;
+}
+
+.no-flex-gap .settings-plugin-builder > * + *,
+.no-flex-gap .settings-plugin-provider-heading {
+  margin-top: 18px;
+}
+
+.no-flex-gap .settings-plugin-add > * + * {
+  margin-left: 14px;
+}
+
+.no-flex-gap .settings-dialog > * + * {
+  margin-top: 32px;
+}
+
+.no-css-grid .search-header {
+  display: flex;
+  align-items: center;
+}
+
+.no-css-grid .search-header > * + * {
+  margin-left: 24px;
+}
+
+.no-css-grid .search-input-field {
+  flex: 1 1 auto;
+}
+
+.no-css-grid .discover-filters,
+.no-css-grid .settings-plugin-builder-row,
+.no-css-grid .settings-text-dialog-actions {
+  display: flex;
+}
+
+.no-css-grid .discover-filters > *,
+.no-css-grid .settings-text-dialog-actions > * {
+  flex: 1 1 0;
+}
+
+.no-css-grid .discover-filters > * + *,
+.no-css-grid .settings-text-dialog-actions > * + * {
+  margin-left: 16px;
+}
+
+.no-css-grid .settings-plugin-input {
+  flex: 1 1 auto;
+}
+
+.no-css-grid .settings-plugin-add {
+  flex: 0 0 180px;
+}
+
+.no-css-grid .settings-plugin-builder-row > * + * {
+  margin-left: 18px;
+}
+
 @supports not (font-size: clamp(1px, 2px, 3px)) {
   .home-screen-shell.home-layout-modern .home-hero,
   .home-screen-shell.home-layout-modern .home-modern-hero-card {
