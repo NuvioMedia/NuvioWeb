@@ -1766,34 +1766,53 @@ button:focus-visible {
   display: flex;
   width: 100vw;
   height: 100vh;
+  /* ATV sidebar tokens use dp; web TV canvas doubles them for 1920px. */
+  /* ATV legacyCollapsedWidth 72dp -> 144px */
   --legacy-sidebar-rail-width: 144px;
+  /* ATV legacyExpandedWidth 196dp -> 392px */
   --legacy-sidebar-open-width: 392px;
+  /* ATV avatar md 48dp -> 96px */
   --legacy-sidebar-item-width: 96px;
-  --legacy-sidebar-item-expanded-width: 312px;
+  /* ATV sidebar itemWidth 148dp -> 296px */
+  --legacy-sidebar-item-expanded-width: 296px;
+  /* ATV sidebar itemHeight 52dp -> 104px */
   --legacy-sidebar-item-height: 104px;
   --legacy-sidebar-item-radius: 64px;
   --legacy-sidebar-padding: 24px;
   --legacy-sidebar-item-gap: 20px;
+  /* ATV legacy icon offset 13dp -> 26px */
   --legacy-sidebar-leading-offset: 26px;
+  /* ATV label padding start 54dp -> 108px */
   --legacy-sidebar-label-start: 108px;
+  /* ATV label end 14dp -> 28px */
   --legacy-sidebar-label-end: 28px;
   --legacy-sidebar-profile-top-gap: 60px;
   --legacy-sidebar-profile-bottom-gap: 20px;
+  /* ATV leadingVisual 34dp -> 68px */
   --sidebar-leading-visual-size: 68px;
+  /* ATV iconSize 22dp -> 44px */
   --sidebar-icon-size: 44px;
   --legacy-sidebar-focus-scale: 1.1;
+  /* ATV collapsedWidth 184dp -> 368px */
   --modern-sidebar-collapsed-width: 368px;
+  /* ATV expandedWidth 262dp -> 524px */
   --modern-sidebar-open-width: 524px;
+  /* ATV expandedWidth minus start/end padding 262dp - 14dp - 8dp -> 480px */
   --modern-sidebar-surface-width: 480px;
+  /* ATV sidebar panel top/start/bottom 16dp/14dp/12dp -> 32px/28px/24px */
   --modern-sidebar-surface-top: 32px;
   --modern-sidebar-surface-left: 28px;
   --modern-sidebar-surface-bottom: 24px;
+  /* ATV panel padding 12dp x 14dp -> 24px x 28px */
   --modern-sidebar-panel-padding-x: 24px;
   --modern-sidebar-panel-padding-y: 28px;
   --modern-sidebar-button-width: 92%;
+  /* ATV leadingVisual 34dp + vertical padding 10dp * 2 -> 108px */
   --modern-sidebar-button-height: 108px;
+  /* ATV contentGap 14dp -> 28px */
   --modern-sidebar-button-gap: 28px;
   --modern-sidebar-button-radius: 999px;
+  /* ATV item spacing 6dp -> 12px */
   --modern-sidebar-list-gap: 12px;
   --modern-sidebar-pill-top: 32px;
   --modern-sidebar-pill-left: 28px;
@@ -2061,13 +2080,15 @@ button:focus-visible {
   margin: var(--legacy-sidebar-profile-top-gap) auto var(--legacy-sidebar-profile-bottom-gap);
   flex-shrink: 0;
   align-items: center;
-  gap: 10px;
+  /* ATV legacy profile gap 8dp -> 16px */
+  gap: 16px;
   border: none;
   background: transparent;
   border-radius: var(--legacy-sidebar-item-radius);
   cursor: pointer;
   color: var(--text-secondary);
-  padding: 0 var(--legacy-sidebar-leading-offset);
+  /* ATV profileLeadingInset 18dp -> 36px */
+  padding: 0 var(--legacy-sidebar-label-end) 0 36px;
   justify-content: flex-start;
   opacity: 0;
   visibility: hidden;
@@ -16750,7 +16771,7 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .no-css-vars .home-sidebar.content-expanded .home-nav-item {
-  width: 312px;
+  width: 296px;
   padding: 0 28px 0 26px;
   color: #b3b3b3;
 }
@@ -16783,7 +16804,7 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .no-css-vars .home-sidebar.content-expanded .home-nav-label {
-  width: 176px;
+  width: 160px;
 }
 
 .no-css-vars .modern-sidebar-shell {

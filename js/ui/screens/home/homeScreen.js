@@ -2403,18 +2403,18 @@ export const HomeScreen = {
       return false;
     }
 
-    const preferredIndex = Number(focusState.sidebarIndex);
-    let target = Number.isFinite(preferredIndex)
-      ? nodes[Math.max(0, Math.min(nodes.length - 1, preferredIndex))] || null
-      : null;
+    let target = this.layoutPrefs?.modernSidebar
+      ? getModernSidebarSelectedNode(this.container)
+      : getLegacySidebarSelectedNode(this.container);
 
     if (!target && focusState.sidebarAction) {
       target = nodes.find((node) => String(node.dataset?.action || "") === String(focusState.sidebarAction || "")) || null;
     }
 
-    target = target || (this.layoutPrefs?.modernSidebar
-      ? getModernSidebarSelectedNode(this.container)
-      : getLegacySidebarSelectedNode(this.container))
+    const preferredIndex = Number(focusState.sidebarIndex);
+    target = target || (Number.isFinite(preferredIndex)
+      ? nodes[Math.max(0, Math.min(nodes.length - 1, preferredIndex))] || null
+      : null)
       || nodes[0]
       || null;
     if (!target) {
