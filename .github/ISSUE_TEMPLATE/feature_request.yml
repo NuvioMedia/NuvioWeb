@@ -1,0 +1,157 @@
+name: Feature request
+description: Suggest an improvement or new feature for NuvioTV Web.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One feature request per issue, please. The more real-world your use case is, the easier it is to evaluate.
+
+        Feature requests are reviewed as product proposals first.
+
+        Please do not open a pull request for a new feature, major UX change, playback behavior change, platform change, installer change, or broad cosmetic update unless a maintainer has explicitly approved it first.
+
+        Unapproved feature PRs will usually be closed.
+
+        **Any large PR or change that is not a simple bug fix MUST be discussed and approved via a feature request issue first.**
+
+        PRs that introduce large changes without a linked, approved feature request **will not be reviewed at all** and will be closed immediately. No exceptions.
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Request details
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Pick the closest area affected by this request.
+      options:
+        - Playback
+        - Streams / Sources
+        - Audio tracks
+        - Subtitles
+        - Resume / Watch progress
+        - Continue Watching
+        - Next Episode / Auto-play
+        - Focus / Remote navigation
+        - UI / Layout
+        - Search
+        - Library / Sync
+        - Settings
+        - Samsung Tizen / AVPlay
+        - LG webOS / Luna media
+        - Packaging / Build
+        - Installer
+        - TizenBrew wrapper
+        - webOS Homebrew wrapper
+        - Browser development mode
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_platforms
+    attributes:
+      label: Affected platform(s)
+      description: Select the platform or platforms that would be affected by this request.
+      multiple: true
+      options:
+        - Samsung Tizen
+        - LG webOS
+        - Browser development mode
+        - Nuvio WebTV Installer
+        - TizenBrew wrapper
+        - webOS Homebrew wrapper
+        - Shared web app
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem are you trying to solve?
+      placeholder: |
+        I want to be able to...
+        This is currently difficult because...
+        This affects users when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Proposed solution
+      description: What would you like NuvioTV Web to do?
+      placeholder: |
+        I would like the app to...
+        The expected behavior would be...
+    validations:
+      required: true
+
+  - type: textarea
+    id: platform_notes
+    attributes:
+      label: Platform notes
+      description: Explain whether this should work on Tizen, webOS, both, browser development mode, or installer/wrapper tooling.
+      placeholder: |
+        - Samsung Tizen:
+        - LG webOS:
+        - Browser development mode:
+        - Installer / wrapper impact:
+    validations:
+      required: false
+
+  - type: textarea
+    id: compatibility_risks
+    attributes:
+      label: Compatibility risks
+      description: Describe any possible risks for Smart TV compatibility, playback behavior, remote navigation, packaging, installer flow, or wrapper projects.
+      placeholder: |
+        This may affect...
+        This may require platform-specific handling because...
+        Possible risks are...
+    validations:
+      required: false
+
+  - type: dropdown
+    id: contribution_plan
+    attributes:
+      label: Are you planning to implement this yourself?
+      description: Major features, playback changes, platform changes, installer changes, and UI changes need maintainer approval before implementation.
+      options:
+        - No, this is only a proposal
+        - Maybe, but only if approved first
+        - Yes, but I understand implementation still needs maintainer approval
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or other approaches you considered.
+      placeholder: |
+        I also considered...
+        A possible workaround is...
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Mockups, examples from other apps, related issues, screenshots, videos, or technical notes.
+      placeholder: |
+        - Related issue:
+        - Example app:
+        - Screenshot/video:
+        - Extra notes:
+    validations:
+      required: false
