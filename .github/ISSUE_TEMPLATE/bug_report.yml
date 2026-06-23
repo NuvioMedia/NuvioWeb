@@ -1,0 +1,299 @@
+name: Bug report
+description: Report a reproducible NuvioTV Web bug, one problem per issue.
+title: "[Bug]: short summary here"
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug in NuvioTV Web.
+
+        If we can reproduce it, we can usually fix it. Please describe the bug in enough detail that someone else can understand what failed without watching a video or guessing from the title.
+
+        Please replace the default title with a short summary of the actual problem.
+
+        Vague reports such as "not working", "broken", or "same issue" may be labeled `needs-info` and closed after 1 day if the missing details are not added.
+
+        Bug reports left open for more than 30 days may be closed as stale.
+
+        If the app crashes, shows a blank screen, fails to install, or has a playback/platform API error, logs are required. Reports without the required logs may be closed.
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Quick checks
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I can reproduce this on the latest release or latest main build.
+          required: false
+        - label: This issue is limited to a single bug, not multiple unrelated problems.
+          required: true
+        - label: This is not a source/stream-specific error, or I have confirmed it happens with multiple sources.
+          required: true
+        - label: I tested on the affected platform or clearly explained why I could not.
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Version, platform, and install method
+
+  - type: input
+    id: app_version
+    attributes:
+      label: App version / commit
+      description: Release version or commit hash. If unsure, say where you got the build from.
+      placeholder: "e.g. 0.2.4, or main@abc1234"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Samsung Tizen
+        - LG webOS
+        - Browser development mode
+        - Nuvio WebTV Installer
+        - TizenBrew wrapper
+        - webOS Homebrew wrapper
+        - Other (please describe below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install_method
+    attributes:
+      label: Install method
+      options:
+        - Nuvio WebTV Installer
+        - TizenBrew
+        - webOS Homebrew Channel
+        - Manual WGT install
+        - Manual IPK install
+        - Hosted web app
+        - Local development build
+        - Built from source
+        - Other (please describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: device_model
+    attributes:
+      label: Device model
+      description: Include the TV model or the device/browser used for testing.
+      placeholder: "e.g. LG C1, LG B4, Samsung S90F, Chrome on macOS"
+    validations:
+      required: true
+
+  - type: input
+    id: platform_version
+    attributes:
+      label: Platform version
+      description: Include Tizen version, webOS version, browser version, or installer version if known.
+      placeholder: "e.g. webOS 6, webOS 24, Tizen 9.0, Chrome 126"
+    validations:
+      required: false
+
+  - type: input
+    id: package_type
+    attributes:
+      label: Package type
+      description: If relevant, specify whether this was a WGT, IPK, hosted build, local build, or installer build.
+      placeholder: "e.g. .wgt, .ipk, hosted, local dist, installer"
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ## What happened?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Pick the closest match. It helps triage.
+      options:
+        - Playback
+        - Streams / Sources
+        - Audio tracks
+        - Subtitles
+        - Resume / Watch progress
+        - Continue Watching
+        - Next Episode / Auto-play
+        - Focus / Remote navigation
+        - UI / Layout
+        - Search
+        - Library / Sync
+        - Settings
+        - Samsung Tizen / AVPlay
+        - LG webOS / Luna media
+        - Packaging / Build
+        - Installer
+        - TizenBrew wrapper
+        - webOS Homebrew wrapper
+        - Browser development mode
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: |
+        Explain the problem in detail. Do not only write "not working" or "same issue".
+        Include what screen or flow you were using, what you pressed on the remote, what changed on screen, and any visible error text.
+      placeholder: |
+        I was trying to ...
+        The app ...
+        I saw ...
+        This happens on ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps, one action per line. If it depends on specific content, describe it without sharing private links.
+      placeholder: |
+        1. Open NuvioTV Web on ...
+        2. Navigate to ...
+        3. Press ...
+        4. Select ...
+        5. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: "What you expected to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: "What actually happened? Include any on-screen error text/codes and whether the app froze, crashed, ignored remote input, showed the wrong content, failed playback, etc."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Frequency
+      options:
+        - Always
+        - Often (more than 50%)
+        - Sometimes
+        - Rarely
+        - Once
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Did this work before?
+      options:
+        - Not sure
+        - Yes, it used to work
+        - No, it never worked
+    validations:
+      required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Playback details, if relevant
+
+  - type: textarea
+    id: media_details
+    attributes:
+      label: Media details
+      description: Only include what you can safely share. This is especially useful for playback, audio, subtitles, resume, and source selection issues.
+      placeholder: |
+        - Content type: movie / series
+        - Season/Episode: S1E2
+        - Stream/source: addon name or source label
+        - Container: MP4 / MKV / HLS / DASH / unknown
+        - Video codec: H.264 / H.265 / AV1 / unknown
+        - Audio codec: AAC / AC3 / EAC3 / DTS / TrueHD / unknown
+        - Subtitle type: embedded / external / unknown
+    validations:
+      required: false
+
+  - type: dropdown
+    id: playback_engine
+    attributes:
+      label: Playback engine / platform API
+      description: Select the closest option if this is a playback issue.
+      options:
+        - Not a playback issue
+        - LG webOS media player / Luna
+        - Samsung Tizen AVPlay
+        - Browser video element
+        - Not sure
+        - Other (please describe below)
+    validations:
+      required: false
+
+  - type: markdown
+    attributes:
+      value: |
+        ## Logs and evidence
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Required for crashes, blank screens, install failures, package failures, playback failures, and platform API errors.
+        Include a short snippet from around the time the bug happens.
+
+        Useful examples:
+        - webOS logs: npm run logs:webos -- -d lg
+        - webOS inspect: npm run inspect:webos -- -d lg
+        - Tizen Studio console/device logs
+        - Browser console and network errors
+        - Installer logs, if the issue is installer-related
+      render: shell
+      placeholder: |
+        Paste logs here.
+    validations:
+      required: false
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots or video
+      description: Required for visible UI/layout/focus issues. You can drag and drop screenshots or recordings here.
+      placeholder: "Attach screenshots, short videos, or before/after evidence if relevant."
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Related issues, workarounds, extra notes, affected repositories, or anything else that may help.
+      placeholder: |
+        - Related issue:
+        - Workaround:
+        - Additional notes:
+    validations:
+      required: false
