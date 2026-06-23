@@ -8517,6 +8517,7 @@ button:focus-visible {
   text-align: left;
   display: flex;
   flex-direction: column;
+  align-items: stretch;
   gap: 12px;
   position: relative;
   overflow: hidden;
@@ -8541,22 +8542,28 @@ button:focus-visible {
 }
 
 .settings-layout-preview {
+  width: 100%;
   height: 224px;
   border-radius: 24px;
   background: var(--bg-color);
   position: relative;
   overflow: hidden;
   display: block;
+  align-self: stretch;
+  box-sizing: border-box;
   isolation: isolate;
 }
 
 .settings-layout-preview-placeholder {
+  width: 100%;
   height: 224px;
   border-radius: 24px;
   background: var(--bg-elevated);
+  box-sizing: border-box;
   padding: 20px;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
   gap: 16px;
 }
 
@@ -8596,8 +8603,13 @@ button:focus-visible {
   display: none;
 }
 
-.settings-layout-card:not(.focused):not(.is-selected) .settings-layout-preview {
+.settings-layout-card .settings-layout-preview {
   display: none;
+}
+
+.settings-layout-card.focused .settings-layout-preview,
+.settings-layout-card.is-selected .settings-layout-preview {
+  display: block;
 }
 
 .settings-layout-preview::after {
@@ -8640,11 +8652,11 @@ button:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
+  height: 224px;
   --settings-layout-modern-side: 5%;
   --settings-layout-modern-top: 6%;
   --settings-layout-modern-gap: 3%;
-  --settings-layout-modern-card-width: 18.5%;
+  --settings-layout-modern-card-width: 78px;
   --settings-layout-modern-cycle-width: calc(
     var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap) +
       var(--settings-layout-modern-card-width) + var(--settings-layout-modern-gap) +
@@ -8694,7 +8706,7 @@ button:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
+  height: 224px;
   --settings-layout-grid-gap: 2.5%;
   --settings-layout-grid-card-width: calc((100% - (var(--settings-layout-grid-gap) * 4)) / 5);
   --settings-layout-grid-card-height: calc(var(--settings-layout-grid-card-width) * 1.4);
@@ -8737,7 +8749,7 @@ button:focus-visible {
   position: relative;
   display: block;
   width: 100%;
-  height: 100%;
+  height: 224px;
   --settings-layout-classic-side: 4.5%;
   --settings-layout-classic-gap: 2.5%;
   --settings-layout-classic-card-width: 18.2%;
@@ -15920,6 +15932,30 @@ button:focus-visible {
   animation: streamRouteSpin 700ms linear infinite !important;
 }
 
+.performance-constrained .settings-layout-preview-modern-row {
+  animation: settingsLayoutModernPreviewScroll 5.7s linear infinite !important;
+}
+
+.performance-constrained .settings-layout-preview-grid-canvas {
+  animation: settingsLayoutGridPreviewScroll 8.8s linear infinite !important;
+}
+
+.performance-constrained .settings-layout-preview-classic-row.is-featured {
+  animation: settingsLayoutClassicPreviewScroll 4s linear infinite !important;
+}
+
+.performance-constrained.no-css-math .settings-layout-preview-modern-row {
+  animation: settingsLayoutModernPreviewScrollLegacy 5.7s linear infinite !important;
+}
+
+.performance-constrained.no-css-math .settings-layout-preview-grid-canvas {
+  animation: settingsLayoutGridPreviewScrollLegacy 8.8s linear infinite !important;
+}
+
+.performance-constrained.no-css-math .settings-layout-preview-classic-row.is-featured {
+  animation: settingsLayoutClassicPreviewScrollLegacy 4s linear infinite !important;
+}
+
 .performance-constrained .nuvio-route-slide-enter,
 .performance-constrained .home-route-content-enter,
 .performance-constrained .addons-route-enter,
@@ -17051,17 +17087,17 @@ html.no-css-grid .cast-detail-meta {
 .no-css-math .settings-layout-preview-modern-row {
   top: 73%;
   left: 5%;
-  width: 780px;
+  width: 1776px;
   height: 24%;
   gap: 0;
   animation-name: settingsLayoutModernPreviewScrollLegacy;
 }
 
 .no-css-math .settings-layout-preview-modern-card {
-  flex: 0 0 78px;
-  width: 78px;
+  flex: 0 0 134px;
+  width: 134px;
   height: 100%;
-  margin-right: 12px;
+  margin-right: 14px;
 }
 
 .no-css-math .settings-layout-preview-grid-canvas {
@@ -17069,25 +17105,25 @@ html.no-css-grid .cast-detail-meta {
   top: 2.5%;
   left: 2.5%;
   width: 95%;
-  height: 660px;
+  height: 822px;
   grid-template-columns: repeat(5, 18%);
-  grid-auto-rows: 82px;
+  grid-auto-rows: 108px;
   justify-content: space-between;
   align-content: flex-start;
   gap: 0;
-  row-gap: 12px;
+  row-gap: 11px;
   column-gap: 0;
   animation-name: settingsLayoutGridPreviewScrollLegacy;
 }
 
 .no-css-math .settings-layout-preview-grid-cell {
   width: 100%;
-  height: 82px;
+  height: 108px;
 }
 
 .no-css-math .settings-layout-preview-classic-row {
   left: 4.5%;
-  width: 920px;
+  width: 1883px;
   gap: 0;
 }
 
@@ -17096,10 +17132,10 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .no-css-math .settings-layout-preview-classic-card {
-  flex: 0 0 118px;
-  width: 118px;
+  flex: 0 0 258px;
+  width: 258px;
   height: 85%;
-  margin-right: 14px;
+  margin-right: 11px;
 }
 
 .no-css-grid .settings-layout-preview-grid-canvas {
@@ -17110,14 +17146,14 @@ html.no-css-grid .cast-detail-meta {
   gap: 0;
   row-gap: 12px;
   column-gap: 0;
-  height: 660px;
+  height: 822px;
 }
 
 .no-css-grid .settings-layout-preview-grid-cell {
   flex: 0 0 18%;
   width: 18%;
-  height: 82px;
-  margin-bottom: 12px;
+  height: 108px;
+  margin-bottom: 11px;
   margin-right: 0;
 }
 
@@ -17134,112 +17170,6 @@ html.no-css-grid .cast-detail-meta {
 .no-css-math .settings-layout-preview-grid,
 .no-css-math .settings-layout-preview-classic {
   overflow: hidden;
-}
-
-.no-css-math .settings-layout-preview-modern::before,
-.no-css-math .settings-layout-preview-modern::after,
-.no-css-math .settings-layout-preview-grid::before,
-.no-css-math .settings-layout-preview-grid::after,
-.no-css-math .settings-layout-preview-classic::before,
-.no-css-math .settings-layout-preview-classic::after {
-  content: "";
-  display: block;
-  position: absolute;
-  pointer-events: none;
-  z-index: 0;
-}
-
-.no-css-math .settings-layout-preview-modern::before {
-  top: 6%;
-  left: 5%;
-  width: 90%;
-  height: 62%;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.38);
-}
-
-.no-css-math .settings-layout-preview-modern::after {
-  left: 5%;
-  bottom: 7%;
-  width: 78px;
-  height: 24%;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.28);
-  box-shadow:
-    90px 0 0 rgba(255, 255, 255, 0.46),
-    180px 0 0 rgba(255, 255, 255, 0.28),
-    270px 0 0 rgba(255, 255, 255, 0.28),
-    360px 0 0 rgba(255, 255, 255, 0.46),
-    450px 0 0 rgba(255, 255, 255, 0.28),
-    540px 0 0 rgba(255, 255, 255, 0.28);
-  animation: settingsLayoutModernPreviewShadowScrollLegacy 5.7s linear infinite;
-  will-change: transform;
-}
-
-.no-css-math .settings-layout-preview-grid::before {
-  top: 2.5%;
-  left: 2.5%;
-  width: 18%;
-  height: 82px;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.5);
-  box-shadow:
-    20.5% 0 0 rgba(255, 255, 255, 0.5),
-    41% 0 0 rgba(255, 255, 255, 0.5),
-    61.5% 0 0 rgba(255, 255, 255, 0.5),
-    82% 0 0 rgba(255, 255, 255, 0.5),
-    0 94px 0 rgba(255, 255, 255, 0.5),
-    20.5% 94px 0 rgba(255, 255, 255, 0.5),
-    41% 94px 0 rgba(255, 255, 255, 0.5),
-    61.5% 94px 0 rgba(255, 255, 255, 0.5),
-    82% 94px 0 rgba(255, 255, 255, 0.5),
-    0 188px 0 rgba(255, 255, 255, 0.3),
-    20.5% 188px 0 rgba(255, 255, 255, 0.3),
-    41% 188px 0 rgba(255, 255, 255, 0.3),
-    61.5% 188px 0 rgba(255, 255, 255, 0.3),
-    82% 188px 0 rgba(255, 255, 255, 0.3),
-    0 282px 0 rgba(255, 255, 255, 0.5),
-    20.5% 282px 0 rgba(255, 255, 255, 0.5),
-    41% 282px 0 rgba(255, 255, 255, 0.5),
-    61.5% 282px 0 rgba(255, 255, 255, 0.5),
-    82% 282px 0 rgba(255, 255, 255, 0.5),
-    0 376px 0 rgba(255, 255, 255, 0.5),
-    20.5% 376px 0 rgba(255, 255, 255, 0.5),
-    41% 376px 0 rgba(255, 255, 255, 0.5),
-    61.5% 376px 0 rgba(255, 255, 255, 0.5),
-    82% 376px 0 rgba(255, 255, 255, 0.5);
-  animation: settingsLayoutGridPreviewShadowScrollLegacy 8.8s linear infinite;
-  will-change: transform;
-}
-
-.no-css-math .settings-layout-preview-classic::before,
-.no-css-math .settings-layout-preview-classic::after {
-  left: 4.5%;
-  width: 118px;
-  height: 25%;
-  border-radius: 5px;
-  background: rgba(255, 255, 255, 0.3);
-  box-shadow:
-    132px 0 0 rgba(255, 255, 255, 0.3),
-    264px 0 0 rgba(255, 255, 255, 0.3),
-    396px 0 0 rgba(255, 255, 255, 0.3);
-}
-
-.no-css-math .settings-layout-preview-classic::before {
-  top: 4%;
-}
-
-.no-css-math .settings-layout-preview-classic::after {
-  top: 35.333%;
-  background: rgba(255, 255, 255, 0.6);
-  box-shadow:
-    132px 0 0 rgba(255, 255, 255, 0.6),
-    264px 0 0 rgba(255, 255, 255, 0.6),
-    396px 0 0 rgba(255, 255, 255, 0.6),
-    528px 0 0 rgba(255, 255, 255, 0.6),
-    660px 0 0 rgba(255, 255, 255, 0.6);
-  animation: settingsLayoutClassicPreviewShadowScrollLegacy 4s linear infinite;
-  will-change: transform;
 }
 
 .no-css-grid .profile-editor-avatar-grid {
@@ -17556,7 +17486,7 @@ html.no-css-grid .cast-detail-meta {
     transform: translateX(0);
   }
   to {
-    transform: translateX(-270px);
+    transform: translateX(-444px);
   }
 }
 
@@ -17565,7 +17495,7 @@ html.no-css-grid .cast-detail-meta {
     transform: translateY(0);
   }
   to {
-    transform: translateY(-282px);
+    transform: translateY(-357px);
   }
 }
 
@@ -17574,34 +17504,7 @@ html.no-css-grid .cast-detail-meta {
     transform: translateX(0);
   }
   to {
-    transform: translateX(-264px);
-  }
-}
-
-@keyframes settingsLayoutModernPreviewShadowScrollLegacy {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-270px);
-  }
-}
-
-@keyframes settingsLayoutGridPreviewShadowScrollLegacy {
-  from {
-    transform: translateY(0);
-  }
-  to {
-    transform: translateY(-282px);
-  }
-}
-
-@keyframes settingsLayoutClassicPreviewShadowScrollLegacy {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-264px);
+    transform: translateX(-538px);
   }
 }
 
