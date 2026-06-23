@@ -7060,10 +7060,13 @@ export const HomeScreen = {
     const backFocusState = this.isRestoringFocusFromBack
       ? (this.pendingBackFocusState || this.readStoredReturnFocusState() || null)
       : null;
-    const retainedFocusState = backFocusState
+    const rawRetainedFocusState = backFocusState
       || this.captureCurrentFocusState()
       || this.savedFocusStates?.[this.layoutMode]
       || null;
+    const retainedFocusState = !this.isRestoringFocusFromBack && rawRetainedFocusState?.focusKind === "sidebar"
+      ? null
+      : rawRetainedFocusState;
     this.cancelFocusedPosterFlow();
     this.expandedPosterNode = null;
     const backFocusHero = backFocusState ? this.getHeroSourceFromFocusState(backFocusState) : null;
