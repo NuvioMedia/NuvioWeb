@@ -13376,7 +13376,9 @@ button:focus-visible {
 }
 
 .series-detail-title {
+  max-height: 220px;
   margin: 0 0 12px;
+  overflow: hidden;
   font-size: 54px;
   line-height: 1.02;
 }
@@ -14232,7 +14234,14 @@ button:focus-visible {
 }
 
 .detail-trailer-active .detail-trailer-layer {
+  z-index: 0;
+}
+
+.detail-trailer-active.detail-trailer-ready .detail-trailer-layer {
   opacity: 1;
+}
+
+.detail-trailer-manual .detail-trailer-layer {
   z-index: 2;
 }
 
@@ -14446,8 +14455,13 @@ button:focus-visible {
   pointer-events: none;
 }
 
-.detail-trailer-active .series-detail-content {
+.detail-trailer-manual .series-detail-content {
   pointer-events: none;
+  opacity: 0;
+}
+
+.detail-trailer-active.detail-trailer-ready .series-detail-backdrop {
+  opacity: 0;
 }
 
 .series-detail-vignette {
@@ -14475,7 +14489,7 @@ button:focus-visible {
   transition: opacity 800ms ease;
 }
 
-.detail-trailer-active .series-detail-vignette {
+.detail-trailer-active.detail-trailer-ready .series-detail-vignette {
   opacity: 0;
 }
 
@@ -14505,11 +14519,13 @@ button:focus-visible {
   position: relative;
   z-index: 1;
   height: 100vh;
+  opacity: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0 0 clamp(116px, 12vh, 168px);
   box-sizing: border-box;
   scrollbar-width: none;
+  transition: opacity 400ms ease;
 }
 
 .series-detail-content::-webkit-scrollbar {
@@ -14532,6 +14548,19 @@ button:focus-visible {
   justify-content: flex-end;
 }
 
+.detail-hero-body {
+  max-height: 760px;
+  opacity: 1;
+  overflow: hidden;
+  transform: translateY(0);
+  visibility: visible;
+  transition:
+    max-height 600ms ease,
+    opacity 400ms ease,
+    transform 400ms ease,
+    visibility 0s linear 0s;
+}
+
 .series-detail-logo {
   max-width: min(44vw, 620px);
   max-height: clamp(112px, 9vh, 144px);
@@ -14545,7 +14574,7 @@ button:focus-visible {
     margin-bottom 600ms ease;
 }
 
-.detail-trailer-active .series-detail-logo {
+.detail-trailer-autoplay.detail-trailer-ready .series-detail-logo {
   max-width: min(28vw, 380px);
   max-height: clamp(72px, 6vh, 96px);
   margin-bottom: 24px;
@@ -14557,23 +14586,35 @@ button:focus-visible {
   line-height: 1.1;
   font-weight: 700;
   letter-spacing: 0;
-  transition: opacity 400ms ease;
+  transition:
+    max-height 600ms ease,
+    margin-bottom 600ms ease,
+    opacity 400ms ease;
 }
 
-.detail-trailer-active .series-detail-title {
+.detail-trailer-autoplay.detail-trailer-ready .series-detail-title {
+  max-height: 0;
+  margin-bottom: 0;
   opacity: 0;
 }
 
 .detail-trailer-hint {
-  margin: 0 0 8px;
+  max-height: 0;
+  margin: 0;
+  overflow: hidden;
   font-size: var(--tv-secondary-text);
   line-height: 1.3;
   color: rgba(255, 255, 255, 0.72);
   opacity: 0;
-  transition: opacity 450ms ease;
+  transition:
+    max-height 600ms ease,
+    margin-bottom 600ms ease,
+    opacity 450ms ease;
 }
 
-.detail-trailer-active .detail-trailer-hint {
+.detail-trailer-autoplay.detail-trailer-ready .detail-trailer-hint {
+  max-height: 56px;
+  margin-bottom: 8px;
   opacity: 1;
 }
 
@@ -14587,15 +14628,17 @@ button:focus-visible {
     transform 400ms ease;
 }
 
-.detail-trailer-active .series-detail-actions,
-.detail-trailer-active .detail-resume-indicator,
-.detail-trailer-active .series-detail-support,
-.detail-trailer-active .detail-ratings-row,
-.detail-trailer-active .series-detail-description,
-.detail-trailer-active .detail-meta-stack {
+.detail-trailer-autoplay.detail-trailer-ready .detail-hero-body {
+  max-height: 0;
   opacity: 0;
   transform: translateY(8px);
+  visibility: hidden;
   pointer-events: none;
+  transition:
+    max-height 600ms ease,
+    opacity 400ms ease,
+    transform 400ms ease,
+    visibility 0s linear 600ms;
 }
 
 .series-primary-btn,
@@ -16071,11 +16114,24 @@ button:focus-visible {
 
 .performance-constrained .modern-sidebar-panel,
 .performance-constrained .modern-sidebar-pill-chip,
+.performance-constrained .detail-trailer-badge,
+.performance-constrained .detail-trailer-control-btn,
 .performance-constrained .series-episode-card,
 .performance-constrained .series-stream-panel,
 .performance-constrained .stream-route-panel-shell {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+.performance-constrained .series-detail-backdrop,
+.performance-constrained .series-detail-vignette,
+.performance-constrained .detail-trailer-layer,
+.performance-constrained .series-detail-logo,
+.performance-constrained .series-detail-title,
+.performance-constrained .detail-trailer-hint,
+.performance-constrained .detail-hero-body,
+.performance-constrained .series-detail-content {
+  transition-duration: 250ms !important;
 }
 
 .performance-constrained .home-screen-shell .home-hero-backdrop {
@@ -16609,6 +16665,8 @@ button:focus-visible {
 .no-backdrop-filter .modern-sidebar-pill-chip,
 .no-backdrop-filter .player-pause-overlay,
 .no-backdrop-filter .detail-trailer-control-bar,
+.no-backdrop-filter .detail-trailer-badge,
+.no-backdrop-filter .detail-trailer-control-btn,
 .no-backdrop-filter .series-episode-card,
 .no-backdrop-filter .series-stream-panel,
 .no-backdrop-filter .stream-route-panel-shell,
@@ -19062,7 +19120,7 @@ html.no-css-grid .cast-detail-meta {
   margin-bottom: 40px;
 }
 
-.detail-trailer-active .series-detail-logo {
+.detail-trailer-autoplay.detail-trailer-ready .series-detail-logo {
   max-width: 25vw;
   max-height: 120px;
   margin-bottom: 48px;
@@ -19074,8 +19132,12 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .detail-trailer-hint {
-  margin-bottom: 16px;
   font-size: var(--detail-label-size);
+}
+
+.detail-trailer-autoplay.detail-trailer-ready .detail-trailer-hint {
+  max-height: 48px;
+  margin-bottom: 16px;
 }
 
 .series-detail-actions {

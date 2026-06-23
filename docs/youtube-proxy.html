@@ -84,6 +84,8 @@
             }, -1)
           );
           return {
+            playerState: playerState,
+            ended: playerState === 0,
             currentTime: Number(
               safeCall(function getCurrentTime() {
                 return player && player.getCurrentTime();
@@ -130,7 +132,7 @@
             return;
           }
           lastStatePayload = serialized;
-          postToParent("state", { state: state });
+          postToParent("state", { videoId: videoId, state: state });
         }
 
         function ensureStateTimer() {
@@ -300,6 +302,8 @@
                 if (Number(event.data) === 0 && loop) {
                   event.target.seekTo(0, true);
                   event.target.playVideo();
+                } else if (Number(event.data) === 0) {
+                  postToParent("ended", { videoId: videoId });
                 }
                 pushState(true);
               },

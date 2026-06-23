@@ -833,7 +833,7 @@ function resolveTrailerTrustedProxyOrigin() {
   return "";
 }
 
-function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
+function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true, loop = true } = {}) {
   const videoId = String(cleanId || "").trim();
   if (!videoId || !Environment.isBrowser()) {
     return "";
@@ -842,14 +842,16 @@ function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = true } = {}) {
     autoplay: "1",
     mute: muted ? "1" : "0",
     controls: "0",
-    loop: "1",
-    playlist: videoId,
+    loop: loop ? "1" : "0",
     playsinline: "1",
     rel: "0",
     modestbranding: "1",
     enablejsapi: "1",
     iv_load_policy: "3"
   });
+  if (loop) {
+    params.set("playlist", videoId);
+  }
   const origin = String(globalThis?.location?.origin || "").trim();
   if (/^https?:\/\//i.test(origin)) {
     params.set("origin", origin);
@@ -904,13 +906,13 @@ function buildYoutubeEmbedUrl(ytId = "", { muted = true } = {}) {
   return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
-function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
+function buildInlineYoutubePlayerUrl(ytId = "", { muted = true, loop = false } = {}) {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
   }
   if (shouldUseDirectYoutubeEmbedOnTv()) {
-    return buildDirectYoutubeEmbedUrl(cleanId, { muted });
+    return buildDirectYoutubeEmbedUrl(cleanId, { muted, loop });
   }
   const proxyBase = getYoutubeProxyBaseUrl();
   if (proxyBase) {
@@ -920,8 +922,12 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
       proxyUrl.searchParams.set("autoplay", "1");
       proxyUrl.searchParams.set("muted", muted ? "1" : "0");
       proxyUrl.searchParams.set("controls", "0");
-      proxyUrl.searchParams.set("loop", "1");
-      proxyUrl.searchParams.set("playlist", cleanId);
+      proxyUrl.searchParams.set("loop", loop ? "1" : "0");
+      if (loop) {
+        proxyUrl.searchParams.set("playlist", cleanId);
+      } else {
+        proxyUrl.searchParams.delete("playlist");
+      }
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
       proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
@@ -934,13 +940,15 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = true } = {}) {
     autoplay: "1",
     mute: muted ? "1" : "0",
     controls: "0",
-    loop: "1",
-    playlist: cleanId,
+    loop: loop ? "1" : "0",
     playsinline: "1",
     rel: "0",
     modestbranding: "1",
     enablejsapi: "1"
   });
+  if (loop) {
+    params.set("playlist", cleanId);
+  }
   const origin = String(globalThis?.location?.origin || "").trim();
   if (/^https?:\/\//i.test(origin)) {
     params.set("origin", origin);
@@ -1079,6 +1087,8 @@ function normalizeTrailerProxyStatePayload(payload, fallbackMuted = false) {
   return {
     currentTime: Number(candidate.currentTime || 0),
     duration: Number(candidate.duration || 0),
+    playerState: Number(candidate.playerState ?? -1),
+    ended: Boolean(candidate.ended),
     paused: Boolean(candidate.paused),
     muted: candidate.muted == null ? Boolean(fallbackMuted) : Boolean(candidate.muted),
     loading: Boolean(candidate.loading),
@@ -1255,10 +1265,29 @@ export const MetaDetailsScreen = {
           controllable: true
         };
         this.postTrailerProxyCommand("getState");
-        this.updateTrailerOverlay();
+        if (this.trailerPlaybackMode === "manual") {
+          this.updateTrailerOverlay();
+        }
+        return;
+      }
+      if (data.type === "ended") {
+        const endedId = String(data.videoId || "").trim();
+        const activeId = String(this.trailerSource?.ytId || "").trim();
+        if (
+          this.isTrailerPlaying &&
+          this.trailerSource?.kind === "youtube" &&
+          (!endedId || !activeId || endedId === activeId)
+        ) {
+          this.stopTrailerPlayback();
+        }
         return;
       }
       if (data.type === "state") {
+        const stateVideoId = String(data.videoId || "").trim();
+        const activeVideoId = String(this.trailerSource?.ytId || "").trim();
+        if (stateVideoId && activeVideoId && stateVideoId !== activeVideoId) {
+          return;
+        }
         const nextState = normalizeTrailerProxyStatePayload(data, this.trailerMuted);
         if (
           nextState.loading === false ||
@@ -1269,7 +1298,21 @@ export const MetaDetailsScreen = {
         }
         this.trailerProxyState = nextState;
         this.trailerYoutubeFallbackActive = nextState.controllable === false;
-        this.updateTrailerOverlay();
+        if (
+          !nextState.loading &&
+          (!nextState.paused ||
+            nextState.playerState === 1 ||
+            Number(nextState.currentTime || 0) > 0)
+        ) {
+          this.markTrailerVisualReady();
+        }
+        if (nextState.ended) {
+          this.stopTrailerPlayback();
+          return;
+        }
+        if (this.trailerPlaybackMode === "manual") {
+          this.updateTrailerOverlay();
+        }
       }
     };
     window.addEventListener("message", this.trailerProxyMessageHandler);
@@ -1297,7 +1340,11 @@ export const MetaDetailsScreen = {
   async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("detail");
     ScreenUtils.show(this.container);
-    this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
+    this.stopTrailerPlayback({
+      keepDom: false,
+      restartAutoplay: false,
+      restoreFocus: false
+    });
     this.params = params;
     this.isBackNavigation = Boolean(navigationContext?.isBackNavigation);
     this.pendingEpisodeSelection = null;
@@ -1335,6 +1382,9 @@ export const MetaDetailsScreen = {
     this.selectedCommentIndex = -1;
     this.trailerSource = null;
     this.isTrailerPlaying = false;
+    this.trailerPlaybackMode = null;
+    this.trailerVisualReady = false;
+    this.trailerHasAutoplayed = false;
     this.trailerMuted = false;
     this.trailerMediaListeners = [];
     this.trailerUiRefs = null;
@@ -1345,6 +1395,8 @@ export const MetaDetailsScreen = {
     this.trailerProxyState = null;
     this.trailerProxyMessageHandler = null;
     this.trailerYoutubeFallbackActive = false;
+    this.trailerDomGeneration = 0;
+    this.trailerFocusRestore = null;
     this.episodeProgressMap = new Map();
     this.resumeProgress = null;
     this.resumeContentIds = [];
@@ -2500,6 +2552,14 @@ export const MetaDetailsScreen = {
     });
   },
 
+  getTrailerShellStateClasses() {
+    if (!this.isTrailerPlaying) {
+      return "";
+    }
+    const mode = this.trailerPlaybackMode === "autoplay" ? "autoplay" : "manual";
+    return ` detail-trailer-active detail-trailer-${mode}${this.trailerVisualReady ? " detail-trailer-ready" : ""}`;
+  },
+
   renderSeriesLayout(meta) {
     const backdrop = meta.background || meta.poster || "";
     if (!this.selectedRatingSeason || !this.seriesRatingsBySeason?.[this.selectedRatingSeason]) {
@@ -2507,7 +2567,7 @@ export const MetaDetailsScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="series-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
+      <div class="series-detail-shell${this.getTrailerShellStateClasses()}">
         <div class="series-detail-backdrop" data-backdrop-url="${escapeAttribute(backdrop || "")}"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="series-detail-vignette"></div>
@@ -2568,23 +2628,25 @@ export const MetaDetailsScreen = {
           ${logoOrTitle}
           <p class="detail-trailer-hint">${escapeHtml(t("detail.pressBackToReturn", {}, "Press back to return to details"))}</p>
         </div>
-        <div class="series-detail-actions">
-          <button class="series-primary-btn focusable" data-action="playDefault">
-            <span class="series-btn-icon">${renderPlayGlyph()}</span>
-            <span>${escapeHtml(playLabel)}</span>
-          </button>
-          ${this.getActiveResumeProgress() ? `<button class="series-secondary-btn focusable" data-action="playFromBeginning">${escapeHtml(t("detail.playFromBeginning", {}, "Play from Beginning"))}</button>` : ""}
-          <button class="series-circle-btn focusable${this.isSavedInLibrary ? " is-library-selected" : ""}" data-action="toggleLibrary">
-            ${renderLibraryGlyph(this.isSavedInLibrary)}
-          </button>
-          ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${escapeAttribute(this.isMarkedWatched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched"))}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
-          ${trailerButton}
+        <div class="detail-hero-body">
+          <div class="series-detail-actions">
+            <button class="series-primary-btn focusable" data-action="playDefault">
+              <span class="series-btn-icon">${renderPlayGlyph()}</span>
+              <span>${escapeHtml(playLabel)}</span>
+            </button>
+            ${this.getActiveResumeProgress() ? `<button class="series-secondary-btn focusable" data-action="playFromBeginning">${escapeHtml(t("detail.playFromBeginning", {}, "Play from Beginning"))}</button>` : ""}
+            <button class="series-circle-btn focusable${this.isSavedInLibrary ? " is-library-selected" : ""}" data-action="toggleLibrary">
+              ${renderLibraryGlyph(this.isSavedInLibrary)}
+            </button>
+            ${showWatchedButton ? `<button class="series-circle-btn focusable${this.isMarkedWatched ? " is-selected" : ""}" data-action="toggleWatched" aria-label="${escapeAttribute(this.isMarkedWatched ? t("common.markUnwatched", {}, "Mark Unwatched") : t("common.markWatched", {}, "Mark Watched"))}">${renderWatchedGlyph(this.isMarkedWatched)}</button>` : ""}
+            ${trailerButton}
+          </div>
+          ${this.renderResumeIndicator()}
+          ${creditLine ? `<p class="series-detail-support">${escapeHtml(creditPrefix)}: ${escapeHtml(creditLine)}</p>` : ""}
+          ${externalRatings}
+          <p class="series-detail-description">${escapeHtml(meta.description || t("detail.noDescription", {}, "No description."))}</p>
+          ${this.renderHeroMetaRows(meta)}
         </div>
-        ${this.renderResumeIndicator()}
-        ${creditLine ? `<p class="series-detail-support">${escapeHtml(creditPrefix)}: ${escapeHtml(creditLine)}</p>` : ""}
-        ${externalRatings}
-        <p class="series-detail-description">${escapeHtml(meta.description || t("detail.noDescription", {}, "No description."))}</p>
-        ${this.renderHeroMetaRows(meta)}
       </section>
     `;
   },
@@ -2804,7 +2866,7 @@ export const MetaDetailsScreen = {
     const backdrop = meta.background || meta.poster || "";
 
     this.container.innerHTML = `
-      <div class="series-detail-shell movie-detail-shell${this.isTrailerPlaying ? " detail-trailer-active" : ""}">
+      <div class="series-detail-shell movie-detail-shell${this.getTrailerShellStateClasses()}">
         <div class="series-detail-backdrop" data-backdrop-url="${escapeAttribute(backdrop || "")}"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="series-detail-vignette"></div>
@@ -5007,6 +5069,9 @@ export const MetaDetailsScreen = {
       if (!shell) {
         return;
       }
+      if (this.isTrailerPlaying && this.trailerPlaybackMode === "autoplay") {
+        this.stopTrailerPlayback({ restartAutoplay: false });
+      }
       shell.classList.toggle("detail-scrolled", content.scrollTop > 160);
     };
     content.addEventListener("scroll", this.detailScrollHandler, { passive: true });
@@ -5032,6 +5097,14 @@ export const MetaDetailsScreen = {
       const target = event?.target;
       if (!(target instanceof HTMLElement) || !this.container?.contains(target)) {
         return;
+      }
+      if (!this.isTrailerPlaying) {
+        if (target.matches('.series-detail-actions [data-action="playDefault"]')) {
+          this.restartTrailerAutoplayTimer();
+        } else if (this.trailerAutoplayTimer) {
+          clearTimeout(this.trailerAutoplayTimer);
+          this.trailerAutoplayTimer = null;
+        }
       }
       if (target.matches(".series-season-btn.focusable")) {
         const season = Number(target.dataset.season || 0);
@@ -5079,8 +5152,16 @@ export const MetaDetailsScreen = {
       this.container.removeEventListener("click", this.detailClickHandler, true);
     }
     this.detailClickHandler = (event) => {
+      if (this.isTrailerPlaying && this.trailerPlaybackMode === "autoplay") {
+        this.stopTrailerPlayback({ restartAutoplay: false });
+        return;
+      }
       const target = event?.target?.closest?.("[data-trailer-control]");
-      if (!target || !this.isTrailerPlaying) {
+      if (
+        !target ||
+        !this.isTrailerPlaying ||
+        this.trailerPlaybackMode !== "manual"
+      ) {
         return;
       }
       event?.preventDefault?.();
@@ -5287,7 +5368,20 @@ export const MetaDetailsScreen = {
   },
 
   shouldSuppressTrailerAutoplay() {
-    return false;
+    const content = this.getDetailContentScroller();
+    const focused = this.container?.querySelector(".focusable.focused") || null;
+    return Boolean(
+      this.trailerHasAutoplayed ||
+        !content ||
+        Number(content.scrollTop || 0) > 160 ||
+        !focused?.matches?.('.series-detail-actions [data-action="playDefault"]') ||
+        this.seasonHoldMenu ||
+        this.episodeHoldMenu ||
+        this.heroPlayMenu ||
+        this.libraryListMenu ||
+        this.detailHoldDialog ||
+        this.posterOptionsController?.dialog
+    );
   },
 
   animateScroll(container, axis, targetValue, duration = 150) {
@@ -5532,8 +5626,11 @@ export const MetaDetailsScreen = {
         controllable: false
       };
       this.trailerYoutubeFallbackActive = true;
-      this.updateTrailerOverlay();
-      this.restartTrailerControlsTimer();
+      this.markTrailerVisualReady();
+      if (this.trailerPlaybackMode === "manual") {
+        this.updateTrailerOverlay();
+        this.restartTrailerControlsTimer();
+      }
     }, 4500);
   },
 
@@ -5547,7 +5644,11 @@ export const MetaDetailsScreen = {
 
   restartTrailerControlsTimer() {
     this.stopTrailerControlsTimer();
-    if (!this.isTrailerPlaying || !this.trailerSource) {
+    if (
+      !this.isTrailerPlaying ||
+      !this.trailerSource ||
+      this.trailerPlaybackMode !== "manual"
+    ) {
       this.setTrailerControlsVisible(false);
       return;
     }
@@ -5563,6 +5664,9 @@ export const MetaDetailsScreen = {
 
   startTrailerProgressTimer() {
     this.stopTrailerProgressTimer();
+    if (this.trailerPlaybackMode !== "manual") {
+      return;
+    }
     this.updateTrailerOverlay();
     this.trailerProgressTimer = setInterval(() => {
       if (
@@ -5728,21 +5832,56 @@ export const MetaDetailsScreen = {
     }
     this.detachTrailerMediaListeners();
     const sync = () => this.updateTrailerOverlay();
-    const eventNames = [
-      "play",
-      "pause",
-      "timeupdate",
-      "volumechange",
-      "loadedmetadata",
-      "durationchange",
-      "waiting",
-      "playing",
-      "canplay"
-    ];
+    const markReady = () => {
+      this.markTrailerVisualReady();
+      this.updateTrailerOverlay();
+    };
+    const handleEnded = () => {
+      if (this.isTrailerPlaying) {
+        this.stopTrailerPlayback();
+      }
+    };
+    const handleError = () => {
+      if (this.isTrailerPlaying && !this.trailerVisualReady) {
+        this.stopTrailerPlayback();
+      }
+    };
+    const eventNames =
+      this.trailerPlaybackMode === "manual"
+        ? [
+            "play",
+            "pause",
+            "timeupdate",
+            "volumechange",
+            "loadedmetadata",
+            "durationchange",
+            "waiting",
+            "playing",
+            "canplay"
+          ]
+        : [];
     this.trailerMediaListeners = eventNames.map((eventName) => {
       video.addEventListener(eventName, sync);
       return { target: video, eventName, handler: sync };
     });
+    [
+      ["playing", markReady],
+      ["ended", handleEnded],
+      ["error", handleError]
+    ].forEach(([eventName, handler]) => {
+      video.addEventListener(eventName, handler);
+      this.trailerMediaListeners.push({ target: video, eventName, handler });
+    });
+  },
+
+  markTrailerVisualReady() {
+    if (!this.isTrailerPlaying || this.trailerVisualReady) {
+      return;
+    }
+    this.trailerVisualReady = true;
+    this.container
+      ?.querySelector(".series-detail-shell")
+      ?.classList.add("detail-trailer-ready");
   },
 
   destroyYoutubeTrailerPlayer() {
@@ -5788,7 +5927,11 @@ export const MetaDetailsScreen = {
   },
 
   toggleActiveTrailerPlayback() {
-    if (!this.isTrailerPlaying || !this.trailerSource) {
+    if (
+      !this.isTrailerPlaying ||
+      !this.trailerSource ||
+      this.trailerPlaybackMode !== "manual"
+    ) {
       return;
     }
     this.restartTrailerControlsTimer();
@@ -5821,7 +5964,11 @@ export const MetaDetailsScreen = {
 
   setTrailerMutedState(nextMuted) {
     this.trailerMuted = Boolean(nextMuted);
-    if (!this.isTrailerPlaying || !this.trailerSource) {
+    if (
+      !this.isTrailerPlaying ||
+      !this.trailerSource ||
+      this.trailerPlaybackMode !== "manual"
+    ) {
       return;
     }
     if (this.trailerSource.kind === "video") {
@@ -5842,7 +5989,12 @@ export const MetaDetailsScreen = {
 
   seekTrailerBy(deltaSeconds) {
     const delta = Number(deltaSeconds || 0);
-    if (!delta || !this.isTrailerPlaying || !this.trailerSource) {
+    if (
+      !delta ||
+      !this.isTrailerPlaying ||
+      !this.trailerSource ||
+      this.trailerPlaybackMode !== "manual"
+    ) {
       return;
     }
     if (this.trailerSource.kind === "video") {
@@ -5878,6 +6030,18 @@ export const MetaDetailsScreen = {
       return;
     }
     shell.classList.toggle("detail-trailer-active", Boolean(this.isTrailerPlaying));
+    shell.classList.toggle(
+      "detail-trailer-autoplay",
+      this.isTrailerPlaying && this.trailerPlaybackMode === "autoplay"
+    );
+    shell.classList.toggle(
+      "detail-trailer-manual",
+      this.isTrailerPlaying && this.trailerPlaybackMode === "manual"
+    );
+    shell.classList.toggle(
+      "detail-trailer-ready",
+      this.isTrailerPlaying && this.trailerVisualReady
+    );
     if (!this.isTrailerPlaying || !this.trailerSource) {
       this.stopTrailerProgressTimer();
       this.detachTrailerMediaListeners();
@@ -5889,8 +6053,9 @@ export const MetaDetailsScreen = {
     const title = escapeHtml(
       this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Trailer"
     );
+    this.trailerDomGeneration = Number(this.trailerDomGeneration || 0) + 1;
     const subtitle = escapeHtml(t("detail.trailerLabel", {}, "Trailer"));
-    const controlsMarkup = `
+    const controlsMarkup = this.trailerPlaybackMode === "manual" ? `
       <div class="detail-trailer-controls-overlay" tabindex="-1">
         <div class="detail-trailer-controls-gradient detail-trailer-controls-gradient-top"></div>
         <div class="detail-trailer-controls-gradient detail-trailer-controls-gradient-bottom"></div>
@@ -5923,10 +6088,13 @@ export const MetaDetailsScreen = {
           </div>
         </div>
       </div>
-    `;
+    ` : "";
     if (this.trailerSource.kind === "youtube") {
       const youtubeFrameUrl =
-        buildInlineYoutubePlayerUrl(this.trailerSource.ytId, { muted: this.trailerMuted }) ||
+        buildInlineYoutubePlayerUrl(this.trailerSource.ytId, {
+          muted: this.trailerMuted,
+          loop: false
+        }) ||
         this.trailerSource.embedUrl ||
         "";
       layer.innerHTML = `
@@ -5946,27 +6114,33 @@ export const MetaDetailsScreen = {
         ${controlsMarkup}
       `;
       this.cacheTrailerRefs();
-      this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
-      this.startTrailerProgressTimer();
+      if (this.trailerPlaybackMode === "manual") {
+        this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
+        this.startTrailerProgressTimer();
+      }
       this.initYoutubeTrailerPlayer();
       return;
     }
     layer.innerHTML = `
       <div class="detail-trailer-media" data-trailer-media>
-        <video class="detail-trailer-video" autoplay loop playsinline${this.trailerMuted ? " muted" : ""}>
+        <video class="detail-trailer-video" autoplay playsinline preload="auto"${this.trailerMuted ? " muted" : ""}>
           <source src="${this.trailerSource.url}" />
         </video>
       </div>
       ${controlsMarkup}
     `;
     this.cacheTrailerRefs();
-    this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
+    if (this.trailerPlaybackMode === "manual") {
+      this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
+    }
     this.bindTrailerVideoEvents(this.trailerUiRefs?.video || null);
     const playAttempt = this.trailerUiRefs?.video?.play?.();
     if (playAttempt?.catch) {
       playAttempt.catch(() => {});
     }
-    this.startTrailerProgressTimer();
+    if (this.trailerPlaybackMode === "manual") {
+      this.startTrailerProgressTimer();
+    }
   },
 
   async playTrailer({
@@ -5975,6 +6149,7 @@ export const MetaDetailsScreen = {
     initiatedByUser = true,
     preserveSource = false
   } = {}) {
+    const requestedFocusRestore = initiatedByUser ? this.captureDetailFocus() : null;
     if (!preserveSource && (!this.trailerSource || this.trailerSource.kind === "youtube")) {
       const preferredSource = await this.resolvePreferredTrailerSource(this.meta);
       if (preferredSource) {
@@ -5990,32 +6165,76 @@ export const MetaDetailsScreen = {
       this.trailerMuted = false;
     }
     if (this.isTrailerPlaying && !restart) {
-      this.toggleActiveTrailerPlayback();
+      if (this.trailerPlaybackMode === "manual") {
+        this.toggleActiveTrailerPlayback();
+      }
       return;
     }
-    this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
+    this.stopTrailerPlayback({
+      keepDom: false,
+      restartAutoplay: false,
+      restoreFocus: false
+    });
+    this.trailerPlaybackMode = initiatedByUser ? "manual" : "autoplay";
+    this.trailerFocusRestore =
+      initiatedByUser &&
+      requestedFocusRestore?.selector?.includes(".series-detail-actions")
+        ? { selector: '.series-detail-actions [data-action="playDefault"]' }
+        : requestedFocusRestore;
+    this.trailerVisualReady = false;
+    if (!initiatedByUser) {
+      this.trailerHasAutoplayed = true;
+    }
     this.isTrailerPlaying = true;
     this.syncTrailerDom();
-    this.restartTrailerControlsTimer();
+    if (this.trailerPlaybackMode === "manual") {
+      this.restartTrailerControlsTimer();
+    }
   },
 
   openTrailerInPlayer() {
     this.playTrailer({ restart: true, initiatedByUser: true });
   },
 
-  stopTrailerPlayback({ keepDom = false, restartAutoplay = true } = {}) {
+  stopTrailerPlayback({
+    keepDom = false,
+    restartAutoplay = true,
+    restoreFocus = true
+  } = {}) {
     if (this.trailerAutoplayTimer) {
       clearTimeout(this.trailerAutoplayTimer);
       this.trailerAutoplayTimer = null;
+    }
+    const layer = this.container?.querySelector(".detail-trailer-layer") || null;
+    const wasVisualReady = Boolean(this.trailerVisualReady);
+    const cleanupGeneration = Number(this.trailerDomGeneration || 0) + 1;
+    this.trailerDomGeneration = cleanupGeneration;
+    if (this.trailerSource?.kind === "youtube") {
+      this.postTrailerProxyCommand("pause");
+    } else {
+      try {
+        this.trailerUiRefs?.video?.pause?.();
+      } catch (_) {}
     }
     this.stopTrailerProgressTimer();
     this.stopTrailerControlsTimer();
     this.stopTrailerProxyLoadingTimer();
     this.detachTrailerMediaListeners();
     this.destroyYoutubeTrailerPlayer();
+    const previousMode = this.trailerPlaybackMode;
+    const focusRestore = this.trailerFocusRestore;
     this.isTrailerPlaying = false;
-    if (!keepDom) {
-      const layer = this.container?.querySelector(".detail-trailer-layer");
+    this.trailerPlaybackMode = null;
+    this.trailerVisualReady = false;
+    this.trailerFocusRestore = null;
+    const clearLayer = () => {
+      if (
+        !layer ||
+        Number(this.trailerDomGeneration || 0) !== cleanupGeneration ||
+        this.isTrailerPlaying
+      ) {
+        return;
+      }
       if (layer) {
         const activeFrame = layer.querySelector("iframe");
         if (activeFrame) {
@@ -6028,12 +6247,38 @@ export const MetaDetailsScreen = {
         }
         layer.innerHTML = "";
       }
-    }
+    };
     this.trailerUiRefs = null;
     this.trailerControlsVisible = true;
     const shell = this.container?.querySelector(".series-detail-shell");
     if (shell) {
-      shell.classList.remove("detail-trailer-active");
+      shell.classList.remove(
+        "detail-trailer-active",
+        "detail-trailer-autoplay",
+        "detail-trailer-manual",
+        "detail-trailer-ready"
+      );
+    }
+    if (!keepDom) {
+      if (wasVisualReady) {
+        setTimeout(clearLayer, 620);
+      } else {
+        clearLayer();
+      }
+    }
+    if (restoreFocus && previousMode === "manual") {
+      const restore = () => {
+        this.focusDetailDescriptor(
+          focusRestore || {
+            selector: '.series-detail-actions [data-action="playDefault"]'
+          }
+        );
+      };
+      if (typeof requestAnimationFrame === "function") {
+        requestAnimationFrame(restore);
+      } else {
+        setTimeout(restore, 0);
+      }
     }
     if (restartAutoplay) {
       this.restartTrailerAutoplayTimer();
@@ -6044,7 +6289,11 @@ export const MetaDetailsScreen = {
     if (!videoId || !this.meta) {
       return;
     }
-    this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
+    this.stopTrailerPlayback({
+      keepDom: false,
+      restartAutoplay: false,
+      restoreFocus: false
+    });
     const episode = this.episodes.find((entry) => entry.id === videoId) || null;
     if (!episode) {
       return;
@@ -6057,7 +6306,11 @@ export const MetaDetailsScreen = {
   },
 
   async openMovieStreamChooser(options = {}) {
-    this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
+    this.stopTrailerPlayback({
+      keepDom: false,
+      restartAutoplay: false,
+      restoreFocus: false
+    });
     this.navigateToStreamScreenForMovie(
       this.getResumeParamsForProgress(this.getActiveResumeProgress(), options)
     );
@@ -7752,7 +8005,11 @@ export const MetaDetailsScreen = {
       return;
     }
 
-    if (this.isTrailerPlaying) {
+    if (this.isTrailerPlaying && this.trailerPlaybackMode === "autoplay") {
+      this.stopTrailerPlayback({ restartAutoplay: false });
+    }
+
+    if (this.isTrailerPlaying && this.trailerPlaybackMode === "manual") {
       this.restartTrailerControlsTimer();
       const direction = getDpadDirection(event);
       if (event.keyCode === 13) {
@@ -7775,7 +8032,7 @@ export const MetaDetailsScreen = {
         this.setTrailerMutedState(!this.trailerMuted);
         return;
       }
-    } else {
+    } else if (!this.isTrailerPlaying) {
       this.restartTrailerAutoplayTimer();
     }
 
@@ -8177,7 +8434,11 @@ export const MetaDetailsScreen = {
     this.episodeTrackScrollHandler = null;
     this.episodeVirtualWindow = null;
     this.episodeVirtualMetrics = null;
-    this.stopTrailerPlayback({ keepDom: false, restartAutoplay: false });
+    this.stopTrailerPlayback({
+      keepDom: false,
+      restartAutoplay: false,
+      restoreFocus: false
+    });
     if (this.detailScrollHandler && this.container) {
       const content = this.container.querySelector(".series-detail-content");
       if (content) {
