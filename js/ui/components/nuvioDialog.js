@@ -91,6 +91,9 @@ export class NuvioDialog {
     const normalized = (key || keyName || code).toLowerCase();
     return {
       isBack:
+        keyCode === 8 ||
+        keyCode === 27 ||
+        keyCode === 461 ||
         keyCode === 10009 ||
         ["escape", "esc", "backspace", "goback", "back", "return"].includes(normalized),
       isDown: keyCode === 40 || normalized === "arrowdown" || normalized === "down",

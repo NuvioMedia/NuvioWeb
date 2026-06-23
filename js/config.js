@@ -9,7 +9,9 @@ export const YOUTUBE_PROXY_URL = String(
   runtimeEnv.YOUTUBE_PROXY_URL || "youtube-proxy.html"
 ).trim();
 export const PARENTAL_GUIDE_API_URL = String(runtimeEnv.PARENTAL_GUIDE_API_URL || "").trim();
-export const INTRODB_API_URL = String(runtimeEnv.INTRODB_API_URL || "").trim();
+export const INTRODB_API_URL = String(
+  runtimeEnv.INTRODB_API_URL || "https://api.introdb.app/"
+).trim();
 export const IMDB_RATINGS_API_BASE_URL = String(runtimeEnv.IMDB_RATINGS_API_BASE_URL || "").trim();
 export const AVATAR_PUBLIC_BASE_URL = String(runtimeEnv.AVATAR_PUBLIC_BASE_URL || "").trim();
 export const CONTRIBUTIONS_URL = String(runtimeEnv.CONTRIBUTIONS_URL || "").trim();

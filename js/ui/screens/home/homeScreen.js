@@ -3563,6 +3563,29 @@ export const HomeScreen = {
     }
   },
 
+  dismissContinueWatchingMenu() {
+    this._homeHoldDialog = null;
+    if (this.continueWatchingMenu) {
+      this.pendingContinueWatchingFocusIndex = Math.max(0, Number(this.continueWatchingMenu.index || 0));
+    }
+    this.continueWatchingMenu = null;
+    this.restoreContinueWatchingMenuFocus();
+    this.holdMenuScrollState = null;
+  },
+
+  dismissPosterHoldMenu() {
+    this._homeHoldDialog = null;
+    if (this.posterHoldMenu) {
+      this.pendingPosterHoldFocus = {
+        rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
+        index: Number(this.posterHoldMenu.index || 0)
+      };
+    }
+    this.posterHoldMenu = null;
+    this.restorePosterHoldMenuFocus();
+    this.holdMenuScrollState = null;
+  },
+
   lockHomeHoldFocus() {
     this.homeHoldFocusLocked = true;
     const current = this.getCurrentFocusedNode();
@@ -3683,15 +3706,7 @@ export const HomeScreen = {
           void this.activateContinueWatchingMenuOption();
         }
       })),
-      onDismiss: () => {
-        this._homeHoldDialog = null;
-        if (this.continueWatchingMenu) {
-          this.pendingContinueWatchingFocusIndex = Math.max(0, Number(this.continueWatchingMenu.index || 0));
-        }
-        this.continueWatchingMenu = null;
-        this.restoreContinueWatchingMenuFocus();
-        this.holdMenuScrollState = null;
-      }
+      onDismiss: () => this.dismissContinueWatchingMenu()
     }).mount(document.body);
     this.suppressHoldMenuEnterUntilKeyUp = true;
     this.scheduleHoldMenuScrollRestore();
@@ -3722,18 +3737,7 @@ export const HomeScreen = {
           void this.activatePosterHoldMenuOption();
         }
       })),
-      onDismiss: () => {
-        this._homeHoldDialog = null;
-        if (this.posterHoldMenu) {
-          this.pendingPosterHoldFocus = {
-            rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
-            index: Number(this.posterHoldMenu.index || 0)
-          };
-        }
-        this.posterHoldMenu = null;
-        this.restorePosterHoldMenuFocus();
-        this.holdMenuScrollState = null;
-      }
+      onDismiss: () => this.dismissPosterHoldMenu()
     }).mount(document.body);
     this.suppressHoldMenuEnterUntilKeyUp = true;
     this.scheduleHoldMenuScrollRestore();
@@ -5310,7 +5314,8 @@ export const HomeScreen = {
     this.collapseFocusedPoster();
   },
 
-  openSidebar() {
+  openSidebar({ openedByBack = false } = {}) {
+    this.sidebarOpenedByBack = Boolean(openedByBack);
     if (this.layoutPrefs?.modernSidebar) {
       if (this.sidebarExpanded) {
         return true;
@@ -5331,6 +5336,7 @@ export const HomeScreen = {
   },
 
   closeSidebarToContent() {
+    this.sidebarOpenedByBack = false;
     if (this.layoutPrefs?.modernSidebar) {
       if (!this.sidebarExpanded) {
         return false;
@@ -6462,6 +6468,7 @@ export const HomeScreen = {
     ScreenUtils.show(this.container);
     this.ensureDelegatedEventsBound();
     this.sidebarExpanded = false;
+    this.sidebarOpenedByBack = false;
     this.pillIconOnly = false;
     this.homeRouteEnterPending = true;
     this.destroyHomeHoldDialog();
@@ -8099,6 +8106,21 @@ export const HomeScreen = {
   },
 
   consumeBackRequest() {
+    if (this._homeHoldDialog) {
+      this._homeHoldDialog.destroy();
+      if (this.continueWatchingMenu) {
+        this.dismissContinueWatchingMenu();
+      } else if (this.posterHoldMenu || this.posterListPicker) {
+        if (this.posterListPicker) {
+          this.posterListPicker = null;
+        }
+        this.dismissPosterHoldMenu();
+      } else {
+        this._homeHoldDialog = null;
+        this.unlockHomeHoldFocus();
+      }
+      return true;
+    }
     if (this.continueWatchingMenu) {
       this.closeContinueWatchingMenu();
       return true;
@@ -8115,11 +8137,16 @@ export const HomeScreen = {
       this.container?.querySelector(".modern-sidebar-panel .focusable.focused")
       || this.container?.querySelector(".home-sidebar .focusable.focused")
     );
-    if (sidebarFocused) {
-      Platform.exitApp();
-    } else {
-      this.openSidebar();
+    if (sidebarFocused || this.sidebarExpanded) {
+      if (this.sidebarOpenedByBack) {
+        this.sidebarOpenedByBack = false;
+        Platform.exitApp();
+        return true;
+      }
+      this.closeSidebarToContent();
+      return true;
     }
+    this.openSidebar({ openedByBack: true });
     return true;
   },
 

@@ -4040,6 +4040,7 @@ export const SettingsScreen = {
             )}</div>
             <div class="stream-route-card-badges">
               ${(section.filters || [])
+                .filter((filter) => String(filter?.imageURL || "").trim())
                 .map((filter) => {
                   const filled =
                     String(filter?.tagStyle || "")

@@ -1,4 +1,5 @@
 import { INTRODB_API_URL } from "../../config.js";
+import { Platform } from "../../platform/index.js";
 
 const CACHE = new Map();
 
@@ -42,12 +43,14 @@ function toSkipInterval(segment, type) {
   };
 }
 
-async function fetchJson(url, timeoutMs = 3500) {
+async function fetchJson(url, timeoutMs = Platform.isTizen() || Platform.isWebOS() ? 8000 : 3500) {
   const controller = typeof AbortController === "function" ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
     const response = await fetch(url, {
       method: "GET",
+      mode: "cors",
+      cache: "no-store",
       signal: controller?.signal
     });
     if (!response.ok) {

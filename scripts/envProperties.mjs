@@ -27,7 +27,7 @@ const DEFAULT_ENV_VALUES = {
   TV_LOGIN_REDIRECT_BASE_URL: "",
   YOUTUBE_PROXY_URL: "youtube-proxy.html",
   PARENTAL_GUIDE_API_URL: "",
-  INTRODB_API_URL: "",
+  INTRODB_API_URL: "https://api.introdb.app/",
   IMDB_RATINGS_API_BASE_URL: "",
   AVATAR_PUBLIC_BASE_URL: "",
   CONTRIBUTIONS_URL: "",
@@ -87,7 +87,11 @@ export function normalizeEnvProperties(properties = {}) {
     const rawValue = Object.prototype.hasOwnProperty.call(properties, key)
       ? properties[key]
       : DEFAULT_ENV_VALUES[key];
-    env[key] = String(rawValue ?? "");
+    const normalizedValue = String(rawValue ?? "");
+    env[key] =
+      key === "INTRODB_API_URL" && !normalizedValue.trim()
+        ? DEFAULT_ENV_VALUES.INTRODB_API_URL
+        : normalizedValue;
   });
   return env;
 }

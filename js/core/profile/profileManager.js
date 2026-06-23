@@ -62,7 +62,10 @@ export const ProfileManager = {
   },
 
   hasEverSelectedProfile() {
-    return Boolean(LocalStore.get(HAS_EVER_SELECTED_PROFILE_KEY, false));
+    return Boolean(
+      LocalStore.get(HAS_EVER_SELECTED_PROFILE_KEY, false) ||
+        LocalStore.get(ACTIVE_PROFILE_ID_KEY, null) != null
+    );
   },
 
   clearActiveProfile() {

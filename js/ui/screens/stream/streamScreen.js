@@ -1025,6 +1025,9 @@ function getStreamPresentation(stream = {}) {
 
 function renderImageBadgeChip(badge = {}) {
   const imageUrl = normalizeAddonLogoUrl(badge.imageURL);
+  if (!imageUrl) {
+    return "";
+  }
   let displayImageUrl = getCachedAddonLogoDisplayUrl(imageUrl);
   if (imageUrl && !displayImageUrl && !failedAddonLogoUrls.has(imageUrl)) {
     requestAddonLogo(imageUrl);
@@ -1041,6 +1044,9 @@ function renderImageBadgeChip(badge = {}) {
       .toLowerCase() === "filled";
   const fallbackImageUrl = Environment.isWebOS() ? "" : imageUrl;
   const safeImageUrl = displayImageUrl || fallbackImageUrl;
+  if (!safeImageUrl) {
+    return "";
+  }
   const style = [
     filled && backgroundColor ? `background:${backgroundColor};` : "",
     outlineColor ? `border-color:${outlineColor};` : "",
@@ -1048,11 +1054,7 @@ function renderImageBadgeChip(badge = {}) {
   ].join("");
   return `
     <span class="stream-route-stream-badge image${filled ? " filled" : ""}"${style ? ` style="${escapeHtml(style)}"` : ""}>
-      ${
-        safeImageUrl
-          ? `<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
-          : ""
-      }
+      <img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(badge.name || "")}" loading="lazy" decoding="async" referrerpolicy="no-referrer" />
     </span>
   `;
 }
@@ -1061,7 +1063,10 @@ function renderImportedStreamBadgeChips(stream = {}, badges = [], showFileSizeBa
   const sizeBytes = stream.behaviorHints?.videoSize;
   const chips = [];
   badges.slice(0, STREAM_BADGE_LIMIT).forEach((badge) => {
-    chips.push(renderImageBadgeChip(badge));
+    const chip = renderImageBadgeChip(badge);
+    if (chip) {
+      chips.push(chip);
+    }
   });
   if (showFileSizeBadges && sizeBytes != null) {
     chips.push(
@@ -1926,6 +1931,13 @@ export const StreamScreen = {
     );
   },
 
+  shouldUseManualListScroll(listNode) {
+    if (!listNode || !Environment.isWebOS()) {
+      return false;
+    }
+    return Number(listNode.scrollHeight || 0) > Number(listNode.clientHeight || 0);
+  },
+
   getListScrollTop(listNode) {
     if (!listNode) {
       return 0;
@@ -1936,6 +1948,19 @@ export const StreamScreen = {
     return Number(listNode.scrollTop || 0);
   },
 
+  updateManualListScrollTransform(listNode, scrollTop) {
+    if (!listNode) {
+      return;
+    }
+    const normalized = Math.max(0, Number(scrollTop || 0));
+    const transform = normalized > 0 ? `translateY(${-normalized}px)` : "";
+    Array.from(listNode.children || []).forEach((child) => {
+      if (child instanceof HTMLElement) {
+        child.style.transform = transform;
+      }
+    });
+  },
+
   applyManualListScroll(listNode, scrollTop) {
     if (!listNode) {
       return;
@@ -1944,6 +1969,12 @@ export const StreamScreen = {
     listNode.classList.add("manual-scroll");
     listNode.dataset.manualScrollTop = String(normalized);
     listNode.style.setProperty("--stream-route-manual-scroll", `${-normalized}px`);
+    try {
+      listNode.scrollTop = 0;
+    } catch (_) {
+      // Ignore webOS scrollTop assignment failures; the manual transform is authoritative.
+    }
+    this.updateManualListScrollTransform(listNode, normalized);
     this.listScrollTop = normalized;
   },
 
@@ -1957,6 +1988,10 @@ export const StreamScreen = {
     );
     const normalized = clamp(Number(nextScrollTop || 0), 0, maxScrollTop);
     if (listNode.classList?.contains("manual-scroll")) {
+      this.applyManualListScroll(listNode, normalized);
+      return;
+    }
+    if (this.shouldUseManualListScroll(listNode)) {
       this.applyManualListScroll(listNode, normalized);
       return;
     }
@@ -2537,6 +2572,22 @@ export const StreamScreen = {
       },
       { passive: true }
     );
+    if (Environment.isWebOS()) {
+      list.addEventListener(
+        "wheel",
+        (event) => {
+          const deltaMode = Number(event?.deltaMode || 0);
+          const multiplier = deltaMode === 1 ? 40 : deltaMode === 2 ? list.clientHeight : 1;
+          const deltaY = Number(event?.deltaY || 0) * multiplier;
+          if (!deltaY) {
+            return;
+          }
+          event?.preventDefault?.();
+          this.setListScrollTop(list, this.getListScrollTop(list) + deltaY);
+        },
+        { passive: false }
+      );
+    }
   },
 
   bindAddonLogoFallbacks() {

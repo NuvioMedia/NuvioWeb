@@ -1077,7 +1077,7 @@ export const PlayerController = {
       // Internal subtitle selection can still work without clearing the external path.
     }
     try {
-      avplay.setSilentSubtitle?.(true);
+      avplay.setSilentSubtitle?.(false);
       this.avplaySubtitlesSilent = false;
     } catch (_) {
       this.avplaySubtitlesSilent = false;
@@ -1108,7 +1108,7 @@ export const PlayerController = {
       }
     }
     try {
-      avplay.setSilentSubtitle?.(true);
+      avplay.setSilentSubtitle?.(false);
       this.avplaySubtitlesSilent = false;
     } catch (_) {
       this.avplaySubtitlesSilent = false;
@@ -3470,20 +3470,38 @@ export const PlayerController = {
     }
   },
 
-  stop() {
+  stop({ forceCloudSync = true, allowCloudSync = true, flushProgress = true } = {}) {
     if (!this.video) return;
 
     this.playRequestToken = Number(this.playRequestToken || 0) + 1;
-    const flushPromise = this.flushCurrentProgress({ forceCloudSync: true });
+    const flushPromise = flushProgress
+      ? this.flushCurrentProgress({ forceCloudSync, allowCloudSync })
+      : Promise.resolve(false);
     this.setStartupAudioGate(false, { resume: false });
 
-    this.video.pause();
+    try {
+      this.video.pause();
+    } catch (_) {
+      // Older TV media elements can throw while the native pipeline is tearing down.
+    }
     this.teardownAdaptiveInstances();
     this.teardownAvPlay();
     this.resetNativeMediaState();
-    this.video.removeAttribute("src");
-    Array.from(this.video.querySelectorAll("source")).forEach((node) => node.remove());
-    this.video.load();
+    try {
+      this.video.removeAttribute("src");
+    } catch (_) {
+      // Ignore source reset failures during route transitions.
+    }
+    try {
+      Array.from(this.video.querySelectorAll("source")).forEach((node) => node.remove());
+    } catch (_) {
+      // Ignore source node cleanup failures.
+    }
+    try {
+      this.video.load();
+    } catch (_) {
+      // Some legacy TV engines reject load() after AVPlay/native teardown.
+    }
 
     this.isPlaying = false;
     this.currentItemId = null;

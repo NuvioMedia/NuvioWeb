@@ -11,11 +11,28 @@ function normalizeText(value = "") {
 }
 
 function normalizeColor(value = "") {
-  const hex = normalizeText(value).replace(/^#/, "");
+  const text = normalizeText(value);
+  if (/^(transparent|rgba?\([\d\s,%.]+\))$/i.test(text)) {
+    return text;
+  }
+  const hex = text.replace(/^#/, "");
   if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(hex)) {
     return "";
   }
-  return `#${hex.length === 8 ? hex.slice(2) : hex}`.toUpperCase();
+  if (hex.length === 6) {
+    return `#${hex}`.toUpperCase();
+  }
+  const alpha = parseInt(hex.slice(0, 2), 16);
+  const red = parseInt(hex.slice(2, 4), 16);
+  const green = parseInt(hex.slice(4, 6), 16);
+  const blue = parseInt(hex.slice(6, 8), 16);
+  if (alpha >= 255) {
+    return `#${hex.slice(2)}`.toUpperCase();
+  }
+  if (alpha <= 0) {
+    return "transparent";
+  }
+  return `rgba(${red}, ${green}, ${blue}, ${(alpha / 255).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")})`;
 }
 
 function toBadgeArray(value) {

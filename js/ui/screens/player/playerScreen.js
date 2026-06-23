@@ -1136,9 +1136,23 @@ function formatBytesPerSecond(value) {
 function normalizeStreamBadgeChipColor(value = "") {
   const hex = String(value || "").trim().replace(/^#/, "");
   if (!/^[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$/.test(hex)) {
-    return "";
+    const cssColor = String(value || "").trim();
+    return /^(transparent|rgba?\([\d\s,%.]+\))$/i.test(cssColor) ? cssColor : "";
   }
-  return `#${hex.length === 8 ? hex.slice(2) : hex}`.toUpperCase();
+  if (hex.length === 6) {
+    return `#${hex}`.toUpperCase();
+  }
+  const alpha = parseInt(hex.slice(0, 2), 16);
+  const red = parseInt(hex.slice(2, 4), 16);
+  const green = parseInt(hex.slice(4, 6), 16);
+  const blue = parseInt(hex.slice(6, 8), 16);
+  if (alpha >= 255) {
+    return `#${hex.slice(2)}`.toUpperCase();
+  }
+  if (alpha <= 0) {
+    return "transparent";
+  }
+  return `rgba(${red}, ${green}, ${blue}, ${(alpha / 255).toFixed(3).replace(/0+$/, "").replace(/\.$/, "")})`;
 }
 
 function renderPlayerImageBadgeChip(badge = {}) {
@@ -5490,8 +5504,9 @@ export const PlayerScreen = {
       const streamItems = resolution.streamItems;
       const bestStreamCandidate = resolution.selectedStream;
       const bestStream = bestStreamCandidate?.url || bestStreamCandidate?.externalUrl || null;
-      await PlayerController.flushCurrentProgress({ forceCloudSync: true });
-      await PlayerController.stop();
+      await PlayerController.flushCurrentProgress({ allowCloudSync: false });
+      void PlayerController.pushProgressIfDue?.(true);
+      PlayerController.stop({ flushProgress: false });
       await this.releaseCurrentEngineFsStream("next-episode", { removeTorrent: true });
       Router.navigate("player", {
         streamUrl: bestStream,
@@ -9474,6 +9489,15 @@ export const PlayerScreen = {
     this.invalidateTrackDialogCaches();
   },
 
+  isSubtitleOffEntrySelected(nativeTrackIndex = this.selectedSubtitleTrackIndex) {
+    return (
+      Number(nativeTrackIndex) < 0 &&
+      Number(this.selectedEmbeddedSubtitleTrackIndex) < 0 &&
+      !this.selectedAddonSubtitleId &&
+      !this.selectedManifestSubtitleTrackId
+    );
+  },
+
   getSubtitleEntries(tab = this.subtitleDialogTab) {
     const textTracks = this.getTextTracks();
     const builtInBoundary = this.resolveBuiltInSubtitleBoundary(textTracks);
@@ -9515,7 +9539,7 @@ export const PlayerScreen = {
             id: "subtitle-off",
             label: t("subtitle_none", {}, "None"),
             secondary: "",
-            selected: selectedAvPlaySubtitleTrack < 0,
+            selected: this.isSubtitleOffEntrySelected(selectedAvPlaySubtitleTrack),
             trackIndex: -1,
             avplaySubtitleTrackIndex: -1
           },
@@ -9546,7 +9570,7 @@ export const PlayerScreen = {
             id: "subtitle-off",
             label: t("subtitle_none", {}, "None"),
             secondary: "",
-            selected: selectedDashSubtitleTrack < 0,
+            selected: this.isSubtitleOffEntrySelected(selectedDashSubtitleTrack),
             trackIndex: -1,
             dashSubtitleTrackIndex: -1
           },
@@ -9574,7 +9598,7 @@ export const PlayerScreen = {
             id: "subtitle-off",
             label: t("subtitle_none", {}, "None"),
             secondary: "",
-            selected: selectedHlsSubtitleTrack < 0,
+            selected: this.isSubtitleOffEntrySelected(selectedHlsSubtitleTrack),
             trackIndex: -1,
             hlsSubtitleTrackIndex: -1
           },
@@ -9601,7 +9625,7 @@ export const PlayerScreen = {
             id: "subtitle-off",
             label: t("subtitle_none", {}, "None"),
             secondary: "",
-            selected: this.selectedSubtitleTrackIndex < 0 && this.selectedEmbeddedSubtitleTrackIndex < 0 && !this.selectedManifestSubtitleTrackId,
+            selected: this.isSubtitleOffEntrySelected(this.selectedSubtitleTrackIndex),
             trackIndex: -1
           },
           ...embeddedSubtitleTracks.map((track, index) => {
@@ -10902,7 +10926,12 @@ export const PlayerScreen = {
     this.subtitleOptionRailIndex = clamp(this.subtitleOptionRailIndex, 0, Math.max(0, options.length - 1));
     const styleItems = this.getSubtitleStyleControls();
     this.subtitleStyleRailIndex = clamp(this.subtitleStyleRailIndex, 0, Math.max(0, styleItems.length - 1));
-    const subtitleLoadingVisible = this.embeddedSubtitleLoading && this.canDiscoverEmbeddedSubtitleTracks();
+    const subtitleLoadingVisible = Boolean(
+      this.subtitleLoading ||
+      this.manifestLoading ||
+      this.trackDiscoveryInProgress ||
+      (this.embeddedSubtitleLoading && this.canDiscoverEmbeddedSubtitleTracks())
+    );
     const showOptionsRail = activeLanguage !== SUBTITLE_LANGUAGE_OFF_KEY || subtitleLoadingVisible;
     const focusedStyleSide = this.subtitleStyleControlSide === "plus" ? "plus" : "minus";
     const emptySubtitleOptionsMarkup = subtitleLoadingVisible
@@ -13602,6 +13631,11 @@ export const PlayerScreen = {
   cleanup() {
     this.playerRouteActive = false;
     this.playerMountToken = Number(this.playerMountToken || 0) + 1;
+    this.unbindVideoEvents();
+    if (this.endedHandler && PlayerController.video) {
+      PlayerController.video.removeEventListener("ended", this.endedHandler);
+      this.endedHandler = null;
+    }
     PlayerController.stop();
     TraktScrobbleService.cancel();
     this.unbindPlayerExitCleanup();
@@ -13680,7 +13714,6 @@ export const PlayerScreen = {
       this.subtitleSelectionTimer = null;
     }
 
-    this.unbindVideoEvents();
     this.clearMediaSessionHandlers();
 
     this.releaseStartupAudioGate({ resume: false });
@@ -13693,10 +13726,6 @@ export const PlayerScreen = {
     this.uiRefs = null;
     this.lastUiTickState = null;
 
-    if (this.endedHandler && PlayerController.video) {
-      PlayerController.video.removeEventListener("ended", this.endedHandler);
-      this.endedHandler = null;
-    }
   }
 
 };

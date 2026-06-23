@@ -17,7 +17,9 @@
     PARENTAL_GUIDE_API_URL:
       typeof existing.PARENTAL_GUIDE_API_URL === "undefined" ? "" : existing.PARENTAL_GUIDE_API_URL,
     INTRODB_API_URL:
-      typeof existing.INTRODB_API_URL === "undefined" ? "" : existing.INTRODB_API_URL,
+      typeof existing.INTRODB_API_URL === "undefined"
+        ? "https://api.introdb.app/"
+        : existing.INTRODB_API_URL,
     IMDB_RATINGS_API_BASE_URL:
       typeof existing.IMDB_RATINGS_API_BASE_URL === "undefined"
         ? ""
