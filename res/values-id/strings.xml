@@ -2246,4 +2246,7 @@
     <string name="detail.resumeAvailable">Lanjutkan tersedia</string>
     <string name="detail.currentEpisode">Episode {{episode}}</string>
     <string name="detail.timeLeftDuration">Sisa {{time}}</string>
+    <string name="player.audio.unsupported">Tidak didukung</string>
+    <string name="player.audio.unsupportedCodec">Codec tidak didukung oleh perangkat ini</string>
+    <string name="player.audio.noSupportedTracks">Tidak ada trek audio yang didukung</string>
 </resources>

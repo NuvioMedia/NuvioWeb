@@ -1024,4 +1024,7 @@
     <string name="detail.resumeAvailable">Fortsettelse tilgjengelig</string>
     <string name="detail.currentEpisode">Episode {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} igjen</string>
+    <string name="player.audio.unsupported">Ikke støttet</string>
+    <string name="player.audio.unsupportedCodec">Kodeken støttes ikke av denne enheten</string>
+    <string name="player.audio.noSupportedTracks">Ingen støttede lydspor er tilgjengelige</string>
 </resources>

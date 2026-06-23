@@ -2602,4 +2602,7 @@
     <string name="detail_lists_save_failed">Não foi possível guardar as alterações da lista.</string>
     <string name="skip_outro">Saltar encerramento</string>
     <string name="common_all">Tudo</string>
+    <string name="player.audio.unsupported">Não suportado</string>
+    <string name="player.audio.unsupportedCodec">Codec não suportado por este dispositivo</string>
+    <string name="player.audio.noSupportedTracks">Nenhuma faixa de áudio suportada disponível</string>
 </resources>

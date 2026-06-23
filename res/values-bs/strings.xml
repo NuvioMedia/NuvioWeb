@@ -1361,4 +1361,7 @@
     <string name="detail.resumeAvailable">Nastavak je dostupan</string>
     <string name="detail.currentEpisode">Epizoda {{episode}}</string>
     <string name="detail.timeLeftDuration">Preostalo {{time}}</string>
+    <string name="player.audio.unsupported">Nije podržano</string>
+    <string name="player.audio.unsupportedCodec">Ovaj uređaj ne podržava kodek</string>
+    <string name="player.audio.noSupportedTracks">Nema dostupnih podržanih audio zapisa</string>
 </resources>

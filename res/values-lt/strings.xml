@@ -911,4 +911,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="detail.resumeAvailable">Galima tęsti</string>
     <string name="detail.currentEpisode">Serija {{episode}}</string>
     <string name="detail.timeLeftDuration">Liko {{time}}</string>
+    <string name="player.audio.unsupported">Nepalaikoma</string>
+    <string name="player.audio.unsupportedCodec">Šis įrenginys nepalaiko kodeko</string>
+    <string name="player.audio.noSupportedTracks">Nėra palaikomų garso takelių</string>
 </resources>

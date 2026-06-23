@@ -2613,4 +2613,7 @@
     <string name="detail.resumeAvailable">Resume available</string>
     <string name="detail.currentEpisode">Episode {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} left</string>
+    <string name="player.audio.unsupported">Unsupported</string>
+    <string name="player.audio.unsupportedCodec">Codec not supported by this device</string>
+    <string name="player.audio.noSupportedTracks">No supported audio tracks available</string>
 </resources>

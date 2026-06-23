@@ -6028,21 +6028,6 @@ button:focus-visible {
   transition: opacity 480ms ease;
 }
 
-.home-screen-shell.home-layout-modern
-  .home-modern-hero-media.trailer-active
-  + .home-modern-hero-copy
-  .home-modern-hero-meta-line,
-.home-screen-shell.home-layout-modern
-  .home-modern-hero-media.trailer-active
-  + .home-modern-hero-copy
-  .home-modern-hero-secondary,
-.home-screen-shell.home-layout-modern
-  .home-modern-hero-media.trailer-active
-  + .home-modern-hero-copy
-  .home-hero-description {
-  opacity: 0;
-}
-
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line .home-hero-imdb,
 .home-screen-shell.home-layout-modern .home-modern-hero-secondary .home-hero-imdb {
   gap: 10px;
@@ -12093,6 +12078,29 @@ button:focus-visible {
   opacity: 0.58;
 }
 
+.player-audio-track-list .player-dialog-item.disabled,
+.player-audio-track-list .player-dialog-item.disabled.focused,
+.player-audio-track-list .player-dialog-item.disabled.selected {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  color: var(--player-text-secondary);
+}
+
+.player-audio-track-list .player-dialog-item.disabled .player-dialog-item-main,
+.player-audio-track-list .player-dialog-item.disabled .player-dialog-item-sub,
+.player-audio-track-list .player-dialog-item.disabled .player-dialog-item-check {
+  color: var(--player-text-secondary);
+}
+
+.player-audio-track-list .player-dialog-item.pending {
+  pointer-events: none;
+}
+
+.player-audio-track-list .player-dialog-item.pending .player-dialog-item-check {
+  color: var(--player-text-secondary);
+}
+
 .player-dialog-item-main {
   font-size: 18px;
   font-weight: 700;
@@ -12192,6 +12200,15 @@ button:focus-visible {
   padding: 12px 4px;
   font-size: 22px;
   color: rgba(226, 236, 247, 0.74);
+}
+
+.player-audio-support-message {
+  margin-bottom: min(0.83vw, 16px);
+  padding: min(0.63vw, 12px) min(0.83vw, 16px);
+  border-radius: min(0.83vw, 16px);
+  background: rgba(245, 158, 11, 0.12);
+  color: rgba(255, 231, 181, 0.92);
+  font-size: min(1.15vw, 22px);
 }
 
 .player-sources-panel {

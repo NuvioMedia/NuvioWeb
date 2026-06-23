@@ -2224,4 +2224,7 @@
     <string name="detail.resumeAvailable">Η συνέχεια είναι διαθέσιμη</string>
     <string name="detail.currentEpisode">Επεισόδιο {{episode}}</string>
     <string name="detail.timeLeftDuration">Απομένουν {{time}}</string>
+    <string name="player.audio.unsupported">Δεν υποστηρίζεται</string>
+    <string name="player.audio.unsupportedCodec">Ο κωδικοποιητής δεν υποστηρίζεται από αυτήν τη συσκευή</string>
+    <string name="player.audio.noSupportedTracks">Δεν υπάρχουν διαθέσιμα υποστηριζόμενα κομμάτια ήχου</string>
 </resources>

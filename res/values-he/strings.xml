@@ -940,4 +940,7 @@
     <string name="detail.resumeAvailable">המשך זמין</string>
     <string name="detail.currentEpisode">פרק {{episode}}</string>
     <string name="detail.timeLeftDuration">נותרו {{time}}</string>
+    <string name="player.audio.unsupported">לא נתמך</string>
+    <string name="player.audio.unsupportedCodec">רכיב ה-Codec אינו נתמך במכשיר זה</string>
+    <string name="player.audio.noSupportedTracks">אין רצועות שמע נתמכות זמינות</string>
 </resources>

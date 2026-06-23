@@ -989,4 +989,7 @@
     <string name="detail.resumeAvailable">Folytatás elérhető</string>
     <string name="detail.currentEpisode">Epizód {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} van hátra</string>
+    <string name="player.audio.unsupported">Nem támogatott</string>
+    <string name="player.audio.unsupportedCodec">Ezt a kodeket az eszköz nem támogatja</string>
+    <string name="player.audio.noSupportedTracks">Nincs elérhető támogatott hangsáv</string>
 </resources>

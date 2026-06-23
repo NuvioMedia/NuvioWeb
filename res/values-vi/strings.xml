@@ -923,4 +923,7 @@
     <string name="detail.resumeAvailable">Có thể tiếp tục</string>
     <string name="detail.currentEpisode">Tập {{episode}}</string>
     <string name="detail.timeLeftDuration">Còn {{time}}</string>
+    <string name="player.audio.unsupported">Không được hỗ trợ</string>
+    <string name="player.audio.unsupportedCodec">Thiết bị này không hỗ trợ codec</string>
+    <string name="player.audio.noSupportedTracks">Không có bản âm thanh được hỗ trợ</string>
 </resources>

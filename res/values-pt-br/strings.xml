@@ -2344,4 +2344,7 @@
     <string name="detail.resumeAvailable">Retomada disponível</string>
     <string name="detail.currentEpisode">Episódio {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} restantes</string>
+    <string name="player.audio.unsupported">Não compatível</string>
+    <string name="player.audio.unsupportedCodec">Codec não compatível com este dispositivo</string>
+    <string name="player.audio.noSupportedTracks">Nenhuma faixa de áudio compatível disponível</string>
 </resources>

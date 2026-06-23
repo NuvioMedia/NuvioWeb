@@ -1076,4 +1076,7 @@
     <string name="detail.resumeAvailable">Reanudación disponible</string>
     <string name="detail.currentEpisode">Episodio {{episode}}</string>
     <string name="detail.timeLeftDuration">Quedan {{time}}</string>
+    <string name="player.audio.unsupported">No compatible</string>
+    <string name="player.audio.unsupportedCodec">Códec no compatible con este dispositivo</string>
+    <string name="player.audio.noSupportedTracks">No hay pistas de audio compatibles disponibles</string>
 </resources>

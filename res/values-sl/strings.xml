@@ -2193,4 +2193,7 @@
     <string name="detail.resumeAvailable">Nadaljevanje je na voljo</string>
     <string name="detail.currentEpisode">Epizoda {{episode}}</string>
     <string name="detail.timeLeftDuration">Še {{time}}</string>
+    <string name="player.audio.unsupported">Ni podprto</string>
+    <string name="player.audio.unsupportedCodec">Ta naprava ne podpira kodeka</string>
+    <string name="player.audio.noSupportedTracks">Na voljo ni podprtih zvočnih sledi</string>
 </resources>

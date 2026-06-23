@@ -2344,4 +2344,7 @@
     <string name="detail.resumeAvailable">Доступно продолжение</string>
     <string name="detail.currentEpisode">Эпизод {{episode}}</string>
     <string name="detail.timeLeftDuration">Осталось {{time}}</string>
+    <string name="player.audio.unsupported">Не поддерживается</string>
+    <string name="player.audio.unsupportedCodec">Кодек не поддерживается этим устройством</string>
+    <string name="player.audio.noSupportedTracks">Нет доступных поддерживаемых аудиодорожек</string>
 </resources>

@@ -2075,4 +2075,7 @@
     <string name="detail.resumeAvailable">தொடர்வு கிடைக்கிறது</string>
     <string name="detail.currentEpisode">எபிசோடு {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} மீதம்</string>
+    <string name="player.audio.unsupported">ஆதரிக்கப்படவில்லை</string>
+    <string name="player.audio.unsupportedCodec">இந்தச் சாதனம் இந்த கோடெக்கை ஆதரிக்கவில்லை</string>
+    <string name="player.audio.noSupportedTracks">ஆதரிக்கப்படும் ஆடியோ தடங்கள் எதுவும் இல்லை</string>
 </resources>

@@ -568,6 +568,14 @@ function isUnsupportedWebOsAudioTrack(track = {}) {
   );
 }
 
+function getAudioTrackSupportState(track = {}) {
+  const supported = !isUnsupportedWebOsAudioTrack(track);
+  return {
+    supported,
+    unsupportedReason: supported ? null : "codec"
+  };
+}
+
 function normalizeTrackLanguageCode(value) {
   const raw = cleanDisplayText(value).toLowerCase();
   if (!raw || raw === "unknown") {
@@ -1039,10 +1047,6 @@ function escapeHtml(value) {
 
 function escapeAttribute(value) {
   return escapeHtml(value);
-}
-
-function buildEpisodePanelHint() {
-  return `UP/DOWN ${t("discover_select_catalog", {}, "Select")} | OK ${t("episodes_play", {}, "Play")} | BACK ${t("episodes_panel_close", {}, "Close")}`;
 }
 
 function formatEpisodePanelDate(value = "") {
@@ -1781,6 +1785,9 @@ export const PlayerScreen = {
     this.selectedAudioTrackIndex = -1;
     this.embeddedAudioTracks = [];
     this.selectedEmbeddedAudioTrackIndex = -1;
+    this.audioFallbackApplying = false;
+    this.pendingWebOsAudioSelection = null;
+    this.failedAutomaticAudioFallbackEntryId = "";
 
     this.sourcesPanelVisible = false;
     this.sourcesLoading = false;
@@ -3265,14 +3272,16 @@ export const PlayerScreen = {
   normalizeEmbeddedAudioTracks(rawTracks = []) {
     return rawTracks
       .filter((track) => String(track?.type || "").toLowerCase() === "audio")
-      .filter((track) => !isUnsupportedWebOsAudioTrack(track))
       .map((track, index) => {
         const sourceTrackId = Number(track?.id);
+        const support = getAudioTrackSupportState(track);
         return {
           id: `embedded-audio-${index}`,
           embeddedTrackIndex: index,
           sourceTrackId: Number.isFinite(sourceTrackId) ? sourceTrackId : -1,
           nativeTrackIndex: index,
+          supported: support.supported,
+          unsupportedReason: support.unsupportedReason,
           label: cleanDisplayText(track?.label),
           language: normalizeTrackLanguageCode(track?.lang) || String(track?.lang || "").trim().toLowerCase(),
           lang: cleanDisplayText(track?.lang),
@@ -5627,6 +5636,7 @@ export const PlayerScreen = {
     const outlineShadow = style.outlineEnabled ? `0 0 2px ${outlineColor}, 0 0 4px ${outlineColor}` : "";
     const subtitleShadow = [outlineShadow, boldShadow].filter(Boolean).join(", ") || "none";
     const subtitleFontSize = normalizeSubtitleFontSize(style.fontSize);
+    PlayerController.setWebOsSubtitleFontSize?.(subtitleFontSize);
     uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
     uiRoot.style.setProperty("--player-subtitle-outline-color", outlineColor);
     uiRoot.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
@@ -6255,6 +6265,51 @@ export const PlayerScreen = {
       }
     };
 
+    const onWebOsAudioTrackSelectionChanged = (event) => {
+      const detail = event?.detail || {};
+      const status = String(detail?.status || "");
+      const existingPending = this.pendingWebOsAudioSelection;
+      const samePendingSelection = existingPending
+        && existingPending.selectionKind === detail.selectionKind
+        && Number(existingPending.selectedTrackIndex) === Number(detail.selectedTrackIndex);
+
+      if (status === "pending") {
+        this.pendingWebOsAudioSelection = {
+          ...detail,
+          entryId: samePendingSelection ? existingPending.entryId : "",
+          automaticFallback: samePendingSelection ? Boolean(existingPending.automaticFallback) : false
+        };
+        this.invalidateTrackDialogCaches();
+        this.renderAudioDialog();
+        return;
+      }
+
+      if (status === "confirmed") {
+        if (detail.selectionKind === "embedded") {
+          this.selectedEmbeddedAudioTrackIndex = Number(detail.selectedTrackIndex);
+          this.selectedAudioTrackIndex = Number(detail.selectedTrackIndex);
+        } else {
+          this.selectedEmbeddedAudioTrackIndex = -1;
+          this.selectedAudioTrackIndex = Number(detail.targetTrackIndex);
+        }
+        this.pendingWebOsAudioSelection = null;
+        this.failedAutomaticAudioFallbackEntryId = "";
+        this.refreshTrackDialogs();
+        return;
+      }
+
+      if (status === "failed") {
+        if (samePendingSelection && existingPending.automaticFallback) {
+          this.failedAutomaticAudioFallbackEntryId = existingPending.entryId || "";
+        }
+        this.pendingWebOsAudioSelection = null;
+        console.warn("webOS audio track selection failed", detail?.error || detail);
+        this.invalidateTrackDialogCaches();
+        this.renderControlButtons();
+        this.renderAudioDialog();
+      }
+    };
+
     const onAvPlaySubtitleChange = (event) => {
       this.renderAvPlaySubtitleChange(event?.detail || {});
     };
@@ -6424,6 +6479,7 @@ export const PlayerScreen = {
       ["canplay", onPlayable],
       ["avplaytrackschanged", onTrackListChanged],
       ["avplaysubtitlechange", onAvPlaySubtitleChange],
+      ["webosaudiotrackselectionchanged", onWebOsAudioTrackSelectionChanged],
       ["hlstrackschanged", onTrackListChanged],
       ["dashtrackschanged", onTrackListChanged]
     ];
@@ -7735,6 +7791,11 @@ export const PlayerScreen = {
     this.startupAudioPreferenceApplied = false;
     this.startupAudioPreferenceApplying = false;
     this.clearStartupAudioPreferenceRetry();
+    if (typeof PlayerController.cancelWebOsAudioTrackSelection === "function") {
+      PlayerController.cancelWebOsAudioTrackSelection();
+    }
+    this.pendingWebOsAudioSelection = null;
+    this.failedAutomaticAudioFallbackEntryId = "";
     this.startupTrackPreferenceReady = false;
     this.builtInSubtitleCount = 0;
     this.embeddedSubtitleTracks = [];
@@ -8353,6 +8414,7 @@ export const PlayerScreen = {
   refreshTrackDialogs() {
     this.invalidateTrackDialogCaches();
     this.syncTrackState();
+    this.ensureSupportedAudioTrackSelected();
     if (this.startupTrackPreferenceReady) {
       this.applyStartupAudioPreference();
       this.applyStartupSubtitlePreference();
@@ -8577,7 +8639,14 @@ export const PlayerScreen = {
         return;
       }
 
-      const tracks = await localMediaTracksRepository.getTracks(probeUrl);
+      const capabilityPromise = Environment.isWebOS()
+        && typeof PlayerController.refreshWebOsDeviceInfo === "function"
+        ? PlayerController.refreshWebOsDeviceInfo()
+        : Promise.resolve();
+      const [, tracks] = await Promise.all([
+        capabilityPromise,
+        localMediaTracksRepository.getTracks(probeUrl)
+      ]);
       if (requestToken !== this.embeddedSubtitleLoadToken) {
         return;
       }
@@ -8808,8 +8877,12 @@ export const PlayerScreen = {
   mergeEmbeddedAudioTrackMetadata(track, index) {
     const embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(index) || this.getEmbeddedAudioTrack(index);
     if (!embeddedTrack) {
-      return track;
+      return {
+        ...track,
+        ...getAudioTrackSupportState(track)
+      };
     }
+    const support = getAudioTrackSupportState(embeddedTrack);
     return {
       ...track,
       label: cleanDisplayText(embeddedTrack.label) || track?.label || track?.name || "",
@@ -8826,6 +8899,8 @@ export const PlayerScreen = {
       channels: embeddedTrack.channels || track?.channels || track?.channelCount || "",
       channelCount: embeddedTrack.channelCount || track?.channelCount || track?.channels || "",
       sampleRate: embeddedTrack.sampleRate || track?.sampleRate || track?.audioSampleRate || 0,
+      supported: support.supported,
+      unsupportedReason: support.unsupportedReason,
       raw: embeddedTrack.raw || track?.raw || null
     };
   },
@@ -8836,8 +8911,12 @@ export const PlayerScreen = {
       Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
     );
     if (!embeddedTrack) {
-      return track;
+      return {
+        ...track,
+        ...getAudioTrackSupportState(track)
+      };
     }
+    const support = getAudioTrackSupportState(embeddedTrack);
     return {
       ...track,
       label: cleanDisplayText(embeddedTrack.label) || track?.label || track?.name || "",
@@ -8854,6 +8933,8 @@ export const PlayerScreen = {
       channels: embeddedTrack.channels || track?.channels || track?.channelCount || "",
       channelCount: embeddedTrack.channelCount || track?.channelCount || track?.channels || "",
       sampleRate: embeddedTrack.sampleRate || track?.sampleRate || track?.audioSampleRate || 0,
+      supported: support.supported,
+      unsupportedReason: support.unsupportedReason,
       raw: embeddedTrack.raw || track?.raw || null
     };
   },
@@ -8873,9 +8954,12 @@ export const PlayerScreen = {
       return false;
     }) || this.manifestAudioTracks[index] || null;
     if (!manifestTrack) {
-      return track;
+      return {
+        ...track,
+        ...getAudioTrackSupportState(track)
+      };
     }
-    return {
+    const mergedTrack = {
       ...track,
       label: cleanDisplayText(manifestTrack.label || manifestTrack.name) || track?.label || track?.name || "",
       name: cleanDisplayText(manifestTrack.name || manifestTrack.label) || track?.name || track?.label || "",
@@ -8887,6 +8971,10 @@ export const PlayerScreen = {
       isDefault: Boolean(manifestTrack.isDefault) || Boolean(track?.isDefault) || Boolean(track?.default),
       autoselect: Boolean(manifestTrack.autoselect) || Boolean(track?.autoselect),
       uri: manifestTrack.uri || track?.url || track?.uri || null
+    };
+    return {
+      ...mergedTrack,
+      ...getAudioTrackSupportState(mergedTrack)
     };
   },
 
@@ -10264,6 +10352,7 @@ export const PlayerScreen = {
         label: cleanDisplayText(entry?.label || ""),
         secondary: cleanDisplayText(entry?.secondary || ""),
         selected: Boolean(entry?.selected),
+        supported: entry?.supported !== false,
         languageKey,
         languageLabel: getTrackLanguageLabel(track),
         entry,
@@ -10300,7 +10389,7 @@ export const PlayerScreen = {
     }
     const options = this.collectAudioOptionItems();
     for (const target of normalizedTargets) {
-      const matchingOption = options.find((entry) => this.matchesStartupAudioTarget(entry, target));
+      const matchingOption = options.find((entry) => entry.supported && this.matchesStartupAudioTarget(entry, target));
       if (matchingOption) {
         return matchingOption;
       }
@@ -10322,7 +10411,10 @@ export const PlayerScreen = {
 
     const isStillLoading = this.isAudioPreferenceDiscoveryPending();
     const selectedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
-    if (selectedOption && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))) {
+    if (
+      selectedOption?.supported
+      && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))
+    ) {
       this.clearStartupAudioPreferenceRetry();
       this.startupAudioPreferenceApplied = true;
       return true;
@@ -10348,7 +10440,10 @@ export const PlayerScreen = {
     }
 
     const appliedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
-    const applied = Boolean(appliedOption && preferredTargets.some((target) => this.matchesStartupAudioTarget(appliedOption, target)));
+    const applied = Boolean(
+      appliedOption?.supported
+      && preferredTargets.some((target) => this.matchesStartupAudioTarget(appliedOption, target))
+    );
     this.startupAudioPreferenceApplied = applied;
     if (applied) {
       this.clearStartupAudioPreferenceRetry();
@@ -11105,9 +11200,7 @@ export const PlayerScreen = {
       }
 
       const mergedTrack = this.mergeEmbeddedAudioTrackMetadata(track, index);
-      if (isUnsupportedWebOsAudioTrack(mergedTrack)) {
-        return;
-      }
+      const support = getAudioTrackSupportState(mergedTrack);
       const display = formatAudioTrackDisplay(mergedTrack, index);
       entries.push({
         id: `audio-track-${index}`,
@@ -11116,15 +11209,17 @@ export const PlayerScreen = {
         selected: Number.isFinite(embeddedTrackIndex) && this.selectedEmbeddedAudioTrackIndex >= 0
           ? embeddedTrackIndex === this.selectedEmbeddedAudioTrackIndex
           : index === this.selectedAudioTrackIndex,
+        supported: support.supported,
+        unsupportedReason: support.unsupportedReason,
         audioTrackIndex: index,
-        track: mergedTrack
+        track: {
+          ...mergedTrack,
+          ...support
+        }
       });
     });
 
     this.embeddedAudioTracks.forEach((track, index) => {
-      if (isUnsupportedWebOsAudioTrack(track)) {
-        return;
-      }
       const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
       const normalizedEmbeddedIndex = Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0
         ? embeddedTrackIndex
@@ -11144,13 +11239,19 @@ export const PlayerScreen = {
       }
 
       const display = formatAudioTrackDisplay(track, index);
+      const support = getAudioTrackSupportState(track);
       entries.push({
         id: `audio-embedded-${normalizedEmbeddedIndex}`,
         label: display.label,
         secondary: display.secondary,
         selected: normalizedEmbeddedIndex === this.selectedEmbeddedAudioTrackIndex,
+        supported: support.supported,
+        unsupportedReason: support.unsupportedReason,
         embeddedAudioTrackIndex: normalizedEmbeddedIndex,
-        track
+        track: {
+          ...track,
+          ...support
+        }
       });
     });
 
@@ -11172,6 +11273,7 @@ export const PlayerScreen = {
         : -1;
       entries = avplayAudioTracks.map((track, index) => {
         const mergedTrack = this.mergeAvPlayAudioTrackMetadata(track, index);
+        const support = getAudioTrackSupportState(mergedTrack);
         const avplayTrackIndex = Number(track?.avplayTrackIndex);
         const normalizedTrackIndex = Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index;
         const display = formatAudioTrackDisplay(mergedTrack, index);
@@ -11181,10 +11283,15 @@ export const PlayerScreen = {
           secondary: display.secondary,
           selected: normalizedTrackIndex === selectedAvPlayAudioTrack
             || (selectedAvPlayAudioTrack < 0 && normalizedTrackIndex === this.selectedAudioTrackIndex),
+          supported: support.supported,
+          unsupportedReason: support.unsupportedReason,
           avplayAudioTrackIndex: normalizedTrackIndex,
-          track: mergedTrack
+          track: {
+            ...mergedTrack,
+            ...support
+          }
         };
-      }).filter((entry) => !isUnsupportedWebOsAudioTrack(entry.track));
+      });
     } else {
       const dashAudioTracks = typeof PlayerController.getDashAudioTracks === "function"
         ? PlayerController.getDashAudioTracks()
@@ -11195,13 +11302,19 @@ export const PlayerScreen = {
         : -1;
       entries = dashAudioTracks.map((track, index) => {
         const display = formatAudioTrackDisplay(track, index);
+        const support = getAudioTrackSupportState(track);
         return {
           id: `audio-dash-${index}-${track?.id ?? ""}`,
           label: display.label,
           secondary: display.secondary,
           selected: index === selectedDashAudioTrack || (selectedDashAudioTrack < 0 && index === this.selectedAudioTrackIndex),
+          supported: support.supported,
+          unsupportedReason: support.unsupportedReason,
           dashAudioTrackIndex: index,
-          track
+          track: {
+            ...track,
+            ...support
+          }
         };
       });
       } else {
@@ -11215,13 +11328,19 @@ export const PlayerScreen = {
       entries = hlsAudioTracks.map((track, index) => {
         const mergedTrack = this.mergeHlsAudioTrackMetadata(track, index);
         const display = formatAudioTrackDisplay(mergedTrack, index);
+        const support = getAudioTrackSupportState(mergedTrack);
         return {
           id: `audio-hls-${index}-${mergedTrack?.id ?? mergedTrack?.name ?? mergedTrack?.lang ?? ""}`,
           label: display.label,
           secondary: display.secondary,
           selected: index === selectedHlsAudioTrack || (selectedHlsAudioTrack < 0 && index === this.selectedAudioTrackIndex),
+          supported: support.supported,
+          unsupportedReason: support.unsupportedReason,
           hlsAudioTrackIndex: index,
-          track: mergedTrack
+          track: {
+            ...mergedTrack,
+            ...support
+          }
         };
       });
         } else {
@@ -11231,13 +11350,19 @@ export const PlayerScreen = {
           } else if (this.manifestAudioTracks.length) {
             entries = this.manifestAudioTracks.map((track, index) => {
               const display = formatAudioTrackDisplay(track, index);
+              const support = getAudioTrackSupportState(track);
               return {
                 id: `audio-manifest-${track.id}`,
                 label: display.label,
                 secondary: display.secondary,
                 selected: this.selectedManifestAudioTrackId === track.id,
+                supported: support.supported,
+                unsupportedReason: support.unsupportedReason,
                 manifestAudioTrackId: track.id,
-                track
+                track: {
+                  ...track,
+                  ...support
+                }
               };
             });
           } else {
@@ -11270,15 +11395,66 @@ export const PlayerScreen = {
       sampleRate: currentStream?.sampleRate || currentStream?.audioSampleRate || currentStream?.extraInfo?.audioSampleRate || 0
     };
     const display = formatAudioTrackDisplay(track, 0);
+    const support = getAudioTrackSupportState(track);
     return {
       id: "audio-implicit-0",
       label: display.label,
       secondary: display.secondary,
       selected: true,
+      supported: support.supported,
+      unsupportedReason: support.unsupportedReason,
       implicitAudioTrack: true,
       audioTrackIndex: 0,
-      track
+      track: {
+        ...track,
+        ...support
+      }
     };
+  },
+
+  ensureSupportedAudioTrackSelected() {
+    if (
+      this.audioFallbackApplying
+      || this.pendingWebOsAudioSelection
+      || (Environment.isWebOS() && !this.startupTrackPreferenceReady)
+    ) {
+      return false;
+    }
+    const entries = this.getAudioEntries();
+    const supportedEntryIndex = entries.findIndex((entry) => entry?.supported !== false);
+    if (supportedEntryIndex < 0) {
+      return false;
+    }
+    const supportedEntry = entries[supportedEntryIndex];
+    if (supportedEntry?.id && supportedEntry.id === this.failedAutomaticAudioFallbackEntryId) {
+      return false;
+    }
+    const selectedEntry = entries.find((entry) => entry?.selected);
+    const shouldFallback = selectedEntry
+      ? selectedEntry.supported === false
+      : entries[0]?.supported === false;
+    if (!shouldFallback) {
+      return false;
+    }
+
+    this.audioFallbackApplying = true;
+    try {
+      this.applyAudioTrack(supportedEntryIndex, { automaticFallback: true });
+    } finally {
+      this.audioFallbackApplying = false;
+    }
+    return true;
+  },
+
+  isAudioEntryPending(entry = {}) {
+    const pending = this.pendingWebOsAudioSelection;
+    if (!pending) {
+      return false;
+    }
+    if (pending.selectionKind === "embedded") {
+      return Number(entry?.embeddedAudioTrackIndex) === Number(pending.selectedTrackIndex);
+    }
+    return Number(entry?.audioTrackIndex) === Number(pending.targetTrackIndex);
   },
 
   adjustAudioAmplification(delta = 0) {
@@ -11325,13 +11501,19 @@ export const PlayerScreen = {
     this.resetControlsAutoHide();
   },
 
-  applyAudioTrack(index) {
+  applyAudioTrack(index, { automaticFallback = false } = {}) {
     const entries = this.getAudioEntries();
     const selectedEntry = entries[index] || null;
     if (!selectedEntry) {
       return;
     }
-    if (isUnsupportedWebOsAudioTrack(selectedEntry.track)) {
+    if (this.isAudioEntryPending(selectedEntry)) {
+      return;
+    }
+    if (!automaticFallback) {
+      this.failedAutomaticAudioFallbackEntryId = "";
+    }
+    if (selectedEntry.supported === false || isUnsupportedWebOsAudioTrack(selectedEntry.track)) {
       this.invalidateTrackDialogCaches();
       this.renderAudioDialog();
       return;
@@ -11403,15 +11585,31 @@ export const PlayerScreen = {
         const targetTrackIndex = Number.isFinite(nativeTrackIndex) && nativeTrackIndex >= 0
           ? nativeTrackIndex
           : selectedEntry.embeddedAudioTrackIndex;
+        this.pendingWebOsAudioSelection = {
+          selectionKind: "embedded",
+          targetTrackIndex,
+          selectedTrackIndex: selectedEntry.embeddedAudioTrackIndex,
+          entryId: selectedEntry.id || "",
+          automaticFallback: Boolean(automaticFallback)
+        };
         applied = typeof PlayerController.setWebOsEmbeddedAudioTrack === "function"
           ? PlayerController.setWebOsEmbeddedAudioTrack(targetTrackIndex, selectedEntry.embeddedAudioTrackIndex)
           : false;
       }
       if (applied) {
+        if (Environment.isWebOS()) {
+          this.invalidateTrackDialogCaches();
+          this.renderAudioDialog();
+          return;
+        }
         this.selectedEmbeddedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
         this.selectedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
         this.invalidateTrackDialogCaches();
         this.renderControlButtons();
+        this.renderAudioDialog();
+      } else if (Environment.isWebOS()) {
+        this.pendingWebOsAudioSelection = null;
+        this.invalidateTrackDialogCaches();
         this.renderAudioDialog();
       }
       return;
@@ -11423,14 +11621,34 @@ export const PlayerScreen = {
       return;
     }
 
+    if (Environment.isWebOS()) {
+      this.pendingWebOsAudioSelection = {
+        selectionKind: "native",
+        targetTrackIndex: nativeTrackIndex,
+        selectedTrackIndex: nativeTrackIndex,
+        entryId: selectedEntry.id || "",
+        automaticFallback: Boolean(automaticFallback)
+      };
+    }
     const appliedByController = typeof PlayerController.setNativeAudioTrack === "function"
       ? PlayerController.setNativeAudioTrack(nativeTrackIndex)
       : false;
     if (appliedByController) {
+      if (Environment.isWebOS()) {
+        this.invalidateTrackDialogCaches();
+        this.renderAudioDialog();
+        return;
+      }
       this.selectedAudioTrackIndex = nativeTrackIndex;
       this.selectedEmbeddedAudioTrackIndex = -1;
       this.invalidateTrackDialogCaches();
       this.renderControlButtons();
+      this.renderAudioDialog();
+      return;
+    }
+    if (Environment.isWebOS()) {
+      this.pendingWebOsAudioSelection = null;
+      this.invalidateTrackDialogCaches();
       this.renderAudioDialog();
       return;
     }
@@ -11472,6 +11690,7 @@ export const PlayerScreen = {
     }
 
     const entries = this.getAudioEntries();
+    const hasSupportedEntries = entries.some((entry) => entry?.supported !== false);
     const audioControls = [
       {
         id: "amplification",
@@ -11514,16 +11733,25 @@ export const PlayerScreen = {
     this.audioDialogIndex = clamp(this.audioDialogIndex, 0, entries.length - 1);
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("audio_dialog_title", {}, "Audio"))}</div>
+      ${hasSupportedEntries ? "" : `<div class="player-audio-support-message">${escapeHtml(t("player.audio.noSupportedTracks", {}, "No supported audio tracks available"))}</div>`}
       <div class="player-audio-overlay-grid">
         <div class="player-dialog-list player-audio-track-list">
           ${entries.map((entry, index) => {
             const selected = entry.selected;
             const focused = this.audioFocusedColumn === "tracks" && index === this.audioDialogIndex;
+            const disabled = entry.supported === false;
+            const pending = this.isAudioEntryPending(entry);
+            const label = disabled
+              ? `${entry.label || ""} · ${t("player.audio.unsupported", {}, "Unsupported")}`
+              : entry.label || "";
+            const secondary = disabled
+              ? [entry.secondary, t("player.audio.unsupportedCodec", {}, "Codec not supported by this device")].filter(Boolean).join(" · ")
+              : entry.secondary || "";
             return `
-              <div class="player-dialog-item focusable${selected ? " selected" : ""}${focused ? " focused" : ""}" data-audio-column="tracks" data-audio-index="${index}">
-                <div class="player-dialog-item-main">${escapeHtml(entry.label || "")}</div>
-                <div class="player-dialog-item-sub">${escapeHtml(entry.secondary || "")}</div>
-                <div class="player-dialog-item-check">${selected ? "&#10003;" : ""}</div>
+              <div class="player-dialog-item focusable${selected ? " selected" : ""}${focused ? " focused" : ""}${disabled ? " disabled" : ""}${pending ? " pending" : ""}" data-audio-column="tracks" data-audio-index="${index}" aria-disabled="${disabled ? "true" : "false"}" aria-busy="${pending ? "true" : "false"}">
+                <div class="player-dialog-item-main">${escapeHtml(label)}</div>
+                <div class="player-dialog-item-sub">${escapeHtml(secondary)}</div>
+                <div class="player-dialog-item-check">${pending ? "&#8230;" : (selected ? "&#10003;" : "")}</div>
               </div>
             `;
           }).join("")}

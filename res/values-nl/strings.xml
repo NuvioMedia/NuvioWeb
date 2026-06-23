@@ -903,4 +903,7 @@
     <string name="detail.resumeAvailable">Hervatten beschikbaar</string>
     <string name="detail.currentEpisode">Aflevering {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} resterend</string>
+    <string name="player.audio.unsupported">Niet ondersteund</string>
+    <string name="player.audio.unsupportedCodec">Codec wordt niet ondersteund door dit apparaat</string>
+    <string name="player.audio.noSupportedTracks">Geen ondersteunde audiotracks beschikbaar</string>
 </resources>

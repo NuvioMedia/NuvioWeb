@@ -747,4 +747,7 @@
     <string name="detail.resumeAvailable">Reluare disponibilă</string>
     <string name="detail.currentEpisode">Episodul {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} rămase</string>
+    <string name="player.audio.unsupported">Neacceptat</string>
+    <string name="player.audio.unsupportedCodec">Codecul nu este acceptat de acest dispozitiv</string>
+    <string name="player.audio.noSupportedTracks">Nu sunt disponibile piste audio acceptate</string>
 </resources>

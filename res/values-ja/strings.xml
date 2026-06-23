@@ -1213,4 +1213,7 @@
     <string name="detail.resumeAvailable">再開できます</string>
     <string name="detail.currentEpisode">エピソード {{episode}}</string>
     <string name="detail.timeLeftDuration">残り{{time}}</string>
+    <string name="player.audio.unsupported">非対応</string>
+    <string name="player.audio.unsupportedCodec">このデバイスではコーデックがサポートされていません</string>
+    <string name="player.audio.noSupportedTracks">対応している音声トラックがありません</string>
 </resources>

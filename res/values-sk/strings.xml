@@ -2380,4 +2380,7 @@
     <string name="detail.resumeAvailable">Pokračovanie je dostupné</string>
     <string name="detail.currentEpisode">Epizóda {{episode}}</string>
     <string name="detail.timeLeftDuration">Zostáva {{time}}</string>
+    <string name="player.audio.unsupported">Nepodporované</string>
+    <string name="player.audio.unsupportedCodec">Toto zariadenie nepodporuje kodek</string>
+    <string name="player.audio.noSupportedTracks">Nie sú k dispozícii žiadne podporované zvukové stopy</string>
 </resources>

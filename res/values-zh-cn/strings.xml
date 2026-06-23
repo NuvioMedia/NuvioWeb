@@ -2163,4 +2163,7 @@
     <string name="detail.resumeAvailable">可继续播放</string>
     <string name="detail.currentEpisode">剧集 {{episode}}</string>
     <string name="detail.timeLeftDuration">剩余 {{time}}</string>
+    <string name="player.audio.unsupported">不支持</string>
+    <string name="player.audio.unsupportedCodec">此设备不支持该编解码器</string>
+    <string name="player.audio.noSupportedTracks">没有可用的受支持音轨</string>
 </resources>

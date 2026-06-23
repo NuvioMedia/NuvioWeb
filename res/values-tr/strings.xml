@@ -2350,4 +2350,7 @@
     <string name="detail.resumeAvailable">Devam etme mevcut</string>
     <string name="detail.currentEpisode">Bölüm {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} kaldı</string>
+    <string name="player.audio.unsupported">Desteklenmiyor</string>
+    <string name="player.audio.unsupportedCodec">Codec bu cihaz tarafından desteklenmiyor</string>
+    <string name="player.audio.noSupportedTracks">Desteklenen ses parçası bulunmuyor</string>
 </resources>

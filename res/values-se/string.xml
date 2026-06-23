@@ -842,4 +842,7 @@
     <string name="update_install">Installera</string>
     <string name="update_ignore">Ignorera</string>
     <string name="common_all">Alla</string>
+    <string name="player.audio.unsupported">Stöds inte</string>
+    <string name="player.audio.unsupportedCodec">Kodeken stöds inte av den här enheten</string>
+    <string name="player.audio.noSupportedTracks">Inga ljudspår som stöds är tillgängliga</string>
 </resources>

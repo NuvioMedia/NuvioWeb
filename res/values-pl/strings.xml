@@ -2487,4 +2487,7 @@
     <string name="detail.resumeAvailable">Wznawianie dostępne</string>
     <string name="detail.currentEpisode">Odcinek {{episode}}</string>
     <string name="detail.timeLeftDuration">Zostało {{time}}</string>
+    <string name="player.audio.unsupported">Nieobsługiwane</string>
+    <string name="player.audio.unsupportedCodec">Kodek nie jest obsługiwany przez to urządzenie</string>
+    <string name="player.audio.noSupportedTracks">Brak dostępnych obsługiwanych ścieżek audio</string>
 </resources>

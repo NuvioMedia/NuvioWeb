@@ -1797,4 +1797,7 @@
     <string name="detail.resumeAvailable">Pokračování je dostupné</string>
     <string name="detail.currentEpisode">Epizoda {{episode}}</string>
     <string name="detail.timeLeftDuration">Zbývá {{time}}</string>
+    <string name="player.audio.unsupported">Nepodporováno</string>
+    <string name="player.audio.unsupportedCodec">Tento kodek zařízení nepodporuje</string>
+    <string name="player.audio.noSupportedTracks">Nejsou k dispozici žádné podporované zvukové stopy</string>
 </resources>

@@ -1033,4 +1033,7 @@
     <string name="detail.resumeAvailable">फिर से शुरू करना उपलब्ध है</string>
     <string name="detail.currentEpisode">एपिसोड {{episode}}</string>
     <string name="detail.timeLeftDuration">{{time}} बाकी</string>
+    <string name="player.audio.unsupported">समर्थित नहीं</string>
+    <string name="player.audio.unsupportedCodec">यह डिवाइस इस कोडेक का समर्थन नहीं करता</string>
+    <string name="player.audio.noSupportedTracks">कोई समर्थित ऑडियो ट्रैक उपलब्ध नहीं है</string>
 </resources>

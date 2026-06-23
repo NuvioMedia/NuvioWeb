@@ -1351,4 +1351,7 @@
     <string name="detail.resumeAvailable">الاستئناف متاح</string>
     <string name="detail.currentEpisode">الحلقة {{episode}}</string>
     <string name="detail.timeLeftDuration">متبقٍ {{time}}</string>
+    <string name="player.audio.unsupported">غير مدعوم</string>
+    <string name="player.audio.unsupportedCodec">برنامج الترميز غير مدعوم على هذا الجهاز</string>
+    <string name="player.audio.noSupportedTracks">لا تتوفر مسارات صوتية مدعومة</string>
 </resources>

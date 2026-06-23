@@ -10,6 +10,7 @@ import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 
 const MIN_PROGRESS_SYNC_DURATION_MS = 1000;
+const WEBOS_AUDIO_TRACK_SELECTION_TIMEOUT_MS = 4000;
 
 function logEngineFsDebug(...args) {
   if (globalThis.__NUVIO_DEBUG_ENGINEFS__) {
@@ -25,6 +26,27 @@ function logTizenAvPlayDebug(...args) {
 
 function isValidAvPlayTrackSelectionState(state) {
   return state === "READY" || state === "PLAYING" || state === "PAUSED";
+}
+
+// com.webos.media exposes five discrete subtitle sizes (0=tiny, 4=largest).
+function resolveWebOsSubtitleFontSizeLevel(value) {
+  const size = Number(value);
+  if (!Number.isFinite(size)) {
+    return 1;
+  }
+  if (size <= 70) {
+    return 0;
+  }
+  if (size <= 100) {
+    return 1;
+  }
+  if (size <= 125) {
+    return 2;
+  }
+  if (size <= 150) {
+    return 3;
+  }
+  return 4;
 }
 
 export const PlayerController = {
@@ -75,6 +97,9 @@ export const PlayerController = {
   nativeMediaIdLookupToken: 0,
   selectedWebOsEmbeddedAudioTrackIndex: -1,
   selectedWebOsEmbeddedSubtitleTrackIndex: -1,
+  webOsAudioSelectionRequestToken: 0,
+  webOsSubtitleFontSizeLevel: 1,
+  appliedWebOsSubtitleFontSizeKey: "",
   webosDeviceInfoPromise: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
   viewportSyncHandler: null,
@@ -407,8 +432,10 @@ export const PlayerController = {
   resetNativeMediaState() {
     this.nativeMediaId = "";
     this.nativeMediaIdLookupToken = Number(this.nativeMediaIdLookupToken || 0) + 1;
+    this.cancelWebOsAudioTrackSelection();
     this.selectedWebOsEmbeddedAudioTrackIndex = -1;
     this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
+    this.appliedWebOsSubtitleFontSizeKey = "";
   },
 
   syncNativeMediaId() {
@@ -1140,6 +1167,116 @@ export const PlayerController = {
     return Number.isFinite(this.selectedWebOsEmbeddedAudioTrackIndex)
       ? this.selectedWebOsEmbeddedAudioTrackIndex
       : -1;
+  },
+
+  cancelWebOsAudioTrackSelection() {
+    this.webOsAudioSelectionRequestToken = Number(this.webOsAudioSelectionRequestToken || 0) + 1;
+  },
+
+  requestConfirmedWebOsAudioTrackSelection({
+    targetTrackIndex,
+    selectedTrackIndex = targetTrackIndex,
+    selectionKind = "native",
+    applySelection = null
+  } = {}) {
+    if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
+      return false;
+    }
+
+    const targetIndex = Number(targetTrackIndex);
+    const selectedIndex = Number(selectedTrackIndex);
+    if (!Number.isFinite(targetIndex) || targetIndex < 0) {
+      return false;
+    }
+
+    const requestToken = Number(this.webOsAudioSelectionRequestToken || 0) + 1;
+    this.webOsAudioSelectionRequestToken = requestToken;
+    const detail = {
+      requestToken,
+      selectionKind,
+      targetTrackIndex: targetIndex,
+      selectedTrackIndex: Number.isFinite(selectedIndex) && selectedIndex >= 0
+        ? selectedIndex
+        : targetIndex
+    };
+
+    const emitSelectionState = (status, extra = {}) => {
+      if (requestToken !== this.webOsAudioSelectionRequestToken) {
+        return;
+      }
+      const selectionState = {
+        ...detail,
+        status,
+        ...extra
+      };
+      this.emitVideoEvent("webosaudiotrackselectionchanged", selectionState);
+    };
+
+    const commitSelection = () => {
+      if (typeof applySelection === "function") {
+        applySelection();
+      }
+      this.selectedWebOsEmbeddedAudioTrackIndex = selectionKind === "embedded"
+        ? detail.selectedTrackIndex
+        : -1;
+    };
+
+    emitSelectionState("pending");
+
+    if (!WebOsLunaService.isAvailable()) {
+      commitSelection();
+      emitSelectionState("confirmed");
+      return true;
+    }
+
+    void (async () => {
+      try {
+        const mediaId = this.syncNativeMediaId() || await this.waitForNativeMediaId();
+        if (requestToken !== this.webOsAudioSelectionRequestToken) {
+          return;
+        }
+        if (!mediaId) {
+          throw new Error("webOS media id unavailable");
+        }
+
+        let timeoutId = 0;
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("webOS audio track selection timed out"));
+          }, WEBOS_AUDIO_TRACK_SELECTION_TIMEOUT_MS);
+        });
+        let result;
+        try {
+          result = await Promise.race([
+            this.requestWebOsMediaCommand("selectTrack", {
+              type: "audio",
+              mediaId,
+              index: targetIndex
+            }),
+            timeoutPromise
+          ]);
+        } finally {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+          }
+        }
+        if (requestToken !== this.webOsAudioSelectionRequestToken) {
+          return;
+        }
+        if (result?.returnValue === false || result?.errorCode) {
+          throw new Error(result?.errorText || "webOS audio track selection failed");
+        }
+
+        commitSelection();
+        emitSelectionState("confirmed");
+      } catch (error) {
+        emitSelectionState("failed", {
+          error: String(error?.errorText || error?.message || error || "webOS audio track selection failed")
+        });
+      }
+    })();
+
+    return true;
   },
 
   getSelectedWebOsEmbeddedSubtitleTrackIndex() {
@@ -2798,36 +2935,37 @@ export const PlayerController = {
       return false;
     }
 
-    this.selectedWebOsEmbeddedAudioTrackIndex = -1;
+    const applySelection = () => {
+      tracks.forEach((track, trackIndex) => {
+        const selected = trackIndex === targetIndex;
+        try {
+          if ("enabled" in track) {
+            track.enabled = selected;
+          }
+        } catch (_) {
+          // Best effort.
+        }
+        try {
+          if ("selected" in track) {
+            track.selected = selected;
+          }
+        } catch (_) {
+          // Best effort.
+        }
+      });
+    };
 
-    const mediaId = this.syncNativeMediaId();
-    if (mediaId) {
-      this.requestWebOsMediaCommand("selectTrack", {
-        type: "audio",
-        mediaId,
-        index: targetIndex
-      }).catch(() => {
-        // Ignore Luna audio track selection failures and keep native toggles.
+    if (Platform.isWebOS() && this.isUsingNativePlayback()) {
+      return this.requestConfirmedWebOsAudioTrackSelection({
+        targetTrackIndex: targetIndex,
+        selectedTrackIndex: targetIndex,
+        selectionKind: "native",
+        applySelection
       });
     }
 
-    tracks.forEach((track, trackIndex) => {
-      const selected = trackIndex === targetIndex;
-      try {
-        if ("enabled" in track) {
-          track.enabled = selected;
-        }
-      } catch (_) {
-        // Best effort.
-      }
-      try {
-        if ("selected" in track) {
-          track.selected = selected;
-        }
-      } catch (_) {
-        // Best effort.
-      }
-    });
+    this.selectedWebOsEmbeddedAudioTrackIndex = -1;
+    applySelection();
     return true;
   },
 
@@ -2846,19 +2984,7 @@ export const PlayerController = {
       return false;
     }
 
-    const applySelection = (mediaId) => {
-      if (!mediaId) {
-        return;
-      }
-
-      this.requestWebOsMediaCommand("selectTrack", {
-        type: "audio",
-        mediaId,
-        index: targetIndex
-      }).catch(() => {
-        // Ignore Luna audio track selection failures.
-      });
-
+    const applySelection = () => {
       const tracks = this.nativeAudioTrackListToArray();
       if (!tracks.length) {
         return;
@@ -2883,24 +3009,12 @@ export const PlayerController = {
       });
     };
 
-    this.selectedWebOsEmbeddedAudioTrackIndex = storedSelectedIndex;
-
-    const mediaId = this.syncNativeMediaId();
-    if (mediaId) {
-      applySelection(mediaId);
-      return true;
-    }
-
-    this.waitForNativeMediaId().then((resolvedMediaId) => {
-      if (Number(this.selectedWebOsEmbeddedAudioTrackIndex) !== storedSelectedIndex) {
-        return;
-      }
-      applySelection(resolvedMediaId);
-    }).catch(() => {
-      // Ignore media-id lookup failures.
+    return this.requestConfirmedWebOsAudioTrackSelection({
+      targetTrackIndex: targetIndex,
+      selectedTrackIndex: storedSelectedIndex,
+      selectionKind: "embedded",
+      applySelection
     });
-
-    return true;
   },
 
   setNativeTextTrack(index) {
@@ -2945,6 +3059,7 @@ export const PlayerController = {
         }).catch(() => {
           // Ignore Luna subtitle enable failures and keep native toggles.
         });
+        this.applyWebOsSubtitleFontSize(mediaId, { force: true });
         setTimeout(() => {
           if (mediaId !== this.nativeMediaId) {
             return;
@@ -2968,6 +3083,46 @@ export const PlayerController = {
       }
     });
 
+    return true;
+  },
+
+  applyWebOsSubtitleFontSize(mediaId, { force = false } = {}) {
+    const normalizedMediaId = String(mediaId || "").trim();
+    if (!Platform.isWebOS() || !normalizedMediaId) {
+      return false;
+    }
+
+    const fontSize = Math.min(
+      4,
+      Math.max(0, Math.trunc(Number(this.webOsSubtitleFontSizeLevel) || 0))
+    );
+    const applyKey = `${normalizedMediaId}:${fontSize}`;
+    if (!force && this.appliedWebOsSubtitleFontSizeKey === applyKey) {
+      return true;
+    }
+
+    this.appliedWebOsSubtitleFontSizeKey = applyKey;
+    this.requestWebOsMediaCommand("setSubtitleFontSize", {
+      mediaId: normalizedMediaId,
+      fontSize
+    }).catch(() => {
+      if (this.appliedWebOsSubtitleFontSizeKey === applyKey) {
+        this.appliedWebOsSubtitleFontSizeKey = "";
+      }
+    });
+    return true;
+  },
+
+  setWebOsSubtitleFontSize(value) {
+    if (!Platform.isWebOS()) {
+      return false;
+    }
+
+    this.webOsSubtitleFontSizeLevel = resolveWebOsSubtitleFontSizeLevel(value);
+    const mediaId = this.syncNativeMediaId();
+    if (mediaId) {
+      return this.applyWebOsSubtitleFontSize(mediaId);
+    }
     return true;
   },
 
@@ -3002,6 +3157,7 @@ export const PlayerController = {
       }).catch(() => {
         // Ignore Luna subtitle enable failures.
       });
+      this.applyWebOsSubtitleFontSize(mediaId, { force: true });
 
       setTimeout(() => {
         if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== targetIndex) {
