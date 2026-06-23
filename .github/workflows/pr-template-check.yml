@@ -1,0 +1,288 @@
+name: PR Template Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  validate_pr_body:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validate required PR sections
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = (pr.body || "").trim();
+
+            function sectionContent(title) {
+              const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+              const re = new RegExp(`^##\\s+${escaped}\\s*$`, "m");
+              const match = body.match(re);
+
+              if (!match) return null;
+
+              const start = match.index + match[0].length;
+              const rest = body.slice(start);
+              const next = rest.search(/^##\s+/m);
+
+              return (next === -1 ? rest : rest.slice(0, next)).trim();
+            }
+
+            function cleanedContent(title) {
+              const content = sectionContent(title);
+
+              if (content === null) return null;
+
+              return content
+                .replace(/<!--[\s\S]*?-->/g, "")
+                .replace(/```[\s\S]*?```/g, "")
+                .replace(/`/g, "")
+                .replace(/\s+/g, " ")
+                .trim();
+            }
+
+            function checkedLines(content) {
+              return (content || "").match(/^\s*-\s+$begin:math:display$\[xX\]$end:math:display$\s+.+$/gm) || [];
+            }
+
+            function uncheckedLines(content) {
+              return (content || "").match(/^\s*-\s+$begin:math:display$\\s$end:math:display$\s+.+$/gm) || [];
+            }
+
+            function hasIssueReference(content) {
+              return /(^|\s)(#\d+|https:\/\/github\.com\/\S+\/issues\/\d+)/i.test(content || "");
+            }
+
+            function isPlaceholderText(text) {
+              const normalized = (text || "").toLowerCase();
+
+              return (
+                normalized.includes("what changed in this pr") ||
+                normalized.includes("why is this change needed") ||
+                normalized.includes("why this change is needed") ||
+                normalized.includes("required for critical bug fixes") ||
+                normalized.includes("examples: fixes #123") ||
+                normalized.includes("what happened before this pr") ||
+                normalized.includes("what happens after this pr") ||
+                normalized.includes("explain which platforms were affected") ||
+                normalized.includes("list anything intentionally not changed") ||
+                normalized.includes("what did you test and how") ||
+                normalized.includes("describe the exact flow tested") ||
+                normalized.includes("describe what could break") ||
+                normalized.includes("any breaking behavior") ||
+                normalized.includes("required for any ui")
+              );
+            }
+
+            const required = [
+              "Summary",
+              "PR type",
+              "Affected area",
+              "Why",
+              "Issue or approval",
+              "Reproduction steps",
+              "Old behavior",
+              "New behavior",
+              "Platform impact",
+              "UI / behavior / playback impact",
+              "Installer, packaging, or wrapper impact",
+              "Policy check",
+              "Scope boundaries",
+              "Testing",
+              "Screenshots / Video",
+              "Logs",
+              "Regression risk",
+              "Breaking changes",
+              "Linked issues",
+            ];
+
+            const missing = [];
+            const empty = [];
+            const failedRules = [];
+
+            for (const name of required) {
+              const content = sectionContent(name);
+
+              if (content === null) {
+                missing.push(name);
+                continue;
+              }
+
+              const cleaned = cleanedContent(name);
+              const normalized = cleaned.toLowerCase();
+
+              const allowsNone =
+                name === "Screenshots / Video" ||
+                name === "Logs" ||
+                name === "Breaking changes" ||
+                name === "Regression risk";
+
+              if (
+                cleaned.length < 4 ||
+                (!allowsNone && ["none", "n/a", "na", "not applicable"].includes(normalized)) ||
+                isPlaceholderText(cleaned)
+              ) {
+                empty.push(name);
+              }
+            }
+
+            const prTypeContent = sectionContent("PR type") || "";
+            const prTypeChecked = checkedLines(prTypeContent);
+
+            if (sectionContent("PR type") !== null && prTypeChecked.length !== 1) {
+              failedRules.push("Check exactly one PR type.");
+            }
+
+            const checkedTypeText = prTypeChecked.join(" ");
+
+            const isLocalizationOnly = /Translation\/localization only/i.test(checkedTypeText);
+            const isCriticalBugFix = /Critical bug fix/i.test(checkedTypeText);
+            const isApprovedChange = /Approved feature\/change/i.test(checkedTypeText);
+
+            const allowedType =
+              isLocalizationOnly ||
+              isCriticalBugFix ||
+              isApprovedChange;
+
+            if (sectionContent("PR type") !== null && prTypeChecked.length === 1 && !allowedType) {
+              failedRules.push("Invalid PR type selected.");
+            }
+
+            const affectedAreaContent = sectionContent("Affected area") || "";
+            const affectedAreaChecked = checkedLines(affectedAreaContent);
+
+            if (sectionContent("Affected area") !== null && affectedAreaChecked.length === 0) {
+              failedRules.push("Check at least one affected area.");
+            }
+
+            const impactContent = sectionContent("UI / behavior / playback impact") || "";
+            const impactChecked = checkedLines(impactContent);
+
+            if (sectionContent("UI / behavior / playback impact") !== null && impactChecked.length === 0) {
+              failedRules.push("Check at least one UI / behavior / playback impact box.");
+            }
+
+            const installerImpactContent = sectionContent("Installer, packaging, or wrapper impact") || "";
+            const installerImpactChecked = checkedLines(installerImpactContent);
+
+            if (sectionContent("Installer, packaging, or wrapper impact") !== null && installerImpactChecked.length === 0) {
+              failedRules.push("Check at least one installer, packaging, or wrapper impact box.");
+            }
+
+            const policyContent = sectionContent("Policy check") || "";
+            const policyChecked = checkedLines(policyContent);
+            const policyUnchecked = uncheckedLines(policyContent);
+
+            if (sectionContent("Policy check") !== null && policyChecked.length === 0) {
+              failedRules.push("Policy check must include checked boxes.");
+            }
+
+            if (policyUnchecked.length) {
+              failedRules.push("Every Policy check box must be checked.");
+            }
+
+            const issueRequired = isCriticalBugFix || isApprovedChange;
+
+            const issueText = [
+              cleanedContent("Issue or approval") || "",
+              cleanedContent("Linked issues") || "",
+            ].join(" ");
+
+            if (issueRequired && !hasIssueReference(issueText)) {
+              failedRules.push("Critical bug fixes and approved changes must link an issue or approved feature request.");
+            }
+
+            const reproductionText = (cleanedContent("Reproduction steps") || "").toLowerCase();
+
+            if (
+              isCriticalBugFix &&
+              ["none", "n/a", "na", "not applicable", "no reproduction steps"].includes(reproductionText)
+            ) {
+              failedRules.push("Critical bug fixes must include reproduction steps.");
+            }
+
+            const uiChanged = impactChecked.some((line) =>
+              /UI changed only to fix a documented glitch\/bug|UI change has explicit maintainer approval/i.test(line)
+            );
+
+            const behaviorChanged = impactChecked.some((line) =>
+              /Behavior changed only to fix a documented bug\/regression|Behavior change has explicit maintainer approval/i.test(line)
+            );
+
+            const playbackChanged = impactChecked.some((line) =>
+              /Playback changed only to fix a documented bug\/regression|Playback change has explicit maintainer approval/i.test(line)
+            );
+
+            const screenshotText = (cleanedContent("Screenshots / Video") || "").toLowerCase();
+
+            if (
+              uiChanged &&
+              ["none", "n/a", "na", "not a ui change", "not applicable"].includes(screenshotText)
+            ) {
+              failedRules.push("UI, layout, focus, or visual changes must include before/after screenshots or video.");
+            }
+
+            const logsText = (cleanedContent("Logs") || "").toLowerCase();
+
+            if (
+              playbackChanged &&
+              ["none", "n/a", "na", "not applicable"].includes(logsText)
+            ) {
+              failedRules.push("Playback changes must include logs or a clear explanation of why logs are not relevant.");
+            }
+
+            const packagingChanged = installerImpactChecked.some((line) =>
+              /Tizen `\.wgt` packaging changed|webOS `\.ipk` packaging changed|App identifiers or metadata changed|local\.properties|sync:tizen|sync:webos|Nuvio WebTV Installer compatibility changed|TizenBrew wrapper support changed|webOS Homebrew metadata support changed/i.test(line)
+            );
+
+            const testingContent = [
+              sectionContent("Testing") || "",
+              body.match(/^###\s+Commands tested\s*$/m) ? body : "",
+            ].join("\n");
+
+            if (
+              packagingChanged &&
+              !/npm run (build|package:tizen|package:webos|install:webos|sync:tizen|sync:webos)/i.test(testingContent)
+            ) {
+              failedRules.push("Installer, packaging, or wrapper changes must list the relevant commands tested.");
+            }
+
+            const platformImpact = cleanedContent("Platform impact") || "";
+
+            if (
+              (affectedAreaChecked.some((line) => /Samsung Tizen/i.test(line)) && !/Samsung Tizen:\s*\S+/i.test(platformImpact)) ||
+              (affectedAreaChecked.some((line) => /LG webOS/i.test(line)) && !/LG webOS:\s*\S+/i.test(platformImpact))
+            ) {
+              failedRules.push("Platform impact must describe the affected Tizen and/or webOS platform sections.");
+            }
+
+            if (missing.length || empty.length || failedRules.length) {
+              const lines = [
+                "PR description is missing required detail.",
+                "",
+              ];
+
+              if (missing.length) {
+                lines.push(`Missing sections: ${missing.join(", ")}`);
+              }
+
+              if (empty.length) {
+                lines.push(`Incomplete sections: ${empty.join(", ")}`);
+              }
+
+              if (failedRules.length) {
+                lines.push(`Failed policy rules: ${failedRules.join(" ")}`);
+              }
+
+              lines.push("");
+              lines.push("Please complete the PR template and make sure the PR fits CONTRIBUTING.md before review.");
+
+              core.setFailed(lines.join("\n"));
+            } else {
+              core.info("PR template check passed.");
+            }
