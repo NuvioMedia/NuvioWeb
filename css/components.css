@@ -7927,7 +7927,8 @@ button:focus-visible {
   width: 100%;
   padding: 24px 36px;
   border-radius: 999px;
-  border: 1px solid transparent;
+  border: 2px solid transparent;
+  box-sizing: border-box;
   background: var(--bg-color);
   color: #fff;
   display: flex;
@@ -9390,7 +9391,7 @@ button:focus-visible {
 .settings-profile-manage-row {
   min-height: 120px;
   background: var(--bg-elevated);
-  border: 1px solid var(--border-color);
+  border: 2px solid var(--border-color);
 }
 
 .settings-profile-card {
