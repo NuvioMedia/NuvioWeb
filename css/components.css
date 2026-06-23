@@ -6651,9 +6651,9 @@ button:focus-visible {
 .settings-nav-label {
   display: inline-block;
   max-width: 100%;
-  font-size: clamp(26px, 1.7vw, 32px);
+  font-size: clamp(26px, 1.7vw, 32px); /* ATV titleMedium 16sp -> 32px */
   font-weight: 400;
-  line-height: 1;
+  line-height: min(2.5vw, 48px); /* ATV titleMedium lineHeight 24sp -> 48px */
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -16883,6 +16883,7 @@ html.no-css-grid .cast-detail-meta {
 
 .no-css-math .settings-nav-label {
   font-size: 32px;
+  line-height: 48px;
 }
 
 .no-css-math .library-picker-groups {
