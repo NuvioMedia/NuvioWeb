@@ -1321,7 +1321,6 @@ export const ProfileSelectionScreen = {
   canHoldManageProfile(node) {
     return (
       !this.isManagementMode &&
-      !Platform.isWebOS() &&
       Boolean(node?.matches?.(".profile-card.focused, .profile-card")) &&
       String(node?.dataset?.profileId || "") !== "add"
     );
