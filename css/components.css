@@ -15031,6 +15031,13 @@ button:focus-visible {
   box-sizing: border-box;
 }
 
+.series-insight-empty {
+  padding-left: var(--tv-safe-gutter-wide);
+  padding-right: var(--tv-safe-gutter-wide);
+  box-sizing: border-box;
+  font-size: clamp(20px, 1.35vw, 26px);
+}
+
 .series-season-row {
   margin-bottom: 0;
   gap: clamp(12px, 1vw, 18px);
