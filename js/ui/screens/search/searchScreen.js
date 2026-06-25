@@ -86,7 +86,7 @@ function escapeSelectorValue(value = "") {
   return raw.replace(/["\\]/g, "\\$&");
 }
 
-function formatCatalogRowTitle(catalogName, addonName, type) {
+function formatCatalogRowTitle(catalogName, addonName, type, showTypeSuffix = true) {
   const typeLabel = formatTypeLabel(type);
   let base = String(catalogName || "").trim();
   if (!base) return typeLabel;
@@ -100,6 +100,7 @@ function formatCatalogRowTitle(catalogName, addonName, type) {
     });
   base = base.replace(/\s{2,}/g, " ").trim();
   if (!base) return typeLabel;
+  if (!showTypeSuffix) return base;
   const endsWithType = new RegExp(`\\b${escapeRegExp(typeLabel)}$`, "i").test(base);
   return endsWithType ? base : `${base} - ${typeLabel}`;
 }
@@ -638,8 +639,16 @@ export const SearchScreen = {
       .map((entry) => {
         const items = entry.result?.data?.items || [];
         return {
-          title: formatCatalogRowTitle(entry.catalogName, entry.addonName, entry.type),
-          subtitle: `from ${entry.addonName || "Addon"}`,
+          title: formatCatalogRowTitle(
+            entry.catalogName,
+            entry.addonName,
+            entry.type,
+            this.layoutPrefs?.catalogTypeSuffixEnabled !== false
+          ),
+          subtitle:
+            this.layoutPrefs?.catalogAddonNameEnabled !== false
+              ? `from ${entry.addonName || "Addon"}`
+              : "",
           type: entry.type,
           addonBaseUrl: entry.addonBaseUrl,
           addonId: entry.addonId,
@@ -705,8 +714,16 @@ export const SearchScreen = {
       .map(({ catalog, result }) => {
         const items = result?.data?.items || [];
         return {
-          title: formatCatalogRowTitle(catalog.catalogName, catalog.addonName, catalog.type),
-          subtitle: `from ${catalog.addonName || "Addon"}`,
+          title: formatCatalogRowTitle(
+            catalog.catalogName,
+            catalog.addonName,
+            catalog.type,
+            this.layoutPrefs?.catalogTypeSuffixEnabled !== false
+          ),
+          subtitle:
+            this.layoutPrefs?.catalogAddonNameEnabled !== false
+              ? `from ${catalog.addonName || "Addon"}`
+              : "",
           type: catalog.type,
           addonBaseUrl: catalog.addonBaseUrl,
           addonId: catalog.addonId,
@@ -754,7 +771,7 @@ export const SearchScreen = {
         return `
       <section class="search-results-row" data-row-key="${escapeHtml(rowKey)}">
         <h3 class="search-results-title">${row.title}</h3>
-        <div class="search-results-subtitle">${row.subtitle}</div>
+        ${row.subtitle ? `<div class="search-results-subtitle">${row.subtitle}</div>` : ""}
         <div class="search-results-track">
           ${(row.items || [])
             .map(
