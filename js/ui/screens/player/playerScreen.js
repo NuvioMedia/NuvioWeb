@@ -14305,6 +14305,7 @@ export const PlayerScreen = {
   },
 
   cleanup() {
+    try {
     this.playerRouteActive = false;
     this.playerMountToken = Number(this.playerMountToken || 0) + 1;
     this.unbindVideoEvents();
@@ -14392,16 +14393,24 @@ export const PlayerScreen = {
     this.clearMediaSessionHandlers();
 
     this.releaseStartupAudioGate({ resume: false });
-    PlayerController.stop();
-
-    if (this.container) {
-      this.container.style.display = "none";
-      this.container.querySelector("#playerUiRoot")?.remove();
-      this.container.querySelector("#episodeSidePanel")?.remove();
+    } catch (error) {
+      try { console.warn("Player cleanup error suppressed to keep navigation working", error); } catch (e) {}
+    } finally {
+      // Always stop playback and hide the player surface, even if the teardown
+      // above threw, so the user is never left stuck in the player with the
+      // video still playing (seen on Samsung Tizen when the EngineFS release
+      // throws during cleanup and aborts the route navigation).
+      try { PlayerController.stop(); } catch (e) {}
+      try {
+        if (this.container) {
+          this.container.style.display = "none";
+          this.container.querySelector("#playerUiRoot")?.remove();
+          this.container.querySelector("#episodeSidePanel")?.remove();
+        }
+      } catch (e) {}
+      this.uiRefs = null;
+      this.lastUiTickState = null;
     }
-    this.uiRefs = null;
-    this.lastUiTickState = null;
-
   }
 
 };
