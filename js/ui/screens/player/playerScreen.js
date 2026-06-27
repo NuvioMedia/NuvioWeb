@@ -6840,6 +6840,9 @@ export const PlayerScreen = {
 
   isBufferingSpinnerVisible() {
     if (this.seekLoading) {
+      if (this.isStartupLoadingVisible()) {
+        return false;
+      }
       return !this.isExternalFrameMode() && !this.isStartupErrorVisible();
     }
     if (!this.loadingVisible || !this.hasPresentedPlaybackFrame || this.isExternalFrameMode() || this.isStartupErrorVisible()) {
@@ -8613,23 +8616,26 @@ export const PlayerScreen = {
       }
 
       const now = Date.now();
-      const shouldRetryEmbeddedSubtitles = this.canDiscoverEmbeddedSubtitleTracks()
+      const shouldRetryEmbeddedTracks = this.canDiscoverEmbeddedSubtitleTracks()
         && this.embeddedSubtitleTracks.length <= 0
-        && !this.embeddedSubtitleLoading;
+        && this.embeddedAudioTracks.length <= 0
+        && !this.embeddedSubtitleLoading
+        && !this.embeddedAudioLoading;
       if (
-        shouldRetryEmbeddedSubtitles
+        shouldRetryEmbeddedTracks
         && (now - Number(this.lastEmbeddedTrackRetryAt || 0)) >= 1200
       ) {
         this.lastEmbeddedTrackRetryAt = now;
         this.loadEmbeddedSubtitleTracks();
       }
 
-      const doneByData = this.hasSubtitleTracksAvailable()
-        || (this.hasAudioTracksAvailable() && !shouldRetryEmbeddedSubtitles);
+      const doneByData = (this.hasSubtitleTracksAvailable() || this.hasAudioTracksAvailable())
+        && !shouldRetryEmbeddedTracks;
       const doneByIdle = !this.subtitleLoading
         && !this.embeddedSubtitleLoading
+        && !this.embeddedAudioLoading
         && !this.manifestLoading
-        && !shouldRetryEmbeddedSubtitles
+        && !shouldRetryEmbeddedTracks
         && (now - Number(this.trackDiscoveryStartedAt || 0)) >= 1200;
       const doneByTimeout = now >= this.trackDiscoveryDeadline;
       this.refreshTrackDialogs();
@@ -10223,7 +10229,7 @@ export const PlayerScreen = {
       || this.manifestLoading
       || this.trackDiscoveryInProgress
       || this.pendingWebOsAudioSelection
-      || this.isTizenAvPlayStartupAudioRetryPending()
+      || this.isStartupAudioPreferenceRetryPending()
       || (!this.getAudioEntries().length && this.isTrackDiscoveryWindowPending())
     );
   },
@@ -10245,12 +10251,18 @@ export const PlayerScreen = {
     );
   },
 
+  isStartupAudioPreferenceRetryPending() {
+    return Number(this.startupAudioPreferenceRetryDeadline || 0) > Date.now();
+  },
+
   scheduleStartupAudioPreferenceRetry() {
-    if (!(
+    const canRetryTizenAvPlay = Boolean(
       Environment.isTizen()
       && typeof PlayerController.isUsingAvPlay === "function"
       && PlayerController.isUsingAvPlay()
-    )) {
+    );
+    const canRetryWebOsTracks = Environment.isWebOS();
+    if (!canRetryTizenAvPlay && !canRetryWebOsTracks) {
       return false;
     }
 
@@ -10274,6 +10286,10 @@ export const PlayerScreen = {
       }
       if (typeof PlayerController.syncAvPlayTrackInfo === "function") {
         PlayerController.syncAvPlayTrackInfo({ force: true });
+      }
+      if (canRetryWebOsTracks) {
+        this.loadEmbeddedSubtitleTracks();
+        this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl || this.getCurrentStreamCandidate()?.url || null);
       }
       this.invalidateTrackDialogCaches();
       this.syncTrackState();

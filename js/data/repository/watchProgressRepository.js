@@ -334,9 +334,14 @@ function toProgressItemFromPlayback(playbackItem) {
   };
 }
 
-function toWatchedShowSeedItem(watchedShowItem) {
-  if (!watchedShowItem || !Array.isArray(watchedShowItem.seasons)) return null;
+function toWatchedShowSeedItems(watchedShowItem) {
+  if (!watchedShowItem || !Array.isArray(watchedShowItem.seasons)) return [];
   const watchedEpisodes = [];
+  const fallbackWatchedAt = watchedShowItem.lastWatchedAt
+    ? new Date(watchedShowItem.lastWatchedAt).getTime()
+    : Date.now();
+  const { contentId, title, year, imdbId, tmdbId, traktId } = watchedShowItem;
+  if (!contentId) return [];
   watchedShowItem.seasons.forEach((season) => {
     const seasonNumber = Number(season?.number || 0);
     if (seasonNumber <= 0) return;
@@ -351,38 +356,29 @@ function toWatchedShowSeedItem(watchedShowItem) {
       });
     });
   });
-  if (!watchedEpisodes.length) return null;
-  const latestEpisode = watchedEpisodes.sort((left, right) => {
-    const leftKey = (left.season * 1000) + left.episode;
-    const rightKey = (right.season * 1000) + right.episode;
-    if (rightKey !== leftKey) return rightKey - leftKey;
-    return Number(right.watchedAtMs || 0) - Number(left.watchedAtMs || 0);
-  })[0];
-  const fallbackWatchedAt = watchedShowItem.lastWatchedAt
-    ? new Date(watchedShowItem.lastWatchedAt).getTime()
-    : Date.now();
-  const updatedAt = Number(latestEpisode.watchedAtMs || 0) || fallbackWatchedAt || Date.now();
-  const { contentId, title, year, imdbId, tmdbId, traktId } = watchedShowItem;
-  return {
-    contentId,
-    videoId: `${contentId}:s${latestEpisode.season}e${latestEpisode.episode}`,
-    contentType: "series",
-    title: title || "",
-    year,
-    imdbId,
-    tmdbId: tmdbId || null,
-    traktId: traktId || null,
-    source: "trakt_show_progress",
-    updatedAt,
-    positionMs: 1,
-    durationMs: 1,
-    progressPercent: 100,
-    profileId: activeProfileId(),
-    season: latestEpisode.season,
-    episode: latestEpisode.episode,
-    seasonNumber: latestEpisode.season,
-    episodeNumber: latestEpisode.episode
-  };
+  return watchedEpisodes.map((watchedEpisode) => {
+    const updatedAt = Number(watchedEpisode.watchedAtMs || 0) || fallbackWatchedAt || Date.now();
+    return {
+      contentId,
+      videoId: `${contentId}:s${watchedEpisode.season}e${watchedEpisode.episode}`,
+      contentType: "series",
+      title: title || "",
+      year,
+      imdbId,
+      tmdbId: tmdbId || null,
+      traktId: traktId || null,
+      source: "trakt_show_progress",
+      updatedAt,
+      positionMs: 1,
+      durationMs: 1,
+      progressPercent: 100,
+      profileId: activeProfileId(),
+      season: watchedEpisode.season,
+      episode: watchedEpisode.episode,
+      seasonNumber: watchedEpisode.season,
+      episodeNumber: watchedEpisode.episode
+    };
+  });
 }
 
 async function fetchTraktProgressSnapshot() {
@@ -422,10 +418,15 @@ async function fetchTraktProgressSnapshot() {
         })
     ]);
 
+    const watchedShowSeedItems = [];
+    watchedShows.forEach((watchedShow) => {
+      Array.prototype.push.apply(watchedShowSeedItems, toWatchedShowSeedItems(watchedShow));
+    });
+
     const snapshot = {
       historyItems: history.map(toProgressItemFromTraktHistory).filter(Boolean),
       playbackItems: playbackState.map(toProgressItemFromPlayback).filter(Boolean),
-      watchedShowSeedItems: watchedShows.map(toWatchedShowSeedItem).filter(Boolean)
+      watchedShowSeedItems
     };
     traktProgressSnapshotCache = {
       profileId: activeProfileId(),

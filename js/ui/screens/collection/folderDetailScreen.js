@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { Environment } from "../../../platform/environment.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
+import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { CollectionsStore } from "../../../data/local/collectionsStore.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
@@ -22,6 +23,11 @@ import {
   renderContinueWatchingSection
 } from "../home/homeScreen.js";
 import { renderModernHomeLayout } from "../home/modernHomeLayout.js";
+import {
+  buildWatchedTitleIdSet,
+  isTitleItemWatched,
+  renderTitleWatchedBadge
+} from "../../components/watchedTitleBadge.js";
 
 const TMDB_API_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
@@ -727,7 +733,11 @@ export const FolderDetailScreen = {
       HomeScreen.ensureDelegatedEventsBound.call(this);
     }
 
-    const addons = await addonRepository.getInstalledAddons().catch(() => []);
+    const [addons, watchedItems] = await Promise.all([
+      addonRepository.getInstalledAddons().catch(() => []),
+      watchedItemsRepository.getAll(5000).catch(() => [])
+    ]);
+    this.watchedTitleIds = buildWatchedTitleIdSet(watchedItems);
     const folderSources = Array.isArray(this.folder.sources) && this.folder.sources.length
       ? this.folder.sources
       : buildFallbackStreamingSources(this.folder);
@@ -1074,6 +1084,7 @@ export const FolderDetailScreen = {
               ${item.poster
                 ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
                 : `<div class="seeall-card-poster placeholder"></div>`}
+              ${isTitleItemWatched(item, this.watchedTitleIds) ? renderTitleWatchedBadge() : ""}
             </div>
             ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
               <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
@@ -1103,6 +1114,7 @@ export const FolderDetailScreen = {
             ${item.poster
               ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
               : `<div class="seeall-card-poster placeholder"></div>`}
+            ${isTitleItemWatched(item, this.watchedTitleIds) ? renderTitleWatchedBadge() : ""}
           </div>
           ${this.layoutPrefs?.posterLabelsEnabled !== false ? `
             <div class="seeall-card-title">${escapeHtml(item.name || "Untitled")}</div>
@@ -1205,6 +1217,7 @@ export const FolderDetailScreen = {
       createPosterCardMarkup,
       createSeeAllCardMarkup,
       formatCatalogRowTitle,
+      watchedTitleIds: this.watchedTitleIds,
       escapeHtml,
       escapeAttribute
     });
@@ -1318,7 +1331,9 @@ export const FolderDetailScreen = {
           false,
           "modern",
           false,
-          modernLandscapePostersEnabled
+          modernLandscapePostersEnabled,
+          false,
+          this.watchedTitleIds
         )).join("");
         const fragment = document.createRange().createContextualFragment(newMarkup);
         track.appendChild(fragment);

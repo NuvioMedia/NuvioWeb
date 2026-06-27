@@ -21,6 +21,7 @@ import { CatalogSeeAllScreen } from "../screens/catalog/catalogSeeAllScreen.js";
 import { FolderDetailScreen } from "../screens/collection/folderDetailScreen.js";
 import { Platform } from "../../platform/index.js";
 import { RouteStateStore } from "./routeStateStore.js";
+import { LocalStore } from "../../core/storage/localStore.js";
 
 const ROUTER_PERF_DEBUG = Boolean(
   globalThis.__NUVIO_DEBUG_ROUTER_PERF__ || globalThis.__NUVIO_DEBUG_HOME_PERF__
@@ -46,6 +47,13 @@ const NON_BACKSTACK_ROUTES = new Set([
   "authQrSignIn",
   "authSignIn",
   "syncCode"
+]);
+const WEBOS_RESUME_ROUTE_KEY = "webos_last_resume_route";
+const WEBOS_RESUME_ROUTE_TTL_MS = 20 * 60 * 1000;
+const WEBOS_NON_RESTORABLE_ROUTES = new Set([
+  ...NON_BACKSTACK_ROUTES,
+  "player",
+  "stream"
 ]);
 
 export const Router = {
@@ -192,6 +200,52 @@ export const Router = {
     this.ignoreNextPopstate = true;
   },
 
+  persistWebOsResumeRoute(routeName = this.current, params = this.currentParams) {
+    if (!Platform.isWebOS()) {
+      return;
+    }
+    const route = String(routeName || "").trim();
+    if (!route || !this.routes[route] || WEBOS_NON_RESTORABLE_ROUTES.has(route)) {
+      LocalStore.remove(WEBOS_RESUME_ROUTE_KEY);
+      return;
+    }
+    try {
+      LocalStore.set(WEBOS_RESUME_ROUTE_KEY, {
+        route,
+        params: params || {},
+        savedAt: Date.now()
+      });
+    } catch (error) {
+      console.warn("Failed to persist webOS resume route", error);
+    }
+  },
+
+  consumeWebOsResumeRoute() {
+    if (!Platform.isWebOS()) {
+      return null;
+    }
+    const snapshot = LocalStore.get(WEBOS_RESUME_ROUTE_KEY, null);
+    if (!snapshot || typeof snapshot !== "object") {
+      return null;
+    }
+    const route = String(snapshot.route || "").trim();
+    const savedAt = Number(snapshot.savedAt || 0);
+    if (
+      !route ||
+      !this.routes[route] ||
+      WEBOS_NON_RESTORABLE_ROUTES.has(route) ||
+      !Number.isFinite(savedAt) ||
+      Date.now() - savedAt > WEBOS_RESUME_ROUTE_TTL_MS
+    ) {
+      LocalStore.remove(WEBOS_RESUME_ROUTE_KEY);
+      return null;
+    }
+    return {
+      route,
+      params: snapshot.params && typeof snapshot.params === "object" ? snapshot.params : {}
+    };
+  },
+
   async navigate(routeName, params = {}, options = {}) {
     const navigationStart = ROUTER_PERF_DEBUG ? routerPerfNow() : 0;
 
@@ -257,6 +311,7 @@ export const Router = {
         }
       }
     }
+    this.persistWebOsResumeRoute(this.current, this.currentParams);
   },
 
   async back(options = {}) {
@@ -285,6 +340,7 @@ export const Router = {
         this.current = "home";
         this.currentParams = {};
         await this.routes.home.mount();
+        this.persistWebOsResumeRoute("home", {});
         return;
       }
 
@@ -309,6 +365,7 @@ export const Router = {
     });
 
     await this.routes[previousRoute].mount(previousParams, navigationContext);
+    this.persistWebOsResumeRoute(this.current, this.currentParams);
   },
 
   getCurrent() {

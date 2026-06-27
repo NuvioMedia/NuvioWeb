@@ -207,7 +207,7 @@ async function shouldShowProfileSelection() {
   return profiles.length > 1 || activeProfileHasPin;
 }
 
-async function enterWithLastProfile() {
+async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
   hasSelectedProfileThisSession = true;
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
@@ -227,7 +227,17 @@ async function enterWithLastProfile() {
       I18n.apply();
     }
   }
-  Router.navigate("home");
+  const resumeRoute = restoreWebOsRoute && typeof Router.consumeWebOsResumeRoute === "function"
+    ? Router.consumeWebOsResumeRoute()
+    : null;
+  if (resumeRoute?.route) {
+    await Router.navigate(resumeRoute.route, resumeRoute.params || {}, {
+      replaceHistory: true,
+      skipStackPush: true
+    });
+    return;
+  }
+  await Router.navigate("home");
 }
 
 async function routeAfterAuthentication() {
@@ -237,7 +247,7 @@ async function routeAfterAuthentication() {
     return;
   }
 
-  await enterWithLastProfile();
+  await enterWithLastProfile({ restoreWebOsRoute: true });
 }
 
 function setupWebOsAppLifecycle() {
@@ -301,13 +311,9 @@ function setupWebOsAppLifecycle() {
       if (document.body) {
         document.body.style.removeProperty("display");
       }
-      const isTransientRoute = current === "player" || current === "stream";
-      const target = isTransientRoute ? "home" : current;
-      const params = target === current ? Router.currentParams || {} : {};
-      await Router.navigate(target, params, {
-        replaceHistory: true,
-        skipStackPush: true
-      });
+      if (typeof Router.persistWebOsResumeRoute === "function") {
+        Router.persistWebOsResumeRoute(current, Router.currentParams || {});
+      }
       // With handlesRelaunch=true, webOS expects the app to explicitly request
       // foreground activation after processing the relaunch callback.
       activateWebOsApp();
@@ -402,7 +408,7 @@ async function bootstrapApp() {
           ProfileManager.isRememberLastProfileEnabled() &&
           ProfileManager.hasEverSelectedProfile()
         ) {
-          enterWithLastProfile().catch((error) => {
+          enterWithLastProfile({ restoreWebOsRoute: true }).catch((error) => {
             console.warn("Failed to enter with last profile", error);
             ProfileManager.clearActiveProfile();
             if (Router.getCurrent() !== "profileSelection") {

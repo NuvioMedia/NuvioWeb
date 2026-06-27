@@ -2,6 +2,7 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
+import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
@@ -10,6 +11,11 @@ import {
   PosterOptionsDialogController,
   posterItemFromNode
 } from "../../components/posterOptionsMenu.js";
+import {
+  buildWatchedTitleIdSet,
+  isTitleItemWatched,
+  renderTitleWatchedBadge
+} from "../../components/watchedTitleBadge.js";
 import {
   focusWithoutAutoScroll,
   setLegacySidebarExpanded
@@ -225,6 +231,11 @@ export const DiscoverScreen = {
     });
   },
 
+  async refreshWatchedTitleIds() {
+    const watchedItems = await watchedItemsRepository.getAll(5000).catch(() => []);
+    this.watchedTitleIds = buildWatchedTitleIdSet(watchedItems);
+  },
+
   getRouteStateKey() {
     return "discover";
   },
@@ -319,6 +330,7 @@ export const DiscoverScreen = {
     this.preserveViewportOnNextRender = false;
     this.nextSkip = 0;
     this.hasMore = true;
+    await this.refreshWatchedTitleIds();
 
     if (
       navigationContext?.isBackNavigation &&
@@ -432,6 +444,7 @@ export const DiscoverScreen = {
                        ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
                        : `<div class="seeall-card-poster placeholder"></div>`
                    }
+                   ${isTitleItemWatched(item, this.watchedTitleIds) ? renderTitleWatchedBadge() : ""}
                  </div>
                  ${
                    this.layoutPrefs?.posterLabelsEnabled !== false
@@ -888,7 +901,7 @@ export const DiscoverScreen = {
           this.requestRender();
         },
         onChanged: () => {
-          this.requestRender();
+          void this.refreshWatchedTitleIds().then(() => this.requestRender());
         }
       });
     }

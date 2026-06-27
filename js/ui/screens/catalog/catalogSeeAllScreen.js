@@ -1,6 +1,7 @@
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
+import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { Environment } from "../../../platform/environment.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
@@ -9,6 +10,11 @@ import {
   posterItemFromNode,
   PosterOptionsDialogController
 } from "../../components/posterOptionsMenu.js";
+import {
+  buildWatchedTitleIdSet,
+  isTitleItemWatched,
+  renderTitleWatchedBadge
+} from "../../components/watchedTitleBadge.js";
 
 const POSTER_HOLD_DELAY_MS = 650;
 
@@ -164,6 +170,11 @@ export const CatalogSeeAllScreen = {
     return true;
   },
 
+  async refreshWatchedTitleIds() {
+    const watchedItems = await watchedItemsRepository.getAll(5000).catch(() => []);
+    this.watchedTitleIds = buildWatchedTitleIdSet(watchedItems);
+  },
+
   async mount(params = {}, navigationContext = {}) {
     this.container = document.getElementById("catalogSeeAll");
     ScreenUtils.show(this.container);
@@ -182,6 +193,7 @@ export const CatalogSeeAllScreen = {
     this.posterOptionsFocusKey = "";
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
+    await this.refreshWatchedTitleIds();
 
     if (
       navigationContext?.isBackNavigation &&
@@ -525,7 +537,7 @@ export const CatalogSeeAllScreen = {
           this.render();
         },
         onChanged: () => {
-          this.render();
+          void this.refreshWatchedTitleIds().then(() => this.render());
         }
       });
     }
@@ -578,6 +590,7 @@ export const CatalogSeeAllScreen = {
                   ? `<img class="seeall-card-poster-image" src="${escapeHtml(item.poster)}" alt="${escapeHtml(item.name || "content")}" loading="lazy" decoding="async" />`
                   : `<div class="seeall-card-poster placeholder"></div>`
               }
+              ${isTitleItemWatched(item, this.watchedTitleIds) ? renderTitleWatchedBadge() : ""}
             </div>
             ${
               this.layoutPrefs?.posterLabelsEnabled !== false

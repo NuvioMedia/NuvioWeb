@@ -40,6 +40,7 @@ export function renderModernHomeLayout({
   createSeeAllCardMarkup: _createSeeAllCardMarkup,
   formatCatalogRowTitle,
   shouldDeferRowImages,
+  watchedTitleIds = null,
   escapeHtml,
   escapeAttribute
 } = {}) {
@@ -89,7 +90,8 @@ export function renderModernHomeLayout({
       "modern",
       expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex,
       preferLandscapePosters,
-      deferRowImages
+      deferRowImages,
+      watchedTitleIds
     )).join("");
 
     sectionsMarkup.push(`

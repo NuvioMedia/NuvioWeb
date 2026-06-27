@@ -492,6 +492,35 @@ function getDpadDirection(event) {
   return null;
 }
 
+function getTrailerSeekStepSeconds(event) {
+  const repeatCount = Number(event?.repeatCount || event?.detail?.repeatCount || 0);
+  if (repeatCount >= 12) return 12;
+  if (repeatCount >= 6) return 8;
+  if (repeatCount >= 2) return 5;
+  return 3;
+}
+
+function getTrailerMediaAction(event) {
+  const keyCode = Number(event?.keyCode || event?.which || event?.originalKeyCode || 0);
+  const key = String(event?.key || "").toLowerCase();
+  const keyName = String(event?.keyName || event?.detail?.keyName || "").toLowerCase();
+  const code = String(event?.code || "").toLowerCase();
+  const names = [key, keyName, code];
+  if (names.some((name) => name === "mediaplaypause" || name === "playpause")) {
+    return "toggle";
+  }
+  if (names.some((name) => name === "mediaplay" || name === "play")) {
+    return "play";
+  }
+  if (names.some((name) => name === "mediapause" || name === "pause")) {
+    return "pause";
+  }
+  if (keyCode === 179 || keyCode === 10252) return "toggle";
+  if (keyCode === 415) return "play";
+  if (keyCode === 19) return "pause";
+  return "";
+}
+
 function resolveEpisodeHoldRepeatProfile(stepCount = 0, elapsedMs = 0) {
   return (
     EPISODE_HOLD_REPEAT_PROFILE.find(
@@ -2070,19 +2099,38 @@ export const MetaDetailsScreen = {
         `${Number(currentEpisode.season || 0)}:${Number(currentEpisode.episode || 0)}`
       );
     }
+    const isEpisodeCompleted = (episode) => {
+      const key = `${Number(episode?.season || 0)}:${Number(episode?.episode || 0)}`;
+      if (!key || key === "0:0") {
+        return false;
+      }
+      if (
+        currentEpisode &&
+        detailProgressFraction(progress) >= DETAIL_PROGRESS_END_THRESHOLD &&
+        Number(episode?.season || 0) === Number(currentEpisode.season || 0) &&
+        Number(episode?.episode || 0) === Number(currentEpisode.episode || 0)
+      ) {
+        return true;
+      }
+      if (this.enrichedWatchedState?.has(key)) {
+        return Boolean(this.enrichedWatchedState.get(key)?.isWatched);
+      }
+      return completedKeys.has(key);
+    };
     let latestCompletedIndex = -1;
     this.episodes.forEach((episode, index) => {
-      const key = `${Number(episode?.season || 0)}:${Number(episode?.episode || 0)}`;
-      if (completedKeys.has(key)) {
+      if (isEpisodeCompleted(episode)) {
         latestCompletedIndex = Math.max(latestCompletedIndex, index);
       }
     });
     if (latestCompletedIndex >= 0) {
-      return (
-        this.episodes[latestCompletedIndex + 1] ||
-        this.episodes[latestCompletedIndex] ||
-        this.episodes[0]
-      );
+      const nextUnwatched = this.episodes
+        .slice(latestCompletedIndex + 1)
+        .find((episode) => !isEpisodeCompleted(episode));
+      if (nextUnwatched) {
+        return nextUnwatched;
+      }
+      return this.episodes.find((episode) => !isEpisodeCompleted(episode)) || this.episodes[0];
     }
     if (!currentEpisode) {
       return this.episodes[0];
@@ -5941,7 +5989,7 @@ export const MetaDetailsScreen = {
           ? t(
               "detail.trailerControlsHint",
               {},
-              "OK Play/Pause  LEFT/RIGHT Seek  UP/DOWN Audio  BACK Close"
+              "OK Play/Pause  LEFT/RIGHT Seek  UP Show  DOWN Hide  BACK Close"
             )
           : t("detail.trailerFallbackHint", {}, "Use back to close the trailer");
     }
@@ -6196,6 +6244,24 @@ export const MetaDetailsScreen = {
     const target = Math.max(0, Math.min(duration, currentTime + delta));
     this.postTrailerProxyCommand("seekTo", { seconds: target });
     this.updateTrailerOverlay();
+  },
+
+  setActiveTrailerPausedState(paused) {
+    if (
+      !this.isTrailerPlaying ||
+      !this.trailerSource ||
+      this.trailerPlaybackMode !== "manual"
+    ) {
+      return;
+    }
+    const shouldPause = Boolean(paused);
+    const playback = this.getTrailerPlaybackSnapshot();
+    if (Boolean(playback.paused) === shouldPause) {
+      this.restartTrailerControlsTimer();
+      this.updateTrailerOverlay();
+      return;
+    }
+    this.toggleActiveTrailerPlayback();
   },
 
   syncTrailerDom() {
@@ -8210,19 +8276,30 @@ export const MetaDetailsScreen = {
     if (this.isTrailerPlaying && this.trailerPlaybackMode === "manual") {
       this.restartTrailerControlsTimer();
       const direction = getDpadDirection(event);
-      if (event.keyCode === 13) {
+      const mediaAction = getTrailerMediaAction(event);
+      if (event.keyCode === 13 || mediaAction === "toggle") {
         event?.preventDefault?.();
         this.toggleActiveTrailerPlayback();
         return;
       }
+      if (mediaAction === "play") {
+        event?.preventDefault?.();
+        this.setActiveTrailerPausedState(false);
+        return;
+      }
+      if (mediaAction === "pause") {
+        event?.preventDefault?.();
+        this.setActiveTrailerPausedState(true);
+        return;
+      }
       if (direction === "left") {
         event?.preventDefault?.();
-        this.seekTrailerBy(-10);
+        this.seekTrailerBy(-getTrailerSeekStepSeconds(event));
         return;
       }
       if (direction === "right") {
         event?.preventDefault?.();
-        this.seekTrailerBy(10);
+        this.seekTrailerBy(getTrailerSeekStepSeconds(event));
         return;
       }
       if (direction === "up" || direction === "down") {

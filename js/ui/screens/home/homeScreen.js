@@ -21,6 +21,11 @@ import { LocalStore } from "../../../core/storage/localStore.js";
 import { YOUTUBE_PROXY_URL } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import {
+  buildWatchedTitleIdSet,
+  isTitleItemWatched,
+  renderTitleWatchedBadge
+} from "../../components/watchedTitleBadge.js";
+import {
   buildModernRowKey,
   MODERN_HOME_CONSTANTS,
   renderModernHomeLayout
@@ -1836,7 +1841,8 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
     focusedRowKey = "",
     focusedItemIndex = -1,
     expandFocusedPoster = false,
-    rowItemLimit = HOME_MAX_ITEMS_PER_ROW_DEFAULT
+    rowItemLimit = HOME_MAX_ITEMS_PER_ROW_DEFAULT,
+    watchedTitleIds = null
   } = options;
   const catalogSeeAllMap = new Map();
   const sectionsMarkup = [];
@@ -1890,7 +1896,8 @@ function renderLegacyCatalogRowsMarkup(rows = [], options = {}) {
       layoutMode,
       expandFocusedPoster && focusedRowKey === rowKey && focusedItemIndex === itemIndex,
       false,
-      deferRowImages
+      deferRowImages,
+      watchedTitleIds
     )).join("");
     const trackMarkup = `
       <div class="${layoutMode === "grid" ? "home-grid-track" : "home-track"}" data-track-row-key="${escapeAttribute(rowKey)}">
@@ -1988,7 +1995,7 @@ function buildLazyImageAttributes(src = "", { defer = false, highPriority = fals
   return `src="${safeSrc}" loading="${loadingMode}" decoding="async"${priority}`;
 }
 
-export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowData = null, showLabels = true, layoutMode = "classic", isExpanded = false, preferLandscapePoster = false, deferImages = false) {
+export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowData = null, showLabels = true, layoutMode = "classic", isExpanded = false, preferLandscapePoster = false, deferImages = false, watchedTitleIds = null) {
   const suppressPosterText = Boolean(rowData?.suppressPosterText);
   const rowKey = String(rowData?.homeCatalogKey || buildModernRowKey(rowData || {})).trim();
   const collectionSeed = rowData?.rowKind === "collection"
@@ -2083,6 +2090,9 @@ export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowD
   const focusableClass = isLoading ? "" : " focusable";
   const loadingClass = isLoading ? " home-poster-card-loading" : "";
   const shouldShowLabels = showLabels && !isLoading && !suppressPosterText;
+  const watchedBadge = !isLoading && isTitleItemWatched(normalized, watchedTitleIds)
+    ? renderTitleWatchedBadge()
+    : "";
   const titleWidths = [116, 128, 104, 132, 120, 140, 110, 124, 136, 112];
   const subtitleWidths = [82, 96, 74, 90, 88, 100, 80, 94, 86, 92];
   const safeIndex = Math.max(0, Number(itemIndex) || 0);
@@ -2113,6 +2123,7 @@ export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowD
       : '<div class="home-poster-expanded-backdrop placeholder" aria-hidden="true"></div>'}
         <div class="home-poster-trailer-layer"></div>
         <div class="home-poster-expanded-gradient"></div>
+        ${watchedBadge}
         <div class="home-poster-expanded-brand">
           ${(!isLoading && normalized.logo)
       ? `<img class="home-poster-expanded-logo" data-src="${escapeAttribute(normalized.logo)}" decoding="async" loading="lazy" alt="${escapeAttribute(normalized.name || "content")}" />`
@@ -4224,6 +4235,7 @@ export const HomeScreen = {
       this.watchedItems = Array.isArray(this.watchedItems)
         ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(normalized.contentId))
         : [];
+      this.watchedTitleIds = buildWatchedTitleIdSet(this.watchedItems);
       return true;
     }
     await watchedItemsRepository.mark({
@@ -4251,6 +4263,7 @@ export const HomeScreen = {
       },
       ...(Array.isArray(this.watchedItems) ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(normalized.contentId)) : [])
     ];
+    this.watchedTitleIds = buildWatchedTitleIdSet(this.watchedItems);
     this.pruneContinueWatchingItem(normalized);
     return true;
   },
@@ -4329,6 +4342,10 @@ export const HomeScreen = {
     if (watched) {
       await watchedItemsRepository.unmark(item.id);
       await watchProgressRepository.removeProgress(item.id, null).catch(() => false);
+      this.watchedItems = Array.isArray(this.watchedItems)
+        ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(item.id))
+        : [];
+      this.watchedTitleIds = buildWatchedTitleIdSet(this.watchedItems);
       if (this.posterHoldMenu) {
         this.posterHoldMenu = { ...this.posterHoldMenu, isWatched: false };
       }
@@ -4350,6 +4367,16 @@ export const HomeScreen = {
       durationMs: 100,
       updatedAt: Date.now()
     });
+    this.watchedItems = [
+      {
+        contentId: item.id,
+        contentType: item.type || "movie",
+        title: item.name || item.id || "Untitled",
+        watchedAt: Date.now()
+      },
+      ...(Array.isArray(this.watchedItems) ? this.watchedItems.filter((entry) => String(entry?.contentId || "") !== String(item.id)) : [])
+    ];
+    this.watchedTitleIds = buildWatchedTitleIdSet(this.watchedItems);
     if (this.posterHoldMenu) {
       this.posterHoldMenu = { ...this.posterHoldMenu, isWatched: true };
     }
@@ -6588,6 +6615,8 @@ export const HomeScreen = {
     this.layoutPrefs = LayoutPreferences.get();
     this.layoutMode = String(this.layoutPrefs.homeLayout || "classic").toLowerCase();
     this.rows = [];
+    this.watchedItems = [];
+    this.watchedTitleIds = new Set();
     this.continueWatchingDisplay = readContinueWatchingDisplaySnapshot(watchProgressRepository.getContinueWatchingSourceKey());
     this.continueWatchingHydratedFromSnapshot = Boolean(this.continueWatchingDisplay.length);
     this.continueWatchingLoading = false;
@@ -6613,6 +6642,14 @@ export const HomeScreen = {
     this.layoutMode = String(prefs.homeLayout || "classic").toLowerCase();
     const includeWatchedItemNextUpSeeds = watchProgressRepository.getContinueWatchingSource?.() !== "trakt";
     const watchedItemsPromise = watchedItemsRepository.getAll(2000).catch(() => []);
+    watchedItemsPromise.then((watchedItems) => {
+      if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
+        return;
+      }
+      this.watchedItems = Array.isArray(watchedItems) ? watchedItems : [];
+      this.watchedTitleIds = buildWatchedTitleIdSet(this.watchedItems);
+      this.requestBackgroundRender();
+    });
 
     const preserveContinueWatching = Boolean(background && this.continueWatchingDisplay?.length);
     const hydratedFromSnapshot = Boolean(!background && this.continueWatchingHydratedFromSnapshot && this.continueWatchingDisplay?.length);
@@ -6802,6 +6839,7 @@ export const HomeScreen = {
       this.allProgress = Array.isArray(allProgress) ? allProgress : [];
       this.continueWatching = Array.isArray(continueWatching) ? continueWatching : [];
       this.watchedItems = await watchedItemsPromise;
+      this.watchedTitleIds = buildWatchedTitleIdSet(this.watchedItems);
       if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
         return;
       }
@@ -7204,6 +7242,7 @@ export const HomeScreen = {
         createSeeAllCardMarkup,
         formatCatalogRowTitle,
         shouldDeferRowImages: shouldDeferHomeRowImages,
+        watchedTitleIds: this.watchedTitleIds,
         escapeHtml,
         escapeAttribute
       });
@@ -7225,7 +7264,8 @@ export const HomeScreen = {
         focusedRowKey: focusState?.rowKey || "",
         focusedItemIndex: Number.isFinite(focusState?.itemIndex) ? focusState.itemIndex : -1,
         expandFocusedPoster: false,
-        rowItemLimit
+        rowItemLimit,
+        watchedTitleIds: this.watchedTitleIds
       });
       this.catalogSeeAllMap = legacyRowsPayload.catalogSeeAllMap;
       mainContentMarkup = `
@@ -8295,7 +8335,9 @@ export const HomeScreen = {
               showPosterLabels,
               "modern",
               false,
-              preferLandscape
+              preferLandscape,
+              false,
+              this.watchedTitleIds
             )
           ).join("");
           if (newMarkup && track.isConnected) {

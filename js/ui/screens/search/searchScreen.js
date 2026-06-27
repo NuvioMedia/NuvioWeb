@@ -2,6 +2,7 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { catalogRepository } from "../../../data/repository/catalogRepository.js";
+import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { I18n } from "../../../i18n/index.js";
 import { Platform } from "../../../platform/index.js";
@@ -24,6 +25,11 @@ import {
   PosterOptionsDialogController,
   posterItemFromNode
 } from "../../components/posterOptionsMenu.js";
+import {
+  buildWatchedTitleIdSet,
+  isTitleItemWatched,
+  renderTitleWatchedBadge
+} from "../../components/watchedTitleBadge.js";
 
 const POSTER_HOLD_DELAY_MS = 650;
 const SEARCH_RESULTS_PER_ROW_DEFAULT = 18;
@@ -420,6 +426,11 @@ export const SearchScreen = {
     });
   },
 
+  async refreshWatchedTitleIds() {
+    const watchedItems = await watchedItemsRepository.getAll(5000).catch(() => []);
+    this.watchedTitleIds = buildWatchedTitleIdSet(watchedItems);
+  },
+
   captureLiveViewState() {
     const content = this.container?.querySelector(".search-content");
     if (content) {
@@ -476,6 +487,7 @@ export const SearchScreen = {
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
     this.hydrateFromRouteState(navigationContext?.restoredState || null, params);
+    await this.refreshWatchedTitleIds();
     if (!navigationContext?.isBackNavigation) {
       this.focusZone = "content";
       this.sidebarExpanded = false;
@@ -786,6 +798,7 @@ export const SearchScreen = {
                      data-row-key="${escapeHtml(rowKey)}">
               <div class="search-result-poster-wrap">
                 ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" loading="lazy" decoding="async" />` : `<div class="search-result-poster placeholder"></div>`}
+                ${isTitleItemWatched(item, this.watchedTitleIds) ? renderTitleWatchedBadge() : ""}
               </div>
               <div class="search-result-name">${item.name || "Untitled"}</div>
               <div class="search-result-date">${formatReleaseYear(item)}</div>
@@ -977,7 +990,7 @@ export const SearchScreen = {
           }
         },
         onChanged: () => {
-          this.render();
+          void this.refreshWatchedTitleIds().then(() => this.render());
         }
       });
     }
