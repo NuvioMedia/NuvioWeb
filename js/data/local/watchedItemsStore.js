@@ -79,10 +79,14 @@ export const WatchedItemsStore = {
     const targetContentId = String(contentId || "");
     const targetSeason = normalizeEpisodeNumber(options?.season);
     const targetEpisode = normalizeEpisodeNumber(options?.episode);
+    const rootOnly = options?.rootOnly === true;
     const hasScopedEpisode = targetSeason != null || targetEpisode != null;
     const next = this.listAll().filter((entry) => {
       if (String(entry.profileId || "1") !== pid || entry.contentId !== targetContentId) {
         return true;
+      }
+      if (rootOnly) {
+        return !(entry.season == null && entry.episode == null);
       }
       if (!hasScopedEpisode) {
         return false;

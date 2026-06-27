@@ -211,6 +211,9 @@ async function ensureQrSessionAuthenticated({ forceNewAnonymous = false } = {}) 
       if (refreshed && SessionStore.accessToken && !isJwtExpired(SessionStore.accessToken, 0)) {
         return true;
       }
+      if (AuthManager.wasLastSessionRefreshTransientFailure?.()) {
+        return true;
+      }
     }
     SessionStore.accessToken = null;
     SessionStore.refreshToken = null;
@@ -227,6 +230,9 @@ async function ensureQrSessionAuthenticated({ forceNewAnonymous = false } = {}) 
     }
     const refreshed = await AuthManager.refreshSessionIfNeeded();
     if (refreshed && SessionStore.accessToken && !isJwtExpired(SessionStore.accessToken)) {
+      return true;
+    }
+    if (AuthManager.wasLastSessionRefreshTransientFailure?.()) {
       return true;
     }
     SessionStore.clear();

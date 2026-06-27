@@ -34,6 +34,20 @@ function isJwtExpired(token, leewaySeconds = 30) {
   return exp <= nowSeconds + leewaySeconds;
 }
 
+function isTransientNetworkError(error) {
+  const name = String(error?.name || "").toLowerCase();
+  const message = String(error?.message || error || "").toLowerCase();
+  return (
+    name === "typeerror" ||
+    name === "aborterror" ||
+    message.includes("failed to fetch") ||
+    message.includes("network") ||
+    message.includes("load failed") ||
+    message.includes("internet") ||
+    message.includes("offline")
+  );
+}
+
 class AuthManagerClass {
   constructor() {
     this.state = AuthState.LOADING;
@@ -41,6 +55,7 @@ class AuthManagerClass {
     this.cachedEffectiveUserId = null;
     this.cachedEffectiveUserSourceUserId = null;
     this.refreshPromise = null;
+    this.lastRefreshFailureKind = null;
   }
 
   // ------------------------------------
@@ -92,6 +107,10 @@ class AuthManagerClass {
     return this.state === AuthState.AUTHENTICATED;
   }
 
+  wasLastSessionRefreshTransientFailure() {
+    return this.lastRefreshFailureKind === "transient";
+  }
+
   isAccessTokenExpired(leewaySeconds = 30) {
     return isJwtExpired(SessionStore.accessToken, leewaySeconds);
   }
@@ -132,6 +151,7 @@ class AuthManagerClass {
       return this.refreshPromise;
     }
 
+    this.lastRefreshFailureKind = null;
     const accessToken = SessionStore.accessToken;
     const refreshToken = SessionStore.refreshToken;
     if (!refreshToken) {
@@ -153,19 +173,27 @@ class AuthManagerClass {
           body: JSON.stringify({ refresh_token: refreshToken })
         });
         if (!res.ok) {
+          this.lastRefreshFailureKind = "rejected";
           return false;
         }
         const data = await res.json();
         if (!data?.access_token) {
+          this.lastRefreshFailureKind = "invalid";
           return false;
         }
         SessionStore.accessToken = data.access_token;
         if (data.refresh_token) {
           SessionStore.refreshToken = data.refresh_token;
         }
+        this.lastRefreshFailureKind = null;
         return true;
       } catch (error) {
         console.warn("Session refresh failed", error);
+        if (isTransientNetworkError(error) && accessToken) {
+          this.lastRefreshFailureKind = "transient";
+          return true;
+        }
+        this.lastRefreshFailureKind = "failed";
         return false;
       } finally {
         this.refreshPromise = null;

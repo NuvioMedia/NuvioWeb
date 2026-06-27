@@ -2644,6 +2644,8 @@ export const StreamScreen = {
       itemId: this.params?.itemId || null,
       itemType: itemType || "movie",
       imdbId: this.params?.imdbId || null,
+      tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
+      traktId: this.params?.traktId || this.params?.trakt_id || null,
       videoId: this.params?.videoId || null,
       resumePositionMs,
       resumeProgressPercent,

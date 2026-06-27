@@ -85,7 +85,11 @@ export const ScreenUtils = {
 
     current.classList.remove("focused");
     list[nextIndex].classList.add("focused");
-    list[nextIndex].focus();
+    try {
+      list[nextIndex].focus({ preventScroll: true });
+    } catch (_) {
+      list[nextIndex].focus();
+    }
   },
 
   moveFocusDirectional(container, direction, selector = ".focusable") {
@@ -104,7 +108,11 @@ export const ScreenUtils = {
     if (!current.classList.contains("focused")) {
       list.forEach((node) => node.classList.remove("focused"));
       current.classList.add("focused");
-      current.focus();
+      try {
+        current.focus({ preventScroll: true });
+      } catch (_) {
+        current.focus();
+      }
       return;
     }
 
@@ -217,7 +225,11 @@ export const ScreenUtils = {
 
     current.classList.remove("focused");
     target.classList.add("focused");
-    target.focus();
+    try {
+      target.focus({ preventScroll: true });
+    } catch (_) {
+      target.focus();
+    }
   },
 
   handleDpadNavigation(event, container, selector = ".focusable") {

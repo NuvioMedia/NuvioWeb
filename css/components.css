@@ -4570,6 +4570,9 @@ button:focus-visible {
   --home-track-end: 200px;
   --home-continue-track-end: 48px;
   --home-poster-width: 232px;
+  --home-poster-height: calc(var(--home-poster-width) * 1.5);
+  --home-landscape-poster-width: calc(var(--home-poster-width) * 1.5);
+  --home-landscape-poster-height: calc(var(--home-landscape-poster-width) * 0.5625);
   --home-poster-radius: 24px;
   --home-continue-width: 432px;
   --home-continue-height: 243px;
@@ -6265,6 +6268,18 @@ button:focus-visible {
 
 .home-screen-shell .home-collection-card.is-collection-square .home-poster-frame {
   height: var(--home-poster-height);
+  aspect-ratio: 1 / 1;
+}
+
+.home-screen-shell .home-collection-card.is-collection-landscape {
+  flex-basis: var(--home-landscape-poster-width);
+  min-width: var(--home-landscape-poster-width);
+  max-width: var(--home-landscape-poster-width);
+}
+
+.home-screen-shell .home-collection-card.is-collection-landscape .home-poster-frame {
+  height: var(--home-landscape-poster-height);
+  aspect-ratio: 16 / 9;
 }
 
 .home-screen-shell.home-layout-modern .home-collection-card.is-collection-square {
@@ -17066,6 +17081,14 @@ button:focus-visible {
   height: calc(var(--home-poster-width) * 1.5);
 }
 
+.no-aspect-ratio .home-screen-shell .home-collection-card.is-collection-square .home-poster-frame {
+  height: var(--home-poster-height);
+}
+
+.no-aspect-ratio .home-screen-shell .home-collection-card.is-collection-landscape .home-poster-frame {
+  height: var(--home-landscape-poster-height);
+}
+
 .no-aspect-ratio .home-screen-shell .home-poster-card .content-poster {
   height: 100%;
 }
@@ -19353,6 +19376,16 @@ html.no-css-grid .cast-detail-meta {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.folder-detail-shell:not(.folder-detail-follow-layout) .folder-detail-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  margin: -24px -48px 24px;
+  padding: 24px 48px 18px;
+  background:
+    linear-gradient(180deg, var(--bg-color) 0%, rgb(var(--bg-color-rgb) / 0.96) 72%, rgb(var(--bg-color-rgb) / 0) 100%);
 }
 
 .folder-detail-eyebrow {

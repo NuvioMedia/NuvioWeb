@@ -1802,6 +1802,9 @@ function continueWatchingStreamParams(item, options = {}) {
   return {
     itemId: normalized.contentId,
     itemType: normalized.type || "movie",
+    imdbId: normalized.imdbId || null,
+    tmdbId: normalized.tmdbId || null,
+    traktId: normalized.traktId || null,
     itemTitle: normalized.title || normalized.contentId || "Untitled",
     playerTitle: normalized.title || normalized.contentId || "Untitled",
     playerEpisodeTitle: isSeries ? (normalized.episodeTitle || "") : "",
@@ -4139,6 +4142,9 @@ export const HomeScreen = {
     Router.navigate("detail", {
       itemId: normalized.contentId,
       itemType: normalized.type || (isSeriesTypeForContinueWatching(normalized?.type) ? "series" : "movie"),
+      imdbId: normalized.imdbId || null,
+      tmdbId: normalized.tmdbId || null,
+      traktId: normalized.traktId || null,
       fallbackTitle: normalized.title || normalized.contentId || "Untitled",
       autoOpenContinueWatching: true,
       returnHomeOnBack: true,
@@ -4168,6 +4174,9 @@ export const HomeScreen = {
     Router.navigate("detail", {
       itemId: normalized.contentId,
       itemType: normalized.type || "movie",
+      imdbId: normalized.imdbId || null,
+      tmdbId: normalized.tmdbId || null,
+      traktId: normalized.traktId || null,
       fallbackTitle: normalized.title || normalized.contentId || "Untitled"
     });
     return true;
@@ -5930,6 +5939,33 @@ export const HomeScreen = {
       return;
     }
 
+    if (
+      (direction === "up" || direction === "down")
+      && (Platform.isTizen() || Platform.isWebOS() || this.isPerformanceConstrained())
+    ) {
+      if (this._mainClassicVertRaf) {
+        cancelAnimationFrame(this._mainClassicVertRaf);
+      }
+      const _target = target;
+      const _direction = direction;
+      const _current = current;
+      const _adj = layoutAdjustment;
+      this._mainClassicVertRaf = requestAnimationFrame(() => {
+        this._mainClassicVertRaf = null;
+        if (!_target?.isConnected) {
+          return;
+        }
+        this.applyClassicMainVerticalVisibility(_target, _direction, _current, _adj);
+      });
+      return;
+    }
+
+    this.applyClassicMainVerticalVisibility(target, direction, current, layoutAdjustment);
+  },
+
+  applyClassicMainVerticalVisibility(target, direction = null, current = null, layoutAdjustment = 0) {
+    void direction;
+    void current;
     const main = this.layoutMode === "modern"
       ? this.container?.querySelector(".home-modern-rows-viewport")
       : this.container?.querySelector(".home-main");

@@ -332,6 +332,8 @@ const LANGUAGE_NAME_ALIASES = {
   castellano: "es",
   swedish: "sv",
   svedese: "sv",
+  tamil: "ta",
+  telugu: "te",
   turkish: "tr",
   turco: "tr",
   vietnamese: "vi",
@@ -627,6 +629,33 @@ function getTrackLanguageValue(track = {}) {
     track?.extraInfo?.language
   ];
   return candidates.find((value) => cleanDisplayText(value)) || "";
+}
+
+function inferAudioTrackLanguageKey(track = {}, entry = {}) {
+  const explicit = normalizeTrackLanguageCode(getTrackLanguageValue(track));
+  if (explicit) {
+    return explicit;
+  }
+
+  const candidates = [
+    track?.name,
+    track?.label,
+    track?.title,
+    entry?.label,
+    entry?.secondary,
+    ...getTrackMetadataStrings(track)
+  ];
+  for (const candidate of candidates) {
+    const normalizedCode = normalizeTrackLanguageCode(candidate);
+    if (normalizedCode) {
+      return normalizedCode;
+    }
+    const inferredCode = inferTrackLanguageCodeFromText(candidate);
+    if (inferredCode) {
+      return inferredCode;
+    }
+  }
+  return "";
 }
 
 function getTrackLanguageLabel(track = {}) {
@@ -1620,6 +1649,12 @@ function normalizePlayableTmdbId(value = "") {
   return /^\d+$/.test(numeric) ? Number(numeric) : 0;
 }
 
+function normalizePlayableTraktId(value = "") {
+  const raw = String(value || "").trim();
+  const numeric = raw.replace(/^trakt:/i, "").split(":")[0];
+  return /^\d+$/.test(numeric) ? Number(numeric) : 0;
+}
+
 function buildSkipIntervalLabel(interval = {}) {
   const type = String(interval?.type || "").trim().toLowerCase();
   if (type === "recap") {
@@ -2150,10 +2185,16 @@ export const PlayerScreen = {
       normalizePlayableTmdbId(rawItemId),
       normalizePlayableTmdbId(rawVideoId)
     ].find(Boolean) || 0;
+    const traktId = [
+      normalizePlayableTraktId(this.params?.traktId || this.params?.trakt_id),
+      normalizePlayableTraktId(rawItemId),
+      normalizePlayableTraktId(rawVideoId)
+    ].find(Boolean) || 0;
     return {
       itemType,
       imdbId,
       tmdbId,
+      traktId,
       season: Number.isFinite(season) && season > 0 ? season : null,
       episode: Number.isFinite(episode) && episode > 0 ? episode : null
     };
@@ -2170,6 +2211,7 @@ export const PlayerScreen = {
       contentType: identity.itemType === "series" ? "series" : "movie",
       imdbId: identity.imdbId,
       tmdbId: identity.tmdbId || null,
+      traktId: identity.traktId || null,
       title: String(this.params?.playerTitle || this.params?.itemTitle || this.params?.title || ""),
       year: Number(this.params?.playerReleaseYear || this.params?.releaseYear || this.params?.year || 0) || null,
       seasonNumber: identity.season,
@@ -5157,6 +5199,8 @@ export const PlayerScreen = {
       itemId: this.params?.itemId || null,
       itemType,
       imdbId: this.params?.imdbId || null,
+      tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
+      traktId: this.params?.traktId || this.params?.trakt_id || null,
       returnToDetail: true,
       fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       itemTitle: title,
@@ -5210,6 +5254,9 @@ export const PlayerScreen = {
       itemId: this.params?.itemId || null,
       itemType,
       fallbackTitle: this.params?.playerTitle || this.params?.itemTitle || this.params?.itemId || "Untitled",
+      imdbId: this.params?.imdbId || null,
+      tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
+      traktId: this.params?.traktId || this.params?.trakt_id || null,
       preferredSeason: Number.isFinite(preferredSeason) && preferredSeason > 0 ? preferredSeason : null
     };
   },
@@ -5224,6 +5271,8 @@ export const PlayerScreen = {
       itemId: this.params?.itemId || null,
       itemType,
       imdbId: this.params?.imdbId || null,
+      tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
+      traktId: this.params?.traktId || this.params?.trakt_id || null,
       returnToDetail: true,
       fromDetailRoute: Boolean(this.params?.fromDetailRoute),
       itemTitle: title,
@@ -5534,6 +5583,8 @@ export const PlayerScreen = {
         itemId: this.params?.itemId,
         itemType,
         imdbId: this.params?.imdbId || null,
+        tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
+        traktId: this.params?.traktId || this.params?.trakt_id || null,
         videoId: nextEpisode.videoId,
         season: nextEpisode.season,
         episode: nextEpisode.episode,
@@ -7030,6 +7081,16 @@ export const PlayerScreen = {
       return Number(PlayerController.getPlaybackRate() || 1);
     }
     return Number(PlayerController.video?.playbackRate || 1);
+  },
+
+  getPlaybackSpeedOptions() {
+    if (typeof PlayerController.getSupportedPlaybackRates === "function") {
+      const speeds = PlayerController.getSupportedPlaybackRates();
+      if (Array.isArray(speeds) && speeds.length) {
+        return speeds;
+      }
+    }
+    return PLAYER_SPEEDS;
   },
 
   hasKnownPlaybackDuration() {
@@ -10161,6 +10222,7 @@ export const PlayerScreen = {
       this.embeddedAudioLoading
       || this.manifestLoading
       || this.trackDiscoveryInProgress
+      || this.pendingWebOsAudioSelection
       || this.isTizenAvPlayStartupAudioRetryPending()
       || (!this.getAudioEntries().length && this.isTrackDiscoveryWindowPending())
     );
@@ -10354,12 +10416,7 @@ export const PlayerScreen = {
   collectAudioOptionItems() {
     return this.getAudioEntries().map((entry, index) => {
       const track = entry?.track || {};
-      const languageKey = normalizeTrackLanguageCode(
-        getTrackLanguageValue(track)
-        || track?.label
-        || track?.name
-        || ""
-      );
+      const languageKey = inferAudioTrackLanguageKey(track, entry);
       return {
         id: entry?.id || `audio-option-${index}`,
         label: cleanDisplayText(entry?.label || ""),
@@ -11886,11 +11943,12 @@ export const PlayerScreen = {
 
   openSpeedDialog() {
     const currentSpeed = this.getPlaybackSpeed();
+    const speedOptions = this.getPlaybackSpeedOptions();
     this.speedDialogVisible = true;
     this.subtitleDialogVisible = false;
     this.audioDialogVisible = false;
     this.sourcesPanelVisible = false;
-    this.speedDialogIndex = Math.max(0, PLAYER_SPEEDS.findIndex((value) => value === currentSpeed));
+    this.speedDialogIndex = Math.max(0, speedOptions.findIndex((value) => value === currentSpeed));
     this.renderSubtitleDialog();
     this.renderAudioDialog();
     this.renderSourcesPanel();
@@ -11927,11 +11985,12 @@ export const PlayerScreen = {
       return;
     }
     const currentSpeed = this.getPlaybackSpeed();
-    this.speedDialogIndex = clamp(this.speedDialogIndex, 0, PLAYER_SPEEDS.length - 1);
+    const speedOptions = this.getPlaybackSpeedOptions();
+    this.speedDialogIndex = clamp(this.speedDialogIndex, 0, speedOptions.length - 1);
     dialog.innerHTML = `
       <div class="player-dialog-title">${escapeHtml(t("player_playback_speed", {}, "Playback speed"))}</div>
       <div class="player-dialog-list">
-        ${PLAYER_SPEEDS.map((speed, index) => `
+        ${speedOptions.map((speed, index) => `
           <div class="player-dialog-item focusable${speed === currentSpeed ? " selected" : ""}${index === this.speedDialogIndex ? " focused" : ""}" data-speed-index="${index}">
             <div class="player-dialog-item-main">${escapeHtml(`${speed}x`)}</div>
             <div class="player-dialog-item-sub">${escapeHtml(speed === 1 ? t("common.normal", {}, "Normal") : t("player_playback_speed", {}, "Playback speed"))}</div>
@@ -11944,18 +12003,19 @@ export const PlayerScreen = {
 
   handleSpeedDialogKey(event) {
     const keyCode = Number(event?.keyCode || 0);
+    const speedOptions = this.getPlaybackSpeedOptions();
     if (keyCode === 38) {
-      this.speedDialogIndex = clamp(this.speedDialogIndex - 1, 0, PLAYER_SPEEDS.length - 1);
+      this.speedDialogIndex = clamp(this.speedDialogIndex - 1, 0, speedOptions.length - 1);
       this.renderSpeedDialog();
       return true;
     }
     if (keyCode === 40) {
-      this.speedDialogIndex = clamp(this.speedDialogIndex + 1, 0, PLAYER_SPEEDS.length - 1);
+      this.speedDialogIndex = clamp(this.speedDialogIndex + 1, 0, speedOptions.length - 1);
       this.renderSpeedDialog();
       return true;
     }
     if (isSelectKeyCode(keyCode)) {
-      this.applyPlaybackSpeed(PLAYER_SPEEDS[this.speedDialogIndex] || 1);
+      this.applyPlaybackSpeed(speedOptions[this.speedDialogIndex] || 1);
       return true;
     }
     return keyCode === 37 || keyCode === 38 || keyCode === 39 || keyCode === 40 || isSelectKeyCode(keyCode);
@@ -13300,6 +13360,8 @@ export const PlayerScreen = {
         itemId: this.params?.itemId,
         itemType,
         imdbId: this.params?.imdbId || null,
+        tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
+        traktId: this.params?.traktId || this.params?.trakt_id || null,
         videoId: selected.id,
         season: selected.season ?? null,
         episode: selected.episode ?? null,
@@ -13752,7 +13814,8 @@ export const PlayerScreen = {
 
     const speedNode = target.closest?.("[data-speed-index]");
     if (speedNode && this.speedDialogVisible) {
-      this.applyPlaybackSpeed(PLAYER_SPEEDS[this.speedDialogIndex] || 1);
+      const speedOptions = this.getPlaybackSpeedOptions();
+      this.applyPlaybackSpeed(speedOptions[this.speedDialogIndex] || 1);
       return true;
     }
 

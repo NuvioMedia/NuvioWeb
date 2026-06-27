@@ -42,6 +42,9 @@ function matchesWatchedTarget(item = {}, contentId, options = null) {
     options?.season == null || options?.season === "" ? null : Number(options.season);
   const targetEpisode =
     options?.episode == null || options?.episode === "" ? null : Number(options.episode);
+  if (options?.rootOnly === true) {
+    return item.season == null && item.episode == null;
+  }
   const hasScopedEpisode = targetSeason != null || targetEpisode != null;
   if (!hasScopedEpisode) {
     return true;

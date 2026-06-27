@@ -1,5 +1,6 @@
 import { watchProgressRepository } from "../../data/repository/watchProgressRepository.js";
 import { watchedItemsRepository } from "../../data/repository/watchedItemsRepository.js";
+import { watchedSeriesReconciliationService } from "../../data/repository/watchedSeriesReconciliationService.js";
 import { Platform } from "../../platform/index.js";
 import { WatchProgressSyncService } from "../profile/watchProgressSyncService.js";
 import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
@@ -25,6 +26,10 @@ function logTizenAvPlayDebug(...args) {
 }
 
 function isValidAvPlayTrackSelectionState(state) {
+  return state === "READY" || state === "PLAYING" || state === "PAUSED";
+}
+
+function isValidAvPlayPlaybackSpeedState(state) {
   return state === "READY" || state === "PLAYING" || state === "PAUSED";
 }
 
@@ -107,6 +112,8 @@ export const PlayerController = {
   avplayDisplayRect: null,
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
   startupAudioGateActive: false,
+  desiredPlaybackRate: 1,
+  appliedAvPlayPlaybackRate: 1,
 
   isExpectedPlayInterruption(error) {
     const message = String(error?.message || "").toLowerCase();
@@ -623,6 +630,7 @@ export const PlayerController = {
     try {
       avplay.play?.();
       this.isPlaying = true;
+      this.reapplyAvPlayPlaybackRate();
       this.reapplyTizenAvPlayDisplayRect();
       this.reapplyTizenAvPlayDisplayRect(250);
       this.startAvPlayTickTimer();
@@ -632,6 +640,7 @@ export const PlayerController = {
           if (!this.isUsingAvPlay()) {
             return;
           }
+          this.reapplyAvPlayPlaybackRate();
           this.applyPendingAvPlayAudioTrackSelection();
           this.applyPendingAvPlaySubtitleTrackSelection();
         }, delayMs);
@@ -640,6 +649,7 @@ export const PlayerController = {
         if (!this.isUsingAvPlay()) {
           return;
         }
+        this.reapplyAvPlayPlaybackRate();
         this.applyPendingAvPlayAudioTrackSelection();
         this.applyPendingAvPlaySubtitleTrackSelection();
         if (syncTracks) {
@@ -1819,6 +1829,7 @@ export const PlayerController = {
     this.avplayEnded = false;
     this.avplayCurrentTimeMs = 0;
     this.avplayDurationMs = 0;
+    this.appliedAvPlayPlaybackRate = 1;
   },
 
   configureAvPlayForSource(requestHeaders = {}, sourceType = null) {
@@ -2893,7 +2904,79 @@ export const PlayerController = {
     return applied;
   },
 
+  normalizePlaybackRate(speed = 1) {
+    const targetSpeed = Number(speed || 1);
+    if (!Number.isFinite(targetSpeed) || targetSpeed <= 0) {
+      return NaN;
+    }
+    return targetSpeed;
+  },
+
+  getSupportedPlaybackRates() {
+    if (Platform.isTizen() && this.isUsingAvPlay()) {
+      return [1, 2];
+    }
+    return [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
+  },
+
+  isSupportedAvPlayPlaybackRate(speed = 1) {
+    const targetSpeed = this.normalizePlaybackRate(speed);
+    if (!Number.isFinite(targetSpeed)) {
+      return false;
+    }
+    return [1, 2, 4, 8, 16].includes(targetSpeed);
+  },
+
+  applyAvPlayPlaybackRate(speed = this.desiredPlaybackRate) {
+    if (!this.isUsingAvPlay()) {
+      return false;
+    }
+    const targetSpeed = this.normalizePlaybackRate(speed);
+    if (!this.isSupportedAvPlayPlaybackRate(targetSpeed)) {
+      return false;
+    }
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.setSpeed !== "function") {
+      return false;
+    }
+    const state = this.getAvPlayState();
+    if (!isValidAvPlayPlaybackSpeedState(state)) {
+      return false;
+    }
+    try {
+      avplay.setSpeed(targetSpeed);
+      this.appliedAvPlayPlaybackRate = targetSpeed;
+      logTizenAvPlayDebug("Tizen AVPlay setSpeed succeeded", {
+        speed: targetSpeed,
+        state
+      });
+      return true;
+    } catch (error) {
+      logTizenAvPlayDebug("Tizen AVPlay setSpeed failed", {
+        speed: targetSpeed,
+        state,
+        error: error?.message || String(error || "")
+      });
+      return false;
+    }
+  },
+
+  reapplyAvPlayPlaybackRate() {
+    if (!this.isUsingAvPlay()) {
+      return false;
+    }
+    const targetSpeed = this.normalizePlaybackRate(this.desiredPlaybackRate);
+    if (!Number.isFinite(targetSpeed)) {
+      return false;
+    }
+    return this.applyAvPlayPlaybackRate(targetSpeed);
+  },
+
   getPlaybackRate() {
+    const targetSpeed = this.normalizePlaybackRate(this.desiredPlaybackRate);
+    if (Number.isFinite(targetSpeed)) {
+      return targetSpeed;
+    }
     return Number(this.video?.playbackRate || 1);
   },
 
@@ -2901,11 +2984,24 @@ export const PlayerController = {
     if (!this.video) {
       return false;
     }
-    const targetSpeed = Number(speed || 1);
-    if (!Number.isFinite(targetSpeed) || targetSpeed <= 0) {
+    const targetSpeed = this.normalizePlaybackRate(speed);
+    if (!Number.isFinite(targetSpeed)) {
       return false;
     }
 
+    if (this.isUsingAvPlay()) {
+      if (!this.isSupportedAvPlayPlaybackRate(targetSpeed)) {
+        return false;
+      }
+      const state = this.getAvPlayState();
+      if (isValidAvPlayPlaybackSpeedState(state) && !this.applyAvPlayPlaybackRate(targetSpeed)) {
+        return false;
+      }
+      this.desiredPlaybackRate = targetSpeed;
+      return true;
+    }
+
+    this.desiredPlaybackRate = targetSpeed;
     try {
       this.video.playbackRate = targetSpeed;
     } catch (_) {
@@ -3600,13 +3696,16 @@ export const PlayerController = {
       try {
         avplay.play?.();
         this.isPlaying = true;
+        this.reapplyAvPlayPlaybackRate();
         this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
         setTimeout(() => {
+          this.reapplyAvPlayPlaybackRate();
           this.applyPendingAvPlayAudioTrackSelection();
           this.applyPendingAvPlaySubtitleTrackSelection();
         }, 0);
         setTimeout(() => {
+          this.reapplyAvPlayPlaybackRate();
           this.applyPendingAvPlayAudioTrackSelection();
           this.applyPendingAvPlaySubtitleTrackSelection();
         }, 300);
@@ -3829,6 +3928,17 @@ export const PlayerController = {
           positionMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : Math.max(0, Math.trunc(safePosition)),
           durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : Math.max(0, Math.trunc(safePosition))
         });
+        if (watchedSeriesReconciliationService.isSeriesType(active.itemType)) {
+          void watchedSeriesReconciliationService.reconcile(active.itemId, active.itemType, {
+            title: active.title || active.itemId,
+            completedEpisode: {
+              season: active.season,
+              episode: active.episode
+            }
+          }).catch((error) => {
+            console.warn("Series watched reconciliation failed", error);
+          });
+        }
       } else {
         await watchProgressRepository.removeProgress(active.itemId, active.videoId || null);
       }

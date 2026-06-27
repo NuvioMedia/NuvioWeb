@@ -8,6 +8,7 @@ import { savedLibraryRepository } from "../../../data/repository/savedLibraryRep
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { libraryRepository } from "../../../data/repository/libraryRepository.js";
 import { detailWatchedEnrichmentService } from "../../../data/repository/detailWatchedEnrichmentService.js";
+import { watchedSeriesReconciliationService } from "../../../data/repository/watchedSeriesReconciliationService.js";
 import { TmdbService } from "../../../core/tmdb/tmdbService.js";
 import { TmdbMetadataService } from "../../../core/tmdb/tmdbMetadataService.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
@@ -303,6 +304,40 @@ function resolveMetaImdbId(meta = {}, params = {}) {
   return candidates
     .map((value) => String(value || "").trim().split(":")[0])
     .find((value) => /^tt\d+$/i.test(value)) || null;
+}
+
+function resolveMetaTmdbId(meta = {}, params = {}) {
+  const candidates = [
+    meta?.tmdbId,
+    meta?.tmdb_id,
+    meta?.ids?.tmdb,
+    meta?.externalIds?.tmdb,
+    meta?.external_ids?.tmdb,
+    params?.tmdbId,
+    params?.tmdb_id,
+    meta?.id,
+    params?.itemId
+  ];
+  return candidates
+    .map((value) => String(value || "").trim().replace(/^tmdb:/i, "").split(":")[0])
+    .find((value) => /^\d+$/.test(value)) || null;
+}
+
+function resolveMetaTraktId(meta = {}, params = {}) {
+  const candidates = [
+    meta?.traktId,
+    meta?.trakt_id,
+    meta?.ids?.trakt,
+    meta?.externalIds?.trakt,
+    meta?.external_ids?.trakt,
+    params?.traktId,
+    params?.trakt_id,
+    meta?.id,
+    params?.itemId
+  ];
+  return candidates
+    .map((value) => String(value || "").trim().replace(/^trakt:/i, "").split(":")[0])
+    .find((value) => /^\d+$/.test(value)) || null;
 }
 
 function extractCast(meta = {}) {
@@ -4689,6 +4724,13 @@ export const MetaDetailsScreen = {
         await watchProgressRepository.removeProgress(this.params?.itemId, episode.id);
       }
     }
+    if (isSeriesDetailMeta(this.meta, this.episodes)) {
+      await watchedSeriesReconciliationService.reconcile(
+        this.params?.itemId,
+        this.params?.itemType || this.meta?.type || "series",
+        { meta: this.meta }
+      );
+    }
     await this.refreshEpisodePlaybackState();
     return true;
   },
@@ -4769,6 +4811,21 @@ export const MetaDetailsScreen = {
         episode: episode.episode
       });
       await watchProgressRepository.removeProgress(this.params?.itemId, episode.id);
+    }
+    if (isSeriesDetailMeta(this.meta, this.episodes)) {
+      await watchedSeriesReconciliationService.reconcile(
+        this.params?.itemId,
+        this.params?.itemType || this.meta?.type || "series",
+        {
+          meta: this.meta,
+          completedEpisode: watched
+            ? {
+                season: episode.season,
+                episode: episode.episode
+              }
+            : null
+        }
+      );
     }
     await this.refreshEpisodePlaybackState();
     this.episodeHoldMenu = null;
@@ -6664,6 +6721,8 @@ export const MetaDetailsScreen = {
     const currentIndex = this.episodes.findIndex((entry) => entry.id === pending.videoId);
     const nextEpisode = currentIndex >= 0 ? this.episodes[currentIndex + 1] || null : null;
     const imdbId = resolveMetaImdbId(this.meta, this.params);
+    const tmdbId = resolveMetaTmdbId(this.meta, this.params);
+    const traktId = resolveMetaTraktId(this.meta, this.params);
     const resumeParams = this.getResumeParamsForProgress(
       this.getEpisodeMenuProgress(pending.episode) || this.getActiveResumeProgress()
     );
@@ -6672,6 +6731,8 @@ export const MetaDetailsScreen = {
       itemId: this.params?.itemId,
       itemType: this.params?.itemType || "series",
       imdbId,
+      tmdbId,
+      traktId,
       videoId: pending.videoId,
       season: pending.episode?.season ?? null,
       episode: pending.episode?.episode ?? null,
@@ -6725,10 +6786,14 @@ export const MetaDetailsScreen = {
     const streamBackdrop =
       this.meta?.background || this.meta?.landscapePoster || this.meta?.poster || null;
     const imdbId = resolveMetaImdbId(this.meta, this.params);
+    const tmdbId = resolveMetaTmdbId(this.meta, this.params);
+    const traktId = resolveMetaTraktId(this.meta, this.params);
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
       itemType: "series",
       imdbId,
+      tmdbId,
+      traktId,
       returnToDetail: true,
       fromDetailRoute: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
@@ -6760,10 +6825,14 @@ export const MetaDetailsScreen = {
       this.meta?.background || this.meta?.landscapePoster || this.meta?.poster || null;
     const itemType = resolvePlayableDetailType(this.params?.itemType || this.meta?.type, this.meta);
     const imdbId = resolveMetaImdbId(this.meta, this.params);
+    const tmdbId = resolveMetaTmdbId(this.meta, this.params);
+    const traktId = resolveMetaTraktId(this.meta, this.params);
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
       itemType,
       imdbId,
+      tmdbId,
+      traktId,
       returnToDetail: true,
       fromDetailRoute: true,
       itemTitle: this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Untitled",
@@ -6795,12 +6864,16 @@ export const MetaDetailsScreen = {
       return;
     }
     const imdbId = resolveMetaImdbId(this.meta, this.params);
+    const tmdbId = resolveMetaTmdbId(this.meta, this.params);
+    const traktId = resolveMetaTraktId(this.meta, this.params);
     const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
       itemType: this.params?.itemType || "movie",
       imdbId,
+      tmdbId,
+      traktId,
       season: null,
       episode: null,
       playerTitle:
@@ -8428,7 +8501,22 @@ export const MetaDetailsScreen = {
     if (action === "toggleWatched") {
       const focusRestore = this.captureDetailFocus();
       const isSeries = isSeriesDetailMeta(this.meta, this.episodes);
-      if (this.isMarkedWatched) {
+      if (isSeries) {
+        if (this.isMarkedWatched) {
+          await watchedSeriesReconciliationService.unmarkSeriesWatched(this.params?.itemId, {
+            meta: this.meta
+          });
+        } else {
+          await watchedSeriesReconciliationService.markSeriesWatched(
+            this.params?.itemId,
+            this.params?.itemType || this.meta?.type || "series",
+            {
+              meta: this.meta,
+              title: this.meta?.name || this.params?.fallbackTitle || "Untitled"
+            }
+          );
+        }
+      } else if (this.isMarkedWatched) {
         await watchedItemsRepository.unmark(this.params?.itemId);
         await watchProgressRepository.removeProgress(this.params?.itemId);
       } else {
@@ -8462,6 +8550,8 @@ export const MetaDetailsScreen = {
 
     if (action === "playStream" && current.dataset.streamUrl) {
       const imdbId = resolveMetaImdbId(this.meta, this.params);
+      const tmdbId = resolveMetaTmdbId(this.meta, this.params);
+      const traktId = resolveMetaTraktId(this.meta, this.params);
       const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
       const selectedStream =
         (this.streamItems || []).find(
@@ -8472,6 +8562,8 @@ export const MetaDetailsScreen = {
         itemId: this.params?.itemId,
         itemType: this.params?.itemType,
         imdbId,
+        tmdbId,
+        traktId,
         season: this.nextEpisodeToWatch?.season ?? null,
         episode: this.nextEpisodeToWatch?.episode ?? null,
         playerTitle:

@@ -696,8 +696,9 @@ export const FolderDetailScreen = {
     this.restoredFocusedItem = null;
     this.navModel = { rows: [] };
     this.tabs = [];
+    const preferredHomeLayout = String(this.layoutPrefs?.homeLayout || "classic").toLowerCase();
     this.viewMode = String(this.collection?.viewMode || "TABBED_GRID").toUpperCase();
-    this.useHomeFollowLayout = this.viewMode === "FOLLOW_LAYOUT";
+    this.useHomeFollowLayout = this.viewMode === "FOLLOW_LAYOUT" || preferredHomeLayout === "modern";
     this.folderRouteEnterPending = true;
     this.heroItem = null;
 

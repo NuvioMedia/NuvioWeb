@@ -361,13 +361,9 @@ export const TraktAuthService = {
     const token = await this.getValidAccessToken();
     if (!token) return [];
 
-    const state = TraktAuthStore.get();
-    const userId = state.userSlug || state.username || "me";
-
-    const { response, payload } = await requestJson(
-      `/users/${encodeURIComponent(userId)}/watched/shows?extended=noseasons`,
-      { authorization: `Bearer ${token}` }
-    );
+    const { response, payload } = await requestJson("/sync/watched/shows", {
+      authorization: `Bearer ${token}`
+    });
     if (!response.ok || !Array.isArray(payload)) return [];
 
     return payload.map(normalizeWatchedShowItem).filter(Boolean);
@@ -492,13 +488,24 @@ function normalizePlaybackItem(entry) {
 function normalizeWatchedShowItem(entry) {
   if (!entry || !entry.show?.ids) return null;
   const show = entry.show;
-  const progress = entry.progress?.watched || {};
-  const nextEpisode = entry.next_episode || null;
 
   const tmdbId = show.ids?.tmdb;
   const traktId = show.ids?.trakt;
   const contentId = tmdbId ? `tmdb:${tmdbId}` : traktId ? `trakt:${traktId}` : null;
   if (!contentId) return null;
+
+  const seasons = Array.isArray(entry.seasons)
+    ? entry.seasons.map((season) => ({
+        number: Number(season?.number || 0),
+        episodes: Array.isArray(season?.episodes)
+          ? season.episodes.map((episode) => ({
+              number: Number(episode?.number || 0),
+              plays: Number(episode?.plays || 0),
+              lastWatchedAt: episode?.last_watched_at || null
+            })).filter((episode) => episode.number > 0 && episode.plays > 0)
+          : []
+      })).filter((season) => season.number > 0 && season.episodes.length)
+    : [];
 
   return {
     type: "series",
@@ -508,18 +515,10 @@ function normalizeWatchedShowItem(entry) {
     imdbId: show.ids?.imdb,
     tmdbId,
     traktId,
-    watchedProgress: {
-      progress: Number(progress.progress || 0),
-      aired: Number(progress.aired || 0),
-      completed: Number(progress.completed || 0)
-    },
-    nextEpisode: nextEpisode
-      ? {
-          season: nextEpisode.season,
-          number: nextEpisode.number,
-          title: nextEpisode.title || ""
-        }
-      : null
+    plays: Number(entry.plays || 0),
+    lastWatchedAt: entry.last_watched_at || null,
+    lastUpdatedAt: entry.last_updated_at || null,
+    seasons
   };
 }
 
