@@ -13879,12 +13879,17 @@ button:focus-visible {
   background:
     linear-gradient(
       90deg,
-      rgba(4, 7, 11, 0.94) 0%,
-      rgba(8, 12, 17, 0.72) 45%,
-      rgba(8, 12, 17, 0.36) 68%,
-      rgba(8, 12, 17, 0.2) 100%
+      rgba(6, 9, 14, 0.96) 0%,
+      rgba(6, 9, 14, 0.86) 45%,
+      rgba(6, 9, 14, 0.66) 72%,
+      rgba(6, 9, 14, 0.5) 100%
     ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.85));
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.4) 0%,
+      rgba(0, 0, 0, 0.18) 38%,
+      rgba(0, 0, 0, 0.9) 100%
+    );
 }
 
 .movie-detail-content {
@@ -14554,20 +14559,22 @@ button:focus-visible {
   left: 0;
   inset: 0;
   z-index: 0;
-  /* Android TV BackdropLayer leftGradient: fadeWidth = 78% of screen. */
-  background: linear-gradient(
-    90deg,
-    rgb(var(--bg-color-rgb) / 1) 0%,
-    rgb(var(--bg-color-rgb) / 0.95) 7.8%,
-    rgb(var(--bg-color-rgb) / 0.84) 17.16%,
-    rgb(var(--bg-color-rgb) / 0.7) 28.08%,
-    rgb(var(--bg-color-rgb) / 0.52) 40.56%,
-    rgb(var(--bg-color-rgb) / 0.34) 51.48%,
-    rgb(var(--bg-color-rgb) / 0.18) 60.84%,
-    rgb(var(--bg-color-rgb) / 0.07) 70.2%,
-    rgb(var(--bg-color-rgb) / 0) 78%,
-    rgb(var(--bg-color-rgb) / 0) 100%
-  );
+  /* Stronger scrim that never fully fades, so detail info/genres stay readable
+     over light backdrops. Classic rgba() for old Tizen/webOS browsers. */
+  background:
+    linear-gradient(
+      90deg,
+      rgba(6, 9, 14, 0.96) 0%,
+      rgba(6, 9, 14, 0.86) 45%,
+      rgba(6, 9, 14, 0.66) 72%,
+      rgba(6, 9, 14, 0.5) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.4) 0%,
+      rgba(0, 0, 0, 0.18) 38%,
+      rgba(0, 0, 0, 0.9) 100%
+    );
   transition: opacity 800ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -15693,12 +15700,17 @@ button:focus-visible {
   background:
     linear-gradient(
       90deg,
-      rgba(5, 9, 14, 0.9) 0%,
-      rgba(7, 11, 16, 0.72) 44%,
-      rgba(7, 11, 16, 0.44) 70%,
-      rgba(7, 11, 16, 0.3) 100%
+      rgba(6, 9, 14, 0.96) 0%,
+      rgba(6, 9, 14, 0.86) 45%,
+      rgba(6, 9, 14, 0.66) 72%,
+      rgba(6, 9, 14, 0.5) 100%
     ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.72));
+    linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.4) 0%,
+      rgba(0, 0, 0, 0.2) 40%,
+      rgba(0, 0, 0, 0.82) 100%
+    );
 }
 
 .stream-screen-panel {
