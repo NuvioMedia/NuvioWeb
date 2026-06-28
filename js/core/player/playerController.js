@@ -312,6 +312,9 @@ export const PlayerController = {
   },
 
   canUseAvPlay() {
+    if (Platform.isWebOS()) {
+      return false;
+    }
     return this.getPlatformAvplayEngine().isSupported();
   },
 

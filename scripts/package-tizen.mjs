@@ -240,6 +240,10 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
   } else {
     await cp(path.join(distDir, "nuvio.env.js"), path.join(stagingDir, "nuvio.env.js"));
   }
+
+  if (await pathExists(path.join(distDir, "app.bundle.js.map"))) {
+    await cp(path.join(distDir, "app.bundle.js.map"), path.join(stagingDir, "app.bundle.js.map"));
+  }
 }
 
 async function addDirectoryToZip(zip, dir, baseDir = dir) {

@@ -1,6 +1,6 @@
+import "./runtime/polyfills.js";
 import "core-js/stable/url";
 import "core-js/stable/url-search-params";
-import "./runtime/polyfills.js";
 import "intersection-observer";
 import "whatwg-fetch";
 import { detailWatchedEnrichmentService } from "./data/repository/detailWatchedEnrichmentService.js";

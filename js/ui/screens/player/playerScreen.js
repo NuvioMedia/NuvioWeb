@@ -7570,7 +7570,7 @@ export const PlayerScreen = {
     this.renderSeekOverlay();
   },
 
-  togglePause() {
+  togglePause({ focusControls = true } = {}) {
     const preserveProgressFocus = this.controlFocusZone === "progress";
     if (this.isExternalFrameMode()) {
       return;
@@ -7591,7 +7591,10 @@ export const PlayerScreen = {
     PlayerController.pause();
     this.paused = true;
     this.updateMediaSessionPlaybackState();
-    this.setControlsVisible(true, { focus: !preserveProgressFocus });
+    if (!focusControls && !preserveProgressFocus) {
+      this.controlFocusZone = "";
+    }
+    this.setControlsVisible(true, { focus: focusControls && !preserveProgressFocus });
     if (preserveProgressFocus) {
       this.controlFocusZone = "progress";
     }
@@ -13900,6 +13903,10 @@ export const PlayerScreen = {
       return true;
     }
 
+    if (this.loadingVisible && !this.hasPresentedPlaybackFrame) {
+      return this.navigateBackToStreamScreen();
+    }
+
     if (this.pauseOverlayVisible || this.pauseOverlayTimer) {
       this.dismissPauseOverlay({ revealControls: false, focus: false });
     }
@@ -14122,10 +14129,15 @@ export const PlayerScreen = {
         return;
       }
       if (isSelectKeyCode(keyCode)) {
+        event?.stopPropagation?.();
+        event?.stopImmediatePropagation?.();
         this.autoHideControlsAfterSeek = false;
-        this.cancelSeekPreview({ commit: true });
-        this.setControlsVisible(true, { focus: true });
-        this.togglePause();
+        if (this.seekPreviewSeconds != null) {
+          this.cancelSeekPreview({ commit: true });
+        } else if (this.seekOverlayVisible) {
+          this.cancelSeekPreview({ commit: false });
+        }
+        this.togglePause({ focusControls: false });
         this.renderControlButtons();
       }
       return;

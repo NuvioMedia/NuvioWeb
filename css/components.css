@@ -11432,12 +11432,12 @@ button:focus-visible {
 .tizen-tv .player-pause-overlay-content {
   left: 56px;
   right: 56px;
-  top: 126px;
-  bottom: 64px;
-  transform: none;
+  top: 50%;
+  bottom: auto;
+  transform: translateY(-50%);
   display: block;
   max-width: calc(100vw - 112px);
-  max-height: calc(100vh - 190px);
+  max-height: calc(100vh - 160px);
   overflow: hidden;
 }
 
@@ -11505,7 +11505,8 @@ button:focus-visible {
 .tizen-tv .player-pause-cast-row {
   display: block;
   margin-top: 10px;
-  max-height: 54px;
+  min-height: 56px;
+  max-height: 56px;
   white-space: nowrap;
   overflow: hidden;
 }
@@ -11541,10 +11542,11 @@ button:focus-visible {
   .tizen-tv .player-pause-overlay-content {
     left: 40px;
     right: 40px;
-    top: 96px;
-    bottom: 42px;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
     max-width: calc(100vw - 80px);
-    max-height: calc(100vh - 138px);
+    max-height: calc(100vh - 116px);
   }
 
   .legacy-tizen .player-pause-title,
@@ -19631,7 +19633,7 @@ html.no-css-grid .cast-detail-meta {
 .series-detail-actions {
   gap: var(--detail-action-gap);
   padding: 6px;
-  margin: -6px -6px 30px;
+  margin: 0 0 30px;
 }
 
 .series-primary-btn {

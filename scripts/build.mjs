@@ -20,6 +20,7 @@ const tempBundlePath = path.join(cacheDir, "__app.bundle.build.js");
 const requireConfiguredRuntimeEnv = /^(1|true|yes|on)$/i.test(
   String(process.env.NUVIO_REQUIRE_LOCAL_PROPERTIES || "")
 );
+const debugBundle = /^(1|true|yes|on)$/i.test(String(process.env.NUVIO_DEBUG_BUNDLE || ""));
 const legacyViewport = {
   width: 1920,
   height: 1080,
@@ -522,8 +523,9 @@ async function buildBundle() {
       "@babel/plugin-transform-optional-chaining",
       "@babel/plugin-transform-nullish-coalescing-operator"
     ],
-    compact: true,
-    minified: true
+    compact: !debugBundle,
+    minified: !debugBundle,
+    sourceMaps: debugBundle
   });
 
   // save result back to the temporary bundle file (which will be the input for esbuild)
@@ -536,8 +538,9 @@ async function buildBundle() {
     entryPoints: [tempBundlePath],
     outfile: path.join(distDir, bundleFileName),
     bundle: true,
-    minify: true,
+    minify: !debugBundle,
     format: "iife",
+    sourcemap: debugBundle,
     target: ["es5"],
     supported: {
       arrow: false,

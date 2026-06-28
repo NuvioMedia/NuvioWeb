@@ -2668,6 +2668,7 @@ export const MetaDetailsScreen = {
 
   renderSeriesLayout(meta) {
     const backdrop = meta.background || meta.poster || "";
+    const heroMarkup = this.renderSeriesHeroMarkup(meta);
     if (!this.selectedRatingSeason || !this.seriesRatingsBySeason?.[this.selectedRatingSeason]) {
       this.selectedRatingSeason = this.selectedSeason || this.episodes?.[0]?.season || 1;
     }
@@ -2681,7 +2682,7 @@ export const MetaDetailsScreen = {
         <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content">
-          <div id="detailHeroSection">${this.renderSeriesHeroMarkup(meta)}</div>
+          <div id="detailHeroSection">${heroMarkup}</div>
           <div id="detailSeasonRowMount">
             <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
           </div>
@@ -2701,6 +2702,7 @@ export const MetaDetailsScreen = {
     if (!this.pendingFocusRestore) {
       ScreenUtils.setInitialFocus(this.container);
     }
+    this._detailHeroMarkup = heroMarkup;
     this.bindDetailChrome();
     this.scheduleEpisodeVirtualizationSync(this.getRememberedEpisodeIndex());
   },
@@ -2971,6 +2973,7 @@ export const MetaDetailsScreen = {
 
   renderMovieLayout(meta) {
     const backdrop = meta.background || meta.poster || "";
+    const heroMarkup = this.renderMovieHeroMarkup(meta);
 
     this.container.innerHTML = `
       <div class="series-detail-shell movie-detail-shell${this.getTrailerShellStateClasses()}">
@@ -2981,7 +2984,7 @@ export const MetaDetailsScreen = {
         <div class="detail-bottom-shadow"></div>
 
         <div class="series-detail-content movie-detail-content">
-          <div id="detailHeroSection">${this.renderMovieHeroMarkup(meta)}</div>
+          <div id="detailHeroSection">${heroMarkup}</div>
           <div id="detailInsightSectionMount">${this.renderMovieInsightSection(meta)}</div>
           <div id="detailCommentsSectionMount">${this.renderStandaloneCommentsSection()}</div>
           <div id="detailCompanySectionsMount">${this.renderCompanySections(meta)}</div>
@@ -2994,6 +2997,7 @@ export const MetaDetailsScreen = {
     if (!this.pendingFocusRestore) {
       ScreenUtils.setInitialFocus(this.container, ".movie-detail-content .focusable");
     }
+    this._detailHeroMarkup = heroMarkup;
     this.bindDetailChrome();
   },
 
@@ -3076,9 +3080,13 @@ export const MetaDetailsScreen = {
 
     const heroMount = this.container.querySelector("#detailHeroSection");
     if (heroMount) {
-      heroMount.innerHTML = isSeries
+      const heroMarkup = isSeries
         ? this.renderSeriesHeroMarkup(meta)
         : this.renderMovieHeroMarkup(meta);
+      if (heroMarkup !== this._detailHeroMarkup) {
+        heroMount.innerHTML = heroMarkup;
+        this._detailHeroMarkup = heroMarkup;
+      }
     }
 
     const seasonMount = this.container.querySelector("#detailSeasonRowMount");
