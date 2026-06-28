@@ -1318,6 +1318,10 @@ export const StreamScreen = {
       {
         itemId,
         itemType: normalizeType(this.params?.itemType),
+        imdbId: this.params?.imdbId || null,
+        tmdbId: this.params?.tmdbId || null,
+        traktId: this.params?.traktId || null,
+        originalItemId: this.params?.originalItemId || null,
         fallbackTitle: this.params?.itemTitle || this.params?.playerTitle || "Untitled",
         returnHomeOnBack: Boolean(
           this.params?.continueWatchingBackHome ||

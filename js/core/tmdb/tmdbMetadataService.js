@@ -21,7 +21,7 @@ function toImageUrl(path) {
 }
 
 function normalizeTmdbArtworkLanguage(language = "") {
-  const normalized = String(language || "en-US")
+  const normalized = String(language || "en")
     .trim()
     .replace(/_/g, "-");
   const [rawLanguage = "en", rawRegion = ""] = normalized.split("-", 2);
@@ -186,16 +186,36 @@ function mapCompanies(items = []) {
     .filter((company) => company.name || company.logo);
 }
 
+function selectAgeRating(data = {}, type = "movie") {
+  if (type === "tv") {
+    const ratings = Array.isArray(data?.content_ratings?.results)
+      ? data.content_ratings.results
+      : [];
+    const preferred =
+      ratings.find((item) => String(item?.iso_3166_1 || "").toUpperCase() === "US") ||
+      ratings.find((item) => String(item?.rating || "").trim());
+    return String(preferred?.rating || "").trim() || null;
+  }
+  const releases = Array.isArray(data?.release_dates?.results) ? data.release_dates.results : [];
+  const preferred =
+    releases.find((item) => String(item?.iso_3166_1 || "").toUpperCase() === "US") ||
+    releases.find((item) => Array.isArray(item?.release_dates) && item.release_dates.length);
+  const certification = (Array.isArray(preferred?.release_dates) ? preferred.release_dates : [])
+    .map((entry) => String(entry?.certification || "").trim())
+    .find(Boolean);
+  return certification || null;
+}
+
 export const TmdbMetadataService = {
   async fetchEnrichment({ tmdbId, contentType, language = null } = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
+    const apiKey = String(TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey || !tmdbId) {
       return null;
     }
 
     const type = resolveType(contentType);
-    const lang = language || settings.language || "en-US";
+    const lang = language || settings.language || "en";
     const imageLanguages = buildTmdbImageLanguageFilter(lang);
     const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos,external_ids&include_image_language=${encodeURIComponent(imageLanguages)}`;
     const url = `${TMDB_BASE_URL}/${type}/${encodeURIComponent(String(tmdbId))}?${params}`;
@@ -249,6 +269,8 @@ export const TmdbMetadataService = {
       releaseInfo: releaseYear || null,
       released: type === "tv" ? data.first_air_date || null : data.release_date || null,
       runtime: Number.isFinite(runtimeValue) && runtimeValue > 0 ? `${runtimeValue} min` : null,
+      status: data?.status || null,
+      ageRating: selectAgeRating(data, type),
       country: countryValue || null,
       language: spokenLanguage?.iso_639_1 || spokenLanguage?.english_name || null,
       imdbId: data?.external_ids?.imdb_id || null,
@@ -265,12 +287,12 @@ export const TmdbMetadataService = {
 
   async fetchSeasonRatings({ tmdbId, seasonNumber, language = null } = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
+    const apiKey = String(TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey || !tmdbId || !Number.isFinite(Number(seasonNumber))) {
       return [];
     }
 
-    const lang = language || settings.language || "en-US";
+    const lang = language || settings.language || "en";
     const url = `${TMDB_BASE_URL}/tv/${encodeURIComponent(String(tmdbId))}/season/${encodeURIComponent(String(seasonNumber))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}`;
     const response = await fetch(url);
     if (!response.ok) {
@@ -287,14 +309,57 @@ export const TmdbMetadataService = {
       .filter((item) => item.episode > 0);
   },
 
+  async fetchEpisodeEnrichment({ tmdbId, seasonNumbers = [], language = null } = {}) {
+    const settings = TmdbSettingsStore.get();
+    const apiKey = String(TMDB_API_KEY || "").trim();
+    if (!settings.enabled || !settings.useEpisodes || !apiKey || !tmdbId) {
+      return new Map();
+    }
+
+    const lang = language || settings.language || "en";
+    const seasons = [...new Set((Array.isArray(seasonNumbers) ? seasonNumbers : [])
+      .map((season) => Number(season || 0))
+      .filter((season) => Number.isFinite(season) && season > 0))];
+    if (!seasons.length) {
+      return new Map();
+    }
+
+    const entries = await Promise.all(
+      seasons.map(async (seasonNumber) => {
+        const url = `${TMDB_BASE_URL}/tv/${encodeURIComponent(String(tmdbId))}/season/${encodeURIComponent(String(seasonNumber))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+          return [];
+        }
+        const data = await response.json();
+        return (Array.isArray(data?.episodes) ? data.episodes : [])
+          .map((episode) => ({
+            key: `${seasonNumber}:${Number(episode?.episode_number || 0)}`,
+            title: episode?.name || "",
+            overview: episode?.overview || "",
+            airDate: episode?.air_date || "",
+            thumbnail: toImageUrl(episode?.still_path || null),
+            runtime: Number(episode?.runtime || 0) || null
+          }))
+          .filter((episode) => !episode.key.endsWith(":0"));
+      })
+    );
+
+    const map = new Map();
+    entries.flat().forEach((episode) => {
+      map.set(episode.key, episode);
+    });
+    return map;
+  },
+
   async fetchMovieCollection({ collectionId, language = null } = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
+    const apiKey = String(TMDB_API_KEY || "").trim();
     if (!settings.enabled || !apiKey || !collectionId) {
       return [];
     }
 
-    const lang = language || settings.language || "en-US";
+    const lang = language || settings.language || "en";
     const url = `${TMDB_BASE_URL}/collection/${encodeURIComponent(String(collectionId))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}`;
     const response = await fetch(url);
     if (!response.ok) {
@@ -303,13 +368,46 @@ export const TmdbMetadataService = {
     const data = await response.json();
     return (Array.isArray(data?.parts) ? data.parts : [])
       .map((item) => ({
-        id: item?.id ? String(item.id) : "",
+        id: item?.id ? `tmdb:${String(item.id)}` : "",
         type: "movie",
         name: item?.title || item?.name || "Untitled",
         poster: toImageUrl(item?.poster_path || null),
         background: toImageUrl(item?.backdrop_path || null),
         landscapePoster: toImageUrl(item?.backdrop_path || null),
         releaseInfo: String(item?.release_date || "").slice(0, 4) || ""
+      }))
+      .filter((item) => item.id);
+  },
+
+  async fetchRecommendations({ tmdbId, contentType, language = null } = {}) {
+    const settings = TmdbSettingsStore.get();
+    const apiKey = String(TMDB_API_KEY || "").trim();
+    if (!settings.enabled || !settings.useMoreLikeThis || !apiKey || !tmdbId) {
+      return [];
+    }
+
+    const type = resolveType(contentType);
+    const lang = language || settings.language || "en";
+    const url = `${TMDB_BASE_URL}/${type}/${encodeURIComponent(String(tmdbId))}/recommendations?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&page=1`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      return [];
+    }
+    const data = await response.json();
+    return (Array.isArray(data?.results) ? data.results : [])
+      .map((item) => ({
+        id: item?.id ? `tmdb:${String(item.id)}` : "",
+        type: type === "tv" ? "series" : "movie",
+        name: item?.title || item?.name || "Untitled",
+        poster: toImageUrl(item?.poster_path || null),
+        background: toImageUrl(item?.backdrop_path || null),
+        backdrop: toImageUrl(item?.backdrop_path || null),
+        landscapePoster: toImageUrl(item?.backdrop_path || null),
+        description: item?.overview || "",
+        releaseInfo:
+          String(type === "tv" ? item?.first_air_date || "" : item?.release_date || "").slice(0, 4) ||
+          "",
+        tmdbRating: typeof item?.vote_average === "number" ? Number(item.vote_average.toFixed(1)) : null
       }))
       .filter((item) => item.id);
   }

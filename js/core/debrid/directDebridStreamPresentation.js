@@ -160,15 +160,7 @@ const DEFAULT_AUDIO_TAG_ORDER = [
 ];
 const DEFAULT_AUDIO_CHANNEL_ORDER = ["CH_7_1", "CH_6_1", "CH_5_1", "CH_2_0", "UNKNOWN"];
 const DEFAULT_ENCODE_ORDER = ["AV1", "HEVC", "AVC", "XVID", "DIVX", "UNKNOWN"];
-const DEFAULT_SORT_CRITERIA = [
-  { key: "RESOLUTION", direction: "DESC" },
-  { key: "QUALITY", direction: "DESC" },
-  { key: "VISUAL_TAG", direction: "DESC" },
-  { key: "AUDIO_TAG", direction: "DESC" },
-  { key: "AUDIO_CHANNEL", direction: "DESC" },
-  { key: "ENCODE", direction: "DESC" },
-  { key: "SIZE", direction: "DESC" }
-];
+const ORIGINAL_SORT_CRITERIA = [];
 
 function isMagnet(value) {
   return String(value || "")
@@ -502,7 +494,7 @@ function effectiveSettings(settings = {}) {
     excludedLanguages: [],
     requiredReleaseGroups: [],
     excludedReleaseGroups: [],
-    sortCriteria: DEFAULT_SORT_CRITERIA
+    sortCriteria: ORIGINAL_SORT_CRITERIA
   };
   if (preferences) {
     return {
@@ -513,10 +505,9 @@ function effectiveSettings(settings = {}) {
       maxPerQuality: Number(preferences.maxPerQuality ?? 0) || 0,
       sizeMinGb: Number(preferences.sizeMinGb ?? 0) || 0,
       sizeMaxGb: Number(preferences.sizeMaxGb ?? 0) || 0,
-      sortCriteria:
-        Array.isArray(preferences.sortCriteria) && preferences.sortCriteria.length
-          ? preferences.sortCriteria
-          : DEFAULT_SORT_CRITERIA
+      sortCriteria: Array.isArray(preferences.sortCriteria)
+        ? preferences.sortCriteria
+        : ORIGINAL_SORT_CRITERIA
     };
   }
   const minQuality = String(settings.streamMinimumQuality || "ANY").toUpperCase();
@@ -718,7 +709,7 @@ function compareStreams(left, right, preferences) {
   const criteria =
     Array.isArray(preferences.sortCriteria) && preferences.sortCriteria.length
       ? preferences.sortCriteria
-      : DEFAULT_SORT_CRITERIA;
+      : ORIGINAL_SORT_CRITERIA;
   for (const criterion of criteria) {
     const comparison = compareKey(left.fact, right.fact, criterion, preferences);
     if (comparison !== 0) {
@@ -1031,9 +1022,11 @@ export const DebridStreamPresentation = {
       const passthrough = visibleStreams.filter((stream) => !isManagedDebridStream(stream));
       const presented = managed
         .map((stream) => ({ stream, fact: facts(stream) }))
-        .filter((entry) => matchesFilters(entry.fact, effective))
-        .sort((left, right) => compareStreams(left, right, effective));
-      const limited = applyLimits(presented, effective).map((entry) =>
+        .filter((entry) => matchesFilters(entry.fact, effective));
+      const ordered = effective.sortCriteria.length
+        ? presented.sort((left, right) => compareStreams(left, right, effective))
+        : presented;
+      const limited = applyLimits(ordered, effective).map((entry) =>
         formatManagedStream(entry.stream, entry.fact, settings)
       );
       return {

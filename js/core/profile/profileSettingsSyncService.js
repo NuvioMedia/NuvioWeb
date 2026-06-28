@@ -16,7 +16,8 @@ import { StreamBadgeSettingsStore } from "../../data/local/streamBadgeSettingsSt
 import { TorrentSettingsStore } from "../../data/local/torrentSettingsStore.js";
 import {
   ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE,
-  DebridSettingsStore
+  DebridSettingsStore,
+  normalizeDebridStreamPreferences
 } from "../../data/local/debridSettingsStore.js";
 import {
   parseStreamBadgeRulesFromPayload,
@@ -456,7 +457,7 @@ function normalizeContinueWatchingSortModeForWeb(value) {
 }
 
 function normalizeTmdbLanguageForAndroid(value) {
-  const normalized = String(value || "en-US").trim();
+  const normalized = String(value || "en").trim();
   if (!normalized) {
     return "en";
   }
@@ -468,13 +469,13 @@ function normalizeTmdbLanguageForWeb(value) {
     .trim()
     .replace(/_/g, "-");
   if (!normalized) {
-    return "en-US";
+    return "en";
   }
 
   switch (normalized.toLowerCase()) {
     case "en":
     case "en-us":
-      return "en-US";
+      return "en";
     case "en-au":
       return "en-AU";
     case "en-ca":
@@ -1064,22 +1065,45 @@ const FEATURE_ADAPTERS = {
       const settings = TmdbSettingsStore.getForProfile(profileId);
       return {
         tmdb_enabled: Boolean(settings.enabled),
+        tmdb_modern_home_enabled: Boolean(settings.modernHomeEnabled),
+        tmdb_enrich_continue_watching: settings.enrichContinueWatching !== false,
         tmdb_language: normalizeTmdbLanguageForAndroid(settings.language),
         tmdb_use_artwork: settings.useArtwork !== false,
         tmdb_use_basic_info: settings.useBasicInfo !== false,
-        tmdb_use_details: settings.useDetails !== false
+        tmdb_use_details: settings.useDetails !== false,
+        tmdb_use_release_dates: settings.useReleaseDates !== false,
+        tmdb_use_credits: settings.useCredits !== false,
+        tmdb_use_productions: settings.useProductions !== false,
+        tmdb_use_networks: settings.useNetworks !== false,
+        tmdb_use_episodes: settings.useEpisodes !== false,
+        tmdb_use_trailers: settings.useTrailers !== false,
+        tmdb_use_more_like_this: settings.useMoreLikeThis !== false,
+        tmdb_use_collections: settings.useCollections !== false
       };
     },
     project(rawFeature = {}) {
       const raw = normalizeFeaturePayload(rawFeature);
       const projected = {};
-      ["tmdb_enabled", "tmdb_use_artwork", "tmdb_use_basic_info", "tmdb_use_details"].forEach(
-        (key) => {
-          if (booleanOrNull(raw[key]) != null) {
-            projected[key] = Boolean(raw[key]);
-          }
+      [
+        "tmdb_enabled",
+        "tmdb_modern_home_enabled",
+        "tmdb_enrich_continue_watching",
+        "tmdb_use_artwork",
+        "tmdb_use_basic_info",
+        "tmdb_use_details",
+        "tmdb_use_release_dates",
+        "tmdb_use_credits",
+        "tmdb_use_productions",
+        "tmdb_use_networks",
+        "tmdb_use_episodes",
+        "tmdb_use_trailers",
+        "tmdb_use_more_like_this",
+        "tmdb_use_collections"
+      ].forEach((key) => {
+        if (booleanOrNull(raw[key]) != null) {
+          projected[key] = Boolean(raw[key]);
         }
-      );
+      });
       if (stringOrNull(raw.tmdb_language)) {
         projected.tmdb_language = normalizeTmdbLanguageForAndroid(raw.tmdb_language);
       }
@@ -1090,6 +1114,12 @@ const FEATURE_ADAPTERS = {
       const partial = {};
       if (booleanOrNull(raw.tmdb_enabled) != null) {
         partial.enabled = Boolean(raw.tmdb_enabled);
+      }
+      if (booleanOrNull(raw.tmdb_modern_home_enabled) != null) {
+        partial.modernHomeEnabled = Boolean(raw.tmdb_modern_home_enabled);
+      }
+      if (booleanOrNull(raw.tmdb_enrich_continue_watching) != null) {
+        partial.enrichContinueWatching = Boolean(raw.tmdb_enrich_continue_watching);
       }
       if (stringOrNull(raw.tmdb_language)) {
         partial.language = normalizeTmdbLanguageForWeb(raw.tmdb_language);
@@ -1103,6 +1133,30 @@ const FEATURE_ADAPTERS = {
       if (booleanOrNull(raw.tmdb_use_details) != null) {
         partial.useDetails = Boolean(raw.tmdb_use_details);
       }
+      if (booleanOrNull(raw.tmdb_use_release_dates) != null) {
+        partial.useReleaseDates = Boolean(raw.tmdb_use_release_dates);
+      }
+      if (booleanOrNull(raw.tmdb_use_credits) != null) {
+        partial.useCredits = Boolean(raw.tmdb_use_credits);
+      }
+      if (booleanOrNull(raw.tmdb_use_productions) != null) {
+        partial.useProductions = Boolean(raw.tmdb_use_productions);
+      }
+      if (booleanOrNull(raw.tmdb_use_networks) != null) {
+        partial.useNetworks = Boolean(raw.tmdb_use_networks);
+      }
+      if (booleanOrNull(raw.tmdb_use_episodes) != null) {
+        partial.useEpisodes = Boolean(raw.tmdb_use_episodes);
+      }
+      if (booleanOrNull(raw.tmdb_use_trailers) != null) {
+        partial.useTrailers = Boolean(raw.tmdb_use_trailers);
+      }
+      if (booleanOrNull(raw.tmdb_use_more_like_this) != null) {
+        partial.useMoreLikeThis = Boolean(raw.tmdb_use_more_like_this);
+      }
+      if (booleanOrNull(raw.tmdb_use_collections) != null) {
+        partial.useCollections = Boolean(raw.tmdb_use_collections);
+      }
       if (!Object.keys(partial).length) {
         return false;
       }
@@ -1115,7 +1169,14 @@ const FEATURE_ADAPTERS = {
       const settings = MdbListSettingsStore.getForProfile(profileId);
       return {
         mdblist_enabled: Boolean(settings.enabled),
-        mdblist_api_key: String(settings.apiKey || "").trim()
+        mdblist_api_key: String(settings.apiKey || "").trim(),
+        mdblist_show_trakt: settings.showTrakt !== false,
+        mdblist_show_imdb: settings.showImdb !== false,
+        mdblist_show_tmdb: settings.showTmdb !== false,
+        mdblist_show_letterboxd: settings.showLetterboxd !== false,
+        mdblist_show_tomatoes: settings.showTomatoes !== false,
+        mdblist_show_audience: settings.showAudience !== false,
+        mdblist_show_metacritic: settings.showMetacritic !== false
       };
     },
     project(rawFeature = {}) {
@@ -1127,6 +1188,19 @@ const FEATURE_ADAPTERS = {
       if (raw.mdblist_api_key != null) {
         projected.mdblist_api_key = String(raw.mdblist_api_key || "").trim();
       }
+      [
+        "mdblist_show_trakt",
+        "mdblist_show_imdb",
+        "mdblist_show_tmdb",
+        "mdblist_show_letterboxd",
+        "mdblist_show_tomatoes",
+        "mdblist_show_audience",
+        "mdblist_show_metacritic"
+      ].forEach((key) => {
+        if (booleanOrNull(raw[key]) != null) {
+          projected[key] = Boolean(raw[key]);
+        }
+      });
       return projected;
     },
     import(profileId, rawFeature = {}) {
@@ -1137,6 +1211,27 @@ const FEATURE_ADAPTERS = {
       }
       if (raw.mdblist_api_key != null) {
         partial.apiKey = String(raw.mdblist_api_key || "").trim();
+      }
+      if (booleanOrNull(raw.mdblist_show_trakt) != null) {
+        partial.showTrakt = Boolean(raw.mdblist_show_trakt);
+      }
+      if (booleanOrNull(raw.mdblist_show_imdb) != null) {
+        partial.showImdb = Boolean(raw.mdblist_show_imdb);
+      }
+      if (booleanOrNull(raw.mdblist_show_tmdb) != null) {
+        partial.showTmdb = Boolean(raw.mdblist_show_tmdb);
+      }
+      if (booleanOrNull(raw.mdblist_show_letterboxd) != null) {
+        partial.showLetterboxd = Boolean(raw.mdblist_show_letterboxd);
+      }
+      if (booleanOrNull(raw.mdblist_show_tomatoes) != null) {
+        partial.showTomatoes = Boolean(raw.mdblist_show_tomatoes);
+      }
+      if (booleanOrNull(raw.mdblist_show_audience) != null) {
+        partial.showAudience = Boolean(raw.mdblist_show_audience);
+      }
+      if (booleanOrNull(raw.mdblist_show_metacritic) != null) {
+        partial.showMetacritic = Boolean(raw.mdblist_show_metacritic);
       }
       if (!Object.keys(partial).length) {
         return false;
@@ -1344,18 +1439,16 @@ const FEATURE_ADAPTERS = {
         preferred_resolver_provider_id: String(settings.preferredResolverProviderId || "").trim(),
         instant_playback_preparation_limit: Math.max(
           0,
-          Math.trunc(Number(settings.instantPlaybackPreparationLimit || 0))
+          Math.min(5, Math.trunc(Number(settings.instantPlaybackPreparationLimit || 0)))
         ),
-        stream_max_results: Math.max(0, Math.trunc(Number(settings.streamMaxResults || 0))),
+        stream_max_results: Math.max(0, Math.min(100, Math.trunc(Number(settings.streamMaxResults || 0)))),
         stream_sort_mode: String(settings.streamSortMode || "DEFAULT").toUpperCase(),
         stream_minimum_quality: String(settings.streamMinimumQuality || "ANY").toUpperCase(),
         stream_dolby_vision_filter: String(settings.streamDolbyVisionFilter || "ANY").toUpperCase(),
         stream_hdr_filter: String(settings.streamHdrFilter || "ANY").toUpperCase(),
         stream_codec_filter: String(settings.streamCodecFilter || "ANY").toUpperCase(),
         stream_badges_enabled: settings.streamBadgesEnabled !== false,
-        stream_preferences: settings.streamPreferences
-          ? JSON.stringify(settings.streamPreferences)
-          : "",
+        stream_preferences: JSON.stringify(normalizeDebridStreamPreferences(settings.streamPreferences)),
         debrid_stream_name_template: String(settings.streamNameTemplate || ""),
         debrid_stream_description_template: String(
           settings.streamDescriptionTemplate || ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE
@@ -1388,7 +1481,6 @@ const FEATURE_ADAPTERS = {
         "stream_dolby_vision_filter",
         "stream_hdr_filter",
         "stream_codec_filter",
-        "stream_preferences",
         "debrid_stream_name_template",
         "debrid_stream_description_template"
       ].forEach((key) => {
@@ -1396,9 +1488,15 @@ const FEATURE_ADAPTERS = {
           projected[key] = String(raw[key] || "").trim();
         }
       });
+      if (raw.stream_preferences != null) {
+        projected.stream_preferences = JSON.stringify(
+          normalizeDebridStreamPreferences(String(raw.stream_preferences || "").trim())
+        );
+      }
       ["instant_playback_preparation_limit", "stream_max_results"].forEach((key) => {
         if (numberOrNull(raw[key]) != null) {
-          projected[key] = Math.max(0, Math.trunc(Number(raw[key])));
+          const max = key === "instant_playback_preparation_limit" ? 5 : 100;
+          projected[key] = Math.max(0, Math.min(max, Math.trunc(Number(raw[key]))));
         }
       });
       return projected;
@@ -1429,11 +1527,11 @@ const FEATURE_ADAPTERS = {
       if (numberOrNull(raw.instant_playback_preparation_limit) != null) {
         partial.instantPlaybackPreparationLimit = Math.max(
           0,
-          Math.trunc(Number(raw.instant_playback_preparation_limit))
+          Math.min(5, Math.trunc(Number(raw.instant_playback_preparation_limit)))
         );
       }
       if (numberOrNull(raw.stream_max_results) != null) {
-        partial.streamMaxResults = Math.max(0, Math.trunc(Number(raw.stream_max_results)));
+        partial.streamMaxResults = Math.max(0, Math.min(100, Math.trunc(Number(raw.stream_max_results))));
       }
       if (raw.stream_sort_mode != null) {
         partial.streamSortMode = String(raw.stream_sort_mode || "DEFAULT")
@@ -1469,7 +1567,9 @@ const FEATURE_ADAPTERS = {
         partial.streamBadgesEnabled = streamBadgesEnabled;
       }
       if (raw.stream_preferences != null) {
-        partial.streamPreferences = String(raw.stream_preferences || "").trim();
+        partial.streamPreferences = normalizeDebridStreamPreferences(
+          String(raw.stream_preferences || "").trim()
+        );
       }
       if (raw.debrid_stream_name_template != null) {
         partial.streamNameTemplate = String(raw.debrid_stream_name_template || "");

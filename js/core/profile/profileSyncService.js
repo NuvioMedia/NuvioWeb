@@ -1,5 +1,5 @@
 import { AuthManager } from "../auth/authManager.js";
-import { ProfileManager } from "./profileManager.js";
+import { MAX_PROFILES, ProfileManager } from "./profileManager.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 
 const TABLE = "tv_profiles";
@@ -98,6 +98,7 @@ export const ProfileSyncService = {
         await SupabaseApi.rpc(
           PUSH_RPC,
           {
+            p_client_max_profiles: MAX_PROFILES,
             p_profiles: profiles.map((profile) => {
               const profileIndex = Number(profile.profileIndex || profile.id || 1);
               const avatarUrl = String(profile.avatarUrl || "").trim() || null;

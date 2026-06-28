@@ -12,10 +12,11 @@ function getContentType(type) {
 }
 
 export const TmdbService = {
-  async ensureTmdbId(id, type = "movie") {
+  async ensureTmdbId(id, type = "movie", options = {}) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || TMDB_API_KEY || "").trim();
-    if (!settings.enabled || !apiKey) {
+    const requireEnabled = options?.requireEnabled !== false;
+    const apiKey = String(TMDB_API_KEY || "").trim();
+    if ((requireEnabled && !settings.enabled) || !apiKey) {
       return null;
     }
 
@@ -54,5 +55,24 @@ export const TmdbService = {
     }
 
     return String(first.id);
+  },
+
+  async tmdbToImdb(tmdbId, type = "movie") {
+    const apiKey = String(TMDB_API_KEY || "").trim();
+    const numericId = String(tmdbId || "").trim();
+    if (!apiKey || !/^\d+$/.test(numericId)) {
+      return null;
+    }
+
+    const contentType = getContentType(type);
+    const url = `${TMDB_BASE_URL}/${contentType}/${encodeURIComponent(numericId)}/external_ids?api_key=${encodeURIComponent(apiKey)}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    const imdbId = String(data?.imdb_id || "").trim();
+    return /^tt\d+$/i.test(imdbId) ? imdbId : null;
   }
 };

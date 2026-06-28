@@ -13,6 +13,9 @@ export const INTRODB_API_URL = String(
   runtimeEnv.INTRODB_API_URL || "https://api.introdb.app/"
 ).trim();
 export const IMDB_RATINGS_API_BASE_URL = String(runtimeEnv.IMDB_RATINGS_API_BASE_URL || "").trim();
+export const MDBLIST_API_BASE_URL = String(
+  runtimeEnv.MDBLIST_API_BASE_URL || "https://api.mdblist.com/"
+).trim();
 export const AVATAR_PUBLIC_BASE_URL = String(runtimeEnv.AVATAR_PUBLIC_BASE_URL || "").trim();
 export const CONTRIBUTIONS_URL = String(runtimeEnv.CONTRIBUTIONS_URL || "").trim();
 export const DONATIONS_BASE_URL = String(runtimeEnv.DONATIONS_BASE_URL || "").trim();

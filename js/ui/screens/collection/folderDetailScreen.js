@@ -353,7 +353,7 @@ async function fetchAddonSourceItems(source = {}, page = 1) {
 
 function getTmdbApiKey() {
   const settings = TmdbSettingsStore.get();
-  return settings.enabled ? String(settings.apiKey || TMDB_API_KEY || "").trim() : "";
+  return settings.enabled ? String(TMDB_API_KEY || "").trim() : "";
 }
 
 function getTmdbLanguage() {

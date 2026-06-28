@@ -14,6 +14,16 @@ import { MdbListSettingsStore } from "../../../data/local/mdbListSettingsStore.j
 import { AnimeSkipSettingsStore } from "../../../data/local/animeSkipSettingsStore.js";
 import {
   DEBRID_SETTINGS_DEFAULTS,
+  DEBRID_SORT_PROFILES,
+  DEBRID_STREAM_AUDIO_CHANNELS,
+  DEBRID_STREAM_AUDIO_TAGS,
+  DEBRID_STREAM_ENCODES,
+  DEBRID_STREAM_LANGUAGES,
+  DEBRID_STREAM_QUALITIES,
+  DEBRID_STREAM_RESOLUTIONS,
+  DEBRID_STREAM_VISUAL_TAGS,
+  DEFAULT_STREAM_PREFERENCES,
+  normalizeDebridStreamPreferences,
   DebridSettingsStore
 } from "../../../data/local/debridSettingsStore.js";
 import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
@@ -32,6 +42,7 @@ import { I18n } from "../../../i18n/index.js";
 import { PluginManager } from "../../../core/player/pluginManager.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
 import { TraktAuthService } from "../../../data/repository/traktAuthService.js";
+import { mdbListRepository } from "../../../data/repository/mdbListRepository.js";
 import {
   getStreamBadgePreviewSections,
   normalizeStreamBadgeChipColor,
@@ -350,7 +361,7 @@ function clampSubtitleOffset(value) {
 }
 
 const TMDB_LANGUAGE_OPTIONS = [
-  { id: "en-US", label: "English" },
+  { id: "en", label: "English" },
   { id: "en-AU", label: "English (Australia)" },
   { id: "en-CA", label: "English (Canada)" },
   { id: "en-GB", label: "English (United Kingdom)" },
@@ -373,18 +384,16 @@ const DEBRID_PREPARE_LIMIT_OPTIONS = [
     label: "3 links"
   },
   {
-    id: 4,
-    labelKey: "settings.integration.debrid.prepare.countMany",
-    labelParams: { count: 4 },
-    label: "4 links"
-  },
-  {
     id: 5,
     labelKey: "settings.integration.debrid.prepare.countMany",
     labelParams: { count: 5 },
     label: "5 links"
   }
 ];
+
+const DEBRID_PREPARE_COUNT_OPTIONS = DEBRID_PREPARE_LIMIT_OPTIONS.filter(
+  (option) => Number(option.id) > 0
+);
 
 const DEBRID_MAX_RESULTS_OPTIONS = [
   { id: 0, labelKey: "settings.integration.debrid.maxResults.all", label: "All streams" },
@@ -414,23 +423,22 @@ const DEBRID_MAX_RESULTS_OPTIONS = [
   }
 ];
 
-const DEBRID_SORT_OPTIONS = [
-  { id: "DEFAULT", labelKey: "settings.integration.debrid.sort.default", label: "Default" },
-  {
-    id: "QUALITY_DESC",
-    labelKey: "settings.integration.debrid.sort.quality",
-    label: "Quality, highest first"
-  },
-  {
-    id: "SIZE_DESC",
-    labelKey: "settings.integration.debrid.sort.sizeDesc",
-    label: "Size, largest first"
-  },
-  {
-    id: "SIZE_ASC",
-    labelKey: "settings.integration.debrid.sort.sizeAsc",
-    label: "Size, smallest first"
-  }
+const DEBRID_SORT_PROFILE_OPTIONS = [
+  { id: "ORIGINAL", labelKey: "debrid_stream_sort_original", label: "Original order" },
+  { id: "BEST_QUALITY", labelKey: "debrid_stream_sort_best_quality", label: "Best quality first" },
+  { id: "LARGEST", labelKey: "debrid_stream_sort_largest", label: "Largest first" },
+  { id: "SMALLEST", labelKey: "debrid_stream_sort_smallest", label: "Smallest first" },
+  { id: "AUDIO", labelKey: "debrid_stream_sort_best_audio", label: "Best audio first" },
+  { id: "LANGUAGE", labelKey: "debrid_stream_sort_language", label: "Language first" }
+];
+
+const DEBRID_SIZE_RANGE_OPTIONS = [
+  { id: "0:0", min: 0, max: 0 },
+  { id: "0:5", min: 0, max: 5 },
+  { id: "0:10", min: 0, max: 10 },
+  { id: "5:20", min: 5, max: 20 },
+  { id: "10:50", min: 10, max: 50 },
+  { id: "20:100", min: 20, max: 100 }
 ];
 
 const DEBRID_MIN_QUALITY_OPTIONS = [
@@ -921,7 +929,7 @@ function labelForTmdbLanguage(language) {
   const normalized = normalizeTmdbLanguageCode(language);
   return translateOptionLabel(
     TMDB_LANGUAGE_OPTIONS.find((item) => String(item.id) === normalized),
-    String(language || normalized || "en-US")
+    String(language || normalized || "en")
   );
 }
 
@@ -942,6 +950,262 @@ function labelForOption(options, value, fallback = "") {
     options.find((option) => String(option.id) === String(value)),
     fallback || String(value ?? "")
   );
+}
+
+function sameDebridSortCriteria(left = [], right = []) {
+  if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (criterion, index) =>
+      criterion?.key === right[index]?.key && criterion?.direction === right[index]?.direction
+  );
+}
+
+function debridSortProfileFor(criteria = []) {
+  const normalized = Array.isArray(criteria) ? criteria : [];
+  const legacyQuality = [
+    { key: "RESOLUTION", direction: "DESC" },
+    { key: "QUALITY", direction: "DESC" },
+    { key: "SIZE", direction: "DESC" }
+  ];
+  if (!normalized.length) return "ORIGINAL";
+  if (
+    sameDebridSortCriteria(normalized, DEBRID_SORT_PROFILES.BEST_QUALITY) ||
+    sameDebridSortCriteria(normalized, legacyQuality)
+  ) {
+    return "BEST_QUALITY";
+  }
+  if (sameDebridSortCriteria(normalized, DEBRID_SORT_PROFILES.LARGEST)) return "LARGEST";
+  if (sameDebridSortCriteria(normalized, DEBRID_SORT_PROFILES.SMALLEST)) return "SMALLEST";
+  if (
+    normalized[0]?.key === "AUDIO_TAG" &&
+    normalized[0]?.direction === "DESC" &&
+    normalized[1]?.key === "AUDIO_CHANNEL" &&
+    normalized[1]?.direction === "DESC"
+  ) {
+    return "AUDIO";
+  }
+  if (normalized[0]?.key === "LANGUAGE" && normalized[0]?.direction === "DESC") {
+    return "LANGUAGE";
+  }
+  return "BEST_QUALITY";
+}
+
+function debridSortProfileLabel(criteria = []) {
+  return labelForOption(
+    DEBRID_SORT_PROFILE_OPTIONS,
+    debridSortProfileFor(criteria),
+    t("debrid_stream_sort_best_quality", {}, "Best quality first")
+  );
+}
+
+function debridSelectionCountLabel(values = []) {
+  const count = Array.isArray(values) ? values.length : 0;
+  if (!count) {
+    return t("debrid_selection_count_any", {}, "Any");
+  }
+  return t("debrid_selection_count_value", { count }, `${count} selected`);
+}
+
+function debridSizeRangeId(preferences = {}) {
+  const min = Math.max(0, Math.trunc(Number(preferences.sizeMinGb || 0)));
+  const max = Math.max(0, Math.trunc(Number(preferences.sizeMaxGb || 0)));
+  return `${min}:${max}`;
+}
+
+function debridSizeRangeLabel(minGb = 0, maxGb = 0) {
+  const min = Math.max(0, Math.trunc(Number(minGb || 0)));
+  const max = Math.max(0, Math.trunc(Number(maxGb || 0)));
+  if (min <= 0 && max <= 0) {
+    return t("debrid_size_range_any", {}, "Any");
+  }
+  if (min <= 0) {
+    return t("debrid_size_range_up_to", { count: max, max }, `Up to ${max} GB`);
+  }
+  if (max <= 0) {
+    return t("debrid_size_range_min_plus", { count: min, min }, `${min} GB+`);
+  }
+  return t("debrid_size_range_min_max", { min, max }, `${min}-${max} GB`);
+}
+
+function debridOptionList(items = []) {
+  return items.map((item) => ({ id: item.id, label: item.label }));
+}
+
+function debridRuleRows(preferences = {}) {
+  return [
+    {
+      field: "preferredResolutions",
+      titleKey: "debrid_picker_preferred_resolutions_title",
+      subtitleKey: "debrid_picker_preferred_resolutions_subtitle",
+      dialogTitleKey: "debrid_stream_resolutions_preferred",
+      options: debridOptionList(DEBRID_STREAM_RESOLUTIONS),
+      defaultWhenEmpty: DEFAULT_STREAM_PREFERENCES.preferredResolutions
+    },
+    {
+      field: "requiredResolutions",
+      titleKey: "debrid_picker_required_resolutions_title",
+      subtitleKey: "debrid_picker_required_resolutions_subtitle",
+      dialogTitleKey: "debrid_stream_resolutions_required",
+      options: debridOptionList(DEBRID_STREAM_RESOLUTIONS)
+    },
+    {
+      field: "excludedResolutions",
+      titleKey: "debrid_picker_excluded_resolutions_title",
+      subtitleKey: "debrid_picker_excluded_resolutions_subtitle",
+      dialogTitleKey: "debrid_stream_resolutions_excluded",
+      options: debridOptionList(DEBRID_STREAM_RESOLUTIONS)
+    },
+    {
+      field: "preferredQualities",
+      titleKey: "debrid_picker_preferred_qualities_title",
+      subtitleKey: "debrid_picker_preferred_qualities_subtitle",
+      dialogTitleKey: "debrid_stream_qualities_preferred",
+      options: debridOptionList(DEBRID_STREAM_QUALITIES),
+      defaultWhenEmpty: DEFAULT_STREAM_PREFERENCES.preferredQualities
+    },
+    {
+      field: "requiredQualities",
+      titleKey: "debrid_picker_required_qualities_title",
+      subtitleKey: "debrid_picker_required_qualities_subtitle",
+      dialogTitleKey: "debrid_stream_qualities_required",
+      options: debridOptionList(DEBRID_STREAM_QUALITIES)
+    },
+    {
+      field: "excludedQualities",
+      titleKey: "debrid_picker_excluded_qualities_title",
+      subtitleKey: "debrid_picker_excluded_qualities_subtitle",
+      dialogTitleKey: "debrid_stream_qualities_excluded",
+      options: debridOptionList(DEBRID_STREAM_QUALITIES)
+    },
+    {
+      field: "preferredVisualTags",
+      titleKey: "debrid_picker_preferred_visual_tags_title",
+      subtitleKey: "debrid_picker_preferred_visual_tags_subtitle",
+      dialogTitleKey: "debrid_stream_visual_tags_preferred",
+      options: debridOptionList(DEBRID_STREAM_VISUAL_TAGS),
+      defaultWhenEmpty: DEFAULT_STREAM_PREFERENCES.preferredVisualTags
+    },
+    {
+      field: "requiredVisualTags",
+      titleKey: "debrid_picker_required_visual_tags_title",
+      subtitleKey: "debrid_picker_required_visual_tags_subtitle",
+      dialogTitleKey: "debrid_stream_visual_tags_required",
+      options: debridOptionList(DEBRID_STREAM_VISUAL_TAGS)
+    },
+    {
+      field: "excludedVisualTags",
+      titleKey: "debrid_picker_excluded_visual_tags_title",
+      subtitleKey: "debrid_picker_excluded_visual_tags_subtitle",
+      dialogTitleKey: "debrid_stream_visual_tags_excluded",
+      options: debridOptionList(DEBRID_STREAM_VISUAL_TAGS)
+    },
+    {
+      field: "preferredAudioTags",
+      titleKey: "debrid_picker_preferred_audio_tags_title",
+      subtitleKey: "debrid_picker_preferred_audio_tags_subtitle",
+      dialogTitleKey: "debrid_stream_audio_tags_preferred",
+      options: debridOptionList(DEBRID_STREAM_AUDIO_TAGS),
+      defaultWhenEmpty: DEFAULT_STREAM_PREFERENCES.preferredAudioTags
+    },
+    {
+      field: "requiredAudioTags",
+      titleKey: "debrid_picker_required_audio_tags_title",
+      subtitleKey: "debrid_picker_required_audio_tags_subtitle",
+      dialogTitleKey: "debrid_stream_audio_tags_required",
+      options: debridOptionList(DEBRID_STREAM_AUDIO_TAGS)
+    },
+    {
+      field: "excludedAudioTags",
+      titleKey: "debrid_picker_excluded_audio_tags_title",
+      subtitleKey: "debrid_picker_excluded_audio_tags_subtitle",
+      dialogTitleKey: "debrid_stream_audio_tags_excluded",
+      options: debridOptionList(DEBRID_STREAM_AUDIO_TAGS)
+    },
+    {
+      field: "preferredAudioChannels",
+      titleKey: "debrid_picker_preferred_audio_channels_title",
+      subtitleKey: "debrid_picker_preferred_audio_channels_subtitle",
+      dialogTitleKey: "debrid_stream_channels_preferred",
+      options: debridOptionList(DEBRID_STREAM_AUDIO_CHANNELS),
+      defaultWhenEmpty: DEFAULT_STREAM_PREFERENCES.preferredAudioChannels
+    },
+    {
+      field: "requiredAudioChannels",
+      titleKey: "debrid_picker_required_audio_channels_title",
+      subtitleKey: "debrid_picker_required_audio_channels_subtitle",
+      dialogTitleKey: "debrid_stream_channels_required",
+      options: debridOptionList(DEBRID_STREAM_AUDIO_CHANNELS)
+    },
+    {
+      field: "excludedAudioChannels",
+      titleKey: "debrid_picker_excluded_audio_channels_title",
+      subtitleKey: "debrid_picker_excluded_audio_channels_subtitle",
+      dialogTitleKey: "debrid_stream_channels_excluded",
+      options: debridOptionList(DEBRID_STREAM_AUDIO_CHANNELS)
+    },
+    {
+      field: "preferredEncodes",
+      titleKey: "debrid_picker_preferred_encodes_title",
+      subtitleKey: "debrid_picker_preferred_encodes_subtitle",
+      dialogTitleKey: "debrid_stream_encodes_preferred",
+      options: debridOptionList(DEBRID_STREAM_ENCODES),
+      defaultWhenEmpty: DEFAULT_STREAM_PREFERENCES.preferredEncodes
+    },
+    {
+      field: "requiredEncodes",
+      titleKey: "debrid_picker_required_encodes_title",
+      subtitleKey: "debrid_picker_required_encodes_subtitle",
+      dialogTitleKey: "debrid_stream_encodes_required",
+      options: debridOptionList(DEBRID_STREAM_ENCODES)
+    },
+    {
+      field: "excludedEncodes",
+      titleKey: "debrid_picker_excluded_encodes_title",
+      subtitleKey: "debrid_picker_excluded_encodes_subtitle",
+      dialogTitleKey: "debrid_stream_encodes_excluded",
+      options: debridOptionList(DEBRID_STREAM_ENCODES)
+    },
+    {
+      field: "preferredLanguages",
+      titleKey: "debrid_picker_preferred_languages_title",
+      subtitleKey: "debrid_picker_preferred_languages_subtitle",
+      dialogTitleKey: "debrid_stream_languages_preferred",
+      options: debridOptionList(DEBRID_STREAM_LANGUAGES)
+    },
+    {
+      field: "requiredLanguages",
+      titleKey: "debrid_picker_required_languages_title",
+      subtitleKey: "debrid_picker_required_languages_subtitle",
+      dialogTitleKey: "debrid_stream_languages_required",
+      options: debridOptionList(DEBRID_STREAM_LANGUAGES)
+    },
+    {
+      field: "excludedLanguages",
+      titleKey: "debrid_picker_excluded_languages_title",
+      subtitleKey: "debrid_picker_excluded_languages_subtitle",
+      dialogTitleKey: "debrid_stream_languages_excluded",
+      options: debridOptionList(DEBRID_STREAM_LANGUAGES)
+    },
+    {
+      field: "requiredReleaseGroups",
+      titleKey: "debrid_picker_required_release_groups_title",
+      subtitleKey: "debrid_picker_required_release_groups_subtitle",
+      dialogTitleKey: "debrid_stream_release_groups_required",
+      textList: true
+    },
+    {
+      field: "excludedReleaseGroups",
+      titleKey: "debrid_picker_excluded_release_groups_title",
+      subtitleKey: "debrid_picker_excluded_release_groups_subtitle",
+      dialogTitleKey: "debrid_stream_release_groups_excluded",
+      textList: true
+    }
+  ].map((row) => ({
+    ...row,
+    selectedValues: Array.isArray(preferences[row.field]) ? preferences[row.field] : []
+  }));
 }
 
 async function validateDebridApiKey(providerId, apiKey) {
@@ -999,13 +1263,13 @@ function normalizeTmdbLanguageCode(language) {
     .trim()
     .replace(/_/g, "-");
   if (!code) {
-    return "en-US";
+    return "en";
   }
 
   switch (code.toLowerCase()) {
     case "en":
     case "en-us":
-      return "en-US";
+      return "en";
     case "en-au":
       return "en-AU";
     case "en-ca":
@@ -2146,6 +2410,33 @@ export const SettingsScreen = {
     this.focusZone = "dialog";
   },
 
+  openMultiChoiceDialog({
+    title,
+    message = "",
+    options,
+    selectedIds = [],
+    onToggle,
+    returnFocusKey,
+    dialogClassName = ""
+  }) {
+    this.textDialog = null;
+    this.optionDialog = {
+      title,
+      message,
+      options: Array.isArray(options) ? options : [],
+      selectedId: null,
+      selectedIds: new Set((Array.isArray(selectedIds) ? selectedIds : []).map((id) => String(id))),
+      onToggle,
+      returnFocusKey,
+      dialogClassName,
+      optionRenderer: "multi",
+      multiChoice: true,
+      optionColumns: 1
+    };
+    this.dialogFocusIndex = 0;
+    this.focusZone = "dialog";
+  },
+
   openTextDialog({
     title,
     value = "",
@@ -2154,6 +2445,8 @@ export const SettingsScreen = {
     returnFocusKey,
     saveLabel = t("common.save", {}, "Save"),
     cancelLabel = t("common.cancel", {}, "Cancel"),
+    clearLabel = "",
+    onClear,
     onSubmit
   }) {
     this.optionDialog = null;
@@ -2166,8 +2459,10 @@ export const SettingsScreen = {
       returnFocusKey,
       saveLabel,
       cancelLabel,
+      clearLabel,
       statusMessage: "",
       statusKind: "error",
+      onClear,
       onSubmit
     };
     this.dialogFocusIndex = 0;
@@ -2201,6 +2496,7 @@ export const SettingsScreen = {
       ? ` ${escapeHtml(this.optionDialog.dialogClassName)}`
       : "";
     const useLanguageRenderer = this.optionDialog.optionRenderer === "subtitle-language";
+    const useMultiRenderer = this.optionDialog.optionRenderer === "multi";
     const isP2pConsentDialog =
       String(this.optionDialog.dialogClassName || "") === "settings-p2p-consent-dialog";
     const messageHtml = this.optionDialog.message
@@ -2214,9 +2510,13 @@ export const SettingsScreen = {
           ${messageHtml}
           <div class="settings-dialog-list${useLanguageRenderer ? " settings-language-dialog-list" : ""}">
             ${this.optionDialog.options
-              .map(
-                (option, index) => `
-              <button class="settings-dialog-option settings-content-focusable focusable${useLanguageRenderer ? " settings-language-option" : ""}${String(option.id) === String(this.optionDialog.selectedId) ? " is-selected" : ""}"
+              .map((option, index) => {
+                const optionId = String(option.id);
+                const isSelected = useMultiRenderer
+                  ? this.optionDialog.selectedIds?.has?.(optionId)
+                  : optionId === String(this.optionDialog.selectedId);
+                return `
+              <button class="settings-dialog-option settings-content-focusable focusable${useLanguageRenderer ? " settings-language-option" : ""}${isSelected ? " is-selected" : ""}"
                       data-zone="dialog"
                       data-dialog-index="${index}"
                       data-dialog-option-id="${escapeHtml(option.id)}">
@@ -2232,16 +2532,18 @@ export const SettingsScreen = {
                           : ""
                       }
                       ${
-                        String(option.id) === String(this.optionDialog.selectedId)
+                        isSelected
                           ? `<span class="settings-language-option-check" aria-hidden="true">&#10003;</span>`
                           : ""
                       }
                     </span>`
-                    : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`
+                    : useMultiRenderer
+                      ? `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span><span class="settings-language-option-check" aria-hidden="true">${isSelected ? "&#10003;" : ""}</span>`
+                      : `<span class="settings-dialog-option-label">${escapeHtml(translateOptionLabel(option))}</span>`
                 }
               </button>
             `
-              )
+              })
               .join("")}
           </div>
         </div>
@@ -2284,10 +2586,20 @@ export const SettingsScreen = {
                     data-dialog-index="1">
               <span class="settings-dialog-option-label">${escapeHtml(this.textDialog.saveLabel || t("common.save", {}, "Save"))}</span>
             </button>
+            ${
+              typeof this.textDialog.onClear === "function"
+                ? `<button class="settings-dialog-option settings-text-dialog-button settings-content-focusable focusable"
+                    data-zone="dialog"
+                    data-text-dialog-action="clear"
+                    data-dialog-index="2">
+              <span class="settings-dialog-option-label">${escapeHtml(this.textDialog.clearLabel || t("common.clear", {}, "Clear"))}</span>
+            </button>`
+                : ""
+            }
             <button class="settings-dialog-option settings-text-dialog-button settings-content-focusable focusable"
                     data-zone="dialog"
                     data-text-dialog-action="cancel"
-                    data-dialog-index="2">
+                    data-dialog-index="${typeof this.textDialog.onClear === "function" ? 3 : 2}">
               <span class="settings-dialog-option-label">${escapeHtml(this.textDialog.cancelLabel || t("common.cancel", {}, "Cancel"))}</span>
             </button>
           </div>
@@ -2329,6 +2641,24 @@ export const SettingsScreen = {
     this.textDialog = null;
     this.contentFocusKey = returnFocusKey || this.contentFocusKey;
     this.focusZone = "content";
+  },
+
+  async clearTextDialog() {
+    if (!this.textDialog || typeof this.textDialog.onClear !== "function") {
+      return;
+    }
+    const returnFocusKey = this.textDialog.returnFocusKey;
+    const shouldClose = await this.textDialog.onClear();
+    if (shouldClose === false) {
+      return;
+    }
+    this.textDialog = null;
+    this.contentFocusKey = returnFocusKey || this.contentFocusKey;
+    this.focusZone = "content";
+  },
+
+  getTextDialogMaxFocusIndex() {
+    return this.textDialog && typeof this.textDialog.onClear === "function" ? 3 : 2;
   },
 
   renderCollapsibleRow({ focusKey, title, subtitle, expanded, bodyHtml = "", classes = "" }) {
@@ -3258,7 +3588,13 @@ export const SettingsScreen = {
   renderIntegrationDetail(model, key) {
     this.actionMap.set("integration:back", () => {
       this.integrationView = "hub";
-      this.contentFocusKey = key === "debrid" ? "integration:hub:debrid" : "integration:hub:tmdb";
+      const focusByIntegration = {
+        debrid: "integration:hub:debrid",
+        tmdb: "integration:hub:tmdb",
+        mdblist: "integration:hub:mdblist",
+        animeskip: "integration:hub:animeskip"
+      };
+      this.contentFocusKey = focusByIntegration[key] || "integration:hub:tmdb";
     });
 
     if (key === "debrid") {
@@ -3266,17 +3602,30 @@ export const SettingsScreen = {
       const configuredProviders = providers.filter((provider) =>
         DebridProviders.apiKeyFor(model.debrid, provider.id)
       );
-      const resolverOptions = [
-        { id: "", label: t("common.automatic", {}, "Automatic") },
-        ...configuredProviders.map((provider) => ({ id: provider.id, label: provider.displayName }))
-      ];
-      const preferredProviderId =
-        DebridProviders.byId(model.debrid.preferredResolverProviderId)?.id || "";
+      const resolverProviders = DebridProviders.configuredResolverServices(model.debrid).map(
+        (credential) => credential.provider
+      );
+      const activeResolverProvider =
+        DebridProviders.preferredResolverService(model.debrid)?.provider || null;
+      const hasResolverProvider = Boolean(activeResolverProvider);
+      const canResolvePlayableLinks = Boolean(model.debrid.enabled && hasResolverProvider);
+      const hasCloudLibraryProvider = configuredProviders.some((provider) =>
+        provider.capabilities?.includes?.("cloudLibrary")
+      );
+      const canUseCloudLibrary = Boolean(model.debrid.cloudLibraryEnabled && hasCloudLibraryProvider);
+      const streamPreferences = normalizeDebridStreamPreferences(model.debrid.streamPreferences);
+      const resolverOptions = resolverProviders.map((provider) => ({
+        id: provider.id,
+        label: provider.displayName
+      }));
+      const preferredProviderId = activeResolverProvider?.id || "";
 
       this.actionMap.set("integration:debrid:enabled", () => {
+        if (!hasResolverProvider) return;
         DebridSettingsStore.set({ enabled: !DebridSettingsStore.get().enabled });
       });
       this.actionMap.set("integration:debrid:cloud", () => {
+        if (!hasCloudLibraryProvider) return;
         DebridSettingsStore.set({
           cloudLibraryEnabled: !DebridSettingsStore.get().cloudLibraryEnabled
         });
@@ -3311,18 +3660,22 @@ export const SettingsScreen = {
                 );
                 return false;
               }
-              DebridSettingsStore.set({ [provider.apiKeyField]: trimmed });
+              DebridSettingsStore.setProviderApiKey(provider.id, trimmed);
               return true;
             }
           });
         });
       });
-      this.actionMap.set("integration:debrid:prepare", () => {
+      this.actionMap.set("integration:debrid:prepareToggle", () => {
+        const enabled = Number(DebridSettingsStore.get().instantPlaybackPreparationLimit || 0) > 0;
+        DebridSettingsStore.set({ instantPlaybackPreparationLimit: enabled ? 0 : 2 });
+      });
+      this.actionMap.set("integration:debrid:prepareCount", () => {
         this.openOptionDialog({
           title: t("settings.integration.debrid.prepare.count.title", {}, "Links to prepare"),
-          options: DEBRID_PREPARE_LIMIT_OPTIONS,
+          options: DEBRID_PREPARE_COUNT_OPTIONS,
           selectedId: model.debrid.instantPlaybackPreparationLimit,
-          returnFocusKey: "integration:debrid:prepare",
+          returnFocusKey: "integration:debrid:prepareCount",
           onSelect: (option) =>
             DebridSettingsStore.set({ instantPlaybackPreparationLimit: Number(option.id || 0) })
         });
@@ -3331,19 +3684,23 @@ export const SettingsScreen = {
         this.openOptionDialog({
           title: t("settings.integration.debrid.maxResults.title", {}, "Max results"),
           options: DEBRID_MAX_RESULTS_OPTIONS,
-          selectedId: model.debrid.streamMaxResults,
+          selectedId: streamPreferences.maxResults,
           returnFocusKey: "integration:debrid:maxResults",
           onSelect: (option) =>
-            DebridSettingsStore.set({ streamMaxResults: Number(option.id || 0) })
+            DebridSettingsStore.setStreamMaxResults(Number(option.id || 0))
         });
       });
       this.actionMap.set("integration:debrid:sort", () => {
         this.openOptionDialog({
           title: t("settings.integration.debrid.sort.title", {}, "Sort streams"),
-          options: DEBRID_SORT_OPTIONS,
-          selectedId: model.debrid.streamSortMode,
+          options: DEBRID_SORT_PROFILE_OPTIONS,
+          selectedId: debridSortProfileFor(streamPreferences.sortCriteria),
           returnFocusKey: "integration:debrid:sort",
-          onSelect: (option) => DebridSettingsStore.set({ streamSortMode: option.id })
+          onSelect: (option) =>
+            DebridSettingsStore.setStreamPreferences({
+              ...DebridSettingsStore.get().streamPreferences,
+              sortCriteria: DEBRID_SORT_PROFILES[option.id] || []
+            })
         });
       });
       this.actionMap.set("integration:debrid:minQuality", () => {
@@ -3352,7 +3709,7 @@ export const SettingsScreen = {
           options: DEBRID_MIN_QUALITY_OPTIONS,
           selectedId: model.debrid.streamMinimumQuality,
           returnFocusKey: "integration:debrid:minQuality",
-          onSelect: (option) => DebridSettingsStore.set({ streamMinimumQuality: option.id })
+          onSelect: (option) => DebridSettingsStore.setStreamMinimumQuality(option.id)
         });
       });
       this.actionMap.set("integration:debrid:dv", () => {
@@ -3361,7 +3718,7 @@ export const SettingsScreen = {
           options: DEBRID_FEATURE_FILTER_OPTIONS,
           selectedId: model.debrid.streamDolbyVisionFilter,
           returnFocusKey: "integration:debrid:dv",
-          onSelect: (option) => DebridSettingsStore.set({ streamDolbyVisionFilter: option.id })
+          onSelect: (option) => DebridSettingsStore.setStreamDolbyVisionFilter(option.id)
         });
       });
       this.actionMap.set("integration:debrid:hdr", () => {
@@ -3370,7 +3727,7 @@ export const SettingsScreen = {
           options: DEBRID_FEATURE_FILTER_OPTIONS,
           selectedId: model.debrid.streamHdrFilter,
           returnFocusKey: "integration:debrid:hdr",
-          onSelect: (option) => DebridSettingsStore.set({ streamHdrFilter: option.id })
+          onSelect: (option) => DebridSettingsStore.setStreamHdrFilter(option.id)
         });
       });
       this.actionMap.set("integration:debrid:codec", () => {
@@ -3379,12 +3736,87 @@ export const SettingsScreen = {
           options: DEBRID_CODEC_OPTIONS,
           selectedId: model.debrid.streamCodecFilter,
           returnFocusKey: "integration:debrid:codec",
-          onSelect: (option) => DebridSettingsStore.set({ streamCodecFilter: option.id })
+          onSelect: (option) => DebridSettingsStore.setStreamCodecFilter(option.id)
         });
       });
-      this.actionMap.set("integration:debrid:streamBadges", () => {
-        DebridSettingsStore.set({
-          streamBadgesEnabled: !DebridSettingsStore.get().streamBadgesEnabled
+      this.actionMap.set("integration:debrid:maxPerResolution", () => {
+        this.openOptionDialog({
+          title: t("debrid_stream_per_resolution_limit_title", {}, "Per resolution limit"),
+          options: DEBRID_MAX_RESULTS_OPTIONS,
+          selectedId: streamPreferences.maxPerResolution,
+          returnFocusKey: "integration:debrid:maxPerResolution",
+          onSelect: (option) =>
+            DebridSettingsStore.setStreamPreferences({
+              ...DebridSettingsStore.get().streamPreferences,
+              maxPerResolution: Number(option.id || 0)
+            })
+        });
+      });
+      this.actionMap.set("integration:debrid:maxPerQuality", () => {
+        this.openOptionDialog({
+          title: t("debrid_stream_per_quality_limit_title", {}, "Per quality limit"),
+          options: DEBRID_MAX_RESULTS_OPTIONS,
+          selectedId: streamPreferences.maxPerQuality,
+          returnFocusKey: "integration:debrid:maxPerQuality",
+          onSelect: (option) =>
+            DebridSettingsStore.setStreamPreferences({
+              ...DebridSettingsStore.get().streamPreferences,
+              maxPerQuality: Number(option.id || 0)
+            })
+        });
+      });
+      this.actionMap.set("integration:debrid:sizeRange", () => {
+        this.openOptionDialog({
+          title: t("debrid_stream_size_range_title", {}, "Size range"),
+          options: DEBRID_SIZE_RANGE_OPTIONS.map((option) => ({
+            ...option,
+            label: debridSizeRangeLabel(option.min, option.max)
+          })),
+          selectedId: debridSizeRangeId(streamPreferences),
+          returnFocusKey: "integration:debrid:sizeRange",
+          onSelect: (option) =>
+            DebridSettingsStore.setStreamPreferences({
+              ...DebridSettingsStore.get().streamPreferences,
+              sizeMinGb: option.min,
+              sizeMaxGb: option.max
+            })
+        });
+      });
+      debridRuleRows(streamPreferences).forEach((row) => {
+        this.actionMap.set(`integration:debrid:pref:${row.field}`, () => {
+          if (row.textList) {
+            this.openTextDialog({
+              title: t(row.dialogTitleKey, {}, row.field),
+              value: row.selectedValues.join("\n"),
+              multiline: true,
+              returnFocusKey: `integration:debrid:pref:${row.field}`,
+              onSubmit: (value) => {
+                const values = String(value || "")
+                  .split(/[\n,]/)
+                  .map((entry) => entry.trim())
+                  .filter(Boolean)
+                  .filter((entry, index, array) => array.indexOf(entry) === index);
+                DebridSettingsStore.setStreamPreferences({
+                  ...DebridSettingsStore.get().streamPreferences,
+                  [row.field]: values
+                });
+                return true;
+              }
+            });
+            return;
+          }
+          this.openMultiChoiceDialog({
+            title: t(row.dialogTitleKey, {}, row.field),
+            options: row.options,
+            selectedIds: row.selectedValues,
+            returnFocusKey: `integration:debrid:pref:${row.field}`,
+            onToggle: (selectedIds) => {
+              DebridSettingsStore.setStreamPreferences({
+                ...DebridSettingsStore.get().streamPreferences,
+                [row.field]: selectedIds.length ? selectedIds : row.defaultWhenEmpty || []
+              });
+            }
+          });
         });
       });
       this.actionMap.set("integration:debrid:nameTemplate", () => {
@@ -3435,16 +3867,9 @@ export const SettingsScreen = {
               subtitle: t("settings.integration.backToIntegrations.subtitle"),
               icon: "back"
             })}
-            ${this.renderToggleRow({
-              focusKey: "integration:debrid:enabled",
-              title: t("settings.integration.debrid.enable.title", {}, "Resolve playable links"),
-              subtitle: t(
-                "settings.integration.debrid.enable.subtitle",
-                {},
-                "Ask a connected service for playable links when a result needs it. This may add the item to that service."
-              ),
-              checked: Boolean(model.debrid.enabled)
-            })}
+            <div class="settings-group-heading">
+              <div class="settings-group-title">${escapeHtml(t("debrid_experimental_notice", {}, "Experimental Direct Debrid integration"))}</div>
+            </div>
             ${this.renderToggleRow({
               focusKey: "integration:debrid:cloud",
               title: t("settings.integration.debrid.cloud.title", {}, "Cloud library"),
@@ -3453,23 +3878,44 @@ export const SettingsScreen = {
                 {},
                 "Browse and play files already in your connected accounts."
               ),
-              checked: Boolean(model.debrid.cloudLibraryEnabled)
+              checked: canUseCloudLibrary,
+              disabled: !hasCloudLibraryProvider
             })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:provider",
-              title: t("settings.integration.debrid.resolveWith.title", {}, "Resolve with"),
-              subtitle: configuredProviders.length
-                ? t(
-                    "settings.integration.debrid.resolveWith.subtitle",
-                    {},
-                    "Choose which connected account handles playable links."
-                  )
-                : t("settings.integration.debrid.addKeyFirst", {}, "Connect an account first."),
-              value: preferredProviderId
-                ? labelForDebridProvider(preferredProviderId)
-                : t("common.automatic", {}, "Automatic"),
-              disabled: !configuredProviders.length
+            ${this.renderToggleRow({
+              focusKey: "integration:debrid:enabled",
+              title: t("settings.integration.debrid.enable.title", {}, "Resolve playable links"),
+              subtitle: t(
+                "settings.integration.debrid.enable.subtitle",
+                {},
+                "Ask a connected service for playable links when a result needs it. This may add the item to that service."
+              ),
+              checked: canResolvePlayableLinks,
+              disabled: !hasResolverProvider
             })}
+            ${
+              canResolvePlayableLinks && resolverProviders.length > 1 && activeResolverProvider
+                ? this.renderActionRow({
+                    focusKey: "integration:debrid:provider",
+                    title: t("settings.integration.debrid.resolveWith.title", {}, "Resolve with"),
+                    subtitle: t(
+                      "settings.integration.debrid.resolveWith.subtitle",
+                      {},
+                      "Choose which connected account handles playable links."
+                    ),
+                    value: preferredProviderId
+                      ? labelForDebridProvider(preferredProviderId)
+                      : activeResolverProvider.displayName
+                  })
+                : ""
+            }
+            ${
+              !hasResolverProvider
+                ? `<div class="settings-group-heading"><div class="settings-group-subtitle">${escapeHtml(t("settings.integration.debrid.addKeyFirst", {}, "Connect an account first."))}</div></div>`
+                : ""
+            }
+            <div class="settings-group-heading">
+              <div class="settings-group-title">${escapeHtml(t("debrid_section_account", {}, "Account"))}</div>
+            </div>
             ${providers
               .map((provider) =>
                 this.renderActionRow({
@@ -3488,110 +3934,41 @@ export const SettingsScreen = {
                 })
               )
               .join("")}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:prepare",
-              title: t("settings.integration.debrid.prepare.title", {}, "Prepare links"),
-              subtitle: t(
-                "settings.integration.debrid.prepare.subtitle",
-                {},
-                "Resolve playable links before playback starts."
-              ),
-              value: labelForOption(
-                DEBRID_PREPARE_LIMIT_OPTIONS,
-                model.debrid.instantPlaybackPreparationLimit,
-                "Off"
-              )
-            })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:maxResults",
-              title: t("settings.integration.debrid.maxResults.title", {}, "Max results"),
-              subtitle: t(
-                "settings.integration.debrid.maxResults.subtitle",
-                {},
-                "Limit how many Direct Debrid sources appear."
-              ),
-              value: labelForOption(
-                DEBRID_MAX_RESULTS_OPTIONS,
-                model.debrid.streamMaxResults,
-                "All streams"
-              )
-            })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:sort",
-              title: t("settings.integration.debrid.sort.title", {}, "Sort streams"),
-              subtitle: t(
-                "settings.integration.debrid.sort.subtitle",
-                {},
-                "Choose how Direct Debrid sources are ordered."
-              ),
-              value: labelForOption(DEBRID_SORT_OPTIONS, model.debrid.streamSortMode, "Default")
-            })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:minQuality",
-              title: t("settings.integration.debrid.minQuality.title", {}, "Minimum quality"),
-              subtitle: t(
-                "settings.integration.debrid.minQuality.subtitle",
-                {},
-                "Hide sources below the selected resolution."
-              ),
-              value: labelForOption(
-                DEBRID_MIN_QUALITY_OPTIONS,
-                model.debrid.streamMinimumQuality,
-                "Any quality"
-              )
-            })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:dv",
-              title: t("settings.integration.debrid.dolbyVision.title", {}, "Dolby Vision"),
-              subtitle: t(
-                "settings.integration.debrid.dolbyVision.subtitle",
-                {},
-                "Show, hide, or require Dolby Vision sources."
-              ),
-              value: labelForOption(
-                DEBRID_FEATURE_FILTER_OPTIONS,
-                model.debrid.streamDolbyVisionFilter,
-                "Any"
-              )
-            })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:hdr",
-              title: t("settings.integration.debrid.hdr.title", {}, "HDR"),
-              subtitle: t(
-                "settings.integration.debrid.hdr.subtitle",
-                {},
-                "Show, hide, or require HDR sources."
-              ),
-              value: labelForOption(
-                DEBRID_FEATURE_FILTER_OPTIONS,
-                model.debrid.streamHdrFilter,
-                "Any"
-              )
-            })}
-            ${this.renderActionRow({
-              focusKey: "integration:debrid:codec",
-              title: t("settings.integration.debrid.codec.title", {}, "Codec"),
-              subtitle: t(
-                "settings.integration.debrid.codec.subtitle",
-                {},
-                "Filter sources by video codec."
-              ),
-              value: labelForOption(
-                DEBRID_CODEC_OPTIONS,
-                model.debrid.streamCodecFilter,
-                "Any codec"
-              )
-            })}
-            ${this.renderToggleRow({
-              focusKey: "integration:debrid:streamBadges",
-              title: t("settings.integration.debrid.streamBadges.title", {}, "Stream badges"),
-              subtitle: t(
-                "settings.integration.debrid.streamBadges.subtitle",
-                {},
-                "Show quality, HDR, codec, audio, and size chips in source results."
-              ),
-              checked: model.debrid.streamBadgesEnabled !== false
-            })}
+            ${
+              canResolvePlayableLinks
+                ? `
+                  <div class="settings-group-heading">
+                    <div class="settings-group-title">${escapeHtml(t("debrid_section_instant_playback", {}, "Instant Playback"))}</div>
+                  </div>
+                  ${this.renderToggleRow({
+                    focusKey: "integration:debrid:prepareToggle",
+                    title: t("settings.integration.debrid.prepare.title", {}, "Prepare links"),
+                    subtitle: t(
+                      "settings.integration.debrid.prepare.subtitle",
+                      {},
+                      "Resolve playable links before playback starts."
+                    ),
+                    checked: Number(model.debrid.instantPlaybackPreparationLimit || 0) > 0
+                  })}
+                  ${
+                    Number(model.debrid.instantPlaybackPreparationLimit || 0) > 0
+                      ? this.renderActionRow({
+                          focusKey: "integration:debrid:prepareCount",
+                          title: t("settings.integration.debrid.prepare.count.title", {}, "Links to prepare"),
+                          value: labelForOption(
+                            DEBRID_PREPARE_COUNT_OPTIONS,
+                            model.debrid.instantPlaybackPreparationLimit,
+                            "2 links"
+                          )
+                        })
+                      : ""
+                  }
+                `
+                : ""
+            }
+            <div class="settings-group-heading">
+              <div class="settings-group-title">${escapeHtml(t("debrid_section_formatting", {}, "Formatting"))}</div>
+            </div>
             ${this.renderActionRow({
               focusKey: "integration:debrid:nameTemplate",
               title: t(
@@ -3604,7 +3981,8 @@ export const SettingsScreen = {
                 {},
                 "Pattern used to generate Direct Debrid source names."
               ),
-              value: t("common.edit", {}, "Edit")
+              value: t("common.edit", {}, "Edit"),
+              disabled: !model.debrid.enabled
             })}
             ${this.renderActionRow({
               focusKey: "integration:debrid:descriptionTemplate",
@@ -3618,7 +3996,8 @@ export const SettingsScreen = {
                 {},
                 "Pattern used to generate Direct Debrid source details."
               ),
-              value: t("common.edit", {}, "Edit")
+              value: t("common.edit", {}, "Edit"),
+              disabled: !model.debrid.enabled
             })}
             ${this.renderActionRow({
               focusKey: "integration:debrid:resetTemplates",
@@ -3628,25 +4007,124 @@ export const SettingsScreen = {
                 {},
                 "Restore default source formatting."
               ),
-              value: t("settings.integration.debrid.template.reset.value", {}, "Reset")
+              value: t("settings.integration.debrid.template.reset.value", {}, "Reset"),
+              disabled: !model.debrid.enabled
             })}
+            ${
+              canResolvePlayableLinks
+                ? `
+                  <div class="settings-group-heading">
+                    <div class="settings-group-title">${escapeHtml(t("debrid_section_filters", {}, "Filters"))}</div>
+                  </div>
+                  ${this.renderActionRow({
+                    focusKey: "integration:debrid:maxResults",
+                    title: t("settings.integration.debrid.maxResults.title", {}, "Max results"),
+                    subtitle: t(
+                      "settings.integration.debrid.maxResults.subtitle",
+                      {},
+                      "Limit how many Direct Debrid sources appear."
+                    ),
+                    value: labelForOption(DEBRID_MAX_RESULTS_OPTIONS, streamPreferences.maxResults, "All streams")
+                  })}
+                  ${this.renderActionRow({
+                    focusKey: "integration:debrid:sort",
+                    title: t("settings.integration.debrid.sort.title", {}, "Sort streams"),
+                    subtitle: t(
+                      "settings.integration.debrid.sort.subtitle",
+                      {},
+                      "Choose how Direct Debrid sources are ordered."
+                    ),
+                    value: debridSortProfileLabel(streamPreferences.sortCriteria)
+                  })}
+                  ${this.renderActionRow({
+                    focusKey: "integration:debrid:maxPerResolution",
+                    title: t("debrid_stream_per_resolution_limit_title", {}, "Per resolution limit"),
+                    subtitle: t(
+                      "debrid_stream_per_resolution_limit_subtitle",
+                      {},
+                      "Cap repeated 2160p, 1080p, 720p results after sorting."
+                    ),
+                    value: labelForOption(DEBRID_MAX_RESULTS_OPTIONS, streamPreferences.maxPerResolution, "All streams")
+                  })}
+                  ${this.renderActionRow({
+                    focusKey: "integration:debrid:maxPerQuality",
+                    title: t("debrid_stream_per_quality_limit_title", {}, "Per quality limit"),
+                    subtitle: t(
+                      "debrid_stream_per_quality_limit_subtitle",
+                      {},
+                      "Cap repeated BluRay, WEB-DL, REMUX results after sorting."
+                    ),
+                    value: labelForOption(DEBRID_MAX_RESULTS_OPTIONS, streamPreferences.maxPerQuality, "All streams")
+                  })}
+                  ${this.renderActionRow({
+                    focusKey: "integration:debrid:sizeRange",
+                    title: t("debrid_stream_size_range_title", {}, "Size range"),
+                    subtitle: t("debrid_stream_size_range_subtitle", {}, "Filter streams by file size."),
+                    value: debridSizeRangeLabel(streamPreferences.sizeMinGb, streamPreferences.sizeMaxGb)
+                  })}
+                  ${debridRuleRows(streamPreferences)
+                    .map((row) =>
+                      this.renderActionRow({
+                        focusKey: `integration:debrid:pref:${row.field}`,
+                        title: t(row.titleKey, {}, row.field),
+                        subtitle: t(row.subtitleKey, {}, ""),
+                        value: debridSelectionCountLabel(row.selectedValues)
+                      })
+                    )
+                    .join("")}
+                `
+                : ""
+            }
           </div>
         </div>
       `;
     }
 
     if (key === "tmdb") {
+      const toggleTmdbSetting = (field) => {
+        TmdbSettingsStore.set({ [field]: !TmdbSettingsStore.get()[field] });
+      };
       this.actionMap.set("integration:tmdb:enabled", () => {
         TmdbSettingsStore.set({ enabled: !TmdbSettingsStore.get().enabled });
       });
+      this.actionMap.set("integration:tmdb:modernHome", () => {
+        toggleTmdbSetting("modernHomeEnabled");
+      });
+      this.actionMap.set("integration:tmdb:continueWatching", () => {
+        toggleTmdbSetting("enrichContinueWatching");
+      });
       this.actionMap.set("integration:tmdb:artwork", () => {
-        TmdbSettingsStore.set({ useArtwork: !TmdbSettingsStore.get().useArtwork });
+        toggleTmdbSetting("useArtwork");
       });
       this.actionMap.set("integration:tmdb:basic", () => {
-        TmdbSettingsStore.set({ useBasicInfo: !TmdbSettingsStore.get().useBasicInfo });
+        toggleTmdbSetting("useBasicInfo");
       });
       this.actionMap.set("integration:tmdb:details", () => {
-        TmdbSettingsStore.set({ useDetails: !TmdbSettingsStore.get().useDetails });
+        toggleTmdbSetting("useDetails");
+      });
+      this.actionMap.set("integration:tmdb:releaseDates", () => {
+        toggleTmdbSetting("useReleaseDates");
+      });
+      this.actionMap.set("integration:tmdb:credits", () => {
+        toggleTmdbSetting("useCredits");
+      });
+      this.actionMap.set("integration:tmdb:productions", () => {
+        toggleTmdbSetting("useProductions");
+      });
+      this.actionMap.set("integration:tmdb:networks", () => {
+        toggleTmdbSetting("useNetworks");
+      });
+      this.actionMap.set("integration:tmdb:episodes", () => {
+        toggleTmdbSetting("useEpisodes");
+      });
+      this.actionMap.set("integration:tmdb:trailers", () => {
+        toggleTmdbSetting("useTrailers");
+      });
+      this.actionMap.set("integration:tmdb:moreLikeThis", () => {
+        toggleTmdbSetting("useMoreLikeThis");
+      });
+      this.actionMap.set("integration:tmdb:collections", () => {
+        toggleTmdbSetting("useCollections");
       });
       this.actionMap.set("integration:tmdb:language", () => {
         this.openOptionDialog({
@@ -3659,18 +4137,6 @@ export const SettingsScreen = {
           }
         });
       });
-      this.actionMap.set("integration:tmdb:api", () => {
-        this.openTextDialog({
-          title: t("settings.integration.tmdb.apiKey.prompt"),
-          value: TmdbSettingsStore.get().apiKey || "",
-          returnFocusKey: "integration:tmdb:api",
-          onSubmit: (value) => {
-            TmdbSettingsStore.set({ apiKey: String(value).trim() });
-            return true;
-          }
-        });
-      });
-
       return `
         ${this.renderSectionHeader({ labelKey: "settings.integration.tmdb.label", subtitleKey: "settings.integration.tmdb.subtitle" })}
         <div class="settings-group-card settings-group-card-fill">
@@ -3686,6 +4152,35 @@ export const SettingsScreen = {
               title: t("settings.integration.tmdb.enable.title"),
               subtitle: t("settings.integration.tmdb.enable.subtitle"),
               checked: Boolean(model.tmdb.enabled)
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:modernHome",
+              title: t("tmdb_modern_home_title", {}, "Enable on Modern Home"),
+              subtitle: t(
+                "tmdb_modern_home_subtitle",
+                {},
+                "Also apply TMDB enrichment to Modern Home hero and focused cards"
+              ),
+              checked: Boolean(model.tmdb.modernHomeEnabled),
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:continueWatching",
+              title: t("tmdb_enrich_continue_watching_title", {}, "Enrich Continue Watching"),
+              subtitle: t(
+                "tmdb_enrich_continue_watching_subtitle",
+                {},
+                "Apply TMDB enrichment to Continue Watching items"
+              ),
+              checked: model.tmdb.enrichContinueWatching !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderActionRow({
+              focusKey: "integration:tmdb:language",
+              title: t("settings.integration.tmdb.language.title"),
+              subtitle: t("settings.integration.tmdb.language.subtitle"),
+              value: labelForTmdbLanguage(model.tmdb.language),
+              disabled: !model.tmdb.enabled
             })}
             ${this.renderToggleRow({
               focusKey: "integration:tmdb:artwork",
@@ -3708,17 +4203,69 @@ export const SettingsScreen = {
               checked: Boolean(model.tmdb.useDetails),
               disabled: !model.tmdb.enabled
             })}
-            ${this.renderActionRow({
-              focusKey: "integration:tmdb:language",
-              title: t("settings.integration.tmdb.language.title"),
-              subtitle: t("settings.integration.tmdb.language.subtitle"),
-              value: labelForTmdbLanguage(model.tmdb.language)
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:releaseDates",
+              title: t("tmdb_release_dates_title", {}, "Release Dates"),
+              subtitle: t("tmdb_release_dates_subtitle", {}, "Release and air dates from TMDB"),
+              checked: model.tmdb.useReleaseDates !== false,
+              disabled: !model.tmdb.enabled
             })}
-            ${this.renderActionRow({
-              focusKey: "integration:tmdb:api",
-              title: t("settings.integration.tmdb.apiKey.title"),
-              subtitle: t("settings.integration.tmdb.apiKey.subtitle"),
-              value: maskValue(model.tmdb.apiKey, t("common.notSet"))
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:credits",
+              title: t("tmdb_credits_title", {}, "Credits"),
+              subtitle: t("tmdb_credits_subtitle", {}, "Cast with photos, director, and writer from TMDB"),
+              checked: model.tmdb.useCredits !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:productions",
+              title: t("tmdb_productions_title", {}, "Productions"),
+              subtitle: t("tmdb_productions_subtitle", {}, "Production companies from TMDB"),
+              checked: model.tmdb.useProductions !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:networks",
+              title: t("tmdb_networks_title", {}, "Networks"),
+              subtitle: t("tmdb_networks_subtitle", {}, "Networks with logos from TMDB"),
+              checked: model.tmdb.useNetworks !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:episodes",
+              title: t("tmdb_episodes_title", {}, "Episodes"),
+              subtitle: t(
+                "tmdb_episodes_subtitle",
+                {},
+                "Episode titles, overviews, thumbnails, and runtime from TMDB"
+              ),
+              checked: model.tmdb.useEpisodes !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:trailers",
+              title: t("tmdb_trailers_title", {}, "Trailers"),
+              subtitle: t(
+                "tmdb_trailers_subtitle",
+                {},
+                "Trailer candidates from TMDB videos for the detail trailer section"
+              ),
+              checked: model.tmdb.useTrailers !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:moreLikeThis",
+              title: t("tmdb_more_like_this_title", {}, "More Like This"),
+              subtitle: t("tmdb_more_like_this_subtitle", {}, "TMDB recommendation backdrops on detail page"),
+              checked: model.tmdb.useMoreLikeThis !== false,
+              disabled: !model.tmdb.enabled
+            })}
+            ${this.renderToggleRow({
+              focusKey: "integration:tmdb:collections",
+              title: t("tmdb_collections_title", {}, "Collections"),
+              subtitle: t("tmdb_collections_subtitle", {}, "TMDB movie collections in release order"),
+              checked: model.tmdb.useCollections !== false,
+              disabled: !model.tmdb.enabled
             })}
           </div>
         </div>
@@ -3726,19 +4273,57 @@ export const SettingsScreen = {
     }
 
     if (key === "mdblist") {
+      const toggleMdbListSetting = (field) => {
+        MdbListSettingsStore.set({ [field]: !MdbListSettingsStore.get()[field] });
+      };
       this.actionMap.set("integration:mdblist:enabled", () => {
         MdbListSettingsStore.set({ enabled: !MdbListSettingsStore.get().enabled });
       });
       this.actionMap.set("integration:mdblist:key", () => {
         this.openTextDialog({
-          title: t("settings.integration.mdblist.apiKey.prompt"),
+          title: t("settings.integration.mdblist.dialog.title"),
           value: MdbListSettingsStore.get().apiKey || "",
+          placeholder: t("settings.integration.mdblist.dialog.placeholder"),
           returnFocusKey: "integration:mdblist:key",
-          onSubmit: (value) => {
-            MdbListSettingsStore.set({ apiKey: String(value).trim() });
+          clearLabel: t("common.clear", {}, t("action_clear", {}, "Clear")),
+          onClear: () => {
+            MdbListSettingsStore.set({ apiKey: "" });
+            return true;
+          },
+          onSubmit: async (value) => {
+            const trimmed = String(value || "").trim();
+            if (trimmed) {
+              if (this.textDialog) {
+                this.textDialog.statusMessage = t("action_saving", {}, "Saving...");
+                this.textDialog.statusKind = "info";
+                await this.render({ refreshModel: false });
+              }
+              const valid = await mdbListRepository.validateApiKey(trimmed);
+              if (!valid) {
+                if (this.textDialog) {
+                  this.textDialog.statusMessage = t(
+                    "settings.integration.mdblist.invalidApiKey"
+                  );
+                  this.textDialog.statusKind = "error";
+                }
+                return false;
+              }
+            }
+            MdbListSettingsStore.set({ apiKey: trimmed });
             return true;
           }
         });
+      });
+      [
+        ["trakt", "showTrakt"],
+        ["imdb", "showImdb"],
+        ["tmdb", "showTmdb"],
+        ["letterboxd", "showLetterboxd"],
+        ["tomatoes", "showTomatoes"],
+        ["audience", "showAudience"],
+        ["metacritic", "showMetacritic"]
+      ].forEach(([provider, field]) => {
+        this.actionMap.set(`integration:mdblist:${provider}`, () => toggleMdbListSetting(field));
       });
 
       return `
@@ -3754,18 +4339,35 @@ export const SettingsScreen = {
             ${this.renderToggleRow({
               focusKey: "integration:mdblist:enabled",
               title: t("settings.integration.mdblist.enable.title"),
-              subtitle: plannedSubtitle(t("settings.integration.mdblist.enable.subtitle")),
-              checked: Boolean(model.mdbList.enabled),
-              planned: true
+              subtitle: t("settings.integration.mdblist.enable.subtitle"),
+              checked: Boolean(model.mdbList.enabled)
             })}
             ${this.renderActionRow({
               focusKey: "integration:mdblist:key",
               title: t("settings.integration.mdblist.apiKey.title"),
-              subtitle: plannedSubtitle(t("settings.integration.mdblist.apiKey.subtitle")),
+              subtitle: t("settings.integration.mdblist.apiKey.subtitle"),
               value: maskValue(model.mdbList.apiKey, t("common.notSet")),
-              disabled: !model.mdbList.enabled,
-              planned: true
+              disabled: !model.mdbList.enabled
             })}
+            ${[
+              ["trakt", "showTrakt"],
+              ["imdb", "showImdb"],
+              ["tmdb", "showTmdb"],
+              ["letterboxd", "showLetterboxd"],
+              ["tomatoes", "showTomatoes"],
+              ["audience", "showAudience"],
+              ["metacritic", "showMetacritic"]
+            ]
+              .map(([provider, field]) =>
+                this.renderToggleRow({
+                  focusKey: `integration:mdblist:${provider}`,
+                  title: t(`settings.integration.mdblist.${provider}.title`),
+                  subtitle: t(`settings.integration.mdblist.${provider}.subtitle`),
+                  checked: model.mdbList[field] !== false,
+                  disabled: !model.mdbList.enabled
+                })
+              )
+              .join("")}
           </div>
         </div>
       `;
@@ -5435,7 +6037,11 @@ export const SettingsScreen = {
       const button = target.closest?.(".settings-text-dialog-button[data-dialog-index]");
       if (button) {
         this.focusZone = "dialog";
-        this.dialogFocusIndex = clamp(Number(button.dataset.dialogIndex || 1), 1, 2);
+        this.dialogFocusIndex = clamp(
+          Number(button.dataset.dialogIndex || 1),
+          1,
+          this.getTextDialogMaxFocusIndex()
+        );
         await this.activateFocused();
         return;
       }
@@ -5464,6 +6070,11 @@ export const SettingsScreen = {
         await this.render();
         return;
       }
+      if (action === "clear") {
+        await this.clearTextDialog();
+        await this.render();
+        return;
+      }
       if (action === "cancel") {
         this.closeTextDialog();
         await this.render({ refreshModel: false });
@@ -5477,6 +6088,21 @@ export const SettingsScreen = {
     if (this.optionDialog) {
       const option = this.optionDialog.options[this.dialogFocusIndex];
       if (!option) {
+        return;
+      }
+      if (this.optionDialog.multiChoice) {
+        const optionId = String(option.id);
+        const selectedIds = new Set(this.optionDialog.selectedIds || []);
+        if (selectedIds.has(optionId)) {
+          selectedIds.delete(optionId);
+        } else {
+          selectedIds.add(optionId);
+        }
+        this.optionDialog.selectedIds = selectedIds;
+        if (typeof this.optionDialog.onToggle === "function") {
+          await this.optionDialog.onToggle(Array.from(selectedIds), option);
+        }
+        await this.render();
         return;
       }
       if (typeof this.optionDialog.onSelect === "function") {
@@ -5571,14 +6197,22 @@ export const SettingsScreen = {
       if ((code === 38 || code === 40) && !(activeField && this.textDialog.multiline)) {
         event?.preventDefault?.();
         const delta = code === 38 ? -1 : 1;
-        this.dialogFocusIndex = clamp(this.dialogFocusIndex + delta, 0, 2);
+        this.dialogFocusIndex = clamp(
+          this.dialogFocusIndex + delta,
+          0,
+          this.getTextDialogMaxFocusIndex()
+        );
         this.applyFocus();
         return;
       }
       if (code === 37 || code === 39) {
         if (!activeField) {
           event?.preventDefault?.();
-          this.dialogFocusIndex = clamp(this.dialogFocusIndex + (code === 37 ? -1 : 1), 0, 2);
+          this.dialogFocusIndex = clamp(
+            this.dialogFocusIndex + (code === 37 ? -1 : 1),
+            0,
+            this.getTextDialogMaxFocusIndex()
+          );
           this.applyFocus();
         }
         return;

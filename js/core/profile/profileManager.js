@@ -4,6 +4,7 @@ const PROFILES_KEY = "profiles";
 const ACTIVE_PROFILE_ID_KEY = "activeProfileId";
 const REMEMBER_LAST_PROFILE_KEY = "rememberLastProfile";
 const HAS_EVER_SELECTED_PROFILE_KEY = "hasEverSelectedProfile";
+export const MAX_PROFILES = 6;
 
 const DEFAULT_PROFILES = [
   { id: "1", profileIndex: 1, name: "Profile 1", avatarColorHex: "#1E88E5", isPrimary: true }
@@ -29,7 +30,24 @@ function normalizeProfile(profile, index = 0) {
   };
 }
 
+function getFirstAvailableProfileIndex(profiles = []) {
+  const usedIndexes = new Set(
+    (Array.isArray(profiles) ? profiles : [])
+      .map((profile) => Number(profile?.profileIndex || profile?.id || 0))
+      .filter((profileIndex) => Number.isFinite(profileIndex) && profileIndex > 0)
+      .map((profileIndex) => Math.trunc(profileIndex))
+  );
+  for (let profileIndex = 2; profileIndex <= MAX_PROFILES; profileIndex += 1) {
+    if (!usedIndexes.has(profileIndex)) {
+      return profileIndex;
+    }
+  }
+  return null;
+}
+
 export const ProfileManager = {
+  MAX_PROFILES,
+
   async getProfiles() {
     const stored = LocalStore.get(PROFILES_KEY, null);
     if (Array.isArray(stored) && stored.length) {
@@ -46,6 +64,10 @@ export const ProfileManager = {
       normalizeProfile(profile, index)
     );
     LocalStore.set(PROFILES_KEY, normalized);
+  },
+
+  getNextProfileIndex(profiles = []) {
+    return getFirstAvailableProfileIndex(profiles);
   },
 
   async setActiveProfile(id) {
@@ -86,15 +108,14 @@ export const ProfileManager = {
     }
 
     const profiles = await this.getProfiles();
-    if (profiles.length >= 4) {
+    if (profiles.length >= MAX_PROFILES) {
       return false;
     }
 
-    const nextIndex =
-      profiles.reduce(
-        (max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)),
-        0
-      ) + 1;
+    const nextIndex = getFirstAvailableProfileIndex(profiles);
+    if (nextIndex == null) {
+      return false;
+    }
     const nextProfiles = [
       ...profiles,
       normalizeProfile(

@@ -1808,6 +1808,7 @@ export const PlayerScreen = {
     this.externalSubtitleObjectUrls = [];
     this.htmlSubtitleCues = [];
     this.htmlSubtitleRenderFrame = null;
+    this.htmlSubtitleRenderTimer = null;
     this.avPlaySubtitleOverlayTimer = null;
     this.htmlSubtitleActiveCueKey = "";
     this.htmlSubtitleSelectedId = null;
@@ -1964,6 +1965,7 @@ export const PlayerScreen = {
     this.loadingProgressRefreshInFlight = false;
     this.seekLoading = false;
     this.seekLoadingBaselineSeconds = null;
+    this.seekLoadingTargetSeconds = null;
     this.startupAudioGateActive = false;
     this.loadingCompletionTimer = null;
     this.loadingCompletionToken = 0;
@@ -6143,6 +6145,7 @@ export const PlayerScreen = {
       if (this.seekLoading) {
         this.seekLoading = false;
         this.seekLoadingBaselineSeconds = null;
+        this.seekLoadingTargetSeconds = null;
         this.clearBufferingSpinnerTimer();
       }
       if (isTizenAvPlayPlayback()) {
@@ -6280,6 +6283,7 @@ export const PlayerScreen = {
       }
       this.markPlaybackProgress();
       this.attemptPendingPlaybackRestore();
+      this.renderHtmlSubtitleOverlayAtCurrentTime();
       this.updateUiTick();
     };
 
@@ -6312,11 +6316,22 @@ export const PlayerScreen = {
         return;
       }
       this.attemptPendingPlaybackRestore();
+      this.completeSeekLoadingIfReady();
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
       this.applySubtitlePresentationSettings();
       this.applyAspectMode({ showToast: false });
       this.scheduleLoadingCompletionCheck(120);
+      this.updateUiTick();
+    };
+
+    const onSeeked = () => {
+      if (this.isStartupErrorVisible()) {
+        return;
+      }
+      this.attemptPendingPlaybackRestore();
+      this.completeSeekLoadingIfReady();
+      this.markPlaybackProgress();
       this.updateUiTick();
     };
 
@@ -6384,6 +6399,7 @@ export const PlayerScreen = {
       }
       this.seekLoading = false;
       this.seekLoadingBaselineSeconds = null;
+      this.seekLoadingTargetSeconds = null;
       const now = Date.now();
       if ((now - Number(this.lastPlaybackErrorAt || 0)) < 120) {
         return;
@@ -6541,6 +6557,7 @@ export const PlayerScreen = {
       ["loadedmetadata", onLoadedMetadata],
       ["loadeddata", onPlayable],
       ["canplay", onPlayable],
+      ["seeked", onSeeked],
       ["avplaytrackschanged", onTrackListChanged],
       ["avplaysubtitlechange", onAvPlaySubtitleChange],
       ["webosaudiotrackselectionchanged", onWebOsAudioTrackSelectionChanged],
@@ -7108,6 +7125,31 @@ export const PlayerScreen = {
     return Number.isFinite(readyState) && readyState >= 2;
   },
 
+  clearSeekLoading({ hideBuffering = false } = {}) {
+    if (!this.seekLoading && this.seekLoadingBaselineSeconds == null && this.seekLoadingTargetSeconds == null) {
+      return false;
+    }
+    this.seekLoading = false;
+    this.seekLoadingBaselineSeconds = null;
+    this.seekLoadingTargetSeconds = null;
+    if (hideBuffering && this.hasPresentedPlaybackFrame) {
+      this.loadingVisible = false;
+    }
+    this.clearBufferingSpinnerTimer();
+    this.updateLoadingVisibility();
+    return true;
+  },
+
+  completeSeekLoadingIfReady() {
+    if (!this.seekLoading || this.pendingPlaybackRestore || this.isStartupLoadingVisible()) {
+      return false;
+    }
+    if (!this.isPlaybackFrameReady()) {
+      return false;
+    }
+    return this.clearSeekLoading({ hideBuffering: true });
+  },
+
   isEngineFsStartupReady() {
     if (!this.currentEngineFsStream) {
       return true;
@@ -7122,22 +7164,19 @@ export const PlayerScreen = {
   seekPlaybackSeconds(seconds) {
     // Mark user-initiated seeks so the player can stay responsive while it settles.
     this.seekLoadingBaselineSeconds = this.getPlaybackCurrentSeconds();
+    this.seekLoadingTargetSeconds = Number(seconds || 0);
     this.seekLoading = true;
     this.updateLoadingVisibility();
     if (typeof PlayerController.seekToSeconds === "function") {
       const didSeek = Boolean(PlayerController.seekToSeconds(seconds));
       if (!didSeek) {
-        this.seekLoading = false;
-        this.seekLoadingBaselineSeconds = null;
-        this.updateLoadingVisibility();
+        this.clearSeekLoading();
       }
       return didSeek;
     }
     const video = PlayerController.video;
     if (!video) {
-      this.seekLoading = false;
-      this.seekLoadingBaselineSeconds = null;
-      this.updateLoadingVisibility();
+      this.clearSeekLoading();
       return false;
     }
     video.currentTime = Number(seconds || 0);
@@ -8129,15 +8168,19 @@ export const PlayerScreen = {
     }
     if (this.seekLoading) {
       const seekBaselineSeconds = Number(this.seekLoadingBaselineSeconds);
+      const seekTargetSeconds = Number(this.seekLoadingTargetSeconds);
+      const reachedSeekTarget = Number.isFinite(currentSeconds)
+        && Number.isFinite(seekTargetSeconds)
+        && Math.abs(currentSeconds - seekTargetSeconds) <= 0.75;
       if (
-        Number.isFinite(currentSeconds)
-        && Number.isFinite(seekBaselineSeconds)
-        && currentSeconds > (seekBaselineSeconds + STARTUP_PLAYBACK_ADVANCE_EPSILON_SECONDS)
+        (reachedSeekTarget && this.isPlaybackFrameReady())
+        || (
+          Number.isFinite(currentSeconds)
+          && Number.isFinite(seekBaselineSeconds)
+          && currentSeconds > (seekBaselineSeconds + STARTUP_PLAYBACK_ADVANCE_EPSILON_SECONDS)
+        )
       ) {
-        this.seekLoading = false;
-        this.seekLoadingBaselineSeconds = null;
-        this.clearBufferingSpinnerTimer();
-        this.updateLoadingVisibility();
+        this.clearSeekLoading({ hideBuffering: reachedSeekTarget });
       }
     }
     this.bufferingSpinnerBaselineSeconds = currentSeconds;
@@ -9355,6 +9398,10 @@ export const PlayerScreen = {
       }
     }
     this.htmlSubtitleRenderFrame = null;
+    if (this.htmlSubtitleRenderTimer != null) {
+      clearTimeout(this.htmlSubtitleRenderTimer);
+      this.htmlSubtitleRenderTimer = null;
+    }
     if (this.avPlaySubtitleOverlayTimer) {
       clearTimeout(this.avPlaySubtitleOverlayTimer);
       this.avPlaySubtitleOverlayTimer = null;
@@ -9402,25 +9449,36 @@ export const PlayerScreen = {
     node.setAttribute("aria-hidden", "false");
   },
 
+  renderHtmlSubtitleOverlayAtCurrentTime() {
+    if (!Array.isArray(this.htmlSubtitleCues) || !this.htmlSubtitleCues.length) {
+      return false;
+    }
+    const currentTime = Number(this.getPlaybackCurrentSeconds() || 0);
+    const delaySeconds = Number(this.subtitleDelayMs || 0) / 1000;
+    const subtitleTime = currentTime - delaySeconds;
+    const activeCues = this.htmlSubtitleCues.filter((cue) => (
+      subtitleTime >= cue.start && subtitleTime < cue.end
+    ));
+    this.renderHtmlSubtitleOverlayCue(activeCues);
+    return true;
+  },
+
   scheduleHtmlSubtitleOverlayRender() {
     if (!Array.isArray(this.htmlSubtitleCues) || !this.htmlSubtitleCues.length) {
       return;
     }
+    if (this.htmlSubtitleRenderTimer != null) {
+      clearTimeout(this.htmlSubtitleRenderTimer);
+      this.htmlSubtitleRenderTimer = null;
+    }
     const render = () => {
-      const currentTime = Number(this.getPlaybackCurrentSeconds() || 0);
-      const delaySeconds = Number(this.subtitleDelayMs || 0) / 1000;
-      const subtitleTime = currentTime - delaySeconds;
-      const activeCues = this.htmlSubtitleCues.filter((cue) => (
-        subtitleTime >= cue.start && subtitleTime < cue.end
-      ));
-      this.renderHtmlSubtitleOverlayCue(activeCues);
-      this.htmlSubtitleRenderFrame = typeof requestAnimationFrame === "function"
-        ? requestAnimationFrame(render)
-        : setTimeout(render, 80);
+      if (!this.renderHtmlSubtitleOverlayAtCurrentTime()) {
+        this.htmlSubtitleRenderTimer = null;
+        return;
+      }
+      this.htmlSubtitleRenderTimer = setTimeout(render, 120);
     };
-    this.htmlSubtitleRenderFrame = typeof requestAnimationFrame === "function"
-      ? requestAnimationFrame(render)
-      : setTimeout(render, 80);
+    render();
   },
 
   renderAvPlaySubtitleChange(detail = {}) {
@@ -9463,20 +9521,22 @@ export const PlayerScreen = {
     }, hideDelayMs);
   },
 
-  async applyTizenHtmlAddonSubtitle(subtitle, subtitleIndex) {
+  async applyTvHtmlAddonSubtitle(subtitle, subtitleIndex) {
     const subtitleId = subtitle?.id || subtitle?.url || `subtitle-${subtitleIndex}`;
-    const subtitleUrl = await this.resolveTizenAvPlaySubtitleUrl(subtitle?.url);
+    const subtitleUrl = Environment.isTizen()
+      ? await this.resolveTizenAvPlaySubtitleUrl(subtitle?.url)
+      : await this.resolveSubtitlePlaybackUrl(subtitle?.url);
     if (!subtitleUrl) {
       return false;
     }
     const response = await fetch(subtitleUrl, { cache: "no-cache" });
     if (!response.ok) {
-      throw new Error(`Tizen subtitle proxy failed with HTTP ${response.status}`);
+      throw new Error(`HTML subtitle fetch failed with HTTP ${response.status}`);
     }
     const text = await response.text();
     const cues = this.parseSubtitleCues(text);
     if (!cues.length) {
-      throw new Error("Tizen subtitle proxy returned no cues");
+      throw new Error("HTML subtitle fetch returned no cues");
     }
     this.clearMountedExternalSubtitleTracks();
     this.clearHtmlSubtitleOverlay();
@@ -10977,13 +11037,13 @@ export const PlayerScreen = {
     const usingAvPlay = typeof PlayerController.isUsingAvPlay === "function"
       ? PlayerController.isUsingAvPlay()
       : false;
-    if (usingAvPlay && Environment.isTizen()) {
+    if ((usingAvPlay && Environment.isTizen()) || Environment.isWebOS()) {
       try {
-        if (await this.applyTizenHtmlAddonSubtitle(subtitle, subtitleIndex)) {
+        if (await this.applyTvHtmlAddonSubtitle(subtitle, subtitleIndex)) {
           return;
         }
       } catch (error) {
-        console.warn("Tizen HTML subtitle overlay failed", {
+        console.warn("HTML subtitle overlay failed", {
           subtitleUrl: subtitle.url,
           error: error?.message || String(error || "")
         });
@@ -14485,20 +14545,20 @@ export const PlayerScreen = {
 
     this.releaseStartupAudioGate({ resume: false });
     } catch (error) {
-      try { console.warn("Player cleanup error suppressed to keep navigation working", error); } catch (e) {}
+      try { console.warn("Player cleanup error suppressed to keep navigation working", error); } catch (_) {}
     } finally {
       // Always stop playback and hide the player surface, even if the teardown
       // above threw, so the user is never left stuck in the player with the
       // video still playing (seen on Samsung Tizen when the EngineFS release
       // throws during cleanup and aborts the route navigation).
-      try { PlayerController.stop(); } catch (e) {}
+      try { PlayerController.stop(); } catch (_) {}
       try {
         if (this.container) {
           this.container.style.display = "none";
           this.container.querySelector("#playerUiRoot")?.remove();
           this.container.querySelector("#episodeSidePanel")?.remove();
         }
-      } catch (e) {}
+      } catch (_) {}
       this.uiRefs = null;
       this.lastUiTickState = null;
     }

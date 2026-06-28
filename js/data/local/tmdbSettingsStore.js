@@ -1,21 +1,43 @@
-import { TMDB_API_KEY } from "../../config.js";
 import { createProfileScopedStore } from "./profileScopedStore.js";
 
 const KEY = "tmdbSettings";
 
 const DEFAULTS = {
-  enabled: true,
-  apiKey: TMDB_API_KEY,
-  language: "en-US",
+  enabled: false,
+  modernHomeEnabled: false,
+  enrichContinueWatching: true,
+  language: "en",
   useArtwork: true,
   useBasicInfo: true,
-  useDetails: true
+  useDetails: true,
+  useReleaseDates: true,
+  useCredits: true,
+  useProductions: true,
+  useNetworks: true,
+  useEpisodes: true,
+  useTrailers: true,
+  useMoreLikeThis: true,
+  useCollections: true
 };
 
 function normalizeTmdbSettings(value = {}) {
+  const source = value && typeof value === "object" ? value : {};
   return {
-    ...DEFAULTS,
-    ...(value || {})
+    enabled: Boolean(source.enabled),
+    modernHomeEnabled: Boolean(source.modernHomeEnabled),
+    enrichContinueWatching: source.enrichContinueWatching !== false,
+    language: String(source.language || DEFAULTS.language).trim() || DEFAULTS.language,
+    useArtwork: source.useArtwork !== false,
+    useBasicInfo: source.useBasicInfo !== false,
+    useDetails: source.useDetails !== false,
+    useReleaseDates: source.useReleaseDates !== false,
+    useCredits: source.useCredits !== false,
+    useProductions: source.useProductions !== false,
+    useNetworks: source.useNetworks !== false,
+    useEpisodes: source.useEpisodes !== false,
+    useTrailers: source.useTrailers !== false,
+    useMoreLikeThis: source.useMoreLikeThis !== false,
+    useCollections: source.useCollections !== false
   };
 }
 

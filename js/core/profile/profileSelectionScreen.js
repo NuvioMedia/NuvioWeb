@@ -1,5 +1,5 @@
 import { Router } from "../../ui/navigation/router.js";
-import { ProfileManager } from "../../core/profile/profileManager.js";
+import { MAX_PROFILES, ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "../../core/profile/profileSettingsSyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
@@ -435,7 +435,10 @@ export const ProfileSelectionScreen = {
   },
 
   render() {
-    const canAddProfile = this.getVisibleProfiles().length < 4;
+    const visibleProfiles = this.getVisibleProfiles();
+    const canAddProfile = visibleProfiles.length < MAX_PROFILES;
+    const totalItems = visibleProfiles.length + (canAddProfile ? 1 : 0);
+    const gridClass = totalItems >= 6 ? "profile-grid profile-grid-compact" : "profile-grid";
     const title = this.isManagementMode
       ? t("profile_manage_title", {}, "Manage Profiles")
       : t("profile_selection_title", {}, "Who's watching?");
@@ -450,19 +453,18 @@ export const ProfileSelectionScreen = {
     const pinScreenPhaseClass = isPinActive
       ? ` is-pin-${escapeHtml(this.pinOverlayPhase || "open")}`
       : "";
+    const compactGridScreenClass = totalItems >= 6 ? " profile-screen-compact-grid" : "";
 
     this.container.innerHTML = `
-      <div class="profile-screen${pinScreenPhaseClass}">
+      <div class="profile-screen${pinScreenPhaseClass}${compactGridScreenClass}">
         <div class="profile-main-layer"${isPinActive ? ' aria-hidden="true"' : ""}>
           <img src="assets/brand/app_logo_wordmark.png" class="profile-logo" alt="Nuvio"/>
 
           <h1 class="profile-title">${escapeHtml(title)}</h1>
           <p class="profile-subtitle">${escapeHtml(subtitle)}</p>
 
-          <div class="profile-grid" id="profileGrid">
-            ${this.getVisibleProfiles()
-              .map((profile) => this.renderProfileCard(profile))
-              .join("")}
+          <div class="${gridClass}" id="profileGrid" data-profile-item-count="${totalItems}">
+            ${visibleProfiles.map((profile) => this.renderProfileCard(profile)).join("")}
             ${canAddProfile ? this.renderAddProfileCard() : ""}
           </div>
 
@@ -1897,12 +1899,7 @@ export const ProfileSelectionScreen = {
     const focusProfileId =
       editorState.mode === "edit"
         ? editorState.profileId
-        : String(
-            this.getVisibleProfiles().reduce(
-              (max, profile) => Math.max(max, Number(profile.profileIndex || profile.id || 0)),
-              0
-            ) + 1
-          );
+        : String(ProfileManager.getNextProfileIndex(this.getVisibleProfiles()) || "");
 
     this.editorState = null;
     this.pendingFocusKey = `profile:${focusProfileId}`;

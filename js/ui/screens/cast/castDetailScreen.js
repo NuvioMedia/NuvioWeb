@@ -2,6 +2,7 @@ import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { TmdbSettingsStore } from "../../../data/local/tmdbSettingsStore.js";
 import { Environment } from "../../../platform/environment.js";
+import { TMDB_API_KEY } from "../../../config.js";
 import { I18n } from "../../../i18n/index.js";
 import {
   posterItemFromNode,
@@ -61,7 +62,7 @@ export const CastDetailScreen = {
 
   async getPersonIdFromName(name) {
     const settings = TmdbSettingsStore.get();
-    const apiKey = String(settings.apiKey || "").trim();
+    const apiKey = String(TMDB_API_KEY || "").trim();
     if (!apiKey || !name) {
       return null;
     }
@@ -80,7 +81,7 @@ export const CastDetailScreen = {
     const token = this.loadToken;
     try {
       const settings = TmdbSettingsStore.get();
-      const apiKey = String(settings.apiKey || "").trim();
+      const apiKey = String(TMDB_API_KEY || "").trim();
       if (!apiKey) {
         this.renderError("TMDB API key not configured.");
         return;

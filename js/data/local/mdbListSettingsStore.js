@@ -4,13 +4,29 @@ const KEY = "mdbListSettings";
 
 const DEFAULTS = {
   enabled: false,
-  apiKey: ""
+  apiKey: "",
+  showTrakt: true,
+  showImdb: true,
+  showTmdb: true,
+  showLetterboxd: true,
+  showTomatoes: true,
+  showAudience: true,
+  showMetacritic: true
 };
 
 function normalizeMdbListSettings(value = {}) {
   return {
     ...DEFAULTS,
-    ...(value || {})
+    ...(value || {}),
+    enabled: Boolean(value?.enabled),
+    apiKey: String(value?.apiKey || "").trim(),
+    showTrakt: value?.showTrakt !== false,
+    showImdb: value?.showImdb !== false,
+    showTmdb: value?.showTmdb !== false,
+    showLetterboxd: value?.showLetterboxd !== false,
+    showTomatoes: value?.showTomatoes !== false,
+    showAudience: value?.showAudience !== false,
+    showMetacritic: value?.showMetacritic !== false
   };
 }
 
