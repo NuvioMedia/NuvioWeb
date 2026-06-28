@@ -24,6 +24,10 @@ import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingSe
 import { TizenEngineFsService } from "../../../platform/tizen/tizenEngineFsService.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
+import {
+  shouldEnterStillWatchingPrompt,
+  shouldShowNextEpisodeCard as shouldShowNextEpisodeCardRule
+} from "./playerNextEpisodeRules.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -349,7 +353,6 @@ const SUBTITLE_VERTICAL_OFFSET_STEP = 1;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-const NEXT_EPISODE_THRESHOLD_PERCENT = 0.97;
 const NEXT_EPISODE_PREFETCH_PERCENT = 0.9;
 const SKIP_INTERVAL_CHECK_MS = 250;
 const PARENTAL_GUIDE_ROW_HEIGHT = 36;
@@ -1876,6 +1879,13 @@ export const PlayerScreen = {
     this.pauseOverlayMetaRequestToken = Number(this.pauseOverlayMetaRequestToken || 0);
     this.pauseOverlayMeta = null;
     this.nextEpisodeLaunching = false;
+    this.nextEpisodeAutoplayAttemptedKey = "";
+    this.consecutiveAutoPlayCount = Math.max(0, Math.trunc(Number(params.consecutiveAutoPlayCount || 0) || 0));
+    this.stillWatchingPromptVisible = false;
+    this.stillWatchingPromptCountdownSec = 0;
+    this.stillWatchingPromptTimer = null;
+    this.stillWatchingPromptFocusArmed = false;
+    this.stillWatchingPromptFocus = "continue";
     this.playerBackNavigationInProgress = false;
     this.nextEpisodeCardDismissed = false;
     this.nextEpisodeBackExitArmed = false;
@@ -2308,6 +2318,12 @@ export const PlayerScreen = {
   },
 
   updateActiveSkipInterval(currentTime = this.getPlaybackCurrentSeconds()) {
+    if (!PlayerSettingsStore.get().skipIntroEnabled) {
+      if (this.activeSkipInterval != null) {
+        this.activeSkipInterval = null;
+      }
+      return;
+    }
     const previous = this.activeSkipInterval;
     const active = (Array.isArray(this.skipIntervals) ? this.skipIntervals : []).find((interval) => {
       const start = Number(interval?.startTime);
@@ -5031,13 +5047,42 @@ export const PlayerScreen = {
     }
     const hidden = !this.pauseOverlayVisible || this.loadingVisible;
     overlay.classList.toggle("hidden", hidden);
+    overlay.classList.toggle("is-still-watching", Boolean(this.stillWatchingPromptVisible));
     controlsOverlay?.classList.toggle("pause-overlay-active", !hidden);
     if (hidden) {
       return;
     }
 
-    const meta = this.pauseOverlayMeta || this.buildPauseOverlayMeta();
     const clockText = String(this.lastUiTickState?.clockText || this.uiRefs?.clock?.textContent || "--:--").trim() || "--:--";
+    if (this.stillWatchingPromptVisible) {
+      const nextEpisode = this.resolveNextEpisodeInfo();
+      const titleLine = [nextEpisode?.episodeLabel, nextEpisode?.episodeTitle].filter(Boolean).join(" • ");
+      overlay.innerHTML = `
+        <div class="player-pause-overlay-top">
+          <div class="player-pause-overlay-clock">${escapeHtml(clockText)}</div>
+        </div>
+        <div class="player-pause-overlay-shade"></div>
+        <div class="player-pause-overlay-content player-still-watching-content">
+          <div class="player-pause-kicker">${escapeHtml(t("still_watching_title", {}, "Still watching"))}</div>
+          <div class="player-pause-title">${escapeHtml(titleLine || t("next_episode_label", {}, "Next episode"))}</div>
+          <div class="player-pause-description">${escapeHtml(t("still_watching_countdown", [this.stillWatchingPromptCountdownSec], "Continuing in %1$s"))}</div>
+          <div class="player-still-watching-actions">
+            <button class="player-still-watching-btn focusable is-primary${this.stillWatchingPromptFocus === "continue" ? " focused" : ""}" type="button" tabindex="-1" data-player-pointer-action="stillWatchingContinue">${escapeHtml(t("still_watching_continue", {}, "Continue"))}</button>
+            <button class="player-still-watching-btn focusable${this.stillWatchingPromptFocus === "exit" ? " focused" : ""}" type="button" tabindex="-1" data-player-pointer-action="stillWatchingExit">${escapeHtml(t("still_watching_exit", {}, "Exit"))}</button>
+          </div>
+        </div>
+      `;
+      if (this.stillWatchingPromptFocusArmed) {
+        this.stillWatchingPromptFocusArmed = false;
+        setTimeout(() => {
+          const focusTarget = overlay.querySelector("[data-player-pointer-action='stillWatchingContinue']");
+          focusTarget?.focus?.();
+        }, 0);
+      }
+      return;
+    }
+
+    const meta = this.pauseOverlayMeta || this.buildPauseOverlayMeta();
     const castItems = Array.isArray(meta.cast) ? meta.cast.slice(0, MAX_PAUSE_OVERLAY_CAST) : [];
     overlay.innerHTML = `
       <div class="player-pause-overlay-top">
@@ -5064,6 +5109,83 @@ export const PlayerScreen = {
         ` : ""}
       </div>
     `;
+  },
+
+  clearStillWatchingPromptTimer() {
+    if (this.stillWatchingPromptTimer) {
+      clearInterval(this.stillWatchingPromptTimer);
+      this.stillWatchingPromptTimer = null;
+    }
+  },
+
+  resetStillWatchingPromptState({ render = true } = {}) {
+    this.clearStillWatchingPromptTimer();
+    this.stillWatchingPromptVisible = false;
+    this.stillWatchingPromptCountdownSec = 0;
+    this.stillWatchingPromptFocusArmed = false;
+    this.stillWatchingPromptFocus = "continue";
+    if (render) {
+      this.renderPauseOverlay();
+    }
+  },
+
+  enterStillWatchingPromptMode() {
+    if (this.stillWatchingPromptVisible || this.nextEpisodeLaunching) {
+      return;
+    }
+    const nextEpisode = this.resolveNextEpisodeInfo();
+    if (!nextEpisode?.hasAired) {
+      return;
+    }
+
+    this.clearStillWatchingPromptTimer();
+    this.stillWatchingPromptVisible = true;
+    this.stillWatchingPromptCountdownSec = 60;
+    this.stillWatchingPromptFocusArmed = true;
+    this.stillWatchingPromptFocus = "continue";
+    PlayerController.pause();
+    this.paused = true;
+    this.updateMediaSessionPlaybackState();
+    this.setControlsVisible(false, { focus: false });
+    this.pauseOverlayVisible = true;
+    this.renderPauseOverlay();
+
+    this.stillWatchingPromptTimer = setInterval(() => {
+      if (!this.stillWatchingPromptVisible) {
+        this.clearStillWatchingPromptTimer();
+        return;
+      }
+      const nextCountdown = Number(this.stillWatchingPromptCountdownSec || 0) - 1;
+      if (nextCountdown <= 0) {
+        this.onDismissStillWatchingPrompt();
+        return;
+      }
+      this.stillWatchingPromptCountdownSec = nextCountdown;
+      this.renderPauseOverlay();
+    }, 1000);
+  },
+
+  async onStillWatchingContinue() {
+    if (!this.stillWatchingPromptVisible) {
+      return false;
+    }
+    this.resetStillWatchingPromptState({ render: false });
+    this.consecutiveAutoPlayCount = 0;
+    this.pauseOverlayVisible = false;
+    this.renderPauseOverlay();
+    await this.playNextEpisode({ userInitiated: true });
+    return true;
+  },
+
+  onDismissStillWatchingPrompt() {
+    if (!this.stillWatchingPromptVisible) {
+      return false;
+    }
+    this.resetStillWatchingPromptState({ render: false });
+    this.consecutiveAutoPlayCount = 0;
+    this.pauseOverlayVisible = false;
+    this.renderPauseOverlay();
+    return this.navigateBackToStreamScreen();
   },
 
   getDisplayEpisodeTitle() {
@@ -5332,12 +5454,23 @@ export const PlayerScreen = {
     if (!nextEpisode) {
       return false;
     }
+    if (!this.hasPresentedPlaybackFrame) {
+      return false;
+    }
     const durationSeconds = Number(this.getPlaybackDurationSeconds() || 0);
     const currentSeconds = Number(this.getPlaybackCurrentSeconds() || 0);
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(currentSeconds) || currentSeconds < 0) {
       return false;
     }
-    return (currentSeconds / durationSeconds) >= NEXT_EPISODE_THRESHOLD_PERCENT;
+    const settings = PlayerSettingsStore.get();
+    return shouldShowNextEpisodeCardRule({
+      positionSeconds: currentSeconds,
+      durationSeconds,
+      skipIntervals: settings.skipIntroEnabled ? this.skipIntervals : [],
+      thresholdMode: settings.nextEpisodeThresholdMode,
+      thresholdPercent: settings.nextEpisodeThresholdPercent,
+      thresholdMinutesBeforeEnd: settings.nextEpisodeThresholdMinutesBeforeEnd
+    });
   },
 
   hasPlaybackReachedNaturalEnd() {
@@ -5348,7 +5481,7 @@ export const PlayerScreen = {
     }
     const remainingSeconds = durationSeconds - currentSeconds;
     const progress = currentSeconds / durationSeconds;
-    return remainingSeconds <= 8 || progress >= 0.985;
+    return remainingSeconds <= 1 || progress >= 0.999;
   },
 
   shouldPrefetchNextEpisodeStreams() {
@@ -5426,12 +5559,11 @@ export const PlayerScreen = {
 
   isNextEpisodeCardVisible() {
     const nextEpisode = this.resolveNextEpisodeInfo();
-    const playableStreamsReady = nextEpisode?.hasAired === false || this.hasCachedPlayableStreamsForNextEpisode(nextEpisode);
     return Boolean(
       nextEpisode
       && this.shouldShowNextEpisodeCard()
-      && playableStreamsReady
       && !this.nextEpisodeCardDismissed
+      && !this.stillWatchingPromptVisible
       && !this.loadingVisible
       && !this.subtitleDialogVisible
       && !this.audioDialogVisible
@@ -5440,7 +5572,70 @@ export const PlayerScreen = {
       && !this.episodePanelVisible
       && !this.moreActionsVisible
       && !this.nextEpisodeLaunching
+      && !this.isStartupErrorVisible()
     );
+  },
+
+  maybeAutoplayNextEpisode() {
+    if (this.nextEpisodeLaunching || this.paused || PlayerController.video?.paused || !this.hasPresentedPlaybackFrame) {
+      return false;
+    }
+
+    const nextEpisode = this.resolveNextEpisodeInfo();
+    if (!nextEpisode || normalizeItemType(this.params?.itemType || "movie") !== "series") {
+      this.nextEpisodeAutoplayAttemptedKey = "";
+      return false;
+    }
+
+    const settings = PlayerSettingsStore.get();
+    if (!settings.autoplayNextEpisode || !nextEpisode.hasAired) {
+      this.nextEpisodeAutoplayAttemptedKey = "";
+      return false;
+    }
+    const effectiveSkipIntervals = settings.skipIntroEnabled ? this.skipIntervals : [];
+
+    const durationSeconds = Number(this.getPlaybackDurationSeconds() || 0);
+    const currentSeconds = Number(this.getPlaybackCurrentSeconds() || 0);
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0 || !Number.isFinite(currentSeconds) || currentSeconds < 0) {
+      return false;
+    }
+
+    if (!shouldShowNextEpisodeCardRule({
+      positionSeconds: currentSeconds,
+      durationSeconds,
+      skipIntervals: effectiveSkipIntervals,
+      thresholdMode: settings.nextEpisodeThresholdMode,
+      thresholdPercent: settings.nextEpisodeThresholdPercent,
+      thresholdMinutesBeforeEnd: settings.nextEpisodeThresholdMinutesBeforeEnd
+    })) {
+      this.nextEpisodeAutoplayAttemptedKey = "";
+      return false;
+    }
+
+    const attemptKey = [
+      String(nextEpisode.videoId || ""),
+      String(nextEpisode.season ?? ""),
+      String(nextEpisode.episode ?? "")
+    ].join(":");
+    if (this.nextEpisodeAutoplayAttemptedKey === attemptKey) {
+      return false;
+    }
+
+    if (shouldEnterStillWatchingPrompt({
+      stillWatchingEnabled: settings.stillWatchingEnabled,
+      autoPlayNextEpisodeEnabled: settings.autoplayNextEpisode,
+      nextEpisodeHasAired: nextEpisode.hasAired,
+      consecutiveAutoPlayCount: this.consecutiveAutoPlayCount,
+      threshold: settings.stillWatchingEpisodeThreshold
+    })) {
+      this.nextEpisodeAutoplayAttemptedKey = "";
+      this.enterStillWatchingPromptMode();
+      return true;
+    }
+
+    this.nextEpisodeAutoplayAttemptedKey = attemptKey;
+    void this.playNextEpisode({ userInitiated: false });
+    return true;
   },
 
   async getPlayableStreamsForVideo(videoId, itemType) {
@@ -5527,7 +5722,7 @@ export const PlayerScreen = {
     };
   },
 
-  async playNextEpisode() {
+  async playNextEpisode({ userInitiated = false } = {}) {
     const nextEpisode = this.resolveNextEpisodeInfo();
     const itemType = normalizeItemType(this.params?.itemType || "movie");
     if (!nextEpisode?.videoId || itemType !== "series" || nextEpisode.hasAired === false || this.nextEpisodeLaunching) {
@@ -5535,6 +5730,9 @@ export const PlayerScreen = {
     }
 
     this.nextEpisodeLaunching = true;
+    if (userInitiated) {
+      this.consecutiveAutoPlayCount = 0;
+    }
     this.nextEpisodeTransitionMeta = {
       title: this.params?.playerTitle || this.params?.itemTitle || this.params?.itemId || "Nuvio",
       subtitle: nextEpisode.episodeTitle || nextEpisode.episodeLabel || "",
@@ -5574,6 +5772,7 @@ export const PlayerScreen = {
       const streamItems = resolution.streamItems;
       const bestStreamCandidate = resolution.selectedStream;
       const bestStream = bestStreamCandidate?.url || bestStreamCandidate?.externalUrl || null;
+      this.consecutiveAutoPlayCount = userInitiated ? 0 : (Number(this.consecutiveAutoPlayCount || 0) + 1);
       await PlayerController.flushCurrentProgress({ allowCloudSync: false });
       void PlayerController.pushProgressIfDue?.(true);
       this.releaseCurrentEngineFsStreamBestEffort("next-episode", {
@@ -5601,7 +5800,8 @@ export const PlayerScreen = {
         preferredStreamId: bestStreamCandidate.id || null,
         playbackSourceContext: this.getPlaybackSourceContext(bestStreamCandidate),
         nextEpisodeVideoId: null,
-        nextEpisodeLabel: null
+        nextEpisodeLabel: null,
+        consecutiveAutoPlayCount: this.consecutiveAutoPlayCount
       }, {
         replaceHistory: true
       });
@@ -7396,6 +7596,7 @@ export const PlayerScreen = {
     this.syncSkipIntroButtonProgress();
     this.renderSkipIntroButton();
     this.syncPlayerOverlayLayoutState();
+    this.maybeAutoplayNextEpisode();
 
     const clock = uiRefs.clock;
     if (clock) {
@@ -13594,7 +13795,17 @@ export const PlayerScreen = {
     }
 
     if (action === "playNextEpisode") {
-      void this.playNextEpisode();
+      void this.playNextEpisode({ userInitiated: true });
+      return;
+    }
+
+    if (action === "stillWatchingContinue") {
+      void this.onStillWatchingContinue();
+      return;
+    }
+
+    if (action === "stillWatchingExit") {
+      this.onDismissStillWatchingPrompt();
       return;
     }
 
@@ -13838,7 +14049,17 @@ export const PlayerScreen = {
     }
 
     if (target.closest?.("[data-player-pointer-action='nextEpisode']")) {
-      await this.playNextEpisode();
+      await this.playNextEpisode({ userInitiated: true });
+      return true;
+    }
+
+    if (target.closest?.("[data-player-pointer-action='stillWatchingContinue']")) {
+      await this.onStillWatchingContinue();
+      return true;
+    }
+
+    if (target.closest?.("[data-player-pointer-action='stillWatchingExit']")) {
+      this.onDismissStillWatchingPrompt();
       return true;
     }
 
@@ -13967,6 +14188,10 @@ export const PlayerScreen = {
       return this.navigateBackToStreamScreen();
     }
 
+    if (this.stillWatchingPromptVisible) {
+      return this.onDismissStillWatchingPrompt();
+    }
+
     if (this.pauseOverlayVisible || this.pauseOverlayTimer) {
       this.dismissPauseOverlay({ revealControls: false, focus: false });
     }
@@ -14052,6 +14277,22 @@ export const PlayerScreen = {
       event?.preventDefault?.();
       event?.stopPropagation?.();
       event?.stopImmediatePropagation?.();
+      if (this.stillWatchingPromptVisible) {
+        if (keyCode === 37 || keyCode === 39) {
+          this.stillWatchingPromptFocus = this.stillWatchingPromptFocus === "continue" ? "exit" : "continue";
+          this.renderPauseOverlay();
+          return;
+        }
+        if (mediaAction === "play" || mediaAction === "toggle" || isSelectKeyCode(keyCode)) {
+          if (this.stillWatchingPromptFocus === "exit") {
+            this.onDismissStillWatchingPrompt();
+          } else {
+            await this.onStillWatchingContinue();
+          }
+          return;
+        }
+        return;
+      }
       if (mediaAction === "play" || mediaAction === "toggle" || isSelectKeyCode(keyCode)) {
         this.dismissPauseOverlay();
         this.togglePause();
@@ -14152,7 +14393,7 @@ export const PlayerScreen = {
 
     if (!this.controlsVisible && this.isNextEpisodeCardVisible()) {
       if (isSelectKeyCode(keyCode)) {
-        await this.playNextEpisode();
+        await this.playNextEpisode({ userInitiated: true });
         return;
       }
       if (keyCode === 38 || keyCode === 40) {
@@ -14429,7 +14670,7 @@ export const PlayerScreen = {
     const autoplayEnabled = Boolean(PlayerSettingsStore.get().autoplayNextEpisode);
     const canAutoplayNext = autoplayEnabled && this.hasPlaybackReachedNaturalEnd();
     if (canAutoplayNext) {
-      await this.playNextEpisode();
+      await this.playNextEpisode({ userInitiated: false });
       if (this.nextEpisodeLaunching || Router.getCurrent() !== "player") {
         return;
       }
@@ -14459,6 +14700,9 @@ export const PlayerScreen = {
     try {
     this.playerRouteActive = false;
     this.playerMountToken = Number(this.playerMountToken || 0) + 1;
+    this.nextEpisodeAutoplayAttemptedKey = "";
+    this.resetStillWatchingPromptState({ render: false });
+    this.consecutiveAutoPlayCount = 0;
     this.unbindVideoEvents();
     if (this.endedHandler && PlayerController.video) {
       PlayerController.video.removeEventListener("ended", this.endedHandler);

@@ -380,8 +380,10 @@ export function normalizeDebridStreamPreferences(value) {
 }
 
 function normalizeStreamDescriptionTemplate(value) {
-  const template = String(value || "");
-  return template || ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE;
+  if (value == null) {
+    return ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE;
+  }
+  return String(value);
 }
 
 function sameSortCriteria(left = [], right = []) {

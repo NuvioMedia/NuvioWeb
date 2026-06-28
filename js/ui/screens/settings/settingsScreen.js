@@ -79,6 +79,32 @@ const SETTINGS_VERSION_LABEL = formatSettingsVersionLabel(
 );
 const PRIVACY_URL = "https://tapframe.github.io/NuvioStreaming/#privacy-policy";
 
+function formatHalfStepSettingValue(value, suffix = "") {
+  const rounded = Math.round(Number(value || 0) * 2) / 2;
+  const text = Number.isInteger(rounded) ? String(rounded) : String(rounded).replace(/\.0$/, "");
+  return `${text}${suffix}`;
+}
+
+const NEXT_EPISODE_THRESHOLD_MODE_OPTIONS = [
+  { id: "PERCENTAGE", label: "Percentage" },
+  { id: "MINUTES_BEFORE_END", label: "Minutes before end" }
+];
+
+const NEXT_EPISODE_THRESHOLD_PERCENT_OPTIONS = [97, 97.5, 98, 98.5, 99, 99.5, 100].map((value) => ({
+  id: value,
+  label: `${formatHalfStepSettingValue(value, "")}%`
+}));
+
+const NEXT_EPISODE_THRESHOLD_MINUTE_OPTIONS = [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5].map((value) => ({
+  id: value,
+  label: `${formatHalfStepSettingValue(value, "")} min`
+}));
+
+const STILL_WATCHING_THRESHOLD_OPTIONS = [2, 3, 4, 5, 6].map((value) => ({
+  id: value,
+  label: String(value)
+}));
+
 const THEME_OPTIONS = [
   {
     id: "WHITE",
@@ -3840,7 +3866,7 @@ export const SettingsScreen = {
             "Stream description pattern"
           ),
           value:
-            DebridSettingsStore.get().streamDescriptionTemplate ||
+            DebridSettingsStore.get().streamDescriptionTemplate ??
             DEBRID_SETTINGS_DEFAULTS.streamDescriptionTemplate,
           multiline: true,
           returnFocusKey: "integration:debrid:descriptionTemplate",
@@ -4743,6 +4769,56 @@ export const SettingsScreen = {
     this.actionMap.set("playback:skipIntro", () => {
       PlayerSettingsStore.set({ skipIntroEnabled: !PlayerSettingsStore.get().skipIntroEnabled });
     });
+    this.actionMap.set("playback:nextEpisodeThresholdMode", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.nextEpisodeThresholdMode.title", {}, "Next episode threshold"),
+        options: NEXT_EPISODE_THRESHOLD_MODE_OPTIONS,
+        selectedId: PlayerSettingsStore.get().nextEpisodeThresholdMode,
+        returnFocusKey: "playback:nextEpisodeThresholdMode",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ nextEpisodeThresholdMode: String(option.id) });
+        }
+      });
+    });
+    this.actionMap.set("playback:nextEpisodeThresholdValue", () => {
+      const mode = String(PlayerSettingsStore.get().nextEpisodeThresholdMode || "PERCENTAGE").toUpperCase();
+      const options = mode === "MINUTES_BEFORE_END"
+        ? NEXT_EPISODE_THRESHOLD_MINUTE_OPTIONS
+        : NEXT_EPISODE_THRESHOLD_PERCENT_OPTIONS;
+      const selectedId = mode === "MINUTES_BEFORE_END"
+        ? PlayerSettingsStore.get().nextEpisodeThresholdMinutesBeforeEnd
+        : PlayerSettingsStore.get().nextEpisodeThresholdPercent;
+      this.openOptionDialog({
+        title: mode === "MINUTES_BEFORE_END"
+          ? t("settings.playback.nextEpisodeThresholdMinutes.title", {}, "Next episode minutes before end")
+          : t("settings.playback.nextEpisodeThresholdPercent.title", {}, "Next episode percentage"),
+        options,
+        selectedId,
+        returnFocusKey: "playback:nextEpisodeThresholdValue",
+        onSelect: (option) => {
+          const value = Number(option.id);
+          if (mode === "MINUTES_BEFORE_END") {
+            PlayerSettingsStore.set({ nextEpisodeThresholdMinutesBeforeEnd: value });
+          } else {
+            PlayerSettingsStore.set({ nextEpisodeThresholdPercent: value });
+          }
+        }
+      });
+    });
+    this.actionMap.set("playback:stillWatching", () => {
+      PlayerSettingsStore.set({ stillWatchingEnabled: !PlayerSettingsStore.get().stillWatchingEnabled });
+    });
+    this.actionMap.set("playback:stillWatchingThreshold", () => {
+      this.openOptionDialog({
+        title: t("settings.playback.stillWatchingThreshold.title", {}, "Still watching threshold"),
+        options: STILL_WATCHING_THRESHOLD_OPTIONS,
+        selectedId: PlayerSettingsStore.get().stillWatchingEpisodeThreshold,
+        returnFocusKey: "playback:stillWatchingThreshold",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ stillWatchingEpisodeThreshold: Number(option.id) });
+        }
+      });
+    });
     this.actionMap.set("playback:autoStreamMode", () => {
       this.openOptionDialog({
         title: t("settings.playback.autoStream.title", {}, "Auto Stream Selection"),
@@ -4948,6 +5024,40 @@ export const SettingsScreen = {
           ),
           checked: Boolean(model.player.skipIntroEnabled)
         })}
+        ${this.renderActionRow({
+          focusKey: "playback:nextEpisodeThresholdMode",
+          title: t("settings.playback.nextEpisodeThresholdMode.title", {}, "Next episode threshold"),
+          subtitle: t("settings.playback.nextEpisodeThresholdMode.subtitle", {}, "Choose percentage or minutes before the end."),
+          value: String(model.player.nextEpisodeThresholdMode || "PERCENTAGE").toUpperCase() === "MINUTES_BEFORE_END"
+            ? t("settings.playback.nextEpisodeThresholdMode.minutes", {}, "Minutes before end")
+            : t("settings.playback.nextEpisodeThresholdMode.percentage", {}, "Percentage")
+        })}
+        ${this.renderActionRow({
+          focusKey: "playback:nextEpisodeThresholdValue",
+          title: String(model.player.nextEpisodeThresholdMode || "PERCENTAGE").toUpperCase() === "MINUTES_BEFORE_END"
+            ? t("settings.playback.nextEpisodeThresholdMinutes.title", {}, "Next episode minutes before end")
+            : t("settings.playback.nextEpisodeThresholdPercent.title", {}, "Next episode percentage"),
+          subtitle: String(model.player.nextEpisodeThresholdMode || "PERCENTAGE").toUpperCase() === "MINUTES_BEFORE_END"
+            ? t("settings.playback.nextEpisodeThresholdMinutes.subtitle", {}, "Start the next episode this many minutes before the end.")
+            : t("settings.playback.nextEpisodeThresholdPercent.subtitle", {}, "Start the next episode at this percentage."),
+          value: String(model.player.nextEpisodeThresholdMode || "PERCENTAGE").toUpperCase() === "MINUTES_BEFORE_END"
+            ? formatHalfStepSettingValue(model.player.nextEpisodeThresholdMinutesBeforeEnd ?? 2, " min")
+            : `${formatHalfStepSettingValue(model.player.nextEpisodeThresholdPercent ?? 99, "")}%`
+        })}
+        ${Boolean(model.player.autoplayNextEpisode) ? `
+        ${this.renderToggleRow({
+          focusKey: "playback:stillWatching",
+          title: t("settings.playback.stillWatching.title", {}, "Still watching"),
+          subtitle: t("settings.playback.stillWatching.subtitle", {}, "Show a prompt after repeated autoplay episodes."),
+          checked: Boolean(model.player.stillWatchingEnabled)
+        })}
+        ${Boolean(model.player.stillWatchingEnabled) ? this.renderActionRow({
+          focusKey: "playback:stillWatchingThreshold",
+          title: t("settings.playback.stillWatchingThreshold.title", {}, "Still watching threshold"),
+          subtitle: t("settings.playback.stillWatchingThreshold.subtitle", {}, "How many autoplayed episodes before prompting."),
+          value: String(model.player.stillWatchingEpisodeThreshold ?? 3)
+        }) : ""}
+        ` : ""}
         ${this.renderActionRow({
           focusKey: "playback:autoStreamMode",
           title: t("settings.playback.autoStream.title", {}, "Auto Stream Selection"),

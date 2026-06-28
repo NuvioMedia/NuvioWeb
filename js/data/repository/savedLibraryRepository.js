@@ -5,74 +5,85 @@ function activeProfileId() {
   return String(ProfileManager.getActiveProfileId() || "1");
 }
 
-let savedLibrarySyncTimer = null;
-let savedLibrarySyncInFlight = null;
+let savedLibrarySyncTimers = null;
+const savedLibrarySyncInFlightByProfile = new Map();
 
-function queueSavedLibraryCloudSync(delayMs = 500) {
-  if (savedLibrarySyncTimer) {
-    clearTimeout(savedLibrarySyncTimer);
+function queueSavedLibraryCloudSync(profileId = activeProfileId(), delayMs = 500) {
+  const profileKey = String(profileId || "1");
+  if (savedLibrarySyncTimers) {
+    const existingTimer = savedLibrarySyncTimers.get(profileKey);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
   }
-  savedLibrarySyncTimer = setTimeout(() => {
-    savedLibrarySyncTimer = null;
+  if (!savedLibrarySyncTimers) {
+    savedLibrarySyncTimers = new Map();
+  }
+  const timerId = setTimeout(() => {
+    savedLibrarySyncTimers.delete(profileKey);
     const runPush = async () => {
-      if (savedLibrarySyncInFlight) {
-        await savedLibrarySyncInFlight.catch(() => false);
+      const inFlight = savedLibrarySyncInFlightByProfile.get(profileKey);
+      if (inFlight) {
+        await inFlight.catch(() => false);
       }
-      savedLibrarySyncInFlight = import("../../core/profile/savedLibrarySyncService.js")
-        .then(({ SavedLibrarySyncService }) => SavedLibrarySyncService.push())
+      const pushPromise = import("../../core/profile/savedLibrarySyncService.js")
+        .then(({ SavedLibrarySyncService }) => SavedLibrarySyncService.push(profileId))
         .catch((error) => {
           console.warn("Saved library cloud sync enqueue failed", error);
           return false;
         })
         .finally(() => {
-          savedLibrarySyncInFlight = null;
+          if (savedLibrarySyncInFlightByProfile.get(profileKey) === pushPromise) {
+            savedLibrarySyncInFlightByProfile.delete(profileKey);
+          }
         });
-      await savedLibrarySyncInFlight;
+      savedLibrarySyncInFlightByProfile.set(profileKey, pushPromise);
+      await pushPromise;
     };
     void runPush();
   }, delayMs);
+  savedLibrarySyncTimers.set(profileKey, timerId);
 }
 
 class SavedLibraryRepository {
-  async getAll(limit = 200) {
-    return SavedLibraryStore.listForProfile(activeProfileId()).slice(0, limit);
+  async getAll(limit = 200, profileId = activeProfileId()) {
+    return SavedLibraryStore.listForProfile(profileId).slice(0, limit);
   }
 
-  async isSaved(contentId) {
-    return Boolean(SavedLibraryStore.findByContentId(contentId, activeProfileId()));
+  async isSaved(contentId, profileId = activeProfileId()) {
+    return Boolean(SavedLibraryStore.findByContentId(contentId, profileId));
   }
 
-  async save(item) {
+  async save(item, profileId = activeProfileId()) {
     if (!item?.contentId) {
       return;
     }
-    SavedLibraryStore.upsert(item, activeProfileId());
-    queueSavedLibraryCloudSync();
+    SavedLibraryStore.upsert(item, profileId);
+    queueSavedLibraryCloudSync(profileId);
   }
 
-  async remove(contentId) {
-    SavedLibraryStore.remove(contentId, activeProfileId());
-    queueSavedLibraryCloudSync();
+  async remove(contentId, profileId = activeProfileId()) {
+    SavedLibraryStore.remove(contentId, profileId);
+    queueSavedLibraryCloudSync(profileId);
   }
 
-  async toggle(item) {
+  async toggle(item, profileId = activeProfileId()) {
     if (!item?.contentId) {
       return false;
     }
-    const profileId = activeProfileId();
     const exists = SavedLibraryStore.findByContentId(item.contentId, profileId);
     if (exists) {
       SavedLibraryStore.remove(item.contentId, profileId);
-      queueSavedLibraryCloudSync();
+      queueSavedLibraryCloudSync(profileId);
       return false;
     }
     SavedLibraryStore.upsert(item, profileId);
-    queueSavedLibraryCloudSync();
+    queueSavedLibraryCloudSync(profileId);
     return true;
   }
 
-  async replaceAll(items) {
-    SavedLibraryStore.replaceForProfile(activeProfileId(), items || []);
+  async replaceAll(items, profileId = activeProfileId()) {
+    SavedLibraryStore.replaceForProfile(profileId, items || []);
   }
 }
 

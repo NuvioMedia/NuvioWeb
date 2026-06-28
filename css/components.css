@@ -11521,6 +11521,39 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.player-pause-overlay.is-still-watching .player-pause-overlay-content {
+  max-width: min(920px, calc(100vw - 112px));
+}
+
+.player-still-watching-content {
+  gap: 18px;
+}
+
+.player-still-watching-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.player-still-watching-btn {
+  min-height: 56px;
+  padding: 0 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: var(--tv-secondary-text);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.player-still-watching-btn.is-primary {
+  background: #ffffff;
+  border-color: #ffffff;
+  color: #000000;
+}
+
 .no-flex-gap .player-pause-overlay-content > * + * {
   margin-top: 14px;
 }
@@ -11674,6 +11707,19 @@ button:focus-visible {
   vertical-align: top;
   font-size: 16px;
   line-height: 20px;
+}
+
+.legacy-tizen .player-still-watching-actions,
+.tizen-tv .player-still-watching-actions {
+  gap: 12px;
+}
+
+.legacy-tizen .player-still-watching-btn,
+.tizen-tv .player-still-watching-btn {
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  font-size: 16px;
 }
 
 @media (max-width: 1366px), (max-height: 760px) {

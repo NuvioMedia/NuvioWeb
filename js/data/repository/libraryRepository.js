@@ -38,6 +38,7 @@ const PERSONAL_KEY_PREFIX = "personal:";
 const REMOTE_LIST_LIMIT = 24;
 const META_TIMEOUT_MS = 2200;
 const META_BATCH_SIZE = 6;
+const VALID_POSTER_SHAPES = new Set(["POSTER", "LANDSCAPE", "SQUARE"]);
 
 // Cache for library metadata enrichment with 5-minute TTL
 const enrichedLibraryMetaCache = new Map();
@@ -196,6 +197,7 @@ function normalizeSavedItem(item = {}) {
     contentType: String(item.contentType || item.itemType || item.type || "movie"),
     title: String(item.title || item.name || item.contentId || item.itemId || "Untitled"),
     poster: item.poster || null,
+    posterShape: normalizePosterShape(item.posterShape || item.poster_shape),
     background: item.background || null,
     description: item.description || "",
     releaseInfo: item.releaseInfo || "",
@@ -204,6 +206,11 @@ function normalizeSavedItem(item = {}) {
     addonBaseUrl: item.addonBaseUrl || null,
     updatedAt: Number(item.updatedAt || item.listedAt || Date.now())
   };
+}
+
+function normalizePosterShape(value) {
+  const shape = String(value || "").trim().toUpperCase();
+  return VALID_POSTER_SHAPES.has(shape) ? shape : "POSTER";
 }
 
 function toSavedItemFromTraktWatchlist(entry) {

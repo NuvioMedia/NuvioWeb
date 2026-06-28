@@ -3,13 +3,18 @@ import { createProfileScopedStore } from "./profileScopedStore.js";
 const KEY = "playerSettings";
 
 const DEFAULTS = {
-  autoplayNextEpisode: true,
+  autoplayNextEpisode: false,
   subtitlesEnabled: true,
   subtitleLanguage: "off",
   secondarySubtitleLanguage: "off",
   preferredAudioLanguage: "system",
   trailerAutoplay: false,
   skipIntroEnabled: true,
+  nextEpisodeThresholdMode: "PERCENTAGE",
+  nextEpisodeThresholdPercent: 99,
+  nextEpisodeThresholdMinutesBeforeEnd: 2,
+  stillWatchingEnabled: false,
+  stillWatchingEpisodeThreshold: 3,
   subtitleRenderMode: "native",
   subtitleDelayMs: 0,
   subtitleStyle: {
@@ -35,6 +40,7 @@ const DEFAULTS = {
 
 const STREAM_AUTO_PLAY_MODES = ["MANUAL", "FIRST_STREAM", "REGEX_MATCH"];
 const STREAM_AUTO_PLAY_SOURCES = ["ALL_SOURCES", "INSTALLED_ADDONS_ONLY", "ENABLED_PLUGINS_ONLY"];
+const NEXT_EPISODE_THRESHOLD_MODES = ["PERCENTAGE", "MINUTES_BEFORE_END"];
 
 function normalizeStreamAutoPlayMode(value) {
   const normalized = String(value || "").trim().toUpperCase();
@@ -52,6 +58,27 @@ function normalizeStreamAutoPlayTimeout(value) {
     return DEFAULTS.streamAutoPlayTimeoutSeconds;
   }
   return Math.min(60, seconds);
+}
+
+function normalizeNextEpisodeThresholdMode(value) {
+  const normalized = String(value || "").trim().toUpperCase();
+  return NEXT_EPISODE_THRESHOLD_MODES.includes(normalized) ? normalized : DEFAULTS.nextEpisodeThresholdMode;
+}
+
+function normalizeHalfStep(value, min, max, fallback) {
+  const next = Number(value);
+  if (!Number.isFinite(next)) {
+    return fallback;
+  }
+  return Math.round(Math.max(min, Math.min(max, next)) * 2) / 2;
+}
+
+function normalizeStillWatchingThreshold(value) {
+  const threshold = Math.trunc(Number(value));
+  if (!Number.isFinite(threshold)) {
+    return DEFAULTS.stillWatchingEpisodeThreshold;
+  }
+  return Math.min(6, Math.max(2, threshold));
 }
 
 function extractLanguageCode(value, fallback = "off") {
@@ -133,6 +160,25 @@ function normalizePlayerSettings(settings = {}) {
     streamAutoPlaySource: normalizeStreamAutoPlaySource(settings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource),
     streamAutoPlayRegex: String(settings.streamAutoPlayRegex ?? "").slice(0, 500),
     streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(settings.streamAutoPlayTimeoutSeconds),
+    nextEpisodeThresholdMode: normalizeNextEpisodeThresholdMode(
+      settings.nextEpisodeThresholdMode ?? DEFAULTS.nextEpisodeThresholdMode
+    ),
+    nextEpisodeThresholdPercent: normalizeHalfStep(
+      settings.nextEpisodeThresholdPercent ?? DEFAULTS.nextEpisodeThresholdPercent,
+      97,
+      100,
+      DEFAULTS.nextEpisodeThresholdPercent
+    ),
+    nextEpisodeThresholdMinutesBeforeEnd: normalizeHalfStep(
+      settings.nextEpisodeThresholdMinutesBeforeEnd ?? DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd,
+      0,
+      3.5,
+      DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd
+    ),
+    stillWatchingEnabled: Boolean(settings.stillWatchingEnabled ?? DEFAULTS.stillWatchingEnabled),
+    stillWatchingEpisodeThreshold: normalizeStillWatchingThreshold(
+      settings.stillWatchingEpisodeThreshold ?? DEFAULTS.stillWatchingEpisodeThreshold
+    ),
     subtitlesEnabled,
     subtitleLanguage: preferredLanguage,
     secondarySubtitleLanguage: secondaryPreferredLanguage,

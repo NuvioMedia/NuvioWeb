@@ -233,6 +233,27 @@ function stringOrNull(value) {
   return normalized ? normalized : null;
 }
 
+function normalizeNextEpisodeThresholdModeForSync(value) {
+  const mode = String(value || "").trim().toUpperCase();
+  return mode === "MINUTES_BEFORE_END" ? "MINUTES_BEFORE_END" : "PERCENTAGE";
+}
+
+function normalizeHalfStepForSync(value, min, max, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.round(Math.max(min, Math.min(max, parsed)) * 2) / 2;
+}
+
+function normalizeStillWatchingThresholdForSync(value) {
+  const parsed = Math.trunc(Number(value));
+  if (!Number.isFinite(parsed)) {
+    return 3;
+  }
+  return Math.min(6, Math.max(2, parsed));
+}
+
 function extractLanguageCode(value, fallback = "off") {
   if (value && typeof value === "object") {
     return extractLanguageCode(
@@ -866,6 +887,25 @@ const FEATURE_ADAPTERS = {
         persist_audio_amplification: Boolean(settings.persistAudioAmplification),
         skip_intro_enabled: Boolean(settings.skipIntroEnabled),
         stream_auto_play_next_episode_enabled: Boolean(settings.autoplayNextEpisode),
+        still_watching_enabled: Boolean(settings.stillWatchingEnabled),
+        still_watching_episode_threshold: normalizeStillWatchingThresholdForSync(
+          settings.stillWatchingEpisodeThreshold
+        ),
+        next_episode_threshold_mode: normalizeNextEpisodeThresholdModeForSync(
+          settings.nextEpisodeThresholdMode
+        ),
+        next_episode_threshold_percent_v2: normalizeHalfStepForSync(
+          settings.nextEpisodeThresholdPercent,
+          97,
+          100,
+          99
+        ),
+        next_episode_threshold_minutes_before_end_v2: normalizeHalfStepForSync(
+          settings.nextEpisodeThresholdMinutesBeforeEnd,
+          0,
+          3.5,
+          2
+        ),
         stream_auto_play_mode: String(settings.streamAutoPlayMode || "MANUAL"),
         stream_auto_play_source: String(settings.streamAutoPlaySource || "ALL_SOURCES"),
         stream_auto_play_regex: String(settings.streamAutoPlayRegex || ""),
@@ -901,7 +941,8 @@ const FEATURE_ADAPTERS = {
         "subtitle_outline_enabled",
         "persist_audio_amplification",
         "skip_intro_enabled",
-        "stream_auto_play_next_episode_enabled"
+        "stream_auto_play_next_episode_enabled",
+        "still_watching_enabled"
       ].forEach((key) => {
         if (booleanOrNull(raw[key]) != null) {
           projected[key] = Boolean(raw[key]);
@@ -931,6 +972,36 @@ const FEATURE_ADAPTERS = {
         projected.stream_auto_play_timeout_seconds = Math.max(
           0,
           Math.trunc(Number(raw.stream_auto_play_timeout_seconds))
+        );
+      }
+      if (numberOrNull(raw.still_watching_episode_threshold) != null) {
+        projected.still_watching_episode_threshold = normalizeStillWatchingThresholdForSync(
+          raw.still_watching_episode_threshold
+        );
+      }
+      if (raw.next_episode_threshold_mode != null) {
+        projected.next_episode_threshold_mode = normalizeNextEpisodeThresholdModeForSync(
+          raw.next_episode_threshold_mode
+        );
+      }
+      const thresholdPercent = numberOrNull(raw.next_episode_threshold_percent_v2) ??
+        numberOrNull(raw.next_episode_threshold_percent);
+      if (thresholdPercent != null) {
+        projected.next_episode_threshold_percent_v2 = normalizeHalfStepForSync(
+          thresholdPercent,
+          97,
+          100,
+          99
+        );
+      }
+      const thresholdMinutes = numberOrNull(raw.next_episode_threshold_minutes_before_end_v2) ??
+        numberOrNull(raw.next_episode_threshold_minutes_before_end);
+      if (thresholdMinutes != null) {
+        projected.next_episode_threshold_minutes_before_end_v2 = normalizeHalfStepForSync(
+          thresholdMinutes,
+          0,
+          3.5,
+          2
         );
       }
       return projected;
@@ -1007,6 +1078,34 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.stream_auto_play_next_episode_enabled) != null) {
         partial.autoplayNextEpisode = Boolean(raw.stream_auto_play_next_episode_enabled);
+      }
+      if (booleanOrNull(raw.still_watching_enabled) != null) {
+        partial.stillWatchingEnabled = Boolean(raw.still_watching_enabled);
+      }
+      if (numberOrNull(raw.still_watching_episode_threshold) != null) {
+        partial.stillWatchingEpisodeThreshold = normalizeStillWatchingThresholdForSync(
+          raw.still_watching_episode_threshold
+        );
+      }
+      if (raw.next_episode_threshold_mode != null) {
+        partial.nextEpisodeThresholdMode = normalizeNextEpisodeThresholdModeForSync(
+          raw.next_episode_threshold_mode
+        );
+      }
+      const thresholdPercent = numberOrNull(raw.next_episode_threshold_percent_v2) ??
+        numberOrNull(raw.next_episode_threshold_percent);
+      if (thresholdPercent != null) {
+        partial.nextEpisodeThresholdPercent = normalizeHalfStepForSync(thresholdPercent, 97, 100, 99);
+      }
+      const thresholdMinutes = numberOrNull(raw.next_episode_threshold_minutes_before_end_v2) ??
+        numberOrNull(raw.next_episode_threshold_minutes_before_end);
+      if (thresholdMinutes != null) {
+        partial.nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStepForSync(
+          thresholdMinutes,
+          0,
+          3.5,
+          2
+        );
       }
       if (raw.stream_auto_play_mode != null) {
         partial.streamAutoPlayMode = String(raw.stream_auto_play_mode);
@@ -1451,7 +1550,7 @@ const FEATURE_ADAPTERS = {
         stream_preferences: JSON.stringify(normalizeDebridStreamPreferences(settings.streamPreferences)),
         debrid_stream_name_template: String(settings.streamNameTemplate || ""),
         debrid_stream_description_template: String(
-          settings.streamDescriptionTemplate || ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE
+          settings.streamDescriptionTemplate ?? ANDROID_DEBRID_STREAM_DESCRIPTION_TEMPLATE
         )
       };
     },

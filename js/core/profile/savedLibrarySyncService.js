@@ -6,9 +6,15 @@ import { ProfileManager } from "./profileManager.js";
 const PULL_RPC = "sync_pull_library";
 const PUSH_RPC = "sync_push_library";
 const PULL_PAGE_SIZE = 500;
+const VALID_POSTER_SHAPES = new Set(["POSTER", "LANDSCAPE", "SQUARE"]);
 
-function resolveProfileId() {
-  const raw = Number(ProfileManager.getActiveProfileId() || 1);
+function normalizePosterShape(value) {
+  const shape = String(value || "").trim().toUpperCase();
+  return VALID_POSTER_SHAPES.has(shape) ? shape : "POSTER";
+}
+
+function resolveProfileId(profileId = null) {
+  const raw = Number(profileId ?? ProfileManager.getActiveProfileId() ?? 1);
   if (Number.isFinite(raw) && raw > 0) {
     return Math.trunc(raw);
   }
@@ -31,48 +37,15 @@ function mapRemoteItem(row = {}) {
     contentType: row.content_type || row.contentType || "movie",
     title: row.name || row.title || "Untitled",
     poster: row.poster || null,
+    posterShape: normalizePosterShape(row.poster_shape || row.posterShape),
     background: row.background || null,
     description: row.description || "",
     releaseInfo: row.release_info || row.releaseInfo || "",
-    imdbRating: row.imdb_rating || row.imdbRating || null,
+    imdbRating: row.imdb_rating ?? row.imdbRating ?? null,
     genres: Array.isArray(row.genres) ? row.genres : [],
     addonBaseUrl: row.addon_base_url || row.addonBaseUrl || null,
     updatedAt: Number.isFinite(updatedAt) ? updatedAt : Date.now()
   };
-}
-
-function libraryItemKey(item = {}) {
-  const contentType = String(item.contentType || "movie").trim();
-  const contentId = String(item.contentId || "").trim();
-  return `${contentType}:${contentId}`;
-}
-
-function mergeLibraryItems(localItems = [], remoteItems = []) {
-  if (!remoteItems.length) {
-    return [...localItems];
-  }
-  const byKey = new Map();
-  const upsert = (item, remote = false) => {
-    if (!item?.contentId) {
-      return;
-    }
-    const key = libraryItemKey(item);
-    const existing = byKey.get(key);
-    if (!existing) {
-      byKey.set(key, item);
-      return;
-    }
-    const existingUpdated = Number(existing.updatedAt || 0);
-    const incomingUpdated = Number(item.updatedAt || 0);
-    if (incomingUpdated > existingUpdated || (incomingUpdated === existingUpdated && remote)) {
-      byKey.set(key, item);
-    }
-  };
-  localItems.forEach((item) => upsert(item, false));
-  remoteItems.forEach((item) => upsert(item, true));
-  return Array.from(byKey.values()).sort(
-    (left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0)
-  );
 }
 
 function toRemoteItem(item = {}) {
@@ -81,7 +54,7 @@ function toRemoteItem(item = {}) {
     content_type: item.contentType || "movie",
     name: item.title || item.name || "Untitled",
     poster: item.poster || null,
-    poster_shape: "POSTER",
+    poster_shape: normalizePosterShape(item.posterShape || item.poster_shape),
     background: item.background || null,
     description: item.description || "",
     release_info: item.releaseInfo || "",
@@ -93,19 +66,19 @@ function toRemoteItem(item = {}) {
 }
 
 export const SavedLibrarySyncService = {
-  async pull() {
+  async pull(profileId = null) {
     try {
       if (!AuthManager.isAuthenticated) {
         return [];
       }
-      const profileId = resolveProfileId();
-      const localItems = await savedLibraryRepository.getAll(1000);
+      const resolvedProfileId = resolveProfileId(profileId);
+      const localItems = await savedLibraryRepository.getAll(1000, resolvedProfileId);
       const rows = [];
       for (let offset = 0; ; offset += PULL_PAGE_SIZE) {
         const page = await SupabaseApi.rpc(
           PULL_RPC,
           {
-            p_profile_id: profileId,
+            p_profile_id: resolvedProfileId,
             p_limit: PULL_PAGE_SIZE,
             p_offset: offset
           },
@@ -123,25 +96,28 @@ export const SavedLibrarySyncService = {
       if (!remoteItems.length && localItems.length) {
         return localItems;
       }
-      const mergedItems = mergeLibraryItems(localItems, remoteItems);
-      await savedLibraryRepository.replaceAll(mergedItems);
-      return mergedItems;
+      await savedLibraryRepository.replaceAll(remoteItems, resolvedProfileId);
+      return remoteItems;
     } catch (error) {
       console.warn("Saved library sync pull failed", error);
       return [];
     }
   },
 
-  async push() {
+  async push(profileId = null) {
     try {
       if (!AuthManager.isAuthenticated) {
         return false;
       }
-      const items = await savedLibraryRepository.getAll(1000);
+      const resolvedProfileId = resolveProfileId(profileId);
+      const items = await savedLibraryRepository.getAll(1000, resolvedProfileId);
+      if (!items.length) {
+        return true;
+      }
       await SupabaseApi.rpc(
         PUSH_RPC,
         {
-          p_profile_id: resolveProfileId(),
+          p_profile_id: resolvedProfileId,
           p_items: items.map((item) => toRemoteItem(item))
         },
         true
