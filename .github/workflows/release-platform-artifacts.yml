@@ -243,7 +243,7 @@ jobs:
         run: npm ci
 
       - name: Build Windows installer
-        run: npm run dist:win
+        run: npm run dist:win -- --publish never
 
       - name: Normalize installer artifact
         id: installer
@@ -294,7 +294,7 @@ jobs:
         run: npm ci
 
       - name: Build macOS installer
-        run: npm run dist:mac
+        run: npm run dist:mac -- --publish never
 
       - name: Package macOS app
         id: installer
@@ -343,7 +343,7 @@ jobs:
         run: npm ci
 
       - name: Build Linux installer
-        run: npm run dist:linux
+        run: npm run dist:linux -- --publish never
 
       - name: Normalize installer artifact
         id: installer
