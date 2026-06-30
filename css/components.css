@@ -6241,15 +6241,16 @@ button:focus-visible {
 }
 
 .home-screen-shell.home-layout-modern .home-hero-description {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
+  width: min(100%, var(--modern-hero-description-max-width));
   min-height: 0;
   margin-top: 0;
   max-width: min(100%, var(--modern-hero-description-max-width));
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  display: block;
   overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
+  white-space: normal;
   color: #ffffff;
   font-size: var(--modern-hero-description-size);
   line-height: 1.35;
@@ -10620,6 +10621,20 @@ button:focus-visible {
   white-space: pre-line;
 }
 
+.player-startup-error-details {
+  width: min(78vw, 840px);
+  max-height: min(28vh, 260px);
+  overflow: auto;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  line-height: 1.4;
+  text-align: left;
+  word-break: break-word;
+}
+
 .player-startup-error-actions {
   display: flex;
   flex-wrap: wrap;
@@ -12627,6 +12642,8 @@ button:focus-visible {
   padding: 12px 8px;
   font-size: 20px;
   color: rgba(226, 236, 247, 0.74);
+  white-space: pre-line;
+  word-break: break-word;
 }
 
 .player-source-card {
@@ -18595,7 +18612,8 @@ html.no-css-grid .cast-detail-meta {
 
 .performance-constrained .home-screen-shell.home-layout-modern .home-hero-description {
   max-height: none;
-  -webkit-line-clamp: 5;
+  -webkit-line-clamp: initial;
+  line-clamp: initial;
 }
 
 .performance-constrained .home-content-card.focused,

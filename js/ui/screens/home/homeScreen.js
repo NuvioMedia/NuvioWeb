@@ -5150,14 +5150,6 @@ export const HomeScreen = {
     if (!this.container) {
       return;
     }
-    if (this.isPerformanceConstrained()) {
-      this.homeTruncationScope = null;
-      if (this.homeTruncationFrame) {
-        cancelAnimationFrame(this.homeTruncationFrame);
-        this.homeTruncationFrame = null;
-      }
-      return;
-    }
     this.homeTruncationScope = scope || null;
     if (this.homeTruncationFrame) {
       cancelAnimationFrame(this.homeTruncationFrame);
@@ -5235,9 +5227,8 @@ export const HomeScreen = {
       ? [scope]
       : Array.from(scope.querySelectorAll(".home-hero-card"));
     heroNodes.forEach((heroNode) => {
-      const copy = heroNode.querySelector(".home-modern-hero-copy");
       const description = heroNode.querySelector(".home-hero-description");
-      if (!(copy instanceof HTMLElement) || !(description instanceof HTMLElement)) {
+      if (!(description instanceof HTMLElement)) {
         return;
       }
 
@@ -5248,31 +5239,11 @@ export const HomeScreen = {
         return;
       }
 
-      const visibleSiblings = Array.from(copy.children).filter((node) => {
-        if (!(node instanceof HTMLElement) || node === description) {
-          return false;
-        }
-        return node.offsetHeight > 0 || node.offsetWidth > 0;
-      });
-      const gapValue = parseFloat(getComputedStyle(copy).rowGap || getComputedStyle(copy).gap || "0") || 0;
-      const reservedHeight = visibleSiblings.reduce((total, node) => total + node.offsetHeight, 0);
-      const visibleCount = visibleSiblings.length + 1;
-      const gapCount = Math.max(0, visibleCount - 1);
-      const availableHeight = Math.floor(copy.clientHeight - reservedHeight - (gapCount * gapValue));
-      const lineHeight = parseFloat(getComputedStyle(description).lineHeight || "0") || 0;
-      const lineBoxHeight = Math.max(1, Math.ceil(lineHeight || description.offsetHeight || 1));
-      if (availableHeight <= 0) {
-        description.style.webkitLineClamp = "1";
-        description.style.lineClamp = "1";
-        description.style.maxHeight = `${lineBoxHeight}px`;
-        return;
-      }
-      const availableLines = lineHeight > 0
-        ? Math.max(1, Math.min(modernHeroDescriptionMaxLines, Math.floor((availableHeight - 2) / lineHeight)))
-        : modernHeroDescriptionMaxLines;
-      description.style.webkitLineClamp = String(availableLines);
-      description.style.lineClamp = String(availableLines);
-      description.style.maxHeight = `${lineBoxHeight * availableLines}px`;
+      const descriptionStyle = getComputedStyle(description);
+      const lineHeight = parseFloat(descriptionStyle.lineHeight || "0") || 0;
+      const fontSize = parseFloat(descriptionStyle.fontSize || "0") || 0;
+      const lineBoxHeight = Math.max(1, Math.ceil(lineHeight || (fontSize * 1.35) || description.offsetHeight || 1));
+      description.style.maxHeight = `${lineBoxHeight * modernHeroDescriptionMaxLines}px`;
     });
   },
 

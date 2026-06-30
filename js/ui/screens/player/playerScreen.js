@@ -1082,6 +1082,54 @@ function escapeAttribute(value) {
   return escapeHtml(value);
 }
 
+function cleanPlaybackDiagnosticValue(value, maxLength = 320) {
+  const text = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) {
+    return "";
+  }
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function pushPlaybackDiagnosticLine(lines, label, value, maxLength = 320) {
+  const text = cleanPlaybackDiagnosticValue(value, maxLength);
+  if (!text) {
+    return;
+  }
+  const line = `${label}: ${text}`;
+  if (!lines.includes(line)) {
+    lines.push(line);
+  }
+}
+
+function extractPlaybackHttpStatus(value = "") {
+  const text = String(value || "");
+  if (!text) {
+    return 0;
+  }
+  const patterns = [
+    /\bhttp(?:\s+status|\s+code)?\s*[:=]?\s*([45]\d{2})\b/i,
+    /\bstatus(?:\s+code)?\s*[:=]?\s*([45]\d{2})\b/i,
+    /\bresponse(?:\s+code)?\s*[:=]?\s*([45]\d{2})\b/i
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    const status = Number(match?.[1] || 0);
+    if (status >= 400 && status <= 599) {
+      return status;
+    }
+  }
+  if (/\bhttp\b/i.test(text)) {
+    const match = text.match(/\b([45]\d{2})\b/);
+    const status = Number(match?.[1] || 0);
+    if (status >= 400 && status <= 599) {
+      return status;
+    }
+  }
+  return 0;
+}
+
 function formatEpisodePanelDate(value = "") {
   const raw = String(value || "").trim();
   if (!raw) {
@@ -1960,6 +2008,7 @@ export const PlayerScreen = {
     this.hasPresentedPlaybackFrame = false;
     this.startupErrorMessage = "";
     this.startupErrorMediaCode = 0;
+    this.startupErrorDetails = [];
     this.startupPlaybackBaselineSeconds = null;
     this.startupPlaybackHasAdvanced = false;
     this.paused = false;
@@ -4420,12 +4469,156 @@ export const PlayerScreen = {
   clearStartupError() {
     this.startupErrorMessage = "";
     this.startupErrorMediaCode = 0;
+    this.startupErrorDetails = [];
     this.renderStartupErrorOverlay();
   },
 
-  showStartupError(message = "", { mediaErrorCode = 0 } = {}) {
+  getPlaybackErrorCodeLabel(mediaErrorCode = 0) {
+    const code = Number(mediaErrorCode || 0);
+    if (code === 1) return "1 aborted";
+    if (code === 2) return "2 network";
+    if (code === 3) return "3 decode";
+    if (code === 4) return "4 source not supported";
+    return code > 0 ? String(code) : "";
+  },
+
+  getPlaybackEventErrorDetail(eventDetail = {}) {
+    const detail = eventDetail && typeof eventDetail === "object" ? eventDetail : {};
+    return [
+      detail.avplayError,
+      detail.hlsErrorType,
+      detail.hlsErrorDetails,
+      detail.dashError,
+      detail.playbackEngine
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .join(" ");
+  },
+
+  getHttpPlaybackErrorMessage(statusCode = 0) {
+    const status = Number(statusCode || 0);
+    if (status < 400 || status > 599) {
+      return "";
+    }
+    const providerHint = status === 403
+      ? t("player_error_stream_blocked", {}, "\n\nThe stream source is blocked or restricted. Try a different source.")
+      : status === 404
+        ? t("player_error_stream_removed", {}, "\n\nThe stream link has expired or been removed. Try a different source.")
+        : status === 410
+          ? t("player_error_stream_expired", {}, "\n\nThe stream link has expired. Try a different source.")
+          : status === 429
+            ? t("player_error_stream_rate_limited", {}, "\n\nToo many requests to the stream source. Wait a moment and try again.")
+            : [500, 502, 503].includes(status)
+              ? t("player_error_stream_unavailable", {}, "\n\nThe stream server is currently unavailable. Try a different source.")
+              : "";
+    return `HTTP ${status}${providerHint}`;
+  },
+
+  getPlaybackErrorDetailLines({
+    mediaErrorCode = 0,
+    detail = "",
+    error = null,
+    eventDetail = null,
+    streamCandidate = null,
+    playbackUrl = "",
+    reason = "",
+    resolverStatus = "",
+    resolverDetail = ""
+  } = {}) {
+    const lines = [];
+    const video = PlayerController.video || null;
+    const candidate = streamCandidate || this.getStreamCandidateByUrl(playbackUrl || this.activePlaybackUrl) || this.getCurrentStreamCandidate();
+    const raw = candidate?.raw || {};
+    const requestHeaders = raw?.behaviorHints?.proxyHeaders?.request || candidate?.behaviorHints?.proxyHeaders?.request || null;
+    const headerNames = requestHeaders && typeof requestHeaders === "object"
+      ? Object.keys(requestHeaders).filter(Boolean).join(", ")
+      : "";
+    const engineFs = candidate?.engineFs || raw?.engineFs || this.currentEngineFsStream || null;
+    const mediaError = video?.error || null;
+    const eventErrorDetail = this.getPlaybackEventErrorDetail(eventDetail);
+    const httpStatus = extractPlaybackHttpStatus([
+      detail,
+      eventErrorDetail,
+      error?.message,
+      error?.name,
+      error?.errorText,
+      error?.status
+    ].filter(Boolean).join(" "));
+    const runtimeDetail = detail
+      || eventErrorDetail
+      || error?.message
+      || error?.name
+      || error?.errorText
+      || error?.status
+      || "";
+    const sourceLabel = [
+      candidate?.addonName,
+      candidate?.name || candidate?.title || candidate?.description,
+      candidate?.id
+    ].filter(Boolean).join(" / ");
+    const sourceType = [
+      candidate?.mimeType,
+      raw?.mimeType,
+      candidate?.sourceType,
+      raw?.sourceType,
+      raw?.type
+    ].find(Boolean);
+    const activeUrl = playbackUrl || this.activePlaybackUrl || candidate?.url || candidate?.externalUrl || raw?.url || raw?.externalUrl || "";
+
+    pushPlaybackDiagnosticLine(lines, "Platform", Environment.isWebOS() ? "webOS" : Environment.isTizen() ? "Tizen" : "browser");
+    pushPlaybackDiagnosticLine(lines, "Reason", reason);
+    pushPlaybackDiagnosticLine(lines, "Media code", this.getPlaybackErrorCodeLabel(mediaErrorCode));
+    pushPlaybackDiagnosticLine(lines, "HTTP status", httpStatus);
+    pushPlaybackDiagnosticLine(lines, "Runtime error", runtimeDetail);
+    pushPlaybackDiagnosticLine(lines, "HLS error", eventDetail?.hlsErrorDetails || eventDetail?.hlsErrorType);
+    pushPlaybackDiagnosticLine(lines, "DASH error", eventDetail?.dashError);
+    pushPlaybackDiagnosticLine(lines, "AVPlay error", eventDetail?.avplayError);
+    pushPlaybackDiagnosticLine(lines, "HTML media error", mediaError?.message || mediaError?.code);
+    pushPlaybackDiagnosticLine(lines, "Video readyState", video?.readyState);
+    pushPlaybackDiagnosticLine(lines, "Video networkState", video?.networkState);
+    pushPlaybackDiagnosticLine(lines, "Current src", video?.currentSrc || video?.src, 420);
+    pushPlaybackDiagnosticLine(lines, "Playback engine", PlayerController.playbackEngine || "unknown");
+    pushPlaybackDiagnosticLine(lines, "Source", sourceLabel);
+    pushPlaybackDiagnosticLine(lines, "Source type", sourceType);
+    pushPlaybackDiagnosticLine(lines, "URL", activeUrl, 420);
+    pushPlaybackDiagnosticLine(lines, "Proxy header names", headerNames);
+    pushPlaybackDiagnosticLine(lines, "Resolver status", resolverStatus);
+    pushPlaybackDiagnosticLine(lines, "Resolver detail", resolverDetail);
+    if (engineFs) {
+      pushPlaybackDiagnosticLine(lines, "EngineFS infoHash", engineFs.infoHash);
+      pushPlaybackDiagnosticLine(lines, "EngineFS fileIdx", engineFs.fileIdx);
+      pushPlaybackDiagnosticLine(lines, "EngineFS base", engineFs.baseUrlKind);
+      pushPlaybackDiagnosticLine(lines, "EngineFS playbackUrl", engineFs.playbackUrl || engineFs.url, 420);
+      pushPlaybackDiagnosticLine(lines, "EngineFS publicUrl", engineFs.publicPlaybackUrl, 420);
+    }
+    return lines;
+  },
+
+  formatPlaybackErrorForSources(message = "", options = {}) {
+    const baseMessage = String(message || "").trim() || t("player_error_playback_fallback", {}, "Playback error");
+    const detailLines = this.getPlaybackErrorDetailLines(options);
+    return detailLines.length
+      ? `${baseMessage}\n\nDetails\n${detailLines.join("\n")}`
+      : baseMessage;
+  },
+
+  showStartupError(message = "", { mediaErrorCode = 0, detail = "", error = null, eventDetail = null, streamCandidate = null, playbackUrl = "", reason = "", resolverStatus = "", resolverDetail = "", details = null } = {}) {
     this.startupErrorMessage = String(message || "").trim() || t("player_error_playback_fallback", {}, "Playback error");
     this.startupErrorMediaCode = Number(mediaErrorCode || 0);
+    this.startupErrorDetails = Array.isArray(details)
+      ? details.map((line) => cleanPlaybackDiagnosticValue(line)).filter(Boolean)
+      : this.getPlaybackErrorDetailLines({
+        mediaErrorCode,
+        detail,
+        error,
+        eventDetail,
+        streamCandidate,
+        playbackUrl,
+        reason,
+        resolverStatus,
+        resolverDetail
+      });
     this.lastPlaybackErrorAt = 0;
     this.loadingVisible = false;
     this.loadingProgress = null;
@@ -4463,7 +4656,10 @@ export const PlayerScreen = {
   startPlayerControllerPlayback(url, context = {}, { mountToken = null, sourceCandidate = null } = {}) {
     const playbackUrl = String(url || "").trim();
     if (!playbackUrl) {
-      this.showStartupError(t("player_error_no_stream_url", {}, "No stream URL provided"));
+      this.showStartupError(t("player_error_no_stream_url", {}, "No stream URL provided"), {
+        streamCandidate: sourceCandidate,
+        reason: "missing-url"
+      });
       return;
     }
     Promise.resolve(PlayerController.play(playbackUrl, context)).catch((error) => {
@@ -4484,7 +4680,12 @@ export const PlayerScreen = {
       this.markPlaybackSourceFailed(playbackUrl);
       if (!this.hasPresentedPlaybackFrame) {
         this.showStartupError(this.getStartupErrorMessage(mediaErrorCode, detail, candidate), {
-          mediaErrorCode
+          mediaErrorCode,
+          detail,
+          error,
+          streamCandidate: candidate,
+          playbackUrl,
+          reason: "play-start"
         });
         console.warn("Playback failed to start", {
           url: playbackUrl,
@@ -4493,7 +4694,17 @@ export const PlayerScreen = {
         });
         return;
       }
-      this.sourcesError = `${this.mediaErrorMessage(mediaErrorCode, detail, candidate)}. Choose another source manually.`;
+      this.sourcesError = this.formatPlaybackErrorForSources(
+        `${this.mediaErrorMessage(mediaErrorCode, detail, candidate)}. Choose another source manually.`,
+        {
+          mediaErrorCode,
+          detail,
+          error,
+          streamCandidate: candidate,
+          playbackUrl,
+          reason: "play-after-startup"
+        }
+      );
       this.renderSourcesPanel();
       console.warn("Playback failed after startup", {
         url: playbackUrl,
@@ -4538,10 +4749,16 @@ export const PlayerScreen = {
       return;
     }
     const message = String(this.startupErrorMessage || "").trim() || t("player_error_playback_fallback", {}, "Playback error");
+    const detailLines = Array.isArray(this.startupErrorDetails) ? this.startupErrorDetails.filter(Boolean) : [];
     overlay.innerHTML = `
       <div class="player-startup-error-shell">
         <div class="player-startup-error-title">${escapeHtml(t("player_error_title", {}, "Playback Error"))}</div>
         <div class="player-startup-error-message">${escapeHtml(message)}</div>
+        ${detailLines.length ? `
+          <div class="player-startup-error-details" aria-label="${escapeHtml(t("player_error_details", {}, "Playback error details"))}">
+            ${detailLines.map((line) => `<div>${escapeHtml(line)}</div>`).join("")}
+          </div>
+        ` : ""}
         <button class="player-startup-error-button focusable focused" type="button" tabindex="-1" data-player-error-action="back">
           ${escapeHtml(t("player_go_back", {}, "Go Back"))}
         </button>
@@ -5829,7 +6046,12 @@ export const PlayerScreen = {
         const errorMessage = resolution.status === "missing_source_context"
           ? t("next_episode_source_context_missing", {}, "Could not identify the current source. Choose a source manually.")
           : t("next_episode_source_unavailable", [sourceLabel], "No stream is available from %1$s for the next episode. Choose another source manually.");
-        this.showStartupError(errorMessage);
+        this.showStartupError(errorMessage, {
+          streamCandidate: resolution.selectedStream || this.getCurrentStreamCandidate(),
+          reason: "next-episode-resolve",
+          resolverStatus: resolution.status,
+          resolverDetail: `totalStreams=${resolution.streamItems?.length || 0}, matchedStreams=${resolution.matchedStreams?.length || 0}`
+        });
         return;
       }
       const streamItems = resolution.streamItems;
@@ -5877,7 +6099,11 @@ export const PlayerScreen = {
       this.renderNextEpisodeCard();
       this.nextEpisodeTransitionMeta = null;
       this.refreshLoadingOverlayPresentation();
-      this.showStartupError(t("next_episode_source_error", {}, "Could not load the next episode from the current source. Choose another source manually."));
+      this.showStartupError(t("next_episode_source_error", {}, "Could not load the next episode from the current source. Choose another source manually."), {
+        error,
+        streamCandidate: this.getCurrentStreamCandidate(),
+        reason: "next-episode-play"
+      });
     }
   },
 
@@ -6674,7 +6900,10 @@ export const PlayerScreen = {
         ? Number(PlayerController.getLastPlaybackErrorCode() || 0)
         : 0;
       const mediaErrorCode = detailErrorCode || Number(video?.error?.code || 0) || controllerErrorCode;
-      const avplayError = String(event?.detail?.avplayError || "").toLowerCase();
+      const eventDetail = event?.detail && typeof event.detail === "object" ? event.detail : {};
+      const playbackErrorDetail = this.getPlaybackEventErrorDetail(eventDetail);
+      const avplayError = String(eventDetail?.avplayError || "").toLowerCase();
+      const normalizedPlaybackErrorDetail = String(playbackErrorDetail || "").toLowerCase();
       const currentSourceCandidate = this.getStreamCandidateByUrl(this.activePlaybackUrl) || this.getCurrentStreamCandidate();
       const currentEngineFsState = this.currentEngineFsStream || null;
       const publicEngineFsUrl = String(currentEngineFsState?.publicPlaybackUrl || "").trim();
@@ -6684,8 +6913,8 @@ export const PlayerScreen = {
         && (
           mediaErrorCode === 2
           || avplayError.includes("connection refused")
-          || avplayError.includes("network")
-          || avplayError.includes("failed")
+          || normalizedPlaybackErrorDetail.includes("network")
+          || normalizedPlaybackErrorDetail.includes("failed")
         );
       if (!this.hasPresentedPlaybackFrame && isLocalEngineFsNetworkFailure) {
         const sourceCandidate = this.getStreamCandidateByUrl(this.activePlaybackUrl) || this.getCurrentStreamCandidate();
@@ -6768,10 +6997,17 @@ export const PlayerScreen = {
           return;
         }
         this.markPlaybackSourceFailed(this.activePlaybackUrl);
-        const startupErrorMessage = this.getStartupErrorMessage(mediaErrorCode, avplayError, currentSourceCandidate);
+        const startupErrorMessage = this.getStartupErrorMessage(mediaErrorCode, playbackErrorDetail, currentSourceCandidate);
         this.clearPlaybackStallGuard();
         this.releaseStartupAudioGate({ resume: false });
-        this.showStartupError(startupErrorMessage, { mediaErrorCode });
+        this.showStartupError(startupErrorMessage, {
+          mediaErrorCode,
+          detail: playbackErrorDetail,
+          eventDetail,
+          streamCandidate: currentSourceCandidate,
+          playbackUrl: this.activePlaybackUrl,
+          reason: "startup-media-error"
+        });
         console.warn("Playback failed during startup", {
           url: this.activePlaybackUrl,
           mediaErrorCode,
@@ -6789,7 +7025,17 @@ export const PlayerScreen = {
       this.dismissPauseOverlay();
       this.updateLoadingVisibility();
       this.setControlsVisible(true, { focus: false });
-      this.sourcesError = `${this.mediaErrorMessage(mediaErrorCode, avplayError, currentSourceCandidate)}. Choose another source manually.`;
+      this.sourcesError = this.formatPlaybackErrorForSources(
+        `${this.mediaErrorMessage(mediaErrorCode, playbackErrorDetail, currentSourceCandidate)}. Choose another source manually.`,
+        {
+          mediaErrorCode,
+          detail: playbackErrorDetail,
+          eventDetail,
+          streamCandidate: currentSourceCandidate,
+          playbackUrl: this.activePlaybackUrl,
+          reason: "media-error"
+        }
+      );
       if (this.currentEngineFsStream) {
         logEngineFsDebug("EngineFS playback failed; keeping torrent alive until player exit or source change", {
           reason: "playback-error",
@@ -8255,6 +8501,8 @@ export const PlayerScreen = {
       const canUseTizenP2p = TizenStreamingServerResolver.canResolveStream(streamCandidate);
       const canUseP2p = Boolean(TorrentSettingsStore.get().p2pEnabled) && (canUseEngineFs || canUseTizenP2p);
       let fallbackError = "";
+      let resolveFailureStatus = "";
+      let resolveFailureDetail = "";
 
       if (DirectDebridResolver.canResolveStream(streamCandidate, resolveContext)) {
         const result = await DirectDebridResolver.resolve(streamCandidate, resolveContext);
@@ -8279,11 +8527,23 @@ export const PlayerScreen = {
             : result.status === "stale"
                 ? t("stream.debrid.stale", {}, "This Debrid result expired. Refreshing streams.")
                 : t("stream.debrid.failed", {}, "Could not resolve this Debrid stream.");
+          resolveFailureStatus = result.status || "debrid-failed";
+          resolveFailureDetail = result.detail || result.error || "";
           if (result.status === "service_degraded") {
             if (!this.hasPresentedPlaybackFrame) {
-              this.showStartupError(fallbackError);
+              this.showStartupError(fallbackError, {
+                streamCandidate,
+                reason: "debrid-resolve",
+                resolverStatus: resolveFailureStatus,
+                resolverDetail: resolveFailureDetail
+              });
             } else {
-              this.sourcesError = fallbackError;
+              this.sourcesError = this.formatPlaybackErrorForSources(fallbackError, {
+                streamCandidate,
+                reason: "debrid-resolve",
+                resolverStatus: resolveFailureStatus,
+                resolverDetail: resolveFailureDetail
+              });
               this.renderSourcesPanel();
             }
             return;
@@ -8317,6 +8577,8 @@ export const PlayerScreen = {
             raw: { ...(streamCandidate.raw || {}), ...(result.stream.raw || {}) }
           });
         } else {
+          resolveFailureStatus = result?.status || "p2p-failed";
+          resolveFailureDetail = result?.detail || result?.error || "";
           console.warn("PlayerScreen: P2P resolve failed", {
             status: result.status,
             detail: result.detail || "",
@@ -8335,12 +8597,23 @@ export const PlayerScreen = {
             ? t("player_error_failed_start_torrent", [t("player_error_playback_fallback", {}, "Playback error")], "Failed to start torrent: %1$s")
             : t("player_error_playback_fallback", {}, "Playback error"));
         if (!this.hasPresentedPlaybackFrame) {
-          this.showStartupError(startupMessage);
+          this.showStartupError(startupMessage, {
+            streamCandidate,
+            reason: canUseP2p ? "p2p-resolve" : "stream-resolve",
+            resolverStatus: resolveFailureStatus,
+            resolverDetail: resolveFailureDetail
+          });
           return;
         }
-        this.sourcesError = canUseP2p
+        const sourceErrorMessage = canUseP2p
           ? t("stream.p2p.failed", {}, "Could not start this torrent stream.")
           : (fallbackError || t("stream.debrid.unavailable", {}, "This Debrid source needs a configured Debrid account."));
+        this.sourcesError = this.formatPlaybackErrorForSources(sourceErrorMessage, {
+          streamCandidate,
+          reason: canUseP2p ? "p2p-resolve" : "stream-resolve",
+          resolverStatus: resolveFailureStatus,
+          resolverDetail: resolveFailureDetail
+        });
         this.renderSourcesPanel();
         return;
       }
@@ -8390,14 +8663,33 @@ export const PlayerScreen = {
 
   mediaErrorMessage(errorCode = 0, detail = "", streamCandidate = this.getCurrentStreamCandidate()) {
     const code = Number(errorCode || 0);
+    const text = String(detail || "").toLowerCase();
+    const httpStatus = extractPlaybackHttpStatus(detail);
+    const httpMessage = this.getHttpPlaybackErrorMessage(httpStatus);
+    if (httpMessage) {
+      return httpMessage;
+    }
     if (code === 1) return "Playback aborted";
     if (code === 2) return "Network error";
-    if (code === 3) return t("player_error_decoder", {}, "Decoder error");
+    if (code === 3) {
+      const unsupported = t("player_error_unsupported_format", [this.getPlaybackErrorCodeLabel(code) || "decode"], "This stream uses a format your device may not support. Try a different source. [%1$s]");
+      return `${t("player_error_decoder", {}, "Decoder error")}\n\n${unsupported}`;
+    }
     if (code === 4) {
       if (this.isDebridPlaybackCandidate(streamCandidate)) {
         return t("player_error_stream_load_failed", {}, "Playback failed to load");
       }
-      const text = String(detail || "").toLowerCase();
+      if (
+        text.includes("manifestparsingerror")
+        || text.includes("manifest parsing")
+        || text.includes("unrecognized")
+        || text.includes("invalid content")
+        || text.includes("invalid data")
+        || text.includes("text/html")
+        || text.includes("html")
+      ) {
+        return t("player_error_source_invalid_content", [this.getPlaybackErrorCodeLabel(code) || "source"], "Source error: The stream source returned invalid or unplayable content. The link may have expired or the server returned an error page instead of video.\n\nTry a different source. [%1$s]");
+      }
       if (
         text.includes("no supported source")
         || text.includes("no supported sources")
@@ -8754,7 +9046,12 @@ export const PlayerScreen = {
         const mediaErrorCode = Number(PlayerController.getLastPlaybackErrorCode?.() || 0);
         const sourceCandidate = this.getStreamCandidateByUrl(this.activePlaybackUrl) || this.getCurrentStreamCandidate();
         const startupErrorMessage = this.getStartupErrorMessage(mediaErrorCode, "", sourceCandidate);
-        this.showStartupError(startupErrorMessage, { mediaErrorCode });
+        this.showStartupError(startupErrorMessage, {
+          mediaErrorCode,
+          streamCandidate: sourceCandidate,
+          playbackUrl: this.activePlaybackUrl,
+          reason: "startup-stall"
+        });
         if (this.currentEngineFsStream) {
           logEngineFsDebug("EngineFS playback stalled during startup; keeping torrent alive until player exit or source change", {
             reason: "playback-stall",
@@ -8773,7 +9070,16 @@ export const PlayerScreen = {
       this.setControlsVisible(true, { focus: false });
       {
         const sourceCandidate = this.getStreamCandidateByUrl(this.activePlaybackUrl) || this.getCurrentStreamCandidate();
-        this.sourcesError = `${this.mediaErrorMessage(PlayerController.getLastPlaybackErrorCode?.() || 0, "", sourceCandidate)}. Choose another source manually.`;
+        const mediaErrorCode = Number(PlayerController.getLastPlaybackErrorCode?.() || 0);
+        this.sourcesError = this.formatPlaybackErrorForSources(
+          `${this.mediaErrorMessage(mediaErrorCode, "", sourceCandidate)}. Choose another source manually.`,
+          {
+            mediaErrorCode,
+            streamCandidate: sourceCandidate,
+            playbackUrl: this.activePlaybackUrl,
+            reason: "playback-stall"
+          }
+        );
       }
       if (this.currentEngineFsStream) {
         logEngineFsDebug("EngineFS playback stalled; keeping torrent alive until player exit or source change", {
@@ -12512,9 +12818,17 @@ export const PlayerScreen = {
       if (merged.length) {
         this.streamCandidates = merged;
       }
-    } catch (_error) {
+    } catch (error) {
       if (token === this.sourceLoadToken) {
-        this.sourcesError = t("panel_failed_load_streams", {}, "Failed to load streams");
+        this.sourcesError = this.formatPlaybackErrorForSources(
+          t("panel_failed_load_streams", {}, "Failed to load streams"),
+          {
+            error,
+            streamCandidate: this.getCurrentStreamCandidate(),
+            playbackUrl: this.activePlaybackUrl,
+            reason: "reload-sources"
+          }
+        );
       }
     } finally {
       if (token === this.sourceLoadToken) {
