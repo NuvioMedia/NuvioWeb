@@ -2039,7 +2039,11 @@ export const PlayerScreen = {
         this.engineFsPlaybackToken = "";
         this.enableStartupAudioGate();
       }
-      PlayerController.play(this.activePlaybackUrl, this.buildPlaybackContext(sourceCandidate));
+      this.startPlayerControllerPlayback(
+        this.activePlaybackUrl,
+        this.buildPlaybackContext(sourceCandidate),
+        { mountToken, sourceCandidate }
+      );
       this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
       this.startTrackDiscoveryWindow();
       this.schedulePlaybackStallGuard();
@@ -4033,7 +4037,11 @@ export const PlayerScreen = {
     this.syncTorrentOverlay();
     this.updateLoadingVisibility();
     this.enableStartupAudioGate();
-    PlayerController.play(targetUrl, this.buildPlaybackContext(currentStreamCandidate));
+    this.startPlayerControllerPlayback(
+      targetUrl,
+      this.buildPlaybackContext(currentStreamCandidate),
+      { sourceCandidate: currentStreamCandidate }
+    );
     this.schedulePlaybackStallGuard();
     this.setControlsVisible(true, { focus: false });
   },
@@ -4450,6 +4458,49 @@ export const PlayerScreen = {
     this.renderPauseOverlay();
     this.renderStartupErrorOverlay();
     this.focusStartupErrorButton();
+  },
+
+  startPlayerControllerPlayback(url, context = {}, { mountToken = null, sourceCandidate = null } = {}) {
+    const playbackUrl = String(url || "").trim();
+    if (!playbackUrl) {
+      this.showStartupError(t("player_error_no_stream_url", {}, "No stream URL provided"));
+      return;
+    }
+    Promise.resolve(PlayerController.play(playbackUrl, context)).catch((error) => {
+      if (!this.isActiveMountToken(mountToken) || this.isExternalFrameMode()) {
+        return;
+      }
+      if (playbackUrl !== String(this.activePlaybackUrl || "").trim()) {
+        return;
+      }
+      if (this.isStartupErrorVisible()) {
+        return;
+      }
+      const mediaErrorCode = typeof PlayerController.getLastPlaybackErrorCode === "function"
+        ? Number(PlayerController.getLastPlaybackErrorCode() || 0)
+        : 0;
+      const detail = String(error?.message || error?.name || error || "").trim();
+      const candidate = sourceCandidate || this.getStreamCandidateByUrl(playbackUrl) || this.getCurrentStreamCandidate();
+      this.markPlaybackSourceFailed(playbackUrl);
+      if (!this.hasPresentedPlaybackFrame) {
+        this.showStartupError(this.getStartupErrorMessage(mediaErrorCode, detail, candidate), {
+          mediaErrorCode
+        });
+        console.warn("Playback failed to start", {
+          url: playbackUrl,
+          mediaErrorCode,
+          error
+        });
+        return;
+      }
+      this.sourcesError = `${this.mediaErrorMessage(mediaErrorCode, detail, candidate)}. Choose another source manually.`;
+      this.renderSourcesPanel();
+      console.warn("Playback failed after startup", {
+        url: playbackUrl,
+        mediaErrorCode,
+        error
+      });
+    });
   },
 
   getStartupErrorMessage(mediaErrorCode = 0, detail = "", streamCandidate = this.getCurrentStreamCandidate()) {
@@ -5422,8 +5473,6 @@ export const PlayerScreen = {
       return true;
     }
     this.playerBackNavigationInProgress = true;
-    Router.suppressNextPopstate?.(1500);
-    Router.ignoreSinglePopstate?.();
     this.releaseCurrentEngineFsStreamBestEffort("back-to-stream", {
       removeTorrent: true,
       deferRemoveMs: ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS
@@ -5435,6 +5484,20 @@ export const PlayerScreen = {
       || streamParams.itemId
       || streamParams.videoId
     );
+    const canReturnThroughExistingStreamHistory = Boolean(
+      shouldReturnToStream
+      && this.params?.returnToStreamOnBack
+      && this.params?.streamRouteParams
+      && Router.historyInitialized
+      && window?.history
+      && typeof window.history.back === "function"
+    );
+    if (canReturnThroughExistingStreamHistory) {
+      void Router.back({ skipConsume: true });
+      return "history";
+    }
+    Router.suppressNextPopstate?.(1500);
+    Router.ignoreSinglePopstate?.();
     const targetRoute = shouldReturnToStream
       ? "stream"
       : (this.params?.itemId ? "detail" : "home");
@@ -8159,10 +8222,14 @@ export const PlayerScreen = {
     this.renderSubtitleDialog();
     this.renderAudioDialog();
     this.renderSpeedDialog();
-    PlayerController.play(this.activePlaybackUrl, {
-      ...this.buildPlaybackContext(sourceCandidate),
-      forceEngine
-    });
+    this.startPlayerControllerPlayback(
+      this.activePlaybackUrl,
+      {
+        ...this.buildPlaybackContext(sourceCandidate),
+        forceEngine
+      },
+      { mountToken, sourceCandidate }
+    );
     this.paused = false;
     this.refreshTrackDialogs();
     this.updateUiTick();
@@ -9690,10 +9757,10 @@ export const PlayerScreen = {
     ) {
       return;
     }
-    const selectedTrackIndex = typeof PlayerController.getSelectedAvPlaySubtitleTrackIndex === "function"
-      ? PlayerController.getSelectedAvPlaySubtitleTrackIndex()
-      : this.selectedSubtitleTrackIndex;
-    if (!Number.isFinite(Number(selectedTrackIndex)) || Number(selectedTrackIndex) < 0) {
+    const subtitleOutputActive = typeof PlayerController.hasActiveAvPlaySubtitleOutput === "function"
+      ? PlayerController.hasActiveAvPlaySubtitleOutput()
+      : Number(this.selectedSubtitleTrackIndex) >= 0;
+    if (!subtitleOutputActive) {
       return;
     }
     if (this.avPlaySubtitleOverlayTimer) {
@@ -11046,8 +11113,12 @@ export const PlayerScreen = {
         ? PlayerController.setAvPlaySubtitleTrack(nativeTrackIndex)
         : false;
     } else {
+      const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
+      const selectionTrackIndex = Number.isFinite(nativeTrackIndex) && nativeTrackIndex >= 0
+        ? nativeTrackIndex
+        : targetTrackIndex;
       applied = typeof PlayerController.setWebOsEmbeddedSubtitleTrack === "function"
-        ? PlayerController.setWebOsEmbeddedSubtitleTrack(targetTrackIndex)
+        ? PlayerController.setWebOsEmbeddedSubtitleTrack(selectionTrackIndex, targetTrackIndex)
         : false;
     }
     if (!applied) {

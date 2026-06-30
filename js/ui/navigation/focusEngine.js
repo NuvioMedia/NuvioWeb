@@ -100,7 +100,11 @@ export const FocusEngine = {
     normalizedEvent.stopImmediatePropagation();
 
     const currentScreen = Router.getCurrentScreen();
-    if (currentScreen?.consumeBackRequest?.()) {
+    const consumeResult = currentScreen?.consumeBackRequest?.();
+    if (consumeResult) {
+      if (consumeResult === "history") {
+        return;
+      }
       Router.suppressNextPopstate?.();
       return;
     }

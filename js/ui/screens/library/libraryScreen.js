@@ -11,6 +11,10 @@ import {
   posterItemFromNode
 } from "../../components/posterOptionsMenu.js";
 import {
+  isTitleItemWatched,
+  renderTitleWatchedBadge
+} from "../../components/watchedTitleBadge.js";
+import {
   activateLegacySidebarAction,
   bindRootSidebarEvents,
   getRootSidebarNodes,
@@ -40,25 +44,6 @@ function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
 
-function extractReleaseYear(item = {}) {
-  const candidates = [
-    item?.released,
-    item?.releaseDate,
-    item?.release_date,
-    item?.releaseInfo,
-    item?.year
-  ].filter(Boolean);
-
-  for (const value of candidates) {
-    const match = String(value).match(/\b(19|20)\d{2}\b/);
-    if (match) {
-      return match[0];
-    }
-  }
-
-  return "";
-}
-
 function bookmarkOutlineSvg() {
   return `
     <svg viewBox="0 0 80 80" class="library-empty-icon" aria-hidden="true" focusable="false">
@@ -70,10 +55,6 @@ function bookmarkOutlineSvg() {
             stroke-linejoin="round" />
     </svg>
   `;
-}
-
-function renderWatchedBadgeGlyph(className = "library-watched-badge-svg") {
-  return `<svg viewBox="0 0 24 24" class="${className}" aria-hidden="true" focusable="false"><path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17Z" fill="currentColor"/></svg>`;
 }
 
 function isTextField(node) {
@@ -464,7 +445,7 @@ export const LibraryScreen = {
     `;
   },
 
-  syncRenderedPickerValues(state) {
+  syncRenderedPickerValues() {
     const valueByPicker = {
       list: this.controller.getSelectedListLabel(),
       type: this.controller.getSelectedTypeLabel(),
@@ -575,11 +556,7 @@ export const LibraryScreen = {
           ${items
             .map((item) => {
               const focusKey = `${item.type}:${item.id}`;
-              const isSeries =
-                String(item.type || "").toLowerCase() === "series" ||
-                String(item.type || "").toLowerCase() === "tv";
-              const watchedIds = isSeries ? state.watchedSeriesIds : state.watchedMovieIds;
-              const isWatched = watchedIds?.has?.(String(item.id || ""));
+              const isWatched = isTitleItemWatched(item, state.watchedTitleIds);
               return `
               <article class="library-grid-card focusable"
                        data-action="openDetail"
@@ -590,7 +567,7 @@ export const LibraryScreen = {
                        data-backdrop-src="${escapeHtml(item.background || "")}"
                        data-focus-key="${escapeHtml(focusKey)}">
                 <div class="library-grid-poster${item.poster ? "" : " placeholder"}"${item.poster ? ` style="background-image:url('${escapeHtml(item.poster)}')"` : ""}>
-                  ${isWatched ? `<span class="library-watched-badge" aria-label="${escapeHtml(t("episodes_cd_watched", {}, "Watched"))}">${renderWatchedBadgeGlyph()}</span>` : ""}
+                  ${isWatched ? renderTitleWatchedBadge({ className: "library-watched-badge", iconClassName: "library-watched-badge-svg" }) : ""}
                 </div>
                 <div class="library-grid-title">${escapeHtml(item.name || item.id || "Untitled")}</div>
               </article>

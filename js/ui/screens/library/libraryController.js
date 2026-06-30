@@ -8,6 +8,7 @@ import {
 import { AuthManager } from "../../../core/auth/authManager.js";
 import { watchedItemsRepository } from "../../../data/repository/watchedItemsRepository.js";
 import { I18n } from "../../../i18n/index.js";
+import { buildWatchedTitleIdSet } from "../../components/watchedTitleBadge.js";
 
 const ALL_KEY = "__all__";
 const MESSAGE_CLEAR_MS = 2400;
@@ -78,8 +79,7 @@ function makeInitialState() {
     lastFocusedPosterKey: persistedPosterFocusKey,
     isNuvioAccount: false,
     isTraktAuthenticated: false,
-    watchedMovieIds: new Set(),
-    watchedSeriesIds: new Set()
+    watchedTitleIds: new Set()
   };
 }
 
@@ -378,8 +378,7 @@ export class LibraryController {
       availableSortOptions: [...this.state.availableSortOptions],
       allItems: [...this.state.allItems],
       visibleItems: [...this.state.visibleItems],
-      watchedMovieIds: new Set(this.state.watchedMovieIds || []),
-      watchedSeriesIds: new Set(this.state.watchedSeriesIds || []),
+      watchedTitleIds: new Set(this.state.watchedTitleIds || []),
       listEditorState: copyEditorState(this.state.listEditorState)
     };
   }
@@ -505,16 +504,7 @@ export class LibraryController {
       manageSelectedListKey,
       isNuvioAccount: sourceMode === LibrarySourceMode.LOCAL && AuthManager.isAuthenticated,
       isTraktAuthenticated: sourceMode === LibrarySourceMode.TRAKT,
-      watchedMovieIds: new Set(
-        (watchedItems || [])
-          .filter((item) => item.season == null && item.episode == null)
-          .map((item) => String(item.contentId || ""))
-      ),
-      watchedSeriesIds: new Set(
-        (watchedItems || [])
-          .filter((item) => item.season == null && item.episode == null)
-          .map((item) => String(item.contentId || ""))
-      ),
+      watchedTitleIds: buildWatchedTitleIdSet(watchedItems),
       isLoading: false,
       isSyncing: false,
       expandedPicker: preserveOverlay ? this.state.expandedPicker : null,

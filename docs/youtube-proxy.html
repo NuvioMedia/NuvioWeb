@@ -44,6 +44,7 @@
         var startMuted = params.muted === "1";
         var autoplay = params.autoplay !== "0";
         var loop = params.loop !== "0";
+        var captionsEnabled = params.cc_load_policy === "1";
 
         function parseQuery(search) {
           var output = {};
@@ -103,6 +104,7 @@
                 return player && player.isMuted();
               }, startMuted)
             ),
+            captionsEnabled: captionsEnabled,
             loading: !ready || playerState === -1 || playerState === 3,
             controllable: true
           };
@@ -152,6 +154,28 @@
           }, 250);
         }
 
+        function setCaptionsEnabled(enabled) {
+          captionsEnabled = Boolean(enabled);
+          if (!player) {
+            return;
+          }
+          if (captionsEnabled) {
+            safeCall(function loadCaptionsModule() {
+              return player.loadModule && player.loadModule("captions");
+            }, null);
+            safeCall(function loadCcModule() {
+              return player.loadModule && player.loadModule("cc");
+            }, null);
+          } else {
+            safeCall(function unloadCaptionsModule() {
+              return player.unloadModule && player.unloadModule("captions");
+            }, null);
+            safeCall(function unloadCcModule() {
+              return player.unloadModule && player.unloadModule("cc");
+            }, null);
+          }
+        }
+
         function handleCommand(data) {
           var command;
           var payload;
@@ -185,6 +209,8 @@
             } else {
               player.unMute();
             }
+          } else if (command === "setCaptionsEnabled") {
+            setCaptionsEnabled(Boolean(payload.enabled));
           } else if (command === "seekTo") {
             seconds = Math.max(0, Number(payload.seconds || 0));
             player.seekTo(seconds, true);
@@ -248,6 +274,7 @@
             "playsinline=1",
             "rel=0",
             "modestbranding=1",
+            "cc_load_policy=0",
             "iv_load_policy=3",
             "widget_referrer=" + encodeURIComponent(widgetReferrer)
           ].join("&");
@@ -281,6 +308,7 @@
               fs: 0,
               loop: loop ? 1 : 0,
               modestbranding: 1,
+              cc_load_policy: captionsEnabled ? 1 : 0,
               origin: pageOriginIsHttp ? pageOrigin : undefined,
               playsinline: 1,
               playlist: loop ? videoId : undefined,
@@ -299,6 +327,7 @@
                 } else {
                   event.target.unMute();
                 }
+                setCaptionsEnabled(captionsEnabled);
                 if (autoplay) {
                   event.target.playVideo();
                 }

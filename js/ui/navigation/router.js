@@ -155,14 +155,18 @@ export const Router = {
       }
       const shouldSkipConsume = Boolean(this.skipConsumeNextPopstate);
       this.skipConsumeNextPopstate = false;
+      const state = event?.state || null;
       const currentScreen = this.getCurrentScreen();
-      if (!shouldSkipConsume && currentScreen?.consumeBackRequest?.()) {
-        if (window?.history && typeof window.history.pushState === "function") {
+      const shouldLetPlayerReturnToStream = this.current === "player" && state?.route === "stream";
+      const consumeResult = !shouldSkipConsume && !shouldLetPlayerReturnToStream
+        ? currentScreen?.consumeBackRequest?.()
+        : false;
+      if (consumeResult) {
+        if (consumeResult !== "history" && window?.history && typeof window.history.pushState === "function") {
           window.history.pushState({ route: this.current, params: this.currentParams }, "");
         }
         return;
       }
-      const state = event?.state || null;
       if (this.current === "home" && (!state?.route || NON_BACKSTACK_ROUTES.has(state.route))) {
         Platform.exitApp();
         return;
@@ -316,8 +320,13 @@ export const Router = {
 
   async back(options = {}) {
     const currentScreen = this.getCurrentScreen();
-    if (!options?.skipConsume && currentScreen?.consumeBackRequest?.()) {
-      this.suppressNextPopstate();
+    const consumeResult = !options?.skipConsume
+      ? currentScreen?.consumeBackRequest?.()
+      : false;
+    if (consumeResult) {
+      if (consumeResult !== "history") {
+        this.suppressNextPopstate();
+      }
       return;
     }
 

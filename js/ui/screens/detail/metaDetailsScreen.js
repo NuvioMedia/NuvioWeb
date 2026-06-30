@@ -951,6 +951,7 @@ function buildDirectYoutubeEmbedUrl(cleanId = "", { muted = false, loop = true }
     rel: "0",
     modestbranding: "1",
     enablejsapi: "1",
+    cc_load_policy: "0",
     iv_load_policy: "3"
   });
   if (loop) {
@@ -983,6 +984,7 @@ function buildYoutubeEmbedUrl(ytId = "", { muted = false } = {}) {
       proxyUrl.searchParams.set("playlist", cleanId);
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
+      proxyUrl.searchParams.set("cc_load_policy", "0");
       proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
@@ -1001,6 +1003,7 @@ function buildYoutubeEmbedUrl(ytId = "", { muted = false } = {}) {
     playsinline: "1",
     rel: "0",
     modestbranding: "1",
+    cc_load_policy: "0",
     enablejsapi: "1"
   });
   const origin = String(globalThis?.location?.origin || "").trim();
@@ -1034,6 +1037,7 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = false, loop = false } 
       }
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
+      proxyUrl.searchParams.set("cc_load_policy", "0");
       proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
@@ -1184,7 +1188,11 @@ function formatPlaybackTime(value = 0) {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function normalizeTrailerProxyStatePayload(payload, fallbackMuted = false) {
+function normalizeTrailerProxyStatePayload(
+  payload,
+  fallbackMuted = false,
+  fallbackCaptionsEnabled = false
+) {
   const source = payload && typeof payload === "object" ? payload : {};
   const nestedState = source.state && typeof source.state === "object" ? source.state : null;
   const candidate = nestedState || source;
@@ -1195,6 +1203,10 @@ function normalizeTrailerProxyStatePayload(payload, fallbackMuted = false) {
     ended: Boolean(candidate.ended),
     paused: Boolean(candidate.paused),
     muted: candidate.muted == null ? Boolean(fallbackMuted) : Boolean(candidate.muted),
+    captionsEnabled:
+      candidate.captionsEnabled == null
+        ? Boolean(fallbackCaptionsEnabled)
+        : Boolean(candidate.captionsEnabled),
     loading: Boolean(candidate.loading),
     controllable: candidate.controllable !== false
   };
@@ -1365,11 +1377,15 @@ export const MetaDetailsScreen = {
           duration: 0,
           paused: false,
           muted: Boolean(this.trailerMuted),
+          captionsEnabled: Boolean(this.trailerSubtitlesEnabled),
           loading: true,
           controllable: true
         };
         this.postTrailerProxyCommand("setMuted", {
           muted: Boolean(this.trailerMuted)
+        });
+        this.postTrailerProxyCommand("setCaptionsEnabled", {
+          enabled: Boolean(this.trailerSubtitlesEnabled)
         });
         this.postTrailerProxyCommand("play");
         this.postTrailerProxyCommand("getState");
@@ -1409,7 +1425,11 @@ export const MetaDetailsScreen = {
         if (stateVideoId && activeVideoId && stateVideoId !== activeVideoId) {
           return;
         }
-        const nextState = normalizeTrailerProxyStatePayload(data, this.trailerMuted);
+        const nextState = normalizeTrailerProxyStatePayload(
+          data,
+          this.trailerMuted,
+          this.trailerSubtitlesEnabled
+        );
         if (
           nextState.loading === false ||
           Number(nextState.duration || 0) > 0 ||
@@ -1509,6 +1529,7 @@ export const MetaDetailsScreen = {
     this.trailerVisualReady = false;
     this.trailerHasAutoplayed = false;
     this.trailerMuted = false;
+    this.trailerSubtitlesEnabled = false;
     this.trailerMediaListeners = [];
     this.trailerUiRefs = null;
     this.trailerProgressTimer = null;
@@ -3591,7 +3612,7 @@ export const MetaDetailsScreen = {
       if (!url) return;
       el.style.backgroundImage = "url('" + String(url).replace(/'/g, "%27") + "')";
       el.removeAttribute("data-thumb");
-    } catch (e) {}
+    } catch (_) {}
   },
 
   observeEpisodeThumbnails() {
@@ -3611,7 +3632,7 @@ export const MetaDetailsScreen = {
             entries.forEach((entry) => {
               if (entry.isIntersecting) {
                 this.applyEpisodeThumb(entry.target);
-                try { this.episodeThumbObserver.unobserve(entry.target); } catch (e) {}
+                try { this.episodeThumbObserver.unobserve(entry.target); } catch (_) {}
               }
             });
           },
@@ -3619,7 +3640,7 @@ export const MetaDetailsScreen = {
         );
       }
       thumbs.forEach((el) => this.episodeThumbObserver.observe(el));
-    } catch (e) {}
+    } catch (_) {}
   },
 
   renderEpisodeCards(preferredIndex = null) {
@@ -5370,14 +5391,10 @@ export const MetaDetailsScreen = {
     if (this.detailClickHandler) {
       this.container.removeEventListener("click", this.detailClickHandler, true);
     }
-    this.detailClickHandler = (event) => {
+    this.detailClickHandler = () => {
       if (this.isTrailerPlaying && this.trailerPlaybackMode === "autoplay") {
         this.stopTrailerPlayback({ restartAutoplay: false });
         return;
-      }
-      const target = event?.target?.closest?.("[data-trailer-control]");
-      if (this.activateTrailerControl(target)) {
-        event?.preventDefault?.();
       }
     };
     this.container.addEventListener("click", this.detailClickHandler, true);
@@ -5922,27 +5939,6 @@ export const MetaDetailsScreen = {
     }, 3200);
   },
 
-  activateTrailerControl(target) {
-    if (
-      !target ||
-      !this.isTrailerPlaying ||
-      this.trailerPlaybackMode !== "manual"
-    ) {
-      return false;
-    }
-    this.restartTrailerControlsTimer();
-    const control = String(target.dataset.trailerControl || "");
-    if (control === "playPause") {
-      this.toggleActiveTrailerPlayback();
-      return true;
-    }
-    if (control === "mute") {
-      this.setTrailerMutedState(!this.trailerMuted);
-      return true;
-    }
-    return false;
-  },
-
   startTrailerProgressTimer() {
     this.stopTrailerProgressTimer();
     if (this.trailerPlaybackMode !== "manual") {
@@ -5972,13 +5968,7 @@ export const MetaDetailsScreen = {
           video: layer.querySelector(".detail-trailer-video"),
           status: layer.querySelector("[data-trailer-status]"),
           progressFill: layer.querySelector("[data-trailer-progress-fill]"),
-          timeLabel: layer.querySelector("[data-trailer-time-label]"),
-          playPauseButton: layer.querySelector('[data-trailer-control="playPause"]'),
-          playPauseIcon: layer.querySelector("[data-trailer-play-icon]"),
-          playPauseText: layer.querySelector("[data-trailer-play-label]"),
-          muteButton: layer.querySelector('[data-trailer-control="mute"]'),
-          muteIcon: layer.querySelector("[data-trailer-mute-icon]"),
-          muteText: layer.querySelector("[data-trailer-mute-label]")
+          timeLabel: layer.querySelector("[data-trailer-time-label]")
         }
       : null;
   },
@@ -5989,6 +5979,7 @@ export const MetaDetailsScreen = {
       duration: 0,
       paused: true,
       muted: Boolean(this.trailerMuted),
+      captionsEnabled: Boolean(this.trailerSubtitlesEnabled),
       loading: false,
       controllable: true
     };
@@ -6009,6 +6000,7 @@ export const MetaDetailsScreen = {
         duration,
         paused: Boolean(video.paused),
         muted: Boolean(video.muted),
+        captionsEnabled: Boolean(this.trailerSubtitlesEnabled),
         loading: Boolean(!video.readyState || video.readyState < 2),
         controllable: true
       };
@@ -6025,6 +6017,7 @@ export const MetaDetailsScreen = {
       duration: Number(this.trailerProxyState.duration || 0),
       paused: Boolean(this.trailerProxyState.paused),
       muted: Boolean(this.trailerProxyState.muted),
+      captionsEnabled: Boolean(this.trailerProxyState.captionsEnabled),
       loading: Boolean(this.trailerProxyState.loading),
       controllable: this.trailerProxyState.controllable !== false
     };
@@ -6037,6 +6030,7 @@ export const MetaDetailsScreen = {
     }
     const playback = this.getTrailerPlaybackSnapshot();
     this.trailerMuted = Boolean(playback.muted);
+    this.trailerSubtitlesEnabled = Boolean(playback.captionsEnabled);
     const progress =
       playback.duration > 0
         ? Math.max(0, Math.min(100, (playback.currentTime / playback.duration) * 100))
@@ -6051,51 +6045,8 @@ export const MetaDetailsScreen = {
       refs.status.textContent = playback.loading
         ? t("detail.trailerLoading", {}, "Loading trailer...")
         : playback.controllable
-          ? t(
-              "detail.trailerControlsHint",
-              {},
-              "OK Play/Pause  LEFT/RIGHT Seek  UP Show  DOWN Hide  BACK Close"
-            )
+          ? ""
           : t("detail.trailerFallbackHint", {}, "Use back to close the trailer");
-    }
-    if (refs.playPauseIcon) {
-      refs.playPauseIcon.src = playback.paused
-        ? "assets/icons/ic_player_play.svg"
-        : "assets/icons/ic_player_pause.svg";
-      refs.playPauseIcon.alt = "";
-    }
-    if (refs.playPauseText) {
-      refs.playPauseText.textContent = playback.paused
-        ? t("detail.trailerResume", {}, "Resume")
-        : t("detail.trailerPause", {}, "Pause");
-    }
-    if (refs.playPauseButton) {
-      refs.playPauseButton.setAttribute(
-        "aria-label",
-        playback.paused
-          ? t("detail.trailerResume", {}, "Resume")
-          : t("detail.trailerPause", {}, "Pause")
-      );
-    }
-    if (refs.muteIcon) {
-      refs.muteIcon.src = playback.muted
-        ? "assets/icons/ic_player_audio_outline.svg"
-        : "assets/icons/ic_player_audio_filled.svg";
-      refs.muteIcon.alt = "";
-    }
-    if (refs.muteText) {
-      refs.muteText.textContent = playback.muted
-        ? t("detail.trailerUnmute", {}, "Unmute")
-        : t("detail.trailerMute", {}, "Mute");
-    }
-    if (refs.muteButton) {
-      refs.muteButton.setAttribute(
-        "aria-label",
-        playback.muted
-          ? t("detail.trailerUnmute", {}, "Unmute")
-          : t("detail.trailerMute", {}, "Mute")
-      );
-      refs.muteButton.disabled = !playback.controllable;
     }
     if (playback.loading || playback.paused) {
       this.stopTrailerControlsTimer();
@@ -6112,7 +6063,10 @@ export const MetaDetailsScreen = {
       return;
     }
     this.detachTrailerMediaListeners();
-    const sync = () => this.updateTrailerOverlay();
+    const sync = () => {
+      this.applyTrailerVideoSubtitleState(video);
+      this.updateTrailerOverlay();
+    };
     const markReady = () => {
       if (!this.isTrailerPlaying || video.paused || !video.isConnected) {
         return;
@@ -6206,6 +6160,7 @@ export const MetaDetailsScreen = {
       duration: 0,
       paused: false,
       muted: Boolean(this.trailerMuted),
+      captionsEnabled: Boolean(this.trailerSubtitlesEnabled),
       loading: true,
       controllable: true
     };
@@ -6250,29 +6205,21 @@ export const MetaDetailsScreen = {
     this.updateTrailerOverlay();
   },
 
-  setTrailerMutedState(nextMuted) {
-    this.trailerMuted = Boolean(nextMuted);
-    if (
-      !this.isTrailerPlaying ||
-      !this.trailerSource ||
-      this.trailerPlaybackMode !== "manual"
-    ) {
+  applyTrailerVideoSubtitleState(video = null) {
+    const target = video || this.trailerUiRefs?.video || null;
+    if (!target) {
       return;
     }
-    if (this.trailerSource.kind === "video") {
-      const video = this.trailerUiRefs?.video;
-      if (video) {
-        video.muted = this.trailerMuted;
-      }
-      this.updateTrailerOverlay();
+    const tracks = target.textTracks || target.webkitTextTracks || target.mozTextTracks || null;
+    if (!tracks) {
       return;
     }
-    if (!this.trailerProxyState || this.trailerYoutubeFallbackActive) {
-      this.updateTrailerOverlay();
-      return;
-    }
-    this.postTrailerProxyCommand("setMuted", { muted: this.trailerMuted });
-    this.updateTrailerOverlay();
+    const enabled = Boolean(this.trailerSubtitlesEnabled);
+    Array.from(tracks).forEach((track) => {
+      try {
+        track.mode = enabled ? "showing" : "disabled";
+      } catch (_) {}
+    });
   },
 
   seekTrailerBy(deltaSeconds) {
@@ -6360,36 +6307,25 @@ export const MetaDetailsScreen = {
       this.meta?.name || this.params?.fallbackTitle || this.params?.itemId || "Trailer"
     );
     this.trailerDomGeneration = Number(this.trailerDomGeneration || 0) + 1;
-    const subtitle = escapeHtml(t("detail.trailerLabel", {}, "Trailer"));
+    const trailerHint = escapeHtml(t("hero_press_back_trailer", {}, "Press back to exit trailer"));
     const controlsMarkup = this.trailerPlaybackMode === "manual" ? `
       <div class="detail-trailer-controls-overlay" tabindex="-1">
         <div class="detail-trailer-controls-gradient detail-trailer-controls-gradient-top"></div>
         <div class="detail-trailer-controls-gradient detail-trailer-controls-gradient-bottom"></div>
         <div class="detail-trailer-controls-top">
-          <div class="detail-trailer-badge">${subtitle}</div>
+          <div class="detail-trailer-meta">
+            <div class="detail-trailer-title">${title}</div>
+            <div class="detail-trailer-subtitle">${trailerHint}</div>
+          </div>
           <div class="detail-trailer-status" data-trailer-status aria-live="polite"></div>
         </div>
         <div class="detail-trailer-controls-bottom">
-          <div class="detail-trailer-meta">
-            <div class="detail-trailer-title">${title}</div>
-            <div class="detail-trailer-subtitle">${subtitle}</div>
-          </div>
           <div class="detail-trailer-progress">
             <div class="detail-trailer-progress-track">
               <div class="detail-trailer-progress-fill" data-trailer-progress-fill></div>
             </div>
           </div>
           <div class="detail-trailer-controls-row">
-            <div class="detail-trailer-buttons">
-              <button class="player-control-btn detail-trailer-control-btn focusable is-primary" type="button" data-trailer-control="playPause" aria-label="${escapeAttribute(t("detail.trailerPause", {}, "Pause"))}">
-                <img class="player-control-icon" data-trailer-play-icon src="assets/icons/ic_player_pause.svg" alt="" />
-                <span class="detail-trailer-control-text" data-trailer-play-label>${escapeHtml(t("detail.trailerPause", {}, "Pause"))}</span>
-              </button>
-              <button class="player-control-btn detail-trailer-control-btn focusable" type="button" data-trailer-control="mute" aria-label="${escapeAttribute(t("detail.trailerMute", {}, "Mute"))}">
-                <img class="player-control-icon" data-trailer-mute-icon src="assets/icons/ic_player_audio_outline.svg" alt="" />
-                <span class="detail-trailer-control-text" data-trailer-mute-label>${escapeHtml(t("detail.trailerMute", {}, "Mute"))}</span>
-              </button>
-            </div>
             <div class="detail-trailer-time" data-trailer-time-label>0:00 / 0:00</div>
           </div>
         </div>
@@ -6439,6 +6375,7 @@ export const MetaDetailsScreen = {
     if (this.trailerPlaybackMode === "manual") {
       this.trailerUiRefs?.overlay?.focus?.({ preventScroll: true });
     }
+    this.applyTrailerVideoSubtitleState(this.trailerUiRefs?.video || null);
     this.bindTrailerVideoEvents(this.trailerUiRefs?.video || null);
     const playAttempt = this.trailerUiRefs?.video?.play?.();
     if (playAttempt?.catch) {
@@ -6483,6 +6420,7 @@ export const MetaDetailsScreen = {
       restartAutoplay: false,
       restoreFocus: false
     });
+    this.trailerSubtitlesEnabled = false;
     this.trailerPlaybackMode = initiatedByUser ? "manual" : "autoplay";
     this.trailerFocusRestore =
       initiatedByUser &&
@@ -6496,7 +6434,8 @@ export const MetaDetailsScreen = {
     this.isTrailerPlaying = true;
     this.syncTrailerDom();
     if (this.trailerPlaybackMode === "manual") {
-      this.restartTrailerControlsTimer();
+      this.stopTrailerControlsTimer();
+      this.setTrailerControlsVisible(false);
     }
   },
 
@@ -6534,6 +6473,7 @@ export const MetaDetailsScreen = {
     this.isTrailerPlaying = false;
     this.trailerPlaybackMode = null;
     this.trailerVisualReady = false;
+    this.trailerSubtitlesEnabled = false;
     this.trailerFocusRestore = null;
     const clearLayer = () => {
       if (
@@ -8749,18 +8689,10 @@ export const MetaDetailsScreen = {
     }
   },
 
-  onPointerFocus(target) {
-    if (target?.closest?.("[data-trailer-control]")) {
-      this.restartTrailerControlsTimer();
-    }
+  onPointerFocus() {
   },
 
   onPointerActivate(target) {
-    const trailerControl = target?.closest?.("[data-trailer-control]");
-    if (this.activateTrailerControl(trailerControl)) {
-      return true;
-    }
-
     const actionTarget = target?.closest?.("[data-action]");
     const action = String(actionTarget?.dataset?.action || "");
     if (action === "toggleTrailer") {

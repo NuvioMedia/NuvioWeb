@@ -84,6 +84,7 @@ export const PlayerController = {
   desiredAvPlaySubtitleTrackIndex: -1,
   desiredAvPlaySubtitleTrackUntil: 0,
   avplaySubtitlesSilent: false,
+  avplayExternalSubtitlePath: "",
   avplayTickTimer: null,
   avplayReady: false,
   avplayEnded: false,
@@ -1086,6 +1087,7 @@ export const PlayerController = {
   },
 
   clearAvPlayExternalSubtitlePath() {
+    this.avplayExternalSubtitlePath = "";
     const avplay = this.getAvPlay();
     if (!avplay || typeof avplay.setExternalSubtitlePath !== "function") {
       return false;
@@ -1588,11 +1590,33 @@ export const PlayerController = {
       this.desiredAvPlaySubtitleTrackUntil = 0;
       this.selectedAvPlaySubtitleTrackIndex = -1;
       this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
+      this.avplayExternalSubtitlePath = path;
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     } catch (_) {
       return false;
     }
+  },
+
+  hasActiveAvPlaySubtitleOutput() {
+    if (!this.isUsingAvPlay() || this.avplaySubtitlesSilent) {
+      return false;
+    }
+    if (String(this.avplayExternalSubtitlePath || "").trim()) {
+      return true;
+    }
+    const selectedIndex = Number(this.selectedAvPlaySubtitleTrackIndex);
+    const pendingIndex = Number(this.pendingAvPlaySubtitleTrackIndex);
+    const desiredIndex = Number(this.desiredAvPlaySubtitleTrackIndex);
+    return (
+      (Number.isFinite(selectedIndex) && selectedIndex >= 0)
+      || (Number.isFinite(pendingIndex) && pendingIndex >= 0)
+      || (
+        Number.isFinite(desiredIndex)
+        && desiredIndex >= 0
+        && Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0)
+      )
+    );
   },
 
   getAvPlayVideoDimensions() {
@@ -1828,6 +1852,7 @@ export const PlayerController = {
     this.desiredAvPlaySubtitleTrackIndex = -1;
     this.desiredAvPlaySubtitleTrackUntil = 0;
     this.avplaySubtitlesSilent = false;
+    this.avplayExternalSubtitlePath = "";
     this.avplayReady = false;
     this.avplayEnded = false;
     this.avplayCurrentTimeMs = 0;
@@ -3226,12 +3251,16 @@ export const PlayerController = {
     return true;
   },
 
-  setWebOsEmbeddedSubtitleTrack(trackIndex) {
+  setWebOsEmbeddedSubtitleTrack(trackIndex, selectedTrackIndex = trackIndex) {
     if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
       return false;
     }
 
     const targetIndex = Number(trackIndex);
+    const selectedIndex = Number(selectedTrackIndex);
+    const storedSelectedIndex = Number.isFinite(selectedIndex) && selectedIndex >= 0
+      ? selectedIndex
+      : targetIndex;
     if (!Number.isFinite(targetIndex) || targetIndex < -1) {
       return false;
     }
@@ -3260,7 +3289,7 @@ export const PlayerController = {
       this.applyWebOsSubtitleFontSize(mediaId, { force: true });
 
       setTimeout(() => {
-        if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== targetIndex) {
+        if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== storedSelectedIndex) {
           return;
         }
         if (this.nativeMediaId && mediaId !== this.nativeMediaId) {
@@ -3276,7 +3305,7 @@ export const PlayerController = {
       }, 350);
     };
 
-    this.selectedWebOsEmbeddedSubtitleTrackIndex = targetIndex;
+    this.selectedWebOsEmbeddedSubtitleTrackIndex = targetIndex < 0 ? -1 : storedSelectedIndex;
 
     const mediaId = this.syncNativeMediaId();
     if (mediaId) {
@@ -3285,7 +3314,7 @@ export const PlayerController = {
     }
 
     this.waitForNativeMediaId().then((resolvedMediaId) => {
-      if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== targetIndex) {
+      if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== (targetIndex < 0 ? -1 : storedSelectedIndex)) {
         return;
       }
       applySelection(resolvedMediaId);

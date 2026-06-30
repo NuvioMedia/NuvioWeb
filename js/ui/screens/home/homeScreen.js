@@ -5169,16 +5169,17 @@ export const HomeScreen = {
   },
 
   applyHomeTruncationState() {
-    if (!this.container || this.isPerformanceConstrained()) {
+    if (!this.container) {
       return;
     }
     const modernHeroDescriptionWordLimit = 40;
     const root = this.homeTruncationScope || this.container;
     this.homeTruncationScope = null;
     this.applyModernHeroDescriptionBounds(root);
-    const nodes = root.querySelectorAll(
-      ".home-hero-description, .home-poster-title, .home-poster-subtitle"
-    );
+    const truncationSelector = this.isPerformanceConstrained()
+      ? ".home-hero-description"
+      : ".home-hero-description, .home-poster-title, .home-poster-subtitle";
+    const nodes = root.querySelectorAll(truncationSelector);
     nodes.forEach((node) => {
       if (!(node instanceof HTMLElement)) {
         return;
@@ -5228,7 +5229,7 @@ export const HomeScreen = {
     if (!this.container || this.layoutMode !== "modern") {
       return;
     }
-    const modernHeroDescriptionMaxLines = 5;
+    const modernHeroDescriptionMaxLines = 4;
     const scope = root instanceof HTMLElement ? root : this.container;
     const heroNodes = scope.classList?.contains("home-hero-card")
       ? [scope]
@@ -5241,6 +5242,8 @@ export const HomeScreen = {
       }
 
       description.style.maxHeight = "";
+      description.style.webkitLineClamp = "";
+      description.style.lineClamp = "";
       if (description.classList.contains("is-empty")) {
         return;
       }
@@ -5257,15 +5260,19 @@ export const HomeScreen = {
       const gapCount = Math.max(0, visibleCount - 1);
       const availableHeight = Math.floor(copy.clientHeight - reservedHeight - (gapCount * gapValue));
       const lineHeight = parseFloat(getComputedStyle(description).lineHeight || "0") || 0;
+      const lineBoxHeight = Math.max(1, Math.ceil(lineHeight || description.offsetHeight || 1));
       if (availableHeight <= 0) {
-        description.style.maxHeight = lineHeight > 0 ? `${lineHeight}px` : "0px";
+        description.style.webkitLineClamp = "1";
+        description.style.lineClamp = "1";
+        description.style.maxHeight = `${lineBoxHeight}px`;
         return;
       }
-      const maxDescriptionHeight = lineHeight > 0
-        ? (lineHeight * modernHeroDescriptionMaxLines)
-        : availableHeight;
-      const constrainedHeight = Math.min(availableHeight, maxDescriptionHeight);
-      description.style.maxHeight = `${Math.max(lineHeight, constrainedHeight)}px`;
+      const availableLines = lineHeight > 0
+        ? Math.max(1, Math.min(modernHeroDescriptionMaxLines, Math.floor((availableHeight - 2) / lineHeight)))
+        : modernHeroDescriptionMaxLines;
+      description.style.webkitLineClamp = String(availableLines);
+      description.style.lineClamp = String(availableLines);
+      description.style.maxHeight = `${lineBoxHeight * availableLines}px`;
     });
   },
 
@@ -6558,7 +6565,7 @@ export const HomeScreen = {
     this.sidebarExpanded = false;
     this.sidebarOpenedByBack = false;
     this.pillIconOnly = false;
-    this.homeRouteEnterPending = true;
+    this.homeRouteEnterPending = !(navigationContext?.isBackNavigation || returnFocusState?.layoutMode);
     this.destroyHomeHoldDialog();
     this.unlockHomeHoldFocus();
     this.continueWatchingMenu = null;
@@ -6608,7 +6615,10 @@ export const HomeScreen = {
     if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
       this.homeLoadToken = (this.homeLoadToken || 0) + 1;
       this.render();
-      this.loadData({ background: true }).catch((error) => {
+      this.loadData({
+        background: true,
+        preserveReturnState: Boolean(navigationContext?.isBackNavigation || returnFocusState?.layoutMode)
+      }).catch((error) => {
         console.warn("Home background refresh failed", error);
       });
       logHomePerf("mount", {
@@ -6645,9 +6655,12 @@ export const HomeScreen = {
     });
   },
 
-  async loadData({ background = false } = {}) {
+  async loadData({ background = false, preserveReturnState = false } = {}) {
     const loadStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     const token = this.homeLoadToken;
+    const preserveHomeReturnState = Boolean(background && preserveReturnState);
+    const preservedHeroItem = preserveHomeReturnState ? this.heroItem : null;
+    const preservedHeroIdentity = preserveHomeReturnState ? buildHeroIdentity(this.heroItem) : "";
     const prefs = LayoutPreferences.get();
     this.layoutPrefs = prefs;
     this.sidebarExpanded = Boolean(this.layoutPrefs?.modernSidebar && this.sidebarExpanded);
@@ -6730,6 +6743,9 @@ export const HomeScreen = {
         if (token !== this.homeLoadToken || Router.getCurrent() !== "home") {
           return;
         }
+        if (preserveHomeReturnState) {
+          return;
+        }
         progressiveInitialRows.set(row.homeCatalogKey, row);
         this.rows = this.sortAndFilterRows(Array.from(progressiveInitialRows.values()), this.collections);
         this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
@@ -6746,7 +6762,10 @@ export const HomeScreen = {
     if (token !== this.homeLoadToken) {
       return;
     }
-    this.rows = this.sortAndFilterRows(initialRows, this.collections);
+    const nextInitialRows = preserveHomeReturnState
+      ? Array.from(new Map([...(this.rows || []), ...initialRows].map((row) => [row.homeCatalogKey, row])).values())
+      : initialRows;
+    this.rows = this.sortAndFilterRows(nextInitialRows, this.collections);
     if (preserveContinueWatching) {
       this.continueWatchingLoading = false;
     } else if (!background
@@ -6760,8 +6779,24 @@ export const HomeScreen = {
       }
     }
     this.heroCandidates = uniqueById(this.collectHeroCandidates(this.rows));
-    this.heroIndex = 0;
-    this.heroItem = this.pickInitialHero();
+    if (preserveHomeReturnState) {
+      const currentHeroIdentity = buildHeroIdentity(this.heroItem);
+      const shouldRestorePreservedHero = Boolean(preservedHeroItem)
+        && (!preservedHeroIdentity || currentHeroIdentity === preservedHeroIdentity);
+      if (shouldRestorePreservedHero) {
+        this.heroItem = preservedHeroItem;
+      } else if (!this.heroItem) {
+        this.heroItem = this.pickInitialHero();
+      }
+      const heroIdentity = buildHeroIdentity(this.heroItem);
+      const matchedHeroIndex = this.heroCandidates.findIndex((candidate) => buildHeroIdentity(candidate) === heroIdentity);
+      if (matchedHeroIndex >= 0) {
+        this.heroIndex = matchedHeroIndex;
+      }
+    } else {
+      this.heroIndex = 0;
+      this.heroItem = this.pickInitialHero();
+    }
     this.loadedProfileId = String(ProfileManager.getActiveProfileId() || "");
     this.loadedWatchProgressSourceKey = watchProgressRepository.getContinueWatchingSourceKey();
     if (!waitForInitialContinueWatching) {
@@ -6922,7 +6957,7 @@ export const HomeScreen = {
         this.continueWatchingLoading = false;
         this.persistContinueWatchingSnapshot();
         if (this.layoutMode === "modern" && this.continueWatchingDisplay.length) {
-          if (!this.suppressInitialContinueWatchingFocus) {
+          if (!preserveHomeReturnState && !this.suppressInitialContinueWatchingFocus) {
             this.heroItem = this.pickInitialHero();
           }
           if (!background && !this.suppressInitialContinueWatchingFocus && !this.hasAppliedInitialContinueWatchingFocus) {
@@ -6934,7 +6969,7 @@ export const HomeScreen = {
         if (!releaseInitialHomeAfterContinueWatching()
           && (previousLoadingState !== this.continueWatchingLoading
           || previousDisplaySignature !== nextDisplaySignature
-          || previousHeroIdentity !== nextHeroIdentity)) {
+          || (!preserveHomeReturnState && previousHeroIdentity !== nextHeroIdentity))) {
           this.requestBackgroundRender();
         }
       } catch (error) {
