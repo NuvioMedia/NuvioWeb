@@ -131,7 +131,12 @@ function isSearchableCatalogType(type) {
   const normalized = String(type || "")
     .trim()
     .toLowerCase();
-  return normalized === "movie" || normalized === "series" || normalized === "tv";
+  return (
+    normalized === "movie" ||
+    normalized === "series" ||
+    normalized === "tv" ||
+    normalized === "anime"
+  );
 }
 
 function buildSearchTargets(addons = []) {
