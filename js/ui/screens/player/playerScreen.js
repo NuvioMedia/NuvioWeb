@@ -3505,8 +3505,9 @@ export const PlayerScreen = {
   },
 
   getCurrentStreamRequestHeaders(streamCandidate = this.getCurrentStreamCandidate()) {
-    const stream = streamCandidate?.raw || streamCandidate || null;
-    const requestHeaders = stream?.behaviorHints?.proxyHeaders?.request;
+    const requestHeaders =
+      streamCandidate?.raw?.behaviorHints?.proxyHeaders?.request ||
+      streamCandidate?.behaviorHints?.proxyHeaders?.request;
     if (!requestHeaders || typeof requestHeaders !== "object") {
       return {};
     }
@@ -9997,7 +9998,14 @@ export const PlayerScreen = {
       return;
     }
     const cueKey = activeCues.map((cue) => `${cue.start}-${cue.end}-${cue.text}`).join("|");
-    if (cueKey === this.htmlSubtitleActiveCueKey) {
+    const hasRenderedActiveCue = activeCues.length > 0
+      && !node.classList.contains("hidden")
+      && node.getAttribute("aria-hidden") === "false"
+      && node.childNodes.length > 0;
+    const hasRenderedEmptyCue = activeCues.length === 0
+      && node.classList.contains("hidden")
+      && node.childNodes.length === 0;
+    if (cueKey === this.htmlSubtitleActiveCueKey && (hasRenderedActiveCue || hasRenderedEmptyCue)) {
       return;
     }
     this.htmlSubtitleActiveCueKey = cueKey;

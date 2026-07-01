@@ -721,6 +721,7 @@ export const WebOsEngineFsResolver = {
       }
       // Get companion status to attempt to discover a public baseUrl in settings
       let statusPayload = {};
+      let statusError = "";
       try {
         const statusResult = await withTimeout(
           requestWebOsCompanionService({ method: "status", parameters: {} }),
@@ -728,8 +729,9 @@ export const WebOsEngineFsResolver = {
           "webOS companion status request timed out"
         );
         statusPayload = statusResult?.payload || {};
-      } catch (_) {
+      } catch (error) {
         statusPayload = {};
+        statusError = describeError(error);
       }
 
       const parseSettingsBase = (payload) => {
@@ -800,7 +802,11 @@ export const WebOsEngineFsResolver = {
           });
         }
       } else {
-        return { status: "unavailable", detail: "EngineFS local runtime URL is unavailable" };
+        const detail = statusError
+          || statusPayload?.error?.message
+          || (statusPayload?.settingsReachable === false ? "EngineFS local runtime settings endpoint is unreachable" : "")
+          || "EngineFS local runtime URL is unavailable";
+        return { status: "unavailable", detail };
       }
       if (createPayload.returnValue === false) {
         console.warn("WebOsEngineFsResolver: EngineFS create failed", {
