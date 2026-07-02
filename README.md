@@ -30,6 +30,10 @@ The project is optimized for a TV-first experience, with remote-control navigati
 
 ## Installation
 
+### Compatibility requirement
+
+NuvioTV Web officially supports **Samsung Tizen and LG webOS TVs from 2020 onward**.
+
 ### Nuvio WebTV Installer
 
 Download the latest Windows, macOS, or Linux `Nuvio WebTV Installer` build from [GitHub Releases](https://github.com/NuvioMedia/NuvioWeb/releases/latest).
