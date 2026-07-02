@@ -8,6 +8,7 @@ import { hlsJsEngine } from "./engines/hlsJsEngine.js";
 import { dashJsEngine } from "./engines/dashJsEngine.js";
 import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
+import { WebOSPlayerExtensions } from "../../platform/webos/webosPlayerExtensions.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 
 const MIN_PROGRESS_SYNC_DURATION_MS = 1000;
@@ -412,6 +413,26 @@ export const PlayerController = {
     return String(this.playbackEngine || "").endsWith("avplay") && this.avplayActive;
   },
 
+  shouldKeepWebOsPlaybackAwake() {
+    return Boolean(
+      Platform.isWebOS()
+      && this.playbackSessionActive
+      && this.isPlaying
+      && !this.isPlaybackEnded()
+    );
+  },
+
+  syncWebOsPlaybackKeepAwake() {
+    if (!Platform.isWebOS()) {
+      return;
+    }
+    if (this.shouldKeepWebOsPlaybackAwake()) {
+      WebOSPlayerExtensions.startPlaybackKeepAwake(() => this.shouldKeepWebOsPlaybackAwake());
+    } else {
+      WebOSPlayerExtensions.stopPlaybackKeepAwake();
+    }
+  },
+
   emitVideoEvent(eventName, detail = null) {
     if (!this.video || !eventName) {
       return;
@@ -551,6 +572,7 @@ export const PlayerController = {
     try {
       this.video.pause();
       this.isPlaying = false;
+      this.syncWebOsPlaybackKeepAwake();
     } catch (_) {
       // Ignore pause failures while the media element is still loading.
     }
@@ -571,6 +593,7 @@ export const PlayerController = {
         });
       }
       this.isPlaying = true;
+      this.syncWebOsPlaybackKeepAwake();
     } catch (error) {
       if (!this.isExpectedPlayInterruption(error)) {
         console.warn("Playback start after startup gate rejected", error);
@@ -606,6 +629,7 @@ export const PlayerController = {
         try {
           avplay?.pause?.();
           this.isPlaying = false;
+          this.syncWebOsPlaybackKeepAwake();
           this.stopAvPlayTickTimer();
         } catch (_) {
           // Ignore AVPlay pause failures while replacing the source.
@@ -634,6 +658,7 @@ export const PlayerController = {
     try {
       avplay.play?.();
       this.isPlaying = true;
+      this.syncWebOsPlaybackKeepAwake();
       this.reapplyAvPlayPlaybackRate();
       this.reapplyTizenAvPlayDisplayRect();
       this.reapplyTizenAvPlayDisplayRect(250);
@@ -665,6 +690,7 @@ export const PlayerController = {
     } catch (error) {
       this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
       this.isPlaying = false;
+      this.syncWebOsPlaybackKeepAwake();
       this.emitVideoEvent("error", {
         playbackEngine: this.playbackEngine,
         mediaErrorCode: this.lastPlaybackErrorCode
@@ -1973,6 +1999,7 @@ export const PlayerController = {
           }
           this.avplayEnded = true;
           this.isPlaying = false;
+          this.syncWebOsPlaybackKeepAwake();
           this.stopAvPlayTickTimer();
           this.refreshAvPlayTimeline();
           const completedDurationMs = Number(this.avplayDurationMs || 0);
@@ -2004,6 +2031,7 @@ export const PlayerController = {
           }
           this.avplayReady = false;
           this.isPlaying = false;
+          this.syncWebOsPlaybackKeepAwake();
           this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(errorValue);
           this.stopAvPlayTickTimer();
           this.emitVideoEvent("error", {
@@ -2043,6 +2071,7 @@ export const PlayerController = {
       }
       this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(errorValue);
       this.isPlaying = false;
+      this.syncWebOsPlaybackKeepAwake();
       this.teardownAvPlay();
       this.playbackEngine = "none";
       this.emitVideoEvent("error", {
@@ -3417,6 +3446,7 @@ export const PlayerController = {
 
     this.video.addEventListener("ended", () => {
       this.isPlaying = false;
+      this.syncWebOsPlaybackKeepAwake();
       const context = this.createProgressContext();
       const durationMs = Math.floor(this.getDurationSeconds() * 1000);
       const completedMs = durationMs > 0
@@ -3426,6 +3456,8 @@ export const PlayerController = {
     });
 
     this.video.addEventListener("error", (e) => {
+      this.isPlaying = false;
+      this.syncWebOsPlaybackKeepAwake();
       const customErrorCode = Number(e?.detail?.mediaErrorCode || 0);
       const nativeErrorCode = Number(this.video?.error?.code || 0);
       const mediaErrorCode = customErrorCode || nativeErrorCode || this.getLastPlaybackErrorCode();
@@ -3671,6 +3703,7 @@ export const PlayerController = {
     }
 
     this.isPlaying = true;
+    this.syncWebOsPlaybackKeepAwake();
 
     if (this.progressSaveTimer) {
       clearInterval(this.progressSaveTimer);
@@ -3700,6 +3733,7 @@ export const PlayerController = {
       try {
         avplay.pause?.();
         this.isPlaying = false;
+        this.syncWebOsPlaybackKeepAwake();
         this.stopAvPlayTickTimer();
         this.emitVideoEvent("pause", { playbackEngine: this.playbackEngine });
       } catch (_) {
@@ -3709,6 +3743,8 @@ export const PlayerController = {
     }
 
     this.video.pause();
+    this.isPlaying = false;
+    this.syncWebOsPlaybackKeepAwake();
   },
 
   resume() {
@@ -3728,6 +3764,7 @@ export const PlayerController = {
       try {
         avplay.play?.();
         this.isPlaying = true;
+        this.syncWebOsPlaybackKeepAwake();
         this.reapplyAvPlayPlaybackRate();
         this.startAvPlayTickTimer();
         this.emitVideoEvent("playing", { playbackEngine: this.playbackEngine });
@@ -3757,6 +3794,8 @@ export const PlayerController = {
         console.warn("Playback resume rejected", error);
       });
     }
+    this.isPlaying = true;
+    this.syncWebOsPlaybackKeepAwake();
   },
 
   stop({ forceCloudSync = true, allowCloudSync = true, flushProgress = true } = {}) {
@@ -3767,6 +3806,7 @@ export const PlayerController = {
       ? this.flushCurrentProgress({ forceCloudSync, allowCloudSync })
       : Promise.resolve(false);
     if (!this.playbackSessionActive) {
+      this.syncWebOsPlaybackKeepAwake();
       if (this.progressSaveTimer) {
         clearInterval(this.progressSaveTimer);
         this.progressSaveTimer = null;
@@ -3774,6 +3814,7 @@ export const PlayerController = {
       return flushPromise;
     }
     this.playbackSessionActive = false;
+    this.syncWebOsPlaybackKeepAwake();
     this.setStartupAudioGate(false, { resume: false });
 
     try {
@@ -3801,6 +3842,7 @@ export const PlayerController = {
     }
 
     this.isPlaying = false;
+    this.syncWebOsPlaybackKeepAwake();
     this.currentItemId = null;
     this.currentItemType = null;
     this.currentVideoId = null;

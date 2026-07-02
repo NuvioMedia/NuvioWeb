@@ -354,7 +354,9 @@ const SUBTITLE_LANGUAGE_OFF_KEY = "__off__";
 const SUBTITLE_LANGUAGE_UNKNOWN_KEY = "__unknown__";
 const SUBTITLE_TEXT_COLORS = ["#FFFFFF", "#D9D9D9", "#FFD700", "#00E5FF", "#FF5C5C", "#00FF88"];
 const SUBTITLE_OUTLINE_COLORS = ["#000000", "#FFFFFF", "#00E5FF", "#FF5C5C"];
-const SUBTITLE_DELAY_STEP_MS = 250;
+const SUBTITLE_DELAY_MIN_MS = -60000;
+const SUBTITLE_DELAY_MAX_MS = 60000;
+const SUBTITLE_DELAY_STEP_MS = 100;
 const SUBTITLE_FONT_STEP = 5;
 const SUBTITLE_VERTICAL_OFFSET_STEP = 1;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
@@ -1911,6 +1913,7 @@ export const PlayerScreen = {
     this.subtitleStyleControlSide = "minus";
     this.subtitleFocusedRail = "language";
     this.subtitleDialogScrollMode = "nearest";
+    this.subtitleDialogScrollTimer = null;
     this.selectedSubtitleTrackIndex = -1;
     this.selectedEmbeddedSubtitleTrackIndex = -1;
     this.selectedAddonSubtitleId = null;
@@ -2112,7 +2115,7 @@ export const PlayerScreen = {
     this.mediaSessionActions = [];
 
     const playerSettings = PlayerSettingsStore.get();
-    this.subtitleDelayMs = Number(playerSettings.subtitleDelayMs || 0);
+    this.subtitleDelayMs = 0;
     this.subtitleStyleSettings = {
       ...playerSettings.subtitleStyle,
       preferredLanguage: extractSubtitleLanguageSetting(playerSettings.subtitleStyle?.preferredLanguage || playerSettings.subtitleLanguage || "off"),
@@ -4172,6 +4175,7 @@ export const PlayerScreen = {
     const root = document.createElement("div");
     root.id = "playerUiRoot";
     root.className = "player-ui-root";
+    root.tabIndex = -1;
 
     if (this.isExternalFrameMode()) {
       root.innerHTML = `
@@ -5764,24 +5768,17 @@ export const PlayerScreen = {
       deferRemoveMs: ENGINEFS_NAVIGATION_CLEANUP_GRACE_MS
     });
     const streamParams = this.buildReturnStreamRouteParamsFromPlayer();
+    try {
+      PlayerController.stop();
+    } catch (_) {
+      // Route cleanup will make a second best-effort stop if native teardown throws.
+    }
     const shouldReturnToStream = Boolean(
       this.params?.returnToStreamOnBack
       || this.params?.streamRouteParams
       || streamParams.itemId
       || streamParams.videoId
     );
-    const canReturnThroughExistingStreamHistory = Boolean(
-      shouldReturnToStream
-      && this.params?.returnToStreamOnBack
-      && this.params?.streamRouteParams
-      && Router.historyInitialized
-      && window?.history
-      && typeof window.history.back === "function"
-    );
-    if (canReturnThroughExistingStreamHistory) {
-      void Router.back({ skipConsume: true });
-      return "history";
-    }
     Router.suppressNextPopstate?.(1500);
     Router.ignoreSinglePopstate?.();
     const targetRoute = shouldReturnToStream
@@ -6178,7 +6175,6 @@ export const PlayerScreen = {
 
   persistPlayerPresentationSettings() {
     PlayerSettingsStore.set({
-      subtitleDelayMs: Number(this.subtitleDelayMs || 0),
       subtitleStyle: { ...this.subtitleStyleSettings },
       subtitleLanguage: this.subtitleStyleSettings?.preferredLanguage || "off",
       secondarySubtitleLanguage: this.subtitleStyleSettings?.secondaryPreferredLanguage || "off",
@@ -7372,6 +7368,26 @@ export const PlayerScreen = {
       this.resetControlsAutoHide();
     } else {
       this.clearControlsAutoHide();
+      this.focusPlayerRootForHiddenControls();
+    }
+  },
+
+  focusPlayerRootForHiddenControls() {
+    if (this.isExternalFrameMode() || this.controlsVisible || this.isDialogOpen()) {
+      return;
+    }
+    const root = this.uiRefs?.root;
+    if (!root || typeof root.focus !== "function") {
+      return;
+    }
+    try {
+      root.focus({ preventScroll: true });
+    } catch (_) {
+      try {
+        root.focus();
+      } catch (_) {
+        // Best effort on older TV engines.
+      }
     }
   },
 
@@ -10054,7 +10070,11 @@ export const PlayerScreen = {
     this.htmlSubtitleSelectedId = null;
     const node = this.uiRefs?.htmlSubtitles || document.getElementById("playerHtmlSubtitles");
     if (node) {
-      node.replaceChildren();
+      if (typeof node.replaceChildren === "function") {
+        node.replaceChildren();
+      } else {
+        node.innerHTML = "";
+      }
       node.classList.add("hidden");
       node.setAttribute("aria-hidden", "true");
     }
@@ -10077,7 +10097,11 @@ export const PlayerScreen = {
       return;
     }
     this.htmlSubtitleActiveCueKey = cueKey;
-    node.replaceChildren();
+    if (typeof node.replaceChildren === "function") {
+      node.replaceChildren();
+    } else {
+      node.innerHTML = "";
+    }
     if (!activeCues.length) {
       node.classList.add("hidden");
       node.setAttribute("aria-hidden", "true");
@@ -10869,21 +10893,49 @@ export const PlayerScreen = {
       return;
     }
     const margin = 12;
-    const nodeTop = Number(node.offsetTop || 0);
-    const nodeBottom = nodeTop + Number(node.offsetHeight || 0);
     const viewTop = Number(rail.scrollTop || 0);
-    const viewBottom = viewTop + Number(rail.clientHeight || 0);
+    const maxScrollTop = Math.max(0, Number(rail.scrollHeight || 0) - Number(rail.clientHeight || 0));
+    if (maxScrollTop <= 0) {
+      return;
+    }
     let nextScrollTop = viewTop;
-    if (center) {
-      nextScrollTop = nodeTop - Math.max(0, (Number(rail.clientHeight || 0) - Number(node.offsetHeight || 0)) / 2);
-    } else if (nodeTop < viewTop + margin) {
-      nextScrollTop = nodeTop - margin;
-    } else if (nodeBottom > viewBottom - margin) {
-      nextScrollTop = nodeBottom - Number(rail.clientHeight || 0) + margin;
+
+    const railRect = typeof rail.getBoundingClientRect === "function" ? rail.getBoundingClientRect() : null;
+    const nodeRect = typeof node.getBoundingClientRect === "function" ? node.getBoundingClientRect() : null;
+    if (railRect && nodeRect && Number.isFinite(railRect.top) && Number.isFinite(nodeRect.top)) {
+      if (center) {
+        nextScrollTop = viewTop + (nodeRect.top - railRect.top) - Math.max(0, (rail.clientHeight - node.offsetHeight) / 2);
+      } else if (nodeRect.top < railRect.top + margin) {
+        nextScrollTop = viewTop - ((railRect.top + margin) - nodeRect.top);
+      } else if (nodeRect.bottom > railRect.bottom - margin) {
+        nextScrollTop = viewTop + (nodeRect.bottom - (railRect.bottom - margin));
+      }
+    } else {
+      const nodeTop = Number(node.offsetTop || 0);
+      const nodeBottom = nodeTop + Number(node.offsetHeight || 0);
+      const viewBottom = viewTop + Number(rail.clientHeight || 0);
+      if (center) {
+        nextScrollTop = nodeTop - Math.max(0, (Number(rail.clientHeight || 0) - Number(node.offsetHeight || 0)) / 2);
+      } else if (nodeTop < viewTop + margin) {
+        nextScrollTop = nodeTop - margin;
+      } else if (nodeBottom > viewBottom - margin) {
+        nextScrollTop = nodeBottom - Number(rail.clientHeight || 0) + margin;
+      }
     }
     if (nextScrollTop !== viewTop) {
-      rail.scrollTop = Math.max(0, nextScrollTop);
+      rail.scrollTop = Math.max(0, Math.min(maxScrollTop, Math.round(nextScrollTop)));
     }
+  },
+
+  scheduleSubtitleDialogScrollIntoView() {
+    if (this.subtitleDialogScrollTimer) {
+      clearTimeout(this.subtitleDialogScrollTimer);
+      this.subtitleDialogScrollTimer = null;
+    }
+    this.subtitleDialogScrollTimer = setTimeout(() => {
+      this.subtitleDialogScrollTimer = null;
+      this.scrollSubtitleDialogIntoView();
+    }, 0);
   },
 
   scrollSubtitleDialogIntoView() {
@@ -11406,7 +11458,14 @@ export const PlayerScreen = {
   adjustSubtitleStyleControl(controlId, delta = 0) {
     const style = { ...(this.subtitleStyleSettings || {}) };
     if (controlId === "delay") {
-      this.subtitleDelayMs = clamp(Number(this.subtitleDelayMs || 0) + (delta * SUBTITLE_DELAY_STEP_MS), -5000, 5000);
+      this.subtitleDelayMs = clamp(
+        Number(this.subtitleDelayMs || 0) + (delta * SUBTITLE_DELAY_STEP_MS),
+        SUBTITLE_DELAY_MIN_MS,
+        SUBTITLE_DELAY_MAX_MS
+      );
+      this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
+      this.renderSubtitleDialog();
+      return;
     } else if (controlId === "fontSize") {
       style.fontSize = normalizeSubtitleFontSize(Number(style.fontSize || 100) + (delta * SUBTITLE_FONT_STEP));
     } else if (controlId === "bold" && delta !== 0) {
@@ -11482,7 +11541,35 @@ export const PlayerScreen = {
     this.renderSubtitleDialog();
   },
 
+  getActiveSubtitleSelectionKey() {
+    if (this.selectedAddonSubtitleId) {
+      return `addon:${String(this.selectedAddonSubtitleId)}`;
+    }
+    if (this.selectedManifestSubtitleTrackId) {
+      return `manifest:${String(this.selectedManifestSubtitleTrackId)}`;
+    }
+    if (Number(this.selectedEmbeddedSubtitleTrackIndex) >= 0) {
+      return `embedded:${Number(this.selectedEmbeddedSubtitleTrackIndex)}`;
+    }
+    if (Number(this.selectedSubtitleTrackIndex) >= 0) {
+      return `native:${Number(this.selectedSubtitleTrackIndex)}`;
+    }
+    return "off";
+  },
+
+  resetSubtitleDelayAfterSelectionChange(previousSelectionKey) {
+    if (previousSelectionKey === this.getActiveSubtitleSelectionKey()) {
+      return;
+    }
+    if (Number(this.subtitleDelayMs || 0) === 0) {
+      return;
+    }
+    this.subtitleDelayMs = 0;
+    this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
+  },
+
   applyNativeEmbeddedSubtitleTrack(embeddedTrack, targetTrackIndex) {
+    const previousSubtitleSelectionKey = this.getActiveSubtitleSelectionKey();
     if (this.externalTrackNodes.length) {
       this.clearMountedExternalSubtitleTracks();
     }
@@ -11511,6 +11598,7 @@ export const PlayerScreen = {
     this.selectedSubtitleTrackIndex = -1;
     this.selectedAddonSubtitleId = null;
     this.selectedManifestSubtitleTrackId = null;
+    this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
     this.invalidateTrackDialogCaches();
     this.refreshSubtitleCueStyles();
     this.renderControlButtons();
@@ -11522,6 +11610,7 @@ export const PlayerScreen = {
     if (!entry || entry.disabled) {
       return;
     }
+    const previousSubtitleSelectionKey = this.getActiveSubtitleSelectionKey();
 
     const isEmbeddedEntry = Object.prototype.hasOwnProperty.call(entry, "embeddedSubtitleTrackIndex");
     if (!isEmbeddedEntry) {
@@ -11554,6 +11643,7 @@ export const PlayerScreen = {
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
       this.selectedManifestSubtitleTrackId = null;
+      this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
       this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
@@ -11573,6 +11663,7 @@ export const PlayerScreen = {
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
       this.selectedManifestSubtitleTrackId = null;
+      this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
       this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
@@ -11592,6 +11683,7 @@ export const PlayerScreen = {
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
       this.selectedManifestSubtitleTrackId = null;
+      this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
       this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
@@ -11604,6 +11696,7 @@ export const PlayerScreen = {
       this.selectedSubtitleTrackIndex = -1;
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedAddonSubtitleId = null;
+      this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
       this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
@@ -11618,6 +11711,7 @@ export const PlayerScreen = {
       this.selectedSubtitleTrackIndex = -1;
       this.selectedEmbeddedSubtitleTrackIndex = -1;
       this.selectedManifestSubtitleTrackId = null;
+      this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
       this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
@@ -11647,6 +11741,7 @@ export const PlayerScreen = {
       this.selectedAddonSubtitleId = null;
       this.selectedSubtitleTrackIndex = targetIndex;
       this.selectedEmbeddedSubtitleTrackIndex = -1;
+      this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
       this.invalidateTrackDialogCaches();
       this.refreshSubtitleCueStyles();
       this.renderControlButtons();
@@ -11675,6 +11770,7 @@ export const PlayerScreen = {
     this.selectedAddonSubtitleId = null;
     this.selectedSubtitleTrackIndex = targetIndex;
     this.selectedEmbeddedSubtitleTrackIndex = -1;
+    this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
     this.invalidateTrackDialogCaches();
     this.refreshSubtitleCueStyles();
     this.renderControlButtons();
@@ -11872,6 +11968,7 @@ export const PlayerScreen = {
       </div>
     `;
     this.scrollSubtitleDialogIntoView();
+    this.scheduleSubtitleDialogScrollIntoView();
   },
 
   handleSubtitleDialogKey(event) {
@@ -15290,6 +15387,10 @@ export const PlayerScreen = {
     if (this.subtitleSelectionTimer) {
       clearTimeout(this.subtitleSelectionTimer);
       this.subtitleSelectionTimer = null;
+    }
+    if (this.subtitleDialogScrollTimer) {
+      clearTimeout(this.subtitleDialogScrollTimer);
+      this.subtitleDialogScrollTimer = null;
     }
 
     this.clearMediaSessionHandlers();

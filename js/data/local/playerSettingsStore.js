@@ -16,7 +16,6 @@ const DEFAULTS = {
   stillWatchingEnabled: false,
   stillWatchingEpisodeThreshold: 3,
   subtitleRenderMode: "native",
-  subtitleDelayMs: 0,
   subtitleStyle: {
     fontSize: 100,
     textColor: "#FFFFFF",
@@ -123,20 +122,21 @@ function normalizeSelectableSubtitleLanguageCode(language, fallback = "off") {
 }
 
 function normalizePlayerSettings(settings = {}) {
+  const { subtitleDelayMs: _ignoredSubtitleDelayMs, ...persistentSettings } = settings || {};
   const subtitleStyle = {
     ...DEFAULTS.subtitleStyle,
-    ...(settings.subtitleStyle || {})
+    ...(persistentSettings.subtitleStyle || {})
   };
   let preferredLanguage = normalizeSelectableSubtitleLanguageCode(
-    subtitleStyle.preferredLanguage ?? settings.subtitleLanguage,
+    subtitleStyle.preferredLanguage ?? persistentSettings.subtitleLanguage,
     DEFAULTS.subtitleStyle.preferredLanguage
   );
-  const subtitlesEnabled = settings.subtitlesEnabled ?? DEFAULTS.subtitlesEnabled;
+  const subtitlesEnabled = persistentSettings.subtitlesEnabled ?? DEFAULTS.subtitlesEnabled;
   let secondaryPreferredLanguage = normalizeSelectableSubtitleLanguageCode(
-    subtitleStyle.secondaryPreferredLanguage ?? settings.secondarySubtitleLanguage,
+    subtitleStyle.secondaryPreferredLanguage ?? persistentSettings.secondarySubtitleLanguage,
     DEFAULTS.subtitleStyle.secondaryPreferredLanguage
   );
-  let useForcedSubtitles = Boolean(subtitleStyle.useForcedSubtitles ?? settings.useForcedSubtitles);
+  let useForcedSubtitles = Boolean(subtitleStyle.useForcedSubtitles ?? persistentSettings.useForcedSubtitles);
 
   if (preferredLanguage === "forced") {
     useForcedSubtitles = true;
@@ -155,22 +155,22 @@ function normalizePlayerSettings(settings = {}) {
 
   return {
     ...DEFAULTS,
-    ...settings,
-    streamAutoPlayMode: normalizeStreamAutoPlayMode(settings.streamAutoPlayMode ?? DEFAULTS.streamAutoPlayMode),
-    streamAutoPlaySource: normalizeStreamAutoPlaySource(settings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource),
-    streamAutoPlayRegex: String(settings.streamAutoPlayRegex ?? "").slice(0, 500),
-    streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(settings.streamAutoPlayTimeoutSeconds),
+    ...persistentSettings,
+    streamAutoPlayMode: normalizeStreamAutoPlayMode(persistentSettings.streamAutoPlayMode ?? DEFAULTS.streamAutoPlayMode),
+    streamAutoPlaySource: normalizeStreamAutoPlaySource(persistentSettings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource),
+    streamAutoPlayRegex: String(persistentSettings.streamAutoPlayRegex ?? "").slice(0, 500),
+    streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(persistentSettings.streamAutoPlayTimeoutSeconds),
     nextEpisodeThresholdMode: normalizeNextEpisodeThresholdMode(
-      settings.nextEpisodeThresholdMode ?? DEFAULTS.nextEpisodeThresholdMode
+      persistentSettings.nextEpisodeThresholdMode ?? DEFAULTS.nextEpisodeThresholdMode
     ),
     nextEpisodeThresholdPercent: normalizeHalfStep(
-      settings.nextEpisodeThresholdPercent ?? DEFAULTS.nextEpisodeThresholdPercent,
+      persistentSettings.nextEpisodeThresholdPercent ?? DEFAULTS.nextEpisodeThresholdPercent,
       97,
       100,
       DEFAULTS.nextEpisodeThresholdPercent
     ),
     nextEpisodeThresholdMinutesBeforeEnd: normalizeHalfStep(
-      settings.nextEpisodeThresholdMinutesBeforeEnd ?? DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd,
+      persistentSettings.nextEpisodeThresholdMinutesBeforeEnd ?? DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd,
       0,
       3.5,
       DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd
@@ -195,12 +195,13 @@ const store = createProfileScopedStore({
   key: KEY,
   normalize: normalizePlayerSettings,
   merge(current, partial) {
+    const { subtitleDelayMs: _ignoredSubtitleDelayMs, ...persistentPartial } = partial || {};
     return {
       ...current,
-      ...(partial || {}),
+      ...persistentPartial,
       subtitleStyle: {
         ...current.subtitleStyle,
-        ...((partial || {}).subtitleStyle || {})
+        ...(persistentPartial.subtitleStyle || {})
       }
     };
   }

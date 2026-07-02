@@ -12720,9 +12720,10 @@ button:focus-visible {
   display: grid;
   grid-template-columns: 220px 1fr 280px;
   gap: 14px;
-  flex: 1;
-  height: 100%;
+  flex: 1 1 0;
+  height: auto;
   min-height: 0;
+  max-height: 100%;
   overflow: hidden;
   align-items: stretch;
 }
@@ -18637,6 +18638,43 @@ html.no-css-grid .cast-detail-meta {
 
 .tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
   background: linear-gradient(180deg, transparent 88%, rgba(0, 0, 0, 0.62) 100%);
+}
+
+.legacy-tizen .home-screen-shell.home-layout-modern {
+  --home-content-start: 128px;
+  --home-track-end: 128px;
+  --home-continue-track-end: 128px;
+  --modern-track-peek-extension: 72px;
+  --modern-hero-copy-top-safe: 56px;
+  --modern-hero-copy-right: 72px;
+}
+
+.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-rows-viewport {
+  bottom: 28px;
+  height: calc(var(--modern-rows-viewport-height) - 28px);
+}
+
+.legacy-tizen .home-screen-shell.home-layout-modern .home-track {
+  margin-left: calc(var(--modern-track-peek-extension) * -1);
+  padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
+  padding-right: var(--home-track-end);
+}
+
+.legacy-tizen .player-subtitle-modal,
+.legacy-tizen .player-audio-modal {
+  left: 96px;
+  bottom: 72px;
+  width: calc(100vw - 192px);
+  max-height: calc(100vh - 144px);
+}
+
+.legacy-tizen .player-subtitle-modal {
+  height: calc(100vh - 144px);
+}
+
+.legacy-tizen .player-subtitle-overlay-grid {
+  height: auto;
+  min-height: 0;
 }
 
 .legacy-tizen .series-detail-shell:not(.detail-trailer-active) .detail-hero-body {
