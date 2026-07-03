@@ -6446,7 +6446,8 @@ export const MetaDetailsScreen = {
   stopTrailerPlayback({
     keepDom = false,
     restartAutoplay = true,
-    restoreFocus = true
+    restoreFocus = true,
+    immediateClear = false
   } = {}) {
     if (this.trailerAutoplayTimer) {
       clearTimeout(this.trailerAutoplayTimer);
@@ -6456,12 +6457,40 @@ export const MetaDetailsScreen = {
     const wasVisualReady = Boolean(this.trailerVisualReady);
     const cleanupGeneration = Number(this.trailerDomGeneration || 0) + 1;
     this.trailerDomGeneration = cleanupGeneration;
+    const hardStopLayerMedia = () => {
+      if (!layer) {
+        return;
+      }
+      const activeFrame = layer.querySelector("iframe");
+      if (activeFrame) {
+        try {
+          activeFrame.src = "about:blank";
+        } catch (_) {}
+        try {
+          activeFrame.removeAttribute("src");
+        } catch (_) {}
+      }
+      const activeVideo = layer.querySelector("video");
+      if (activeVideo) {
+        try {
+          activeVideo.pause?.();
+        } catch (_) {}
+        try {
+          activeVideo.removeAttribute("src");
+          activeVideo.querySelectorAll("source").forEach((source) => source.removeAttribute("src"));
+          activeVideo.load?.();
+        } catch (_) {}
+      }
+    };
     if (this.trailerSource?.kind === "youtube") {
       this.postTrailerProxyCommand("pause");
     } else {
       try {
         this.trailerUiRefs?.video?.pause?.();
       } catch (_) {}
+    }
+    if (immediateClear) {
+      hardStopLayerMedia();
     }
     this.stopTrailerProgressTimer();
     this.stopTrailerControlsTimer();
@@ -6484,15 +6513,7 @@ export const MetaDetailsScreen = {
         return;
       }
       if (layer) {
-        const activeFrame = layer.querySelector("iframe");
-        if (activeFrame) {
-          try {
-            activeFrame.src = "about:blank";
-          } catch (_) {}
-          try {
-            activeFrame.removeAttribute("src");
-          } catch (_) {}
-        }
+        hardStopLayerMedia();
         layer.innerHTML = "";
       }
     };
@@ -6533,15 +6554,20 @@ export const MetaDetailsScreen = {
     }
   },
 
+  stopTrailerPlaybackForNavigation() {
+    this.stopTrailerPlayback({
+      keepDom: false,
+      restartAutoplay: false,
+      restoreFocus: false,
+      immediateClear: true
+    });
+  },
+
   async openEpisodeStreamChooser(videoId, options = {}) {
     if (!videoId || !this.meta) {
       return;
     }
-    this.stopTrailerPlayback({
-      keepDom: false,
-      restartAutoplay: false,
-      restoreFocus: false
-    });
+    this.stopTrailerPlaybackForNavigation();
     const episode = this.episodes.find((entry) => entry.id === videoId) || null;
     if (!episode) {
       return;
@@ -6554,11 +6580,7 @@ export const MetaDetailsScreen = {
   },
 
   async openMovieStreamChooser(options = {}) {
-    this.stopTrailerPlayback({
-      keepDom: false,
-      restartAutoplay: false,
-      restoreFocus: false
-    });
+    this.stopTrailerPlaybackForNavigation();
     this.navigateToStreamScreenForMovie(
       this.getResumeParamsForProgress(this.getActiveResumeProgress(), options)
     );
@@ -6797,6 +6819,7 @@ export const MetaDetailsScreen = {
     const resumeParams = this.getResumeParamsForProgress(
       this.getEpisodeMenuProgress(pending.episode) || this.getActiveResumeProgress()
     );
+    this.stopTrailerPlaybackForNavigation();
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
@@ -6859,6 +6882,7 @@ export const MetaDetailsScreen = {
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
+    this.stopTrailerPlaybackForNavigation();
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
       itemType: "series",
@@ -6899,6 +6923,7 @@ export const MetaDetailsScreen = {
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
+    this.stopTrailerPlaybackForNavigation();
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
       itemType,
@@ -6940,6 +6965,7 @@ export const MetaDetailsScreen = {
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
     const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
+    this.stopTrailerPlaybackForNavigation();
     Router.navigate("player", {
       streamUrl: selectedStream.url,
       itemId: this.params?.itemId,
@@ -7575,24 +7601,24 @@ export const MetaDetailsScreen = {
         });
       return false;
     };
-    const focusFirstSeriesSectionBelowHero = (index = 0) => {
+    const focusFirstSeriesSectionBelowHero = () => {
       if (insightTabs.length) {
         return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs));
       }
       if (this.seriesInsightTab === "ratings" && ratingSeasons.length) {
-        return this.focusInList(ratingSeasons, Math.min(index, ratingSeasons.length - 1));
+        return this.focusInList(ratingSeasons, 0);
       }
       if (castCards.length) {
-        return this.focusInList(castCards, Math.min(index, castCards.length - 1));
+        return this.focusInList(castCards, 0);
       }
       if (moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, moreLikeRememberedIndex);
+        return this.focusInList(moreLikeCards, 0);
       }
-      if (focusCommentsEntry(index)) {
+      if (focusCommentsEntry(0)) {
         return true;
       }
       if (companyCards[0]?.length) {
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0));
+        return this.focusInList(companyCards[0], 0);
       }
       return false;
     };
@@ -7630,7 +7656,7 @@ export const MetaDetailsScreen = {
             }) || true
           );
         }
-        if (focusFirstSeriesSectionBelowHero(actionIndex)) {
+        if (focusFirstSeriesSectionBelowHero()) {
           return true;
         }
       }
@@ -7654,7 +7680,7 @@ export const MetaDetailsScreen = {
             }) || true
           );
         }
-        if (focusFirstSeriesSectionBelowHero(seasonIndex)) {
+        if (focusFirstSeriesSectionBelowHero()) {
           return true;
         }
       }
@@ -7721,18 +7747,16 @@ export const MetaDetailsScreen = {
       }
       if (direction === "down") {
         if (this.seriesInsightTab === "ratings" && ratingSeasons.length) {
-          return (
-            this.focusInList(ratingSeasons, Math.min(tabIndex, ratingSeasons.length - 1)) || true
-          );
+          return this.focusInList(ratingSeasons, 0) || true;
         }
         if (castCards.length) {
-          return this.focusInList(castCards, Math.min(tabIndex, castCards.length - 1)) || true;
+          return this.focusInList(castCards, 0) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+          return this.focusInList(moreLikeCards, 0) || true;
         }
         if (companyCards[0]?.length) {
-          return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+          return this.focusInList(companyCards[0], 0) || true;
         }
       }
       return true;
@@ -7754,14 +7778,14 @@ export const MetaDetailsScreen = {
           );
         }
       }
-      if (direction === "down" && focusCommentsEntry(castIndex)) {
+      if (direction === "down" && focusCommentsEntry(0)) {
         return true;
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+        return this.focusInList(moreLikeCards, 0) || true;
       }
       if (direction === "down" && companyCards[0]?.length) {
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+        return this.focusInList(companyCards[0], 0) || true;
       }
       return true;
     }
@@ -7787,14 +7811,12 @@ export const MetaDetailsScreen = {
         }
       }
       if (direction === "down" && ratingChips.length) {
-        return (
-          this.focusInList(ratingChips, Math.min(ratingSeasonIndex, ratingChips.length - 1)) || true
-        );
+        return this.focusInList(ratingChips, 0) || true;
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+        return this.focusInList(moreLikeCards, 0) || true;
       }
-      if (direction === "down" && focusCommentsEntry(ratingSeasonIndex)) {
+      if (direction === "down" && focusCommentsEntry(0)) {
         return true;
       }
       return true;
@@ -7824,14 +7846,14 @@ export const MetaDetailsScreen = {
           );
         }
       }
-      if (direction === "down" && focusCommentsEntry(ratingChipIndex)) {
+      if (direction === "down" && focusCommentsEntry(0)) {
         return true;
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+        return this.focusInList(moreLikeCards, 0) || true;
       }
       if (direction === "down" && companyCards[0]?.length) {
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+        return this.focusInList(companyCards[0], 0) || true;
       }
       return true;
     }
@@ -7850,10 +7872,7 @@ export const MetaDetailsScreen = {
         );
       if (direction === "up") return focusActiveSectionFromComments(commentModeIndex) || true;
       if (direction === "down" && commentCards.length)
-        return (
-          this.focusInList(commentCards, Math.min(commentModeIndex, commentCards.length - 1)) ||
-          true
-        );
+        return this.focusInList(commentCards, 0) || true;
       return true;
     }
 
@@ -7903,11 +7922,11 @@ export const MetaDetailsScreen = {
           );
         }
       }
-      if (direction === "down" && focusCommentsEntry(moreLikeIndex)) {
+      if (direction === "down" && focusCommentsEntry(0)) {
         return true;
       }
       if (direction === "down" && companyCards[0]?.length) {
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+        return this.focusInList(companyCards[0], 0) || true;
       }
       return true;
     }
@@ -7959,10 +7978,7 @@ export const MetaDetailsScreen = {
         trackIndex < companyCards.length - 1 &&
         companyCards[trackIndex + 1]?.length
       ) {
-        return (
-          this.focusInList(companyCards[trackIndex + 1], rememberedCompanyIndex(trackIndex + 1)) ||
-          true
-        );
+        return this.focusInList(companyCards[trackIndex + 1], 0) || true;
       }
       return true;
     }
@@ -8065,13 +8081,13 @@ export const MetaDetailsScreen = {
           return this.focusInList(tabs, this.getActiveInsightTabIndex(tabs)) || true;
         }
         if (cast.length) {
-          return this.focusInList(cast, actionIndex) || true;
+          return this.focusInList(cast, 0) || true;
         }
         if (moreLikeCards.length) {
-          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+          return this.focusInList(moreLikeCards, 0) || true;
         }
         if (companyCards[0]?.length) {
-          return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+          return this.focusInList(companyCards[0], 0) || true;
         }
       }
       return true;
@@ -8086,12 +8102,12 @@ export const MetaDetailsScreen = {
       if (direction === "up")
         return this.focusInList(actions, Math.min(tabIndex, actions.length - 1)) || true;
       if (direction === "down") {
-        if (cast.length) return this.focusInList(cast, Math.min(tabIndex, cast.length - 1)) || true;
+        if (cast.length) return this.focusInList(cast, 0) || true;
         if (moreLikeCards.length)
-          return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
-        if (focusCommentsEntry(tabIndex)) return true;
+          return this.focusInList(moreLikeCards, 0) || true;
+        if (focusCommentsEntry(0)) return true;
         if (companyCards[0]?.length)
-          return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+          return this.focusInList(companyCards[0], 0) || true;
       }
       return true;
     }
@@ -8107,13 +8123,13 @@ export const MetaDetailsScreen = {
         return this.focusInList(actions, Math.min(castIndex, actions.length - 1)) || true;
       }
       if (direction === "down" && moreLikeCards.length) {
-        return this.focusInList(moreLikeCards, moreLikeRememberedIndex) || true;
+        return this.focusInList(moreLikeCards, 0) || true;
       }
-      if (direction === "down" && focusCommentsEntry(castIndex)) {
+      if (direction === "down" && focusCommentsEntry(0)) {
         return true;
       }
       if (direction === "down" && companyCards[0]?.length) {
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+        return this.focusInList(companyCards[0], 0) || true;
       }
       return true;
     }
@@ -8135,11 +8151,11 @@ export const MetaDetailsScreen = {
         }
         return this.focusInList(actions, Math.min(moreLikeIndex, actions.length - 1)) || true;
       }
-      if (direction === "down" && focusCommentsEntry(moreLikeIndex)) {
+      if (direction === "down" && focusCommentsEntry(0)) {
         return true;
       }
       if (direction === "down" && companyCards[0]?.length) {
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+        return this.focusInList(companyCards[0], 0) || true;
       }
       return true;
     }
@@ -8158,10 +8174,7 @@ export const MetaDetailsScreen = {
         );
       if (direction === "up") return focusActiveSectionFromComments(commentModeIndex) || true;
       if (direction === "down" && commentCards.length)
-        return (
-          this.focusInList(commentCards, Math.min(commentModeIndex, commentCards.length - 1)) ||
-          true
-        );
+        return this.focusInList(commentCards, 0) || true;
       return true;
     }
 
@@ -8187,7 +8200,7 @@ export const MetaDetailsScreen = {
         return focusActiveSectionFromComments(commentCardIndex) || true;
       }
       if (direction === "down" && companyCards[0]?.length)
-        return this.focusInList(companyCards[0], rememberedCompanyIndex(0)) || true;
+        return this.focusInList(companyCards[0], 0) || true;
       return true;
     }
 
@@ -8227,10 +8240,7 @@ export const MetaDetailsScreen = {
         trackIndex < companyCards.length - 1 &&
         companyCards[trackIndex + 1]?.length
       ) {
-        return (
-          this.focusInList(companyCards[trackIndex + 1], rememberedCompanyIndex(trackIndex + 1)) ||
-          true
-        );
+        return this.focusInList(companyCards[trackIndex + 1], 0) || true;
       }
       return true;
     }
@@ -8641,6 +8651,7 @@ export const MetaDetailsScreen = {
         (this.streamItems || []).find(
           (stream) => String(stream?.url || "") === String(current.dataset.streamUrl || "")
         ) || null;
+      this.stopTrailerPlaybackForNavigation();
       Router.navigate("player", {
         streamUrl: current.dataset.streamUrl,
         itemId: this.params?.itemId,
@@ -8780,7 +8791,8 @@ export const MetaDetailsScreen = {
     this.stopTrailerPlayback({
       keepDom: false,
       restartAutoplay: false,
-      restoreFocus: false
+      restoreFocus: false,
+      immediateClear: true
     });
     if (this.detailScrollHandler && this.container) {
       const content = this.container.querySelector(".series-detail-content");

@@ -1842,6 +1842,7 @@
     <string name="home_error_no_addons">No addons installed</string>
     <string name="home_error_no_catalog_addons">No catalog addons installed</string>
     <string name="player_error_failed_start_torrent">Failed to start torrent: %1$s</string>
+    <string name="player_error_p2p_disabled">P2P streaming is disabled. Enable P2P in Settings to play torrent streams.</string>
     <string name="sub_mode_overlay_canvas_sub">HDR support with canvas rendering. May block UI thread.</string>
     <string name="ratings_season_label">S%1$d</string>
     <string name="ratings_episode_label">E%1$d</string>

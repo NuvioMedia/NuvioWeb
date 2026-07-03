@@ -14596,11 +14596,13 @@ button:focus-visible {
 }
 
 .detail-trailer-controls-overlay.hidden {
-  opacity: 1;
+  opacity: 0;
   pointer-events: none;
 }
 
+.detail-trailer-controls-overlay.hidden .detail-trailer-controls-gradient-top,
 .detail-trailer-controls-overlay.hidden .detail-trailer-controls-gradient-bottom,
+.detail-trailer-controls-overlay.hidden .detail-trailer-controls-top,
 .detail-trailer-controls-overlay.hidden .detail-trailer-controls-bottom {
   opacity: 0;
 }
@@ -19358,6 +19360,7 @@ html.no-css-grid .cast-detail-meta {
   color: var(--text-color);
   padding: 26px 34px 38px;
   box-sizing: border-box;
+  position: relative;
 }
 
 .cast-detail-loading,
@@ -19373,15 +19376,25 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .cast-detail-back {
-  height: 46px;
-  padding: 0 18px;
-  border-radius: 999px;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
   border: 1px solid rgb(var(--focus-color-rgb) / 0.22);
   background: rgb(var(--focus-color-rgb) / 0.08);
   color: var(--text-color);
-  font-size: 16px;
-  font-weight: 700;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
+}
+
+.cast-detail-back .material-icons {
+  font-size: 28px;
+  line-height: 1;
 }
 
 .cast-detail-back.focused {
@@ -19444,6 +19457,10 @@ html.no-css-grid .cast-detail-meta {
 .cast-detail-section-title {
   margin: 0 0 14px;
   font-size: 34px;
+}
+
+.cast-credit-section + .cast-credit-section {
+  margin-top: 34px;
 }
 
 .cast-credit-track {

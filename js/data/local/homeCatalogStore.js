@@ -119,10 +119,13 @@ export const HomeCatalogStore = {
 
   ensureOrderKeys(keys) {
     const current = this.get();
-    const valid = current.order.filter((key) => keys.includes(key));
-    const missing = keys.filter((key) => !valid.includes(key));
-    const next = [...valid, ...missing];
-    this.set({ order: next }, { silentSync: true });
+    const saved = unique(current.order || []).filter(Boolean);
+    const savedSet = new Set(saved);
+    const missing = unique(keys || []).filter((key) => key && !savedSet.has(key));
+    const next = [...saved, ...missing];
+    if (!sameArray(current.order, next)) {
+      this.set({ order: next }, { silentSync: true });
+    }
     return next;
   },
 

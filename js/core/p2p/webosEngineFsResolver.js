@@ -99,6 +99,21 @@ function getMagnetUri(stream = {}) {
   return "";
 }
 
+function isMagnetUri(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("magnet:");
+}
+
+function getDirectPlaybackUrl(stream = {}) {
+  const candidates = [stream.url, stream.externalUrl];
+  return candidates.find((value) => {
+    const url = String(value || "").trim();
+    return url && !isMagnetUri(url);
+  }) || "";
+}
+
 function normalizeTrackerSource(value = "") {
   const source = String(value || "").trim();
   if (!source) {
@@ -388,7 +403,7 @@ async function waitForEngineFsReady(
   infoHash,
   fileIdx,
   playbackUrl,
-  { collectDiagnostics = true } = {}
+  _options = {}
 ) {
   const start = Date.now();
   let baseRoot = String(baseCandidate || "").replace(/\/$/, "");
@@ -697,7 +712,7 @@ export const WebOsEngineFsResolver = {
   },
 
   async resolve(stream = {}, context = {}) {
-    if (stream.url || stream.externalUrl) {
+    if (getDirectPlaybackUrl(stream)) {
       return { status: "success", stream };
     }
     if (!this.canResolveStream(stream)) {
@@ -896,7 +911,6 @@ export const WebOsEngineFsResolver = {
         try {
           const abs = new URL(candidatePlaybackFromCreate);
           if (!isLocalHostUrl(abs.href)) {
-            const baseCandidate = abs.origin;
             const filename = selectedFilename;
             // Build playback URL as origin/<infoHash>/<fileIdx> (no filename)
             let finalPlayback = null;

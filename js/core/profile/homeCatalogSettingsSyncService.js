@@ -1,4 +1,5 @@
 import { AuthManager } from "../auth/authManager.js";
+import { SessionStore } from "../storage/sessionStore.js";
 import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { addonRepository } from "../../data/repository/addonRepository.js";
 import { HomeCatalogStore } from "../../data/local/homeCatalogStore.js";
@@ -53,6 +54,28 @@ function stableStringify(value) {
 
 function normalizeString(value) {
   return String(value ?? "").trim();
+}
+
+function decodeJwtPayload(token) {
+  try {
+    const [, payload] = String(token || "").split(".");
+    if (!payload) {
+      return null;
+    }
+    const normalized = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    return JSON.parse(atob(padded));
+  } catch (_) {
+    return null;
+  }
+}
+
+function currentPullToken(profileId = null) {
+  if (!AuthManager.isAuthenticated) {
+    return null;
+  }
+  const userId = normalizeString(decodeJwtPayload(SessionStore.accessToken)?.sub) || "authenticated";
+  return `${userId}:${resolveProfileId(profileId)}`;
 }
 
 function normalizeStringArray(value) {
@@ -408,17 +431,15 @@ async function fetchBestRemotePayload(profileId, localPayload) {
   }
 
   const selected =
-    (shared?.payload?.items || []).length > 0
-      ? shared
-      : legacyRows
-          .filter((row) => (row.payload.items || []).length > 0)
-          .sort((left, right) =>
-            String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""))
-          )[0] ||
-        shared ||
-        legacyRows.sort((left, right) =>
-          String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""))
-        )[0];
+    rows
+      .filter((row) => (row.payload.items || []).length > 0)
+      .sort((left, right) =>
+        String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""))
+      )[0] ||
+    shared ||
+    legacyRows.sort((left, right) =>
+      String(right.updatedAt || "").localeCompare(String(left.updatedAt || ""))
+    )[0];
 
   return selected ? withNewestStandaloneSettings(selected, rows) : null;
 }
@@ -493,6 +514,7 @@ async function mergedSharedPayload(profileId, localPayload) {
 export const HomeCatalogSettingsSyncService = {
   syncingFromRemoteProfiles: new Set(),
   pushTimers: new Map(),
+  completedInitialPullTokens: new Set(),
 
   isSyncingFromRemote(profileId = null) {
     return this.syncingFromRemoteProfiles.has(resolveProfileId(profileId));
@@ -503,16 +525,26 @@ export const HomeCatalogSettingsSyncService = {
       return false;
     }
     const resolvedProfileId = resolveProfileId(profileId);
+    const pullToken = currentPullToken(resolvedProfileId);
     try {
       const localPayload = await buildLocalPayload(resolvedProfileId);
       const remote = await fetchBestRemotePayload(resolvedProfileId, localPayload);
       if (!remote || !(remote.payload.items || []).length) {
+        if (pullToken) {
+          this.completedInitialPullTokens.add(pullToken);
+        }
         return false;
       }
       if (payloadSignature(remote.payload) === payloadSignature(localPayload)) {
+        if (pullToken) {
+          this.completedInitialPullTokens.add(pullToken);
+        }
         return false;
       }
       applyPayload(resolvedProfileId, remote.payload);
+      if (pullToken) {
+        this.completedInitialPullTokens.add(pullToken);
+      }
       return true;
     } catch (error) {
       console.warn("Home catalog settings sync pull failed", error);
@@ -552,6 +584,10 @@ export const HomeCatalogSettingsSyncService = {
       return;
     }
     const resolvedProfileId = resolveProfileId(profileId);
+    const pullToken = currentPullToken(resolvedProfileId);
+    if (!pullToken || !this.completedInitialPullTokens.has(pullToken)) {
+      return;
+    }
     if (this.isSyncingFromRemote(resolvedProfileId)) {
       return;
     }

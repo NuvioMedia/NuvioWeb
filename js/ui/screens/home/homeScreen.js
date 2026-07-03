@@ -961,7 +961,8 @@ function normalizeEpisodeEntries(videos = []) {
       title: String(video?.title || video?.name || "").trim(),
       thumbnail: firstNonEmpty(video?.thumbnail, video?.thumbnailUrl, video?.still, video?.stillUrl, video?.image, video?.poster),
       overview: firstNonEmpty(video?.overview, video?.description),
-      released: firstNonEmpty(video?.released, video?.releaseInfo)
+      released: firstNonEmpty(video?.released, video?.releaseInfo),
+      runtimeMinutes: parseRuntimeMinutes(video?.runtimeMinutes ?? video?.runtime ?? 0)
     }))
     .filter((entry) => entry.season > 0 && entry.episode > 0)
     .sort((left, right) => {
@@ -1074,26 +1075,38 @@ function buildProgressStatus(item) {
   if (item?.isNextUp) {
     return t("home.continueStatusNextUp", {}, "Next Up");
   }
-  const durationMs = Number(item?.durationMs || 0);
+  const durationMs = continueWatchingDurationMs(item);
   const rawPositionMs = Number(item?.positionMs || 0);
   const progressPercent = Number(item?.progressPercent);
   const positionMs = rawPositionMs > 0
     ? rawPositionMs
     : (durationMs > 0 && Number.isFinite(progressPercent) ? durationMs * Math.max(0, Math.min(100, progressPercent)) / 100 : 0);
   if (!durationMs || !positionMs) {
+    if (Number.isFinite(progressPercent) && progressPercent > 0) {
+      const percent = Math.max(1, Math.min(99, Math.round(progressPercent)));
+      return t("home.continueStatusWatchedPercent", { percent }, "{{percent}}% watched");
+    }
     return t("home.continueStatusContinue", {}, "Continue");
   }
   const effectivePositionMs = Math.max(0, Math.min(durationMs, positionMs));
-  const remainingMinutes = Math.max(0, Math.round((durationMs - effectivePositionMs) / 60000));
-  const progress = Math.max(0, Math.min(1, effectivePositionMs / durationMs));
-  if (progress >= CW_PROGRESS_END_THRESHOLD || remainingMinutes <= 10) {
-    return t("home.continueStatusAlmostDone", {}, "Almost done");
+  const remainingMinutes = Math.max(1, Math.floor(Math.max(0, durationMs - effectivePositionMs) / 60000));
+  const remainingLabel = formatDurationMinutes(remainingMinutes);
+  return t("home.timeLeftDuration", { time: remainingLabel }, "{{time}} left");
+}
+
+function continueWatchingDurationMs(item = {}) {
+  const explicitDurationMs = Number(item?.durationMs || 0);
+  if (Number.isFinite(explicitDurationMs) && explicitDurationMs > 0) {
+    return Math.trunc(explicitDurationMs);
   }
-  if (remainingMinutes > 0) {
-    const remainingLabel = formatDurationMinutes(remainingMinutes);
-    return t("home.timeLeftDuration", { time: remainingLabel }, "{{time}} left");
-  }
-  return t("home.continueStatusContinue", {}, "Continue");
+  const runtimeMinutes = parseRuntimeMinutes(
+    item?.runtimeMinutes
+    ?? item?.runtime
+    ?? item?.durationMinutes
+    ?? item?.duration_minutes
+    ?? 0
+  );
+  return runtimeMinutes > 0 ? Math.round(runtimeMinutes * 60000) : 0;
 }
 
 function buildProgressFraction(item) {
@@ -1154,7 +1167,7 @@ function normalizeContinueWatchingItem(item) {
     season: Number.isFinite(Number(item.season)) ? Number(item.season) : null,
     episode: Number.isFinite(Number(item.episode)) ? Number(item.episode) : null,
     positionMs: Number(item.positionMs || 0) || 0,
-    durationMs: Number(item.durationMs || 0) || 0,
+    durationMs: continueWatchingDurationMs(item),
     type,
     apiType: type,
     name: title,
@@ -4905,31 +4918,68 @@ export const HomeScreen = {
     }
     if (source.kind === "video" && source.url) {
       const shouldMute = source.muted !== false;
-      container.innerHTML = `
-        <video class="home-inline-trailer-video" autoplay loop playsinline>
-          <source src="${escapeAttribute(source.url)}" />
-        </video>
-      `;
-      const video = container.querySelector("video");
-      if (video) {
-        video.muted = shouldMute;
-        video.defaultMuted = shouldMute;
-        try {
-          video.volume = shouldMute ? 0 : 1;
-        } catch (_) {
-        }
-        const activate = () => {
-          container.classList.add("is-active");
-          onReady?.();
-        };
-        video.addEventListener("loadeddata", activate, { once: true });
-        const playAttempt = video.play?.();
-        if (playAttempt?.catch) {
-          playAttempt.catch(() => { });
-        }
+      const video = document.createElement("video");
+      video.className = "home-inline-trailer-video";
+      video.autoplay = true;
+      video.loop = true;
+      video.playsInline = true;
+      video.defaultMuted = shouldMute;
+      video.muted = shouldMute;
+      video.preload = "auto";
+      video.setAttribute("autoplay", "");
+      video.setAttribute("loop", "");
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      if (shouldMute) {
+        video.setAttribute("muted", "");
       } else {
+        video.removeAttribute("muted");
+      }
+      try {
+        video.volume = shouldMute ? 0 : 1;
+      } catch (_) {
+      }
+      try {
+        video.disableRemotePlayback = true;
+      } catch (_) {
+      }
+
+      let didActivate = false;
+      const activate = () => {
+        if (didActivate) {
+          return;
+        }
+        didActivate = true;
         container.classList.add("is-active");
         onReady?.();
+      };
+      ["playing", "canplay", "loadeddata", "loadedmetadata", "timeupdate"].forEach((eventName) => {
+        video.addEventListener(eventName, activate, { once: true });
+      });
+      video.addEventListener("error", () => {
+        console.warn("Home inline MP4 hero video failed", {
+          url: String(source.url || ""),
+          code: video.error?.code || 0,
+          message: video.error?.message || ""
+        });
+      }, { once: true });
+      container.appendChild(video);
+      video.setAttribute("src", String(source.url || ""));
+      try {
+        video.load?.();
+      } catch (_) {
+      }
+      const playAttempt = video.play?.();
+      if (playAttempt?.then) {
+        playAttempt.then(activate).catch((error) => {
+          console.warn("Home inline MP4 hero video autoplay failed", error);
+        });
+      } else {
+        setTimeout(() => {
+          if (video.isConnected && !didActivate && Number(video.readyState || 0) >= 2) {
+            activate();
+          }
+        }, 500);
       }
     }
   },
@@ -8006,6 +8056,12 @@ export const HomeScreen = {
           if (meta) {
             const enrichedMeta = await this.enrichContinueWatchingMetaWithTmdb(meta, item);
             const episodeEntry = findEpisodeEntry(enrichedMeta.videos, item.season, item.episode);
+            const runtimeMinutes = parseRuntimeMinutes(
+              episodeEntry?.runtimeMinutes
+              ?? enrichedMeta.runtimeMinutes
+              ?? enrichedMeta.runtime
+              ?? 0
+            );
             const enriched = {
               ...item,
               title: enrichedMeta.name || prettyId(item.contentId),
@@ -8020,7 +8076,10 @@ export const HomeScreen = {
               releaseInfo: enrichedMeta.releaseInfo || "",
               imdbRating: resolveImdbRating(enrichedMeta),
               genres: Array.isArray(enrichedMeta.genres) ? enrichedMeta.genres : [],
-              runtimeMinutes: Number(enrichedMeta.runtimeMinutes ?? enrichedMeta.runtime ?? 0) || 0,
+              runtimeMinutes,
+              durationMs: Number(item.durationMs || 0) > 0
+                ? Number(item.durationMs || 0)
+                : (runtimeMinutes > 0 ? Math.round(runtimeMinutes * 60000) : 0),
               ageRating: firstNonEmpty(enrichedMeta.ageRating, enrichedMeta.age_rating),
               status: firstNonEmpty(enrichedMeta.status),
               language: firstNonEmpty(enrichedMeta.language),
@@ -8412,7 +8471,47 @@ export const HomeScreen = {
           return;
         }
         const currentItems = Array.isArray(rowPayload.items) ? rowPayload.items : [];
-        const skip = currentItems.length;
+        const rowIndex = (this.rows || []).indexOf(rowData);
+        const layoutPrefs = this.layoutPrefs || {};
+        const showPosterLabels = Boolean(layoutPrefs.showPosterLabels !== false);
+        const preferLandscape = Boolean(layoutPrefs.modernLandscapePosters);
+        const appendItemsToTrack = (itemsToAppend = [], startIndex = 0) => {
+          if (!itemsToAppend.length || !track.isConnected) {
+            return false;
+          }
+          const newMarkup = itemsToAppend.map((item, i) =>
+            createPosterCardMarkup(
+              item,
+              rowIndex,
+              startIndex + i,
+              rowData.type || "movie",
+              rowData,
+              showPosterLabels,
+              "modern",
+              false,
+              preferLandscape,
+              false,
+              this.watchedTitleIds
+            )
+          ).join("");
+          if (!newMarkup) {
+            return false;
+          }
+          const frag = document.createRange().createContextualFragment(newMarkup);
+          this.invalidateNavigationModel();
+          track.appendChild(frag);
+          this.buildNavigationModel();
+          return true;
+        };
+        if (totalVisible < currentItems.length) {
+          const chunkSize = Math.max(1, Number(this.getRowItemLimit?.() || HOME_MAX_ITEMS_PER_ROW_DEFAULT));
+          appendItemsToTrack(currentItems.slice(totalVisible, totalVisible + chunkSize), totalVisible);
+          return;
+        }
+        const storedNextSkip = Number(rowPayload.nextSkip);
+        const skip = Number.isFinite(storedNextSkip) && storedNextSkip > currentItems.length
+          ? Math.trunc(storedNextSkip)
+          : currentItems.length;
         this._trackPaginationInFlight = this._trackPaginationInFlight || new Set();
         this._trackPaginationInFlight.add(rowKey);
         const token = this.homeLoadToken;
@@ -8429,45 +8528,39 @@ export const HomeScreen = {
           if (token !== this.homeLoadToken || result?.status !== "success") {
             return;
           }
-          const newItems = Array.isArray(result.data?.items) ? result.data.items : [];
-          if (!newItems.length) {
+          const incomingItems = Array.isArray(result.data?.items) ? result.data.items : [];
+          const seenIds = new Set(
+            currentItems
+              .map((item) => String(item?.id || "").trim())
+              .filter(Boolean)
+          );
+          const newItems = incomingItems.filter((item) => {
+            const itemId = String(item?.id || "").trim();
+            if (!itemId) {
+              return true;
+            }
+            if (seenIds.has(itemId)) {
+              return false;
+            }
+            seenIds.add(itemId);
+            return true;
+          });
+          if (!incomingItems.length) {
             // Mark hasMore=false so we stop trying
             if (rowData?.result?.data) {
               rowData.result.data.hasMore = false;
             }
             return;
           }
+          const nextSkip = skip + incomingItems.length;
           const startIndex = currentItems.length;
-          const rowIndex = (this.rows || []).indexOf(rowData);
-          const layoutPrefs = this.layoutPrefs || {};
-          const showPosterLabels = Boolean(layoutPrefs.showPosterLabels !== false);
-          const preferLandscape = Boolean(layoutPrefs.modernLandscapePosters);
-          const newMarkup = newItems.map((item, i) =>
-            createPosterCardMarkup(
-              item,
-              rowIndex,
-              startIndex + i,
-              rowData.type || "movie",
-              rowData,
-              showPosterLabels,
-              "modern",
-              false,
-              preferLandscape,
-              false,
-              this.watchedTitleIds
-            )
-          ).join("");
-          if (newMarkup && track.isConnected) {
-            const frag = document.createRange().createContextualFragment(newMarkup);
-            this.invalidateNavigationModel();
-            track.appendChild(frag);
-            this.buildNavigationModel();
-          }
+          appendItemsToTrack(newItems, startIndex);
           // Update in-memory row data
           if (rowData?.result?.data) {
             rowData.result.data.items = [...currentItems, ...newItems];
             rowData.result.data.hasMore = result.data?.hasMore ?? newItems.length > 0;
             rowData.result.data.currentPage = result.data?.currentPage ?? rowData.result.data.currentPage;
+            rowData.result.data.nextSkip = nextSkip;
           }
         }).catch((err) => {
           console.warn("Home track pagination failed for", rowKey, err);

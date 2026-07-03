@@ -1526,6 +1526,15 @@ function isMagnetUrl(value = "") {
   return String(value || "").trim().toLowerCase().startsWith("magnet:");
 }
 
+function directPlaybackUrl(value = "") {
+  const url = String(value || "").trim();
+  return url && !isMagnetUrl(url) ? url : "";
+}
+
+function streamDirectPlaybackUrl(stream = {}) {
+  return directPlaybackUrl(stream?.url) || directPlaybackUrl(stream?.externalUrl);
+}
+
 function streamDebridIdentity(item = {}) {
   const resolve = item.clientResolve || item.raw?.clientResolve || {};
   const behaviorHints = item.behaviorHints || item.raw?.behaviorHints || {};
@@ -1874,11 +1883,13 @@ export const PlayerScreen = {
       ? this.streamCandidates.find((stream) => String(stream?.id || "") === preferredStreamId) || null
       : null;
     const initialStreamCandidate = preferredStreamCandidate || this.selectBestStreamCandidate(this.streamCandidates);
-    const initialStreamUrl = params.streamUrl || initialStreamCandidate?.url || null;
-    if (!this.streamCandidates.length && initialStreamUrl) {
+    const initialStreamLocator = params.streamUrl || initialStreamCandidate?.url || initialStreamCandidate?.externalUrl || null;
+    const initialStreamUrl =
+      directPlaybackUrl(params.streamUrl) || streamDirectPlaybackUrl(initialStreamCandidate);
+    if (!this.streamCandidates.length && initialStreamLocator) {
       this.streamCandidates = this.normalizeStreamCandidates([
         {
-          url: initialStreamUrl,
+          url: initialStreamLocator,
           title: "Current source",
           addonName: "Current"
         }
@@ -1887,7 +1898,9 @@ export const PlayerScreen = {
 
     this.currentStreamIndex = this.streamCandidates.findIndex((stream) => (
       (preferredStreamCandidate && String(stream?.id || "") === String(preferredStreamCandidate.id || ""))
-      || stream.url === initialStreamUrl
+      || stream.url === initialStreamLocator
+      || stream.externalUrl === initialStreamLocator
+      || (initialStreamUrl && streamDirectPlaybackUrl(stream) === initialStreamUrl)
     ));
     if (this.currentStreamIndex < 0) {
       this.currentStreamIndex = 0;
@@ -6130,7 +6143,7 @@ export const PlayerScreen = {
       }
       const streamItems = resolution.streamItems;
       const bestStreamCandidate = resolution.selectedStream;
-      const bestStream = bestStreamCandidate?.url || bestStreamCandidate?.externalUrl || null;
+      const bestStream = streamDirectPlaybackUrl(bestStreamCandidate) || null;
       this.consecutiveAutoPlayCount = userInitiated ? 0 : (Number(this.consecutiveAutoPlayCount || 0) + 1);
       await PlayerController.flushCurrentProgress({ allowCloudSync: false });
       void PlayerController.pushProgressIfDue?.(true);
@@ -8586,7 +8599,7 @@ export const PlayerScreen = {
     if (!streamCandidate) {
       return;
     }
-    let targetUrl = streamCandidate.url || streamCandidate.externalUrl || "";
+    let targetUrl = streamDirectPlaybackUrl(streamCandidate);
     if (!targetUrl) {
       const resolveContext = {
         season: this.params?.season == null ? null : Number(this.params.season),
@@ -8594,7 +8607,9 @@ export const PlayerScreen = {
       };
       const canUseEngineFs = WebOsEngineFsResolver.canResolveStream(streamCandidate);
       const canUseTizenP2p = TizenStreamingServerResolver.canResolveStream(streamCandidate);
-      const canUseP2p = Boolean(TorrentSettingsStore.get().p2pEnabled) && (canUseEngineFs || canUseTizenP2p);
+      const canResolveP2p = canUseEngineFs || canUseTizenP2p;
+      const p2pEnabled = Boolean(TorrentSettingsStore.get().p2pEnabled);
+      const canUseP2p = p2pEnabled && canResolveP2p;
       let fallbackError = "";
       let resolveFailureStatus = "";
       let resolveFailureDetail = "";
@@ -8688,24 +8703,28 @@ export const PlayerScreen = {
           return;
         }
         const startupMessage = fallbackError
-          || (canUseP2p
+          || (!p2pEnabled && canResolveP2p
+            ? t("player_error_p2p_disabled", {}, "P2P streaming is disabled. Enable P2P in Settings to play torrent streams.")
+            : canUseP2p
             ? t("player_error_failed_start_torrent", [t("player_error_playback_fallback", {}, "Playback error")], "Failed to start torrent: %1$s")
             : t("player_error_playback_fallback", {}, "Playback error"));
         if (!this.hasPresentedPlaybackFrame) {
           this.showStartupError(startupMessage, {
             streamCandidate,
-            reason: canUseP2p ? "p2p-resolve" : "stream-resolve",
+            reason: !p2pEnabled && canResolveP2p ? "p2p-disabled" : canUseP2p ? "p2p-resolve" : "stream-resolve",
             resolverStatus: resolveFailureStatus,
             resolverDetail: resolveFailureDetail
           });
           return;
         }
-        const sourceErrorMessage = canUseP2p
+        const sourceErrorMessage = !p2pEnabled && canResolveP2p
+          ? t("player_error_p2p_disabled", {}, "P2P streaming is disabled. Enable P2P in Settings to play torrent streams.")
+          : canUseP2p
           ? t("stream.p2p.failed", {}, "Could not start this torrent stream.")
           : (fallbackError || t("stream.debrid.unavailable", {}, "This Debrid source needs a configured Debrid account."));
         this.sourcesError = this.formatPlaybackErrorForSources(sourceErrorMessage, {
           streamCandidate,
-          reason: canUseP2p ? "p2p-resolve" : "stream-resolve",
+          reason: !p2pEnabled && canResolveP2p ? "p2p-disabled" : canUseP2p ? "p2p-resolve" : "stream-resolve",
           resolverStatus: resolveFailureStatus,
           resolverDetail: resolveFailureDetail
         });
@@ -14220,7 +14239,7 @@ export const PlayerScreen = {
       }
       const bestStreamCandidate =
         selectedStream || this.selectBestStreamCandidate(streamItems) || streamItems[0];
-      const bestStream = bestStreamCandidate?.url || bestStreamCandidate?.externalUrl || null;
+      const bestStream = streamDirectPlaybackUrl(bestStreamCandidate) || null;
       const nextEpisode = this.episodes[this.episodePanelIndex + 1] || null;
       await PlayerController.flushCurrentProgress({ allowCloudSync: false });
       void PlayerController.pushProgressIfDue?.(true);
@@ -15248,7 +15267,7 @@ export const PlayerScreen = {
 
   selectBestStreamUrl(streams = []) {
     const candidate = this.selectBestStreamCandidate(streams);
-    return candidate?.url || candidate?.externalUrl || null;
+    return streamDirectPlaybackUrl(candidate) || null;
   },
 
   selectBestStreamCandidateForAddon(streams = [], addonName = "") {
@@ -15267,7 +15286,7 @@ export const PlayerScreen = {
 
   selectBestStreamUrlForAddon(streams = [], addonName = "") {
     const candidate = this.selectBestStreamCandidateForAddon(streams, addonName);
-    return candidate?.url || candidate?.externalUrl || null;
+    return streamDirectPlaybackUrl(candidate) || null;
   },
 
   async handlePlaybackEnded() {

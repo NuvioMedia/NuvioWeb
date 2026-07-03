@@ -80,6 +80,21 @@ function getMagnetUri(stream = {}) {
   );
 }
 
+function isMagnetUri(value = "") {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .startsWith("magnet:");
+}
+
+function getDirectPlaybackUrl(stream = {}) {
+  const candidates = [stream.url, stream.externalUrl];
+  return candidates.find((value) => {
+    const url = String(value || "").trim();
+    return url && !isMagnetUri(url);
+  }) || "";
+}
+
 function normalizeTrackerSource(value = "") {
   return String(value || "")
     .trim()
@@ -424,7 +439,7 @@ export const TizenStreamingServerResolver = {
   },
 
   async resolve(stream = {}, context = {}) {
-    if (stream.url || stream.externalUrl) {
+    if (getDirectPlaybackUrl(stream)) {
       return { status: "success", stream };
     }
     if (!Platform.isTizen()) {

@@ -17,6 +17,19 @@ function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
 
+function escapeHtml(value = "") {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function escapeAttribute(value = "") {
+  return escapeHtml(value);
+}
+
 function toImage(path) {
   const value = String(path || "").trim();
   if (!value) {
@@ -41,6 +54,22 @@ function toType(mediaType) {
     return "series";
   }
   return "movie";
+}
+
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function uniqueCredits(items = []) {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = String(item?.itemId || item?.id || "").trim();
+    if (!key || seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 export const CastDetailScreen = {
@@ -126,11 +155,11 @@ export const CastDetailScreen = {
           name: item?.title || item?.name || "Untitled",
           subtitle: item?.character || "",
           poster: toImage(item?.poster_path || item?.backdrop_path || ""),
-          popularity: Number(item?.popularity || 0)
+          popularity: Number(item?.popularity || 0),
+          releaseDate: String(item?.release_date || item?.first_air_date || "")
         }))
         .filter((item) => Boolean(item.itemId))
-        .sort((left, right) => right.popularity - left.popularity)
-        .slice(0, 30);
+        .sort((left, right) => right.popularity - left.popularity);
 
       this.render();
     } catch (error) {
@@ -158,54 +187,137 @@ export const CastDetailScreen = {
     ScreenUtils.setInitialFocus(this.container);
   },
 
+  getCreditSections() {
+    const allCredits = uniqueCredits(this.credits);
+    const today = todayIsoDate();
+    const popular = [...allCredits].sort((left, right) => right.popularity - left.popularity);
+    const latest = allCredits
+      .filter((item) => item.releaseDate && item.releaseDate <= today)
+      .sort((left, right) => String(right.releaseDate || "").localeCompare(String(left.releaseDate || "")));
+    const upcoming = allCredits
+      .filter((item) => item.releaseDate && item.releaseDate > today)
+      .sort((left, right) => String(left.releaseDate || "").localeCompare(String(right.releaseDate || "")));
+
+    return [
+      { key: "popular", title: t("person_popular", {}, "Popular"), items: popular },
+      { key: "latest", title: t("person_latest", {}, "Latest"), items: latest },
+      { key: "upcoming", title: t("person_upcoming", {}, "Upcoming"), items: upcoming }
+    ].filter((section) => section.items.length);
+  },
+
+  renderCreditCard(item) {
+    return `
+      <article class="cast-credit-card focusable"
+               data-action="openDetail"
+               data-item-id="${escapeAttribute(item.itemId)}"
+               data-item-type="${escapeAttribute(item.type)}"
+               data-item-title="${escapeAttribute(item.name)}"
+               data-poster-src="${escapeAttribute(item.poster || "")}"
+               data-backdrop-src="${escapeAttribute(item.poster || "")}">
+        <div class="cast-credit-poster"${item.poster ? ` style="background-image:url('${escapeAttribute(item.poster)}')"` : ""}></div>
+        <div class="cast-credit-title">${escapeHtml(item.name)}</div>
+        <div class="cast-credit-subtitle">${escapeHtml(item.subtitle || item.type)}</div>
+      </article>
+    `;
+  },
+
+  renderCreditSections() {
+    const sections = this.getCreditSections();
+    if (!sections.length) {
+      return `<div class="cast-credit-empty">${escapeHtml(t("cast_detail_empty", {}, "No titles found for this cast member."))}</div>`;
+    }
+    return sections
+      .map(
+        (section) => `
+          <section class="cast-credit-section" data-credit-section="${escapeAttribute(section.key)}">
+            <h3 class="cast-detail-section-title">${escapeHtml(section.title)}</h3>
+            <div class="cast-credit-track">${section.items.map((item) => this.renderCreditCard(item)).join("")}</div>
+          </section>
+        `
+      )
+      .join("");
+  },
+
   render() {
     const person = this.person || {};
-    const creditsHtml = this.credits.length
-      ? this.credits
-          .map(
-            (item) => `
-          <article class="cast-credit-card focusable"
-                   data-action="openDetail"
-                   data-item-id="${item.itemId}"
-                   data-item-type="${item.type}"
-                   data-item-title="${item.name}"
-                   data-poster-src="${item.poster || ""}"
-                   data-backdrop-src="${item.poster || ""}">
-            <div class="cast-credit-poster"${item.poster ? ` style="background-image:url('${item.poster}')"` : ""}></div>
-            <div class="cast-credit-title">${item.name}</div>
-            <div class="cast-credit-subtitle">${item.subtitle || item.type}</div>
-          </article>
-        `
-          )
-          .join("")
-      : `<div class="cast-credit-empty">No titles found for this cast member.</div>`;
+    const creditsHtml = this.renderCreditSections();
 
     this.container.innerHTML = `
       <div class="cast-detail-shell">
+        <button class="cast-detail-back focusable" data-action="back" aria-label="${escapeAttribute(t("common.back", {}, "Back"))}">
+          <span class="material-icons" aria-hidden="true">arrow_back</span>
+        </button>
         <section class="cast-detail-hero">
-          <button class="cast-detail-back focusable" data-action="back">Back</button>
           <div class="cast-detail-hero-content">
-            <div class="cast-detail-avatar"${person.profile ? ` style="background-image:url('${person.profile}')"` : ""}></div>
+            <div class="cast-detail-avatar"${person.profile ? ` style="background-image:url('${escapeAttribute(person.profile)}')"` : ""}></div>
             <div class="cast-detail-meta">
-              <h2 class="cast-detail-name">${person.name || "Unknown"}</h2>
+              <h2 class="cast-detail-name">${escapeHtml(person.name || "Unknown")}</h2>
               <div class="cast-detail-facts">
-                ${person.knownForDepartment ? `<span>${person.knownForDepartment}</span>` : ""}
-                ${person.birthday ? `<span>${person.birthday}</span>` : ""}
-                ${person.placeOfBirth ? `<span>${person.placeOfBirth}</span>` : ""}
+                ${person.knownForDepartment ? `<span>${escapeHtml(person.knownForDepartment)}</span>` : ""}
+                ${person.birthday ? `<span>${escapeHtml(person.birthday)}</span>` : ""}
+                ${person.placeOfBirth ? `<span>${escapeHtml(person.placeOfBirth)}</span>` : ""}
               </div>
-              <p class="cast-detail-bio">${person.biography || "No biography available."}</p>
+              <p class="cast-detail-bio">${escapeHtml(person.biography || "No biography available.")}</p>
             </div>
           </div>
         </section>
         <section class="cast-detail-credits">
-          <h3 class="cast-detail-section-title">${t("cast_detail_known_for", {}, "Known For")}</h3>
-          <div class="cast-credit-track">${creditsHtml}</div>
+          ${creditsHtml}
         </section>
       </div>
     `;
 
     ScreenUtils.indexFocusables(this.container);
-    ScreenUtils.setInitialFocus(this.container);
+    ScreenUtils.setInitialFocus(this.container, ".cast-credit-card.focusable");
+    this.syncFocusedCardScroll({ instant: true });
+  },
+
+  syncFocusedCardScroll({ instant = false } = {}) {
+    const shell = this.container?.querySelector(".cast-detail-shell");
+    const focused = this.container?.querySelector(".cast-credit-card.focusable.focused");
+    if (!(shell instanceof HTMLElement) || !(focused instanceof HTMLElement)) {
+      return;
+    }
+    const track = focused.closest(".cast-credit-track");
+    if (track instanceof HTMLElement) {
+      const trackRect = track.getBoundingClientRect();
+      const focusRect = focused.getBoundingClientRect();
+      const padSide = 28;
+      let nextScrollLeft = track.scrollLeft;
+      if (focusRect.left < trackRect.left + padSide) {
+        nextScrollLeft -= trackRect.left + padSide - focusRect.left;
+      } else if (focusRect.right > trackRect.right - padSide) {
+        nextScrollLeft += focusRect.right - (trackRect.right - padSide);
+      }
+      nextScrollLeft = Math.max(0, Math.min(track.scrollWidth - track.clientWidth, nextScrollLeft));
+      if (Math.abs(nextScrollLeft - track.scrollLeft) >= 1) {
+        if (!instant && typeof track.scrollTo === "function") {
+          track.scrollTo({ left: nextScrollLeft, behavior: "smooth" });
+        } else {
+          track.scrollLeft = nextScrollLeft;
+        }
+      }
+    }
+
+    const shellRect = shell.getBoundingClientRect();
+    const focusRect = focused.getBoundingClientRect();
+    const padTop = 40;
+    const padBottom = 58;
+    let nextScrollTop = shell.scrollTop;
+    if (focusRect.top < shellRect.top + padTop) {
+      nextScrollTop -= shellRect.top + padTop - focusRect.top;
+    } else if (focusRect.bottom > shellRect.bottom - padBottom) {
+      nextScrollTop += focusRect.bottom - (shellRect.bottom - padBottom);
+    }
+    nextScrollTop = Math.max(0, Math.min(shell.scrollHeight - shell.clientHeight, nextScrollTop));
+    if (Math.abs(nextScrollTop - shell.scrollTop) < 1) {
+      return;
+    }
+    if (!instant && typeof shell.scrollTo === "function") {
+      shell.scrollTo({ top: nextScrollTop, behavior: "smooth" });
+    } else {
+      shell.scrollTop = nextScrollTop;
+    }
   },
 
   isPosterHoldTarget(node) {
@@ -293,6 +405,7 @@ export const CastDetailScreen = {
           });
           target.classList.add("focused");
           target.focus?.({ preventScroll: true });
+          this.syncFocusedCardScroll({ instant: true });
         }
       });
     }
@@ -330,6 +443,7 @@ export const CastDetailScreen = {
       return;
     }
     if (ScreenUtils.handleDpadNavigation(event, this.container)) {
+      this.syncFocusedCardScroll();
       return;
     }
     if (code !== 13) {
