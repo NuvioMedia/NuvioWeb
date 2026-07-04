@@ -8,6 +8,7 @@ var probeLocalServer = serverHost.probeLocalServer;
 var requestLocalHttp = serverHost.requestLocalHttp;
 var requestActiveServerHttp = serverHost.requestActiveServerHttp;
 var requestActiveServerPath = serverHost.requestActiveServerPath;
+var SUPABASE_PROXY_PATH = require("./supabaseProxy").SUPABASE_PROXY_PATH;
 
 var RUNTIME_PATH = path.resolve(__dirname, "..", "runtime", "media-http.cjs");
 
@@ -133,6 +134,51 @@ function registerCommand(commandName, includeBody) {
         })
       );
     });
+  });
+}
+
+function registerSupabaseProxyCommand() {
+  service.register("supabaseProxy", function (message) {
+    var payload = getMessagePayload(message);
+    var proxyRequest = {
+      url: payload.url,
+      method: payload.method,
+      headers: payload.headers,
+      body: typeof payload.body === "string" ? payload.body : null
+    };
+    requestActiveServerHttp(
+      SUPABASE_PROXY_PATH,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(proxyRequest),
+        timeoutMs: 20000,
+        maxBodyBytes: 10 * 1024 * 1024
+      },
+      function (error, result) {
+        if (error) {
+          respond(
+            message,
+            buildErrorPayload(error, {
+              proxiedPath: SUPABASE_PROXY_PATH
+            })
+          );
+          return;
+        }
+
+        respond(
+          message,
+          Object.assign(buildBasePayload(), {
+            supabaseProxy: true,
+            statusCode: result ? result.statusCode || 0 : 0,
+            headers: result ? result.headers || {} : {},
+            body: result ? result.body || "" : ""
+          })
+        );
+      }
+    );
   });
 }
 
@@ -1234,6 +1280,7 @@ function registerEngineFsDiagnosticCommand() {
 ensureRuntimeStarted();
 registerCommand("ping", false);
 registerCommand("status", true);
+registerSupabaseProxyCommand();
 registerEngineFsKeepAliveCommands();
 registerTracksCommand();
 registerTorrentProxyCommands();

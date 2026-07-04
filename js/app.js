@@ -217,6 +217,7 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     null;
   if (activeProfile) {
     await ProfileManager.setActiveProfile(activeProfile.id);
+    StartupSyncService.enableProfileScopedSync();
     detailWatchedEnrichmentService.invalidateAllCache();
     const didApplyProfileSettings = await ProfileSettingsSyncService.pull(activeProfile.id);
     await CollectionSyncService.pull(activeProfile.id);

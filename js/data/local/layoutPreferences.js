@@ -17,7 +17,7 @@ const DEFAULTS = {
   focusedPosterBackdropTrailerPlaybackTarget: "hero_media",
   posterCardWidthDp: 126,
   posterCardCornerRadiusDp: 12,
-  detailPageTrailerButtonEnabled: false,
+  detailPageTrailerButtonEnabled: true,
   collapseSidebar: false,
   modernSidebar: false,
   modernSidebarBlur: false,

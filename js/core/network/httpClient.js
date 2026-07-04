@@ -1,5 +1,6 @@
 import { SessionStore } from "../storage/sessionStore.js";
 import { AuthManager } from "../auth/authManager.js";
+import { fetchViaWebOsSupabaseProxy } from "../../platform/webos/webosSupabaseProxy.js";
 
 function toHeaderObject(headers) {
   if (!headers) {
@@ -40,24 +41,28 @@ export async function httpRequest(url, options = {}) {
   }
 
   const { includeSessionAuth: _ignoredIncludeSessionAuth, ...fetchOptions } = options;
-
-  let response = await fetch(url, {
+  const fetchInit = {
     ...fetchOptions,
     method,
+    credentials: fetchOptions.credentials || "omit",
     headers
-  });
+  };
+
+  let response = (await fetchViaWebOsSupabaseProxy(url, fetchInit)) || (await fetch(url, fetchInit));
 
   if (response.status === 401 && includeSessionAuth && SessionStore.refreshToken) {
     const refreshed = await AuthManager.refreshSessionIfNeeded({ force: true });
     if (refreshed && SessionStore.accessToken) {
-      response = await fetch(url, {
-        ...fetchOptions,
+      const retryInit = {
+        ...fetchInit,
         method,
         headers: {
           ...headers,
           Authorization: `Bearer ${SessionStore.accessToken}`
         }
-      });
+      };
+      response =
+        (await fetchViaWebOsSupabaseProxy(url, retryInit)) || (await fetch(url, retryInit));
     }
   }
 

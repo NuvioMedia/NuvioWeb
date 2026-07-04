@@ -2082,13 +2082,11 @@ export const ProfileSelectionScreen = {
     profileCard?.classList?.add("is-activating");
     try {
       await ProfileManager.setActiveProfile(profileId);
+      StartupSyncService.enableProfileScopedSync();
       detailWatchedEnrichmentService.invalidateAllCache();
       await ProfileSettingsSyncService.pull(profileId);
       await CollectionSyncService.pull(profileId);
       await HomeCatalogSettingsSyncService.pull(profileId);
-      StartupSyncService.syncPull().catch((error) => {
-        console.warn("Profile startup sync failed", error);
-      });
       await I18n.init();
       ThemeManager.apply();
       I18n.apply();

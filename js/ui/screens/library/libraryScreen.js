@@ -1081,6 +1081,33 @@ export const LibraryScreen = {
     return remembered || findNearestNodeByCenterX(referenceNode, anchors) || anchors[0] || null;
   },
 
+  resolveRelativePickerRowNode(current, direction) {
+    if (
+      !current ||
+      !current.matches?.(".library-picker-anchor.focusable") ||
+      !current.closest?.(".library-picker-row")
+    ) {
+      return null;
+    }
+    const anchors = Array.from(
+      this.container?.querySelectorAll(".library-picker-row .library-picker-anchor.focusable") || []
+    );
+    if (!anchors.length) {
+      return null;
+    }
+    const rows = groupNodesByRow(anchors);
+    const rowIndex = rows.findIndex((row) => row.nodes.includes(current));
+    if (rowIndex < 0) {
+      return null;
+    }
+    const targetRow =
+      direction === "up" ? rows[rowIndex - 1] : direction === "down" ? rows[rowIndex + 1] : null;
+    if (!targetRow?.nodes?.length) {
+      return null;
+    }
+    return findNearestNodeByCenterX(current, targetRow.nodes) || targetRow.nodes[0] || null;
+  },
+
   resolvePreferredGridNode(referenceNode = null) {
     const cards = Array.from(
       this.container?.querySelectorAll(".library-grid-card.focusable") || []
@@ -1264,6 +1291,28 @@ export const LibraryScreen = {
     }
     const target = anchors[nextIndex] || null;
     if (!target) {
+      return false;
+    }
+    event?.preventDefault?.();
+    this.setFocusedNode(target);
+    return true;
+  },
+
+  handleFilterRowVerticalNavigation(event, current) {
+    if (
+      !current ||
+      !current.matches?.(".library-picker-anchor.focusable") ||
+      !current.closest?.(".library-picker-row")
+    ) {
+      return false;
+    }
+    const code = Number(event?.keyCode || 0);
+    const direction = code === 38 ? "up" : code === 40 ? "down" : "";
+    if (!direction) {
+      return false;
+    }
+    const target = this.resolveRelativePickerRowNode(current, direction);
+    if (!target || target === current) {
       return false;
     }
     event?.preventDefault?.();
@@ -1756,6 +1805,10 @@ export const LibraryScreen = {
     }
 
     if (!sidebarLocked && this.handleFilterRowHorizontalNavigation(event, current)) {
+      return;
+    }
+
+    if (!sidebarLocked && this.handleFilterRowVerticalNavigation(event, current)) {
       return;
     }
 

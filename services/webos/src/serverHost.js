@@ -3,6 +3,7 @@ var http = require("http");
 var path = require("path");
 var Module = require("module");
 var createImageProxyHandler = require("./imageProxy").createImageProxyHandler;
+var createSupabaseProxyHandler = require("./supabaseProxy").createSupabaseProxyHandler;
 
 var SERVICE_ID = "space.nuvio.webos.service";
 var PORT_CANDIDATES = require("./constants").PORT_CANDIDATES;
@@ -36,6 +37,7 @@ function patchServerRequestRegistration(server, wrapRequestListener) {
 function installImageProxyHttpHook() {
   var originalCreateServer = http.createServer;
   var imageProxyHandler = createImageProxyHandler();
+  var supabaseProxyHandler = createSupabaseProxyHandler();
 
   function wrapRequestListener(listener) {
     if (typeof listener !== "function" || listener.__nuvioImageProxyWrapped) {
@@ -43,6 +45,9 @@ function installImageProxyHttpHook() {
     }
 
     var wrapped = function (req, res) {
+      if (supabaseProxyHandler(req, res)) {
+        return;
+      }
       if (imageProxyHandler(req, res)) {
         return;
       }
