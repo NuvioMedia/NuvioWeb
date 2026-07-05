@@ -14,12 +14,14 @@ import {
 import { localMediaTracksRepository } from "../../../data/repository/localMediaTracksRepository.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
+import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { parentalGuideRepository } from "../../../data/repository/parentalGuideRepository.js";
 import { skipIntroRepository } from "../../../data/repository/skipIntroRepository.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
 import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
 import { matchStreamBadges } from "../../../core/streams/streamBadgeRules.js";
+import { selectAutoPlayStream } from "../../../core/streams/streamAutoPlaySelector.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { I18n } from "../../../i18n/index.js";
 import { Environment } from "../../../platform/environment.js";
@@ -2484,7 +2486,7 @@ export const PlayerScreen = {
     const active = (Array.isArray(this.skipIntervals) ? this.skipIntervals : []).find((interval) => {
       const start = Number(interval?.startTime);
       const end = Number(interval?.endTime);
-      return Number.isFinite(start) && Number.isFinite(end) && currentTime >= start && currentTime < end;
+      return Number.isFinite(start) && Number.isFinite(end) && currentTime >= start && currentTime < (end - 0.5);
     }) || null;
     const previousKey = previous ? `${previous.type}:${previous.startTime}:${previous.endTime}` : "";
     const nextKey = active ? `${active.type}:${active.startTime}:${active.endTime}` : "";
@@ -5955,7 +5957,9 @@ export const PlayerScreen = {
   },
 
   maybeAutoplayNextEpisode() {
-    if (this.nextEpisodeLaunching || this.paused || PlayerController.video?.paused || !this.hasPresentedPlaybackFrame) {
+    const isAvPlayPlayback = typeof PlayerController.isUsingAvPlay === "function" && PlayerController.isUsingAvPlay();
+    const isVideoPaused = !isAvPlayPlayback && Boolean(PlayerController.video?.paused);
+    if (this.nextEpisodeLaunching || this.paused || isVideoPaused || !this.hasPresentedPlaybackFrame) {
       return false;
     }
 
@@ -6100,6 +6104,29 @@ export const PlayerScreen = {
     };
   },
 
+  async selectNextEpisodeStreamByAutoPlayPolicy(streamItems = [], settings = PlayerSettingsStore.get()) {
+    if (!Array.isArray(streamItems) || !streamItems.length) {
+      return null;
+    }
+
+    const mode = String(settings.streamAutoPlayMode || "MANUAL").toUpperCase();
+    const shouldAutoSelectInManualMode = mode === "MANUAL" && Boolean(settings.autoplayNextEpisode);
+    const installedAddons = await addonRepository.getInstalledAddons().catch(() => []);
+    const installedAddonNames = new Set(
+      (installedAddons || [])
+        .map((addon) => String(addon?.displayName || addon?.name || "").trim())
+        .filter(Boolean)
+    );
+    return selectAutoPlayStream(streamItems, {
+      mode: shouldAutoSelectInManualMode ? "FIRST_STREAM" : mode,
+      source: shouldAutoSelectInManualMode
+        ? "ALL_SOURCES"
+        : String(settings.streamAutoPlaySource || "ALL_SOURCES"),
+      regexPattern: shouldAutoSelectInManualMode ? "" : String(settings.streamAutoPlayRegex || ""),
+      installedAddonNames
+    });
+  },
+
   async playNextEpisode({ userInitiated = false } = {}) {
     const nextEpisode = this.resolveNextEpisodeInfo();
     const itemType = normalizeItemType(this.params?.itemType || "movie");
@@ -6125,13 +6152,25 @@ export const PlayerScreen = {
 
     try {
       const resolution = await this.resolveNextEpisodeStreamFromCurrentSource(nextEpisode, itemType);
-      if (resolution.status !== "success" || !resolution.selectedStream) {
+      let streamItems = Array.isArray(resolution.streamItems) ? resolution.streamItems : [];
+      if (!streamItems.length) {
+        streamItems = await this.withNextEpisodeSourceTimeout(
+          this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType)
+        );
+      }
+      const settings = PlayerSettingsStore.get();
+      const selectedByAutoPlayPolicy = resolution.selectedStream
+        ? null
+        : await this.selectNextEpisodeStreamByAutoPlayPolicy(streamItems, settings);
+      const selectedStream = resolution.selectedStream || selectedByAutoPlayPolicy || null;
+
+      if (!selectedStream) {
         const sourceLabel = resolution.sourceContext?.addonName || resolution.sourceContext?.addonId || resolution.sourceContext?.sourceProviderId || t("sources_title", {}, "source");
         console.warn("Next episode source resolution failed", {
           status: resolution.status,
           videoId: nextEpisode.videoId,
           sourceContext: this.playbackSourceContextLogPayload(resolution.sourceContext),
-          totalStreams: resolution.streamItems?.length || 0,
+          totalStreams: streamItems.length,
           matchedStreams: resolution.matchedStreams?.length || 0
         });
         this.nextEpisodeLaunching = false;
@@ -6148,13 +6187,14 @@ export const PlayerScreen = {
           streamCandidate: resolution.selectedStream || this.getCurrentStreamCandidate(),
           reason: "next-episode-resolve",
           resolverStatus: resolution.status,
-          resolverDetail: `totalStreams=${resolution.streamItems?.length || 0}, matchedStreams=${resolution.matchedStreams?.length || 0}`
+          resolverDetail: `totalStreams=${streamItems.length}, matchedStreams=${resolution.matchedStreams?.length || 0}`
         });
         return;
       }
-      const streamItems = resolution.streamItems;
-      const bestStreamCandidate = resolution.selectedStream;
+      const bestStreamCandidate = selectedStream;
       const bestStream = streamDirectPlaybackUrl(bestStreamCandidate) || null;
+      const nextEpisodeIndex = this.episodes.findIndex((episode) => String(episode?.id || "") === String(nextEpisode.videoId || ""));
+      const followingEpisode = nextEpisodeIndex >= 0 ? this.episodes[nextEpisodeIndex + 1] || null : null;
       this.consecutiveAutoPlayCount = userInitiated ? 0 : (Number(this.consecutiveAutoPlayCount || 0) + 1);
       await PlayerController.flushCurrentProgress({ allowCloudSync: false });
       void PlayerController.pushProgressIfDue?.(true);
@@ -6183,8 +6223,12 @@ export const PlayerScreen = {
         streamCandidates: streamItems,
         preferredStreamId: bestStreamCandidate.id || null,
         playbackSourceContext: this.getPlaybackSourceContext(bestStreamCandidate),
-        nextEpisodeVideoId: null,
-        nextEpisodeLabel: null,
+        nextEpisodeVideoId: followingEpisode?.id || null,
+        nextEpisodeLabel: followingEpisode ? `S${followingEpisode.season}E${followingEpisode.episode}` : null,
+        nextEpisodeSeason: followingEpisode?.season ?? null,
+        nextEpisodeEpisode: followingEpisode?.episode ?? null,
+        nextEpisodeTitle: followingEpisode?.title || "",
+        nextEpisodeReleased: followingEpisode?.released || "",
         consecutiveAutoPlayCount: this.consecutiveAutoPlayCount
       }, {
         replaceHistory: true
@@ -14853,6 +14897,14 @@ export const PlayerScreen = {
       return true;
     }
 
+    if (!this.controlsVisible && this.activeSkipInterval && !this.skipIntervalDismissed) {
+      this.skipIntervalDismissed = true;
+      this.skipIntroAutoHidden = false;
+      this.stopSkipIntroCountdownAnimation();
+      this.renderSkipIntroButton();
+      return true;
+    }
+
     if (this.sourcesPanelVisible) {
       this.closeSourcesPanel();
       return true;
@@ -15038,7 +15090,7 @@ export const PlayerScreen = {
       return;
     }
 
-    if (!this.controlsVisible && this.activeSkipInterval && !this.skipIntervalDismissed) {
+    if (!this.controlsVisible && this.activeSkipInterval && !this.skipIntervalDismissed && !this.skipIntroAutoHidden) {
       if (isSelectKeyCode(keyCode)) {
         if (this.skipActiveInterval()) {
           return;

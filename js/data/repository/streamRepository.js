@@ -42,15 +42,39 @@ class StreamRepository {
       }
     };
 
+    const supportsResourceType = (resource, type) => {
+      const targetType = String(type || "")
+        .trim()
+        .toLowerCase();
+      const types = Array.isArray(resource?.types)
+        ? resource.types
+            .map((resourceType) =>
+              String(resourceType || "")
+                .trim()
+                .toLowerCase()
+            )
+            .filter(Boolean)
+        : [];
+      return !types.length || types.includes(targetType);
+    };
+
+    const supportsResourceId = (addon, resource, id) => {
+      const prefixes = (Array.isArray(resource?.idPrefixes) && resource.idPrefixes.length
+        ? resource.idPrefixes
+        : Array.isArray(addon?.idPrefixes) && addon.idPrefixes.length
+          ? addon.idPrefixes
+          : [])
+        .map((prefix) => String(prefix || ""))
+        .filter(Boolean);
+      return !prefixes.length || prefixes.some((prefix) => String(id || "").startsWith(prefix));
+    };
+
     const supportsStreamType = (addon) =>
       (addon?.resources || []).some((resource) => {
         if (resource.name !== "stream") {
           return false;
         }
-        if (!resource.types || resource.types.length === 0) {
-          return true;
-        }
-        return resource.types.some((resourceType) => resourceType === type);
+        return supportsResourceType(resource, type) && supportsResourceId(addon, resource, videoId);
       });
 
     const supportsMetaType = (addon) =>
@@ -58,10 +82,7 @@ class StreamRepository {
         if (resource.name !== "meta") {
           return false;
         }
-        if (!resource.types || resource.types.length === 0) {
-          return true;
-        }
-        return resource.types.some((resourceType) => resourceType === type);
+        return supportsResourceType(resource, type) && supportsResourceId(addon, resource, videoId);
       });
 
     const notifyAddon = (addon, orderIndex) => {

@@ -56,7 +56,19 @@ export function isAutoPlayEffectivelyEnabled(settings = {}) {
 // only entries (e.g. an addon's "open this website" cast link) are skipped so
 // auto-play never lands on a non-video page.
 function isPlayableStream(stream = {}) {
-  return Boolean(stream && (stream.url || stream.ytId || stream.infoHash));
+  const resolve = stream?.clientResolve || stream?.raw?.clientResolve || {};
+  return Boolean(
+    stream && (
+      stream.url ||
+      stream.ytId ||
+      stream.infoHash ||
+      resolve.infoHash ||
+      resolve.magnetUri ||
+      stream.engineFs ||
+      stream.tizenP2p ||
+      stream.debridCacheStatus
+    )
+  );
 }
 
 function streamSearchableText(stream = {}) {
