@@ -344,6 +344,9 @@ function normalizeAudioLanguageForAndroid(value) {
   if (normalized.toLowerCase() === "none" || normalized.toLowerCase() === "off") {
     return "DEFAULT";
   }
+  if (normalized.toUpperCase() === "ORIGINAL") {
+    return "ORIGINAL";
+  }
   if (normalized.toUpperCase() === "DEFAULT") {
     return "DEFAULT";
   }
@@ -360,6 +363,9 @@ function normalizeAudioLanguageForWeb(value) {
   }
   if (normalized.toUpperCase() === "DEVICE") {
     return "system";
+  }
+  if (normalized.toUpperCase() === "ORIGINAL") {
+    return "original";
   }
   // Android "DEFAULT" means "use media file default", i.e. no preferred
   // language — that is the web "none" option, not "system" (device locale).

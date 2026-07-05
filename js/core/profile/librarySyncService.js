@@ -112,8 +112,15 @@ function extractAddonEntries(rows = []) {
 function applyPulledAddons(rows = []) {
   const entries = extractAddonEntries(rows);
   const urls = entries.map((entry) => entry.url).filter(Boolean);
+  const currentNames = addonRepository.getAddonDisplayNameOverrides();
   addonRepository.setAddonDisplayNameOverrides(
-    entries.map((entry) => ({ url: entry.url, name: entry.displayName || entry.name })),
+    entries.map((entry) => {
+      const cleanUrl = addonRepository.canonicalizeUrl(entry.url);
+      return {
+        url: entry.url,
+        name: entry.displayName || entry.name || currentNames[cleanUrl] || ""
+      };
+    }),
     { replace: true }
   );
   return urls;
@@ -241,12 +248,16 @@ export const LibrarySyncService = {
           `user_id=eq.${encodeURIComponent(ownerId)}&profile_id=eq.${profileId}`,
           true
         );
-        const addonRows = urls.map((url, index) => ({
-          user_id: ownerId,
-          profile_id: profileId,
-          url,
-          sort_order: index
-        }));
+        const addonRows = urls.map((url, index) => {
+          const name = addonRepository.getAddonDisplayNameOverride(url);
+          return {
+            user_id: ownerId,
+            profile_id: profileId,
+            url,
+            sort_order: index,
+            ...(name ? { name } : {})
+          };
+        });
         if (addonRows.length) {
           try {
             await SupabaseApi.upsert(ADDONS_TABLE, addonRows, "user_id,profile_id,url", true);

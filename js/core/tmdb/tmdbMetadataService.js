@@ -273,6 +273,7 @@ export const TmdbMetadataService = {
       ageRating: selectAgeRating(data, type),
       country: countryValue || null,
       language: spokenLanguage?.iso_639_1 || spokenLanguage?.english_name || null,
+      originalLanguage: data?.original_language || null,
       imdbId: data?.external_ids?.imdb_id || null,
       credits: data.credits || null,
       companies,

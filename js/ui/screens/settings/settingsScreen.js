@@ -294,6 +294,7 @@ const PREFERRED_SUBTITLE_LANGUAGE_OPTIONS = [{ id: "off", label: "Off" }, ...AVA
 // so the full shared language catalogue can be offered.
 const PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
   { id: "system", labelKey: "common.system" },
+  { id: "original", labelKey: "audio_lang_original", label: "Original language" },
   // "None" never auto-selects an audio track, leaving the stream's own
   // default playing (the player already treats "none" as no preference).
   { id: "none", labelKey: "common.none" },

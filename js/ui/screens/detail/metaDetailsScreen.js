@@ -341,6 +341,18 @@ function resolveMetaTraktId(meta = {}, params = {}) {
     .find((value) => /^\d+$/.test(value)) || null;
 }
 
+function resolveMetaOriginalLanguage(meta = {}, params = {}) {
+  return [
+    meta?.originalLanguage,
+    meta?.original_language,
+    params?.contentLanguage,
+    params?.originalLanguage,
+    params?.original_language
+  ]
+    .map((value) => String(value || "").trim())
+    .find(Boolean) || null;
+}
+
 function metaWithRouteExternalIds(meta = {}, params = {}) {
   const imdbId = resolveMetaImdbId(meta, params);
   const tmdbId = resolveMetaTmdbId(meta, params);
@@ -2376,6 +2388,11 @@ export const MetaDetailsScreen = {
         runtime: settings.useDetails ? enrichment.runtime || meta.runtime : meta.runtime,
         country: settings.useDetails ? enrichment.country || meta.country : meta.country,
         language: settings.useDetails ? enrichment.language || meta.language : meta.language,
+        originalLanguage:
+          enrichment.originalLanguage ||
+          meta.originalLanguage ||
+          meta.original_language ||
+          null,
         imdbId: enrichment.imdbId || meta.imdbId || meta.imdb_id || null,
         tmdbRating:
           settings.useBasicInfo && typeof enrichment.rating === "number"
@@ -6816,6 +6833,7 @@ export const MetaDetailsScreen = {
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
+    const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
     const resumeParams = this.getResumeParamsForProgress(
       this.getEpisodeMenuProgress(pending.episode) || this.getActiveResumeProgress()
     );
@@ -6827,6 +6845,7 @@ export const MetaDetailsScreen = {
       imdbId,
       tmdbId,
       traktId,
+      contentLanguage,
       videoId: pending.videoId,
       season: pending.episode?.season ?? null,
       episode: pending.episode?.episode ?? null,
@@ -6882,6 +6901,7 @@ export const MetaDetailsScreen = {
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
+    const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
     this.stopTrailerPlaybackForNavigation();
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
@@ -6889,6 +6909,7 @@ export const MetaDetailsScreen = {
       imdbId,
       tmdbId,
       traktId,
+      contentLanguage,
       originalItemId: this.params?.originalItemId || null,
       returnToDetail: true,
       fromDetailRoute: true,
@@ -6923,6 +6944,7 @@ export const MetaDetailsScreen = {
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
+    const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
     this.stopTrailerPlaybackForNavigation();
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
@@ -6930,6 +6952,7 @@ export const MetaDetailsScreen = {
       imdbId,
       tmdbId,
       traktId,
+      contentLanguage,
       originalItemId: this.params?.originalItemId || null,
       returnToDetail: true,
       fromDetailRoute: true,
@@ -6964,6 +6987,7 @@ export const MetaDetailsScreen = {
     const imdbId = resolveMetaImdbId(this.meta, this.params);
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
+    const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
     const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
     this.stopTrailerPlaybackForNavigation();
     Router.navigate("player", {
@@ -6973,6 +6997,7 @@ export const MetaDetailsScreen = {
       imdbId,
       tmdbId,
       traktId,
+      contentLanguage,
       season: null,
       episode: null,
       playerTitle:
@@ -8646,6 +8671,7 @@ export const MetaDetailsScreen = {
       const imdbId = resolveMetaImdbId(this.meta, this.params);
       const tmdbId = resolveMetaTmdbId(this.meta, this.params);
       const traktId = resolveMetaTraktId(this.meta, this.params);
+      const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
       const resumeParams = this.getResumeParamsForProgress(this.getActiveResumeProgress());
       const selectedStream =
         (this.streamItems || []).find(
@@ -8659,6 +8685,7 @@ export const MetaDetailsScreen = {
         imdbId,
         tmdbId,
         traktId,
+        contentLanguage,
         season: this.nextEpisodeToWatch?.season ?? null,
         episode: this.nextEpisodeToWatch?.episode ?? null,
         playerTitle:

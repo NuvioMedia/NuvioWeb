@@ -2310,6 +2310,11 @@ export const StreamScreen = {
       imdbId: this.params?.imdbId || null,
       tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
       traktId: this.params?.traktId || this.params?.trakt_id || null,
+      contentLanguage:
+        this.params?.contentLanguage ||
+        this.params?.originalLanguage ||
+        this.params?.original_language ||
+        null,
       videoId: this.params?.videoId || null,
       resumePositionMs,
       resumeProgressPercent,

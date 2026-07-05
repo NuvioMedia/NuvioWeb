@@ -616,6 +616,16 @@ function normalizeTrackLanguageCode(value) {
   return [base, ...parts.slice(1)].join("-");
 }
 
+function resolveRouteContentLanguage(params = {}) {
+  return [
+    params?.contentLanguage,
+    params?.originalLanguage,
+    params?.original_language
+  ]
+    .map((value) => normalizeTrackLanguageCode(value))
+    .find(Boolean) || "";
+}
+
 function normalizeLanguageNameText(value) {
   const comparable = normalizeComparableText(value);
   const asciiComparable = typeof comparable.normalize === "function"
@@ -1857,6 +1867,7 @@ export const PlayerScreen = {
     this.playerMountToken = mountToken;
     this.playerRouteActive = true;
     this.params = params;
+    this.contentLanguage = resolveRouteContentLanguage(params);
     this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
     if (this.releaseImageProxyReadyListener) {
       this.releaseImageProxyReadyListener();
@@ -6158,6 +6169,7 @@ export const PlayerScreen = {
         imdbId: this.params?.imdbId || null,
         tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
         traktId: this.params?.traktId || this.params?.trakt_id || null,
+        contentLanguage: this.contentLanguage || null,
         videoId: nextEpisode.videoId,
         season: nextEpisode.season,
         episode: nextEpisode.episode,
@@ -11212,15 +11224,28 @@ export const PlayerScreen = {
     }
 
     if (configured === "system") {
-      const locale = typeof I18n.getLocale === "function"
-        ? I18n.getLocale()
-        : (globalThis.navigator?.language || "");
-      const systemLanguage = normalizeTrackLanguageCode(locale);
+      const systemLanguage = this.getStartupSystemAudioLanguageTarget();
+      return systemLanguage ? [systemLanguage] : [];
+    }
+
+    if (configured === "original") {
+      const originalLanguage = normalizeTrackLanguageCode(this.contentLanguage);
+      if (originalLanguage) {
+        return [originalLanguage];
+      }
+      const systemLanguage = this.getStartupSystemAudioLanguageTarget();
       return systemLanguage ? [systemLanguage] : [];
     }
 
     const normalized = normalizeTrackLanguageCode(configured);
     return normalized ? [normalized] : [];
+  },
+
+  getStartupSystemAudioLanguageTarget() {
+    const locale = typeof I18n.getLocale === "function"
+      ? I18n.getLocale()
+      : (globalThis.navigator?.language || "");
+    return normalizeTrackLanguageCode(locale);
   },
 
   collectAudioOptionItems() {
@@ -14254,6 +14279,7 @@ export const PlayerScreen = {
         imdbId: this.params?.imdbId || null,
         tmdbId: this.params?.tmdbId || this.params?.tmdb_id || null,
         traktId: this.params?.traktId || this.params?.trakt_id || null,
+        contentLanguage: this.contentLanguage || null,
         videoId: selected.id,
         season: selected.season ?? null,
         episode: selected.episode ?? null,
