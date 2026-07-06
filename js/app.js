@@ -17,6 +17,8 @@ import { TraktCredentialSyncService } from "./core/profile/traktCredentialSyncSe
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { CollectionSyncService } from "./core/profile/collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./core/profile/homeCatalogSettingsSyncService.js";
+import { WatchedItemsSyncService } from "./core/profile/watchedItemsSyncService.js";
+import { WatchProgressSyncService } from "./core/profile/watchProgressSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
@@ -225,6 +227,8 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     await TraktCredentialSyncService.pullFromRemote(activeProfile.id);
     await CollectionSyncService.pull(activeProfile.id);
     await HomeCatalogSettingsSyncService.pull(activeProfile.id);
+    await WatchedItemsSyncService.pull();
+    await WatchProgressSyncService.pull();
     if (didApplyProfileSettings) {
       await I18n.init();
       ThemeManager.apply();

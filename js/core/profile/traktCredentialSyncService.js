@@ -52,6 +52,19 @@ function credentialJsonFromState(state = {}) {
 }
 
 function stateFromCredentialJson(credential = {}) {
+  if (!credential) {
+    return null;
+  }
+  if (typeof credential === "string") {
+    try {
+      credential = JSON.parse(credential);
+    } catch (_) {
+      return null;
+    }
+  }
+  if (typeof credential !== "object") {
+    return null;
+  }
   const accessToken = String(credential.access_token || credential.accessToken || "").trim();
   const refreshToken = String(credential.refresh_token || credential.refreshToken || "").trim();
   if (!accessToken || !refreshToken) {

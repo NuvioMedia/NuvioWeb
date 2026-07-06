@@ -3,6 +3,8 @@ import { SupabaseApi } from "../../data/remote/supabase/supabaseApi.js";
 import { watchedItemsRepository } from "../../data/repository/watchedItemsRepository.js";
 import { ProfileManager } from "./profileManager.js";
 import { LocalStore } from "../storage/localStore.js";
+import { TraktAuthStore } from "../../data/local/traktAuthStore.js";
+import { TraktSettingsStore, WatchProgressSource } from "../../data/local/traktSettingsStore.js";
 
 const PULL_RPC = "sync_pull_watched_items";
 const PUSH_RPC = "sync_push_watched_items";
@@ -13,6 +15,11 @@ const WATCHED_ITEMS_PAGE_SIZE = 900;
 function resolveProfileId() {
   const raw = Number(ProfileManager.getActiveProfileId() || 1);
   return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : 1;
+}
+
+function shouldUseSupabaseWatchProgressSync() {
+  const source = TraktSettingsStore.get().watchProgressSource || WatchProgressSource.TRAKT;
+  return !(TraktAuthStore.isAuthenticated() && source === WatchProgressSource.TRAKT);
 }
 
 function mapRemoteItem(row = {}) {
@@ -144,6 +151,9 @@ export const WatchedItemsSyncService = {
       if (!AuthManager.isAuthenticated) {
         return [];
       }
+      if (!shouldUseSupabaseWatchProgressSync()) {
+        return [];
+      }
       const profileId = resolveProfileId();
       const localItems = await watchedItemsRepository.getAll(5000);
       const rows = await pullRemoteWatchedItems(profileId);
@@ -192,6 +202,9 @@ export const WatchedItemsSyncService = {
     try {
       if (!AuthManager.isAuthenticated) {
         return false;
+      }
+      if (!shouldUseSupabaseWatchProgressSync()) {
+        return true;
       }
       const keys = (Array.isArray(items) ? items : [])
         .filter((item) => Boolean(item?.contentId))

@@ -6,6 +6,8 @@ import { TraktCredentialSyncService } from "../../core/profile/traktCredentialSy
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { CollectionSyncService } from "../../core/profile/collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "../../core/profile/homeCatalogSettingsSyncService.js";
+import { WatchedItemsSyncService } from "../../core/profile/watchedItemsSyncService.js";
+import { WatchProgressSyncService } from "../../core/profile/watchProgressSyncService.js";
 import { ScreenUtils } from "../../ui/navigation/screen.js";
 import { AvatarRepository } from "../../data/remote/supabase/avatarRepository.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
@@ -2089,6 +2091,8 @@ export const ProfileSelectionScreen = {
       await TraktCredentialSyncService.pullFromRemote(profileId);
       await CollectionSyncService.pull(profileId);
       await HomeCatalogSettingsSyncService.pull(profileId);
+      await WatchedItemsSyncService.pull();
+      await WatchProgressSyncService.pull();
       await I18n.init();
       ThemeManager.apply();
       I18n.apply();

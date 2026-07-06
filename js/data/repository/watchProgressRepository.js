@@ -146,6 +146,20 @@ function isTraktProgressItem(item = {}) {
     .startsWith("trakt");
 }
 
+function isTraktCompatibleContentId(contentId) {
+  const raw = String(contentId || "").trim();
+  if (!raw) {
+    return false;
+  }
+  if (raw.toLowerCase().startsWith("tt")) {
+    return true;
+  }
+  if (/^(tmdb|trakt):/i.test(raw)) {
+    return true;
+  }
+  return /^\d+$/.test(raw.split(":")[0] || "");
+}
+
 function selectedContinueWatchingSource() {
   const settings = TraktSettingsStore.get();
   const requestedSource = settings.watchProgressSource || WatchProgressSource.TRAKT;
@@ -157,7 +171,11 @@ function selectedContinueWatchingSource() {
 function filterForSelectedContinueWatchingSource(items = []) {
   const useTrakt = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
   const all = Array.isArray(items) ? items : [];
-  return all.filter((item) => (useTrakt ? isTraktProgressItem(item) : !isTraktProgressItem(item)));
+  return all.filter((item) =>
+    useTrakt
+      ? isTraktProgressItem(item) || !isTraktCompatibleContentId(item?.contentId)
+      : !isTraktProgressItem(item)
+  );
 }
 
 function deduplicateInProgress(items = []) {
