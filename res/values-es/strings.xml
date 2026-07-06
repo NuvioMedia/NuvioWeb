@@ -135,6 +135,12 @@
     <string name="about_check_updates_subtitle">Descargar la última versión</string>
     <string name="about_privacy_policy">Política de privacidad</string>
     <string name="about_privacy_policy_subtitle">Ver nuestra política de privacidad</string>
+    <string name="about_debug_console_title">Consola debug</string>
+    <string name="about_debug_console_subtitle">Mostrar últimos errores/avisos</string>
+    <string name="debug_console_subtitle">Últimos avisos y errores capturados en esta sesión de la app</string>
+    <string name="debug_console_empty_title">Sin avisos ni errores</string>
+    <string name="debug_console_empty_subtitle">Los eventos warning/error de la consola aparecerán aquí hasta cerrar la app.</string>
+    <string name="debug_console_event_count">%d eventos</string>
     <string name="settings_account">Cuenta</string>
     <string name="settings_account_subtitle">Estado de la cuenta y sincronización</string>
     <string name="settings_profiles">Perfiles</string>

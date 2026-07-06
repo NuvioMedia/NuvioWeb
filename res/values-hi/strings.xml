@@ -148,6 +148,12 @@
     <string name="about_privacy_policy_subtitle">हमारी प्राइवेसी पॉलिसी देखें</string>
     <string name="about_supporters_contributors">समर्थक और योगदानकर्ता</string>
     <string name="about_supporters_contributors_subtitle">ओपन मान्यता और प्रोजेक्ट क्रेडिट</string>
+    <string name="about_debug_console_title">डीबग कंसोल</string>
+    <string name="about_debug_console_subtitle">नवीनतम error/warning इवेंट दिखाएँ</string>
+    <string name="debug_console_subtitle">इस ऐप सत्र में पकड़ी गई अंतिम चेतावनियाँ और त्रुटियाँ</string>
+    <string name="debug_console_empty_title">कोई चेतावनी या त्रुटि नहीं</string>
+    <string name="debug_console_empty_subtitle">ऐप बंद होने तक console warning/error इवेंट यहाँ दिखाई देंगे।</string>
+    <string name="debug_console_event_count">%d इवेंट</string>
     <string name="settings_account">अकाउंट</string>
     <string name="settings_account_subtitle">अकाउंट और सिंक स्थिति।</string>
     <string name="settings_profiles">प्रोफाइल</string>

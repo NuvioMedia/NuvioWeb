@@ -315,6 +315,12 @@
     <string name="about_privacy_policy_subtitle">View our privacy policy</string>
     <string name="about_supporters_contributors">Supporters &amp; Contributors</string>
     <string name="about_supporters_contributors_subtitle">Open recognition and project credits</string>
+    <string name="about_debug_console_title">Console debug</string>
+    <string name="about_debug_console_subtitle">Show latest error/warning events</string>
+    <string name="debug_console_subtitle">Last warnings and errors captured from this app session</string>
+    <string name="debug_console_empty_title">No warnings or errors</string>
+    <string name="debug_console_empty_subtitle">Console warning/error events will appear here until the app is closed.</string>
+    <string name="debug_console_event_count">%d events</string>
     <string name="about_licenses_attributions">Licenses &amp; Attribution</string>
     <string name="about_licenses_attributions_subtitle">Data sources, acknowledgements, and Android licenses</string>
     <string name="licenses_attributions_title">Licenses &amp; Attribution</string>

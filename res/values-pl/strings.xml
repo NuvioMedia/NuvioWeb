@@ -102,6 +102,12 @@
     <string name="about_privacy_policy_subtitle">Wyświetl politykę prywatności</string>
     <string name="about_supporters_contributors">Wspierający i współtwórcy</string>
     <string name="about_supporters_contributors_subtitle">Podziękowania i autorzy projektu</string>
+    <string name="about_debug_console_title">Konsola debug</string>
+    <string name="about_debug_console_subtitle">Pokaż najnowsze błędy/ostrzeżenia</string>
+    <string name="debug_console_subtitle">Ostatnie ostrzeżenia i błędy przechwycone w tej sesji aplikacji</string>
+    <string name="debug_console_empty_title">Brak ostrzeżeń lub błędów</string>
+    <string name="debug_console_empty_subtitle">Zdarzenia warning/error konsoli będą widoczne tutaj do zamknięcia aplikacji.</string>
+    <string name="debug_console_event_count">%d zdarzeń</string>
     <string name="settings_account">Konto</string>
     <string name="settings_account_subtitle">Status konta i synchronizacji</string>
     <string name="settings_profiles">Profile</string>

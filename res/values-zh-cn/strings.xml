@@ -315,6 +315,12 @@
     <string name="about_privacy_policy_subtitle">查看我们的隐私政策</string>
     <string name="about_supporters_contributors">支持者和贡献者</string>
     <string name="about_supporters_contributors_subtitle">公开致谢与项目鸣谢</string>
+    <string name="about_debug_console_title">调试控制台</string>
+    <string name="about_debug_console_subtitle">显示最新错误/警告事件</string>
+    <string name="debug_console_subtitle">本次应用会话捕获的最新警告和错误</string>
+    <string name="debug_console_empty_title">没有警告或错误</string>
+    <string name="debug_console_empty_subtitle">控制台 warning/error 事件会显示在这里，直到应用关闭。</string>
+    <string name="debug_console_event_count">%d 个事件</string>
     <string name="about_licenses_attributions">许可与致谢</string>
     <string name="about_licenses_attributions_subtitle">数据来源、致谢和 Android 许可</string>
     <string name="licenses_attributions_title">许可与致谢</string>

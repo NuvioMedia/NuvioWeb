@@ -151,6 +151,12 @@
     <string name="about_privacy_policy_subtitle">Visa vår integritetspolicy</string>
     <string name="about_supporters_contributors">Supportrar &amp; bidragsgivare</string>
     <string name="about_supporters_contributors_subtitle">Öppen erkänsla och projektcredits</string>
+    <string name="about_debug_console_title">Debug-konsol</string>
+    <string name="about_debug_console_subtitle">Visa senaste fel/varningar</string>
+    <string name="debug_console_subtitle">Senaste varningar och fel som fångats i denna appsession</string>
+    <string name="debug_console_empty_title">Inga varningar eller fel</string>
+    <string name="debug_console_empty_subtitle">Konsolens warning/error-händelser visas här tills appen stängs.</string>
+    <string name="debug_console_event_count">%d händelser</string>
     <string name="settings_account">Konto</string>
     <string name="settings_account_subtitle">Konto och synkroniseringsstatus</string>
     <string name="settings_profiles">Profiler</string>

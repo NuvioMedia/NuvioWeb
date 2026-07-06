@@ -240,6 +240,12 @@
     <string name="about_privacy_policy_subtitle">Visualizza la nostra informativa sulla privacy</string>
     <string name="about_supporters_contributors">Sostenitori &amp; Collaboratori</string>
     <string name="about_supporters_contributors_subtitle">Apri riconoscimenti e contributi al progetto</string>
+    <string name="about_debug_console_title">Console debug</string>
+    <string name="about_debug_console_subtitle">Mostra ultimi eventi errori/warning</string>
+    <string name="debug_console_subtitle">Ultimi warning ed errori catturati in questa sessione dell’app</string>
+    <string name="debug_console_empty_title">Nessun warning o errore</string>
+    <string name="debug_console_empty_subtitle">Gli eventi warning/error della console appariranno qui finché l’app non viene chiusa.</string>
+    <string name="debug_console_event_count">%d eventi</string>
     <string name="settings_account">Account</string>
     <string name="settings_account_subtitle">Stato dell\'account e della sincronizzazione</string>
     <string name="settings_profiles">Profili</string>

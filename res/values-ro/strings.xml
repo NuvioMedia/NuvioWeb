@@ -93,6 +93,12 @@
     <string name="about_check_updates_subtitle">Descarcă cea mai recentă versiune</string>
     <string name="about_privacy_policy">Politica de confidențialitate</string>
     <string name="about_privacy_policy_subtitle">Vizualizează politica noastră de confidențialitate</string>
+    <string name="about_debug_console_title">Consolă debug</string>
+    <string name="about_debug_console_subtitle">Afișează ultimele erori/avertismente</string>
+    <string name="debug_console_subtitle">Ultimele avertismente și erori capturate în această sesiune a aplicației</string>
+    <string name="debug_console_empty_title">Fără avertismente sau erori</string>
+    <string name="debug_console_empty_subtitle">Evenimentele warning/error din consolă vor apărea aici până la închiderea aplicației.</string>
+    <string name="debug_console_event_count">%d evenimente</string>
     <string name="settings_account">Cont</string>
     <string name="settings_account_subtitle">Starea contului și sincronizării</string>
     <string name="settings_profiles">Profile</string>

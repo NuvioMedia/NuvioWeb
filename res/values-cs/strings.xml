@@ -305,6 +305,12 @@
     <string name="about_privacy_policy_subtitle">Zobrazit naše zásady ochrany osobních údajů</string>
     <string name="about_supporters_contributors">Podporovatelé a přispěvatelé</string>
     <string name="about_supporters_contributors_subtitle">Otevřít uznání a kredity projektu</string>
+    <string name="about_debug_console_title">Ladicí konzole</string>
+    <string name="about_debug_console_subtitle">Zobrazit poslední chyby/varování</string>
+    <string name="debug_console_subtitle">Poslední varování a chyby zachycené v této relaci aplikace</string>
+    <string name="debug_console_empty_title">Žádná varování ani chyby</string>
+    <string name="debug_console_empty_subtitle">Události warning/error z konzole se zde budou zobrazovat do zavření aplikace.</string>
+    <string name="debug_console_event_count">%d událostí</string>
     <string name="about_licenses_attributions">Licence a atribuce</string>
     <string name="about_licenses_attributions_subtitle">Zdroje dat, poděkování a licence Android</string>
     <string name="licenses_attributions_title">Licence a atribuce</string>

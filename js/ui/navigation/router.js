@@ -10,6 +10,7 @@ import { LibraryScreen } from "../screens/library/libraryScreen.js";
 import { SearchScreen } from "../screens/search/searchScreen.js";
 import { DiscoverScreen } from "../screens/search/discoverScreen.js";
 import { SettingsScreen } from "../screens/settings/settingsScreen.js";
+import { ConsoleDebugScreen } from "../screens/debug/consoleDebugScreen.js";
 import { TraktScreen } from "../screens/trakt/traktScreen.js";
 import { SupportersContributorsScreen } from "../screens/supporters/supportersContributorsScreen.js";
 import { PluginScreen } from "../screens/plugin/pluginScreen.js";
@@ -79,6 +80,7 @@ export const Router = {
     search: SearchScreen,
     discover: DiscoverScreen,
     settings: SettingsScreen,
+    debugConsole: ConsoleDebugScreen,
     trakt: TraktScreen,
     supportersContributors: SupportersContributorsScreen,
     plugin: PluginScreen,

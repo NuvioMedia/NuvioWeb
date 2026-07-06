@@ -97,6 +97,12 @@
     <string name="about_check_updates_subtitle">Tải phiên bản mới nhất</string>
     <string name="about_privacy_policy">Chính sách quyền riêng tư</string>
     <string name="about_privacy_policy_subtitle">Xem chính sách quyền riêng tư của chúng tôi</string>
+    <string name="about_debug_console_title">Bảng điều khiển debug</string>
+    <string name="about_debug_console_subtitle">Hiển thị lỗi/cảnh báo mới nhất</string>
+    <string name="debug_console_subtitle">Các cảnh báo và lỗi mới nhất được ghi trong phiên ứng dụng này</string>
+    <string name="debug_console_empty_title">Không có cảnh báo hoặc lỗi</string>
+    <string name="debug_console_empty_subtitle">Sự kiện warning/error của console sẽ xuất hiện ở đây cho đến khi đóng ứng dụng.</string>
+    <string name="debug_console_event_count">%d sự kiện</string>
     <string name="settings_account">Tài khoản</string>
     <string name="settings_account_subtitle">Tài khoản và trạng thái đồng bộ</string>
     <string name="settings_profiles">Hồ sơ</string>

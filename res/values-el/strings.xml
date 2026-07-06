@@ -315,6 +315,12 @@
     <string name="about_privacy_policy_subtitle">Δείτε την πολιτική απορρήτου μας</string>
     <string name="about_supporters_contributors">Υποστηρικτές &amp; Συνεισφέροντες</string>
     <string name="about_supporters_contributors_subtitle">Αναγνώριση και συντελεστές έργου</string>
+    <string name="about_debug_console_title">Κονσόλα debug</string>
+    <string name="about_debug_console_subtitle">Εμφάνιση τελευταίων σφαλμάτων/προειδοποιήσεων</string>
+    <string name="debug_console_subtitle">Τελευταίες προειδοποιήσεις και σφάλματα αυτής της συνεδρίας εφαρμογής</string>
+    <string name="debug_console_empty_title">Δεν υπάρχουν προειδοποιήσεις ή σφάλματα</string>
+    <string name="debug_console_empty_subtitle">Τα συμβάντα warning/error της κονσόλας θα εμφανίζονται εδώ μέχρι να κλείσει η εφαρμογή.</string>
+    <string name="debug_console_event_count">%d συμβάντα</string>
     <string name="about_licenses_attributions">Άδειες &amp; αναγνώριση</string>
     <string name="about_licenses_attributions_subtitle">Πηγές δεδομένων, ευχαριστίες και άδειες Android</string>
     <string name="licenses_attributions_title">Άδειες &amp; αναγνώριση</string>

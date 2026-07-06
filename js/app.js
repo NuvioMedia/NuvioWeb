@@ -1,3 +1,4 @@
+import "./core/diagnostics/consoleDebugBuffer.js";
 import "./runtime/polyfills.js";
 import "core-js/stable/url";
 import "core-js/stable/url-search-params";

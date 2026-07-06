@@ -233,6 +233,12 @@
     <string name="about_privacy_policy_subtitle">Pogledajte našu politiku privatnosti</string>
     <string name="about_supporters_contributors">Podržavaoci i Saradnici</string>
     <string name="about_supporters_contributors_subtitle">Priznanja i zasluge za projekt</string>
+    <string name="about_debug_console_title">Debug konzola</string>
+    <string name="about_debug_console_subtitle">Prikaži najnovije greške/upozorenja</string>
+    <string name="debug_console_subtitle">Zadnja upozorenja i greške zabilježene u ovoj sesiji aplikacije</string>
+    <string name="debug_console_empty_title">Nema upozorenja ni grešaka</string>
+    <string name="debug_console_empty_subtitle">Console warning/error događaji će se prikazivati ovdje dok se aplikacija ne zatvori.</string>
+    <string name="debug_console_event_count">%d događaja</string>
     <string name="settings_account">Račun</string>
     <string name="settings_account_subtitle">Račun i status sinhronizacije</string>
     <string name="settings_profiles">Profili</string>

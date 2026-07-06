@@ -308,6 +308,12 @@
     <string name="about_privacy_policy_subtitle">Gizlilik politikamızı görüntüleyin</string>
     <string name="about_supporters_contributors">Destekleyenler ve Katkıda Bulunanlar</string>
     <string name="about_supporters_contributors_subtitle">Projede emeği geçenler ve açık kaynak destekçileri</string>
+    <string name="about_debug_console_title">Debug konsolu</string>
+    <string name="about_debug_console_subtitle">Son hata/uyarı olaylarını göster</string>
+    <string name="debug_console_subtitle">Bu uygulama oturumunda yakalanan son uyarılar ve hatalar</string>
+    <string name="debug_console_empty_title">Uyarı veya hata yok</string>
+    <string name="debug_console_empty_subtitle">Konsol warning/error olayları uygulama kapatılana kadar burada görünür.</string>
+    <string name="debug_console_event_count">%d olay</string>
     <string name="about_licenses_attributions">Lisanslar ve Atıflar</string>
     <string name="about_licenses_attributions_subtitle">Veri kaynakları, teşekkürler ve Android lisansları</string>
     <string name="licenses_attributions_title">Lisanslar ve Atıflar</string>

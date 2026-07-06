@@ -315,6 +315,12 @@
     <string name="about_privacy_policy_subtitle">Unsere Datenschutzerklärung anzeigen</string>
     <string name="about_supporters_contributors">Unterstützer und Mitwirkende</string>
     <string name="about_supporters_contributors_subtitle">Offene Anerkennung und Projekt-Credits</string>
+    <string name="about_debug_console_title">Debug-Konsole</string>
+    <string name="about_debug_console_subtitle">Neueste Fehler/Warnungen anzeigen</string>
+    <string name="debug_console_subtitle">Letzte Warnungen und Fehler aus dieser App-Sitzung</string>
+    <string name="debug_console_empty_title">Keine Warnungen oder Fehler</string>
+    <string name="debug_console_empty_subtitle">Console-Warnungen/Fehler erscheinen hier, bis die App geschlossen wird.</string>
+    <string name="debug_console_event_count">%d Ereignisse</string>
     <string name="about_licenses_attributions">Lizenzen &amp; Quellen</string>
     <string name="about_licenses_attributions_subtitle">Data sources, acknowledgements, and Android licenses</string>
     <string name="licenses_attributions_title">Lizenzen &amp; Quellen</string>

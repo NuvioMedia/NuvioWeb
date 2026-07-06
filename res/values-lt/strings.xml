@@ -148,6 +148,12 @@
     <string name="about_privacy_policy_subtitle">Peržiūrėti mūsų privatumo politiką</string>
     <string name="about_supporters_contributors">Rėmėjai ir pagalbininkai</string>
     <string name="about_supporters_contributors_subtitle">Viešas pripažinimas ir projekto nuopelnai</string>
+    <string name="about_debug_console_title">Derinimo konsolė</string>
+    <string name="about_debug_console_subtitle">Rodyti naujausias klaidas/įspėjimus</string>
+    <string name="debug_console_subtitle">Paskutiniai šios programos sesijos įspėjimai ir klaidos</string>
+    <string name="debug_console_empty_title">Nėra įspėjimų ar klaidų</string>
+    <string name="debug_console_empty_subtitle">Konsolės warning/error įvykiai bus rodomi čia, kol programa bus uždaryta.</string>
+    <string name="debug_console_event_count">%d įvykių</string>
     <string name="settings_account">Paskyra</string>
     <string name="settings_account_subtitle">Paskyros ir sinchronizavimo būsena</string>
     <string name="settings_profiles">Profiliai</string>

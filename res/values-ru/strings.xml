@@ -232,6 +232,12 @@
     <string name="about_privacy_policy_subtitle">Посмотреть политику конфиденциальности</string>
     <string name="about_supporters_contributors">Спонсоры и участники</string>
     <string name="about_supporters_contributors_subtitle">Признание и титры проекта</string>
+    <string name="about_debug_console_title">Консоль отладки</string>
+    <string name="about_debug_console_subtitle">Показать последние ошибки/предупреждения</string>
+    <string name="debug_console_subtitle">Последние предупреждения и ошибки, пойманные в этой сессии приложения</string>
+    <string name="debug_console_empty_title">Нет предупреждений или ошибок</string>
+    <string name="debug_console_empty_subtitle">События warning/error из консоли будут отображаться здесь до закрытия приложения.</string>
+    <string name="debug_console_event_count">%d событий</string>
     <string name="settings_account">Аккаунт</string>
     <string name="settings_account_subtitle">Статус аккаунта и синхронизации</string>
     <string name="settings_profiles">Профили</string>

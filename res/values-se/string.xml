@@ -112,6 +112,12 @@
     <string name="about_check_updates_subtitle">Ladda ner senaste versionen</string>
     <string name="about_privacy_policy">Integritetspolicy</string>
     <string name="about_privacy_policy_subtitle">Visa vår integritetspolicy</string>
+    <string name="about_debug_console_title">Debug-konsol</string>
+    <string name="about_debug_console_subtitle">Visa senaste fel/varningar</string>
+    <string name="debug_console_subtitle">Senaste varningar och fel som fångats i denna appsession</string>
+    <string name="debug_console_empty_title">Inga varningar eller fel</string>
+    <string name="debug_console_empty_subtitle">Konsolens warning/error-händelser visas här tills appen stängs.</string>
+    <string name="debug_console_event_count">%d händelser</string>
 
     <!-- SettingsScreen categories -->
     <string name="settings_account">Konto</string>

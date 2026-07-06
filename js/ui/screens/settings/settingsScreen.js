@@ -5675,6 +5675,7 @@ export const SettingsScreen = {
       window.open?.(PRIVACY_URL, "_blank");
     });
     this.actionMap.set("about:supporters", () => Router.navigate("supportersContributors"));
+    this.actionMap.set("about:debugConsole", () => Router.navigate("debugConsole"));
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "about"))}
@@ -5696,6 +5697,16 @@ export const SettingsScreen = {
             focusKey: "about:supporters",
             title: t("settings.about.supporters.title"),
             subtitle: t("settings.about.supporters.subtitle")
+          })}
+          ${this.renderActionRow({
+            focusKey: "about:debugConsole",
+            title: t("about_debug_console_title", {}, "Console debug"),
+            subtitle: t(
+              "about_debug_console_subtitle",
+              {},
+              "Show latest error/warning events"
+            ),
+            leadingIcon: "terminal"
           })}
         </div>
       </div>

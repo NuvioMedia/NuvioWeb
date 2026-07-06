@@ -315,6 +315,12 @@
     <string name="about_privacy_policy_subtitle">Lihat kebijakan privasi kami</string>
     <string name="about_supporters_contributors">Kontributor &amp; Donatur</string>
     <string name="about_supporters_contributors_subtitle">Apresiasi terbuka dan kredit proyek</string>
+    <string name="about_debug_console_title">Konsol debug</string>
+    <string name="about_debug_console_subtitle">Tampilkan error/peringatan terbaru</string>
+    <string name="debug_console_subtitle">Peringatan dan error terakhir yang ditangkap pada sesi aplikasi ini</string>
+    <string name="debug_console_empty_title">Tidak ada peringatan atau error</string>
+    <string name="debug_console_empty_subtitle">Event warning/error konsol akan muncul di sini sampai aplikasi ditutup.</string>
+    <string name="debug_console_event_count">%d event</string>
     <string name="about_licenses_attributions">Lisensi &amp; Atribusi</string>
     <string name="about_licenses_attributions_subtitle">Sumber data, pengakuan, dan lisensi Android</string>
     <string name="licenses_attributions_title">Lisensi &amp; Atribusi</string>

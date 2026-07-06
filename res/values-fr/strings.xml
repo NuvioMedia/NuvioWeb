@@ -303,6 +303,12 @@
     <string name="about_privacy_policy_subtitle">Consulter notre politique de confidentialité</string>
     <string name="about_supporters_contributors">Soutiens et contributeurs</string>
     <string name="about_supporters_contributors_subtitle">Remerciements et crédits du projet</string>
+    <string name="about_debug_console_title">Console debug</string>
+    <string name="about_debug_console_subtitle">Afficher les derniers événements erreur/avertissement</string>
+    <string name="debug_console_subtitle">Derniers avertissements et erreurs capturés dans cette session de l’application</string>
+    <string name="debug_console_empty_title">Aucun avertissement ni erreur</string>
+    <string name="debug_console_empty_subtitle">Les événements warning/error de la console apparaîtront ici jusqu’à la fermeture de l’application.</string>
+    <string name="debug_console_event_count">%d événements</string>
     <string name="settings_account">Compte</string>
     <string name="settings_account_subtitle">Compte et état de la synchronisation</string>
     <string name="settings_profiles">Profils</string>

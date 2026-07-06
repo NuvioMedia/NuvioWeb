@@ -178,6 +178,12 @@
     <string name="about_privacy_policy_subtitle">プライバシーポリシーを表示</string>
     <string name="about_supporters_contributors">サポーター &amp; 貢献者</string>
     <string name="about_supporters_contributors_subtitle">感謝の認定とプロジェクトクレジット</string>
+    <string name="about_debug_console_title">デバッグコンソール</string>
+    <string name="about_debug_console_subtitle">最新のエラー/警告イベントを表示</string>
+    <string name="debug_console_subtitle">このアプリセッションで取得した最新の警告とエラー</string>
+    <string name="debug_console_empty_title">警告またはエラーはありません</string>
+    <string name="debug_console_empty_subtitle">アプリを閉じるまで、コンソールの warning/error イベントがここに表示されます。</string>
+    <string name="debug_console_event_count">%d 件</string>
     <string name="settings_account">アカウント</string>
     <string name="settings_account_subtitle">アカウントと同期の状態</string>
     <string name="settings_profiles">プロフィール</string>

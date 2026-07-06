@@ -307,6 +307,12 @@
     <string name="about_privacy_policy_subtitle">Oglejte si našo politiko zasebnosti</string>
     <string name="about_supporters_contributors">Podporniki &amp; soustvarjalci</string>
     <string name="about_supporters_contributors_subtitle">Javne zahvale in zasluge pri projektu</string>
+    <string name="about_debug_console_title">Razhroščevalna konzola</string>
+    <string name="about_debug_console_subtitle">Prikaži zadnje napake/opozorila</string>
+    <string name="debug_console_subtitle">Zadnja opozorila in napake, zajete v tej seji aplikacije</string>
+    <string name="debug_console_empty_title">Ni opozoril ali napak</string>
+    <string name="debug_console_empty_subtitle">Dogodki warning/error konzole bodo prikazani tukaj, dokler se aplikacija ne zapre.</string>
+    <string name="debug_console_event_count">%d dogodkov</string>
     <string name="about_licenses_attributions">Licence in avtorstvo</string>
     <string name="about_licenses_attributions_subtitle">Viri podatkov, zahvale in licence za Android</string>
     <string name="licenses_attributions_title">Licence in avtorstvo</string>

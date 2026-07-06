@@ -151,6 +151,12 @@
     <string name="about_privacy_policy_subtitle">Adatvédelmi irányelvek megtekintése</string>
     <string name="about_supporters_contributors">Támogatók és közreműködők</string>
     <string name="about_supporters_contributors_subtitle">A projekt támogatóinak és közreműködőinek listája</string>
+    <string name="about_debug_console_title">Debug konzol</string>
+    <string name="about_debug_console_subtitle">Legutóbbi hibák/figyelmeztetések megjelenítése</string>
+    <string name="debug_console_subtitle">Az app ezen munkamenetében rögzített legutóbbi figyelmeztetések és hibák</string>
+    <string name="debug_console_empty_title">Nincs figyelmeztetés vagy hiba</string>
+    <string name="debug_console_empty_subtitle">A konzol warning/error eseményei itt jelennek meg az app bezárásáig.</string>
+    <string name="debug_console_event_count">%d esemény</string>
 	
     <!-- SettingsScreen categories -->
     <string name="settings_account">Fiók</string>

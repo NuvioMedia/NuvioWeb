@@ -150,6 +150,12 @@
     <string name="about_privacy_policy_subtitle">צפה במדיניות הפרטיות שלנו</string>
     <string name="about_supporters_contributors">תומכים ותורמים</string>
     <string name="about_supporters_contributors_subtitle">הכרה ציבורית וקרדיטים לפרויקט</string>
+    <string name="about_debug_console_title">מסוף דיבוג</string>
+    <string name="about_debug_console_subtitle">הצג אירועי שגיאה/אזהרה אחרונים</string>
+    <string name="debug_console_subtitle">האזהרות והשגיאות האחרונות שנלכדו בסשן האפליקציה הזה</string>
+    <string name="debug_console_empty_title">אין אזהרות או שגיאות</string>
+    <string name="debug_console_empty_subtitle">אירועי warning/error מהמסוף יופיעו כאן עד לסגירת האפליקציה.</string>
+    <string name="debug_console_event_count">%d אירועים</string>
     <string name="settings_account">חשבון</string>
     <string name="settings_account_subtitle">מצב חשבון וסנכרון</string>
     <string name="settings_profiles">פרופילים</string>

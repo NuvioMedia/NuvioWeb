@@ -224,6 +224,12 @@
     <string name="about_privacy_policy_subtitle">الاطلاع على بيان الخصوصية</string>
     <string name="about_supporters_contributors">الداعمون والمساهمون</string>
     <string name="about_supporters_contributors_subtitle">تقدير مفتوح وشكر للمساهمين في المشروع</string>
+    <string name="about_debug_console_title">وحدة تحكم التصحيح</string>
+    <string name="about_debug_console_subtitle">اعرض أحدث أحداث الأخطاء/التحذيرات</string>
+    <string name="debug_console_subtitle">آخر التحذيرات والأخطاء الملتقطة في جلسة التطبيق هذه</string>
+    <string name="debug_console_empty_title">لا توجد تحذيرات أو أخطاء</string>
+    <string name="debug_console_empty_subtitle">ستظهر أحداث التحذير/الخطأ من وحدة التحكم هنا حتى يتم إغلاق التطبيق.</string>
+    <string name="debug_console_event_count">%d حدث</string>
     <string name="settings_account">الحساب</string>
     <string name="settings_account_subtitle">الحساب وحالة المزامنة</string>
     <string name="settings_profiles">المستخدمين</string>
