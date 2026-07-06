@@ -8,6 +8,7 @@ import { SavedLibrarySyncService } from "./savedLibrarySyncService.js";
 import { WatchedItemsSyncService } from "./watchedItemsSyncService.js";
 import { PluginSyncService } from "./pluginSyncService.js";
 import { ProfileSettingsSyncService } from "./profileSettingsSyncService.js";
+import { TraktCredentialSyncService } from "./traktCredentialSyncService.js";
 import { CollectionSyncService } from "./collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./homeCatalogSettingsSyncService.js";
 import { ThemeManager } from "../../ui/theme/themeManager.js";
@@ -116,6 +117,7 @@ export const StartupSyncService = {
           ThemeManager.apply();
           I18n.apply();
         }
+        await TraktCredentialSyncService.pullFromRemote(ProfileManager.getActiveProfileId());
         if (!includeProfileScoped) {
           return didApplyProfileSettings;
         }
@@ -144,6 +146,7 @@ export const StartupSyncService = {
     try {
       await ProfileSyncService.push();
       await ProfileSettingsSyncService.push();
+      await TraktCredentialSyncService.pushCurrentToRemote(ProfileManager.getActiveProfileId());
       await CollectionSyncService.push();
       await HomeCatalogSettingsSyncService.push();
       await PluginSyncService.push();

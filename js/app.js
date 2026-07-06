@@ -13,6 +13,7 @@ import { AuthState } from "./core/auth/authState.js";
 import { ProfileManager } from "./core/profile/profileManager.js";
 import { ProfileSyncService } from "./core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "./core/profile/profileSettingsSyncService.js";
+import { TraktCredentialSyncService } from "./core/profile/traktCredentialSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
 import { CollectionSyncService } from "./core/profile/collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "./core/profile/homeCatalogSettingsSyncService.js";
@@ -221,6 +222,7 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     StartupSyncService.enableProfileScopedSync();
     detailWatchedEnrichmentService.invalidateAllCache();
     const didApplyProfileSettings = await ProfileSettingsSyncService.pull(activeProfile.id);
+    await TraktCredentialSyncService.pullFromRemote(activeProfile.id);
     await CollectionSyncService.pull(activeProfile.id);
     await HomeCatalogSettingsSyncService.pull(activeProfile.id);
     if (didApplyProfileSettings) {

@@ -2,6 +2,7 @@ import { Router } from "../../ui/navigation/router.js";
 import { MAX_PROFILES, ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
 import { ProfileSettingsSyncService } from "../../core/profile/profileSettingsSyncService.js";
+import { TraktCredentialSyncService } from "../../core/profile/traktCredentialSyncService.js";
 import { StartupSyncService } from "../../core/profile/startupSyncService.js";
 import { CollectionSyncService } from "../../core/profile/collectionSyncService.js";
 import { HomeCatalogSettingsSyncService } from "../../core/profile/homeCatalogSettingsSyncService.js";
@@ -2085,6 +2086,7 @@ export const ProfileSelectionScreen = {
       StartupSyncService.enableProfileScopedSync();
       detailWatchedEnrichmentService.invalidateAllCache();
       await ProfileSettingsSyncService.pull(profileId);
+      await TraktCredentialSyncService.pullFromRemote(profileId);
       await CollectionSyncService.pull(profileId);
       await HomeCatalogSettingsSyncService.pull(profileId);
       await I18n.init();
