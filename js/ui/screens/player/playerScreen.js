@@ -1381,10 +1381,17 @@ function normalizeSubtitleFontSize(value = 100) {
 
 function formatHtmlSubtitleFontSize(value = 100) {
   const scale = normalizeSubtitleFontSize(value) / 100;
-  const minPx = Math.round(30 * scale);
-  const preferredVh = (4.4 * scale).toFixed(2);
-  const maxPx = Math.round(82 * scale);
-  return `clamp(${minPx}px, ${preferredVh}vh, ${maxPx}px)`;
+  const documentRef = globalThis?.document;
+  const viewportHeight = Number(
+    globalThis?.innerHeight
+    || documentRef?.documentElement?.clientHeight
+    || documentRef?.body?.clientHeight
+    || 0
+  );
+  const basePx = viewportHeight > 0
+    ? clamp(viewportHeight * 0.044, 30, 82)
+    : 48;
+  return `${Math.round(basePx * scale)}px`;
 }
 
 function normalizeSubtitleVerticalOffset(value = 0) {
