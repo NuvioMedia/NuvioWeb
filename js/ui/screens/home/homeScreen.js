@@ -3619,7 +3619,8 @@ export const HomeScreen = {
     if (this.posterHoldMenu) {
       this.pendingPosterHoldFocus = {
         rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
-        index: Number(this.posterHoldMenu.index || 0)
+        index: Number(this.posterHoldMenu.index || 0),
+        itemId: String(this.posterHoldMenu.item?.id || "")
       };
     }
     this.posterHoldMenu = null;
@@ -3703,6 +3704,33 @@ export const HomeScreen = {
     }
   },
 
+  // Find the card to re-focus after a poster hold menu closes. Prefer the exact
+  // row/column it was at, but fall back to matching the item by id so focus is
+  // kept even when the action changed the row set (e.g. a library or continue
+  // watching row updating shifts the item to a new position).
+  resolvePosterHoldRestoreTarget(pending) {
+    if (!pending) {
+      return null;
+    }
+    const byPosition = this.container?.querySelector(
+      `.home-poster-card.focusable[data-row-index="${Number(pending.rowIndex || 0)}"][data-item-index="${Number(pending.index || 0)}"]`
+    ) || null;
+    if (byPosition) {
+      return byPosition;
+    }
+    const itemId = String(pending.itemId || "");
+    if (!itemId) {
+      return null;
+    }
+    const cards = this.container?.querySelectorAll(".home-poster-card.focusable[data-item-id]") || [];
+    for (let index = 0; index < cards.length; index += 1) {
+      if (String(cards[index].dataset.itemId || "") === itemId) {
+        return cards[index];
+      }
+    }
+    return null;
+  },
+
   restorePosterHoldMenuFocus() {
     this.unlockHomeHoldFocus();
     const pending = this.pendingPosterHoldFocus;
@@ -3710,7 +3738,7 @@ export const HomeScreen = {
     if (!pending) {
       return;
     }
-    const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${Number(pending.rowIndex || 0)}"][data-item-index="${Number(pending.index || 0)}"]`) || null;
+    const target = this.resolvePosterHoldRestoreTarget(pending);
     if (!target) {
       return;
     }
@@ -3859,7 +3887,8 @@ export const HomeScreen = {
     if (this.posterHoldMenu) {
       this.pendingPosterHoldFocus = {
         rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
-        index: Number(this.posterHoldMenu.index || 0)
+        index: Number(this.posterHoldMenu.index || 0),
+        itemId: String(this.posterHoldMenu.item?.id || "")
       };
     }
     this.posterHoldMenu = null;
@@ -3955,7 +3984,8 @@ export const HomeScreen = {
     }
     this.pendingPosterHoldFocus = {
       rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
-      index: Number(this.posterHoldMenu.index || 0)
+      index: Number(this.posterHoldMenu.index || 0),
+      itemId: String(this.posterHoldMenu.item?.id || "")
     };
     this.posterHoldMenu = null;
     this.destroyHomeHoldDialog();
@@ -4408,7 +4438,8 @@ export const HomeScreen = {
     const pendingFocus = this.posterHoldMenu
       ? {
           rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
-          index: Number(this.posterHoldMenu.index || 0)
+          index: Number(this.posterHoldMenu.index || 0),
+          itemId: String(this.posterHoldMenu.item?.id || "")
         }
       : null;
     this.destroyHomeHoldDialog();
@@ -7400,7 +7431,7 @@ export const HomeScreen = {
     }
     if (!sidebarFocusLocked && !this.homeHoldFocusLocked && !backFocusState && this.pendingPosterHoldFocus) {
       const pending = this.pendingPosterHoldFocus;
-      const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${Number(pending.rowIndex || 0)}"][data-item-index="${Number(pending.index || 0)}"]`) || null;
+      const target = this.resolvePosterHoldRestoreTarget(pending);
       this.pendingPosterHoldFocus = null;
       if (target) {
         restoredFocus = true;
