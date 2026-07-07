@@ -15521,6 +15521,9 @@ export const PlayerScreen = {
     this.nextEpisodeTransitionMeta = null;
     this.streamCandidatesByVideoId?.clear?.();
     this.streamCandidatesLoadPromises?.clear?.();
+    this.hlsManifestSubtitlePromotionUrls?.clear?.();
+    this.failedPlaybackUrls?.clear?.();
+    this.failedPlaybackStreamIds?.clear?.();
     this.skipIntervalsRequestToken = Number(this.skipIntervalsRequestToken || 0) + 1;
     this.subtitleLoadToken = (this.subtitleLoadToken || 0) + 1;
     this.manifestLoadToken = (this.manifestLoadToken || 0) + 1;

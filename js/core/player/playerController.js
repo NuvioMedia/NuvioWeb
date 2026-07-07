@@ -3859,6 +3859,7 @@ export const PlayerController = {
     this.playbackEngine = "none";
     this.lastPlaybackErrorCode = 0;
     this.clearPlaybackEngineAttempts();
+    this.avplayFallbackAttempts.clear();
 
     if (this.progressSaveTimer) {
       clearInterval(this.progressSaveTimer);
