@@ -7765,7 +7765,9 @@ export const PlayerScreen = {
     const readyState = typeof PlayerController.getPlaybackReadyState === "function"
       ? Number(PlayerController.getPlaybackReadyState() || 0)
       : Number(PlayerController.video?.readyState || 0);
-    return Number.isFinite(readyState) && readyState >= 3;
+    const audioPreferenceSettled = Boolean(this.startupAudioPreferenceApplied)
+      || (!this.startupAudioPreferenceApplying && !this.hasAudioTracksAvailable());
+    return audioPreferenceSettled && Number.isFinite(readyState) && readyState >= 3;
   },
 
   scheduleLoadingCompletionCheck(delayMs = 250, { force = false } = {}) {
