@@ -7090,6 +7090,21 @@ export const PlayerScreen = {
         }
         this.pendingWebOsAudioSelection = null;
         this.failedAutomaticAudioFallbackEntryId = "";
+        if (this.startupAudioGateActive) {
+          const selectedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
+          const preferredTargets = typeof this.getStartupAudioPreferredTargets === "function"
+            ? this.getStartupAudioPreferredTargets()
+            : [];
+          const matchesStartupPreference = !preferredTargets.length || Boolean(
+            selectedOption?.supported
+            && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))
+          );
+          if (matchesStartupPreference) {
+            this.clearStartupAudioPreferenceRetry();
+            this.startupAudioPreferenceApplied = true;
+            this.scheduleLoadingCompletionCheck(0, { force: true });
+          }
+        }
         this.refreshTrackDialogs();
         return;
       }
@@ -7742,7 +7757,9 @@ export const PlayerScreen = {
       this.refreshTrackDialogs();
     }
     this.setLoadingLogoFillTarget(1);
-    this.releaseStartupAudioGate();
+    if (this.isStartupGateReleaseReady()) {
+      this.releaseStartupAudioGate();
+    }
     this.clearPlaybackStallGuard();
     return true;
   },
@@ -8025,7 +8042,9 @@ export const PlayerScreen = {
     const bufferingSpinner = this.uiRefs?.bufferingSpinner;
     if (!overlay) {
       if (!this.loadingVisible) {
-        this.releaseStartupAudioGate();
+        if (this.isStartupGateReleaseReady()) {
+          this.releaseStartupAudioGate();
+        }
         this.clearBufferingSpinnerTimer();
       }
       return;
@@ -8085,7 +8104,9 @@ export const PlayerScreen = {
       if (!this.loadingVisible) {
         this.clearBufferingSpinnerTimer();
       }
-      this.releaseStartupAudioGate();
+      if (this.isStartupGateReleaseReady()) {
+        this.releaseStartupAudioGate();
+      }
       if (this.paused) {
         this.schedulePauseOverlay();
       }
@@ -11508,6 +11529,12 @@ export const PlayerScreen = {
       this.applyAudioTrack(preferredOption.entryIndex);
     } finally {
       this.startupAudioPreferenceApplying = false;
+    }
+
+    if (Environment.isWebOS() && this.pendingWebOsAudioSelection) {
+      this.startupAudioPreferenceApplied = false;
+      this.scheduleStartupAudioPreferenceRetry();
+      return false;
     }
 
     const appliedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
