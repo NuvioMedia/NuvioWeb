@@ -105,9 +105,47 @@ function dedupeAndSort(items = []) {
   );
 }
 
+let listAllCacheRaw = null;
+let listAllCacheValue = null;
+
+function readStoredProgressRaw() {
+  try {
+    return localStorage.getItem(WATCH_PROGRESS_KEY);
+  } catch (_) {
+    return null;
+  }
+}
+
+function loadProgressItems() {
+  const raw = readStoredProgressRaw();
+  if (raw === listAllCacheRaw && Array.isArray(listAllCacheValue)) {
+    return listAllCacheValue;
+  }
+
+  let parsed = [];
+  if (raw !== null) {
+    try {
+      parsed = JSON.parse(raw);
+    } catch (_) {
+      parsed = [];
+    }
+  }
+
+  const items = dedupeAndSort(Array.isArray(parsed) ? parsed : []);
+  listAllCacheRaw = raw;
+  listAllCacheValue = items;
+  return items;
+}
+
+function persistProgressItems(items) {
+  LocalStore.set(WATCH_PROGRESS_KEY, items);
+  listAllCacheRaw = readStoredProgressRaw();
+  listAllCacheValue = items;
+}
+
 export const WatchProgressStore = {
   listAll() {
-    return dedupeAndSort(LocalStore.get(WATCH_PROGRESS_KEY, []));
+    return loadProgressItems();
   },
 
   listForProfile(profileId) {
@@ -127,7 +165,7 @@ export const WatchProgressStore = {
       normalized,
       ...items.filter((item) => progressKey(item) !== key)
     ]).slice(0, 5000);
-    LocalStore.set(WATCH_PROGRESS_KEY, next);
+    persistProgressItems(next);
   },
 
   findByContentId(contentId, profileId) {
@@ -151,7 +189,7 @@ export const WatchProgressStore = {
       }
       return String(item.videoId || "") !== wantedVideoId;
     });
-    LocalStore.set(WATCH_PROGRESS_KEY, next);
+    persistProgressItems(next);
   },
 
   replaceForProfile(profileId, items = []) {
@@ -163,6 +201,6 @@ export const WatchProgressStore = {
       .map((item) => normalizeProgress(item, pid))
       .filter((item) => Boolean(item.contentId));
     const next = dedupeAndSort([...normalized, ...keepOtherProfiles]).slice(0, 5000);
-    LocalStore.set(WATCH_PROGRESS_KEY, next);
+    persistProgressItems(next);
   }
 };
