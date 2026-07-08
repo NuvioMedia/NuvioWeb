@@ -9839,7 +9839,18 @@ export const PlayerScreen = {
   },
 
   mergeEmbeddedAudioTrackMetadata(track, index) {
-    const embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(index) || this.getEmbeddedAudioTrack(index);
+    let embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(index) || this.getEmbeddedAudioTrack(index);
+    const explicitLanguage = normalizeTrackLanguageCode(track?.language || track?.lang || "");
+    let embeddedLanguage = normalizeTrackLanguageCode(embeddedTrack?.language || embeddedTrack?.lang || "");
+    if (explicitLanguage && embeddedLanguage && explicitLanguage !== embeddedLanguage) {
+      const languageMatchedTrack = (this.embeddedAudioTracks || []).find((candidate) => (
+        normalizeTrackLanguageCode(candidate?.language || candidate?.lang || "") === explicitLanguage
+      ));
+      if (languageMatchedTrack) {
+        embeddedTrack = languageMatchedTrack;
+        embeddedLanguage = normalizeTrackLanguageCode(embeddedTrack?.language || embeddedTrack?.lang || "");
+      }
+    }
     if (!embeddedTrack) {
       return {
         ...track,
@@ -9847,12 +9858,15 @@ export const PlayerScreen = {
       };
     }
     const support = getAudioTrackSupportState(embeddedTrack);
+    const embeddedLabel = cleanDisplayText(embeddedTrack.label);
+    const trackLabel = cleanDisplayText(track?.label || track?.name);
+    const useEmbeddedLabel = Boolean(embeddedLabel && (!explicitLanguage || !embeddedLanguage || explicitLanguage === embeddedLanguage));
     return {
       ...track,
-      label: cleanDisplayText(embeddedTrack.label) || track?.label || track?.name || "",
-      name: cleanDisplayText(track?.name || embeddedTrack.label) || track?.name || "",
-      language: embeddedTrack.language || track?.language || track?.lang || "",
-      lang: embeddedTrack.lang || track?.lang || track?.language || "",
+      label: useEmbeddedLabel ? embeddedLabel : trackLabel || "",
+      name: cleanDisplayText(track?.name || (useEmbeddedLabel ? embeddedLabel : "")) || track?.name || "",
+      language: track?.language || track?.lang || embeddedTrack?.language || embeddedTrack?.lang || "",
+      lang: track?.lang || track?.language || embeddedTrack?.lang || embeddedTrack?.language || "",
       codec: embeddedTrack.codec || track?.codec || track?.audioCodec || "",
       codecs: embeddedTrack.codecs || track?.codecs || "",
       audioCodec: embeddedTrack.audioCodec || track?.audioCodec || track?.codec || "",
@@ -9871,9 +9885,20 @@ export const PlayerScreen = {
 
   mergeAvPlayAudioTrackMetadata(track, index) {
     const avplayTrackIndex = Number(track?.avplayTrackIndex);
-    const embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(
+    let embeddedTrack = this.getEmbeddedAudioTrackByNativeIndex(
       Number.isFinite(avplayTrackIndex) ? avplayTrackIndex : index
     );
+    const explicitLanguage = normalizeTrackLanguageCode(track?.language || track?.lang || "");
+    let embeddedLanguage = normalizeTrackLanguageCode(embeddedTrack?.language || embeddedTrack?.lang || "");
+    if (explicitLanguage && embeddedLanguage && explicitLanguage !== embeddedLanguage) {
+      const languageMatchedTrack = (this.embeddedAudioTracks || []).find((candidate) => (
+        normalizeTrackLanguageCode(candidate?.language || candidate?.lang || "") === explicitLanguage
+      ));
+      if (languageMatchedTrack) {
+        embeddedTrack = languageMatchedTrack;
+        embeddedLanguage = normalizeTrackLanguageCode(embeddedTrack?.language || embeddedTrack?.lang || "");
+      }
+    }
     if (!embeddedTrack) {
       return {
         ...track,
@@ -9881,12 +9906,15 @@ export const PlayerScreen = {
       };
     }
     const support = getAudioTrackSupportState(embeddedTrack);
+    const embeddedLabel = cleanDisplayText(embeddedTrack.label);
+    const trackLabel = cleanDisplayText(track?.label || track?.name);
+    const useEmbeddedLabel = Boolean(embeddedLabel && (!explicitLanguage || !embeddedLanguage || explicitLanguage === embeddedLanguage));
     return {
       ...track,
-      label: cleanDisplayText(embeddedTrack.label) || track?.label || track?.name || "",
-      name: cleanDisplayText(track?.name || embeddedTrack.label) || track?.name || "",
-      language: embeddedTrack.language || track?.language || track?.lang || "",
-      lang: embeddedTrack.lang || track?.lang || track?.language || "",
+      label: useEmbeddedLabel ? embeddedLabel : trackLabel || "",
+      name: cleanDisplayText(track?.name || (useEmbeddedLabel ? embeddedLabel : "")) || track?.name || "",
+      language: track?.language || track?.lang || embeddedTrack?.language || embeddedTrack?.lang || "",
+      lang: track?.lang || track?.language || embeddedTrack?.lang || embeddedTrack?.language || "",
       codec: embeddedTrack.codec || track?.codec || track?.audioCodec || "",
       codecs: embeddedTrack.codecs || track?.codecs || "",
       audioCodec: embeddedTrack.audioCodec || track?.audioCodec || track?.codec || "",
