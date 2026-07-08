@@ -1,11 +1,13 @@
 import { LocalStore } from "../storage/localStore.js";
 import { Environment } from "../../platform/environment.js";
+import { Platform } from "../../platform/index.js";
 import { isWebOsImageProxyUrl, normalizeImageUrl } from "./imageProxy.js";
 
 const failedAddonLogoUrls = new Set();
 const addonLogoCache = new Map();
 const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
 const ADDON_LOGO_CACHE_LIMIT = 36;
+const ADDON_LOGO_TV_CACHE_LIMIT = 12;
 const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
 
 let addonLogoCacheHydrated = false;
@@ -140,7 +142,7 @@ export function requestAddonLogo(url = "", onSettled = null) {
     return cached.promise || Promise.resolve(false);
   }
 
-  if (Environment.isWebOS() && !isWebOsImageProxyUrl(normalized)) {
+  if ((Environment.isWebOS() || Platform.isTizen()) && !isWebOsImageProxyUrl(normalized)) {
     addonLogoCache.set(normalized, {
       status: "direct",
       displayUrl: normalized,
@@ -282,6 +284,9 @@ function hydrateAddonLogoCache() {
     return;
   }
   addonLogoCacheHydrated = true;
+  if (Platform.isTizen()) {
+    return;
+  }
   const cached = LocalStore.get(ADDON_LOGO_CACHE_KEY, {});
   const entries = cached && typeof cached === "object" && !Array.isArray(cached) ? cached : {};
   Object.keys(entries).forEach((url) => {
@@ -299,7 +304,11 @@ function hydrateAddonLogoCache() {
 }
 
 function persistAddonLogoCache() {
+  if (Platform.isTizen()) {
+    return;
+  }
   addonLogoCachePersistTimer = null;
+  const cacheLimit = Platform.isWebOS() ? ADDON_LOGO_TV_CACHE_LIMIT : ADDON_LOGO_CACHE_LIMIT;
   const entries = Array.from(addonLogoCache.entries())
     .filter(
       ([, entry]) =>
@@ -308,7 +317,7 @@ function persistAddonLogoCache() {
         String(entry.displayUrl || "").length <= ADDON_LOGO_CACHE_MAX_LENGTH
     )
     .sort((left, right) => Number(right[1].updatedAt || 0) - Number(left[1].updatedAt || 0))
-    .slice(0, ADDON_LOGO_CACHE_LIMIT);
+    .slice(0, cacheLimit);
   const payload = {};
   entries.forEach(([url, entry]) => {
     payload[url] = {
@@ -320,6 +329,9 @@ function persistAddonLogoCache() {
 }
 
 function scheduleAddonLogoCachePersist() {
+  if (Platform.isTizen()) {
+    return;
+  }
   if (addonLogoCachePersistTimer) {
     return;
   }

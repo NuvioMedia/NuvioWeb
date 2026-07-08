@@ -2,7 +2,12 @@ import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
 import { TMDB_API_KEY } from "../../config.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
-const IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
+const TMDB_IMAGE_SIZES = {
+  poster: "w342",
+  backdrop: "w780",
+  logo: "w300",
+  still: "w300"
+};
 const TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US";
 
 function resolveType(contentType) {
@@ -13,11 +18,16 @@ function resolveType(contentType) {
   return "movie";
 }
 
-function toImageUrl(path) {
+function toImageUrl(path, kind = "backdrop") {
   if (!path) {
     return null;
   }
-  return `${IMAGE_BASE_URL}${path}`;
+  const normalizedPath = String(path);
+  if (/^https?:\/\//i.test(normalizedPath)) {
+    return normalizedPath;
+  }
+  const size = TMDB_IMAGE_SIZES[kind] || kind;
+  return `https://image.tmdb.org/t/p/${size}${normalizedPath}`;
 }
 
 function normalizeTmdbArtworkLanguage(language = "") {
@@ -181,7 +191,7 @@ function mapCompanies(items = []) {
   return (Array.isArray(items) ? items : [])
     .map((company) => ({
       name: company?.name || "",
-      logo: toImageUrl(company?.logo_path || company?.logo || null)
+      logo: toImageUrl(company?.logo_path || company?.logo || null, "logo")
     }))
     .filter((company) => company.name || company.logo);
 }
@@ -259,9 +269,9 @@ export const TmdbMetadataService = {
     return {
       localizedTitle: data.title || data.name || null,
       description: data.overview || null,
-      backdrop: toImageUrl(data.backdrop_path),
-      poster: toImageUrl(data.poster_path),
-      logo: toImageUrl(logoPath),
+      backdrop: toImageUrl(data.backdrop_path, "backdrop"),
+      poster: toImageUrl(data.poster_path, "poster"),
+      logo: toImageUrl(logoPath, "logo"),
       genres: Array.isArray(data.genres)
         ? data.genres.map((genre) => genre.name).filter(Boolean)
         : [],
@@ -339,7 +349,7 @@ export const TmdbMetadataService = {
             title: episode?.name || "",
             overview: episode?.overview || "",
             airDate: episode?.air_date || "",
-            thumbnail: toImageUrl(episode?.still_path || null),
+            thumbnail: toImageUrl(episode?.still_path || null, "still"),
             runtime: Number(episode?.runtime || 0) || null
           }))
           .filter((episode) => !episode.key.endsWith(":0"));
@@ -372,9 +382,9 @@ export const TmdbMetadataService = {
         id: item?.id ? `tmdb:${String(item.id)}` : "",
         type: "movie",
         name: item?.title || item?.name || "Untitled",
-        poster: toImageUrl(item?.poster_path || null),
-        background: toImageUrl(item?.backdrop_path || null),
-        landscapePoster: toImageUrl(item?.backdrop_path || null),
+        poster: toImageUrl(item?.poster_path || null, "poster"),
+        background: toImageUrl(item?.backdrop_path || null, "backdrop"),
+        landscapePoster: toImageUrl(item?.backdrop_path || null, "backdrop"),
         releaseInfo: String(item?.release_date || "").slice(0, 4) || ""
       }))
       .filter((item) => item.id);
@@ -400,10 +410,10 @@ export const TmdbMetadataService = {
         id: item?.id ? `tmdb:${String(item.id)}` : "",
         type: type === "tv" ? "series" : "movie",
         name: item?.title || item?.name || "Untitled",
-        poster: toImageUrl(item?.poster_path || null),
-        background: toImageUrl(item?.backdrop_path || null),
-        backdrop: toImageUrl(item?.backdrop_path || null),
-        landscapePoster: toImageUrl(item?.backdrop_path || null),
+        poster: toImageUrl(item?.poster_path || null, "poster"),
+        background: toImageUrl(item?.backdrop_path || null, "backdrop"),
+        backdrop: toImageUrl(item?.backdrop_path || null, "backdrop"),
+        landscapePoster: toImageUrl(item?.backdrop_path || null, "backdrop"),
         description: item?.overview || "",
         releaseInfo:
           String(type === "tv" ? item?.first_air_date || "" : item?.release_date || "").slice(0, 4) ||

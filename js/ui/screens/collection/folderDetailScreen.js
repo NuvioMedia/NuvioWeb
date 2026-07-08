@@ -30,7 +30,8 @@ import {
 } from "../../components/watchedTitleBadge.js";
 
 const TMDB_API_URL = "https://api.themoviedb.org/3";
-const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/original";
+const TMDB_POSTER_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w342";
+const TMDB_BACKDROP_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w780";
 const TRAKT_PAGE_SIZE = 50;
 const STREAMING_NETWORK_PRESETS = new Map([
   ["netflix", { title: "Netflix", tmdbId: 213 }],
@@ -71,11 +72,16 @@ function firstNonEmpty(...values) {
   return "";
 }
 
-function toImageUrl(path) {
+function toImageUrl(path, kind = "poster") {
   if (!path) {
     return "";
   }
-  return /^https?:\/\//i.test(String(path)) ? String(path) : `${TMDB_IMAGE_BASE_URL}${path}`;
+  const normalizedPath = String(path);
+  if (/^https?:\/\//i.test(normalizedPath)) {
+    return normalizedPath;
+  }
+  const baseUrl = kind === "backdrop" ? TMDB_BACKDROP_IMAGE_BASE_URL : TMDB_POSTER_IMAGE_BASE_URL;
+  return `${baseUrl}${normalizedPath}`;
 }
 
 function buildPlaceholderPosterDataUrl() {
@@ -398,8 +404,8 @@ function mapTmdbListItem(item = {}, mediaType = "movie") {
   if (!item?.id || !title) {
     return null;
   }
-  const posterUrl = toImageUrl(item.poster_path || item.posterPath);
-  const backdropUrl = toImageUrl(item.backdrop_path || item.backdropPath);
+  const posterUrl = toImageUrl(item.poster_path || item.posterPath, "poster");
+  const backdropUrl = toImageUrl(item.backdrop_path || item.backdropPath, "backdrop");
   return normalizeItem({
     id: `tmdb:${item.id}`,
     type,
