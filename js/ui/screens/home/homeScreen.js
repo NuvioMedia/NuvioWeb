@@ -1354,9 +1354,10 @@ function saveContinueWatchingEnrichment(item = {}) {
     episodeTitle: normalized.episodeTitle,
     episodeDescription: normalized.episodeDescription
   };
+  const enrichmentCacheLimit = Platform.isTizen() || Platform.isWebOS() ? 50 : 200;
   const entries = Object.entries(cache)
     .sort(([, left], [, right]) => Number(right?.cachedAt || 0) - Number(left?.cachedAt || 0))
-    .slice(0, 200);
+    .slice(0, enrichmentCacheLimit);
   LocalStore.set(CW_ENRICHMENT_CACHE_KEY, Object.fromEntries(entries));
 }
 
@@ -1711,6 +1712,13 @@ function renderRowHeader(title, subtitle = "") {
   `;
 }
 
+function resolveContinueWatchingBlurNextUp(layoutPrefs) {
+  if (Platform.isTizen()) {
+    return false;
+  }
+  return Boolean(layoutPrefs?.blurContinueWatchingNextUp);
+}
+
 function renderContinueWatchingCard(item, index, options = {}) {
   const normalized = normalizeContinueWatchingItem(item);
   const subtitle = normalized.episodeTitle || "";
@@ -1729,6 +1737,10 @@ function renderContinueWatchingCard(item, index, options = {}) {
   const uniqueCardImageSources = uniqueNonEmptyValues(cardImageSources);
   const cardImage = uniqueCardImageSources[0] || "";
   const fallbackQueue = encodeHeroBackdropFallbacks(uniqueCardImageSources.slice(1));
+  const deferContinueImage = Platform.isTizen() || Platform.isWebOS();
+  const continueImageAttrs = cardImage
+    ? buildLazyImageAttributes(cardImage, { defer: deferContinueImage })
+    : "";
   return `
     <article class="home-content-card home-continue-card${blurNextUp ? " home-continue-card-blur-next-up" : ""} focusable"
              tabindex="0"
@@ -1745,7 +1757,7 @@ function renderContinueWatchingCard(item, index, options = {}) {
              data-item-type="${escapeAttribute(normalized.type || "movie")}"
              data-item-title="${escapeAttribute(normalized.title || "Untitled")}">
       <div class="home-continue-media">
-        ${cardImage ? `<img class="home-continue-bg" src="${escapeAttribute(cardImage)}"${fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : ""} alt="" aria-hidden="true" decoding="async" loading="lazy" onerror="${buildImageFallbackErrorHandler()}" />` : ""}
+        ${cardImage ? `<img class="home-continue-bg" ${continueImageAttrs}${fallbackQueue ? ` data-fallback-srcs="${escapeAttribute(fallbackQueue)}"` : ""} alt="" aria-hidden="true" decoding="async" onerror="${buildImageFallbackErrorHandler()}" />` : ""}
         <span class="home-continue-badge">${escapeHtml(normalized.progressStatus || t("home.continueStatusContinue", {}, "Continue"))}</span>
         <div class="home-continue-copy">
           ${normalized.episodeCode ? `<div class="home-continue-kicker">${escapeHtml(normalized.episodeCode)}</div>` : ""}
@@ -7325,7 +7337,7 @@ export const HomeScreen = {
         continueWatchingLoading: Boolean(this.continueWatchingLoading),
         continueWatchingLoadingCount: effectiveContinueWatchingLoadingCount,
         useEpisodeThumbnailsInCw: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
-        blurContinueWatchingNextUp: Boolean(this.layoutPrefs?.blurContinueWatchingNextUp),
+        blurContinueWatchingNextUp: resolveContinueWatchingBlurNextUp(this.layoutPrefs),
         rowItemLimit,
         showHeroSection,
         showPosterLabels,
@@ -7353,7 +7365,7 @@ export const HomeScreen = {
         loading: Boolean(this.continueWatchingLoading),
         loadingCount: effectiveContinueWatchingLoadingCount,
         useEpisodeThumbnails: this.layoutPrefs?.useEpisodeThumbnailsInCw !== false,
-        blurNextUp: Boolean(this.layoutPrefs?.blurContinueWatchingNextUp)
+        blurNextUp: resolveContinueWatchingBlurNextUp(this.layoutPrefs)
       });
       const legacyRowsPayload = renderLegacyCatalogRowsMarkup(this.rows, {
         layoutMode: this.layoutMode,
@@ -7552,7 +7564,7 @@ export const HomeScreen = {
     }
     const images = Array.from(
       this.container.querySelectorAll(
-        ".home-main .content-poster[data-src], .home-main .home-poster-landscape-logo[data-src]"
+        ".home-main .content-poster[data-src], .home-main .home-poster-landscape-logo[data-src], .home-main .home-continue-bg[data-src]"
       )
     );
     if (!images.length) {
@@ -8664,6 +8676,13 @@ export const HomeScreen = {
     }
     this.pendingHomeLazyImageAnchor = null;
     this.homeTruncationScope = null;
+    if (this.boundHomeEventContainer) {
+      this.boundHomeEventContainer.removeEventListener("focusin", this.boundHomeFocusInHandler);
+      this.boundHomeEventContainer.removeEventListener("click", this.boundHomeClickHandler);
+      this.boundHomeEventContainer.removeEventListener("mouseover", this.boundHomeMouseOverHandler);
+      this.boundHomeEventContainer.removeEventListener("wheel", this.boundHomeWheelHandler);
+      this.boundHomeEventContainer = null;
+    }
     this.cachedModernPortraitPosterMetrics = null;
     this.cachedModernLandscapePosterMetrics = null;
     ScreenUtils.hide(this.container);
