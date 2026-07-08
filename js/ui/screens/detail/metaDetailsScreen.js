@@ -8807,6 +8807,10 @@ export const MetaDetailsScreen = {
     }
     this.stopEpisodeHoldRepeat();
     this.episodeThumbnailPrefetchCache = new Set();
+    if (this.episodeThumbObserver) {
+      try { this.episodeThumbObserver.disconnect(); } catch (_) {}
+      this.episodeThumbObserver = null;
+    }
     this.selectedSeasonEpisodeState = null;
     if (this.episodeTrackScrollNode && this.episodeTrackScrollHandler) {
       this.episodeTrackScrollNode.removeEventListener("scroll", this.episodeTrackScrollHandler);
