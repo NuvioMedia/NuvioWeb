@@ -18941,6 +18941,40 @@ html.no-css-grid .cast-detail-meta {
   background-color: transparent !important;
 }
 
+/* Keep poster focus feedback aligned with Android TV without restoring the
+   expensive home-wide animation set on constrained TV runtimes. */
+.performance-constrained .home-screen-shell.home-layout-classic .home-poster-card,
+.performance-constrained .home-screen-shell.home-layout-grid .home-poster-card {
+  transition: transform 160ms cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+.performance-constrained .home-screen-shell.home-layout-classic .home-poster-card.focused,
+.performance-constrained .home-screen-shell.home-layout-grid .home-poster-card.focused {
+  transform: translateZ(0) scale(1.02) !important;
+}
+
+/* Modern poster expansion only runs after focus settles, so its layout work
+   stays out of the D-pad scrolling path while preserving the Android motion. */
+.performance-constrained .home-screen-shell.home-layout-modern .home-poster-card {
+  transition:
+    flex-basis 180ms cubic-bezier(0.2, 0, 0, 1),
+    min-width 180ms cubic-bezier(0.2, 0, 0, 1),
+    max-width 180ms cubic-bezier(0.2, 0, 0, 1),
+    margin-top 180ms cubic-bezier(0.2, 0, 0, 1),
+    margin-bottom 180ms cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
+.performance-constrained
+  .home-screen-shell.home-layout-modern
+  .home-poster-card
+  .content-poster,
+.performance-constrained
+  .home-screen-shell.home-layout-modern
+  .home-poster-card
+  .home-poster-expanded-backdrop {
+  transition: opacity 180ms cubic-bezier(0.2, 0, 0, 1) !important;
+}
+
 .webos-pointer-remote .focusable {
   cursor: pointer;
 }

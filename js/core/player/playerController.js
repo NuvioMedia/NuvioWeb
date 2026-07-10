@@ -2029,6 +2029,7 @@ export const PlayerController = {
             return;
           }
           this.avplayReady = true;
+          this.reapplyAvPlayPlaybackRate();
           this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
         },
         oncurrentplaytime: (currentTimeMs) => {
@@ -2202,6 +2203,7 @@ export const PlayerController = {
         }
         this.refreshAvPlayTimeline();
         this.avplayReady = true;
+        this.reapplyAvPlayPlaybackRate();
         this.emitVideoEvent("seeked", { playbackEngine: this.playbackEngine });
         this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
       }, 120);
