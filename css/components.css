@@ -19302,6 +19302,14 @@ html.no-css-grid .cast-detail-meta {
     0 10px 28px rgba(0, 0, 0, 0.28);
 }
 
+/* webOS 4 parses CSS variables but not rgb(var(...) / alpha). Without this
+   final override, that invalid computed value turns stream cards transparent. */
+.legacy-webos .stream-route-card,
+.legacy-webos .stream-route-card.focused {
+  background: #222222 !important;
+  background: var(--card-bg) !important;
+}
+
 .stream-route-card.skeleton {
   display: block;
   min-height: 160px;

@@ -9,6 +9,8 @@ const ADDON_LOGO_CACHE_KEY = "nuvio.stream.addonLogoCache.v1";
 const ADDON_LOGO_CACHE_LIMIT = 36;
 const ADDON_LOGO_TV_CACHE_LIMIT = 12;
 const ADDON_LOGO_CACHE_MAX_LENGTH = 140000;
+const ADDON_LOGO_PRELOAD_CONCURRENCY_TV = 3;
+const ADDON_LOGO_PRELOAD_CONCURRENCY_DEFAULT = 6;
 
 let addonLogoCacheHydrated = false;
 let addonLogoCachePersistTimer = null;
@@ -125,7 +127,29 @@ export async function preloadAddonLogoImages(streams = [], lookup = {}) {
       urls.add(url);
     }
   });
-  await Promise.all(Array.from(urls).map((url) => warmAddonLogoPreview(url)));
+  await preloadAddonLogoUrls(urls);
+}
+
+export async function preloadAddonLogoUrls(urls = []) {
+  const pending = Array.from(new Set(Array.from(urls || []).map(normalizeAddonLogoUrl).filter(Boolean)));
+  if (!pending.length) {
+    return;
+  }
+
+  const concurrency = Environment.isWebOS() || Platform.isTizen()
+    ? ADDON_LOGO_PRELOAD_CONCURRENCY_TV
+    : ADDON_LOGO_PRELOAD_CONCURRENCY_DEFAULT;
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < pending.length) {
+      const url = pending[nextIndex];
+      nextIndex += 1;
+      await warmAddonLogoPreview(url);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, pending.length) }, () => worker())
+  );
 }
 
 export function requestAddonLogo(url = "", onSettled = null) {

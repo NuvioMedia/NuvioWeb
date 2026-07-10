@@ -26,6 +26,7 @@ import {
   normalizeAddonLogoLookup,
   normalizeAddonLogoUrl,
   preloadAddonLogoImages,
+  preloadAddonLogoUrls,
   rememberAddonLogoLookup,
   rememberFailedAddonLogo,
   requestAddonLogo,
@@ -414,6 +415,7 @@ async function ensureAddonLogoImageProxyReady() {
 }
 
 export async function preloadStreamBadgeImages(settings = StreamBadgeSettingsStore.snapshot()) {
+  await ensureAddonLogoImageProxyReady();
   const rules = normalizeStreamBadgeRules(settings?.rules);
   const urls = new Set();
   rules.imports.forEach((importItem) => {
@@ -424,7 +426,7 @@ export async function preloadStreamBadgeImages(settings = StreamBadgeSettingsSto
       }
     });
   });
-  await Promise.all(Array.from(urls).map((url) => requestAddonLogo(url)));
+  await preloadAddonLogoUrls(urls);
 }
 
 async function preloadMatchedStreamBadgeImages(
@@ -442,7 +444,7 @@ async function preloadMatchedStreamBadgeImages(
         }
       });
   });
-  await Promise.all(Array.from(urls).map((url) => requestAddonLogo(url)));
+  await preloadAddonLogoUrls(urls);
 }
 
 function getStreamHeadline(stream = {}) {

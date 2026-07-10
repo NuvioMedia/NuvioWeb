@@ -22,6 +22,7 @@ import { WatchProgressSyncService } from "./core/profile/watchProgressSyncServic
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
+import { preloadStreamBadgeImages } from "./ui/screens/stream/streamScreen.js";
 import { warmStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
@@ -234,6 +235,9 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
       ThemeManager.apply();
       I18n.apply();
     }
+    void preloadStreamBadgeImages().catch((error) => {
+      console.warn("Stream badge image prerender failed", error);
+    });
   }
   const resumeRoute = restoreWebOsRoute && typeof Router.consumeWebOsResumeRoute === "function"
     ? Router.consumeWebOsResumeRoute()

@@ -513,6 +513,12 @@ function isGenericAudioTrackLabel(value) {
     || normalized === "sound handler";
 }
 
+function isGenericSubtitleTrackLabel(value) {
+  const normalized = normalizeComparableText(value);
+  return /^subtitles?\s*\d*$/.test(normalized)
+    || /^text\s*\d*$/.test(normalized);
+}
+
 function getTrackMetadataStrings(track = {}) {
   const values = [];
   [
@@ -774,7 +780,7 @@ function getMeaningfulTrackLabel(track = {}) {
   const candidates = [track?.name, track?.label, track?.title];
   for (const candidate of candidates) {
     const text = cleanDisplayText(candidate);
-    if (!text || isGenericAudioTrackLabel(text)) {
+    if (!text || isGenericAudioTrackLabel(text) || isGenericSubtitleTrackLabel(text)) {
       continue;
     }
     if (normalizeTrackLanguageCode(text)) {
@@ -974,7 +980,8 @@ function getSubtitleEntryLanguageSource(entry = {}) {
   if (secondaryLanguage) {
     return secondaryLanguage;
   }
-  return entry.label || entry.title || "";
+  const fallbackLabel = entry.label || entry.title || "";
+  return isGenericSubtitleTrackLabel(fallbackLabel) ? "" : fallbackLabel;
 }
 
 function formatAudioCodecName(value) {

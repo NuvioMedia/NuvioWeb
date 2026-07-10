@@ -3,10 +3,12 @@ const PLAYER_SESSION_REASON = "player-session";
 
 const keepAwakeBindings = new WeakMap();
 const keepAwakeReasons = new Map();
+const keepAwakeLifecycleBindings = new WeakSet();
 
 let refreshTimer = null;
 let screenSaverBlocked = false;
 let wakeLock = null;
+let webOsAppInForeground = true;
 
 function getWebOsSystemObjects() {
   return Array.from(
@@ -14,9 +16,10 @@ function getWebOsSystemObjects() {
   ).filter((system) => typeof system.setWindowProperty === "function");
 }
 
-function isDocumentVisible() {
-  const state = String(document.visibilityState || document.webkitVisibilityState || "").toLowerCase();
-  return !state || state === "visible";
+function getWebOsLifecycleSystems() {
+  return Array.from(
+    new Set([globalThis.webOSSystem || null, globalThis.PalmSystem || null].filter(Boolean))
+  ).filter((system) => (typeof system === "object" || typeof system === "function"));
 }
 
 function setScreenSaverBlocked(blocked) {
@@ -50,10 +53,8 @@ function isVideoActivelyPlaying(videoElement) {
 }
 
 function hasActiveKeepAwakeReason() {
-  if (!isDocumentVisible()) {
-    return false;
-  }
-
+  // webOS can mark the document hidden while its native video layer is still
+  // playing. Visibility must not revoke the system screensaver block.
   keepAwakeReasons.forEach((shouldKeepAwake, reason) => {
     if (typeof shouldKeepAwake !== "function") {
       return;
@@ -70,7 +71,44 @@ function hasActiveKeepAwakeReason() {
     }
   });
 
-  return keepAwakeReasons.size > 0;
+  return webOsAppInForeground && keepAwakeReasons.size > 0;
+}
+
+function setWebOsAppForeground(inForeground) {
+  webOsAppInForeground = Boolean(inForeground);
+  refreshKeepAwake();
+}
+
+function bindWebOsAppLifecycle() {
+  getWebOsLifecycleSystems().forEach((system) => {
+    if (keepAwakeLifecycleBindings.has(system)) {
+      return;
+    }
+
+    const install = (callbackName, inForeground) => {
+      const previous = typeof system[callbackName] === "function" ? system[callbackName].bind(system) : null;
+      try {
+        system[callbackName] = (...args) => {
+          if (previous) {
+            try {
+              previous(...args);
+            } catch (_) {
+              // Keep the screensaver lifecycle independent from app callbacks.
+            }
+          }
+          setWebOsAppForeground(inForeground);
+        };
+      } catch (_) {
+        // Some older webOS runtimes expose readonly lifecycle callbacks.
+      }
+    };
+
+    install("onshow", true);
+    install("onactivate", true);
+    install("onhide", false);
+    install("ondeactivate", false);
+    keepAwakeLifecycleBindings.add(system);
+  });
 }
 
 function releaseWakeLock() {
@@ -164,11 +202,7 @@ function bindWebOsPlaybackKeepAwake(videoElement) {
   };
 
   const onVisibilityChange = () => {
-    if (isDocumentVisible()) {
-      sync();
-    } else {
-      refreshKeepAwake();
-    }
+    sync();
   };
 
   ["playing", "play", "timeupdate", "seeked", "ratechange", "loadeddata", "canplay"].forEach((eventName) => {
@@ -192,6 +226,7 @@ export const WebOSPlayerExtensions = {
     videoElement.setAttribute("playsinline", "");
     videoElement.setAttribute("webkit-playsinline", "");
     videoElement.setAttribute("preload", "auto");
+    bindWebOsAppLifecycle();
     bindWebOsPlaybackKeepAwake(videoElement);
   },
 
