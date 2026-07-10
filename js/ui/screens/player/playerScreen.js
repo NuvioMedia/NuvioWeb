@@ -3038,89 +3038,6 @@ export const PlayerScreen = {
     });
   },
 
-  hasMeaningfulPlaybackSourceContext(context = null) {
-    const normalized = this.normalizePlaybackSourceContext(context);
-    if (!normalized) {
-      return false;
-    }
-    const weakNames = new Set(["", "addon", "current", "stream"]);
-    return Boolean(
-      normalized.addonId
-      || normalized.addonBaseUrl
-      || (normalized.originKind === "plugin" && normalized.sourceProviderId)
-      || (normalized.addonName && !weakNames.has(normalizeComparableText(normalized.addonName)))
-    );
-  },
-
-  playbackSourceContextMatches(streamCandidate = null, context = null) {
-    const expected = this.normalizePlaybackSourceContext(context);
-    const actual = this.getPlaybackSourceContext(streamCandidate);
-    if (!expected || !actual) {
-      return false;
-    }
-    if (expected.addonId && actual.addonId && expected.addonId === actual.addonId) {
-      return true;
-    }
-    if (expected.addonBaseUrl && actual.addonBaseUrl && expected.addonBaseUrl === actual.addonBaseUrl) {
-      return true;
-    }
-    if (expected.addonId || expected.addonBaseUrl || actual.addonId || actual.addonBaseUrl) {
-      return false;
-    }
-    const addonNameMatches = Boolean(
-      expected.addonName
-      && actual.addonName
-      && normalizeComparableText(expected.addonName) === normalizeComparableText(actual.addonName)
-    );
-    if (addonNameMatches) {
-      return true;
-    }
-    const hasAddonIdentity = Boolean(expected.addonBaseUrl || expected.addonId || expected.addonName);
-    if (hasAddonIdentity) {
-      return false;
-    }
-    return Boolean(
-      expected.originKind === "plugin"
-      && actual.originKind === "plugin"
-      && expected.sourceProviderId
-      && actual.sourceProviderId
-      && expected.sourceProviderId === actual.sourceProviderId
-    );
-  },
-
-  filterStreamsForPlaybackSourceContext(streams = [], context = null) {
-    if (!Array.isArray(streams) || !streams.length) {
-      return [];
-    }
-    return streams.filter((stream) => this.playbackSourceContextMatches(stream, context));
-  },
-
-  playbackSourceContextLogPayload(context = null) {
-    const normalized = this.normalizePlaybackSourceContext(context) || {};
-    return {
-      addonId: normalized.addonId || null,
-      addonBaseUrl: normalized.addonBaseUrl || null,
-      addonName: normalized.addonName || null,
-      addonOrderIndex: normalized.addonOrderIndex,
-      originKind: normalized.originKind || null,
-      sourceProviderId: normalized.sourceProviderId || null,
-      sourceId: normalized.sourceId || null,
-      selectedStreamId: normalized.selectedStreamId || null,
-      selectedStreamIndex: normalized.selectedStreamIndex
-    };
-  },
-
-  withNextEpisodeSourceTimeout(promise) {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error("Next episode source resolution timed out"));
-      }, NEXT_EPISODE_SOURCE_RESOLVE_TIMEOUT_MS);
-      Promise.resolve(promise)
-        .then(resolve, reject)
-        .finally(() => clearTimeout(timer));
-    });
-  },
-
   isDebridPlaybackCandidate(streamCandidate = this.getCurrentStreamCandidate()) {
     const stream = streamCandidate?.raw || streamCandidate || {};
     const resolve = streamCandidate?.clientResolve || stream?.clientResolve || {};
@@ -6012,7 +5929,10 @@ export const PlayerScreen = {
     if (this.getCachedPlayableStreamsForVideo(nextEpisode.videoId, itemType) || loadPromises.has(cacheKey)) {
       return;
     }
-    void this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType)
+    void this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType, {
+      season: nextEpisode.season,
+      episode: nextEpisode.episode
+    })
       .then(() => this.renderNextEpisodeCard())
       .catch((error) => console.warn("Next episode stream prefetch failed", error));
   },
@@ -6119,7 +6039,7 @@ export const PlayerScreen = {
     return true;
   },
 
-  async getPlayableStreamsForVideo(videoId, itemType) {
+  async getPlayableStreamsForVideo(videoId, itemType, options = {}) {
     const normalizedVideoId = String(videoId || "").trim();
     const normalizedType = normalizeItemType(itemType || this.params?.itemType || "movie");
     if (!normalizedVideoId) {
@@ -6129,19 +6049,37 @@ export const PlayerScreen = {
     const cache = this.streamCandidatesByVideoId || (this.streamCandidatesByVideoId = new Map());
     if (cache.has(cacheKey)) {
       const cached = cache.get(cacheKey);
-      return Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [];
+      const cachedStreams = Array.isArray(cached) ? cached.map((stream) => ({ ...stream })) : [];
+      options.onChunk?.(cachedStreams);
+      return cachedStreams;
     }
     const loadPromises = this.streamCandidatesLoadPromises || (this.streamCandidatesLoadPromises = new Map());
     if (loadPromises.has(cacheKey)) {
       const loaded = await loadPromises.get(cacheKey);
-      return Array.isArray(loaded) ? loaded.map((stream) => ({ ...stream })) : [];
+      const loadedStreams = Array.isArray(loaded) ? loaded.map((stream) => ({ ...stream })) : [];
+      options.onChunk?.(loadedStreams);
+      return loadedStreams;
     }
 
-    const loadPromise = streamRepository.getStreamsFromAllAddons(normalizedType, normalizedVideoId)
+    let partialItems = [];
+    const loadPromise = streamRepository.getStreamsFromAllAddons(normalizedType, normalizedVideoId, {
+      itemId: String(this.params?.itemId || ""),
+      season: options.season ?? null,
+      episode: options.episode ?? null,
+      onChunk: (chunkResult) => {
+        const chunkItems = flattenStreamGroups(chunkResult);
+        if (!chunkItems.length) {
+          return;
+        }
+        partialItems = mergeStreamItems(partialItems, chunkItems);
+        options.onChunk?.(partialItems.map((stream) => ({ ...stream })));
+      }
+    })
       .then((streamResult) => {
-        const streamItems = (streamResult?.status === "success")
-          ? flattenStreamGroups(streamResult)
-          : [];
+        const streamItems = mergeStreamItems(
+          partialItems,
+          streamResult?.status === "success" ? flattenStreamGroups(streamResult) : []
+        );
         cache.set(cacheKey, streamItems.map((stream) => ({ ...stream })));
         return streamItems;
       })
@@ -6154,83 +6092,189 @@ export const PlayerScreen = {
     return streamItems;
   },
 
-  async resolveNextEpisodeStreamFromCurrentSource(nextEpisode, itemType) {
+  getCurrentStreamBingeGroup() {
     const currentStream = this.getStreamCandidateByUrl(this.activePlaybackUrl) || this.getCurrentStreamCandidate();
-    const sourceContext = this.getPlaybackSourceContext(currentStream) || this.activePlaybackSourceContext || null;
-    console.info("Next episode source resolution started", {
-      videoId: nextEpisode?.videoId || null,
-      itemType,
-      sourceContext: this.playbackSourceContextLogPayload(sourceContext)
-    });
-
-    if (!this.hasMeaningfulPlaybackSourceContext(sourceContext)) {
-      console.warn("Next episode source resolution blocked: missing active source context", {
-        videoId: nextEpisode?.videoId || null,
-        currentStreamId: currentStream?.id || null,
-        currentAddonName: currentStream?.addonName || null
-      });
-      return {
-        status: "missing_source_context",
-        sourceContext,
-        streamItems: [],
-        matchedStreams: [],
-        selectedStream: null
-      };
-    }
-
-    const streamItems = await this.withNextEpisodeSourceTimeout(
-      this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType)
-    );
-    const matchedStreams = this.filterStreamsForPlaybackSourceContext(streamItems, sourceContext);
-    const selectedStream = this.selectBestStreamCandidate(matchedStreams) || matchedStreams[0] || null;
-    console.info("Next episode source resolution completed", {
-      videoId: nextEpisode?.videoId || null,
-      requestedSource: this.playbackSourceContextLogPayload(sourceContext),
-      totalStreams: streamItems.length,
-      matchedStreams: matchedStreams.length,
-      selectedStreamId: selectedStream?.id || null,
-      selectedAddonId: selectedStream?.addonId || null,
-      selectedAddonName: selectedStream?.addonName || null,
-      selectedUrl: selectedStream?.url || selectedStream?.externalUrl || null
-    });
-
-    return {
-      status: selectedStream ? "success" : "no_streams_from_source",
-      sourceContext,
-      streamItems,
-      matchedStreams,
-      selectedStream
-    };
+    return String(
+      currentStream?.behaviorHints?.bingeGroup ||
+      currentStream?.raw?.behaviorHints?.bingeGroup ||
+      ""
+    ).trim();
   },
 
-  async selectNextEpisodeStreamByAutoPlayPolicy(streamItems = [], settings = PlayerSettingsStore.get()) {
+  async selectNextEpisodeStreamByAutoPlayPolicy(streamItems = [], settings = PlayerSettingsStore.get(), options = {}) {
     if (!Array.isArray(streamItems) || !streamItems.length) {
       return null;
     }
 
     const mode = String(settings.streamAutoPlayMode || "MANUAL").toUpperCase();
-    const shouldAutoSelectInManualMode = mode === "MANUAL" && Boolean(settings.autoplayNextEpisode);
-    const installedAddons = await addonRepository.getInstalledAddons().catch(() => []);
-    const installedAddonNames = new Set(
-      (installedAddons || [])
-        .map((addon) => String(addon?.displayName || addon?.name || "").trim())
-        .filter(Boolean)
+    const preferBingeGroup = Boolean(settings.streamAutoPlayPreferBingeGroupForNextEpisode);
+    const shouldAutoSelectInManualMode = mode === "MANUAL" && (
+      Boolean(settings.autoplayNextEpisode) || preferBingeGroup
     );
+    const bingeGroupOnlyManualMode = shouldAutoSelectInManualMode &&
+      !settings.autoplayNextEpisode && preferBingeGroup;
+    const installedAddonNames = options.installedAddonNames instanceof Set
+      ? options.installedAddonNames
+      : new Set(
+          ((await addonRepository.getInstalledAddons().catch(() => [])) || [])
+            .map((addon) => String(addon?.displayName || addon?.name || "").trim())
+            .filter(Boolean)
+        );
     return selectAutoPlayStream(streamItems, {
       mode: shouldAutoSelectInManualMode ? "FIRST_STREAM" : mode,
       source: shouldAutoSelectInManualMode
         ? "ALL_SOURCES"
         : String(settings.streamAutoPlaySource || "ALL_SOURCES"),
       regexPattern: shouldAutoSelectInManualMode ? "" : String(settings.streamAutoPlayRegex || ""),
-      installedAddonNames
+      installedAddonNames,
+      preferredBingeGroup: preferBingeGroup ? this.getCurrentStreamBingeGroup() : "",
+      preferBingeGroupInSelection: preferBingeGroup,
+      bingeGroupOnly: Boolean(options.bingeGroupOnly || bingeGroupOnlyManualMode)
     });
+  },
+
+  async resolveNextEpisodeStreamByAutoPlayPolicy(nextEpisode, itemType, settings) {
+    const installedAddonNames = new Set(
+      ((await addonRepository.getInstalledAddons().catch(() => [])) || [])
+        .map((addon) => String(addon?.displayName || addon?.name || "").trim())
+        .filter(Boolean)
+    );
+    let latestStreams = [];
+    let timeoutElapsed = Number(settings.streamAutoPlayTimeoutSeconds || 0) === 0;
+    const hasPreferredBingeGroup = Boolean(
+      settings.streamAutoPlayPreferBingeGroupForNextEpisode && this.getCurrentStreamBingeGroup()
+    );
+    let settled = false;
+    let resolveSelection;
+    let selectionTimer = null;
+    let hardTimeout = null;
+
+    const selection = new Promise((resolve) => {
+      resolveSelection = resolve;
+    });
+    const finish = (selectedStream, error = null) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(selectionTimer);
+      clearTimeout(hardTimeout);
+      resolveSelection({ selectedStream: selectedStream || null, streamItems: latestStreams, error });
+    };
+    const trySelect = async (bingeGroupOnly) => {
+      const selected = await this.selectNextEpisodeStreamByAutoPlayPolicy(
+        latestStreams,
+        settings,
+        { bingeGroupOnly, installedAddonNames }
+      );
+      if (selected) {
+        finish(selected);
+      }
+      return selected;
+    };
+    const onChunk = (streams) => {
+      latestStreams = Array.isArray(streams) ? streams : latestStreams;
+      void (async () => {
+        if (hasPreferredBingeGroup && await trySelect(true)) {
+          return;
+        }
+        if (timeoutElapsed) {
+          finish(await this.selectNextEpisodeStreamByAutoPlayPolicy(latestStreams, settings, { installedAddonNames }));
+        }
+      })();
+    };
+
+    const timeoutSeconds = Math.max(0, Math.trunc(Number(settings.streamAutoPlayTimeoutSeconds || 0)));
+    if (timeoutSeconds > 0) {
+      selectionTimer = setTimeout(() => {
+        timeoutElapsed = true;
+        if (latestStreams.length) {
+          void this.selectNextEpisodeStreamByAutoPlayPolicy(latestStreams, settings, { installedAddonNames })
+            .then((selected) => finish(selected));
+        }
+      }, timeoutSeconds * 1000);
+    }
+    hardTimeout = setTimeout(() => finish(null, new Error("Next episode stream selection timed out")), NEXT_EPISODE_SOURCE_RESOLVE_TIMEOUT_MS);
+
+    void this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType, {
+      season: nextEpisode.season,
+      episode: nextEpisode.episode,
+      onChunk
+    }).then(async (streams) => {
+      latestStreams = Array.isArray(streams) ? streams : latestStreams;
+      finish(await this.selectNextEpisodeStreamByAutoPlayPolicy(latestStreams, settings, { installedAddonNames }));
+    }).catch((error) => finish(null, error));
+
+    return selection;
+  },
+
+  async openNextEpisodeStreamPicker(nextEpisode, { streamItems = null, forceReload = true, error = null } = {}) {
+    let episodeIndex = this.episodes.findIndex(
+      (episode) => String(episode?.id || "") === String(nextEpisode?.videoId || "")
+    );
+    if (episodeIndex < 0) {
+      this.episodes = [
+        ...this.episodes,
+        {
+          id: nextEpisode.videoId,
+          season: nextEpisode.season ?? null,
+          episode: nextEpisode.episode ?? null,
+          title: nextEpisode.episodeTitle || nextEpisode.episodeLabel || ""
+        }
+      ];
+      episodeIndex = this.episodes.length - 1;
+    }
+
+    this.nextEpisodeLaunching = false;
+    this.loadingVisible = false;
+    this.nextEpisodeTransitionMeta = null;
+    this.updateLoadingVisibility();
+    this.refreshLoadingOverlayPresentation();
+    this.setControlsVisible(true, { focus: false });
+    this.episodePanelIndex = episodeIndex;
+    this.episodePanelVisible = true;
+    this.episodePanelMode = "streams";
+    this.episodePanelStreamVideoId = String(nextEpisode.videoId || "");
+    this.episodePanelStreamFilter = "all";
+    this.episodePanelStreamsError = error ? t("panel_failed_load_streams", {}, "Failed to load streams") : "";
+    this.episodePanelStreamsLoading = !Array.isArray(streamItems);
+    this.episodePanelStreams = Array.isArray(streamItems) ? streamItems : [];
+    this.episodePanelStreamFocus = this.episodePanelStreams.length
+      ? { zone: "streams", index: 0 }
+      : { zone: "actions", index: 0 };
+    this.subtitleDialogVisible = false;
+    this.audioDialogVisible = false;
+    this.speedDialogVisible = false;
+    this.sourcesPanelVisible = false;
+    this.syncEpisodePanelSeasonToIndex();
+    this.updateModalBackdrop();
+    this.renderSubtitleDialog();
+    this.renderAudioDialog();
+    this.renderSpeedDialog();
+    this.renderSourcesPanel();
+    this.renderEpisodePanel();
+
+    if (!Array.isArray(streamItems)) {
+      await this.openEpisodeStreamsView({ forceReload });
+    }
+    return true;
   },
 
   async playNextEpisode({ userInitiated = false } = {}) {
     const nextEpisode = this.resolveNextEpisodeInfo();
     const itemType = normalizeItemType(this.params?.itemType || "movie");
     if (!nextEpisode?.videoId || itemType !== "series" || nextEpisode.hasAired === false || this.nextEpisodeLaunching) {
-      return;
+      return false;
+    }
+
+    const settings = PlayerSettingsStore.get();
+    const mode = String(settings.streamAutoPlayMode || "MANUAL").toUpperCase();
+    const shouldAutoSelectInManualMode = mode === "MANUAL" && (
+      Boolean(settings.autoplayNextEpisode) ||
+      Boolean(settings.streamAutoPlayPreferBingeGroupForNextEpisode)
+    );
+    if (mode === "MANUAL" && !shouldAutoSelectInManualMode) {
+      return this.openNextEpisodeStreamPicker(nextEpisode, { forceReload: true });
     }
 
     this.nextEpisodeLaunching = true;
@@ -6250,45 +6294,23 @@ export const PlayerScreen = {
     this.renderNextEpisodeCard();
 
     try {
-      const resolution = await this.resolveNextEpisodeStreamFromCurrentSource(nextEpisode, itemType);
-      let streamItems = Array.isArray(resolution.streamItems) ? resolution.streamItems : [];
-      if (!streamItems.length) {
-        streamItems = await this.withNextEpisodeSourceTimeout(
-          this.getPlayableStreamsForVideo(nextEpisode.videoId, itemType)
-        );
-      }
-      const settings = PlayerSettingsStore.get();
-      const selectedByAutoPlayPolicy = resolution.selectedStream
-        ? null
-        : await this.selectNextEpisodeStreamByAutoPlayPolicy(streamItems, settings);
-      const selectedStream = resolution.selectedStream || selectedByAutoPlayPolicy || null;
+      const resolution = await this.resolveNextEpisodeStreamByAutoPlayPolicy(nextEpisode, itemType, settings);
+      const streamItems = Array.isArray(resolution.streamItems) ? resolution.streamItems : [];
+      const selectedStream = resolution.selectedStream || null;
 
       if (!selectedStream) {
-        const sourceLabel = resolution.sourceContext?.addonName || resolution.sourceContext?.addonId || resolution.sourceContext?.sourceProviderId || t("sources_title", {}, "source");
-        console.warn("Next episode source resolution failed", {
-          status: resolution.status,
+        console.warn("Next episode auto-selection did not find a stream; opening picker", {
           videoId: nextEpisode.videoId,
-          sourceContext: this.playbackSourceContextLogPayload(resolution.sourceContext),
           totalStreams: streamItems.length,
-          matchedStreams: resolution.matchedStreams?.length || 0
+          mode,
+          preferBingeGroup: Boolean(settings.streamAutoPlayPreferBingeGroupForNextEpisode),
+          error: resolution.error?.message || null
         });
-        this.nextEpisodeLaunching = false;
-        this.loadingVisible = false;
-        this.updateLoadingVisibility();
-        this.setControlsVisible(true, { focus: false });
-        this.renderNextEpisodeCard();
-        this.nextEpisodeTransitionMeta = null;
-        this.refreshLoadingOverlayPresentation();
-        const errorMessage = resolution.status === "missing_source_context"
-          ? t("next_episode_source_context_missing", {}, "Could not identify the current source. Choose a source manually.")
-          : t("next_episode_source_unavailable", [sourceLabel], "No stream is available from %1$s for the next episode. Choose another source manually.");
-        this.showStartupError(errorMessage, {
-          streamCandidate: resolution.selectedStream || this.getCurrentStreamCandidate(),
-          reason: "next-episode-resolve",
-          resolverStatus: resolution.status,
-          resolverDetail: `totalStreams=${streamItems.length}, matchedStreams=${resolution.matchedStreams?.length || 0}`
+        return this.openNextEpisodeStreamPicker(nextEpisode, {
+          streamItems: resolution.error ? null : streamItems,
+          forceReload: Boolean(resolution.error),
+          error: resolution.error
         });
-        return;
       }
       const bestStreamCandidate = selectedStream;
       const bestStream = streamDirectPlaybackUrl(bestStreamCandidate) || null;
@@ -6332,20 +6354,10 @@ export const PlayerScreen = {
       }, {
         replaceHistory: true
       });
+      return true;
     } catch (error) {
       console.warn("Next episode play failed", error);
-      this.nextEpisodeLaunching = false;
-      this.loadingVisible = false;
-      this.updateLoadingVisibility();
-      this.setControlsVisible(true, { focus: false });
-      this.renderNextEpisodeCard();
-      this.nextEpisodeTransitionMeta = null;
-      this.refreshLoadingOverlayPresentation();
-      this.showStartupError(t("next_episode_source_error", {}, "Could not load the next episode from the current source. Choose another source manually."), {
-        error,
-        streamCandidate: this.getCurrentStreamCandidate(),
-        reason: "next-episode-play"
-      });
+      return this.openNextEpisodeStreamPicker(nextEpisode, { forceReload: true, error });
     }
   },
 
@@ -14074,7 +14086,10 @@ export const PlayerScreen = {
     const token = Number(this.episodePanelStreamLoadToken || 0) + 1;
     this.episodePanelStreamLoadToken = token;
     try {
-      const streams = await this.getPlayableStreamsForVideo(selected.id, itemType);
+      const streams = await this.getPlayableStreamsForVideo(selected.id, itemType, {
+        season: selected.season,
+        episode: selected.episode
+      });
       if (
         token !== this.episodePanelStreamLoadToken ||
         !this.episodePanelVisible ||
@@ -14577,7 +14592,10 @@ export const PlayerScreen = {
       const itemType = this.params?.itemType || "series";
       const streamItems = selectedStream
         ? this.episodePanelStreams
-        : await this.getPlayableStreamsForVideo(selected.id, itemType);
+        : await this.getPlayableStreamsForVideo(selected.id, itemType, {
+          season: selected.season,
+          episode: selected.episode
+        });
       if (!streamItems.length) {
         return;
       }
@@ -15652,8 +15670,8 @@ export const PlayerScreen = {
     const autoplayEnabled = Boolean(PlayerSettingsStore.get().autoplayNextEpisode);
     const canAutoplayNext = autoplayEnabled && this.hasPlaybackReachedNaturalEnd();
     if (canAutoplayNext) {
-      await this.playNextEpisode({ userInitiated: false });
-      if (this.nextEpisodeLaunching || Router.getCurrent() !== "player") {
+      const nextEpisodeHandled = await this.playNextEpisode({ userInitiated: false });
+      if (nextEpisodeHandled || this.nextEpisodeLaunching || Router.getCurrent() !== "player") {
         return;
       }
     }

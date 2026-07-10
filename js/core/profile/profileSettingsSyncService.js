@@ -893,6 +893,9 @@ const FEATURE_ADAPTERS = {
         persist_audio_amplification: Boolean(settings.persistAudioAmplification),
         skip_intro_enabled: Boolean(settings.skipIntroEnabled),
         stream_auto_play_next_episode_enabled: Boolean(settings.autoplayNextEpisode),
+        stream_auto_play_prefer_bingegroup_next_episode: Boolean(
+          settings.streamAutoPlayPreferBingeGroupForNextEpisode
+        ),
         still_watching_enabled: Boolean(settings.stillWatchingEnabled),
         still_watching_episode_threshold: normalizeStillWatchingThresholdForSync(
           settings.stillWatchingEpisodeThreshold
@@ -948,6 +951,7 @@ const FEATURE_ADAPTERS = {
         "persist_audio_amplification",
         "skip_intro_enabled",
         "stream_auto_play_next_episode_enabled",
+        "stream_auto_play_prefer_bingegroup_next_episode",
         "still_watching_enabled"
       ].forEach((key) => {
         if (booleanOrNull(raw[key]) != null) {
@@ -1084,6 +1088,11 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.stream_auto_play_next_episode_enabled) != null) {
         partial.autoplayNextEpisode = Boolean(raw.stream_auto_play_next_episode_enabled);
+      }
+      if (booleanOrNull(raw.stream_auto_play_prefer_bingegroup_next_episode) != null) {
+        partial.streamAutoPlayPreferBingeGroupForNextEpisode = Boolean(
+          raw.stream_auto_play_prefer_bingegroup_next_episode
+        );
       }
       if (booleanOrNull(raw.still_watching_enabled) != null) {
         partial.stillWatchingEnabled = Boolean(raw.still_watching_enabled);

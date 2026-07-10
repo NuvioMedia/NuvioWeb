@@ -34,6 +34,7 @@ const DEFAULTS = {
   streamAutoPlayMode: "MANUAL",
   streamAutoPlaySource: "ALL_SOURCES",
   streamAutoPlayRegex: "",
+  streamAutoPlayPreferBingeGroupForNextEpisode: true,
   streamAutoPlayTimeoutSeconds: 3
 };
 
@@ -159,6 +160,10 @@ function normalizePlayerSettings(settings = {}) {
     streamAutoPlayMode: normalizeStreamAutoPlayMode(persistentSettings.streamAutoPlayMode ?? DEFAULTS.streamAutoPlayMode),
     streamAutoPlaySource: normalizeStreamAutoPlaySource(persistentSettings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource),
     streamAutoPlayRegex: String(persistentSettings.streamAutoPlayRegex ?? "").slice(0, 500),
+    streamAutoPlayPreferBingeGroupForNextEpisode: Boolean(
+      persistentSettings.streamAutoPlayPreferBingeGroupForNextEpisode ??
+      DEFAULTS.streamAutoPlayPreferBingeGroupForNextEpisode
+    ),
     streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(persistentSettings.streamAutoPlayTimeoutSeconds),
     nextEpisodeThresholdMode: normalizeNextEpisodeThresholdMode(
       persistentSettings.nextEpisodeThresholdMode ?? DEFAULTS.nextEpisodeThresholdMode

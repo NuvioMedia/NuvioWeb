@@ -57,6 +57,10 @@ export function isAutoPlayEffectivelyEnabled(settings = {}) {
 // auto-play never lands on a non-video page.
 function isPlayableStream(stream = {}) {
   const resolve = stream?.clientResolve || stream?.raw?.clientResolve || {};
+  const debridState = String(stream?.debridCacheStatus?.state || "").trim().toUpperCase();
+  if (["CHECKING", "NOT_CACHED", "UNKNOWN"].includes(debridState)) {
+    return false;
+  }
   return Boolean(
     stream && (
       stream.url ||
@@ -69,6 +73,14 @@ function isPlayableStream(stream = {}) {
       stream.debridCacheStatus
     )
   );
+}
+
+function streamBingeGroup(stream = {}) {
+  return String(
+    stream?.behaviorHints?.bingeGroup ||
+    stream?.raw?.behaviorHints?.bingeGroup ||
+    ""
+  ).trim();
 }
 
 function streamSearchableText(stream = {}) {
@@ -127,12 +139,43 @@ export function selectAutoPlayStream(streams, options = {}) {
     return null;
   }
   const mode = normalizeMode(options.mode);
-  if (mode === STREAM_AUTO_PLAY_MODE.MANUAL) {
+  const source = normalizeSource(options.source);
+  const installedAddonNames = options.installedAddonNames instanceof Set
+    ? options.installedAddonNames
+    : new Set(Array.isArray(options.installedAddonNames) ? options.installedAddonNames : []);
+  const selectedAddons = options.selectedAddons instanceof Set
+    ? options.selectedAddons
+    : new Set(Array.isArray(options.selectedAddons) ? options.selectedAddons : []);
+  const selectedPlugins = options.selectedPlugins instanceof Set
+    ? options.selectedPlugins
+    : new Set(Array.isArray(options.selectedPlugins) ? options.selectedPlugins : []);
+  const candidates = scopeStreamsBySource(list, source, installedAddonNames).filter((stream) => {
+    const addonName = String(stream?.addonName || "");
+    const isAddonStream = installedAddonNames.has(addonName);
+    return isAddonStream
+      ? (!selectedAddons.size || selectedAddons.has(addonName))
+      : (!selectedPlugins.size || selectedPlugins.has(addonName));
+  });
+  if (!candidates.length) {
     return null;
   }
-  const source = normalizeSource(options.source);
-  const candidates = scopeStreamsBySource(list, source, options.installedAddonNames);
-  if (!candidates.length) {
+
+  // Android gives an exact binge-group match priority over the normal mode,
+  // including MANUAL. In bingeGroupOnly mode, a miss must open the picker.
+  const preferredBingeGroup = String(options.preferredBingeGroup || "").trim();
+  if (options.preferBingeGroupInSelection && preferredBingeGroup) {
+    const bingeGroupMatch = candidates.find((stream) => (
+      streamBingeGroup(stream) === preferredBingeGroup && isPlayableStream(stream)
+    ));
+    if (bingeGroupMatch) {
+      return bingeGroupMatch;
+    }
+    if (options.bingeGroupOnly) {
+      return null;
+    }
+  }
+
+  if (mode === STREAM_AUTO_PLAY_MODE.MANUAL) {
     return null;
   }
 

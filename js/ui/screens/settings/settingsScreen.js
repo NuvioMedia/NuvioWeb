@@ -4776,6 +4776,12 @@ export const SettingsScreen = {
         autoplayNextEpisode: !PlayerSettingsStore.get().autoplayNextEpisode
       });
     });
+    this.actionMap.set("playback:preferBingeGroup", () => {
+      PlayerSettingsStore.set({
+        streamAutoPlayPreferBingeGroupForNextEpisode:
+          !PlayerSettingsStore.get().streamAutoPlayPreferBingeGroupForNextEpisode
+      });
+    });
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
@@ -5028,6 +5034,12 @@ export const SettingsScreen = {
           title: t("settings.playback.autoplayNextEpisode.title"),
           subtitle: t("settings.playback.autoplayNextEpisode.subtitle"),
           checked: Boolean(model.player.autoplayNextEpisode)
+        })}
+        ${this.renderToggleRow({
+          focusKey: "playback:preferBingeGroup",
+          title: t("settings.playback.preferBingeGroup.title", {}, "Prefer Binge Group (Next Episode)"),
+          subtitle: t("settings.playback.preferBingeGroup.subtitle", {}, "Try the same source profile first before normal auto-play rules."),
+          checked: Boolean(model.player.streamAutoPlayPreferBingeGroupForNextEpisode)
         })}
         ${this.renderToggleRow({
           focusKey: "playback:skipIntro",

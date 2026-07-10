@@ -250,6 +250,8 @@ const KEY_ALIASES = {
   "settings.layout.trailerTargets.heroMedia": "layout_trailer_hero_media",
   "settings.playback.autoplayNextEpisode.subtitle": "autoplay_next_episode_sub",
   "settings.playback.autoplayNextEpisode.title": "autoplay_next_episode",
+  "settings.playback.preferBingeGroup.subtitle": "autoplay_prefer_binge_group_sub",
+  "settings.playback.preferBingeGroup.title": "autoplay_prefer_binge_group",
   "settings.playback.autoplayTrailer.subtitle": "audio_autoplay_trailers_sub",
   "settings.playback.autoplayTrailer.title": "audio_autoplay_trailers",
   "settings.playback.skipIntro.subtitle": "playback_skip_intro_sub",
