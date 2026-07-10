@@ -112,7 +112,16 @@ class StreamRepository {
       try {
         const canStream = supportsStreamType(addon);
         const canMeta = supportsMetaType(addon);
-        if (!canStream && !canMeta) {
+        // Meta-only stream discovery is a compatibility path for debrid cloud
+        // items, which are exposed through the `other` type. Regular movie/series
+        // metadata addons must not be queried as stream sources.
+        const shouldTryInlineMetaStreams =
+          canMeta &&
+          (canStream ||
+            String(type || "")
+              .trim()
+              .toLowerCase() === "other");
+        if (!canStream && !shouldTryInlineMetaStreams) {
           return null;
         }
         const orderIndex = Number(addon.orderIndex ?? Number.MAX_SAFE_INTEGER);
@@ -127,7 +136,7 @@ class StreamRepository {
         // Some addons (e.g. debrid cloud catalogs) deliver the playable stream
         // inline in the meta's videos[].streams[] and only expose a meta resource
         // for the content type, not a stream resource. Fall back to that here.
-        if (addonStreams.length === 0 && canMeta) {
+        if (addonStreams.length === 0 && shouldTryInlineMetaStreams) {
           addonStreams = await this.fetchInlineStreamsFromMeta(addon, type, videoId);
         }
         if (addonStreams.length === 0) {
