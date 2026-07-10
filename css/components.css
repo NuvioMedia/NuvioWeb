@@ -10785,15 +10785,12 @@ button:focus-visible {
 
 .player-html-subtitles {
   position: absolute;
-  right: 5vw;
-  bottom: calc(8vh + var(--player-subtitle-offset));
-  left: 5vw;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  inset: 0;
   z-index: 12;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.18em;
   color: var(--player-subtitle-color);
   font-size: var(--player-html-subtitle-font-size);
   font-weight: var(--player-subtitle-font-weight);
@@ -10805,6 +10802,56 @@ button:focus-visible {
 
 .player-html-subtitles.hidden {
   display: none;
+}
+
+.player-html-subtitle-cue {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18em;
+  max-width: 90vw;
+}
+
+.player-html-subtitle-default {
+  right: 5vw;
+  bottom: calc(8vh + var(--player-subtitle-offset));
+  left: 5vw;
+  align-items: center;
+}
+
+.player-html-subtitle-default.player-html-subtitle-align-start {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.player-html-subtitle-default.player-html-subtitle-align-end {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.player-html-subtitle-positioned {
+  transform: translateY(-50%) translateY(var(--player-subtitle-offset));
+}
+
+.player-html-subtitle-positioned.player-html-subtitle-align-start {
+  right: 30vw;
+  left: 5vw;
+  align-items: flex-start;
+  text-align: left;
+}
+
+.player-html-subtitle-positioned.player-html-subtitle-align-center {
+  right: 5vw;
+  left: 5vw;
+  align-items: center;
+  text-align: center;
+}
+
+.player-html-subtitle-positioned.player-html-subtitle-align-end {
+  right: 5vw;
+  left: 30vw;
+  align-items: flex-end;
+  text-align: right;
 }
 
 .player-html-subtitle-line {

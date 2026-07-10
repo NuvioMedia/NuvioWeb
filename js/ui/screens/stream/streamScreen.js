@@ -3,6 +3,7 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
+import { isWatchProgressInProgress } from "../../../domain/model/watchProgress.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import {
   selectAutoPlayStream,
@@ -2287,9 +2288,15 @@ export const StreamScreen = {
     const playerStreamCandidates = this.getFilteredStreams();
     const itemType = normalizeType(this.params?.itemType);
     const startFromBeginning = Boolean(this.params?.startFromBeginning);
-    let resumePositionMs = startFromBeginning ? 0 : Number(this.params?.resumePositionMs || 0) || 0;
-    let resumeProgressPercent = startFromBeginning ? null : this.params?.resumeProgressPercent;
-    let resumeDurationMs = startFromBeginning ? 0 : Number(this.params?.resumeDurationMs || 0) || 0;
+    const routeResumeProgress = {
+      positionMs: Number(this.params?.resumePositionMs || 0) || 0,
+      progressPercent: this.params?.resumeProgressPercent,
+      durationMs: Number(this.params?.resumeDurationMs || 0) || 0
+    };
+    const hasRouteResume = !startFromBeginning && isWatchProgressInProgress(routeResumeProgress);
+    let resumePositionMs = hasRouteResume ? routeResumeProgress.positionMs : 0;
+    let resumeProgressPercent = hasRouteResume ? routeResumeProgress.progressPercent : null;
+    let resumeDurationMs = hasRouteResume ? routeResumeProgress.durationMs : 0;
     if (!startFromBeginning && resumePositionMs <= 0 && !(Number(resumeProgressPercent) > 0)) {
       const resumeProgress = await watchProgressRepository
         .getResumeByContentId(this.params?.itemId, {

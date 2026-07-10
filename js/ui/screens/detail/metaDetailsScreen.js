@@ -4383,7 +4383,7 @@ export const MetaDetailsScreen = {
       };
     }
     const resume = progress || this.getActiveResumeProgress();
-    if (!resume) {
+    if (!resume || !isWatchProgressInProgress(resume)) {
       return {};
     }
     const params = {

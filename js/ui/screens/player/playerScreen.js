@@ -12,6 +12,7 @@ import {
   requestAddonLogo
 } from "../../../core/media/addonLogoCache.js";
 import { localMediaTracksRepository } from "../../../data/repository/localMediaTracksRepository.js";
+import { localMediaSubtitleRepository } from "../../../data/repository/localMediaSubtitleRepository.js";
 import { subtitleRepository } from "../../../data/repository/subtitleRepository.js";
 import { streamRepository } from "../../../data/repository/streamRepository.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
@@ -37,6 +38,11 @@ import {
   shouldEnterStillWatchingPrompt,
   shouldShowNextEpisodeCard as shouldShowNextEpisodeCardRule
 } from "./playerNextEpisodeRules.js";
+import {
+  getSubtitleAssAlignment,
+  getSubtitleAssAlignmentSettings,
+  parseVttCueLayout
+} from "../../../core/player/subtitleCueLayout.js";
 
 const CLOCK_FORMATTER_CACHE = new Map();
 const LANGUAGE_DISPLAY_NAME_CACHE = new Map();
@@ -2034,6 +2040,8 @@ export const PlayerScreen = {
     this.htmlSubtitleSelectedId = null;
     this.subtitleCueStyleBindings = new Map();
     this.subtitleCueOriginalState = new WeakMap();
+    this.embeddedSubtitleCueRefreshTimers = new Set();
+    this.webOsEmbeddedCueRefreshApplied = false;
 
     this.audioDialogVisible = false;
     this.audioDialogIndex = 0;
@@ -6479,6 +6487,54 @@ export const PlayerScreen = {
     this.subtitleCueStyleBindings.clear();
   },
 
+  clearEmbeddedSubtitleCueRefreshTimers() {
+    if (this.embeddedSubtitleCueRefreshTimers instanceof Set) {
+      this.embeddedSubtitleCueRefreshTimers.forEach((timerId) => clearTimeout(timerId));
+      this.embeddedSubtitleCueRefreshTimers.clear();
+    } else {
+      this.embeddedSubtitleCueRefreshTimers = new Set();
+    }
+    this.webOsEmbeddedCueRefreshApplied = false;
+  },
+
+  refreshWebOsEmbeddedSubtitleAfterCueMutation() {
+    if (
+      !Environment.isWebOS()
+      || this.webOsEmbeddedCueRefreshApplied
+      || this.selectedEmbeddedSubtitleTrackIndex < 0
+    ) {
+      return;
+    }
+    this.webOsEmbeddedCueRefreshApplied = true;
+    this.refreshSubtitleTrackRendering();
+  },
+
+  scheduleEmbeddedSubtitleCueRefresh() {
+    if (this.embeddedSubtitleCueRefreshTimers instanceof Set) {
+      this.embeddedSubtitleCueRefreshTimers.forEach((timerId) => clearTimeout(timerId));
+      this.embeddedSubtitleCueRefreshTimers.clear();
+    } else {
+      this.embeddedSubtitleCueRefreshTimers = new Set();
+    }
+    if (!Environment.isWebOS() || this.selectedEmbeddedSubtitleTrackIndex < 0) {
+      return;
+    }
+    const selectedIndex = this.selectedEmbeddedSubtitleTrackIndex;
+    [0, 400, 1200].forEach((delayMs) => {
+      const timerId = setTimeout(() => {
+        this.embeddedSubtitleCueRefreshTimers?.delete?.(timerId);
+        if (this.selectedEmbeddedSubtitleTrackIndex !== selectedIndex) {
+          return;
+        }
+        const changed = this.refreshSubtitleCueStyles();
+        if (changed) {
+          this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
+        }
+      }, delayMs);
+      this.embeddedSubtitleCueRefreshTimers.add(timerId);
+    });
+  },
+
   getSubtitleCueSnapshot(cue) {
     if (!cue || typeof cue !== "object") {
       return null;
@@ -6589,25 +6645,15 @@ export const PlayerScreen = {
   },
 
   getSubtitleAssAlignment(content) {
-    const match = String(content || "").match(/\{[^}]*\\an([1-9])\b[^}]*\}/i);
-    return match ? Number(match[1]) : 0;
+    return getSubtitleAssAlignment(content);
   },
 
   hasSubtitleAssSyntax(content) {
-    return /\{[^}]*\\[a-z0-9]+[^}]*\}|\\[Nnh]/i.test(String(content || ""));
+    return /\{[^}]*[\\/][a-z0-9]+[^}]*\}|\\[Nnh]/i.test(String(content || ""));
   },
 
   getSubtitleAssAlignmentSettings(alignment) {
-    const value = Number(alignment || 0);
-    if (value < 1 || value > 9) {
-      return null;
-    }
-    const column = ((value - 1) % 3) + 1;
-    const row = Math.ceil(value / 3);
-    return {
-      line: row === 3 ? 10 : (row === 2 ? 50 : 90),
-      align: column === 1 ? "start" : (column === 3 ? "end" : "center")
-    };
+    return getSubtitleAssAlignmentSettings(alignment);
   },
 
   applySubtitleAssAlignmentToCue(cue, alignment) {
@@ -6727,20 +6773,22 @@ export const PlayerScreen = {
     const allCues = this.getSubtitleCueArray(track?.cues);
     const activeCues = this.getSubtitleCueArray(track?.activeCues);
     const seen = new Set();
+    let changed = false;
     [...allCues, ...activeCues].forEach((cue) => {
       if (!cue || seen.has(cue)) {
         return;
       }
       seen.add(cue);
-      this.sanitizeSubtitleCueText(cue, track);
+      changed = this.sanitizeSubtitleCueText(cue, track) || changed;
     });
+    return changed;
   },
 
   syncSubtitleCueStylesForTrack(track) {
     if (!track) {
-      return;
+      return false;
     }
-    this.sanitizeSubtitleCuesForTrack(track);
+    const subtitleTextChanged = this.sanitizeSubtitleCuesForTrack(track);
     const style = this.subtitleStyleSettings || {};
     const verticalOffset = normalizeSubtitleVerticalOffset(style.verticalOffset);
     const allCues = this.getSubtitleCueArray(track.cues);
@@ -6755,21 +6803,25 @@ export const PlayerScreen = {
       this.applySubtitleCueDelay(cue, snapshot, this.subtitleDelayMs);
       this.applySubtitleCueVerticalOffset(cue, snapshot, verticalOffset);
     });
+    return subtitleTextChanged;
   },
 
   refreshSubtitleCueStyles() {
     const tracks = this.getSubtitleCueTrackList();
     if (!tracks.length) {
-      return;
+      return false;
     }
 
+    let subtitleTextChanged = false;
     tracks.forEach((track) => {
       if (!track) {
         return;
       }
       if (typeof track.addEventListener === "function" && !this.subtitleCueStyleBindings.has(track)) {
         const handler = () => {
-          this.syncSubtitleCueStylesForTrack(track);
+          if (this.syncSubtitleCueStylesForTrack(track)) {
+            this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
+          }
         };
         try {
           track.addEventListener("cuechange", handler);
@@ -6778,12 +6830,33 @@ export const PlayerScreen = {
           // Ignore listener registration failures.
         }
       }
-      this.syncSubtitleCueStylesForTrack(track);
+      subtitleTextChanged = this.syncSubtitleCueStylesForTrack(track) || subtitleTextChanged;
     });
+    return subtitleTextChanged;
   },
 
   refreshSubtitleTrackRendering() {
     if (Environment.isWebOS()) {
+      if (
+        this.selectedEmbeddedSubtitleTrackIndex < 0
+        || typeof PlayerController.setWebOsEmbeddedSubtitleTrack !== "function"
+      ) {
+        return;
+      }
+      const selectedIndex = this.selectedEmbeddedSubtitleTrackIndex;
+      const embeddedTrack = this.getEmbeddedSubtitleTrackByEmbeddedIndex(selectedIndex);
+      const nativeTrackIndex = Number(embeddedTrack?.nativeTrackIndex);
+      const targetTrackIndex = Number.isFinite(nativeTrackIndex) && nativeTrackIndex >= 0
+        ? nativeTrackIndex
+        : selectedIndex;
+      const timerId = setTimeout(() => {
+        this.embeddedSubtitleCueRefreshTimers?.delete?.(timerId);
+        if (this.selectedEmbeddedSubtitleTrackIndex !== selectedIndex) {
+          return;
+        }
+        PlayerController.setWebOsEmbeddedSubtitleTrack(targetTrackIndex, selectedIndex);
+      }, 50);
+      this.embeddedSubtitleCueRefreshTimers.add(timerId);
       return;
     }
     const restoreTrackMode = typeof requestAnimationFrame === "function"
@@ -6807,17 +6880,6 @@ export const PlayerScreen = {
       });
     });
 
-    if (Environment.isWebOS()
-      && this.selectedEmbeddedSubtitleTrackIndex >= 0
-      && typeof PlayerController.setWebOsEmbeddedSubtitleTrack === "function") {
-      const selectedIndex = this.selectedEmbeddedSubtitleTrackIndex;
-      setTimeout(() => {
-        if (this.selectedEmbeddedSubtitleTrackIndex !== selectedIndex) {
-          return;
-        }
-        PlayerController.setWebOsEmbeddedSubtitleTrack(selectedIndex);
-      }, 50);
-    }
   },
 
   updateModalBackdrop() {
@@ -7061,6 +7123,9 @@ export const PlayerScreen = {
 
     const onTrackListChanged = () => {
       this.refreshTrackDialogs();
+      if (this.refreshSubtitleCueStyles()) {
+        this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
+      }
       if (this.trackDiscoveryInProgress && this.hasAudioTracksAvailable() && this.hasSubtitleTracksAvailable()) {
         this.trackDiscoveryInProgress = false;
         this.clearTrackDiscoveryTimer();
@@ -8685,6 +8750,7 @@ export const PlayerScreen = {
     this.markPlaybackProgress();
     this.clearPlaybackStallGuard();
     this.clearSubtitleCueStyleBindings();
+    this.clearEmbeddedSubtitleCueRefreshTimers();
     if (resetSilentAudioState) {
       this.silentAudioFallbackAttempts.clear();
       this.silentAudioFallbackCount = 0;
@@ -9689,6 +9755,7 @@ export const PlayerScreen = {
   },
 
   disableEmbeddedSubtitleSelection() {
+    this.clearEmbeddedSubtitleCueRefreshTimers();
     if (this.selectedEmbeddedSubtitleTrackIndex < 0) {
       return;
     }
@@ -10031,6 +10098,19 @@ export const PlayerScreen = {
     return value.includes(".srt") || value.includes("format=srt");
   },
 
+  createSubtitleObjectUrl(body, sourceUrl = "", contentType = "") {
+    const normalizedContentType = String(contentType || "").toLowerCase();
+    const shouldConvertToVtt = this.isLikelySrtSubtitleUrl(sourceUrl)
+      || normalizedContentType.includes("subrip")
+      || (!normalizedContentType.includes("vtt") && !/^\s*WEBVTT/i.test(body));
+    const vttText = shouldConvertToVtt
+      ? this.convertSrtToVtt(body)
+      : this.applySubtitleAssAlignmentToVtt(body);
+    const objectUrl = URL.createObjectURL(new Blob([vttText], { type: "text/vtt" }));
+    this.externalSubtitleObjectUrls.push(objectUrl);
+    return objectUrl;
+  },
+
   sanitizeSubtitleText(content, { preserveBasicStyle = false } = {}) {
     const source = String(content || "");
     const openTags = [];
@@ -10146,7 +10226,8 @@ export const PlayerScreen = {
     if (/^(blob:|data:)/i.test(original)) {
       return original;
     }
-    const requestController = typeof AbortController === "function" && Number(timeoutMs) > 0
+    const effectiveTimeoutMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : (Environment.isWebOS() ? 5000 : 0);
+    const requestController = typeof AbortController === "function" && effectiveTimeoutMs > 0
       ? new AbortController()
       : null;
     let requestTimeoutId = null;
@@ -10156,7 +10237,7 @@ export const PlayerScreen = {
         headers: this.getSubtitleRequestHeaders(),
         ...(requestController ? { signal: requestController.signal } : {})
       });
-      const response = Number(timeoutMs) > 0
+      const response = effectiveTimeoutMs > 0
         ? await Promise.race([
           requestPromise,
           new Promise((_, reject) => {
@@ -10167,23 +10248,30 @@ export const PlayerScreen = {
                 // Ignore abort failures.
               }
               reject(new Error("Subtitle request timed out"));
-            }, Number(timeoutMs));
+            }, effectiveTimeoutMs);
           })
         ])
         : await requestPromise;
       if (!response.ok) {
-        return original;
+        throw new Error(`Subtitle request failed with HTTP ${response.status}`);
       }
       const body = await response.text();
       const contentType = String(response.headers?.get("content-type") || "").toLowerCase();
-      const shouldConvertToVtt = this.isLikelySrtSubtitleUrl(original)
-        || contentType.includes("subrip")
-        || (!contentType.includes("vtt") && !/^\s*WEBVTT/i.test(body));
-      const vttText = shouldConvertToVtt ? this.convertSrtToVtt(body) : this.applySubtitleAssAlignmentToVtt(body);
-      const objectUrl = URL.createObjectURL(new Blob([vttText], { type: "text/vtt" }));
-      this.externalSubtitleObjectUrls.push(objectUrl);
-      return objectUrl;
-    } catch (_) {
+      return this.createSubtitleObjectUrl(body, original, contentType);
+    } catch (directError) {
+      if (Environment.isWebOS()) {
+        try {
+          const resolved = await localMediaSubtitleRepository.getExternalSubtitleText(original);
+          return this.createSubtitleObjectUrl(resolved.body, original, resolved.contentType);
+        } catch (proxyError) {
+          console.warn("webOS subtitle resolver failed", {
+            subtitleUrl: original,
+            directError: directError?.message || String(directError || ""),
+            proxyError: proxyError?.message || String(proxyError || "")
+          });
+          return "";
+        }
+      }
       return original;
     } finally {
       if (requestTimeoutId) {
@@ -10277,7 +10365,8 @@ export const PlayerScreen = {
         if (!text) {
           return null;
         }
-        return { start, end, text };
+        const layout = parseVttCueLayout(lines[timingIndex]);
+        return { start, end, text, line: layout.line, align: layout.align };
       })
       .filter(Boolean)
       .sort((left, right) => left.start - right.start || left.end - right.end);
@@ -10320,7 +10409,9 @@ export const PlayerScreen = {
     if (!node) {
       return;
     }
-    const cueKey = activeCues.map((cue) => `${cue.start}-${cue.end}-${cue.text}`).join("|");
+    const cueKey = activeCues
+      .map((cue) => `${cue.start}-${cue.end}-${cue.line ?? "default"}-${cue.align || "center"}-${cue.text}`)
+      .join("|");
     const hasRenderedActiveCue = activeCues.length > 0
       && !node.classList.contains("hidden")
       && node.getAttribute("aria-hidden") === "false"
@@ -10342,8 +10433,27 @@ export const PlayerScreen = {
       node.setAttribute("aria-hidden", "true");
       return;
     }
+    const cueGroups = new Map();
     activeCues.forEach((cue) => {
-      String(cue.text || "").split("\n").forEach((line) => {
+      const line = cue?.line == null ? NaN : Number(cue.line);
+      const normalizedLine = Number.isFinite(line) ? clamp(line, 0, 100) : null;
+      const align = ["start", "end", "center"].includes(cue?.align) ? cue.align : "center";
+      const groupKey = `${normalizedLine ?? "default"}:${align}`;
+      if (!cueGroups.has(groupKey)) {
+        cueGroups.set(groupKey, { line: normalizedLine, align, cues: [] });
+      }
+      cueGroups.get(groupKey).cues.push(cue);
+    });
+    cueGroups.forEach((group) => {
+      const cueNode = document.createElement("div");
+      cueNode.className = `player-html-subtitle-cue player-html-subtitle-align-${group.align}`;
+      if (group.line == null) {
+        cueNode.classList.add("player-html-subtitle-default");
+      } else {
+        cueNode.classList.add("player-html-subtitle-positioned");
+        cueNode.style.top = `${group.line}%`;
+      }
+      group.cues.forEach((cue) => String(cue.text || "").split("\n").forEach((line) => {
         const cleanLine = line.trim();
         if (!cleanLine) {
           return;
@@ -10351,8 +10461,11 @@ export const PlayerScreen = {
         const lineNode = document.createElement("span");
         lineNode.className = "player-html-subtitle-line";
         lineNode.textContent = cleanLine;
-        node.appendChild(lineNode);
-      });
+        cueNode.appendChild(lineNode);
+      }));
+      if (cueNode.childNodes.length) {
+        node.appendChild(cueNode);
+      }
     });
     node.classList.remove("hidden");
     node.setAttribute("aria-hidden", "false");
@@ -10419,7 +10532,9 @@ export const PlayerScreen = {
     }
     this.htmlSubtitleCues = [];
     this.htmlSubtitleSelectedId = "avplay-native";
-    this.renderHtmlSubtitleOverlayCue([{ start: 0, end: 0, text }]);
+    const alignment = this.getSubtitleAssAlignment(rawText);
+    const layout = this.getSubtitleAssAlignmentSettings(alignment) || { line: null, align: "center" };
+    this.renderHtmlSubtitleOverlayCue([{ start: 0, end: 0, text, ...layout }]);
     const durationMs = Number(detail?.duration || 0);
     const hideDelayMs = Number.isFinite(durationMs) && durationMs > 0
       ? clamp(durationMs, 250, 12000)
@@ -11824,6 +11939,7 @@ export const PlayerScreen = {
 
   applyNativeEmbeddedSubtitleTrack(embeddedTrack, targetTrackIndex) {
     const previousSubtitleSelectionKey = this.getActiveSubtitleSelectionKey();
+    this.clearEmbeddedSubtitleCueRefreshTimers();
     if (this.externalTrackNodes.length) {
       this.clearMountedExternalSubtitleTracks();
     }
@@ -11854,7 +11970,10 @@ export const PlayerScreen = {
     this.selectedManifestSubtitleTrackId = null;
     this.resetSubtitleDelayAfterSelectionChange(previousSubtitleSelectionKey);
     this.invalidateTrackDialogCaches();
-    this.refreshSubtitleCueStyles();
+    this.scheduleEmbeddedSubtitleCueRefresh();
+    if (this.refreshSubtitleCueStyles()) {
+      this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
+    }
     this.renderControlButtons();
     this.renderSubtitleDialog();
     return true;
@@ -15614,6 +15733,7 @@ export const PlayerScreen = {
     }
 
     this.clearSubtitleCueStyleBindings();
+    this.clearEmbeddedSubtitleCueRefreshTimers();
     this.clearMountedExternalSubtitleTracks();
 
     this.clearControlsAutoHide();

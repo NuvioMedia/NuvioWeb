@@ -22,6 +22,11 @@
           "public": true
         },
         {
+          "name": "subtitleText",
+          "description": "Resolve and convert an external subtitle document",
+          "public": true
+        },
+        {
           "name": "torrentCreate",
           "description": "Create an EngineFS torrent stream on the local media runtime",
           "public": true

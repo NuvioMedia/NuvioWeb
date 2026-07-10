@@ -307,6 +307,62 @@ function registerTracksCommand() {
   });
 }
 
+function registerSubtitleTextCommand() {
+  service.register("subtitleText", function (message) {
+    ensureRuntimeStarted();
+
+    if (runtimeState.error) {
+      respond(message, buildErrorPayload(runtimeState.error));
+      return;
+    }
+
+    var subtitleUrl = String(getMessagePayload(message).url || "").trim();
+    if (!/^https?:\/\//i.test(subtitleUrl)) {
+      respond(message, buildErrorPayload("Missing or unsupported subtitle URL"));
+      return;
+    }
+
+    var subtitlePath = "/subtitles.vtt?from=" + encodeURIComponent(subtitleUrl);
+    requestActiveServerHttp(
+      subtitlePath,
+      {
+        timeoutMs: 15000,
+        maxBodyBytes: 512 * 1024
+      },
+      function (error, result) {
+        if (error) {
+          respond(message, buildErrorPayload(error, { proxiedPath: subtitlePath }));
+          return;
+        }
+
+        var statusCode = result ? result.statusCode || 0 : 0;
+        if (statusCode < 200 || statusCode >= 300) {
+          respond(
+            message,
+            buildErrorPayload("Subtitle request failed with HTTP " + statusCode, {
+              proxiedPath: subtitlePath,
+              statusCode: statusCode
+            })
+          );
+          return;
+        }
+
+        respond(
+          message,
+          Object.assign(buildBasePayload(), {
+            proxiedPath: subtitlePath,
+            statusCode: statusCode,
+            contentType: String(result.headers && result.headers["content-type"] || "text/vtt"),
+            body: String(result.body || ""),
+            bodyBytes: Number(result.bodyBytes || 0),
+            bodyTruncated: Boolean(result.bodyTruncated)
+          })
+        );
+      }
+    );
+  });
+}
+
 function buildTorrentProxyPayload(result, proxiedPath) {
   var json = parseJsonMaybe(result && result.body);
   return Object.assign(buildBasePayload(), {
@@ -1283,5 +1339,6 @@ registerCommand("status", true);
 registerSupabaseProxyCommand();
 registerEngineFsKeepAliveCommands();
 registerTracksCommand();
+registerSubtitleTextCommand();
 registerTorrentProxyCommands();
 registerEngineFsDiagnosticCommand();
