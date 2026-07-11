@@ -682,6 +682,7 @@
     <string name="player_via">forrás: %1$s</string>
     <string name="player_subtitle_delay">Felirat késleltetése</string>
     <string name="player_error_title">Lejátszási hiba</string>
+    <string name="player_error_details">Lejátszási hiba részletei</string>
     <string name="player_go_back">Vissza</string>
     <string name="player_speed_title">Lejátszási sebesség</string>
     <string name="player_more_actions_title">További műveletek</string>

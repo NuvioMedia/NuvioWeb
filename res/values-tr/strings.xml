@@ -1254,6 +1254,7 @@
     <string name="season_episode_format">S%1$d B%2$d</string>
     <string name="player_subtitle_delay">Altyazı Gecikmesi</string>
     <string name="player_error_title">Oynatma Hatası</string>
+    <string name="player_error_details">Oynatma hatası ayrıntıları</string>
     <string name="player_go_back">Geri Git</string>
     <string name="player_speed_title">Oynatma Hızı</string>
     <string name="player_more_actions_title">Daha Fazla</string>

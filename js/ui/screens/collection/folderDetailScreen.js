@@ -1082,8 +1082,14 @@ export const FolderDetailScreen = {
           <article class="seeall-card focusable"
                    data-action="openDetail"
                    data-item-id="${escapeHtml(item.id || "")}" 
-                   data-item-type="${escapeHtml(item.type || "movie")}" 
+                   data-item-type="${escapeHtml(item.catalogType || item.type || "movie")}"
                    data-item-title="${escapeHtml(item.name || "Untitled")}" 
+                   data-poster-src="${escapeHtml(item.poster || "")}"
+                   data-backdrop-src="${escapeHtml(item.background || item.poster || "")}"
+                   data-addon-base-url="${escapeHtml(item.addonBaseUrl || selectedTab?.source?.addonBaseUrl || "")}"
+                   data-addon-id="${escapeHtml(item.addonId || selectedTab?.source?.addonId || "")}"
+                   data-addon-name="${escapeHtml(item.addonName || selectedTab?.source?.addonName || "")}"
+                   data-catalog-type="${escapeHtml(item.catalogType || sourceType(selectedTab?.source || {}) || "")}"
                    data-focus-key="item:${escapeHtml(item.id || index)}"
                    data-item-index="${index}">
             <div class="seeall-card-poster-wrap">
@@ -1108,10 +1114,15 @@ export const FolderDetailScreen = {
         <article class="seeall-card focusable"
                  data-action="openDetail"
                  data-item-id="${escapeHtml(item.id || "")}" 
-                 data-item-type="${escapeHtml(item.type || "movie")}" 
+                 data-item-type="${escapeHtml(item.catalogType || item.type || "movie")}"
                  data-item-title="${escapeHtml(item.name || "Untitled")}" 
+                 data-poster-src="${escapeHtml(item.poster || "")}"
                  data-backdrop-src="${escapeHtml(item.background || item.poster || "")}" 
                  data-logo-src="${escapeHtml(item.logo || "")}" 
+                 data-addon-base-url="${escapeHtml(item.addonBaseUrl || tab.source?.addonBaseUrl || "")}"
+                 data-addon-id="${escapeHtml(item.addonId || tab.source?.addonId || "")}"
+                 data-addon-name="${escapeHtml(item.addonName || tab.source?.addonName || "")}"
+                 data-catalog-type="${escapeHtml(item.catalogType || sourceType(tab.source || {}) || "")}"
                  data-release-info="${escapeHtml(item.releaseInfo || "")}" 
                  data-description="${escapeHtml(item.description || "")}" 
                  data-focus-key="row:${index}:item:${escapeHtml(item.id || itemIndex)}"
@@ -1508,8 +1519,14 @@ export const FolderDetailScreen = {
         );
         Router.navigate("detail", {
           itemId: current.dataset.itemId || "",
-          itemType: current.dataset.itemType || "movie",
-          fallbackTitle: current.dataset.itemTitle || "Untitled"
+          itemType: current.dataset.catalogType || current.dataset.itemType || "movie",
+          fallbackTitle: current.dataset.itemTitle || "Untitled",
+          fallbackPoster: current.dataset.posterSrc || "",
+          fallbackBackground: current.dataset.backdropSrc || "",
+          addonBaseUrl: current.dataset.addonBaseUrl || "",
+          addonId: current.dataset.addonId || "",
+          addonName: current.dataset.addonName || "",
+          catalogType: current.dataset.catalogType || current.dataset.itemType || "movie"
         });
       }
       return;

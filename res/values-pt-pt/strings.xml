@@ -1376,6 +1376,7 @@
     <string name="season_episode_format">T%1$d E%2$d</string>
     <string name="player_subtitle_delay">Atraso das Legendas</string>
     <string name="player_error_title">Erro de Reprodução</string>
+    <string name="player_error_details">Detalhes do erro de reprodução</string>
     <string name="player_go_back">Voltar atrás</string>
     <string name="player_speed_title">Velocidade de Reprodução</string>
     <string name="player_more_actions_title">Mais Ações</string>

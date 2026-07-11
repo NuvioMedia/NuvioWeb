@@ -1637,6 +1637,9 @@ export const MetaDetailsScreen = {
       return;
     }
 
+    const sourceItemId = itemId;
+    const sourceAddonBaseUrl = String(this.params?.addonBaseUrl || "").trim();
+    const sourceItemType = String(this.params?.catalogType || itemType).trim() || itemType;
     const canonicalItemId = await this.resolveCanonicalDetailItemId(itemId, itemType);
     if (token !== this.detailLoadToken) {
       return;
@@ -1650,7 +1653,21 @@ export const MetaDetailsScreen = {
       itemId = canonicalItemId;
     }
 
-    const metaPromise = withTimeout(metaRepository.getMetaFromAllAddons(itemType, itemId), 4500, {
+    const loadMeta = async () => {
+      const globalResultPromise = metaRepository.getMetaFromAllAddons(itemType, itemId);
+      if (sourceAddonBaseUrl) {
+        const sourceResult = await withTimeout(
+          metaRepository.getMeta(sourceAddonBaseUrl, sourceItemType, sourceItemId),
+          1800,
+          { status: "error", message: "timeout" }
+        );
+        if (sourceResult.status === "success") {
+          return sourceResult;
+        }
+      }
+      return globalResultPromise;
+    };
+    const metaPromise = withTimeout(loadMeta(), 4500, {
       status: "error",
       message: "timeout"
     });
@@ -1672,7 +1689,14 @@ export const MetaDetailsScreen = {
     const meta =
       metaResult.status === "success"
         ? metaResult.data
-        : { id: itemId, type: itemType, name: fallbackTitle, description: "" };
+        : {
+            id: itemId,
+            type: itemType,
+            name: fallbackTitle,
+            poster: this.params?.fallbackPoster || null,
+            background: this.params?.fallbackBackground || null,
+            description: ""
+          };
     if (token !== this.detailLoadToken) {
       return;
     }

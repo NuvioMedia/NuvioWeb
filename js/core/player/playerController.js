@@ -1193,11 +1193,11 @@ export const PlayerController = {
       return false;
     }
     try {
-      avplay.setSilentSubtitle?.(false);
+      avplay.setSilentSubtitle?.(true);
       this.avplaySubtitlesSilent = false;
     } catch (_) {
       this.avplaySubtitlesSilent = false;
-      // Some AVPlay builds still emit subtitle callbacks after track selection.
+      // The logical track stays active even when silent native rendering is unavailable.
     }
     try {
       logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(TEXT)", {
@@ -1215,7 +1215,7 @@ export const PlayerController = {
       return false;
     }
     try {
-      avplay.setSilentSubtitle?.(false);
+      avplay.setSilentSubtitle?.(true);
       this.avplaySubtitlesSilent = false;
     } catch (_) {
       this.avplaySubtitlesSilent = false;

@@ -508,6 +508,7 @@
     <string name="player_via">prin %1$s</string>
     <string name="player_subtitle_delay">Întârziere subtitrări</string>
     <string name="player_error_title">Eroare de redare</string>
+    <string name="player_error_details">Detalii despre eroarea de redare</string>
     <string name="player_go_back">Înapoi</string>
     <string name="player_speed_title">Viteză redare</string>
     <string name="player_more_actions_title">Mai multe acțiuni</string>

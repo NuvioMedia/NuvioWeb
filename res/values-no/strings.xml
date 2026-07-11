@@ -752,6 +752,7 @@
     <string name="player_via">via %1$s</string>
     <string name="player_subtitle_delay">Undertekst forsinkelse</string>
     <string name="player_error_title">Avspillingsfeil</string>
+    <string name="player_error_details">Detaljer om avspillingsfeilen</string>
     <string name="player_go_back">Gå tilbake</string>
     <string name="player_speed_title">Avspillingshastighet</string>
     <string name="player_more_actions_title">Flere handlinger</string>

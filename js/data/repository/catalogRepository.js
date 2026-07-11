@@ -44,7 +44,13 @@ class CatalogRepository {
 
     return safeApiCall(() =>
       CatalogApi.getCatalog(url).then((dto) => {
-        const items = (dto?.metas || []).map((meta) => this.mapMeta(meta));
+        const items = (dto?.metas || []).map((meta) => ({
+          ...this.mapMeta(meta),
+          addonBaseUrl,
+          addonId,
+          addonName,
+          catalogType: type
+        }));
 
         const row = {
           addonId,

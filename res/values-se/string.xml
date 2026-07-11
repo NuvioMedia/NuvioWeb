@@ -557,6 +557,7 @@
     <string name="player_via">via %1$s</string>
     <string name="player_subtitle_delay">Undertextfördröjning</string>
     <string name="player_error_title">Uppspelningsfel</string>
+    <string name="player_error_details">Information om uppspelningsfelet</string>
     <string name="player_go_back">Gå tillbaka</string>
     <string name="player_speed_title">Uppspelningshastighet</string>
     <string name="player_more_actions_title">Fler åtgärder</string>

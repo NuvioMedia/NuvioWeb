@@ -1275,6 +1275,7 @@
     <string name="season_episode_format">S%1$d E%2$d</string>
     <string name="player_subtitle_delay">Καθυστέρηση υπότιτλων</string>
     <string name="player_error_title">Σφάλμα αναπαραγωγής</string>
+    <string name="player_error_details">Λεπτομέρειες σφάλματος αναπαραγωγής</string>
     <string name="player_go_back">Επιστροφή</string>
     <string name="player_speed_title">Ταχύτητα αναπαραγωγής</string>
     <string name="player_more_actions_title">Περισσότερες ενέργειες</string>

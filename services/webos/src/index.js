@@ -9,6 +9,9 @@ var requestLocalHttp = serverHost.requestLocalHttp;
 var requestActiveServerHttp = serverHost.requestActiveServerHttp;
 var requestActiveServerPath = serverHost.requestActiveServerPath;
 var SUPABASE_PROXY_PATH = require("./supabaseProxy").SUPABASE_PROXY_PATH;
+var bitmapSubtitles = require("./bitmapSubtitles");
+var getBitmapSubtitleWindow = bitmapSubtitles.getBitmapSubtitleWindow;
+var prepareBitmapSubtitleSource = bitmapSubtitles.prepareBitmapSubtitleSource;
 
 var RUNTIME_PATH = path.resolve(__dirname, "..", "runtime", "media-http.cjs");
 
@@ -360,6 +363,47 @@ function registerSubtitleTextCommand() {
         );
       }
     );
+  });
+}
+
+function registerBitmapSubtitleCommand() {
+  service.register("bitmapSubtitlePrepare", function (message) {
+    var payload = getMessagePayload(message);
+    prepareBitmapSubtitleSource({ url: payload.url }).then(function (result) {
+      respond(message, Object.assign(buildBasePayload(), result, { returnValue: true }));
+    }).catch(function (error) {
+      console.warn("[" + SERVICE_ID + "] bitmap subtitle preparation failed:", error);
+      respond(
+        message,
+        buildErrorPayload(error, {
+          bitmapSubtitle: true,
+          errorCode: String(error && error.code || "BITMAP_SUBTITLE_PREPARE_FAILED"),
+          errorDetails: error && error.details || null
+        })
+      );
+    });
+  });
+
+  service.register("bitmapSubtitleWindow", function (message) {
+    var payload = getMessagePayload(message);
+    getBitmapSubtitleWindow({
+      url: payload.url,
+      trackNumber: payload.trackNumber,
+      startSeconds: payload.startSeconds,
+      endSeconds: payload.endSeconds
+    }).then(function (result) {
+      respond(message, Object.assign(buildBasePayload(), result, { returnValue: true }));
+    }).catch(function (error) {
+      console.error("[" + SERVICE_ID + "] bitmap subtitle extraction failed:", error);
+      respond(
+        message,
+        buildErrorPayload(error, {
+          bitmapSubtitle: true,
+          errorCode: String(error && error.code || "BITMAP_SUBTITLE_FAILED"),
+          errorDetails: error && error.details || null
+        })
+      );
+    });
   });
 }
 
@@ -1340,5 +1384,6 @@ registerSupabaseProxyCommand();
 registerEngineFsKeepAliveCommands();
 registerTracksCommand();
 registerSubtitleTextCommand();
+registerBitmapSubtitleCommand();
 registerTorrentProxyCommands();
 registerEngineFsDiagnosticCommand();

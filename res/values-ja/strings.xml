@@ -756,6 +756,7 @@
     <string name="player_via">%1$s</string>
     <string name="player_subtitle_delay">字幕の遅延</string>
     <string name="player_error_title">再生エラー</string>
+    <string name="player_error_details">再生エラーの詳細</string>
     <string name="player_go_back">戻る</string>
     <string name="player_speed_title">再生速度</string>
     <string name="player_more_actions_title">その他の操作</string>

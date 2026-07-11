@@ -1040,6 +1040,7 @@
     <string name="season_episode_format">S%1$d E%2$d</string>
     <string name="player_subtitle_delay">Délai des sous-titres</string>
     <string name="player_error_title">Erreur de lecture</string>
+    <string name="player_error_details">Détails de l’erreur de lecture</string>
     <string name="player_go_back">Retour</string>
     <string name="player_speed_title">Vitesse de lecture</string>
     <string name="player_more_actions_title">Plus d’actions</string>

@@ -654,6 +654,7 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="player_via">per %1$s</string>
     <string name="player_subtitle_delay">Subtitrų delsa</string>
     <string name="player_error_title">Atkūrimo klaida</string>
+    <string name="player_error_details">Atkūrimo klaidos informacija</string>
     <string name="player_go_back">Grįžti atgal</string>
     <string name="player_speed_title">Atkūrimo greitis</string>
     <string name="player_more_actions_title">Daugiau veiksmų</string>

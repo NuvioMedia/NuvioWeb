@@ -1162,6 +1162,7 @@
     <string name="season_episode_format">S%1$d E%2$d</string>
     <string name="player_subtitle_delay">சப்டைட்டில் தாமதம்</string>
     <string name="player_error_title">இயக்கப் பிழை</string>
+    <string name="player_error_details">இயக்கப் பிழை விவரங்கள்</string>
     <string name="player_go_back">திரும்பிச் செல்</string>
     <string name="player_speed_title">இயக்க வேகம்</string>
     <string name="player_more_actions_title">மேலும் செயல்கள்</string>

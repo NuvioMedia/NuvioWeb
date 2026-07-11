@@ -800,6 +800,10 @@ export const SearchScreen = {
                      data-item-title="${item.name || "Untitled"}"
                      data-poster-src="${escapeHtml(item.poster || "")}"
                      data-backdrop-src="${escapeHtml(item.background || item.backdrop || item.landscapePoster || "")}"
+                     data-addon-base-url="${escapeHtml(row.addonBaseUrl || item.addonBaseUrl || "")}"
+                     data-addon-id="${escapeHtml(row.addonId || item.addonId || "")}"
+                     data-addon-name="${escapeHtml(row.addonName || item.addonName || "")}"
+                     data-catalog-type="${escapeHtml(row.type || item.catalogType || "")}"
                      data-row-key="${escapeHtml(rowKey)}">
               <div class="search-result-poster-wrap">
                 ${item.poster ? `<img class="search-result-poster" src="${item.poster}" alt="${item.name || "content"}" loading="lazy" decoding="async" />` : `<div class="search-result-poster placeholder"></div>`}
@@ -1838,8 +1842,14 @@ export const SearchScreen = {
   openDetailFromNode(node) {
     Router.navigate("detail", {
       itemId: node.dataset.itemId,
-      itemType: node.dataset.itemType || "movie",
-      fallbackTitle: node.dataset.itemTitle || "Untitled"
+      itemType: node.dataset.catalogType || node.dataset.itemType || "movie",
+      fallbackTitle: node.dataset.itemTitle || "Untitled",
+      fallbackPoster: node.dataset.posterSrc || "",
+      fallbackBackground: node.dataset.backdropSrc || "",
+      addonBaseUrl: node.dataset.addonBaseUrl || "",
+      addonId: node.dataset.addonId || "",
+      addonName: node.dataset.addonName || "",
+      catalogType: node.dataset.catalogType || node.dataset.itemType || "movie"
     });
   },
 

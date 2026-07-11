@@ -49,6 +49,7 @@
   "dependencies": {
     "intersection-observer": "^0.12.2",
     "jszip": "^3.10.1",
+    "libbitsub": "^1.10.1",
     "whatwg-fetch": "^3.6.20"
   }
 }

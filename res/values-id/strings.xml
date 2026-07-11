@@ -1297,6 +1297,7 @@
     <string name="season_episode_format">M%1$d E%2$d</string>
     <string name="player_subtitle_delay">Penundaan Subtitle</string>
     <string name="player_error_title">Error Pemutaran</string>
+    <string name="player_error_details">Detail kesalahan pemutaran</string>
     <string name="player_go_back">Kembali</string>
     <string name="player_speed_title">Kecepatan Pemutaran</string>
     <string name="player_more_actions_title">Aksi Lainnya</string>

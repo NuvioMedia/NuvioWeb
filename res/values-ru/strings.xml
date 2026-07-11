@@ -851,6 +851,7 @@
     <string name="player_via">через %1$s</string>
     <string name="player_subtitle_delay">Задержка субтитров</string>
     <string name="player_error_title">Ошибка воспроизведения</string>
+    <string name="player_error_details">Подробности ошибки воспроизведения</string>
     <string name="player_go_back">Назад</string>
     <string name="player_speed_title">Скорость воспроизведения</string>
     <string name="player_more_actions_title">Дополнительные действия</string>

@@ -572,6 +572,14 @@ async function runBuild() {
       cp(path.join(rootDir, "boot-guard.js"), path.join(distDir, "boot-guard.js")),
       cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"))
     ]);
+    await cp(
+      path.join(rootDir, "node_modules", "libbitsub", "pkg", "libbitsub_bg.wasm"),
+      path.join(distDir, "assets", "libs", "libbitsub_bg.wasm")
+    );
+    await cp(
+      path.join(rootDir, "node_modules", "libbitsub", "LICENSE"),
+      path.join(distDir, "assets", "libs", "libbitsub.LICENSE")
+    );
 
     if (!copiedAppInfoSource) {
       console.warn("WARNING: skipping appinfo.json because it is not present in the repo root.");

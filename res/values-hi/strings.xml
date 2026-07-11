@@ -644,6 +644,7 @@
     <string name="player_via">%1$s के माध्यम से</string>
     <string name="player_subtitle_delay">सबटाइटल देरी</string>
     <string name="player_error_title">प्लेबैक त्रुटि</string>
+    <string name="player_error_details">प्लेबैक त्रुटि का विवरण</string>
     <string name="player_go_back">वापस जाएँ</string>
     <string name="player_speed_title">प्लेबैक गति</string>
     <string name="player_more_actions_title">अधिक विकल्प</string>

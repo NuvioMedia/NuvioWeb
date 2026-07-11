@@ -1244,6 +1244,7 @@
     <string name="season_episode_format">S%1$d E%2$d</string>
     <string name="player_subtitle_delay">字幕延迟</string>
     <string name="player_error_title">播放错误</string>
+    <string name="player_error_details">播放错误详情</string>
     <string name="player_go_back">返回</string>
     <string name="player_speed_title">播放速度</string>
     <string name="player_more_actions_title">更多操作</string>

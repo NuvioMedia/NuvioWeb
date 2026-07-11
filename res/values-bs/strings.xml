@@ -869,6 +869,7 @@
     <string name="player_via">preko %1$s</string>
     <string name="player_subtitle_delay">Odgoda Titlova</string>
     <string name="player_error_title">Greška Reprodukcije</string>
+    <string name="player_error_details">Detalji greške reprodukcije</string>
     <string name="player_go_back">Nazad</string>
     <string name="player_speed_title">Brzina Reprodukcije</string>
     <string name="player_more_actions_title">Više Opcija</string>

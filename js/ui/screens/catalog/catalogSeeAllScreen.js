@@ -563,7 +563,13 @@ export const CatalogSeeAllScreen = {
     Router.navigate("detail", {
       itemId: node.dataset.itemId,
       itemType: node.dataset.itemType || "movie",
-      fallbackTitle: node.dataset.itemTitle || "Untitled"
+      fallbackTitle: node.dataset.itemTitle || "Untitled",
+      fallbackPoster: node.dataset.posterSrc || "",
+      fallbackBackground: node.dataset.backdropSrc || "",
+      addonBaseUrl: node.dataset.addonBaseUrl || "",
+      addonId: node.dataset.addonId || "",
+      addonName: node.dataset.addonName || "",
+      catalogType: node.dataset.catalogType || node.dataset.itemType || "movie"
     });
     return true;
   },
@@ -578,10 +584,14 @@ export const CatalogSeeAllScreen = {
           <article class="seeall-card focusable"
                    data-action="openDetail"
                    data-item-id="${item.id || ""}"
-                    data-item-type="${item.type || descriptor.type || "movie"}"
+                    data-item-type="${descriptor.type || item.catalogType || item.type || "movie"}"
                    data-item-title="${escapeHtml(item.name || "Untitled")}"
                     data-poster-src="${escapeHtml(item.poster || "")}"
                     data-backdrop-src="${escapeHtml(item.background || item.backdrop || "")}"
+                    data-addon-base-url="${escapeHtml(descriptor.addonBaseUrl || item.addonBaseUrl || "")}"
+                    data-addon-id="${escapeHtml(descriptor.addonId || item.addonId || "")}"
+                    data-addon-name="${escapeHtml(descriptor.addonName || item.addonName || "")}"
+                    data-catalog-type="${escapeHtml(descriptor.type || item.catalogType || "")}"
                     data-focus-key="item:${item.id || index}"
                     data-item-index="${index}">
             <div class="seeall-card-poster-wrap">

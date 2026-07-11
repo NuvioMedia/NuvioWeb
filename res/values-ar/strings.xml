@@ -860,6 +860,7 @@
     <string name="player_via">بواسطة %1$s</string>
     <string name="player_subtitle_delay">تأخير الترجمة</string>
     <string name="player_error_title">خطأ في التشغيل</string>
+    <string name="player_error_details">تفاصيل خطأ التشغيل</string>
     <string name="player_go_back">رجوع</string>
     <string name="player_speed_title">سرعة التشغيل</string>
     <string name="player_more_actions_title">إجراءات إضافية</string>

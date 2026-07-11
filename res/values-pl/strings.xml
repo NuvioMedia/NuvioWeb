@@ -655,6 +655,7 @@
     <string name="player_loading_starting">Uruchamianie strumienia…</string>
     <string name="player_loading_buffering">Buforowanie…</string>
     <string name="player_error_title">Błąd odtwarzania</string>
+    <string name="player_error_details">Szczegóły błędu odtwarzania</string>
     <string name="player_go_back">Wróć</string>
     <string name="player_speed_title">Prędkość odtwarzania</string>
     <string name="player_more_actions_title">Więcej opcji</string>

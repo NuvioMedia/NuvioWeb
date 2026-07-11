@@ -533,6 +533,7 @@
     <string name="player_via">via %1$s</string>
     <string name="player_subtitle_delay">Ondertitelvertraging</string>
     <string name="player_error_title">Afspeelfout</string>
+    <string name="player_error_details">Details van de afspeelfout</string>
     <string name="player_go_back">Ga terug</string>
     <string name="player_speed_title">Afspeelsnelheid</string>
     <string name="player_more_actions_title">Meer acties</string>

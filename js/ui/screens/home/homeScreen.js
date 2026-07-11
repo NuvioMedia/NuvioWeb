@@ -2140,7 +2140,11 @@ export function createPosterCardMarkup(item, rowIndex, itemIndex, itemType, rowD
              data-item-title="${escapeAttribute(normalized.name || "Untitled")}"
              data-poster-src="${escapeAttribute(posterSrc || "")}"
              data-backdrop-src="${escapeAttribute(backdropSrc || "")}"
-             data-logo-src="${escapeAttribute(normalized.logo || "")}"`}>
+             data-logo-src="${escapeAttribute(normalized.logo || "")}"
+             data-addon-base-url="${escapeAttribute(rowData?.addonBaseUrl || normalized.addonBaseUrl || "")}"
+             data-addon-id="${escapeAttribute(rowData?.addonId || normalized.addonId || "")}"
+             data-addon-name="${escapeAttribute(rowData?.addonName || normalized.addonName || "")}"
+             data-catalog-type="${escapeAttribute(rowData?.type || normalized.catalogType || "")}"`}>
       <div class="home-poster-frame">
         ${(!isLoading && posterSrc)
       ? `<img class="content-poster" ${buildLazyImageAttributes(posterSrc, { defer: deferImages })} alt="${escapeAttribute(normalized.name || "content")}" />`
@@ -8274,8 +8278,14 @@ export const HomeScreen = {
     this.rememberReturnFocusForNode(node);
     Router.navigate("detail", {
       itemId,
-      itemType: node.dataset.itemType || "movie",
-      fallbackTitle: node.dataset.itemTitle || "Untitled"
+      itemType: node.dataset.catalogType || node.dataset.itemType || "movie",
+      fallbackTitle: node.dataset.itemTitle || "Untitled",
+      fallbackPoster: node.dataset.posterSrc || "",
+      fallbackBackground: node.dataset.backdropSrc || "",
+      addonBaseUrl: node.dataset.addonBaseUrl || "",
+      addonId: node.dataset.addonId || "",
+      addonName: node.dataset.addonName || "",
+      catalogType: node.dataset.catalogType || node.dataset.itemType || "movie"
     });
   },
 

@@ -10816,6 +10816,22 @@ html.legacy-webos .debug-console-log-frame {
   display: none;
 }
 
+.player-bitmap-subtitles {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 12;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.player-bitmap-subtitles.hidden {
+  display: none;
+}
+
 .player-html-subtitle-cue {
   position: absolute;
   display: flex;
@@ -12326,6 +12342,15 @@ html.legacy-webos .debug-console-log-frame {
   color: #ffffff;
   font-size: clamp(18px, 1.2vw, 24px);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.player-next-episode-status {
+  margin-top: 3px;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: clamp(12px, 0.75vw, 15px);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -17057,6 +17082,10 @@ html.legacy-webos .debug-console-log-frame {
 
 .legacy-webos .player-next-episode-title {
   font-size: 22px;
+}
+
+.legacy-webos .player-next-episode-status {
+  font-size: 14px;
 }
 
 .legacy-webos .player-episode-panel {

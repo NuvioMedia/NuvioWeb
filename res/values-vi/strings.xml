@@ -548,6 +548,7 @@
     <string name="player_via">từ %1$s</string>
     <string name="player_subtitle_delay">Độ trễ phụ đề</string>
     <string name="player_error_title">Lỗi phát</string>
+    <string name="player_error_details">Chi tiết lỗi phát</string>
     <string name="player_go_back">Quay lại</string>
     <string name="player_speed_title">Tốc độ phát</string>
     <string name="player_more_actions_title">Thêm thao tác</string>

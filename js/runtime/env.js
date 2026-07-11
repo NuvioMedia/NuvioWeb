@@ -26,8 +26,6 @@
         : existing.IMDB_RATINGS_API_BASE_URL,
     AVATAR_PUBLIC_BASE_URL:
       typeof existing.AVATAR_PUBLIC_BASE_URL === "undefined" ? "" : existing.AVATAR_PUBLIC_BASE_URL,
-    CONTRIBUTIONS_URL:
-      typeof existing.CONTRIBUTIONS_URL === "undefined" ? "" : existing.CONTRIBUTIONS_URL,
     DONATIONS_BASE_URL:
       typeof existing.DONATIONS_BASE_URL === "undefined" ? "" : existing.DONATIONS_BASE_URL,
     DONATIONS_DONATE_URL:

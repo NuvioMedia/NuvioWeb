@@ -534,6 +534,7 @@
     <string name="player_via">דרך %1$s</string>
     <string name="player_subtitle_delay">עיכוב כתוביות</string>
     <string name="player_error_title">שגיאת הפעלה</string>
+    <string name="player_error_details">פרטי שגיאת ההפעלה</string>
     <string name="player_go_back">חזרה</string>
     <string name="player_speed_title">מהירות הפעלה</string>
     <string name="player_more_actions_title">פעולות נוספות</string>
