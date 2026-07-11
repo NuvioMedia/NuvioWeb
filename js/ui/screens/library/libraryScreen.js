@@ -213,7 +213,8 @@ export const LibraryScreen = {
   async mount() {
     this.container = document.getElementById("library");
     ScreenUtils.show(this.container);
-    this.controller = new LibraryController((state) => this.handleControllerChange(state));
+    const controller = new LibraryController((state) => this.handleControllerChange(state));
+    this.controller = controller;
     this.libraryRouteEnterPending = true;
     this.sidebarProfile = await getSidebarProfileState();
     this.layoutPrefs = LayoutPreferences.get();
@@ -237,8 +238,11 @@ export const LibraryScreen = {
 
     this.render();
     this.bindEvents();
-    await this.controller.init();
-    this.controller.closePicker();
+    await controller.init();
+    if (this.controller !== controller || Router.getCurrent() !== "library") {
+      return;
+    }
+    controller.closePicker();
   },
 
   bindEvents() {

@@ -274,6 +274,8 @@ const KEY_ALIASES = {
   "settings.plugins.providersHeading": "plugin_providers_section",
   "settings.plugins.repositoriesHeading": "plugin_repositories_section",
   "settings.profiles.manageProfiles": "profile_manage_title",
+  "settings.profiles.rememberLast.subtitle": "advanced_remember_last_profile_subtitle",
+  "settings.profiles.rememberLast.title": "advanced_remember_last_profile",
   "settings.sections.about.label": "about_title",
   "settings.sections.about.subtitle": "about_subtitle",
   "settings.sections.account.label": "settings_account",

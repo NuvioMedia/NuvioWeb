@@ -355,13 +355,18 @@ export class LibraryController {
     this.onChange = onChange;
     this.state = makeInitialState();
     this.messageTimer = null;
+    this.reloadToken = 0;
+    this.disposed = false;
   }
 
   async init() {
+    this.disposed = false;
     await this.reload();
   }
 
   dispose() {
+    this.disposed = true;
+    this.reloadToken += 1;
     if (this.messageTimer) {
       clearTimeout(this.messageTimer);
       this.messageTimer = null;
@@ -423,6 +428,8 @@ export class LibraryController {
   }
 
   async reload(options = {}) {
+    const reloadToken = this.reloadToken + 1;
+    this.reloadToken = reloadToken;
     const preserveOverlay = options.preserveOverlay === true;
     if (!preserveOverlay) {
       this.state = {
@@ -432,12 +439,18 @@ export class LibraryController {
       this.onChange(this.getState());
     }
 
-    const [sourceMode, listTabs, allItems, watchedItems] = await Promise.all([
-      libraryRepository.getSourceMode(),
-      libraryRepository.getListTabs(),
-      libraryRepository.getItems(),
+    const sourceMode = await libraryRepository.getSourceMode();
+    if (this.disposed || reloadToken !== this.reloadToken) {
+      return;
+    }
+    const [listTabs, allItems, watchedItems] = await Promise.all([
+      libraryRepository.getListTabs({ sourceMode }),
+      libraryRepository.getItems({ hydrate: false, sourceMode }),
       watchedItemsRepository.getAll(5000).catch(() => [])
     ]);
+    if (this.disposed || reloadToken !== this.reloadToken) {
+      return;
+    }
 
     const nextSelectedListKey =
       sourceMode === LibrarySourceMode.TRAKT
@@ -512,6 +525,22 @@ export class LibraryController {
     };
     this.state.visibleItems = sortForState(this.state.allItems, this.state);
     this.onChange(this.getState());
+
+    void libraryRepository
+      .hydrateItems(allItems, {
+        shouldContinue: () => !this.disposed && reloadToken === this.reloadToken,
+        onBatch: (enrichedItems) => {
+          if (this.disposed || reloadToken !== this.reloadToken) {
+            return;
+          }
+          this.setState({ allItems: enrichedItems });
+        }
+      })
+      .catch((error) => {
+        if (!this.disposed && reloadToken === this.reloadToken) {
+          console.warn("Library metadata enrichment failed", error);
+        }
+      });
   }
 
   getSourceLabel() {

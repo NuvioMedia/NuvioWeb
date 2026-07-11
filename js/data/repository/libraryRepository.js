@@ -264,7 +264,10 @@ async function batchEnrichLibraryItems(items) {
       meta = cached.meta;
     } else {
       const canonicalType = contentType === "show" ? "series" : contentType;
-      meta = await metaRepository.getMetaFromAllAddons(canonicalType, lookupId).catch(() => null);
+      const result = await metaRepository
+        .getMetaFromAllAddons(canonicalType, lookupId)
+        .catch(() => null);
+      meta = result?.status === "success" ? result.data : null;
       enrichedLibraryMetaCache.set(cacheKey, { meta, timestamp: now });
     }
     results.push(meta ? { ...item, enrichedMeta: meta } : item);
@@ -314,7 +317,7 @@ function mergeItemIntoMap(target, listKey, baseItem, listedAt, traktRank) {
   });
 }
 
-async function hydrateEntries(entries) {
+async function hydrateEntries(entries, { onBatch = null, shouldContinue = null } = {}) {
   const nextEntries = entries.map((entry) => ({
     ...entry,
     listKeys: [...entry.listKeys],
@@ -322,21 +325,43 @@ async function hydrateEntries(entries) {
   }));
 
   for (let index = 0; index < nextEntries.length; index += META_BATCH_SIZE) {
+    if (shouldContinue && !shouldContinue()) {
+      break;
+    }
     const batch = nextEntries.slice(index, index + META_BATCH_SIZE);
+    let didChange = false;
     await Promise.all(
       batch.map(async (entry) => {
         if (entry.poster && entry.name && entry.description) {
           return;
         }
-        const result = await withTimeout(
-          metaRepository.getMetaFromAllAddons(entry.type, entry.id),
-          META_TIMEOUT_MS,
-          { status: "error", message: "timeout" }
-        );
-        if (result?.status !== "success" || !result?.data) {
-          return;
+        const cacheKey = `${entry.type}:${entry.id}`;
+        const cached = enrichedLibraryMetaCache.get(cacheKey);
+        const now = Date.now();
+        let meta =
+          cached && now - cached.timestamp < ENRICHED_LIBRARY_META_CACHE_TTL_MS
+            ? cached.meta
+            : null;
+        if (!meta) {
+          const result = await withTimeout(
+            metaRepository.getMetaFromAllAddons(entry.type, entry.id),
+            META_TIMEOUT_MS,
+            { status: "error", message: "timeout" }
+          );
+          if (result?.status !== "success" || !result?.data) {
+            return;
+          }
+          meta = result.data;
+          enrichedLibraryMetaCache.set(cacheKey, { meta, timestamp: now });
         }
-        const meta = result.data;
+        const before = JSON.stringify([
+          entry.name,
+          entry.poster,
+          entry.background,
+          entry.description,
+          entry.releaseInfo,
+          entry.genres
+        ]);
         entry.name = entry.name || meta.name || entry.id;
         entry.poster = entry.poster || meta.poster || meta.background || null;
         entry.background = entry.background || meta.background || null;
@@ -347,8 +372,22 @@ async function hydrateEntries(entries) {
           : Array.isArray(meta.genres)
             ? meta.genres
             : [];
+        didChange =
+          didChange ||
+          before !==
+            JSON.stringify([
+              entry.name,
+              entry.poster,
+              entry.background,
+              entry.description,
+              entry.releaseInfo,
+              entry.genres
+            ]);
       })
     );
+    if (didChange && (!shouldContinue || shouldContinue())) {
+      onBatch?.(nextEntries);
+    }
   }
 
   return nextEntries;
@@ -373,17 +412,18 @@ async function getRemotePersonalTabs() {
   return state.lists.map((entry) => buildPersonalListTab(entry)).slice(0, REMOTE_LIST_LIMIT);
 }
 
-async function getLocalEntries() {
+async function getLocalEntries({ hydrate = true } = {}) {
   const savedItems = await savedLibraryRepository.getAll(1000);
   const entriesMap = new Map();
   savedItems.forEach((item) => {
     const normalized = normalizeSavedItem(item);
     mergeItemIntoMap(entriesMap, "local", normalized, normalized.updatedAt, null);
   });
-  return hydrateEntries(Array.from(entriesMap.values()));
+  const entries = Array.from(entriesMap.values());
+  return hydrate ? hydrateEntries(entries) : entries;
 }
 
-async function getRemoteEntries() {
+async function getRemoteEntries({ hydrate = true } = {}) {
   const personalState = await readRemoteState();
   const entriesMap = new Map();
 
@@ -409,7 +449,8 @@ async function getRemoteEntries() {
     });
   });
 
-  return hydrateEntries(Array.from(entriesMap.values()));
+  const entries = Array.from(entriesMap.values());
+  return hydrate ? hydrateEntries(entries) : entries;
 }
 
 function membershipMapFromEntries(entries, listTabs) {
@@ -467,9 +508,9 @@ class LibraryRepository {
     return LibrarySourceMode.TRAKT;
   }
 
-  async getListTabs() {
-    const sourceMode = await this.getSourceMode();
-    if (sourceMode === LibrarySourceMode.LOCAL) {
+  async getListTabs({ sourceMode = null } = {}) {
+    const resolvedSourceMode = sourceMode || (await this.getSourceMode());
+    if (resolvedSourceMode === LibrarySourceMode.LOCAL) {
       return [];
     }
     const personalTabs = await getRemotePersonalTabs();
@@ -489,9 +530,15 @@ class LibraryRepository {
     ];
   }
 
-  async getItems() {
-    const sourceMode = await this.getSourceMode();
-    return sourceMode === LibrarySourceMode.TRAKT ? getRemoteEntries() : getLocalEntries();
+  async getItems({ hydrate = true, sourceMode = null } = {}) {
+    const resolvedSourceMode = sourceMode || (await this.getSourceMode());
+    return resolvedSourceMode === LibrarySourceMode.TRAKT
+      ? getRemoteEntries({ hydrate })
+      : getLocalEntries({ hydrate });
+  }
+
+  async hydrateItems(items, options = {}) {
+    return hydrateEntries(items, options);
   }
 
   async getMembershipSnapshot(item) {
