@@ -524,6 +524,7 @@ class AddonRepository {
       baseUrl,
       types,
       rawTypes: types,
+      idPrefixes: Array.isArray(manifest.idPrefixes) ? manifest.idPrefixes : [],
       catalogs,
       resources: this.parseResources(manifest.resources || [], types)
     };

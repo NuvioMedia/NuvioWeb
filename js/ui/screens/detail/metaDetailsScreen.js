@@ -276,19 +276,17 @@ function isSeriesDetailMeta(meta = {}, episodes = null) {
 }
 
 function resolvePlayableDetailType(itemType, meta = {}) {
-  const normalizedType = String(itemType || meta?.type || "movie").trim().toLowerCase();
-  if (normalizedType === "tv") {
-    return "tv";
+  const rawType = String(itemType || meta?.type || "").trim();
+  if (!rawType) {
+    return "movie";
   }
-  if (normalizedType === "series") {
-    return "series";
-  }
-  // Preserve live/channel types so stream requests hit the addon's registered
-  // stream endpoint (e.g. /stream/channel/{id}.json) instead of movie.
-  if (["channel", "live", "tvchannel", "other"].includes(normalizedType)) {
+  const normalizedType = rawType.toLowerCase();
+  if (["movie", "series", "channel", "tv"].includes(normalizedType)) {
     return normalizedType;
   }
-  return "movie";
+  // Match Android's ContentType.UNKNOWN behavior: preserve addon-defined API
+  // types so the stream request uses the exact catalog type instead of movie.
+  return rawType;
 }
 
 function resolveMetaImdbId(meta = {}, params = {}) {

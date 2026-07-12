@@ -14055,13 +14055,23 @@ export const PlayerScreen = {
     if (video) {
       const rect = this.calculateAspectRect(mode.objectFit, video);
       video.style.position = "fixed";
-      video.style.left = `${Math.round(rect.x)}px`;
-      video.style.top = `${Math.round(rect.y)}px`;
-      video.style.width = `${Math.round(rect.width)}px`;
-      video.style.height = `${Math.round(rect.height)}px`;
+      if (Environment.isWebOS()) {
+        // webOS suppresses its screensaver only when the video element itself
+        // occupies the full viewport. Keep aspect handling inside that element.
+        video.style.left = "0px";
+        video.style.top = "0px";
+        video.style.width = "100vw";
+        video.style.height = "100vh";
+        video.style.objectFit = mode.objectFit;
+      } else {
+        video.style.left = `${Math.round(rect.x)}px`;
+        video.style.top = `${Math.round(rect.y)}px`;
+        video.style.width = `${Math.round(rect.width)}px`;
+        video.style.height = `${Math.round(rect.height)}px`;
+        video.style.objectFit = "fill";
+      }
       video.style.maxWidth = "none";
       video.style.maxHeight = "none";
-      video.style.objectFit = "fill";
       video.style.background = "black";
       if (typeof PlayerController.setAvPlayDisplayRect === "function") {
         PlayerController.setAvPlayDisplayRect(rect, rect.displayMethod);

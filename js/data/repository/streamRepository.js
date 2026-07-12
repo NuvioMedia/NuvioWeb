@@ -115,28 +115,35 @@ class StreamRepository {
         // Meta-only stream discovery is a compatibility path for debrid cloud
         // items, which are exposed through the `other` type. Regular movie/series
         // metadata addons must not be queried as stream sources.
-        const shouldTryInlineMetaStreams =
+        const canTryMetaOnlyStreams =
           canMeta &&
-          (canStream ||
-            String(type || "")
-              .trim()
-              .toLowerCase() === "other");
-        if (!canStream && !shouldTryInlineMetaStreams) {
+          String(type || "")
+            .trim()
+            .toLowerCase() === "other";
+        if (!canStream && !canTryMetaOnlyStreams) {
           return null;
         }
         const orderIndex = Number(addon.orderIndex ?? Number.MAX_SAFE_INTEGER);
         notifyAddon(addon, orderIndex);
         let addonStreams = [];
+        let streamRequestSucceeded = false;
         if (canStream) {
           const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
-          if (streamsResult.status === "success" && streamsResult.data.length) {
-            addonStreams = streamsResult.data;
+          if (streamsResult.status === "success") {
+            streamRequestSucceeded = true;
+            if (streamsResult.data.length) {
+              addonStreams = streamsResult.data;
+            }
           }
         }
-        // Some addons (e.g. debrid cloud catalogs) deliver the playable stream
-        // inline in the meta's videos[].streams[] and only expose a meta resource
-        // for the content type, not a stream resource. Fall back to that here.
-        if (addonStreams.length === 0 && shouldTryInlineMetaStreams) {
+        // Match Android: when a declared stream endpoint succeeds with no
+        // results, try the matching meta video's inline streams even if the
+        // manifest omitted its meta resource. Keep the existing meta-only
+        // compatibility path for debrid cloud `other` catalogs as well.
+        if (
+          addonStreams.length === 0 &&
+          ((canStream && streamRequestSucceeded) || canTryMetaOnlyStreams)
+        ) {
           addonStreams = await this.fetchInlineStreamsFromMeta(addon, type, videoId);
         }
         if (addonStreams.length === 0) {
@@ -358,11 +365,23 @@ class StreamRepository {
       return "";
     }
     const parts = raw.split(":");
-    const contentParts = parts.slice();
-    while (contentParts.length > 1 && /^\d+$/.test(contentParts[contentParts.length - 1])) {
-      contentParts.pop();
+    if (parts.length <= 1) {
+      return raw;
     }
-    return contentParts.length ? contentParts.join(":") : raw;
+    let trailingNumericCount = 0;
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      if (!/^\d+$/.test(parts[index])) {
+        break;
+      }
+      trailingNumericCount += 1;
+    }
+    const firstSegment = parts[0];
+    const minSegments = /^tt/i.test(firstSegment) || /^\d+$/.test(firstSegment) ? 1 : 2;
+    const segmentsToDrop = Math.min(
+      trailingNumericCount,
+      Math.max(0, parts.length - minSegments)
+    );
+    return segmentsToDrop > 0 ? parts.slice(0, -segmentsToDrop).join(":") : raw;
   }
 }
 

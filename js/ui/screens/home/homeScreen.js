@@ -3636,6 +3636,7 @@ export const HomeScreen = {
       this.pendingPosterHoldFocus = {
         rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
         index: Number(this.posterHoldMenu.index || 0),
+        rowKey: String(this.posterHoldMenu.rowKey || ""),
         itemId: String(this.posterHoldMenu.item?.id || "")
       };
     }
@@ -3720,13 +3721,33 @@ export const HomeScreen = {
     }
   },
 
-  // Find the card to re-focus after a poster hold menu closes. Prefer the exact
-  // row/column it was at, but fall back to matching the item by id so focus is
-  // kept even when the action changed the row set (e.g. a library or continue
-  // watching row updating shifts the item to a new position).
+  // Find the card to re-focus after a poster hold menu closes. Use the stable
+  // row key before numeric positions so row inserts and duplicate item ids do
+  // not redirect focus to a different catalog.
   resolvePosterHoldRestoreTarget(pending) {
     if (!pending) {
       return null;
+    }
+    const rowKey = String(pending.rowKey || "");
+    const itemId = String(pending.itemId || "");
+    const rowSection = rowKey
+      ? Array.from(this.container?.querySelectorAll("[data-row-key]") || [])
+          .find((node) => String(node.dataset.rowKey || "") === rowKey) || null
+      : null;
+    if (rowSection) {
+      const rowCards = Array.from(rowSection.querySelectorAll(".home-poster-card.focusable"));
+      const byRowIdentity = itemId
+        ? rowCards.find((card) => String(card.dataset.itemId || "") === itemId) || null
+        : null;
+      if (byRowIdentity) {
+        return byRowIdentity;
+      }
+      const byRowIndex = rowCards.find(
+        (card) => Number(card.dataset.itemIndex || 0) === Number(pending.index || 0)
+      ) || null;
+      if (byRowIndex) {
+        return byRowIndex;
+      }
     }
     const byPosition = this.container?.querySelector(
       `.home-poster-card.focusable[data-row-index="${Number(pending.rowIndex || 0)}"][data-item-index="${Number(pending.index || 0)}"]`
@@ -3734,7 +3755,6 @@ export const HomeScreen = {
     if (byPosition) {
       return byPosition;
     }
-    const itemId = String(pending.itemId || "");
     if (!itemId) {
       return null;
     }
@@ -3904,6 +3924,7 @@ export const HomeScreen = {
       this.pendingPosterHoldFocus = {
         rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
         index: Number(this.posterHoldMenu.index || 0),
+        rowKey: String(this.posterHoldMenu.rowKey || ""),
         itemId: String(this.posterHoldMenu.item?.id || "")
       };
     }
@@ -3986,6 +4007,7 @@ export const HomeScreen = {
       item,
       index: Number(node?.dataset?.itemIndex || 0),
       rowIndex: Number(node?.dataset?.rowIndex || 0),
+      rowKey: this.getNodeRowKey(node),
       optionIndex: 0,
       isSaved: Boolean(isSaved),
       isWatched: Boolean(isWatched),
@@ -4001,6 +4023,7 @@ export const HomeScreen = {
     this.pendingPosterHoldFocus = {
       rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
       index: Number(this.posterHoldMenu.index || 0),
+      rowKey: String(this.posterHoldMenu.rowKey || ""),
       itemId: String(this.posterHoldMenu.item?.id || "")
     };
     this.posterHoldMenu = null;
@@ -4455,13 +4478,14 @@ export const HomeScreen = {
       ? {
           rowIndex: Number(this.posterHoldMenu.rowIndex || 0),
           index: Number(this.posterHoldMenu.index || 0),
+          rowKey: String(this.posterHoldMenu.rowKey || ""),
           itemId: String(this.posterHoldMenu.item?.id || "")
         }
       : null;
     this.destroyHomeHoldDialog();
     if (option.action === "details") {
       if (pendingFocus) {
-        const target = this.container?.querySelector(`.home-poster-card.focusable[data-row-index="${Number(pendingFocus.rowIndex || 0)}"][data-item-index="${Number(pendingFocus.index || 0)}"]`) || null;
+        const target = this.resolvePosterHoldRestoreTarget(pendingFocus);
         if (target) {
           this.rememberReturnFocusForNode(target);
         }
@@ -6048,6 +6072,11 @@ export const HomeScreen = {
         if (delta <= 1) {
           return;
         }
+        if (this.isPerformanceConstrained()) {
+          this.cancelScrollAnimation(next.container, "y");
+          next.container.scrollTop = Math.round(Number(next.value || 0));
+          return;
+        }
         this.animateSpringScroll(next.container, "y", next.value);
       });
       return;
@@ -6211,6 +6240,7 @@ export const HomeScreen = {
     target.classList.add("focused");
     this.focusWithoutAutoScroll(target, { suppressDelegatedFocus: true });
     this.setCurrentFocusedNode(target);
+    this.scheduleHomeLazyImageHydration(target);
     if (this.isCollectionFolderNode(current)) {
       this.hydrateCollectionFocusGif(current, false);
     }
@@ -6600,10 +6630,10 @@ export const HomeScreen = {
     }
     if (!this.boundHomeViewportScrollHandler) {
       this.boundHomeViewportScrollHandler = () => {
-        this.scheduleHomeLazyImageHydration();
         if (this.shouldSuspendModernViewportFocusSync()) {
           return;
         }
+        this.scheduleHomeLazyImageHydration();
         // Keep the sidebar sticky across rerenders and layout-driven scroll events.
         if (this.isSidebarFocusActive()) {
           return;
@@ -7304,9 +7334,16 @@ export const HomeScreen = {
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
     const showCatalogTypeSuffix = this.layoutPrefs?.catalogTypeSuffixEnabled !== false;
-    const focusState = !this.homeHoldFocusLocked && retainedFocusState && retainedFocusState.focusKind === "item"
-      ? retainedFocusState
+    const pendingPosterFocusState = this.pendingPosterHoldFocus?.rowKey
+      ? {
+          rowKey: String(this.pendingPosterHoldFocus.rowKey),
+          itemIndex: Number(this.pendingPosterHoldFocus.index || 0)
+        }
       : null;
+    const focusState = pendingPosterFocusState
+      || (!this.homeHoldFocusLocked && retainedFocusState && retainedFocusState.focusKind === "item"
+        ? retainedFocusState
+        : null);
     const focusedPosterFlowConfig = this.getFocusedPosterFlowConfig(this.layoutPrefs || {});
     const expandFocusedPoster = this.layoutMode === "modern"
       && Boolean(focusedPosterFlowConfig.shouldExpand)
@@ -7583,32 +7620,52 @@ export const HomeScreen = {
     ) || null;
     const verticalMargin = Platform.isWebOS() || Platform.isTizen() ? 720 : 1200;
     const horizontalMargin = Platform.isWebOS() || Platform.isTizen() ? 520 : 1000;
+    const rowSelector = ".home-row, .home-modern-row, .home-grid-section, .home-row-continue";
+    const imagesByRow = new Map();
     images.forEach((image) => {
-      if (!(image instanceof HTMLImageElement)) {
-        return;
-      }
-      const src = String(image.dataset.src || "").trim();
-      if (!src) {
-        image.removeAttribute("data-src");
-        return;
-      }
-      const row = image.closest(".home-row, .home-modern-row, .home-grid-section, .home-row-continue");
+      const row = image.closest(rowSelector);
+      const rowImages = imagesByRow.get(row) || [];
+      rowImages.push(image);
+      imagesByRow.set(row, rowImages);
+    });
+    imagesByRow.forEach((rowImages, row) => {
       const shouldHydrateFocusedRow = Boolean(anchorRow && row === anchorRow);
-      const rect = image.getBoundingClientRect();
-      const isNearViewport =
-        rect.bottom >= viewportRect.top - verticalMargin &&
-        rect.top <= viewportRect.bottom + verticalMargin &&
-        rect.right >= viewportRect.left - horizontalMargin &&
-        rect.left <= viewportRect.right + horizontalMargin;
-      if (!shouldHydrateFocusedRow && !isNearViewport) {
-        return;
+      if (!shouldHydrateFocusedRow && row instanceof HTMLElement) {
+        const rowRect = row.getBoundingClientRect();
+        const isRowNearViewport =
+          rowRect.bottom >= viewportRect.top - verticalMargin &&
+          rowRect.top <= viewportRect.bottom + verticalMargin;
+        if (!isRowNearViewport) {
+          return;
+        }
       }
-      // The app already decides when an image is close enough to load. Leaving
-      // loading="lazy" here delegates that decision back to old TV browsers,
-      // which can miscalculate visibility inside the nested modern-home viewport.
-      image.loading = "eager";
-      image.removeAttribute("data-src");
-      image.src = src;
+      rowImages.forEach((image) => {
+        if (!(image instanceof HTMLImageElement)) {
+          return;
+        }
+        const src = String(image.dataset.src || "").trim();
+        if (!src) {
+          image.removeAttribute("data-src");
+          return;
+        }
+        if (!shouldHydrateFocusedRow) {
+          const rect = image.getBoundingClientRect();
+          const isNearViewport =
+            rect.bottom >= viewportRect.top - verticalMargin &&
+            rect.top <= viewportRect.bottom + verticalMargin &&
+            rect.right >= viewportRect.left - horizontalMargin &&
+            rect.left <= viewportRect.right + horizontalMargin;
+          if (!isNearViewport) {
+            return;
+          }
+        }
+        // The app already decides when an image is close enough to load. Leaving
+        // loading="lazy" here delegates that decision back to old TV browsers,
+        // which can miscalculate visibility inside the nested modern-home viewport.
+        image.loading = "eager";
+        image.removeAttribute("data-src");
+        image.src = src;
+      });
     });
   },
 
