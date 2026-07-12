@@ -273,7 +273,7 @@ body:
         - Installer logs, if the issue is installer-related
       render: shell
       placeholder: |
-        Paste logs here.
+        Paste logs here. Take the logs from the Console Log in the settings under "Informations" tab.
     validations:
       required: false
 
