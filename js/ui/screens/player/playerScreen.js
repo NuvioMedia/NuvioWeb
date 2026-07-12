@@ -4379,6 +4379,7 @@ export const PlayerScreen = {
             <div class="player-controls-bar">
               <div id="playerProgressShell" class="player-progress-shell focusable" tabindex="-1" data-player-pointer-action="progress">
                 <div class="player-progress-track">
+                  <div id="playerProgressBuffered" class="player-progress-buffered"></div>
                   <div id="playerProgressFill" class="player-progress-fill"></div>
                 </div>
               </div>
@@ -4451,12 +4452,15 @@ export const PlayerScreen = {
       progressShell: uiRoot.querySelector("#playerProgressShell"),
       clock: uiRoot.querySelector("#playerClock"),
       endsAt: uiRoot.querySelector("#playerEndsAt"),
+      progressBuffered: uiRoot.querySelector("#playerProgressBuffered"),
       progressFill: uiRoot.querySelector("#playerProgressFill"),
       controlButtons: uiRoot.querySelector("#playerControlButtons"),
       timeLabel: uiRoot.querySelector("#playerTimeLabel"),
       startupErrorButton: uiRoot.querySelector("#playerStartupErrorOverlay .player-startup-error-button")
     } : null;
     this.lastUiTickState = {
+      bufferedVisible: false,
+      bufferedWidth: "",
       progressWidth: "",
       clockText: "",
       clockMinuteKey: "",
@@ -7212,6 +7216,10 @@ export const PlayerScreen = {
       this.updateUiTick();
     };
 
+    const onProgress = () => {
+      this.updateUiTick();
+    };
+
     const onLoadedMetadata = () => {
       if (this.isStartupErrorVisible()) {
         return;
@@ -7516,6 +7524,7 @@ export const PlayerScreen = {
       ["playing", onPlaying],
       ["error", onError],
       ["pause", onPause],
+      ["progress", onProgress],
       ["timeupdate", onTimeUpdate],
       ["loadedmetadata", onLoadedMetadata],
       ["loadeddata", onPlayable],
@@ -8084,6 +8093,14 @@ export const PlayerScreen = {
     return Number(PlayerController.video?.duration || 0);
   },
 
+  getPlaybackBufferedSeconds() {
+    if (typeof PlayerController.getBufferedTimeSeconds !== "function") {
+      return null;
+    }
+    const bufferedSeconds = PlayerController.getBufferedTimeSeconds();
+    return bufferedSeconds == null ? null : Number(bufferedSeconds);
+  },
+
   getPlaybackSpeed() {
     if (typeof PlayerController.getPlaybackRate === "function") {
       return Number(PlayerController.getPlaybackRate() || 1);
@@ -8393,6 +8410,25 @@ export const PlayerScreen = {
     const progress = duration > 0 ? clamp(effectiveProgressSeconds / duration, 0, 1) : 0;
     const uiRefs = this.uiRefs || {};
     const uiState = this.lastUiTickState || (this.lastUiTickState = {});
+    const progressBuffered = uiRefs.progressBuffered;
+    if (progressBuffered) {
+      const bufferedSeconds = this.getPlaybackBufferedSeconds();
+      const bufferedVisible = Number.isFinite(bufferedSeconds)
+        && duration > 0
+        && bufferedSeconds > current + 0.25;
+      const bufferedProgress = bufferedVisible
+        ? clamp(bufferedSeconds / duration, 0, 1)
+        : 0;
+      const nextBufferedWidth = `${Math.round(bufferedProgress * 10000) / 100}%`;
+      if (uiState.bufferedWidth !== nextBufferedWidth) {
+        progressBuffered.style.width = nextBufferedWidth;
+        uiState.bufferedWidth = nextBufferedWidth;
+      }
+      if (uiState.bufferedVisible !== bufferedVisible) {
+        progressBuffered.classList.toggle("is-visible", bufferedVisible);
+        uiState.bufferedVisible = bufferedVisible;
+      }
+    }
     const progressFill = uiRefs.progressFill;
     if (progressFill) {
       const nextWidth = `${Math.round(progress * 10000) / 100}%`;

@@ -11396,6 +11396,7 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .player-progress-track {
+  position: relative;
   width: 100%;
   height: 6px;
   border-radius: 3px;
@@ -11411,10 +11412,32 @@ html.legacy-webos .debug-console-log-frame {
   background: rgba(255, 255, 255, 0.45);
 }
 
+.player-progress-buffered,
 .player-progress-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
   width: 0%;
   height: 100%;
   border-radius: 3px;
+}
+
+.player-progress-buffered {
+  z-index: 1;
+  background: var(--player-secondary);
+  opacity: 0;
+  transition:
+    width 250ms linear,
+    opacity 120ms ease;
+}
+
+.player-progress-buffered.is-visible {
+  opacity: 0.4;
+}
+
+.player-progress-fill {
+  z-index: 2;
   background: var(--player-secondary);
   transition: width 150ms linear;
 }

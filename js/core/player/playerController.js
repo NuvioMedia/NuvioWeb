@@ -2161,6 +2161,48 @@ export const PlayerController = {
     return Math.max(0, Number(this.video?.duration || 0));
   },
 
+  getBufferedTimeSeconds() {
+    // AVPlay reports buffering-operation progress, not a buffered media
+    // timestamp. Returning no value prevents the UI from presenting that
+    // percentage as playable time.
+    if (this.isUsingAvPlay()) {
+      return null;
+    }
+
+    const video = this.video;
+    const durationSeconds = Number(video?.duration || 0);
+    const currentSeconds = Number(video?.currentTime || 0);
+    const ranges = video?.buffered;
+    if (
+      !ranges
+      || !Number.isFinite(durationSeconds)
+      || durationSeconds <= 0
+      || !Number.isFinite(currentSeconds)
+      || currentSeconds < 0
+    ) {
+      return null;
+    }
+
+    try {
+      for (let index = 0; index < Number(ranges.length || 0); index += 1) {
+        const startSeconds = Number(ranges.start(index));
+        const endSeconds = Number(ranges.end(index));
+        if (
+          Number.isFinite(startSeconds)
+          && Number.isFinite(endSeconds)
+          && startSeconds <= currentSeconds + 0.25
+          && endSeconds >= currentSeconds - 0.25
+        ) {
+          return Math.max(0, Math.min(endSeconds, durationSeconds));
+        }
+      }
+    } catch (_) {
+      // TimeRanges can change while it is being read on older TV engines.
+    }
+
+    return null;
+  },
+
   seekToSeconds(targetSeconds) {
     const seconds = Number(targetSeconds || 0);
     if (!Number.isFinite(seconds) || seconds < 0) {
