@@ -25,7 +25,8 @@ const DEFAULTS = {
     verticalOffset: 0,
     preferredLanguage: "off",
     secondaryPreferredLanguage: "off",
-    useForcedSubtitles: false
+    useForcedSubtitles: false,
+    showOnlyPreferredLanguages: false
   },
   audioAmplificationDb: 0,
   persistAudioAmplification: false,
@@ -191,7 +192,8 @@ function normalizePlayerSettings(settings = {}) {
       ...subtitleStyle,
       preferredLanguage,
       secondaryPreferredLanguage,
-      useForcedSubtitles
+      useForcedSubtitles,
+      showOnlyPreferredLanguages: Boolean(subtitleStyle.showOnlyPreferredLanguages)
     }
   };
 }

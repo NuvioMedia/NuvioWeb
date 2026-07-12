@@ -108,6 +108,8 @@ export { escapeAttribute, escapeHtml, formatCatalogRowTitle } from "./homeUtils.
 /** @typedef {import("./homeTypes.js").HomeMediaSourceLike} HomeMediaSourceLike */
 /** @typedef {import("./homeTypes.js").HomeHeroDisplay} HomeHeroDisplay */
 
+const TIZEN_ROUTE_RETURN_BACK_GUARD_MS = 700;
+
 function homePerfNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
@@ -358,12 +360,23 @@ function shouldEnrichModernHero(hero) {
   return Boolean(settings.enabled && settings.modernHomeEnabled);
 }
 
+const HERO_IMAGE_PRELOAD_CACHE_LIMIT = 32;
+const heroImagePreloadCache = new Map();
+
 function preloadImageSource(src) {
   const normalized = String(src || "").trim();
   if (!normalized || typeof Image === "undefined") {
     return Promise.resolve(false);
   }
-  return new Promise((resolve) => {
+  const cached = heroImagePreloadCache.get(normalized);
+  if (cached) {
+    return cached;
+  }
+  if (heroImagePreloadCache.size >= HERO_IMAGE_PRELOAD_CACHE_LIMIT) {
+    const oldestSource = heroImagePreloadCache.keys().next().value;
+    heroImagePreloadCache.delete(oldestSource);
+  }
+  const preload = new Promise((resolve) => {
     const image = new Image();
     let settled = false;
     const finish = (loaded) => {
@@ -381,6 +394,13 @@ function preloadImageSource(src) {
       finish(Number(image.naturalWidth || 0) > 0);
     }
   });
+  heroImagePreloadCache.set(normalized, preload);
+  preload.then((loaded) => {
+    if (!loaded && heroImagePreloadCache.get(normalized) === preload) {
+      heroImagePreloadCache.delete(normalized);
+    }
+  });
+  return preload;
 }
 
 function animateModernHeroBackdropSwap(backdrop, nextSrc, nextAlt = "") {
@@ -3179,6 +3199,10 @@ export const HomeScreen = {
       clearTimeout(this.heroFocusDelayTimer);
       this.heroFocusDelayTimer = null;
     }
+    if (this.heroBackdropPreloadTimer) {
+      clearTimeout(this.heroBackdropPreloadTimer);
+      this.heroBackdropPreloadTimer = null;
+    }
     if (this.deferredContinueWatchingFocusTimer) {
       clearTimeout(this.deferredContinueWatchingFocusTimer);
       this.deferredContinueWatchingFocusTimer = null;
@@ -4545,6 +4569,23 @@ export const HomeScreen = {
     const isRapidNav = previous > 0 && (now - previous) < MODERN_HOME_CONSTANTS.heroRapidNavThresholdMs;
     const delay = this.getHeroFocusDelay({ rapid: isRapidNav });
     this.lastModernHeroNavAt = now;
+    const preloadDelay = Math.max(0, Math.min(120, delay - 80));
+    this.heroBackdropPreloadTimer = setTimeout(() => {
+      this.heroBackdropPreloadTimer = null;
+      if (Number(this.heroFocusToken || 0) !== focusToken) {
+        return;
+      }
+      const focusedNode = this.getCurrentFocusedNode();
+      if (focusedNode !== node || !node?.isConnected || !node.classList.contains("focused")) {
+        return;
+      }
+      const focusedHero = this.getNodeHeroSource(node);
+      if (buildHeroIdentity(focusedHero) !== scheduledHeroIdentity) {
+        return;
+      }
+      const backdropSource = buildModernHeroPresentation(focusedHero)?.backdrop || "";
+      void preloadImageSource(backdropSource);
+    }, preloadDelay);
     this.heroFocusDelayTimer = setTimeout(() => {
       if (Number(this.heroFocusToken || 0) !== focusToken) {
         return;
@@ -6651,6 +6692,9 @@ export const HomeScreen = {
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     this.container = document.getElementById("home");
+    this.ignoreRouteReturnBackUntil = Platform.isTizen() && navigationContext?.isBackNavigation
+      ? Date.now() + TIZEN_ROUTE_RETURN_BACK_GUARD_MS
+      : 0;
     const restoredRouteFocusState = navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
       ? navigationContext.restoredState
       : null;
@@ -8509,6 +8553,13 @@ export const HomeScreen = {
     }
     if (this.posterHoldMenu) {
       this.closePosterHoldMenu();
+      return true;
+    }
+    if (Date.now() < Number(this.ignoreRouteReturnBackUntil || 0)) {
+      // Samsung can emit the same physical Back as both a key event and a
+      // tizenhwkey event. The first returns here from a child route; ignore the
+      // duplicate instead of letting the newly mounted Home open its sidebar.
+      this.ignoreRouteReturnBackUntil = 0;
       return true;
     }
     if (this.layoutMode === "modern") {

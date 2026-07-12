@@ -820,19 +820,21 @@ export const PlayerController = {
 
   pickAvPlayTrackLanguage(track = {}) {
     const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
-    return String(
-      track.language
-      || track.lang
-      || track.track_lang
-      || track.trackLang
-      || track.language_code
-      || extraInfo.track_lang
-      || extraInfo.trackLang
-      || extraInfo.language
-      || extraInfo.language_code
-      || extraInfo.lang
-      || ""
-    ).trim();
+    const candidates = [
+      track.language,
+      track.lang,
+      track.track_lang,
+      track.trackLang,
+      track.language_code,
+      extraInfo.track_lang,
+      extraInfo.trackLang,
+      extraInfo.language,
+      extraInfo.language_code,
+      extraInfo.lang
+    ].map((value) => String(value || "").trim());
+    return candidates.find((value) => (
+      value && !/^(unknown(?: language)?|undetermined|undefined|und|unk|zxx)$/i.test(value)
+    )) || "";
   },
 
   pickAvPlayExtraValue(extraInfo = {}, keys = []) {
@@ -968,6 +970,14 @@ export const PlayerController = {
           id: `avplay-sub-${normalizedTrackIndex}`,
           label: this.pickAvPlayTrackLabel(track, index, "Subtitle"),
           language: this.pickAvPlayTrackLanguage(track),
+          codec: this.pickAvPlayExtraValue(extraInfo, [
+            "codec",
+            "codec_name",
+            "codec_id",
+            "codec_tag_string",
+            "fourCC",
+            "fourcc"
+          ]),
           forced: /^(1|true|yes)$/i.test(forcedValue),
           extraInfo,
           avplayTrackIndex: normalizedTrackIndex
@@ -1863,6 +1873,25 @@ export const PlayerController = {
     } catch (_) {
       // Ignore display-method failures.
     }
+    const hasInternalSubtitleTrack = [
+      this.selectedAvPlaySubtitleTrackIndex,
+      this.pendingAvPlaySubtitleTrackIndex,
+      this.desiredAvPlaySubtitleTrackIndex
+    ].some((trackIndex) => Number.isFinite(Number(trackIndex)) && Number(trackIndex) >= 0);
+    if (
+      Platform.isTizen()
+      && hasInternalSubtitleTrack
+      && !this.avplaySubtitlesSilent
+      && !String(this.avplayExternalSubtitlePath || "").trim()
+    ) {
+      try {
+        // Display updates can restore Samsung's native subtitle renderer.
+        // Keep it hidden while onsubtitlechange feeds Nuvio's styled overlay.
+        avplay.setSilentSubtitle?.(true);
+      } catch (_) {
+        // Keep playback working on AVPlay builds without silent subtitles.
+      }
+    }
   },
 
   reapplyTizenAvPlayDisplayRect(delayMs = 0) {
@@ -1928,7 +1957,7 @@ export const PlayerController = {
     this.appliedAvPlayPlaybackRate = 1;
   },
 
-  configureAvPlayForSource(requestHeaders = {}, sourceType = null) {
+  configureAvPlayForSource(requestHeaders = {}) {
     const avplay = this.getAvPlay();
     if (!avplay || typeof avplay.setStreamingProperty !== "function") {
       return;
@@ -1954,21 +1983,9 @@ export const PlayerController = {
     } catch (_) {
       // Ignore unsupported AVPlay header properties.
     }
-    const normalizedSourceType = String(sourceType || "").trim();
-    const isAdaptiveSource = this.isLikelyHlsMimeType(normalizedSourceType)
-      || this.isLikelyDashMimeType(normalizedSourceType)
-      || this.isLikelySmoothStreamingMimeType(normalizedSourceType);
-    if (!isAdaptiveSource) {
-      return;
-    }
-    try {
-      avplay.setStreamingProperty("ADAPTIVE_INFO", "STARTBITRATE=HIGHEST|FIXED_MAX_RESOLUTION=3840X2160");
-    } catch (_) {
-      // Ignore adaptive hints on older firmware.
-    }
   },
 
-  playWithAvPlay(url, requestHeaders = {}, sourceType = null, playToken = null) {
+  playWithAvPlay(url, requestHeaders = {}, _sourceType = null, playToken = null) {
     if (!this.canUseAvPlay()) {
       return false;
     }
@@ -1991,16 +2008,11 @@ export const PlayerController = {
     this.avplayDurationMs = 0;
     this.lastPlaybackErrorCode = 0;
     this.playbackEngine = this.getPlatformAvplayEngineName();
-    const avplaySourceType = sourceType
-      || this.currentPlaybackMediaSourceType
-      || this.resolveRuntimeSourceType(this.guessMediaMimeType(url))
-      || null;
-
     this.emitVideoEvent("waiting", { playbackEngine: this.playbackEngine });
 
     try {
       avplay.open(this.avplayUrl);
-      this.configureAvPlayForSource(requestHeaders, avplaySourceType);
+      this.configureAvPlayForSource(requestHeaders);
     } catch (error) {
       this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
       this.teardownAvPlay();

@@ -12,13 +12,7 @@ import { AuthManager } from "./core/auth/authManager.js";
 import { AuthState } from "./core/auth/authState.js";
 import { ProfileManager } from "./core/profile/profileManager.js";
 import { ProfileSyncService } from "./core/profile/profileSyncService.js";
-import { ProfileSettingsSyncService } from "./core/profile/profileSettingsSyncService.js";
-import { TraktCredentialSyncService } from "./core/profile/traktCredentialSyncService.js";
 import { StartupSyncService } from "./core/profile/startupSyncService.js";
-import { CollectionSyncService } from "./core/profile/collectionSyncService.js";
-import { HomeCatalogSettingsSyncService } from "./core/profile/homeCatalogSettingsSyncService.js";
-import { WatchedItemsSyncService } from "./core/profile/watchedItemsSyncService.js";
-import { WatchProgressSyncService } from "./core/profile/watchProgressSyncService.js";
 import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
@@ -202,16 +196,18 @@ function isAddonRemoteMode() {
 }
 
 async function shouldShowProfileSelection() {
-  await ProfileSyncService.pull();
+  const [, pinStates] = await Promise.all([
+    ProfileSyncService.pull(),
+    ProfileSyncService.pullProfileLockStates()
+  ]);
   const profiles = await ProfileManager.getProfiles();
   const activeProfileId = ProfileManager.getActiveProfileId();
-  const pinStates = await ProfileSyncService.pullProfileLockStates();
   const activeProfileHasPin = Boolean(
     pinStates?.[String(activeProfileId)] || pinStates?.[Number(activeProfileId)]
   );
 
   if (hasSelectedProfileThisSession) {
-    return false;
+    return { show: false, pinStates };
   }
 
   // Remember last profile: when enabled and the last used profile has no PIN,
@@ -222,10 +218,10 @@ async function shouldShowProfileSelection() {
     ProfileManager.hasEverSelectedProfile() &&
     !activeProfileHasPin
   ) {
-    return false;
+    return { show: false, pinStates };
   }
 
-  return profiles.length > 1 || activeProfileHasPin;
+  return { show: profiles.length > 1 || activeProfileHasPin, pinStates };
 }
 
 async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
@@ -240,17 +236,9 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
     await ProfileManager.setActiveProfile(activeProfile.id);
     StartupSyncService.enableProfileScopedSync();
     detailWatchedEnrichmentService.invalidateAllCache();
-    const didApplyProfileSettings = await ProfileSettingsSyncService.pull(activeProfile.id);
-    await TraktCredentialSyncService.pullFromRemote(activeProfile.id);
-    await CollectionSyncService.pull(activeProfile.id);
-    await HomeCatalogSettingsSyncService.pull(activeProfile.id);
-    await WatchedItemsSyncService.pull();
-    await WatchProgressSyncService.pull();
-    if (didApplyProfileSettings) {
-      await I18n.init();
-      ThemeManager.apply();
-      I18n.apply();
-    }
+    await I18n.init();
+    ThemeManager.apply();
+    I18n.apply();
     void preloadStreamBadgeImages().catch((error) => {
       console.warn("Stream badge image prerender failed", error);
     });
@@ -263,15 +251,21 @@ async function enterWithLastProfile({ restoreWebOsRoute = false } = {}) {
       replaceHistory: true,
       skipStackPush: true
     });
-    return;
+  } else {
+    await Router.navigate("home");
   }
-  await Router.navigate("home");
+  void StartupSyncService.requestSyncNow().catch((error) => {
+    console.warn("Profile background sync failed", error);
+  });
 }
 
 async function routeAfterAuthentication() {
-  const showProfileSelection = await shouldShowProfileSelection();
-  if (showProfileSelection) {
-    Router.navigate("profileSelection");
+  const profileRoute = await shouldShowProfileSelection();
+  if (profileRoute.show) {
+    await Router.navigate("profileSelection", {
+      skipInitialProfileSync: true,
+      profilePinEnabled: profileRoute.pinStates
+    });
     return;
   }
 
@@ -472,7 +466,7 @@ async function bootstrapApp() {
     if (state === AuthState.AUTHENTICATED) {
       markBootStage("Loading profiles");
       LocalStore.remove(GUEST_QR_BYPASS_KEY);
-      StartupSyncService.start();
+      StartupSyncService.start({ runInitialPull: false });
       routeAfterAuthentication().catch((error) => {
         console.warn("Failed to resolve authenticated route", error);
         Router.navigate("profileSelection");

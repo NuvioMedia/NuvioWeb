@@ -57,7 +57,7 @@ export const StartupSyncService = {
   addonPushTimer: null,
   unsubscribeAddonChanges: null,
 
-  async start({ profileScopedSyncEnabled = false } = {}) {
+  async start({ profileScopedSyncEnabled = false, runInitialPull = true } = {}) {
     if (this.started) {
       if (profileScopedSyncEnabled) {
         this.profileScopedSyncEnabled = true;
@@ -71,7 +71,9 @@ export const StartupSyncService = {
       this.scheduleAddonPush();
     });
 
-    await this.syncPull({ includeProfileScoped: this.profileScopedSyncEnabled });
+    if (runInitialPull) {
+      await this.syncPull({ includeProfileScoped: this.profileScopedSyncEnabled });
+    }
 
     this.intervalId = setInterval(() => {
       this.syncCycle();
@@ -97,6 +99,23 @@ export const StartupSyncService = {
 
   enableProfileScopedSync() {
     this.profileScopedSyncEnabled = true;
+  },
+
+  async requestSyncNow({ pushAfterPull = false } = {}) {
+    if (!this.started || this.inFlight) {
+      return false;
+    }
+    this.inFlight = true;
+    try {
+      const includeProfileScoped = this.profileScopedSyncEnabled;
+      await this.syncPull({ includeProfileScoped });
+      if (pushAfterPull && includeProfileScoped) {
+        await this.syncPush();
+      }
+      return true;
+    } finally {
+      this.inFlight = false;
+    }
   },
 
   async syncPull({ includeProfileScoped = this.profileScopedSyncEnabled } = {}) {
@@ -160,19 +179,7 @@ export const StartupSyncService = {
   },
 
   async syncCycle() {
-    if (!this.started || this.inFlight) {
-      return;
-    }
-    this.inFlight = true;
-    try {
-      const includeProfileScoped = this.profileScopedSyncEnabled;
-      await this.syncPull({ includeProfileScoped });
-      if (includeProfileScoped) {
-        await this.syncPush();
-      }
-    } finally {
-      this.inFlight = false;
-    }
+    return this.requestSyncNow({ pushAfterPull: true });
   },
 
   scheduleAddonPush() {

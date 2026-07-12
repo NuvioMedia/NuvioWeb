@@ -13413,6 +13413,61 @@ html.legacy-webos .debug-console-log-frame {
   padding: min(0.94vw, 18px) min(1.25vw, 24px); /* ATV 12dp/9dp */
 }
 
+.player-subtitle-language-rail .player-dialog-item-main {
+  display: flex;
+  align-items: center;
+  gap: min(0.52vw, 10px);
+  min-width: 0;
+}
+
+.player-subtitle-language-count,
+.player-subtitle-source-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--player-atv-text-secondary);
+  font-size: min(0.83vw, 16px);
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.player-subtitle-language-count {
+  min-width: min(1.67vw, 32px);
+  height: min(1.67vw, 32px);
+  padding: 0 min(0.42vw, 8px);
+}
+
+.player-subtitle-option-copy {
+  min-width: 0;
+  grid-column: 1 / 2;
+  grid-row: 1 / 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: min(0.31vw, 6px);
+}
+
+.player-subtitle-option-copy .player-dialog-item-main,
+.player-subtitle-option-copy .player-dialog-item-sub {
+  grid-column: auto;
+  grid-row: auto;
+  margin-top: 0;
+}
+
+.player-subtitle-source-chip {
+  min-height: min(1.46vw, 28px);
+  padding: min(0.21vw, 4px) min(0.52vw, 10px);
+}
+
+.player-subtitle-modal .player-dialog-item.selected .player-subtitle-language-count,
+.player-subtitle-modal .player-dialog-item.selected .player-subtitle-source-chip {
+  background: rgba(0, 0, 0, 0.14);
+  color: currentColor;
+}
+
 .player-subtitle-style-rail {
   gap: min(1.04vw, 20px); /* ATV 10dp -> 20px */
   padding-top: 0;

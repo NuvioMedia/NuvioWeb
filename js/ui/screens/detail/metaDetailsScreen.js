@@ -1023,7 +1023,10 @@ function buildYoutubeEmbedUrl(ytId = "", { muted = false } = {}) {
   return `https://www.youtube-nocookie.com/embed/${cleanId}?${params.toString()}`;
 }
 
-function buildInlineYoutubePlayerUrl(ytId = "", { muted = false, loop = false } = {}) {
+function buildInlineYoutubePlayerUrl(
+  ytId = "",
+  { muted = false, loop = false, statePollMs = 250 } = {}
+) {
   const cleanId = String(ytId || "").trim();
   if (!cleanId) {
     return "";
@@ -1048,6 +1051,10 @@ function buildInlineYoutubePlayerUrl(ytId = "", { muted = false, loop = false } 
       proxyUrl.searchParams.set("playsinline", "1");
       proxyUrl.searchParams.set("rel", "0");
       proxyUrl.searchParams.set("cc_load_policy", "0");
+      proxyUrl.searchParams.set(
+        "state_poll_ms",
+        String(Math.max(0, Number(statePollMs || 0)))
+      );
       proxyUrl.searchParams.set("_cb", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
       return proxyUrl.toString();
     } catch (_) {
@@ -5983,17 +5990,10 @@ export const MetaDetailsScreen = {
     if (this.trailerPlaybackMode !== "manual") {
       return;
     }
+    // YouTube proxy state messages and native timeupdate events already keep
+    // the overlay current. A second 250 ms poll doubled cross-frame work and
+    // caused recurring main-thread pressure on Samsung TV browsers.
     this.updateTrailerOverlay();
-    this.trailerProgressTimer = setInterval(() => {
-      if (
-        this.isTrailerPlaying &&
-        this.trailerSource?.kind === "youtube" &&
-        !this.trailerYoutubeFallbackActive
-      ) {
-        this.postTrailerProxyCommand("getState");
-      }
-      this.updateTrailerOverlay();
-    }, 250);
   },
 
   cacheTrailerRefs() {
@@ -6070,6 +6070,9 @@ export const MetaDetailsScreen = {
     const playback = this.getTrailerPlaybackSnapshot();
     this.trailerMuted = Boolean(playback.muted);
     this.trailerSubtitlesEnabled = Boolean(playback.captionsEnabled);
+    if (!this.trailerControlsVisible && !playback.loading && !playback.paused) {
+      return;
+    }
     const progress =
       playback.duration > 0
         ? Math.max(0, Math.min(100, (playback.currentTime / playback.duration) * 100))
@@ -6374,7 +6377,8 @@ export const MetaDetailsScreen = {
       const youtubeFrameUrl =
         buildInlineYoutubePlayerUrl(this.trailerSource.ytId, {
           muted: this.trailerMuted,
-          loop: false
+          loop: false,
+          statePollMs: this.trailerPlaybackMode === "manual" ? 500 : 0
         }) ||
         this.trailerSource.embedUrl ||
         "";

@@ -45,6 +45,10 @@
         var autoplay = params.autoplay !== "0";
         var loop = params.loop !== "0";
         var captionsEnabled = params.cc_load_policy === "1";
+        var statePollMs = Math.max(
+          0,
+          Number(params.state_poll_ms == null ? 250 : params.state_poll_ms) || 0
+        );
 
         function parseQuery(search) {
           var output = {};
@@ -149,9 +153,13 @@
           if (stateTimer) {
             clearInterval(stateTimer);
           }
+          if (statePollMs <= 0) {
+            stateTimer = null;
+            return;
+          }
           stateTimer = setInterval(function pushStateTick() {
             pushState(false);
-          }, 250);
+          }, statePollMs);
         }
 
         function setCaptionsEnabled(enabled) {

@@ -15,6 +15,25 @@
   var lastStage = "Loading startup files";
   var watchdogId = 0;
 
+  function scheduleWatchdog() {
+    if (!active) {
+      return;
+    }
+    if (watchdogId) {
+      window.clearTimeout(watchdogId);
+    }
+    watchdogId = window.setTimeout(function onBootTimeout() {
+      watchdogId = 0;
+      if (active) {
+        showError(
+          "The application is taking too long to start.",
+          "Restart the app. If the problem continues, photograph this screen and report the code and stage.",
+          "BOOT-TIMEOUT"
+        );
+      }
+    }, WATCHDOG_MS);
+  }
+
   function text(value) {
     if (value === undefined || value === null || value === "") {
       return "Unavailable";
@@ -113,6 +132,7 @@
     stage: function stage(name) {
       if (active && name) {
         lastStage = String(name);
+        scheduleWatchdog();
       }
     },
 
@@ -172,13 +192,5 @@
     });
   }
 
-  watchdogId = window.setTimeout(function onBootTimeout() {
-    if (active) {
-      showError(
-        "The application is taking too long to start.",
-        "Restart the app. If the problem continues, photograph this screen and report the code and stage.",
-        "BOOT-TIMEOUT"
-      );
-    }
-  }, WATCHDOG_MS);
+  scheduleWatchdog();
 })(window, document);

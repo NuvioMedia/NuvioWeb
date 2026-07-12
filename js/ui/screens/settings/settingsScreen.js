@@ -4905,6 +4905,15 @@ export const SettingsScreen = {
         }
       });
     });
+    this.actionMap.set("playback:showOnlyPreferredSubtitleLanguages", () => {
+      const currentSettings = PlayerSettingsStore.get();
+      PlayerSettingsStore.set({
+        subtitleStyle: {
+          ...currentSettings.subtitleStyle,
+          showOnlyPreferredLanguages: !currentSettings.subtitleStyle?.showOnlyPreferredLanguages
+        }
+      });
+    });
     this.actionMap.set("playback:subtitleLanguage", () => {
       const currentSettings = PlayerSettingsStore.get();
       const currentLanguage = normalizeSelectableSubtitleLanguageCode(
@@ -5144,6 +5153,16 @@ export const SettingsScreen = {
           title: t("settings.playback.subtitleLanguage.title"),
           subtitle: t("settings.playback.subtitleLanguage.subtitle"),
           value: labelForSubtitlePlaybackLanguage(model.player.subtitleLanguage)
+        })}
+        ${this.renderToggleRow({
+          focusKey: "playback:showOnlyPreferredSubtitleLanguages",
+          title: t("sub_show_only_preferred_languages", {}, "Show Only Preferred Languages"),
+          subtitle: t(
+            "sub_show_only_preferred_languages_desc",
+            {},
+            "Hide all other subtitles languages from selection list"
+          ),
+          checked: Boolean(model.player.subtitleStyle?.showOnlyPreferredLanguages)
         })}
         ${this.renderToggleRow({
           focusKey: "playback:useForcedSubtitles",
