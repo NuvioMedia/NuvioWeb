@@ -7646,7 +7646,7 @@ export const MetaDetailsScreen = {
         return this.focusInList(insightTabs, this.getActiveInsightTabIndex(insightTabs));
       if (episodes.length)
         return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-          preserveVerticalScroll: true
+          preserveVerticalScroll: false
         });
       return false;
     };
@@ -7674,7 +7674,7 @@ export const MetaDetailsScreen = {
     const focusSeriesSectionAboveInsights = (index = 0) => {
       if (episodes.length) {
         return this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-          preserveVerticalScroll: true
+          preserveVerticalScroll: false
         });
       }
       if (seasons.length) {
@@ -7701,7 +7701,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
@@ -7725,7 +7725,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
@@ -7751,7 +7751,11 @@ export const MetaDetailsScreen = {
         );
       if (direction === "up") {
         if (seasons.length) {
-          return this.focusInList(seasons, this.getSelectedSeasonIndex(seasons)) || true;
+          return (
+            this.focusInList(seasons, this.getSelectedSeasonIndex(seasons), {
+              preserveVerticalScroll: true
+            }) || true
+          );
         }
         if (actions.length) {
           return (
@@ -7822,7 +7826,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
@@ -7854,7 +7858,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
@@ -7890,7 +7894,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
@@ -7966,7 +7970,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
@@ -8017,7 +8021,7 @@ export const MetaDetailsScreen = {
         if (episodes.length) {
           return (
             this.focusEpisodeByIndex(this.getRememberedEpisodeIndex(episodes), {
-              preserveVerticalScroll: true
+              preserveVerticalScroll: false
             }) || true
           );
         }
