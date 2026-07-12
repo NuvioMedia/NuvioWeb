@@ -1836,14 +1836,7 @@ export const PlayerController = {
       return;
     }
     const viewport = this.getAvPlayViewportSize();
-    if (Platform.isTizen()) {
-      this.avplayDisplayRect = {
-        x: 0,
-        y: 0,
-        width: viewport.width,
-        height: viewport.height
-      };
-    } else if (rect) {
+    if (rect) {
       this.avplayDisplayRect = {
         x: Math.round(Number(rect.x || 0)),
         y: Math.round(Number(rect.y || 0)),

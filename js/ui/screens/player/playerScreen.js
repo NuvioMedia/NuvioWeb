@@ -5883,6 +5883,17 @@ export const PlayerScreen = {
     } catch (_) {
       // Route cleanup will make a second best-effort stop if native teardown throws.
     }
+    const canReturnThroughHistory = Boolean(
+      this.params?.returnToStreamOnBack
+      && this.params?.streamRouteParams
+      && Router.historyInitialized
+      && window?.history
+      && typeof window.history.back === "function"
+    );
+    if (canReturnThroughHistory) {
+      void Router.back({ skipConsume: true });
+      return "history";
+    }
     const shouldReturnToStream = Boolean(
       this.params?.returnToStreamOnBack
       || this.params?.streamRouteParams
