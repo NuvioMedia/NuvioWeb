@@ -734,6 +734,9 @@ export const SupportersContributorsScreen = {
   },
 
   consumeBackRequest() {
+    if (!this.dialog && !this.showDonateQr) {
+      return false;
+    }
     void this.handleBack();
     return true;
   },
