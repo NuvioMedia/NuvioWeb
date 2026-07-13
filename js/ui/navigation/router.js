@@ -51,6 +51,7 @@ const NON_BACKSTACK_ROUTES = new Set([
 ]);
 const WEBOS_RESUME_ROUTE_KEY = "webos_last_resume_route";
 const WEBOS_RESUME_ROUTE_TTL_MS = 20 * 60 * 1000;
+const TIZEN_ROUTE_RETURN_BACK_GUARD_MS = 700;
 const WEBOS_NON_RESTORABLE_ROUTES = new Set([
   ...NON_BACKSTACK_ROUTES,
   "player",
@@ -66,6 +67,9 @@ export const Router = {
   suppressPopstateUntil: 0,
   skipConsumeNextPopstate: false,
   ignoreNextPopstate: false,
+  routeReturnBackGuardActive: false,
+  routeReturnBackGuardUntil: 0,
+  routeReturnBackGuardNavigationId: 0,
 
   routes: {
     home: HomeScreen,
@@ -208,6 +212,39 @@ export const Router = {
     this.ignoreNextPopstate = true;
   },
 
+  beginRouteReturnBackGuard(isBackNavigation = false) {
+    this.routeReturnBackGuardNavigationId += 1;
+    const navigationId = this.routeReturnBackGuardNavigationId;
+    const shouldGuard = Platform.isTizen() && Boolean(isBackNavigation);
+    this.routeReturnBackGuardActive = shouldGuard;
+    this.routeReturnBackGuardUntil = shouldGuard ? Number.POSITIVE_INFINITY : 0;
+    return navigationId;
+  },
+
+  completeRouteReturnBackGuard(navigationId) {
+    if (
+      navigationId !== this.routeReturnBackGuardNavigationId ||
+      !this.routeReturnBackGuardActive
+    ) {
+      return;
+    }
+    this.routeReturnBackGuardUntil = Date.now() + TIZEN_ROUTE_RETURN_BACK_GUARD_MS;
+  },
+
+  consumeRouteReturnBackGuard() {
+    if (
+      !this.routeReturnBackGuardActive ||
+      Date.now() >= Number(this.routeReturnBackGuardUntil || 0)
+    ) {
+      this.routeReturnBackGuardActive = false;
+      this.routeReturnBackGuardUntil = 0;
+      return false;
+    }
+    this.routeReturnBackGuardActive = false;
+    this.routeReturnBackGuardUntil = 0;
+    return true;
+  },
+
   persistWebOsResumeRoute(routeName = this.current, params = this.currentParams) {
     if (!Platform.isWebOS()) {
       return;
@@ -261,6 +298,9 @@ export const Router = {
     const skipStackPush = Boolean(options?.skipStackPush);
     const replaceHistory = Boolean(options?.replaceHistory);
     const targetParams = params || {};
+    const routeReturnBackGuardNavigationId = this.beginRouteReturnBackGuard(
+      options?.isBackNavigation
+    );
 
     const Screen = this.routes[routeName];
 
@@ -296,6 +336,7 @@ export const Router = {
     const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
 
     await Screen.mount(this.currentParams, navigationContext);
+    this.completeRouteReturnBackGuard(routeReturnBackGuardNavigationId);
     logRouterPerf("navigate", {
       ms: Number((routerPerfNow() - navigationStart).toFixed(2)),
       route: routeName,

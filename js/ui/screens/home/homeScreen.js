@@ -108,8 +108,6 @@ export { escapeAttribute, escapeHtml, formatCatalogRowTitle } from "./homeUtils.
 /** @typedef {import("./homeTypes.js").HomeMediaSourceLike} HomeMediaSourceLike */
 /** @typedef {import("./homeTypes.js").HomeHeroDisplay} HomeHeroDisplay */
 
-const TIZEN_ROUTE_RETURN_BACK_GUARD_MS = 700;
-
 function homePerfNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
@@ -6689,20 +6687,9 @@ export const HomeScreen = {
     viewport.addEventListener("scroll", this.boundHomeViewportScrollHandler, { passive: true });
   },
 
-  completeRouteReturnBackGuard() {
-    if (this.ignoreRouteReturnBackUntil > 0 && !this.routeReturnBackGuardConsumed) {
-      this.ignoreRouteReturnBackUntil = Date.now() + TIZEN_ROUTE_RETURN_BACK_GUARD_MS;
-    }
-  },
-
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     this.container = document.getElementById("home");
-    const shouldGuardRouteReturnBack = Platform.isTizen() && navigationContext?.isBackNavigation;
-    this.routeReturnBackGuardConsumed = false;
-    // Keep the guard active throughout an async Home mount. Older Samsung TVs
-    // can deliver the paired tizenhwkey event only after a slow render yields.
-    this.ignoreRouteReturnBackUntil = shouldGuardRouteReturnBack ? Number.POSITIVE_INFINITY : 0;
     const restoredRouteFocusState = navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
       ? navigationContext.restoredState
       : null;
@@ -6778,7 +6765,6 @@ export const HomeScreen = {
         layoutMode: String(this.layoutMode || ""),
         mode: "refresh"
       });
-      this.completeRouteReturnBackGuard();
       return;
     }
 
@@ -6804,7 +6790,6 @@ export const HomeScreen = {
       background: false,
       layoutMode: String(this.layoutMode || "")
     });
-    this.completeRouteReturnBackGuard();
   },
 
   async loadData({ background = false, preserveReturnState = false } = {}) {
@@ -8393,7 +8378,7 @@ export const HomeScreen = {
     this.rememberReturnFocusForNode(node);
     Router.navigate("detail", {
       itemId,
-      itemType: node.dataset.catalogType || node.dataset.itemType || "movie",
+      itemType: node.dataset.itemType || node.dataset.catalogType || "movie",
       fallbackTitle: node.dataset.itemTitle || "Untitled",
       fallbackPoster: node.dataset.posterSrc || "",
       fallbackBackground: node.dataset.backdropSrc || "",
@@ -8567,14 +8552,6 @@ export const HomeScreen = {
     }
     if (this.posterHoldMenu) {
       this.closePosterHoldMenu();
-      return true;
-    }
-    if (Date.now() < Number(this.ignoreRouteReturnBackUntil || 0)) {
-      // Samsung can emit the same physical Back as both a key event and a
-      // tizenhwkey event. The first returns here from a child route; ignore the
-      // duplicate instead of letting the newly mounted Home open its sidebar.
-      this.ignoreRouteReturnBackUntil = 0;
-      this.routeReturnBackGuardConsumed = true;
       return true;
     }
     if (this.layoutMode === "modern") {
@@ -8771,8 +8748,6 @@ export const HomeScreen = {
   },
 
   cleanup() {
-    this.ignoreRouteReturnBackUntil = 0;
-    this.routeReturnBackGuardConsumed = false;
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;

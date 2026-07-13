@@ -1842,7 +1842,7 @@ export const SearchScreen = {
   openDetailFromNode(node) {
     Router.navigate("detail", {
       itemId: node.dataset.itemId,
-      itemType: node.dataset.catalogType || node.dataset.itemType || "movie",
+      itemType: node.dataset.itemType || node.dataset.catalogType || "movie",
       fallbackTitle: node.dataset.itemTitle || "Untitled",
       fallbackPoster: node.dataset.posterSrc || "",
       fallbackBackground: node.dataset.backdropSrc || "",

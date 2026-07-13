@@ -1082,7 +1082,7 @@ export const FolderDetailScreen = {
           <article class="seeall-card focusable"
                    data-action="openDetail"
                    data-item-id="${escapeHtml(item.id || "")}" 
-                   data-item-type="${escapeHtml(item.catalogType || item.type || "movie")}"
+                   data-item-type="${escapeHtml(item.type || item.catalogType || "movie")}"
                    data-item-title="${escapeHtml(item.name || "Untitled")}" 
                    data-poster-src="${escapeHtml(item.poster || "")}"
                    data-backdrop-src="${escapeHtml(item.background || item.poster || "")}"
@@ -1114,7 +1114,7 @@ export const FolderDetailScreen = {
         <article class="seeall-card focusable"
                  data-action="openDetail"
                  data-item-id="${escapeHtml(item.id || "")}" 
-                 data-item-type="${escapeHtml(item.catalogType || item.type || "movie")}"
+                 data-item-type="${escapeHtml(item.type || item.catalogType || "movie")}"
                  data-item-title="${escapeHtml(item.name || "Untitled")}" 
                  data-poster-src="${escapeHtml(item.poster || "")}"
                  data-backdrop-src="${escapeHtml(item.background || item.poster || "")}" 
@@ -1522,7 +1522,7 @@ export const FolderDetailScreen = {
         );
         Router.navigate("detail", {
           itemId: current.dataset.itemId || "",
-          itemType: current.dataset.catalogType || current.dataset.itemType || "movie",
+          itemType: current.dataset.itemType || current.dataset.catalogType || "movie",
           fallbackTitle: current.dataset.itemTitle || "Untitled",
           fallbackPoster: current.dataset.posterSrc || "",
           fallbackBackground: current.dataset.backdropSrc || "",

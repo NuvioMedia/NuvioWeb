@@ -99,6 +99,10 @@ export const FocusEngine = {
     normalizedEvent.stopPropagation();
     normalizedEvent.stopImmediatePropagation();
 
+    if (Router.consumeRouteReturnBackGuard?.()) {
+      return;
+    }
+
     const currentScreen = Router.getCurrentScreen();
     const consumeResult = currentScreen?.consumeBackRequest?.();
     if (consumeResult) {

@@ -1618,7 +1618,11 @@ export const MetaDetailsScreen = {
 
     const sourceItemId = itemId;
     const sourceAddonBaseUrl = String(this.params?.addonBaseUrl || "").trim();
-    const sourceItemType = String(this.params?.catalogType || itemType).trim() || itemType;
+    // Match Android's MetaPreview.apiType semantics: the type declared by the
+    // individual meta wins, while the catalog type is only a fallback. An
+    // aggregator may expose a `channel` catalog whose entries are `tv`; using
+    // the row type here makes the original TV addon miss both meta and streams.
+    const sourceItemType = String(itemType || this.params?.catalogType).trim() || "movie";
     const canonicalItemId = await this.resolveCanonicalDetailItemId(itemId, itemType);
     if (token !== this.detailLoadToken) {
       return;
@@ -6264,12 +6268,6 @@ export const MetaDetailsScreen = {
     if (!this.trailerProxyState || this.trailerYoutubeFallbackActive) {
       return;
     }
-    if (Platform.isTizen()) {
-      // Keep Samsung's YouTube iframe free from continuous state polling.
-      // The proxy resolves the current position only when the user seeks.
-      this.postTrailerProxyCommand("seekBy", { seconds: delta });
-      return;
-    }
     const duration = Number(this.trailerProxyState.duration || 0);
     if (duration <= 0) {
       return;
@@ -6358,9 +6356,7 @@ export const MetaDetailsScreen = {
         buildInlineYoutubePlayerUrl(this.trailerSource.ytId, {
           muted: this.trailerMuted,
           loop: false,
-          // Repeated YouTube iframe API reads can interrupt video composition
-          // on Samsung browsers. Tizen requests state only on user actions.
-          statePollMs: this.trailerPlaybackMode === "manual" && !Platform.isTizen() ? 500 : 0
+          statePollMs: this.trailerPlaybackMode === "manual" ? 500 : 0
         }) ||
         this.trailerSource.embedUrl ||
         "";
@@ -8362,9 +8358,6 @@ export const MetaDetailsScreen = {
           this.stopTrailerControlsTimer();
           this.setTrailerControlsVisible(false);
         } else {
-          if (Platform.isTizen() && this.trailerSource?.kind === "youtube") {
-            this.postTrailerProxyCommand("getState");
-          }
           this.restartTrailerControlsTimer();
         }
         return;

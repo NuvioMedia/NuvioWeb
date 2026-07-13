@@ -996,7 +996,8 @@ export const StreamScreen = {
       },
       {
         skipStackPush: true,
-        replaceHistory: true
+        replaceHistory: true,
+        isBackNavigation: true
       }
     );
     return true;
