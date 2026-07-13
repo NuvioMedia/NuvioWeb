@@ -228,6 +228,8 @@ const KEY_ALIASES = {
   "settings.layout.homeLayouts.modern.label": "layout_modern",
   "settings.layout.landscapePosters.subtitle": "layout_landscape_posters_sub",
   "settings.layout.landscapePosters.title": "layout_landscape_posters",
+  "settings.layout.fullscreenHeroBackdrop.subtitle": "layout_fullscreen_hero_backdrop_sub",
+  "settings.layout.fullscreenHeroBackdrop.title": "layout_fullscreen_hero_backdrop",
   "settings.layout.modernSidebar.subtitle": "layout_modern_sidebar_sub",
   "settings.layout.modernSidebar.title": "layout_modern_sidebar",
   "settings.layout.modernSidebarBlur.subtitle": "layout_modern_sidebar_blur_sub",

@@ -115,6 +115,7 @@ export const PlayerController = {
   avplayDisplayRect: null,
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
   startupAudioGateActive: false,
+  startupAudioGatePausesNativePlayback: true,
   desiredPlaybackRate: 1,
   appliedAvPlayPlaybackRate: 1,
 
@@ -603,7 +604,11 @@ export const PlayerController = {
   },
 
   handleNativePlayStartedUnderStartupGate(playPromise = null) {
-    if (!this.startupAudioGateActive || this.isUsingAvPlay()) {
+    if (
+      !this.startupAudioGateActive
+      || this.isUsingAvPlay()
+      || !this.startupAudioGatePausesNativePlayback
+    ) {
       return playPromise;
     }
     if (playPromise && typeof playPromise.then === "function") {
@@ -618,10 +623,14 @@ export const PlayerController = {
     return playPromise;
   },
 
-  setStartupAudioGate(active, { resume = true } = {}) {
+  setStartupAudioGate(active, { resume = true, pauseNativePlayback = true } = {}) {
     const shouldGate = Boolean(active);
     const wasGated = Boolean(this.startupAudioGateActive);
+    const nativePlaybackWasPausedForGate = Boolean(this.startupAudioGatePausesNativePlayback);
     this.startupAudioGateActive = shouldGate;
+    this.startupAudioGatePausesNativePlayback = shouldGate
+      ? Boolean(pauseNativePlayback)
+      : true;
     this.applyStartupAudioGateToVideo();
 
     if (shouldGate) {
@@ -648,7 +657,9 @@ export const PlayerController = {
       }
       return;
     }
-    this.resumeNativePlaybackAfterStartupGate();
+    if (nativePlaybackWasPausedForGate || this.video?.paused) {
+      this.resumeNativePlaybackAfterStartupGate();
+    }
   },
 
   startPreparedAvPlayPlayback({ syncTracks = true } = {}) {
@@ -2538,7 +2549,7 @@ export const PlayerController = {
     return true;
   },
 
-  applyWebOsEngineFsSource(url, engineName = "native-file") {
+  applyWebOsStagedNativeSource(url, engineName = "native-file") {
     if (!this.video) {
       return false;
     }
@@ -2548,12 +2559,15 @@ export const PlayerController = {
     return true;
   },
 
-  async prepareWebOsEngineFsPlayback() {
+  async prepareWebOsStagedNativePlayback(playToken = null, url = null) {
     await this.waitForNativeMediaId();
+    if (!this.isPlaybackRequestActive(playToken, url)) {
+      return;
+    }
     try {
       this.video?.load?.();
     } catch (_) {
-      // webOS may throw during local EngineFS startup; play() will surface the real failure.
+      // webOS may throw during staged native startup; play() will surface the real failure.
     }
   },
 
@@ -3782,17 +3796,25 @@ export const PlayerController = {
       });
     } else {
       const isWebOsEngineFsPlayback = Platform.isWebOS() && this.isEngineFsPlaybackUrl(url);
-      if (isWebOsEngineFsPlayback) {
-        this.applyWebOsEngineFsSource(url, "native-file");
+      const isWebOsMatroskaPlayback = Platform.isWebOS()
+        && this.normalizeMimeType(sourceType) === "video/x-matroska";
+      const shouldStageWebOsNativePlayback = isWebOsEngineFsPlayback || isWebOsMatroskaPlayback;
+      if (shouldStageWebOsNativePlayback) {
+        // Match Stremio's webOS startup order: src -> mediaId -> load -> play.
+        this.applyWebOsStagedNativeSource(url, "native-file");
+        await this.prepareWebOsStagedNativePlayback(playToken, requestedUrl);
+        if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
+          return;
+        }
       } else {
         this.applyNativeSource(url, sourceType || null, "native-file");
       }
       this.attemptVideoPlay({
         warningLabel: "Playback start rejected",
         playToken,
-        beforePlay: () => isWebOsEngineFsPlayback
-          ? this.prepareWebOsEngineFsPlayback()
-          : this.waitForNativeMediaId(),
+        beforePlay: shouldStageWebOsNativePlayback
+          ? null
+          : () => this.waitForNativeMediaId(),
         onRejected: (error) => {
           if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay() || !this.isLikelyDirectFileUrl(url)) {
             return false;

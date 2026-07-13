@@ -1345,31 +1345,6 @@ export const MetaDetailsScreen = {
     return true;
   },
 
-  bindBackHandler() {
-    if (this.backHandler) {
-      document.removeEventListener("keydown", this.backHandler, true);
-    }
-    this.backHandler = (event) => {
-      if (!isBackEvent(event)) {
-        return;
-      }
-      if (typeof event.preventDefault === "function") {
-        event.preventDefault();
-      }
-      if (typeof event.stopPropagation === "function") {
-        event.stopPropagation();
-      }
-      if (typeof event.stopImmediatePropagation === "function") {
-        event.stopImmediatePropagation();
-      }
-      if (this.consumeBackRequest()) {
-        return;
-      }
-      Router.back();
-    };
-    document.addEventListener("keydown", this.backHandler, true);
-  },
-
   bindTrailerProxyMessaging() {
     if (this.trailerProxyMessageHandler) {
       window.removeEventListener("message", this.trailerProxyMessageHandler);
@@ -1580,7 +1555,6 @@ export const MetaDetailsScreen = {
     this.autoOpenedContinueWatchingStream = false;
     this.restoredContentScrollTop = 0;
     this.restoredTrackScrollLeftByKey = {};
-    this.bindBackHandler();
     this.bindTrailerProxyMessaging();
 
     if (this.hydrateFromRouteState(navigationContext?.restoredState || null, params)) {
@@ -8869,10 +8843,6 @@ export const MetaDetailsScreen = {
     if (this.detailClickHandler && this.container) {
       this.container.removeEventListener("click", this.detailClickHandler, true);
       this.detailClickHandler = null;
-    }
-    if (this.backHandler) {
-      document.removeEventListener("keydown", this.backHandler, true);
-      this.backHandler = null;
     }
     if (this.trailerProxyMessageHandler) {
       window.removeEventListener("message", this.trailerProxyMessageHandler);

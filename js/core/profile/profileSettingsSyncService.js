@@ -600,6 +600,9 @@ const FEATURE_ADAPTERS = {
         modern_sidebar_enabled: Boolean(layout.modernSidebar),
         modern_sidebar_blur_enabled: Boolean(layout.modernSidebarBlur),
         modern_landscape_posters_enabled: Boolean(layout.modernLandscapePostersEnabled),
+        modern_hero_full_screen_backdrop: Boolean(
+          layout.modernHeroFullScreenBackdropEnabled
+        ),
         hero_section_enabled: Boolean(layout.heroSectionEnabled),
         search_discover_enabled: Boolean(layout.searchDiscoverEnabled),
         discover_location: normalizeDiscoverLocationForAndroid(layout.searchDiscoverEnabled),
@@ -648,6 +651,7 @@ const FEATURE_ADAPTERS = {
         "modern_sidebar_enabled",
         "modern_sidebar_blur_enabled",
         "modern_landscape_posters_enabled",
+        "modern_hero_full_screen_backdrop",
         "hero_section_enabled",
         "poster_labels_enabled",
         "catalog_addon_name_enabled",
@@ -720,6 +724,11 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.modern_landscape_posters_enabled) != null) {
         partial.modernLandscapePostersEnabled = Boolean(raw.modern_landscape_posters_enabled);
+      }
+      if (booleanOrNull(raw.modern_hero_full_screen_backdrop) != null) {
+        partial.modernHeroFullScreenBackdropEnabled = Boolean(
+          raw.modern_hero_full_screen_backdrop
+        );
       }
       if (booleanOrNull(raw.hero_section_enabled) != null) {
         partial.heroSectionEnabled = Boolean(raw.hero_section_enabled);

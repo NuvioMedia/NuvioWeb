@@ -6689,12 +6689,20 @@ export const HomeScreen = {
     viewport.addEventListener("scroll", this.boundHomeViewportScrollHandler, { passive: true });
   },
 
+  completeRouteReturnBackGuard() {
+    if (this.ignoreRouteReturnBackUntil > 0 && !this.routeReturnBackGuardConsumed) {
+      this.ignoreRouteReturnBackUntil = Date.now() + TIZEN_ROUTE_RETURN_BACK_GUARD_MS;
+    }
+  },
+
   async mount(params = {}, navigationContext = {}) {
     const mountStart = HOME_PERF_DEBUG ? homePerfNow() : 0;
     this.container = document.getElementById("home");
-    this.ignoreRouteReturnBackUntil = Platform.isTizen() && navigationContext?.isBackNavigation
-      ? Date.now() + TIZEN_ROUTE_RETURN_BACK_GUARD_MS
-      : 0;
+    const shouldGuardRouteReturnBack = Platform.isTizen() && navigationContext?.isBackNavigation;
+    this.routeReturnBackGuardConsumed = false;
+    // Keep the guard active throughout an async Home mount. Older Samsung TVs
+    // can deliver the paired tizenhwkey event only after a slow render yields.
+    this.ignoreRouteReturnBackUntil = shouldGuardRouteReturnBack ? Number.POSITIVE_INFINITY : 0;
     const restoredRouteFocusState = navigationContext?.isBackNavigation && navigationContext?.restoredState?.layoutMode
       ? navigationContext.restoredState
       : null;
@@ -6770,6 +6778,7 @@ export const HomeScreen = {
         layoutMode: String(this.layoutMode || ""),
         mode: "refresh"
       });
+      this.completeRouteReturnBackGuard();
       return;
     }
 
@@ -6795,6 +6804,7 @@ export const HomeScreen = {
       background: false,
       layoutMode: String(this.layoutMode || "")
     });
+    this.completeRouteReturnBackGuard();
   },
 
   async loadData({ background = false, preserveReturnState = false } = {}) {
@@ -7370,10 +7380,14 @@ export const HomeScreen = {
     const modernLandscapeLayoutClass = modernLandscapePostersEnabled
       ? " home-modern-landscape-posters"
       : "";
+    const modernHeroFullScreenBackdropClass = this.layoutMode === "modern"
+      && Boolean(this.layoutPrefs?.modernHeroFullScreenBackdropEnabled)
+      ? " home-modern-fullscreen-backdrop"
+      : "";
     const modernSidebarLayoutClass = this.layoutPrefs?.modernSidebar
       ? " home-modern-sidebar-enabled"
       : "";
-    const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}${modernSidebarLayoutClass}`;
+    const layoutClass = `home-layout-${this.layoutMode}${modernLandscapeLayoutClass}${modernHeroFullScreenBackdropClass}${modernSidebarLayoutClass}`;
     const sizingStyle = this.layoutMode === "modern" ? buildModernHomeSizingStyle(this.layoutPrefs) : "";
     const showPosterLabels = this.layoutPrefs?.posterLabelsEnabled !== false;
     const showCatalogAddonName = this.layoutPrefs?.catalogAddonNameEnabled !== false;
@@ -8560,6 +8574,7 @@ export const HomeScreen = {
       // tizenhwkey event. The first returns here from a child route; ignore the
       // duplicate instead of letting the newly mounted Home open its sidebar.
       this.ignoreRouteReturnBackUntil = 0;
+      this.routeReturnBackGuardConsumed = true;
       return true;
     }
     if (this.layoutMode === "modern") {
@@ -8756,6 +8771,8 @@ export const HomeScreen = {
   },
 
   cleanup() {
+    this.ignoreRouteReturnBackUntil = 0;
+    this.routeReturnBackGuardConsumed = false;
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;

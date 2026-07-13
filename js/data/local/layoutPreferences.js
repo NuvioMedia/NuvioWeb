@@ -10,6 +10,7 @@ const DEFAULTS = {
   catalogAddonNameEnabled: true,
   catalogTypeSuffixEnabled: true,
   modernLandscapePostersEnabled: false,
+  modernHeroFullScreenBackdropEnabled: false,
   focusedPosterBackdropExpandEnabled: false,
   focusedPosterBackdropExpandDelaySeconds: 3,
   focusedPosterBackdropTrailerEnabled: false,
@@ -50,6 +51,9 @@ function normalizeLayoutPreferences(value = {}) {
   return {
     ...merged,
     modernLandscapePostersEnabled: Boolean(merged.modernLandscapePostersEnabled),
+    modernHeroFullScreenBackdropEnabled: Boolean(
+      merged.modernHeroFullScreenBackdropEnabled
+    ),
     focusedPosterBackdropExpandEnabled: Boolean(merged.focusedPosterBackdropExpandEnabled),
     focusedPosterBackdropExpandDelaySeconds: Math.max(
       0,

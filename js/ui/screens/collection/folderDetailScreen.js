@@ -1240,8 +1240,11 @@ export const FolderDetailScreen = {
     });
     this.catalogSeeAllMap = payload.catalogSeeAllMap;
     const sizingStyle = buildModernHomeSizingStyle(this.layoutPrefs);
+    const fullScreenBackdropClass = this.layoutPrefs?.modernHeroFullScreenBackdropEnabled
+      ? " home-modern-fullscreen-backdrop"
+      : "";
     this.container.innerHTML = `
-      <div class="home-shell home-screen-shell home-layout-modern${modernLandscapePostersEnabled ? " home-modern-landscape-posters" : ""} folder-detail-home-shell" style="${escapeAttribute(sizingStyle)}">
+      <div class="home-shell home-screen-shell home-layout-modern${modernLandscapePostersEnabled ? " home-modern-landscape-posters" : ""}${fullScreenBackdropClass} folder-detail-home-shell" style="${escapeAttribute(sizingStyle)}">
         <main class="home-main home-screen-main">
           <div class="home-route-content${enterClass}">
             ${payload.markup}

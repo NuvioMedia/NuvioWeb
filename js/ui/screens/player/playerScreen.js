@@ -61,6 +61,7 @@ const LOADING_LOGO_FILL_FRAME_MS = 80;
 const NEXT_EPISODE_SOURCE_RESOLVE_TIMEOUT_MS = 45000;
 const STARTUP_AUDIO_PREFERENCE_RETRY_WINDOW_MS = 6000;
 const STARTUP_AUDIO_PREFERENCE_RETRY_INTERVAL_MS = 250;
+const WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS = 8000;
 const EPISODE_PANEL_TRANSITION_MS = 220;
 const activeEngineFsPlaybackClaims = new Map();
 const deferredEngineFsRemovalTimers = new Map();
@@ -2289,6 +2290,8 @@ export const PlayerScreen = {
     this.seekLoadingBaselineSeconds = null;
     this.seekLoadingTargetSeconds = null;
     this.startupAudioGateActive = false;
+    this.startupAudioGateAllowsNativePlayback = false;
+    this.startupAudioGateDeadline = 0;
     this.loadingCompletionTimer = null;
     this.loadingCompletionToken = 0;
     this.bufferingSpinnerTimer = null;
@@ -2343,21 +2346,37 @@ export const PlayerScreen = {
       const sourceCandidate = this.getStreamCandidateByUrl(initialStreamUrl) || this.getCurrentStreamCandidate();
       this.activePlaybackUrl = initialStreamUrl;
       this.currentEngineFsStream = this.getEngineFsStateForStream(sourceCandidate);
+      const prioritizeWebOsRemoteMkvPlayback = Environment.isWebOS()
+        && !this.currentEngineFsStream
+        && this.isCurrentSourceLikelyMkv(initialStreamUrl);
       if (this.currentEngineFsStream) {
         this.engineFsPlaybackToken = claimEngineFsPlayback(this.currentEngineFsStream);
         this.releaseStartupAudioGate({ resume: false });
         this.startEngineFsKeepAlive(this.currentEngineFsStream);
       } else {
         this.engineFsPlaybackToken = "";
-        this.enableStartupAudioGate();
+        this.enableStartupAudioGate({
+          allowNativePlayback: prioritizeWebOsRemoteMkvPlayback,
+          maxWaitMs: prioritizeWebOsRemoteMkvPlayback
+            ? WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS
+            : 0
+        });
       }
-      this.startPlayerControllerPlayback(
+      const playbackStartPromise = this.startPlayerControllerPlayback(
         this.activePlaybackUrl,
         this.buildPlaybackContext(sourceCandidate),
         { mountToken, sourceCandidate }
       );
+      if (prioritizeWebOsRemoteMkvPlayback) {
+        await playbackStartPromise;
+        if (!this.isActiveMountToken(mountToken)) {
+          return;
+        }
+      }
       this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
-      this.startTrackDiscoveryWindow();
+      if (!prioritizeWebOsRemoteMkvPlayback) {
+        this.startTrackDiscoveryWindow();
+      }
       this.schedulePlaybackStallGuard();
     } else if (!this.isExternalFrameMode()) {
       const sourceCandidate = initialStreamCandidate || this.getCurrentStreamCandidate();
@@ -3512,8 +3531,8 @@ export const PlayerScreen = {
       || (typeof PlayerController.isLikelyDashMimeType === "function" && PlayerController.isLikelyDashMimeType(probeMimeType));
   },
 
-  isCurrentSourceLikelyMkv() {
-    const probeUrl = this.getTrackProbeUrl().toLowerCase();
+  isCurrentSourceLikelyMkv(url = this.getTrackProbeUrl()) {
+    const probeUrl = String(url || "").trim().toLowerCase();
     if (!probeUrl) {
       return false;
     }
@@ -4891,7 +4910,7 @@ export const PlayerScreen = {
       });
       return;
     }
-    Promise.resolve(PlayerController.play(playbackUrl, context)).catch((error) => {
+    return Promise.resolve(PlayerController.play(playbackUrl, context)).catch((error) => {
       if (!this.isActiveMountToken(mountToken) || this.isExternalFrameMode()) {
         return;
       }
@@ -7164,7 +7183,7 @@ export const PlayerScreen = {
         this.updateUiTick();
         return;
       }
-      if (this.startupAudioGateActive) {
+      if (this.startupAudioGateActive && !this.startupAudioGateAllowsNativePlayback) {
         this.paused = false;
         this.startupTrackPreferenceReady = true;
         this.refreshTrackDialogs();
@@ -7961,9 +7980,16 @@ export const PlayerScreen = {
     }, Math.max(0, Number(delayMs || 0)));
   },
 
-  enableStartupAudioGate() {
+  enableStartupAudioGate({ allowNativePlayback = false, maxWaitMs = 0 } = {}) {
     this.startupAudioGateActive = true;
-    PlayerController.setStartupAudioGate?.(true);
+    this.startupAudioGateAllowsNativePlayback = Boolean(allowNativePlayback);
+    const boundedWaitMs = Math.max(0, Number(maxWaitMs || 0));
+    this.startupAudioGateDeadline = boundedWaitMs > 0
+      ? Date.now() + boundedWaitMs
+      : 0;
+    PlayerController.setStartupAudioGate?.(true, {
+      pauseNativePlayback: !allowNativePlayback
+    });
   },
 
   releaseStartupAudioGate({ resume = true } = {}) {
@@ -7971,6 +7997,8 @@ export const PlayerScreen = {
       return;
     }
     this.startupAudioGateActive = false;
+    this.startupAudioGateAllowsNativePlayback = false;
+    this.startupAudioGateDeadline = 0;
     PlayerController.setStartupAudioGate?.(false, { resume });
   },
 
@@ -8042,12 +8070,20 @@ export const PlayerScreen = {
   },
 
   isStartupGateReleaseReady() {
-    if (!this.startupAudioGateActive || this.pendingPlaybackRestore) {
+    if (!this.startupAudioGateActive) {
       return false;
     }
     const readyState = typeof PlayerController.getPlaybackReadyState === "function"
       ? Number(PlayerController.getPlaybackReadyState() || 0)
       : Number(PlayerController.video?.readyState || 0);
+    const gateDeadlineExpired = Number(this.startupAudioGateDeadline || 0) > 0
+      && Date.now() >= Number(this.startupAudioGateDeadline || 0);
+    if (gateDeadlineExpired) {
+      return Number.isFinite(readyState) && readyState >= 2;
+    }
+    if (this.pendingPlaybackRestore) {
+      return false;
+    }
     const audioPreferenceSettled = Boolean(this.startupAudioPreferenceApplied)
       || (!this.startupAudioPreferenceApplying && !this.hasAudioTracksAvailable());
     return audioPreferenceSettled && Number.isFinite(readyState) && readyState >= 3;
@@ -8922,6 +8958,9 @@ export const PlayerScreen = {
       this.activePlaybackSourceContext = sourceContext;
     }
     const nextEngineFsState = this.getEngineFsStateForStream(sourceCandidate);
+    const prioritizeWebOsRemoteMkvPlayback = Environment.isWebOS()
+      && !nextEngineFsState
+      && this.isCurrentSourceLikelyMkv(streamUrl);
     const sameEngineFsState = this.isSameEngineFsState(this.currentEngineFsStream, nextEngineFsState);
     if (this.currentEngineFsStream && !this.isSameEngineFsState(this.currentEngineFsStream, nextEngineFsState)) {
       const removePreviousTorrent = !nextEngineFsState
@@ -8951,7 +8990,12 @@ export const PlayerScreen = {
     if (nextEngineFsState) {
       this.releaseStartupAudioGate({ resume: false });
     } else {
-      this.enableStartupAudioGate();
+      this.enableStartupAudioGate({
+        allowNativePlayback: prioritizeWebOsRemoteMkvPlayback,
+        maxWaitMs: prioritizeWebOsRemoteMkvPlayback
+          ? WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS
+          : 0
+      });
     }
     this.cancelSeekPreview({ commit: false });
     if (preservePlaybackState) {
@@ -9031,10 +9075,30 @@ export const PlayerScreen = {
     this.lastEmbeddedTrackProbeUrl = "";
     this.lastEmbeddedTrackRetryAt = 0;
     this.lastTrackWarmupAt = Date.now();
+    const playbackContext = {
+      ...this.buildPlaybackContext(sourceCandidate),
+      forceEngine
+    };
+    if (prioritizeWebOsRemoteMkvPlayback) {
+      // Claim the remote media request before the companion service probes the
+      // same URL. Some providers rate-limit simultaneous Range requests.
+      await this.startPlayerControllerPlayback(
+        this.activePlaybackUrl,
+        playbackContext,
+        { mountToken, sourceCandidate }
+      );
+      if (!this.isActiveMountToken(mountToken)) {
+        return;
+      }
+    }
     this.loadSubtitles();
     this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
-    this.startTrackDiscoveryWindow();
-    if (this.currentEngineFsStream) {
+    // For prioritized webOS MKVs, loadedmetadata calls
+    // ensureTrackDataWarmup() after the media request has been accepted.
+    if (!prioritizeWebOsRemoteMkvPlayback) {
+      this.startTrackDiscoveryWindow();
+    }
+    if (this.currentEngineFsStream || prioritizeWebOsRemoteMkvPlayback) {
       this.initialEmbeddedTrackBootstrapPromise = null;
     } else {
       const embeddedSubtitleWarmupPromise = this.loadEmbeddedSubtitleTracks();
@@ -9053,14 +9117,13 @@ export const PlayerScreen = {
     this.renderSubtitleDialog();
     this.renderAudioDialog();
     this.renderSpeedDialog();
-    this.startPlayerControllerPlayback(
-      this.activePlaybackUrl,
-      {
-        ...this.buildPlaybackContext(sourceCandidate),
-        forceEngine
-      },
-      { mountToken, sourceCandidate }
-    );
+    if (!prioritizeWebOsRemoteMkvPlayback) {
+      this.startPlayerControllerPlayback(
+        this.activePlaybackUrl,
+        playbackContext,
+        { mountToken, sourceCandidate }
+      );
+    }
     this.paused = false;
     this.refreshTrackDialogs();
     this.updateUiTick();

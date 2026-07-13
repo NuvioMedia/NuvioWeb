@@ -3150,6 +3150,12 @@ export const SettingsScreen = {
         modernLandscapePostersEnabled: !LayoutPreferences.get().modernLandscapePostersEnabled
       });
     });
+    this.actionMap.set("layout:modernHeroFullScreenBackdrop", () => {
+      LayoutPreferences.set({
+        modernHeroFullScreenBackdropEnabled:
+          !LayoutPreferences.get().modernHeroFullScreenBackdropEnabled
+      });
+    });
     this.actionMap.set("layout:focusedPosterExpand", () => {
       LayoutPreferences.set({
         focusedPosterBackdropExpandEnabled:
@@ -3238,6 +3244,16 @@ export const SettingsScreen = {
                 title: t("settings.layout.landscapePosters.title"),
                 subtitle: t("settings.layout.landscapePosters.subtitle"),
                 checked: Boolean(model.layout.modernLandscapePostersEnabled)
+              })
+            : ""
+        }
+        ${
+          isModernLayout
+            ? this.renderToggleRow({
+                focusKey: "layout:modernHeroFullScreenBackdrop",
+                title: t("settings.layout.fullscreenHeroBackdrop.title"),
+                subtitle: t("settings.layout.fullscreenHeroBackdrop.subtitle"),
+                checked: Boolean(model.layout.modernHeroFullScreenBackdropEnabled)
               })
             : ""
         }
