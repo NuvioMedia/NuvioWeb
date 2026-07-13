@@ -9,7 +9,8 @@ const DEFAULT_THEME = {
   fontFamily: "INTER",
   language: null,
   amoledMode: false,
-  amoledSurfacesMode: false
+  amoledSurfacesMode: false,
+  reduceAnimations: false
 };
 
 const THEME_BY_ACCENT = new Map([
@@ -54,7 +55,8 @@ function normalizeTheme(settings = {}) {
     ...DEFAULT_THEME,
     ...settings,
     themeName,
-    accentColor: normalizedAccent
+    accentColor: normalizedAccent,
+    reduceAnimations: Boolean(settings?.reduceAnimations)
   };
 }
 

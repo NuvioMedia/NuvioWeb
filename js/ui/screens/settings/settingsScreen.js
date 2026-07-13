@@ -2979,6 +2979,10 @@ export const SettingsScreen = {
       ThemeStore.set({ amoledSurfacesMode: !ThemeStore.get().amoledSurfacesMode });
       ThemeManager.apply();
     });
+    this.actionMap.set("appearance:reduceAnimations", () => {
+      ThemeStore.set({ reduceAnimations: !ThemeStore.get().reduceAnimations });
+      ThemeManager.apply();
+    });
 
     return `
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "appearance"))}
@@ -3019,6 +3023,16 @@ export const SettingsScreen = {
               })
             : ""
         }
+        ${this.renderToggleRow({
+          focusKey: "appearance:reduceAnimations",
+          title: t("appearance_reduce_animations", {}, "Reduce Animations"),
+          subtitle: t(
+            "appearance_reduce_animations_subtitle",
+            {},
+            "Turn off motion and background blur for smoother performance on slower TVs"
+          ),
+          checked: Boolean(model.theme.reduceAnimations)
+        })}
       </div>
       <div class="settings-group-card settings-appearance-group-card">
         <div class="settings-group-heading">

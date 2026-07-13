@@ -17744,16 +17744,30 @@ html.legacy-webos .debug-console-log-frame {
   -webkit-backdrop-filter: none !important;
 }
 
-.no-backdrop-filter .modern-sidebar-shell.blur-enabled .modern-sidebar-panel {
+.no-backdrop-filter .modern-sidebar-shell.blur-enabled .modern-sidebar-panel,
+.reduce-animations .modern-sidebar-shell.blur-enabled .modern-sidebar-panel {
   background:
     linear-gradient(180deg, rgb(var(--bg-elevated-rgb) / 0.96), rgb(var(--bg-elevated-rgb) / 0.96)),
     var(--bg-elevated);
 }
 
-.no-backdrop-filter .modern-sidebar-shell.blur-enabled .modern-sidebar-pill-chip {
+.no-backdrop-filter .modern-sidebar-shell.blur-enabled .modern-sidebar-pill-chip,
+.reduce-animations .modern-sidebar-shell.blur-enabled .modern-sidebar-pill-chip {
   background:
     linear-gradient(180deg, rgb(var(--bg-elevated-rgb) / 0.92), rgb(var(--bg-elevated-rgb) / 0.92)),
     var(--bg-elevated);
+}
+
+/* Reduce Animations (opt-in): make transitions effectively instant and drop
+   backdrop blur so lower-end TVs stop dropping frames. Keyframe animations
+   (loading spinners) are left alone so they still spin. */
+.reduce-animations *,
+.reduce-animations *::before,
+.reduce-animations *::after {
+  transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
 
 html.no-css-grid .qr-layout,

@@ -161,6 +161,14 @@ export const ThemeManager = {
     );
     document.documentElement.style.setProperty("color-scheme", "dark");
 
+    // Reduce animations / transparency for lower-end TVs that lag on the
+    // regular transitions and backdrop blur (opt-in from settings).
+    const reduceAnimations = Boolean(theme.reduceAnimations);
+    document.documentElement.classList.toggle("reduce-animations", reduceAnimations);
+    if (document.body) {
+      document.body.classList.toggle("reduce-animations", reduceAnimations);
+    }
+
     if (!SUPPORTS_CSS_VARS) {
       const colorMap = {
         bg: colors["--bg-color"],
