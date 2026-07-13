@@ -6264,6 +6264,12 @@ export const MetaDetailsScreen = {
     if (!this.trailerProxyState || this.trailerYoutubeFallbackActive) {
       return;
     }
+    if (Platform.isTizen()) {
+      // Keep Samsung's YouTube iframe free from continuous state polling.
+      // The proxy resolves the current position only when the user seeks.
+      this.postTrailerProxyCommand("seekBy", { seconds: delta });
+      return;
+    }
     const duration = Number(this.trailerProxyState.duration || 0);
     if (duration <= 0) {
       return;
@@ -6352,7 +6358,9 @@ export const MetaDetailsScreen = {
         buildInlineYoutubePlayerUrl(this.trailerSource.ytId, {
           muted: this.trailerMuted,
           loop: false,
-          statePollMs: this.trailerPlaybackMode === "manual" ? 500 : 0
+          // Repeated YouTube iframe API reads can interrupt video composition
+          // on Samsung browsers. Tizen requests state only on user actions.
+          statePollMs: this.trailerPlaybackMode === "manual" && !Platform.isTizen() ? 500 : 0
         }) ||
         this.trailerSource.embedUrl ||
         "";
@@ -8354,6 +8362,9 @@ export const MetaDetailsScreen = {
           this.stopTrailerControlsTimer();
           this.setTrailerControlsVisible(false);
         } else {
+          if (Platform.isTizen() && this.trailerSource?.kind === "youtube") {
+            this.postTrailerProxyCommand("getState");
+          }
           this.restartTrailerControlsTimer();
         }
         return;
