@@ -4645,7 +4645,7 @@ export const HomeScreen = {
       if (!deferCommit) {
         return String(this.heroItem?.id || "") === itemId;
       }
-      if (Router.getCurrent() !== "home") {
+      if (Router.getCurrent() !== String(options?.routeName || "home")) {
         return false;
       }
       const focusedHero = this.getNodeHeroSource(this.getCurrentFocusedNode());
@@ -5170,11 +5170,12 @@ export const HomeScreen = {
       const frame = target?.querySelector?.(".home-poster-frame") || null;
       const previousCardTransition = instant && target instanceof HTMLElement ? target.style.transition : "";
       const previousFrameTransition = instant && frame instanceof HTMLElement ? frame.style.transition : "";
+      // TV performance CSS marks these transitions !important, so the instant collapse must match it.
       if (instant && target instanceof HTMLElement) {
-        target.style.transition = "none";
+        target.style.setProperty("transition", "none", "important");
       }
       if (instant && frame instanceof HTMLElement) {
-        frame.style.transition = "none";
+        frame.style.setProperty("transition", "none", "important");
       }
       target.classList.remove("is-expanded", "is-trailer-active", "is-expanded-backdrop-ready");
       this.clearTrailerLayer(target.querySelector(".home-poster-trailer-layer"));
@@ -6879,6 +6880,7 @@ export const HomeScreen = {
     );
     if (canResumePreservedTizenHome) {
       this.homeDomPreserved = false;
+      this.container.classList.remove("home-dom-preserved");
       this.container.style.removeProperty("visibility");
       this.container.style.removeProperty("pointer-events");
       setModernSidebarPillIconOnly(this.container, false);
@@ -6923,6 +6925,7 @@ export const HomeScreen = {
       return;
     }
     this.homeDomPreserved = false;
+    this.container.classList.remove("home-dom-preserved");
     this.container.style.removeProperty("position");
     this.container.style.removeProperty("top");
     this.container.style.removeProperty("right");
@@ -9000,9 +9003,11 @@ export const HomeScreen = {
       this.container.style.left = "0";
       this.container.style.visibility = "hidden";
       this.container.style.pointerEvents = "none";
+      this.container.classList.add("home-dom-preserved");
       this.homeDomPreserved = true;
     } else {
       this.homeDomPreserved = false;
+      this.container.classList.remove("home-dom-preserved");
       this.container.style.removeProperty("position");
       this.container.style.removeProperty("top");
       this.container.style.removeProperty("right");

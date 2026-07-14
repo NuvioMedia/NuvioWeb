@@ -395,6 +395,12 @@
     <string name="audio_lang_original">Lingua originale</string>
     <string name="audio_lang_original_hint">Richiede che l\'arricchimento TMDB sia abilitato</string>
     <string name="audio_preferred_lang">Lingua audio preferita</string>
+    <string name="audio_compatibility_advanced">Compatibilità audio avanzata</string>
+    <string name="audio_compatibility_advanced_desc">Viene usato prima il rilevamento automatico. Forza un codec solo se la TV con root dispone di un decoder funzionante.</string>
+    <string name="audio_force_dts">Forza audio DTS</string>
+    <string name="audio_force_dts_desc">Mantiene selezionabili le tracce DTS quando il rilevamento automatico non riconosce un ripristino DTS funzionante.</string>
+    <string name="audio_force_truehd">Forza audio TrueHD</string>
+    <string name="audio_force_truehd_desc">Mantiene selezionabili le tracce TrueHD solo se la TV può realmente decodificarle o inoltrarle in passthrough.</string>
     <string name="audio_skip_silence">Salta silenzio</string>
     <string name="audio_skip_silence_sub">Salta le porzioni di audio silenziose durante la riproduzione</string>
     <string name="audio_advanced_section">Audio avanzato</string>
@@ -1010,6 +1016,7 @@
     <string name="subtitle_style_outline">Bordo</string>
     <string name="subtitle_style_bottom_offset">Offset Inferiore</string>
     <string name="subtitle_style_defaults">Default</string>
+    <string name="subtitle_style_unavailable_native">Non disponibile con sottotitoli nativi</string>
     <string name="subtitle_style_on">Attivo</string>
     <string name="subtitle_style_off">Spento</string>
     <string name="panel_failed_load_streams">Errore nel caricamento degli stream</string>

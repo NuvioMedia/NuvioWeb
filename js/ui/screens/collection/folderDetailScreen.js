@@ -1390,7 +1390,7 @@ export const FolderDetailScreen = {
     }));
   },
 
-  async enrichCurrentHeroAsync(hero) {
+  async enrichCurrentHeroAsync(hero, focusToken = Number(this.heroFocusToken || 0), options = {}) {
     if (!this.useHomeFollowLayout) {
       return;
     }
@@ -1398,20 +1398,51 @@ export const FolderDetailScreen = {
       return;
     }
     if (!hasTmdbItemId(hero)) {
-      return HomeScreen.enrichCurrentHeroAsync.call(this, hero);
+      return HomeScreen.enrichCurrentHeroAsync.call(this, hero, focusToken, {
+        ...options,
+        routeName: "folderDetail"
+      });
     }
 
     const itemId = String(hero.id || "");
     const itemType = String(hero.type || hero.apiType || "movie");
+    const deferCommit = Boolean(options?.deferCommit);
     const token = (this.heroEnrichmentToken = (Number(this.heroEnrichmentToken || 0) + 1));
+    const matchesHero = (candidate) => {
+      return String(candidate?.id || "") === itemId
+        && String(candidate?.type || candidate?.apiType || "movie") === itemType;
+    };
+    const canCommitHero = () => {
+      if (Number(this.heroEnrichmentToken) !== token || Number(this.heroFocusToken || 0) !== Number(focusToken || 0)) {
+        return false;
+      }
+      if (!deferCommit) {
+        return matchesHero(this.heroItem);
+      }
+      return Router.getCurrent() === "folderDetail"
+        && matchesHero(this.getNodeHeroSource(this.getCurrentFocusedNode()));
+    };
+    const commitHero = (resolvedHero, { merge = false } = {}) => {
+      if (!canCommitHero()) {
+        return false;
+      }
+      this.heroItem = resolvedHero;
+      if (merge) {
+        HomeScreen.mergeHeroIntoCatalogState.call(this, itemId, resolvedHero);
+        this.mergeHeroIntoFolderTabs(itemId, resolvedHero);
+      }
+      HomeScreen.applyHeroToDom.call(this);
+      return true;
+    };
     try {
       const settings = TmdbSettingsStore.get();
       const tmdbId = await TmdbService.ensureTmdbId(firstNonEmpty(hero.tmdbId, hero.id), itemType);
       if (!tmdbId) {
-        if (String(this.heroItem?.id || "") === itemId) {
-          this.heroItem = { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
-          HomeScreen.applyHeroToDom.call(this);
-        }
+        commitHero({
+          ...(deferCommit ? hero : this.heroItem),
+          heroMetaEnriched: true,
+          heroMetaEnriching: false
+        });
         return;
       }
       const enriched = await TmdbMetadataService.fetchEnrichment({
@@ -1419,26 +1450,25 @@ export const FolderDetailScreen = {
         contentType: itemType,
         language: settings.language
       });
-      if (Number(this.heroEnrichmentToken) !== token || String(this.heroItem?.id || "") !== itemId) {
+      if (!canCommitHero()) {
         return;
       }
+      const sourceHero = deferCommit ? hero : this.heroItem;
       const mergedHero = enriched
         ? {
-          ...this.heroItem,
-          ...buildEnrichedTmdbItem(this.heroItem, enriched, settings),
+          ...sourceHero,
+          ...buildEnrichedTmdbItem(sourceHero, enriched, settings),
           heroMetaEnriched: true,
           heroMetaEnriching: false
         }
-        : { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
-      this.heroItem = mergedHero;
-      HomeScreen.mergeHeroIntoCatalogState.call(this, itemId, mergedHero);
-      this.mergeHeroIntoFolderTabs(itemId, mergedHero);
-      HomeScreen.applyHeroToDom.call(this);
+        : { ...sourceHero, heroMetaEnriched: true, heroMetaEnriching: false };
+      commitHero(mergedHero, { merge: true });
     } catch (_error) {
-      if (String(this.heroItem?.id || "") === itemId) {
-        this.heroItem = { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
-        HomeScreen.applyHeroToDom.call(this);
-      }
+      commitHero({
+        ...(deferCommit ? hero : this.heroItem),
+        heroMetaEnriched: true,
+        heroMetaEnriching: false
+      });
     }
   },
 

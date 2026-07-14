@@ -588,8 +588,12 @@
     <string name="audio_lang_original">Original language</string>
     <string name="audio_lang_original_hint">Requires TMDB enrichment to be enabled</string>
     <string name="audio_preferred_lang">Preferred Audio Language</string>
-    <string name="audio_force_dts_truehd">Force DTS/TrueHD audio</string>
-    <string name="audio_force_dts_truehd_desc">Keep DTS/TrueHD audio tracks selectable on rooted TVs where the codec was restored. Leave off unless your TV can actually decode them.</string>
+    <string name="audio_compatibility_advanced">Advanced audio compatibility</string>
+    <string name="audio_compatibility_advanced_desc">Automatic detection is used first. Override only when a rooted TV has a working decoder.</string>
+    <string name="audio_force_dts">Force DTS audio</string>
+    <string name="audio_force_dts_desc">Keep DTS tracks selectable when automatic detection cannot see a working DTS restoration.</string>
+    <string name="audio_force_truehd">Force TrueHD audio</string>
+    <string name="audio_force_truehd_desc">Keep TrueHD tracks selectable only when this TV can actually decode or pass through TrueHD.</string>
     <string name="audio_skip_silence">Skip Silence</string>
     <string name="audio_skip_silence_sub">Skip silent portions of audio during playback</string>
     <string name="audio_remember_delay_per_device">Remember audio delay per device</string>
@@ -1442,6 +1446,7 @@
     <string name="audio_mix_value_db">%1$d dB</string>
     <string name="audio_mix_persist_on">Persist between sessions: ON</string>
     <string name="audio_mix_persist_off">Persist between sessions: OFF</string>
+    <string name="audio_mix_persist_help">Remember boost for future playback</string>
     <string name="audio_mix_range">Range: %1$d dB to %2$d dB</string>
     <string name="audio_mix_range_saved">Range: %1$d dB to %2$d dB (saved)</string>
     <string name="audio_mix_unavailable">Amplification is not available on this device</string>
@@ -1485,6 +1490,7 @@
     <string name="subtitle_style_outline">Outline</string>
     <string name="subtitle_style_bottom_offset">Bottom Offset</string>
     <string name="subtitle_style_defaults">Defaults</string>
+    <string name="subtitle_style_unavailable_native">Unavailable with native subtitles</string>
     <string name="subtitle_style_on">On</string>
     <string name="subtitle_style_off">Off</string>
     <string name="subtitle_style_weight">Weight</string>

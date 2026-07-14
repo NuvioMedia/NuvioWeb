@@ -1,5 +1,14 @@
 import { PlayerController } from "../../../core/player/playerController.js";
 import {
+  audioTrackLabelConflictsWithCodec,
+  formatAudioCodecName,
+  getAuthoritativeAudioCodecValue,
+  getAudioTrackCodecCompatibilityText,
+  getAudioTrackLabelPrefix,
+  mapAudioTrackNativeIndexes
+} from "../../../core/player/audioTrackCodecMetadata.js";
+import { resolveSubtitleStyleControlAvailability } from "../../../core/player/subtitlePresentationCapabilities.js";
+import {
   ensureWebOsImageProxyReady,
   normalizeImageUrl,
   onWebOsImageProxyReady
@@ -22,6 +31,7 @@ import { skipIntroRepository } from "../../../data/repository/skipIntroRepositor
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { StreamBadgeSettingsStore } from "../../../data/local/streamBadgeSettingsStore.js";
 import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
+import { WebOsAudioCompatibilityStore } from "../../../data/local/webOsAudioCompatibilityStore.js";
 import { matchStreamBadges } from "../../../core/streams/streamBadgeRules.js";
 import { selectAutoPlayStream } from "../../../core/streams/streamAutoPlaySelector.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
@@ -61,7 +71,7 @@ const LOADING_LOGO_FILL_FRAME_MS = 80;
 const NEXT_EPISODE_SOURCE_RESOLVE_TIMEOUT_MS = 45000;
 const STARTUP_AUDIO_PREFERENCE_RETRY_WINDOW_MS = 6000;
 const STARTUP_AUDIO_PREFERENCE_RETRY_INTERVAL_MS = 250;
-const WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS = 8000;
+const WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS = 30000;
 const EPISODE_PANEL_TRANSITION_MS = 220;
 const activeEngineFsPlaybackClaims = new Map();
 const deferredEngineFsRemovalTimers = new Map();
@@ -614,7 +624,7 @@ function canUseWebOsBitmapSubtitles() {
 }
 
 function getWebOsAudioTrackCompatibilityText(track = {}) {
-  return getTrackMetadataStrings(track).join(" ");
+  return getAudioTrackCodecCompatibilityText(track, getTrackMetadataStrings(track).join(" "));
 }
 
 function isUnsupportedWebOsAudioTrack(track = {}) {
@@ -1048,37 +1058,6 @@ function detectSubtitleTrackLanguageVariant(track = {}, language = getTrackLangu
   return baseLanguage;
 }
 
-function formatAudioCodecName(value) {
-  const text = cleanDisplayText(value).toLowerCase();
-  if (!text) {
-    return "";
-  }
-
-  if (text.includes("truehd") && text.includes("atmos")) return "TrueHD Atmos";
-  if (text.includes("eac3-joc") || text.includes("ec-3-joc") || text.includes("e-ac-3-joc") || /\bjoc\b/.test(text) || text.includes("atmos")) return "E-AC-3-JOC";
-  if (text.includes("truehd")) return "TrueHD";
-  if (text.includes("dts-hd")) return "DTS-HD";
-  if (text.includes("dts express")) return "DTS Express";
-  if (text.includes("dts")) return "DTS";
-  if (text.includes("ec-3") || text.includes("eac3") || text.includes("ddp") || text.includes("dolby digital plus")) return "E-AC-3";
-  if (text.includes("ac-3") || text.includes("ac3") || text.includes("dolby digital")) return "AC-3";
-  if (text.includes("ac-4") || text.includes("ac4")) return "AC-4";
-  if (text.includes("aac") || text.includes("mp4a")) return "AAC";
-  if (text.includes("mp3") || text.includes("mpeg audio")) return "MP3";
-  if (text.includes("mp2")) return "MP2";
-  if (text.includes("vorbis")) return "Vorbis";
-  if (text.includes("opus")) return "Opus";
-  if (text.includes("flac")) return "FLAC";
-  if (text.includes("alac")) return "ALAC";
-  if (text.includes("wav") || text.includes("pcm")) return "WAV";
-  if (text.includes("amr-wb")) return "AMR-WB";
-  if (text.includes("amr-nb")) return "AMR-NB";
-  if (text.includes("amr")) return "AMR";
-  if (text.includes("iamf")) return "IAMF";
-  if (text.includes("mpegh") || text.includes("mhm1") || text.includes("mha1")) return "MPEG-H";
-  return "";
-}
-
 function formatAudioChannelLayout(value) {
   const numericValue = Number(value);
   if (Number.isFinite(numericValue) && numericValue > 0) {
@@ -1117,18 +1096,21 @@ function formatAudioTrackDisplay(track = {}, index = 0) {
   const rawLanguage = cleanDisplayText(getTrackLanguageValue(track));
   const languageLabel = capitalizeDisplayLabel(getAudioTrackLanguageLabel(track));
   const rawLanguageLabel = capitalizeDisplayLabel(rawLanguage);
+  const authoritativeCodecValue = getAuthoritativeAudioCodecValue(track);
   const codecName = formatAudioCodecName(
-    track?.sampleMimeType
-    || track?.codec
-    || track?.codecs
-    || track?.audioCodec
-    || track?.codecProfile
-    || track?.format
-    || getTrackMetadataStrings(track).join(" ")
+    authoritativeCodecValue || getTrackMetadataStrings(track).join(" ")
   );
   const channelLayout = formatAudioChannelLayout(track?.channelCount || track?.channels);
   const sampleRate = Number(track?.sampleRate || track?.audioSampleRate || 0);
-  const baseName = rawLabel || languageLabel || rawLanguageLabel || audioLabel(index);
+  const labelConflictsWithCodec = audioTrackLabelConflictsWithCodec(rawLabel, authoritativeCodecValue);
+  const labelPrefix = labelConflictsWithCodec
+    ? getAudioTrackLabelPrefix(rawLabel)
+    : "";
+  const baseName = labelPrefix
+    || (labelConflictsWithCodec ? "" : rawLabel)
+    || languageLabel
+    || rawLanguageLabel
+    || audioLabel(index);
   const suffix = [codecName, channelLayout].filter(Boolean).join(" ");
   const label = suffix ? `${baseName} (${suffix})` : baseName;
   const secondaryParts = [];
@@ -2011,6 +1993,12 @@ export const PlayerScreen = {
     this.playerMountToken = mountToken;
     this.playerRouteActive = true;
     this.params = params;
+    if (Environment.isWebOS()) {
+      const legacyForceAll = Boolean(PlayerSettingsStore.get().forceDtsTrueHdAudio);
+      const audioCompatibility = WebOsAudioCompatibilityStore.get({ legacyForceAll });
+      PlayerController.setWebOsAudioCodecOverrides?.(audioCompatibility);
+      void PlayerController.refreshWebOsDeviceInfo?.();
+    }
     this.contentLanguage = resolveRouteContentLanguage(params);
     this.externalFrameUrl = String(params.externalFrameUrl || "").trim();
     if (this.releaseImageProxyReadyListener) {
@@ -2349,7 +2337,12 @@ export const PlayerScreen = {
       this.currentEngineFsStream = this.getEngineFsStateForStream(sourceCandidate);
       const prioritizeWebOsRemoteMkvPlayback = Environment.isWebOS()
         && !this.currentEngineFsStream
-        && this.isCurrentSourceLikelyMkv(initialStreamUrl);
+        && this.isCurrentSourceLikelyMkv(initialStreamUrl, sourceCandidate);
+      if (prioritizeWebOsRemoteMkvPlayback) {
+        // The probe must start only after webOS has accepted the media request,
+        // but startup preference checks must already know discovery is pending.
+        this.trackDiscoveryInProgress = true;
+      }
       if (this.currentEngineFsStream) {
         this.engineFsPlaybackToken = claimEngineFsPlayback(this.currentEngineFsStream);
         this.releaseStartupAudioGate({ resume: false });
@@ -2375,9 +2368,11 @@ export const PlayerScreen = {
         }
       }
       this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
-      if (!prioritizeWebOsRemoteMkvPlayback) {
-        this.startTrackDiscoveryWindow();
-      }
+      this.startTrackDiscoveryWindow({
+        durationMs: prioritizeWebOsRemoteMkvPlayback
+          ? WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS
+          : 7000
+      });
       this.schedulePlaybackStallGuard();
     } else if (!this.isExternalFrameMode()) {
       const sourceCandidate = initialStreamCandidate || this.getCurrentStreamCandidate();
@@ -2497,12 +2492,14 @@ export const PlayerScreen = {
 
     let videoId = null;
     if (type === "series") {
+      const routeVideoId = String(this.params?.videoId || "").trim();
       const season = Number(this.params?.season);
       const episode = Number(this.params?.episode);
-      if (id && Number.isFinite(season) && season > 0 && Number.isFinite(episode) && episode > 0) {
+      // The exact episode id used by the player is authoritative, matching Android TV.
+      if (routeVideoId) {
+        videoId = routeVideoId;
+      } else if (id && Number.isFinite(season) && season > 0 && Number.isFinite(episode) && episode > 0) {
         videoId = `${id}:${season}:${episode}`;
-      } else if (this.params?.videoId) {
-        videoId = String(this.params.videoId);
       }
     }
 
@@ -3532,15 +3529,16 @@ export const PlayerScreen = {
       || (typeof PlayerController.isLikelyDashMimeType === "function" && PlayerController.isLikelyDashMimeType(probeMimeType));
   },
 
-  isCurrentSourceLikelyMkv(url = this.getTrackProbeUrl()) {
+  isCurrentSourceLikelyMkv(url = this.getTrackProbeUrl(), streamCandidate = this.getCurrentStreamCandidate()) {
     const probeUrl = String(url || "").trim().toLowerCase();
-    if (!probeUrl) {
-      return false;
-    }
     if (probeUrl.includes(".mkv")) {
       return true;
     }
-    return false;
+    const sourceType = this.resolvePlaybackMediaSourceType(streamCandidate);
+    const normalizedSourceType = typeof PlayerController.normalizeMimeType === "function"
+      ? PlayerController.normalizeMimeType(sourceType)
+      : String(sourceType || "").toLowerCase().split(";")[0].trim();
+    return normalizedSourceType === "video/x-matroska";
   },
 
   canDiscoverEmbeddedSubtitleTracks() {
@@ -3634,34 +3632,39 @@ export const PlayerScreen = {
   },
 
   normalizeEmbeddedAudioTracks(rawTracks = []) {
-    return rawTracks
-      .filter((track) => String(track?.type || "").toLowerCase() === "audio")
-      .map((track, index) => {
-        const sourceTrackId = Number(track?.id);
-        const support = getAudioTrackSupportState(track);
-        return {
-          id: `embedded-audio-${index}`,
-          embeddedTrackIndex: index,
-          sourceTrackId: Number.isFinite(sourceTrackId) ? sourceTrackId : -1,
-          nativeTrackIndex: index,
-          supported: support.supported,
-          unsupportedReason: support.unsupportedReason,
-          label: cleanDisplayText(track?.label),
-          language: normalizeTrackLanguageCode(track?.lang) || String(track?.lang || "").trim().toLowerCase(),
-          lang: cleanDisplayText(track?.lang),
-          codec: cleanDisplayText(track?.codec || track?.audioCodec),
-          codecs: cleanDisplayText(track?.codecs || track?.codec_id || track?.codec_tag_string),
-          audioCodec: cleanDisplayText(track?.audioCodec || track?.codec),
-          codecProfile: cleanDisplayText(track?.codecProfile || track?.profile || track?.codec_profile),
-          mimeType: cleanDisplayText(track?.mimeType || track?.mime_type),
-          sampleMimeType: cleanDisplayText(track?.sampleMimeType || track?.sample_mime_type),
-          format: cleanDisplayText(track?.format || track?.format_name || track?.format_long_name),
-          channels: track?.channels || track?.channelCount || "",
-          channelCount: track?.channelCount || track?.channels || "",
-          sampleRate: Number(track?.sampleRate || track?.audioSampleRate || track?.sample_rate || 0) || 0,
-          raw: track
-        };
-      });
+    const audioTracks = rawTracks
+      .filter((track) => String(track?.type || "").toLowerCase() === "audio");
+    const supportStates = audioTracks.map((track) => getAudioTrackSupportState(track));
+    const nativeTrackIndexes = mapAudioTrackNativeIndexes(
+      supportStates.map((support) => support.supported),
+      { filterUnsupported: Environment.isWebOS() }
+    );
+    return audioTracks.map((track, index) => {
+      const sourceTrackId = Number(track?.id);
+      const support = supportStates[index];
+      return {
+        id: `embedded-audio-${index}`,
+        embeddedTrackIndex: index,
+        sourceTrackId: Number.isFinite(sourceTrackId) ? sourceTrackId : -1,
+        nativeTrackIndex: nativeTrackIndexes[index],
+        supported: support.supported,
+        unsupportedReason: support.unsupportedReason,
+        label: cleanDisplayText(track?.label),
+        language: normalizeTrackLanguageCode(track?.lang) || String(track?.lang || "").trim().toLowerCase(),
+        lang: cleanDisplayText(track?.lang),
+        codec: cleanDisplayText(track?.codec || track?.audioCodec),
+        codecs: cleanDisplayText(track?.codecs || track?.codec_id || track?.codec_tag_string),
+        audioCodec: cleanDisplayText(track?.audioCodec || track?.codec),
+        codecProfile: cleanDisplayText(track?.codecProfile || track?.profile || track?.codec_profile),
+        mimeType: cleanDisplayText(track?.mimeType || track?.mime_type),
+        sampleMimeType: cleanDisplayText(track?.sampleMimeType || track?.sample_mime_type),
+        format: cleanDisplayText(track?.format || track?.format_name || track?.format_long_name),
+        channels: track?.channels || track?.channelCount || "",
+        channelCount: track?.channelCount || track?.channels || "",
+        sampleRate: Number(track?.sampleRate || track?.audioSampleRate || track?.sample_rate || 0) || 0,
+        raw: track
+      };
+    });
   },
 
   getUnavailableTrackMessage(kind = "audio") {
@@ -6641,6 +6644,9 @@ export const PlayerScreen = {
     const subtitleFontSize = normalizeSubtitleFontSize(style.fontSize);
     const htmlSubtitleFontSize = formatHtmlSubtitleFontSize(subtitleFontSize);
     PlayerController.setWebOsSubtitleFontSize?.(subtitleFontSize);
+    if (Environment.isTizen() && PlayerController.isUsingAvPlay?.()) {
+      PlayerController.setAvPlayExternalSubtitleDelay?.(this.subtitleDelayMs);
+    }
     uiRoot.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
     uiRoot.style.setProperty("--player-subtitle-outline-color", outlineColor);
     uiRoot.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
@@ -7343,7 +7349,14 @@ export const PlayerScreen = {
       if (this.refreshSubtitleCueStyles()) {
         this.refreshWebOsEmbeddedSubtitleAfterCueMutation();
       }
-      if (this.trackDiscoveryInProgress && this.hasAudioTracksAvailable() && this.hasSubtitleTracksAvailable()) {
+      const embeddedAudioDiscoveryPending = this.canDiscoverEmbeddedAudioTracks()
+        && this.embeddedAudioTracks.length <= 0;
+      if (
+        this.trackDiscoveryInProgress
+        && !embeddedAudioDiscoveryPending
+        && this.hasAudioTracksAvailable()
+        && this.hasSubtitleTracksAvailable()
+      ) {
         this.trackDiscoveryInProgress = false;
         this.clearTrackDiscoveryTimer();
         this.refreshTrackDialogs();
@@ -7379,34 +7392,33 @@ export const PlayerScreen = {
         }
         this.pendingWebOsAudioSelection = null;
         this.failedAutomaticAudioFallbackEntryId = "";
-        if (this.startupAudioGateActive) {
-          const selectedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
-          const preferredTargets = typeof this.getStartupAudioPreferredTargets === "function"
-            ? this.getStartupAudioPreferredTargets()
-            : [];
-          const matchesStartupPreference = !preferredTargets.length || Boolean(
-            selectedOption?.supported
-            && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))
-          );
-          if (matchesStartupPreference) {
-            this.clearStartupAudioPreferenceRetry();
-            this.startupAudioPreferenceApplied = true;
-            this.scheduleLoadingCompletionCheck(0, { force: true });
-          }
+        if (this.startupAudioGateActive && existingPending?.automaticFallback) {
+          this.clearStartupAudioPreferenceRetry();
+          this.startupAudioPreferenceApplied = true;
         }
         this.refreshTrackDialogs();
+        if (this.startupAudioGateActive && this.startupAudioPreferenceApplied) {
+          this.scheduleLoadingCompletionCheck(0, { force: true });
+        }
         return;
       }
 
       if (status === "failed") {
         if (samePendingSelection && existingPending.automaticFallback) {
           this.failedAutomaticAudioFallbackEntryId = existingPending.entryId || "";
+          if (this.startupAudioGateActive) {
+            this.clearStartupAudioPreferenceRetry();
+            this.startupAudioPreferenceApplied = true;
+          }
         }
         this.pendingWebOsAudioSelection = null;
         console.warn("webOS audio track selection failed", detail?.error || detail);
         this.invalidateTrackDialogCaches();
         this.renderControlButtons();
         this.renderAudioDialog();
+        if (this.startupAudioGateActive && this.startupAudioPreferenceApplied) {
+          this.scheduleLoadingCompletionCheck(0, { force: true });
+        }
       }
     };
 
@@ -8083,14 +8095,25 @@ export const PlayerScreen = {
       : Number(PlayerController.video?.readyState || 0);
     const gateDeadlineExpired = Number(this.startupAudioGateDeadline || 0) > 0
       && Date.now() >= Number(this.startupAudioGateDeadline || 0);
-    if (gateDeadlineExpired) {
-      return Number.isFinite(readyState) && readyState >= 2;
+    if (gateDeadlineExpired && !this.pendingWebOsAudioSelection) {
+      if (!this.startupAudioPreferenceApplied) {
+        this.applyStartupAudioFallback();
+      }
+      return Boolean(this.startupAudioPreferenceApplied)
+        && Number.isFinite(readyState)
+        && readyState >= 2;
     }
     if (this.pendingPlaybackRestore) {
       return false;
     }
-    const audioPreferenceSettled = Boolean(this.startupAudioPreferenceApplied)
-      || (!this.startupAudioPreferenceApplying && !this.hasAudioTracksAvailable());
+    const audioPreferenceSettled = !this.pendingWebOsAudioSelection && (
+      Boolean(this.startupAudioPreferenceApplied)
+      || (
+        !Environment.isWebOS()
+        && !this.startupAudioPreferenceApplying
+        && !this.hasAudioTracksAvailable()
+      )
+    );
     return audioPreferenceSettled && Number.isFinite(readyState) && readyState >= 3;
   },
 
@@ -8965,7 +8988,7 @@ export const PlayerScreen = {
     const nextEngineFsState = this.getEngineFsStateForStream(sourceCandidate);
     const prioritizeWebOsRemoteMkvPlayback = Environment.isWebOS()
       && !nextEngineFsState
-      && this.isCurrentSourceLikelyMkv(streamUrl);
+      && this.isCurrentSourceLikelyMkv(streamUrl, sourceCandidate);
     const sameEngineFsState = this.isSameEngineFsState(this.currentEngineFsStream, nextEngineFsState);
     if (this.currentEngineFsStream && !this.isSameEngineFsState(this.currentEngineFsStream, nextEngineFsState)) {
       const removePreviousTorrent = !nextEngineFsState
@@ -9061,11 +9084,15 @@ export const PlayerScreen = {
     this.startupTrackPreferenceReady = false;
     this.builtInSubtitleCount = 0;
     this.embeddedSubtitleTracks = [];
+    this.embeddedAudioTracks = [];
+    this.selectedEmbeddedAudioTrackIndex = -1;
     this.clearBitmapSubtitleOverlay({ dispose: true });
     this.clearSubtitleCueStyleBindings();
     this.clearMountedExternalSubtitleTracks();
     this.trackDiscoveryInProgress = true;
     this.clearTrackDiscoveryTimer();
+    this.trackDiscoveryStartedAt = 0;
+    this.trackDiscoveryDeadline = 0;
     this.activePlaybackUrl = streamUrl;
     this.currentEngineFsStream = nextEngineFsState || null;
     if (this.currentEngineFsStream) {
@@ -9098,11 +9125,11 @@ export const PlayerScreen = {
     }
     this.loadSubtitles();
     this.loadManifestTrackDataForCurrentStream(this.activePlaybackUrl);
-    // For prioritized webOS MKVs, loadedmetadata calls
-    // ensureTrackDataWarmup() after the media request has been accepted.
-    if (!prioritizeWebOsRemoteMkvPlayback) {
-      this.startTrackDiscoveryWindow();
-    }
+    this.startTrackDiscoveryWindow({
+      durationMs: prioritizeWebOsRemoteMkvPlayback
+        ? WEBOS_REMOTE_MKV_AUDIO_GATE_MAX_WAIT_MS
+        : 7000
+    });
     if (this.currentEngineFsStream || prioritizeWebOsRemoteMkvPlayback) {
       this.initialEmbeddedTrackBootstrapPromise = null;
     } else {
@@ -9882,11 +9909,19 @@ export const PlayerScreen = {
   },
 
   startTrackDiscoveryWindow({ durationMs = 7000, intervalMs = 350 } = {}) {
+    const now = Date.now();
+    const requestedDeadline = now + Math.max(500, Number(durationMs || 0));
+    const existingDeadline = this.trackDiscoveryInProgress
+      && Number(this.trackDiscoveryDeadline || 0) > now
+      ? Number(this.trackDiscoveryDeadline || 0)
+      : 0;
     const token = (this.trackDiscoveryToken || 0) + 1;
     this.trackDiscoveryToken = token;
     this.trackDiscoveryInProgress = true;
-    this.trackDiscoveryStartedAt = Date.now();
-    this.trackDiscoveryDeadline = this.trackDiscoveryStartedAt + Math.max(500, Number(durationMs || 0));
+    this.trackDiscoveryStartedAt = existingDeadline && Number(this.trackDiscoveryStartedAt || 0) > 0
+      ? Number(this.trackDiscoveryStartedAt)
+      : now;
+    this.trackDiscoveryDeadline = Math.max(requestedDeadline, existingDeadline);
     this.clearTrackDiscoveryTimer();
 
     const tick = () => {
@@ -9998,11 +10033,6 @@ export const PlayerScreen = {
         return;
       }
 
-      if (typeof PlayerController.setForceDtsTrueHdAudio === "function") {
-        PlayerController.setForceDtsTrueHdAudio(
-          Boolean(PlayerSettingsStore.get().forceDtsTrueHdAudio)
-        );
-      }
       const capabilityPromise = Environment.isWebOS()
         && typeof PlayerController.refreshWebOsDeviceInfo === "function"
         ? PlayerController.refreshWebOsDeviceInfo()
@@ -11006,7 +11036,6 @@ export const PlayerScreen = {
     if (!subtitleOutputActive) {
       return;
     }
-    PlayerController.ensureAvPlayHtmlSubtitleRendering?.();
     if (this.avPlaySubtitleOverlayTimer) {
       clearTimeout(this.avPlaySubtitleOverlayTimer);
       this.avPlaySubtitleOverlayTimer = null;
@@ -11676,14 +11705,16 @@ export const PlayerScreen = {
       return resolvedRank;
     };
     const locale = typeof I18n.getLocale === "function" ? I18n.getLocale() : undefined;
-    const preferredKeys = new Set(preferredTargets.map((target) => normalizeSubtitleLanguageKey(target)));
+    const matchesPreferredLanguage = (languageKey) => preferredTargets.some((target) => (
+      languageKey === target || (languageKey && target.startsWith(`${languageKey}-`))
+    ));
     const showOnlyPreferredLanguages = Boolean(this.subtitleStyleSettings?.showOnlyPreferredLanguages);
     const values = Array.from(groups.values())
       .filter((entry) => (
         !showOnlyPreferredLanguages
         || entry.key === SUBTITLE_LANGUAGE_OFF_KEY
         || entry.key === selectedLanguageKey
-        || preferredKeys.has(entry.key)
+        || matchesPreferredLanguage(entry.key)
       ))
       .sort((left, right) => {
       if (left.key === right.key) return 0;
@@ -12143,6 +12174,7 @@ export const PlayerScreen = {
     const selectedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
     if (
       selectedOption?.supported
+      && !(isStillLoading && selectedOption.entry?.implicitAudioTrack)
       && preferredTargets.some((target) => this.matchesStartupAudioTarget(selectedOption, target))
     ) {
       this.clearStartupAudioPreferenceRetry();
@@ -12150,7 +12182,10 @@ export const PlayerScreen = {
       return true;
     }
 
-    const preferredOption = this.findStartupPreferredAudioOption(preferredTargets);
+    const matchedPreferredOption = this.findStartupPreferredAudioOption(preferredTargets);
+    const preferredOption = isStillLoading && matchedPreferredOption?.entry?.implicitAudioTrack
+      ? null
+      : matchedPreferredOption;
     if (!preferredOption?.entry || !Number.isFinite(preferredOption.entryIndex)) {
       if (isStillLoading) {
         const retryingTrackDiscovery = this.scheduleStartupAudioPreferenceRetry();
@@ -12158,9 +12193,7 @@ export const PlayerScreen = {
           return false;
         }
       }
-      this.clearStartupAudioPreferenceRetry();
-      this.startupAudioPreferenceApplied = true;
-      return false;
+      return this.applyStartupAudioFallback();
     }
 
     this.startupAudioPreferenceApplying = true;
@@ -12187,10 +12220,39 @@ export const PlayerScreen = {
     } else {
       const retryingTizenAvPlay = this.scheduleStartupAudioPreferenceRetry();
       if (!retryingTizenAvPlay && !this.isAudioPreferenceDiscoveryPending()) {
-        this.startupAudioPreferenceApplied = true;
+        return this.applyStartupAudioFallback();
       }
     }
     return applied;
+  },
+
+  applyStartupAudioFallback() {
+    this.clearStartupAudioPreferenceRetry();
+    const fallbackOption = this.collectAudioOptionItems().find((entry) => entry.supported);
+    if (!fallbackOption?.entry || !Number.isFinite(fallbackOption.entryIndex)) {
+      this.startupAudioPreferenceApplied = true;
+      return true;
+    }
+
+    if (!fallbackOption.selected) {
+      this.startupAudioPreferenceApplying = true;
+      try {
+        this.applyAudioTrack(fallbackOption.entryIndex, { automaticFallback: true });
+      } finally {
+        this.startupAudioPreferenceApplying = false;
+      }
+    }
+
+    if (Environment.isWebOS() && this.pendingWebOsAudioSelection) {
+      this.startupAudioPreferenceApplied = false;
+      return false;
+    }
+
+    // The preferred language is unavailable or discovery hit its bounded limit.
+    // If the runtime cannot expose/select tracks, its default first track remains
+    // the fallback instead of keeping startup muted indefinitely.
+    this.startupAudioPreferenceApplied = true;
+    return true;
   },
 
   findStartupPreferredSubtitleOption(targets = this.getStartupPreferredSubtitleLanguageTargets(), mode = "language") {
@@ -12258,10 +12320,15 @@ export const PlayerScreen = {
       return false;
     }
 
-    const preferenceMode = this.getStartupSubtitlePreferenceMode();
-    const forcedTarget = preferenceMode === "audio-forced"
+    const configuredPreferenceMode = this.getStartupSubtitlePreferenceMode();
+    const forcedTarget = configuredPreferenceMode === "audio-forced"
       ? this.getStartupForcedSubtitleLanguageTarget()
       : null;
+    // Match Android TV: forced-only applies when the selected audio already
+    // matches the subtitle language; foreign audio uses normal subtitles.
+    const preferenceMode = configuredPreferenceMode === "audio-forced" && !forcedTarget
+      ? "language"
+      : configuredPreferenceMode;
     const preferredTargets = preferenceMode === "audio-forced"
       ? (forcedTarget ? [forcedTarget] : this.getStartupPreferredSubtitleLanguageTargets())
       : this.getStartupPreferredSubtitleLanguageTargets();
@@ -12329,6 +12396,27 @@ export const PlayerScreen = {
 
   getSubtitleStyleControls() {
     const style = this.subtitleStyleSettings || {};
+    const htmlRendererActive = Boolean(
+      this.htmlSubtitleSelectedId
+      && (
+        (Array.isArray(this.htmlSubtitleCues) && this.htmlSubtitleCues.length > 0)
+        || PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml?.()
+      )
+    );
+    const usingTizenAvPlay = Boolean(Environment.isTizen() && PlayerController.isUsingAvPlay?.());
+    const rendererMode = htmlRendererActive
+      ? "html"
+      : (PlayerController.getAvPlaySubtitleOutputMode?.() || "none");
+    const availability = resolveSubtitleStyleControlAvailability({
+      isTizenAvPlay: usingTizenAvPlay,
+      rendererMode,
+      supportsExternalDelay: PlayerController.supportsAvPlayExternalSubtitleDelay?.() === true
+    });
+    const unavailableValue = t(
+      "subtitle_style_unavailable_native",
+      {},
+      "Unavailable with native subtitles"
+    );
     return [
       { id: "delay", label: t("subtitle_tab_delay", {}, "Delay"), value: formatSubtitleDelay(this.subtitleDelayMs) },
       { id: "fontSize", label: t("subtitle_style_font_size", {}, "Font Size"), value: `${normalizeSubtitleFontSize(style.fontSize)}%` },
@@ -12338,10 +12426,21 @@ export const PlayerScreen = {
       { id: "outlineColor", label: t("subtitle_style_outline_color", {}, "Outline Color"), value: styleChipLabel(style.outlineColor || "#000000") },
       { id: "verticalOffset", label: t("subtitle_style_bottom_offset", {}, "Bottom Offset"), value: formatSubtitleVerticalOffset(style.verticalOffset) },
       { id: "reset", label: t("subtitle_style_defaults", {}, "Reset Defaults"), value: "" }
-    ];
+    ].map((item) => {
+      const disabled = availability[item.id] === false;
+      return {
+        ...item,
+        disabled,
+        value: disabled ? unavailableValue : item.value
+      };
+    });
   },
 
   adjustSubtitleStyleControl(controlId, delta = 0) {
+    const activeControl = this.getSubtitleStyleControls().find((item) => item.id === controlId);
+    if (!activeControl || activeControl.disabled) {
+      return false;
+    }
     const style = { ...(this.subtitleStyleSettings || {}) };
     if (controlId === "delay") {
       this.subtitleDelayMs = clamp(
@@ -12351,7 +12450,7 @@ export const PlayerScreen = {
       );
       this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
       this.renderSubtitleDialog();
-      return;
+      return true;
     } else if (controlId === "fontSize") {
       style.fontSize = normalizeSubtitleFontSize(Number(style.fontSize || 100) + (delta * SUBTITLE_FONT_STEP));
     } else if (controlId === "bold" && delta !== 0) {
@@ -12373,12 +12472,13 @@ export const PlayerScreen = {
       this.persistPlayerPresentationSettings();
       this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
       this.renderSubtitleDialog();
-      return;
+      return true;
     }
     this.subtitleStyleSettings = style;
     this.persistPlayerPresentationSettings();
     this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
     this.renderSubtitleDialog();
+    return true;
   },
 
   getSubtitleStyleControlDelta(side = this.subtitleStyleControlSide) {
@@ -12882,13 +12982,13 @@ export const PlayerScreen = {
         </div>
         <div class="player-subtitle-rail player-subtitle-style-rail${showOptionsRail ? "" : " hidden"}">
           ${styleItems.map((item, index) => `
-            <div class="player-dialog-item player-dialog-style-item${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex ? " focused" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}">
-              <button class="player-dialog-step player-dialog-step-minus focusable${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex && focusedStyleSide === "minus" ? " focused" : ""}" type="button" data-subtitle-style-action="decrease" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} -`)}">&#8722;</button>
+            <div class="player-dialog-item player-dialog-style-item${item.disabled ? " disabled" : ""}${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex ? " focused" : ""}" data-subtitle-rail="style" data-subtitle-index="${index}" aria-disabled="${item.disabled ? "true" : "false"}">
+              <button class="player-dialog-step player-dialog-step-minus${item.disabled ? "" : " focusable"}${!item.disabled && this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex && focusedStyleSide === "minus" ? " focused" : ""}" type="button" data-subtitle-style-action="decrease" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} -`)}"${item.disabled ? " disabled" : ""}>&#8722;</button>
               <div class="player-dialog-item-center">
                 <div class="player-dialog-item-main">${escapeHtml(item.label)}</div>
                 <div class="player-dialog-item-sub">${escapeHtml(item.value || "")}</div>
               </div>
-              <button class="player-dialog-step player-dialog-step-plus focusable${this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex && focusedStyleSide === "plus" ? " focused" : ""}" type="button" data-subtitle-style-action="increase" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} +`)}">&#43;</button>
+              <button class="player-dialog-step player-dialog-step-plus${item.disabled ? "" : " focusable"}${!item.disabled && this.subtitleFocusedRail === "style" && index === this.subtitleStyleRailIndex && focusedStyleSide === "plus" ? " focused" : ""}" type="button" data-subtitle-style-action="increase" data-subtitle-rail="style" data-subtitle-index="${index}" data-style-id="${escapeAttribute(item.id)}" aria-label="${escapeAttribute(`${item.label} +`)}"${item.disabled ? " disabled" : ""}>&#43;</button>
             </div>
           `).join("")}
         </div>
@@ -12999,7 +13099,7 @@ export const PlayerScreen = {
         }
         return true;
       }
-      if (styleItem) {
+      if (styleItem && !styleItem.disabled) {
         this.adjustSubtitleStyleControl(styleItem.id, this.getSubtitleStyleControlDelta(this.subtitleStyleControlSide));
       }
       return true;
@@ -13014,6 +13114,35 @@ export const PlayerScreen = {
   },
 
   getMergedAudioTrackEntries(audioTracks = []) {
+    if (Environment.isWebOS() && this.embeddedAudioTracks.length) {
+      return this.embeddedAudioTracks.map((track, index) => {
+        const embeddedTrackIndex = Number(track?.embeddedTrackIndex);
+        const normalizedEmbeddedIndex = Number.isFinite(embeddedTrackIndex) && embeddedTrackIndex >= 0
+          ? embeddedTrackIndex
+          : index;
+        const nativeTrackIndex = Number(track?.nativeTrackIndex);
+        const display = formatAudioTrackDisplay(track, index);
+        const support = getAudioTrackSupportState(track);
+        return {
+          id: `audio-embedded-${normalizedEmbeddedIndex}`,
+          label: display.label,
+          secondary: display.secondary,
+          selected: this.selectedEmbeddedAudioTrackIndex >= 0
+            ? normalizedEmbeddedIndex === this.selectedEmbeddedAudioTrackIndex
+            : Number.isFinite(nativeTrackIndex)
+              && nativeTrackIndex >= 0
+              && nativeTrackIndex === this.selectedAudioTrackIndex,
+          supported: support.supported,
+          unsupportedReason: support.unsupportedReason,
+          embeddedAudioTrackIndex: normalizedEmbeddedIndex,
+          track: {
+            ...track,
+            ...support
+          }
+        };
+      });
+    }
+
     const entries = [];
     const representedEmbeddedIndexes = new Set();
 
@@ -13242,6 +13371,11 @@ export const PlayerScreen = {
       this.audioFallbackApplying
       || this.pendingWebOsAudioSelection
       || (Environment.isWebOS() && !this.startupTrackPreferenceReady)
+      || (
+        Environment.isWebOS()
+        && this.startupAudioGateActive
+        && this.isAudioPreferenceDiscoveryPending()
+      )
     ) {
       return false;
     }
@@ -15180,6 +15314,8 @@ export const PlayerScreen = {
         playerLogoUrl: this.params?.playerLogoUrl || null,
         episodes: this.episodes,
         streamCandidates: streamItems,
+        preferredStreamId: bestStreamCandidate.id || null,
+        playbackSourceContext: this.getPlaybackSourceContext(bestStreamCandidate),
         nextEpisodeVideoId: nextEpisode?.id || null,
         nextEpisodeLabel: nextEpisode ? `S${nextEpisode.season}E${nextEpisode.episode}` : null,
         nextEpisodeSeason: nextEpisode?.season ?? null,
@@ -15610,8 +15746,10 @@ export const PlayerScreen = {
     const subtitleStep = target.closest?.("[data-subtitle-style-action]");
     if (subtitleStep && this.subtitleDialogVisible) {
       const styleItems = this.getSubtitleStyleControls();
-      const styleItem = styleItems[this.subtitleStyleRailIndex];
-      if (styleItem) {
+      const styleIndex = Number(subtitleStep.dataset.subtitleIndex);
+      const styleItem = styleItems[styleIndex];
+      if (styleItem && !styleItem.disabled) {
+        this.subtitleStyleRailIndex = styleIndex;
         const side = String(subtitleStep.dataset.subtitleStyleAction || "").toLowerCase() === "increase" ? "plus" : "minus";
         this.subtitleStyleControlSide = side;
         this.adjustSubtitleStyleControl(styleItem.id, this.getSubtitleStyleControlDelta(side));

@@ -627,6 +627,7 @@ const FEATURE_ADAPTERS = {
           Number(layout.posterCardCornerRadiusDp ?? 12) || 12
         ),
         detail_page_trailer_button_enabled: Boolean(layout.detailPageTrailerButtonEnabled),
+        blur_unwatched_episodes: Boolean(layout.blurUnwatchedEpisodes),
         hide_unreleased_content: Boolean(layout.hideUnreleasedContent),
         use_episode_thumbnails_in_cw: layout.useEpisodeThumbnailsInCw !== false,
         blur_continue_watching_next_up: Boolean(layout.blurContinueWatchingNextUp),
@@ -660,6 +661,7 @@ const FEATURE_ADAPTERS = {
         "focused_poster_backdrop_trailer_enabled",
         "focused_poster_backdrop_trailer_muted",
         "detail_page_trailer_button_enabled",
+        "blur_unwatched_episodes",
         "hide_unreleased_content",
         "use_episode_thumbnails_in_cw",
         "blur_continue_watching_next_up",
@@ -784,6 +786,9 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.detail_page_trailer_button_enabled) != null) {
         partial.detailPageTrailerButtonEnabled = Boolean(raw.detail_page_trailer_button_enabled);
+      }
+      if (booleanOrNull(raw.blur_unwatched_episodes) != null) {
+        partial.blurUnwatchedEpisodes = Boolean(raw.blur_unwatched_episodes);
       }
       if (booleanOrNull(raw.hide_unreleased_content) != null) {
         partial.hideUnreleasedContent = Boolean(raw.hide_unreleased_content);

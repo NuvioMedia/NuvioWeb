@@ -2030,6 +2030,19 @@ button:focus-visible {
   min-height: 100%;
 }
 
+/* Tizen keeps the rendered Home catalog alive between routes. Move the whole
+   retained layer offscreen as well as hiding it: some composited descendants
+   can outlive ancestor visibility changes while the next route is mounting. */
+#home.home-dom-preserved {
+  z-index: -1;
+  transform: translateX(-200vw) !important;
+}
+
+#home.home-dom-preserved .root-sidebar-legacy,
+#home.home-dom-preserved .modern-sidebar-shell {
+  display: none !important;
+}
+
 .home-route-content-enter {
   animation: homeRouteEnter 240ms ease-out both;
 }
@@ -15803,6 +15816,20 @@ html.legacy-webos .debug-console-log-frame {
     border-color 120ms ease,
     box-shadow 120ms ease,
     background-color 120ms ease;
+}
+
+.series-episode-image {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--detail-bg-card) center center / cover no-repeat;
+}
+
+.series-episode-image.is-blurred {
+  filter: blur(12px);
+  transform: scale(1.08);
 }
 
 .series-episode-card.focused {

@@ -7,6 +7,10 @@ import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
 import { hlsJsEngine } from "./engines/hlsJsEngine.js";
 import { dashJsEngine } from "./engines/dashJsEngine.js";
 import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
+import {
+  applyWebOsAudioCodecOverrides,
+  detectWebOsAudioCapabilities
+} from "../../platform/webos/webosAudioCapabilities.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 import { WebOSPlayerExtensions } from "../../platform/webos/webosPlayerExtensions.js";
 import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
@@ -86,7 +90,10 @@ export const PlayerController = {
   desiredAvPlaySubtitleTrackUntil: 0,
   avplaySubtitleSelectionToken: 0,
   avplaySubtitlesSilent: false,
+  avplayNativeSubtitleRendering: false,
   avplayExternalSubtitlePath: "",
+  avplayExternalSubtitleDelayMs: 0,
+  appliedAvPlayExternalSubtitleDelayKey: "",
   avplayTickTimer: null,
   avplayReady: false,
   avplayEnded: false,
@@ -110,8 +117,10 @@ export const PlayerController = {
   webOsSubtitleFontSizeLevel: 1,
   appliedWebOsSubtitleFontSizeKey: "",
   webosDeviceInfoPromise: null,
+  webosAudioCapabilities: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
-  forceDtsTrueHdAudio: false,
+  forceDtsAudio: false,
+  forceTrueHdAudio: false,
   viewportSyncHandler: null,
   avplayDisplayRect: null,
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
@@ -327,36 +336,21 @@ export const PlayerController = {
     return String(this.playbackEngine || "").startsWith("native");
   },
 
-  refreshWebOsDeviceInfo() {
+  refreshWebOsDeviceInfo({ forceRefresh = false } = {}) {
     if (!Platform.isWebOS()) {
       return Promise.resolve({
         unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
       });
     }
-    if (this.webosDeviceInfoPromise) {
-      return this.webosDeviceInfoPromise;
-    }
-    if (!WebOsLunaService.isAvailable()) {
-      this.webosDeviceInfoPromise = Promise.resolve({
-        unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
-      });
+    if (this.webosDeviceInfoPromise && !forceRefresh) {
       return this.webosDeviceInfoPromise;
     }
 
-    this.webosDeviceInfoPromise = WebOsLunaService.request("luna://com.webos.service.config", {
-      method: "getConfigs",
-      parameters: {
-        configNames: ["tv.model.edidType"]
-      }
-    }).then((result) => {
-      const edidType = String(result?.configs?.["tv.model.edidType"] || "").toLowerCase();
-      if (edidType.includes("dts")) {
-        this.webosUnsupportedAudioCodecs.delete("dts");
-      }
-      if (edidType.includes("truehd")) {
-        this.webosUnsupportedAudioCodecs.delete("truehd");
-      }
+    this.webosDeviceInfoPromise = detectWebOsAudioCapabilities({ forceRefresh }).then((capabilities) => {
+      this.webosAudioCapabilities = capabilities;
+      this.webosUnsupportedAudioCodecs = new Set(capabilities.unsupportedAudioCodecs);
       return {
+        ...capabilities,
         unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
       };
     }).catch(() => ({
@@ -366,21 +360,28 @@ export const PlayerController = {
     return this.webosDeviceInfoPromise;
   },
 
+  setWebOsAudioCodecOverrides({ forceDtsAudio = false, forceTrueHdAudio = false } = {}) {
+    this.forceDtsAudio = Boolean(forceDtsAudio);
+    this.forceTrueHdAudio = Boolean(forceTrueHdAudio);
+  },
+
   setForceDtsTrueHdAudio(enabled) {
-    this.forceDtsTrueHdAudio = Boolean(enabled);
+    const forceAll = Boolean(enabled);
+    this.setWebOsAudioCodecOverrides({
+      forceDtsAudio: forceAll,
+      forceTrueHdAudio: forceAll
+    });
   },
 
   getWebOsUnsupportedAudioCodecs() {
-    if (this.forceDtsTrueHdAudio) {
-      return [];
-    }
-    return Array.from(this.webosUnsupportedAudioCodecs);
+    return applyWebOsAudioCodecOverrides(this.webosUnsupportedAudioCodecs, {
+      forceDtsAudio: this.forceDtsAudio,
+      forceTrueHdAudio: this.forceTrueHdAudio
+    });
   },
 
   getWebOsUnsupportedAudioPenalty(text = "") {
-    if (this.forceDtsTrueHdAudio) {
-      return 0;
-    }
+    const unsupportedAudioCodecs = new Set(this.getWebOsUnsupportedAudioCodecs());
     const normalizedText = String(text || "")
       .toLowerCase()
       .replace(/[_-]+/g, " ")
@@ -388,13 +389,13 @@ export const PlayerController = {
       .trim();
     let penalty = 0;
     if (
-      this.webosUnsupportedAudioCodecs.has("dts")
+      unsupportedAudioCodecs.has("dts")
       && /\b(dts hd|dts hd ma|dts x|dtsx|dts)\b/.test(normalizedText)
     ) {
       penalty -= 45;
     }
     if (
-      this.webosUnsupportedAudioCodecs.has("truehd")
+      unsupportedAudioCodecs.has("truehd")
       && /\b(truehd|true hd|dolby truehd|mlp fba|a truehd)\b/.test(normalizedText)
     ) {
       penalty -= 45;
@@ -1198,6 +1199,8 @@ export const PlayerController = {
 
   clearAvPlayExternalSubtitlePath() {
     this.avplayExternalSubtitlePath = "";
+    this.avplayExternalSubtitleDelayMs = 0;
+    this.appliedAvPlayExternalSubtitleDelayKey = "";
     const avplay = this.getAvPlay();
     if (!avplay || typeof avplay.setExternalSubtitlePath !== "function") {
       return false;
@@ -1224,8 +1227,19 @@ export const PlayerController = {
       });
       return false;
     }
-    this.avplaySubtitlesSilent = false;
-    this.ensureAvPlayHtmlSubtitleRendering();
+    let nativeSubtitleRendering = false;
+    try {
+      // Let AVPlay render embedded subtitles natively. Samsung documents that
+      // silent=true hides them and only leaves subtitle callbacks to the app.
+      if (typeof avplay.setSilentSubtitle === "function") {
+        avplay.setSilentSubtitle(false);
+        nativeSubtitleRendering = true;
+      }
+      this.avplaySubtitlesSilent = false;
+    } catch (_) {
+      this.avplaySubtitlesSilent = false;
+      // AVPlay builds without this toggle can still emit subtitle callbacks.
+    }
     try {
       logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(TEXT)", {
         state,
@@ -1241,7 +1255,16 @@ export const PlayerController = {
       });
       return false;
     }
-    this.ensureAvPlayHtmlSubtitleRendering();
+    try {
+      if (typeof avplay.setSilentSubtitle === "function") {
+        avplay.setSilentSubtitle(false);
+        nativeSubtitleRendering = true;
+      }
+      this.avplaySubtitlesSilent = false;
+    } catch (_) {
+      this.avplaySubtitlesSilent = false;
+    }
+    this.avplayNativeSubtitleRendering = nativeSubtitleRendering;
     if (nudge) {
       this.nudgeAvPlayAfterTrackSwitch();
     }
@@ -1552,6 +1575,7 @@ export const PlayerController = {
         this.avplaySubtitlesSilent = true;
         // Ignore subtitle mute failures.
       }
+      this.avplayNativeSubtitleRendering = false;
       this.selectedAvPlaySubtitleTrackIndex = -1;
       this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
@@ -1582,7 +1606,6 @@ export const PlayerController = {
       this.selectedAvPlaySubtitleTrackIndex = canonicalIndex;
       this.avplaySubtitlesSilent = false;
       this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
-      this.ensureAvPlayHtmlSubtitleRendering();
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     }
@@ -1686,9 +1709,12 @@ export const PlayerController = {
       this.pendingAvPlaySubtitleTrackIndex = -1;
       this.desiredAvPlaySubtitleTrackIndex = -1;
       this.desiredAvPlaySubtitleTrackUntil = 0;
+      this.avplayNativeSubtitleRendering = false;
       this.selectedAvPlaySubtitleTrackIndex = -1;
       this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
       this.avplayExternalSubtitlePath = path;
+      this.appliedAvPlayExternalSubtitleDelayKey = "";
+      this.applyAvPlayExternalSubtitleDelay();
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     } catch (_) {
@@ -1718,34 +1744,63 @@ export const PlayerController = {
   },
 
   shouldRenderAvPlaySubtitleCallbacksInHtml() {
-    if (
-      !Platform.isTizen()
-      || !this.isUsingAvPlay()
-      || this.avplaySubtitlesSilent
-      || String(this.avplayExternalSubtitlePath || "").trim()
-    ) {
-      return false;
-    }
-    return [
-      this.selectedAvPlaySubtitleTrackIndex,
-      this.pendingAvPlaySubtitleTrackIndex,
-      this.desiredAvPlaySubtitleTrackIndex
-    ].some((trackIndex) => Number.isFinite(Number(trackIndex)) && Number(trackIndex) >= 0);
+    return (
+      !this.avplayNativeSubtitleRendering
+      && !String(this.avplayExternalSubtitlePath || "").trim()
+      && this.hasActiveAvPlaySubtitleOutput()
+    );
   },
 
-  ensureAvPlayHtmlSubtitleRendering() {
-    if (!this.shouldRenderAvPlaySubtitleCallbacksInHtml()) {
+  getAvPlaySubtitleOutputMode() {
+    if (!this.isUsingAvPlay() || this.avplaySubtitlesSilent) {
+      return "none";
+    }
+    if (String(this.avplayExternalSubtitlePath || "").trim()) {
+      return "external-native";
+    }
+    if (this.avplayNativeSubtitleRendering && this.hasActiveAvPlaySubtitleOutput()) {
+      return "embedded-native";
+    }
+    if (this.hasActiveAvPlaySubtitleOutput()) {
+      return "html-callback";
+    }
+    return "none";
+  },
+
+  supportsAvPlayExternalSubtitleDelay() {
+    return typeof this.getAvPlay()?.setSubtitlePosition === "function";
+  },
+
+  setAvPlayExternalSubtitleDelay(delayMs = 0) {
+    const normalizedDelayMs = Number(delayMs);
+    this.avplayExternalSubtitleDelayMs = Number.isFinite(normalizedDelayMs)
+      ? Math.round(normalizedDelayMs)
+      : 0;
+    this.appliedAvPlayExternalSubtitleDelayKey = "";
+    return this.applyAvPlayExternalSubtitleDelay();
+  },
+
+  applyAvPlayExternalSubtitleDelay() {
+    const path = String(this.avplayExternalSubtitlePath || "").trim();
+    if (!this.isUsingAvPlay() || !path) {
       return false;
     }
     const avplay = this.getAvPlay();
-    if (!avplay || typeof avplay.setSilentSubtitle !== "function") {
+    if (!avplay || typeof avplay.setSubtitlePosition !== "function") {
+      return false;
+    }
+    const delayMs = Math.round(Number(this.avplayExternalSubtitleDelayMs || 0));
+    const applyKey = `${path}:${delayMs}`;
+    if (this.appliedAvPlayExternalSubtitleDelayKey === applyKey) {
+      return true;
+    }
+    const state = this.getAvPlayState();
+    if (state !== "PLAYING" && state !== "PAUSED") {
       return false;
     }
     try {
-      // AVPlay owns track decoding, while Nuvio owns the single visible renderer.
-      // Reassert this invariant because some Samsung firmwares restore native
-      // subtitles after track, playback-state, or display-rectangle changes.
-      avplay.setSilentSubtitle(true);
+      avplay.setSubtitlePosition(delayMs);
+      this.appliedAvPlayExternalSubtitleDelayKey = applyKey;
       return true;
     } catch (_) {
       return false;
@@ -1895,7 +1950,16 @@ export const PlayerController = {
       return;
     }
     const viewport = this.getAvPlayViewportSize();
-    if (rect) {
+    if (Platform.isTizen() && displayMethod === "PLAYER_DISPLAY_MODE_LETTER_BOX") {
+      // AVPlay applies letterboxing inside the display area. Keep that area
+      // fullscreen instead of passing an already letterboxed rectangle.
+      this.avplayDisplayRect = {
+        x: 0,
+        y: 0,
+        width: viewport.width,
+        height: viewport.height
+      };
+    } else if (rect) {
       this.avplayDisplayRect = {
         x: Math.round(Number(rect.x || 0)),
         y: Math.round(Number(rect.y || 0)),
@@ -1922,7 +1986,6 @@ export const PlayerController = {
     } catch (_) {
       // Ignore display-method failures.
     }
-    this.ensureAvPlayHtmlSubtitleRendering();
   },
 
   reapplyTizenAvPlayDisplayRect(delayMs = 0) {
@@ -1980,7 +2043,10 @@ export const PlayerController = {
     this.desiredAvPlaySubtitleTrackUntil = 0;
     this.avplaySubtitleSelectionToken = Number(this.avplaySubtitleSelectionToken || 0) + 1;
     this.avplaySubtitlesSilent = false;
+    this.avplayNativeSubtitleRendering = false;
     this.avplayExternalSubtitlePath = "";
+    this.avplayExternalSubtitleDelayMs = 0;
+    this.appliedAvPlayExternalSubtitleDelayKey = "";
     this.avplayReady = false;
     this.avplayEnded = false;
     this.avplayCurrentTimeMs = 0;
@@ -2068,7 +2134,7 @@ export const PlayerController = {
           }
           this.avplayReady = true;
           this.reapplyAvPlayPlaybackRate();
-          this.ensureAvPlayHtmlSubtitleRendering();
+          this.applyAvPlayExternalSubtitleDelay();
           this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
         },
         oncurrentplaytime: (currentTimeMs) => {
@@ -2079,6 +2145,7 @@ export const PlayerController = {
           if (Number.isFinite(value) && value >= 0) {
             this.avplayCurrentTimeMs = value;
           }
+          this.applyAvPlayExternalSubtitleDelay();
         },
         onstreamcompleted: () => {
           if (!this.isPlaybackRequestActive(playToken, url)) {
@@ -2104,7 +2171,6 @@ export const PlayerController = {
           if (!this.isPlaybackRequestActive(playToken, url)) {
             return;
           }
-          this.ensureAvPlayHtmlSubtitleRendering();
           this.emitVideoEvent("avplaysubtitlechange", {
             playbackEngine: this.playbackEngine,
             duration,

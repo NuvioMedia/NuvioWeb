@@ -9,6 +9,7 @@ import { ThemeStore } from "../../../data/local/themeStore.js";
 import { ThemeManager } from "../../theme/themeManager.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
 import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
+import { WebOsAudioCompatibilityStore } from "../../../data/local/webOsAudioCompatibilityStore.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
 import { MdbListSettingsStore } from "../../../data/local/mdbListSettingsStore.js";
 import { AnimeSkipSettingsStore } from "../../../data/local/animeSkipSettingsStore.js";
@@ -1950,6 +1951,7 @@ function createDefaultExpandedState(sectionId) {
       general: false,
       stream: false,
       audio: false,
+      audioCompatibility: false,
       subtitles: false,
       p2p: false
     };
@@ -2161,6 +2163,11 @@ export const SettingsScreen = {
       pluginsEnabled: PluginManager.pluginsEnabled,
       theme: ThemeStore.get(),
       player: PlayerSettingsStore.get(),
+      webOsAudioCompatibility: Platform.isWebOS()
+        ? WebOsAudioCompatibilityStore.get({
+          legacyForceAll: Boolean(PlayerSettingsStore.get().forceDtsTrueHdAudio)
+        })
+        : null,
       torrent: TorrentSettingsStore.get(),
       layout: LayoutPreferences.get(),
       tmdb: TmdbSettingsStore.get(),
@@ -3220,6 +3227,11 @@ export const SettingsScreen = {
         detailPageTrailerButtonEnabled: !LayoutPreferences.get().detailPageTrailerButtonEnabled
       });
     });
+    this.actionMap.set("layout:detail:blurUnwatched", () => {
+      LayoutPreferences.set({
+        blurUnwatchedEpisodes: !LayoutPreferences.get().blurUnwatchedEpisodes
+      });
+    });
 
     const selectedLayout = String(model.layout.homeLayout || "").toLowerCase();
     const isModernLayout = selectedLayout === "modern";
@@ -3411,8 +3423,7 @@ export const SettingsScreen = {
           focusKey: "layout:detail:blurUnwatched",
           title: t("settings.layout.blurUnwatched.title"),
           subtitle: t("settings.layout.blurUnwatched.subtitle"),
-          checked: false,
-          disabled: true
+          checked: Boolean(model.layout.blurUnwatchedEpisodes)
         })}
         ${this.renderToggleRow({
           focusKey: "layout:detail:trailerButton",
@@ -4787,6 +4798,9 @@ export const SettingsScreen = {
     this.actionMap.set("playback:toggle:audio", () => {
       this.toggleExpandedSection("playback", "audio");
     });
+    this.actionMap.set("playback:toggle:audioCompatibility", () => {
+      this.toggleExpandedSection("playback", "audioCompatibility");
+    });
     this.actionMap.set("playback:toggle:subtitles", () => {
       this.toggleExpandedSection("playback", "subtitles");
     });
@@ -4811,10 +4825,17 @@ export const SettingsScreen = {
     this.actionMap.set("playback:skipIntro", () => {
       PlayerSettingsStore.set({ skipIntroEnabled: !PlayerSettingsStore.get().skipIntroEnabled });
     });
-    this.actionMap.set("playback:forceDtsTrueHd", () => {
-      PlayerSettingsStore.set({
-        forceDtsTrueHdAudio: !PlayerSettingsStore.get().forceDtsTrueHdAudio
-      }, { silentSync: true });
+    this.actionMap.set("playback:forceDts", () => {
+      const current = WebOsAudioCompatibilityStore.get();
+      WebOsAudioCompatibilityStore.set({
+        forceDtsAudio: !current.forceDtsAudio
+      });
+    });
+    this.actionMap.set("playback:forceTrueHd", () => {
+      const current = WebOsAudioCompatibilityStore.get();
+      WebOsAudioCompatibilityStore.set({
+        forceTrueHdAudio: !current.forceTrueHdAudio
+      });
     });
     this.actionMap.set("playback:nextEpisodeThresholdMode", () => {
       this.openOptionDialog({
@@ -5165,16 +5186,31 @@ export const SettingsScreen = {
           subtitle: t("settings.playback.preferredAudio.subtitle"),
           value: labelForPlaybackLanguage(model.player.preferredAudioLanguage)
         })}
-        ${Platform.isWebOS() ? this.renderToggleRow({
-          focusKey: "playback:forceDtsTrueHd",
-          title: t("settings.playback.forceDtsTrueHd.title", {}, "Force DTS/TrueHD audio"),
+      </div>
+    `;
+
+    const audioCompatibilityBody = `
+      <div class="settings-stack">
+        ${this.renderToggleRow({
+          focusKey: "playback:forceDts",
+          title: t("settings.playback.forceDts.title", {}, "Force DTS audio"),
           subtitle: t(
-            "settings.playback.forceDtsTrueHd.subtitle",
+            "settings.playback.forceDts.subtitle",
             {},
-            "Keep DTS/TrueHD audio tracks selectable on rooted TVs where the codec was restored. Leave off unless your TV can actually decode them."
+            "Keep DTS tracks selectable when automatic detection cannot see a working DTS restoration."
           ),
-          checked: Boolean(model.player.forceDtsTrueHdAudio)
-        }) : ""}
+          checked: Boolean(model.webOsAudioCompatibility?.forceDtsAudio)
+        })}
+        ${this.renderToggleRow({
+          focusKey: "playback:forceTrueHd",
+          title: t("settings.playback.forceTrueHd.title", {}, "Force TrueHD audio"),
+          subtitle: t(
+            "settings.playback.forceTrueHd.subtitle",
+            {},
+            "Keep TrueHD tracks selectable only when this TV can actually decode or pass through TrueHD."
+          ),
+          checked: Boolean(model.webOsAudioCompatibility?.forceTrueHdAudio)
+        })}
       </div>
     `;
 
@@ -5308,6 +5344,21 @@ export const SettingsScreen = {
             expanded: Boolean(expanded.audio),
             bodyHtml: audioBody
           })}
+          ${Platform.isWebOS() ? this.renderCollapsibleRow({
+            focusKey: "playback:toggle:audioCompatibility",
+            title: t(
+              "settings.playback.groups.audioCompatibility.title",
+              {},
+              "Advanced audio compatibility"
+            ),
+            subtitle: t(
+              "settings.playback.groups.audioCompatibility.subtitle",
+              {},
+              "Automatic detection is used first. Override only when a rooted TV has a working decoder."
+            ),
+            expanded: Boolean(expanded.audioCompatibility),
+            bodyHtml: audioCompatibilityBody
+          }) : ""}
           ${this.renderCollapsibleRow({
             focusKey: "playback:toggle:subtitles",
             title: t("settings.playback.groups.subtitles.title"),

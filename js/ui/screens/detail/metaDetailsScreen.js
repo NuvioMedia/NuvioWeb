@@ -3621,6 +3621,7 @@ export const MetaDetailsScreen = {
     const isWatched = this.enrichedWatchedState?.has(episodeKey)
       ? Boolean(this.enrichedWatchedState.get(episodeKey)?.isWatched)
       : this.watchedEpisodeKeys.has(episodeKey);
+    const shouldBlur = Boolean(LayoutPreferences.get().blurUnwatchedEpisodes) && !isWatched;
     const rating = resolveEpisodeImdbRating(episode, this.seriesRatingsBySeason);
     const dateLabel = formatEpisodeCardDate(episode.released || "");
     const isUnavailable = episode.available === false;
@@ -3638,7 +3639,8 @@ export const MetaDetailsScreen = {
             data-action="openEpisodeStreams"
             data-video-id="${escapeHtml(episode.id)}"
             data-episode-index="${absoluteIndex}">
-        <div class="series-episode-thumb"${episode.thumbnail ? ` data-thumb="${escapeHtml(episode.thumbnail)}"` : ""}>
+        <div class="series-episode-thumb">
+          <div class="series-episode-image${shouldBlur ? " is-blurred" : ""}"${episode.thumbnail ? ` data-thumb="${escapeHtml(episode.thumbnail)}"` : ""}></div>
           <div class="series-episode-overlay"></div>
           ${isWatched ? `<div class="series-episode-status complete">${renderWatchedBadgeGlyph()}</div>` : progressRatio < 0.02 ? `<div class="series-episode-status idle"></div>` : ""}
           ${isUnavailable ? `<div class="series-episode-unavailable">${escapeHtml(t("episodes_unavailable", {}, "Unavailable").toUpperCase())}</div>` : ""}
@@ -3674,7 +3676,7 @@ export const MetaDetailsScreen = {
     try {
       const root = this.container;
       if (!root) return;
-      const thumbs = Array.from(root.querySelectorAll(".series-episode-thumb[data-thumb]"));
+      const thumbs = Array.from(root.querySelectorAll(".series-episode-image[data-thumb]"));
       if (!thumbs.length) return;
       // Fallback for engines without IntersectionObserver: just load them all.
       if (typeof IntersectionObserver !== "function") {
@@ -3869,8 +3871,9 @@ export const MetaDetailsScreen = {
       return;
     }
     const thumb = card.querySelector(".series-episode-thumb");
+    const image = card.querySelector(".series-episode-image");
     const copy = card.querySelector(".series-episode-copy");
-    if (!(thumb instanceof HTMLElement) || !(copy instanceof HTMLElement)) {
+    if (!(thumb instanceof HTMLElement) || !(image instanceof HTMLElement) || !(copy instanceof HTMLElement)) {
       return;
     }
 
@@ -3884,6 +3887,10 @@ export const MetaDetailsScreen = {
     const isWatched = this.isEpisodeMarkedWatched(episode);
 
     card.classList.toggle("watched", isWatched);
+    image.classList.toggle(
+      "is-blurred",
+      Boolean(LayoutPreferences.get().blurUnwatchedEpisodes) && !isWatched
+    );
 
     let statusNode = thumb.querySelector(".series-episode-status");
     if (isWatched) {

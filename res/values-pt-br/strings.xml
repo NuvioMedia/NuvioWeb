@@ -584,6 +584,12 @@
     <string name="audio_lang_original">Idioma original</string>
     <string name="audio_lang_original_hint">Requer enriquecimento do TMDB ativado</string>
     <string name="audio_preferred_lang">Idioma de áudio preferido</string>
+    <string name="audio_compatibility_advanced">Compatibilidade avançada de áudio</string>
+    <string name="audio_compatibility_advanced_desc">A detecção automática é usada primeiro. Force um codec somente quando uma TV com root tiver um decodificador funcional.</string>
+    <string name="audio_force_dts">Forçar áudio DTS</string>
+    <string name="audio_force_dts_desc">Mantém as faixas DTS selecionáveis quando a detecção automática não identifica uma restauração de DTS funcional.</string>
+    <string name="audio_force_truehd">Forçar áudio TrueHD</string>
+    <string name="audio_force_truehd_desc">Mantém as faixas TrueHD selecionáveis somente quando esta TV puder realmente decodificá-las ou transmiti-las via passthrough.</string>
     <string name="audio_skip_silence">Pular silêncio</string>
     <string name="audio_skip_silence_sub">Pular partes silenciosas</string>
     <string name="audio_remember_delay_per_device">Lembrar atraso de áudio por dispositivo</string>
@@ -1398,6 +1404,7 @@
     <string name="audio_mix_value_db">%1$d dB</string>
     <string name="audio_mix_persist_on">Persistir entre sessões: ATIVADO</string>
     <string name="audio_mix_persist_off">Persistir entre sessões: DESATIVADO</string>
+    <string name="audio_mix_persist_help">Lembrar a amplificação para reproduções futuras</string>
     <string name="audio_mix_range">Faixa: %1$d dB a %2$d dB</string>
     <string name="audio_mix_range_saved">Faixa: %1$d dB a %2$d dB (salvo)</string>
     <string name="audio_mix_unavailable">Amplificação não disponível neste dispositivo</string>
