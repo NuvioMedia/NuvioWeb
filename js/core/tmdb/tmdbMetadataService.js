@@ -1,4 +1,7 @@
-import { TmdbSettingsStore } from "../../data/local/tmdbSettingsStore.js";
+import {
+  normalizeTmdbLanguageCode,
+  TmdbSettingsStore
+} from "../../data/local/tmdbSettingsStore.js";
 import { TMDB_API_KEY } from "../../config.js";
 
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
@@ -31,9 +34,7 @@ function toImageUrl(path, kind = "backdrop") {
 }
 
 function normalizeTmdbArtworkLanguage(language = "") {
-  const normalized = String(language || "en")
-    .trim()
-    .replace(/_/g, "-");
+  const normalized = normalizeTmdbLanguageCode(language);
   const [rawLanguage = "en", rawRegion = ""] = normalized.split("-", 2);
   const languageCode = rawLanguage.toLowerCase() || "en";
   const regionCode =
@@ -225,7 +226,7 @@ export const TmdbMetadataService = {
     }
 
     const type = resolveType(contentType);
-    const lang = language || settings.language || "en";
+    const lang = normalizeTmdbLanguageCode(language || settings.language);
     const imageLanguages = buildTmdbImageLanguageFilter(lang);
     const params = `api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&append_to_response=images,credits,release_dates,content_ratings,videos,external_ids&include_image_language=${encodeURIComponent(imageLanguages)}`;
     const url = `${TMDB_BASE_URL}/${type}/${encodeURIComponent(String(tmdbId))}?${params}`;
@@ -303,7 +304,7 @@ export const TmdbMetadataService = {
       return [];
     }
 
-    const lang = language || settings.language || "en";
+    const lang = normalizeTmdbLanguageCode(language || settings.language);
     const url = `${TMDB_BASE_URL}/tv/${encodeURIComponent(String(tmdbId))}/season/${encodeURIComponent(String(seasonNumber))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}`;
     const response = await fetch(url);
     if (!response.ok) {
@@ -327,7 +328,7 @@ export const TmdbMetadataService = {
       return new Map();
     }
 
-    const lang = language || settings.language || "en";
+    const lang = normalizeTmdbLanguageCode(language || settings.language);
     const seasons = [...new Set((Array.isArray(seasonNumbers) ? seasonNumbers : [])
       .map((season) => Number(season || 0))
       .filter((season) => Number.isFinite(season) && season > 0))];
@@ -370,7 +371,7 @@ export const TmdbMetadataService = {
       return [];
     }
 
-    const lang = language || settings.language || "en";
+    const lang = normalizeTmdbLanguageCode(language || settings.language);
     const url = `${TMDB_BASE_URL}/collection/${encodeURIComponent(String(collectionId))}?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}`;
     const response = await fetch(url);
     if (!response.ok) {
@@ -398,7 +399,7 @@ export const TmdbMetadataService = {
     }
 
     const type = resolveType(contentType);
-    const lang = language || settings.language || "en";
+    const lang = normalizeTmdbLanguageCode(language || settings.language);
     const url = `${TMDB_BASE_URL}/${type}/${encodeURIComponent(String(tmdbId))}/recommendations?api_key=${encodeURIComponent(apiKey)}&language=${encodeURIComponent(lang)}&page=1`;
     const response = await fetch(url);
     if (!response.ok) {

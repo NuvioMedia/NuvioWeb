@@ -20,13 +20,27 @@ const DEFAULTS = {
   useCollections: true
 };
 
+export function normalizeTmdbLanguageCode(value = DEFAULTS.language) {
+  const normalized = String(value || DEFAULTS.language)
+    .trim()
+    .replace(/_/g, "-");
+  if (!normalized) {
+    return DEFAULTS.language;
+  }
+
+  const [rawLanguage = DEFAULTS.language, rawRegion = ""] = normalized.split("-", 2);
+  const language = rawLanguage.toLowerCase() || DEFAULTS.language;
+  const region = /^[a-z]{2}$/i.test(rawRegion) ? rawRegion.toUpperCase() : rawRegion;
+  return region ? `${language}-${region}` : language;
+}
+
 function normalizeTmdbSettings(value = {}) {
   const source = value && typeof value === "object" ? value : {};
   return {
     enabled: Boolean(source.enabled),
     modernHomeEnabled: Boolean(source.modernHomeEnabled),
     enrichContinueWatching: source.enrichContinueWatching !== false,
-    language: String(source.language || DEFAULTS.language).trim() || DEFAULTS.language,
+    language: normalizeTmdbLanguageCode(source.language),
     useArtwork: source.useArtwork !== false,
     useBasicInfo: source.useBasicInfo !== false,
     useDetails: source.useDetails !== false,
