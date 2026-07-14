@@ -56,7 +56,6 @@ function resolveWebOsSubtitleFontSizeLevel(value) {
 }
 
 export const PlayerController = {
-
   video: null,
   isPlaying: false,
   currentItemId: null,
@@ -111,6 +110,7 @@ export const PlayerController = {
   appliedWebOsSubtitleFontSizeKey: "",
   webosDeviceInfoPromise: null,
   webosUnsupportedAudioCodecs: new Set(["dts", "truehd"]),
+  forceDtsTrueHdAudio: false,
   viewportSyncHandler: null,
   avplayDisplayRect: null,
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
@@ -125,8 +125,10 @@ export const PlayerController = {
     if (name === "aborterror") {
       return true;
     }
-    return message.includes("interrupted by a new load request")
-      || message.includes("the play() request was interrupted");
+    return (
+      message.includes("interrupted by a new load request") ||
+      message.includes("the play() request was interrupted")
+    );
   },
 
   isPlaybackRequestActive(playToken = null, url = null) {
@@ -140,7 +142,10 @@ export const PlayerController = {
   },
 
   normalizeMimeType(mimeType) {
-    return String(mimeType || "").toLowerCase().split(";")[0].trim();
+    return String(mimeType || "")
+      .toLowerCase()
+      .split(";")[0]
+      .trim();
   },
 
   normalizePlaybackSourceType(sourceType) {
@@ -174,9 +179,9 @@ export const PlayerController = {
       return null;
     }
     if (
-      this.isLikelyHlsMimeType(normalized)
-      || this.isLikelyDashMimeType(normalized)
-      || this.isLikelySmoothStreamingMimeType(normalized)
+      this.isLikelyHlsMimeType(normalized) ||
+      this.isLikelyDashMimeType(normalized) ||
+      this.isLikelySmoothStreamingMimeType(normalized)
     ) {
       return normalized;
     }
@@ -192,11 +197,11 @@ export const PlayerController = {
     const inferByPath = (pathname = "", search = null) => {
       const path = String(pathname || "").toLowerCase();
       const formatHint = String(
-        search?.get?.("format")
-        || search?.get?.("type")
-        || search?.get?.("mime")
-        || search?.get?.("output")
-        || ""
+        search?.get?.("format") ||
+          search?.get?.("type") ||
+          search?.get?.("mime") ||
+          search?.get?.("output") ||
+          ""
       ).toLowerCase();
       if (path.endsWith(".m3u8")) {
         return "application/vnd.apple.mpegurl";
@@ -216,7 +221,9 @@ export const PlayerController = {
       if (path.includes("/playlist")) {
         return "application/vnd.apple.mpegurl";
       }
-      const extensionMatch = path.match(/\.(mp4|m4v|mov|webm|mkv|avi|wmv|ts|m2ts|mpg|mpeg|3gp|mp3|aac|flac)(?=($|[/?#&]))/i);
+      const extensionMatch = path.match(
+        /\.(mp4|m4v|mov|webm|mkv|avi|wmv|ts|m2ts|mpg|mpeg|3gp|mp3|aac|flac)(?=($|[/?#&]))/i
+      );
       if (extensionMatch) {
         const extension = String(extensionMatch[1] || "").toLowerCase();
         const directMimeMap = {
@@ -251,10 +258,12 @@ export const PlayerController = {
 
   isLikelyHlsMimeType(mimeType) {
     const normalized = this.normalizeMimeType(mimeType);
-    return normalized === "application/vnd.apple.mpegurl"
-      || normalized === "application/x-mpegurl"
-      || normalized === "audio/mpegurl"
-      || normalized === "audio/x-mpegurl";
+    return (
+      normalized === "application/vnd.apple.mpegurl" ||
+      normalized === "application/x-mpegurl" ||
+      normalized === "audio/mpegurl" ||
+      normalized === "audio/x-mpegurl"
+    );
   },
 
   isLikelyDashMimeType(mimeType) {
@@ -279,9 +288,11 @@ export const PlayerController = {
 
   isUnsupportedSourceError(error) {
     const message = String(error?.message || "").toLowerCase();
-    return message.includes("no supported source")
-      || message.includes("no supported sources")
-      || message.includes("not supported");
+    return (
+      message.includes("no supported source") ||
+      message.includes("no supported sources") ||
+      message.includes("not supported")
+    );
   },
 
   getPlatformAvplayEngine() {
@@ -309,7 +320,9 @@ export const PlayerController = {
       return "";
     }
     try {
-      return String(avplay.getState?.() || "").trim().toUpperCase();
+      return String(avplay.getState?.() || "")
+        .trim()
+        .toUpperCase();
     } catch (_) {
       return "";
     }
@@ -347,29 +360,41 @@ export const PlayerController = {
       parameters: {
         configNames: ["tv.model.edidType"]
       }
-    }).then((result) => {
-      const edidType = String(result?.configs?.["tv.model.edidType"] || "").toLowerCase();
-      if (edidType.includes("dts")) {
-        this.webosUnsupportedAudioCodecs.delete("dts");
-      }
-      if (edidType.includes("truehd")) {
-        this.webosUnsupportedAudioCodecs.delete("truehd");
-      }
-      return {
+    })
+      .then((result) => {
+        const edidType = String(result?.configs?.["tv.model.edidType"] || "").toLowerCase();
+        if (edidType.includes("dts")) {
+          this.webosUnsupportedAudioCodecs.delete("dts");
+        }
+        if (edidType.includes("truehd")) {
+          this.webosUnsupportedAudioCodecs.delete("truehd");
+        }
+        return {
+          unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
+        };
+      })
+      .catch(() => ({
         unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
-      };
-    }).catch(() => ({
-      unsupportedAudioCodecs: this.getWebOsUnsupportedAudioCodecs()
-    }));
+      }));
 
     return this.webosDeviceInfoPromise;
   },
 
+  setForceDtsTrueHdAudio(enabled) {
+    this.forceDtsTrueHdAudio = Boolean(enabled);
+  },
+
   getWebOsUnsupportedAudioCodecs() {
+    if (this.forceDtsTrueHdAudio) {
+      return [];
+    }
     return Array.from(this.webosUnsupportedAudioCodecs);
   },
 
   getWebOsUnsupportedAudioPenalty(text = "") {
+    if (this.forceDtsTrueHdAudio) {
+      return 0;
+    }
     const normalizedText = String(text || "")
       .toLowerCase()
       .replace(/[_-]+/g, " ")
@@ -377,14 +402,14 @@ export const PlayerController = {
       .trim();
     let penalty = 0;
     if (
-      this.webosUnsupportedAudioCodecs.has("dts")
-      && /\b(dts hd|dts hd ma|dts x|dtsx|dts)\b/.test(normalizedText)
+      this.webosUnsupportedAudioCodecs.has("dts") &&
+      /\b(dts hd|dts hd ma|dts x|dtsx|dts)\b/.test(normalizedText)
     ) {
       penalty -= 45;
     }
     if (
-      this.webosUnsupportedAudioCodecs.has("truehd")
-      && /\b(truehd|true hd|dolby truehd|mlp fba|a truehd)\b/.test(normalizedText)
+      this.webosUnsupportedAudioCodecs.has("truehd") &&
+      /\b(truehd|true hd|dolby truehd|mlp fba|a truehd)\b/.test(normalizedText)
     ) {
       penalty -= 45;
     }
@@ -408,7 +433,11 @@ export const PlayerController = {
       // Ignore decode failures.
     }
 
-    return probes.some((value) => /\.(mkv|mp4|m4v|mov|webm|avi|wmv|ts|m2ts|mpg|mpeg|3gp)(?=($|[/?#&]))/i.test(String(value || "")));
+    return probes.some((value) =>
+      /\.(mkv|mp4|m4v|mov|webm|avi|wmv|ts|m2ts|mpg|mpeg|3gp)(?=($|[/?#&]))/i.test(
+        String(value || "")
+      )
+    );
   },
 
   isUsingAvPlay() {
@@ -417,10 +446,7 @@ export const PlayerController = {
 
   shouldKeepWebOsPlaybackAwake() {
     return Boolean(
-      Platform.isWebOS()
-      && this.playbackSessionActive
-      && this.isPlaying
-      && !this.isPlaybackEnded()
+      Platform.isWebOS() && this.playbackSessionActive && this.isPlaying && !this.isPlaybackEnded()
     );
   },
 
@@ -441,13 +467,14 @@ export const PlayerController = {
     }
 
     try {
-      const event = typeof CustomEvent === "function"
-        ? new CustomEvent(eventName, { detail: detail || null })
-        : (() => {
-          const legacyEvent = document.createEvent("CustomEvent");
-          legacyEvent.initCustomEvent(eventName, false, false, detail || null);
-          return legacyEvent;
-        })();
+      const event =
+        typeof CustomEvent === "function"
+          ? new CustomEvent(eventName, { detail: detail || null })
+          : (() => {
+              const legacyEvent = document.createEvent("CustomEvent");
+              legacyEvent.initCustomEvent(eventName, false, false, detail || null);
+              return legacyEvent;
+            })();
       this.video.dispatchEvent(event);
     } catch (_) {
       // Ignore synthetic event failures.
@@ -514,7 +541,11 @@ export const PlayerController = {
   },
 
   nativeAudioTrackListToArray() {
-    const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks || null;
+    const audioTrackList =
+      this.video?.audioTracks ||
+      this.video?.webkitAudioTracks ||
+      this.video?.mozAudioTracks ||
+      null;
     if (!audioTrackList) {
       return [];
     }
@@ -559,7 +590,10 @@ export const PlayerController = {
       const gated = Boolean(this.startupAudioGateActive);
       this.video.muted = gated;
       this.video.defaultMuted = gated;
-      if (!gated && (!Number.isFinite(Number(this.video.volume)) || Number(this.video.volume) <= 0)) {
+      if (
+        !gated &&
+        (!Number.isFinite(Number(this.video.volume)) || Number(this.video.volume) <= 0)
+      ) {
         this.video.volume = 1;
       }
     } catch (_) {
@@ -605,18 +639,20 @@ export const PlayerController = {
 
   handleNativePlayStartedUnderStartupGate(playPromise = null) {
     if (
-      !this.startupAudioGateActive
-      || this.isUsingAvPlay()
-      || !this.startupAudioGatePausesNativePlayback
+      !this.startupAudioGateActive ||
+      this.isUsingAvPlay() ||
+      !this.startupAudioGatePausesNativePlayback
     ) {
       return playPromise;
     }
     if (playPromise && typeof playPromise.then === "function") {
-      playPromise.then(() => {
-        this.pauseNativePlaybackForStartupGate();
-      }).catch(() => {
-        // The normal playback-start rejection handler reports real failures.
-      });
+      playPromise
+        .then(() => {
+          this.pauseNativePlaybackForStartupGate();
+        })
+        .catch(() => {
+          // The normal playback-start rejection handler reports real failures.
+        });
       return playPromise;
     }
     this.pauseNativePlaybackForStartupGate();
@@ -628,9 +664,7 @@ export const PlayerController = {
     const wasGated = Boolean(this.startupAudioGateActive);
     const nativePlaybackWasPausedForGate = Boolean(this.startupAudioGatePausesNativePlayback);
     this.startupAudioGateActive = shouldGate;
-    this.startupAudioGatePausesNativePlayback = shouldGate
-      ? Boolean(pauseNativePlayback)
-      : true;
+    this.startupAudioGatePausesNativePlayback = shouldGate ? Boolean(pauseNativePlayback) : true;
     this.applyStartupAudioGateToVideo();
 
     if (shouldGate) {
@@ -686,21 +720,26 @@ export const PlayerController = {
           this.applyPendingAvPlaySubtitleTrackSelection();
         }, delayMs);
       });
-      setTimeout(() => {
-        if (!this.isUsingAvPlay()) {
-          return;
-        }
-        this.reapplyAvPlayPlaybackRate();
-        this.applyPendingAvPlayAudioTrackSelection();
-        this.applyPendingAvPlaySubtitleTrackSelection();
-        if (syncTracks) {
-          this.syncAvPlayTrackInfo({ force: true });
-          this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
-        }
-      }, syncTracks ? 500 : 300);
+      setTimeout(
+        () => {
+          if (!this.isUsingAvPlay()) {
+            return;
+          }
+          this.reapplyAvPlayPlaybackRate();
+          this.applyPendingAvPlayAudioTrackSelection();
+          this.applyPendingAvPlaySubtitleTrackSelection();
+          if (syncTracks) {
+            this.syncAvPlayTrackInfo({ force: true });
+            this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
+          }
+        },
+        syncTracks ? 500 : 300
+      );
       return true;
     } catch (error) {
-      this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
+      this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(
+        error?.name || error?.message || error
+      );
       this.isPlaying = false;
       this.syncWebOsPlaybackKeepAwake();
       this.emitVideoEvent("error", {
@@ -747,7 +786,8 @@ export const PlayerController = {
 
     const source = String(extraInfoValue)
       .replace(/^\uFEFF/, "")
-      .split(String.fromCharCode(0)).join("")
+      .split(String.fromCharCode(0))
+      .join("")
       .trim();
     let candidate = source;
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -790,7 +830,9 @@ export const PlayerController = {
   },
 
   normalizeAvPlayTrackType(typeValue) {
-    const type = String(typeValue || "").trim().toUpperCase();
+    const type = String(typeValue || "")
+      .trim()
+      .toUpperCase();
     if (type === "SUBTITLE") {
       return "TEXT";
     }
@@ -812,20 +854,20 @@ export const PlayerController = {
   pickAvPlayTrackLabel(track = {}, trackIndex = 0, prefix = "Track") {
     const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
     return String(
-      track.name
-      || track.label
-      || track.title
-      || extraInfo.name
-      || extraInfo.label
-      || extraInfo.track_name
-      || extraInfo.track_title
-      || extraInfo.title
-      || extraInfo.track_lang
-      || extraInfo.trackLang
-      || extraInfo.language
-      || extraInfo.language_code
-      || extraInfo.lang
-      || `${prefix} ${trackIndex + 1}`
+      track.name ||
+        track.label ||
+        track.title ||
+        extraInfo.name ||
+        extraInfo.label ||
+        extraInfo.track_name ||
+        extraInfo.track_title ||
+        extraInfo.title ||
+        extraInfo.track_lang ||
+        extraInfo.trackLang ||
+        extraInfo.language ||
+        extraInfo.language_code ||
+        extraInfo.lang ||
+        `${prefix} ${trackIndex + 1}`
     ).trim();
   },
 
@@ -843,9 +885,12 @@ export const PlayerController = {
       extraInfo.language_code,
       extraInfo.lang
     ].map((value) => String(value || "").trim());
-    return candidates.find((value) => (
-      value && !/^(unknown(?: language)?|undetermined|undefined|und|unk|zxx)$/i.test(value)
-    )) || "";
+    return (
+      candidates.find(
+        (value) =>
+          value && !/^(unknown(?: language)?|undetermined|undefined|und|unk|zxx)$/i.test(value)
+      ) || ""
+    );
   },
 
   pickAvPlayExtraValue(extraInfo = {}, keys = []) {
@@ -879,7 +924,7 @@ export const PlayerController = {
 
     const force = Boolean(options?.force);
     const now = Date.now();
-    if (!force && (now - Number(this.avplayTrackSyncAt || 0)) < 220) {
+    if (!force && now - Number(this.avplayTrackSyncAt || 0) < 220) {
       return;
     }
     this.avplayTrackSyncAt = now;
@@ -902,8 +947,12 @@ export const PlayerController = {
       }
     })();
 
-    const currentAudio = currentTracks.find((track) => this.normalizeAvPlayTrackType(track?.type) === "AUDIO");
-    const currentText = currentTracks.find((track) => this.normalizeAvPlayTrackType(track?.type) === "TEXT");
+    const currentAudio = currentTracks.find(
+      (track) => this.normalizeAvPlayTrackType(track?.type) === "AUDIO"
+    );
+    const currentText = currentTracks.find(
+      (track) => this.normalizeAvPlayTrackType(track?.type) === "TEXT"
+    );
     const selectedAudioIndex = Number(currentAudio?.index);
     const selectedTextIndex = Number(currentText?.index);
 
@@ -912,11 +961,9 @@ export const PlayerController = {
       .map((track, index) => {
         const trackIndex = Number(track?.index);
         const normalizedTrackIndex = Number.isFinite(trackIndex) ? trackIndex : -1;
-        const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
-        const forcedValue = this.pickAvPlayExtraValue(extraInfo, [
-          "forced",
-          "is_forced"
-        ]);
+        const extraInfo =
+          this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
+        const forcedValue = this.pickAvPlayExtraValue(extraInfo, ["forced", "is_forced"]);
         return {
           id: `avplay-audio-${normalizedTrackIndex}`,
           label: this.pickAvPlayTrackLabel(track, index, "Track"),
@@ -954,29 +1001,33 @@ export const PlayerController = {
             "role",
             "type"
           ]),
-          sampleRate: Number(this.pickAvPlayExtraValue(extraInfo, [
-            "sampleRate",
-            "audioSampleRate",
-            "sample_rate"
-          ]) || 0) || 0,
+          sampleRate:
+            Number(
+              this.pickAvPlayExtraValue(extraInfo, [
+                "sampleRate",
+                "audioSampleRate",
+                "sample_rate"
+              ]) || 0
+            ) || 0,
           forced: /^(1|true|yes)$/i.test(forcedValue),
           extraInfo,
           avplayTrackIndex: normalizedTrackIndex,
           avplayAudioOrdinalIndex: index
         };
       })
-      .filter((track) => Number.isFinite(Number(track?.avplayTrackIndex)) && Number(track.avplayTrackIndex) >= 0);
+      .filter(
+        (track) =>
+          Number.isFinite(Number(track?.avplayTrackIndex)) && Number(track.avplayTrackIndex) >= 0
+      );
 
     this.avplaySubtitleTracks = totalTracks
       .filter((track) => this.normalizeAvPlayTrackType(track?.type) === "TEXT")
       .map((track, index) => {
         const trackIndex = Number(track?.index);
         const normalizedTrackIndex = Number.isFinite(trackIndex) ? trackIndex : index;
-        const extraInfo = this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
-        const forcedValue = this.pickAvPlayExtraValue(extraInfo, [
-          "forced",
-          "is_forced"
-        ]);
+        const extraInfo =
+          this.parseAvPlayExtraInfo(track.extra_info || track.extraInfo || null) || {};
+        const forcedValue = this.pickAvPlayExtraValue(extraInfo, ["forced", "is_forced"]);
         return {
           id: `avplay-sub-${normalizedTrackIndex}`,
           label: this.pickAvPlayTrackLabel(track, index, "Subtitle"),
@@ -1007,9 +1058,10 @@ export const PlayerController = {
     }
 
     const desiredAudioIndex = Number(this.desiredAvPlayAudioTrackIndex);
-    const desiredAudioActive = Number.isFinite(desiredAudioIndex)
-      && desiredAudioIndex >= 0
-      && Date.now() < Number(this.desiredAvPlayAudioTrackUntil || 0);
+    const desiredAudioActive =
+      Number.isFinite(desiredAudioIndex) &&
+      desiredAudioIndex >= 0 &&
+      Date.now() < Number(this.desiredAvPlayAudioTrackUntil || 0);
     const resolvedSelectedAudioIndex = this.resolveAvPlayAudioTrackIndex(selectedAudioIndex);
     const resolvedSelectedTextIndex = this.resolveAvPlaySubtitleTrackIndex(selectedTextIndex);
 
@@ -1020,7 +1072,10 @@ export const PlayerController = {
       this.pendingAvPlayAudioTrackIndex = -1;
       this.desiredAvPlayAudioTrackIndex = -1;
       this.desiredAvPlayAudioTrackUntil = 0;
-    } else if (Number.isFinite(this.pendingAvPlayAudioTrackIndex) && this.pendingAvPlayAudioTrackIndex >= 0) {
+    } else if (
+      Number.isFinite(this.pendingAvPlayAudioTrackIndex) &&
+      this.pendingAvPlayAudioTrackIndex >= 0
+    ) {
       this.selectedAvPlayAudioTrackIndex = this.pendingAvPlayAudioTrackIndex;
     } else if (this.avplayAudioTracks.length && this.selectedAvPlayAudioTrackIndex < 0) {
       this.selectedAvPlayAudioTrackIndex = this.avplayAudioTracks[0].avplayTrackIndex;
@@ -1029,8 +1084,9 @@ export const PlayerController = {
     }
 
     const desiredSubtitleIndex = Number(this.desiredAvPlaySubtitleTrackIndex);
-    const desiredSubtitleActive = Number.isFinite(desiredSubtitleIndex)
-      && Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0);
+    const desiredSubtitleActive =
+      Number.isFinite(desiredSubtitleIndex) &&
+      Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0);
 
     if (this.avplaySubtitlesSilent) {
       this.selectedAvPlaySubtitleTrackIndex = -1;
@@ -1041,7 +1097,10 @@ export const PlayerController = {
       this.pendingAvPlaySubtitleTrackIndex = -1;
       this.desiredAvPlaySubtitleTrackIndex = -1;
       this.desiredAvPlaySubtitleTrackUntil = 0;
-    } else if (Number.isFinite(this.pendingAvPlaySubtitleTrackIndex) && this.pendingAvPlaySubtitleTrackIndex >= 0) {
+    } else if (
+      Number.isFinite(this.pendingAvPlaySubtitleTrackIndex) &&
+      this.pendingAvPlaySubtitleTrackIndex >= 0
+    ) {
       this.selectedAvPlaySubtitleTrackIndex = this.pendingAvPlaySubtitleTrackIndex;
     } else if (!this.avplaySubtitleTracks.length) {
       this.selectedAvPlaySubtitleTrackIndex = -1;
@@ -1057,7 +1116,9 @@ export const PlayerController = {
   },
 
   getSelectedAvPlayAudioTrackIndex() {
-    return Number.isFinite(this.selectedAvPlayAudioTrackIndex) ? this.selectedAvPlayAudioTrackIndex : -1;
+    return Number.isFinite(this.selectedAvPlayAudioTrackIndex)
+      ? this.selectedAvPlayAudioTrackIndex
+      : -1;
   },
 
   resolveAvPlayAudioTrackIndex(trackIndex) {
@@ -1065,7 +1126,9 @@ export const PlayerController = {
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return -1;
     }
-    const exact = this.avplayAudioTracks.find((track) => Number(track?.avplayTrackIndex) === targetIndex);
+    const exact = this.avplayAudioTracks.find(
+      (track) => Number(track?.avplayTrackIndex) === targetIndex
+    );
     if (exact) {
       return Number(exact.avplayTrackIndex);
     }
@@ -1077,7 +1140,9 @@ export const PlayerController = {
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return -1;
     }
-    const track = this.avplayAudioTracks.find((entry) => Number(entry?.avplayTrackIndex) === targetIndex);
+    const track = this.avplayAudioTracks.find(
+      (entry) => Number(entry?.avplayTrackIndex) === targetIndex
+    );
     return track ? Number(track.avplayTrackIndex) : -1;
   },
 
@@ -1100,7 +1165,12 @@ export const PlayerController = {
   trySelectAvPlayAudioTrackIndex(trackIndex, { nudge = false } = {}) {
     const avplay = this.getAvPlay();
     const targetIndex = Number(trackIndex);
-    if (!avplay || typeof avplay.setSelectTrack !== "function" || !Number.isFinite(targetIndex) || targetIndex < 0) {
+    if (
+      !avplay ||
+      typeof avplay.setSelectTrack !== "function" ||
+      !Number.isFinite(targetIndex) ||
+      targetIndex < 0
+    ) {
       return false;
     }
     const state = this.getAvPlayState();
@@ -1154,7 +1224,9 @@ export const PlayerController = {
   },
 
   getSelectedAvPlaySubtitleTrackIndex() {
-    return Number.isFinite(this.selectedAvPlaySubtitleTrackIndex) ? this.selectedAvPlaySubtitleTrackIndex : -1;
+    return Number.isFinite(this.selectedAvPlaySubtitleTrackIndex)
+      ? this.selectedAvPlaySubtitleTrackIndex
+      : -1;
   },
 
   resolveAvPlaySubtitleTrackIndex(trackIndex) {
@@ -1162,7 +1234,9 @@ export const PlayerController = {
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       return -1;
     }
-    const exact = this.avplaySubtitleTracks.find((track) => Number(track?.avplayTrackIndex) === targetIndex);
+    const exact = this.avplaySubtitleTracks.find(
+      (track) => Number(track?.avplayTrackIndex) === targetIndex
+    );
     if (exact) {
       return Number(exact.avplayTrackIndex);
     }
@@ -1171,7 +1245,11 @@ export const PlayerController = {
 
   getCurrentAvPlaySubtitleTrackIndex() {
     const avplay = this.getAvPlay();
-    if (!avplay || typeof avplay.getCurrentStreamInfo !== "function" || this.avplaySubtitlesSilent) {
+    if (
+      !avplay ||
+      typeof avplay.getCurrentStreamInfo !== "function" ||
+      this.avplaySubtitlesSilent
+    ) {
       return -1;
     }
     try {
@@ -1202,7 +1280,12 @@ export const PlayerController = {
   trySelectAvPlaySubtitleTrackIndex(trackIndex, { nudge = false } = {}) {
     const avplay = this.getAvPlay();
     const targetIndex = Number(trackIndex);
-    if (!avplay || typeof avplay.setSelectTrack !== "function" || !Number.isFinite(targetIndex) || targetIndex < 0) {
+    if (
+      !avplay ||
+      typeof avplay.setSelectTrack !== "function" ||
+      !Number.isFinite(targetIndex) ||
+      targetIndex < 0
+    ) {
       return false;
     }
     const state = this.getAvPlayState();
@@ -1288,9 +1371,8 @@ export const PlayerController = {
       requestToken,
       selectionKind,
       targetTrackIndex: targetIndex,
-      selectedTrackIndex: Number.isFinite(selectedIndex) && selectedIndex >= 0
-        ? selectedIndex
-        : targetIndex
+      selectedTrackIndex:
+        Number.isFinite(selectedIndex) && selectedIndex >= 0 ? selectedIndex : targetIndex
     };
 
     const emitSelectionState = (status, extra = {}) => {
@@ -1309,9 +1391,8 @@ export const PlayerController = {
       if (typeof applySelection === "function") {
         applySelection();
       }
-      this.selectedWebOsEmbeddedAudioTrackIndex = selectionKind === "embedded"
-        ? detail.selectedTrackIndex
-        : -1;
+      this.selectedWebOsEmbeddedAudioTrackIndex =
+        selectionKind === "embedded" ? detail.selectedTrackIndex : -1;
     };
 
     emitSelectionState("pending");
@@ -1324,7 +1405,7 @@ export const PlayerController = {
 
     void (async () => {
       try {
-        const mediaId = this.syncNativeMediaId() || await this.waitForNativeMediaId();
+        const mediaId = this.syncNativeMediaId() || (await this.waitForNativeMediaId());
         if (requestToken !== this.webOsAudioSelectionRequestToken) {
           return;
         }
@@ -1364,7 +1445,9 @@ export const PlayerController = {
         emitSelectionState("confirmed");
       } catch (error) {
         emitSelectionState("failed", {
-          error: String(error?.errorText || error?.message || error || "webOS audio track selection failed")
+          error: String(
+            error?.errorText || error?.message || error || "webOS audio track selection failed"
+          )
         });
       }
     })();
@@ -1419,7 +1502,11 @@ export const PlayerController = {
     }
 
     try {
-      if (!this.trySelectAvPlayAudioTrackIndex(selectionIndex, { nudge: state === "PLAYING" || state === "PAUSED" })) {
+      if (
+        !this.trySelectAvPlayAudioTrackIndex(selectionIndex, {
+          nudge: state === "PLAYING" || state === "PAUSED"
+        })
+      ) {
         throw new Error("setSelectTrack failed");
       }
       this.pendingAvPlayAudioTrackIndex = -1;
@@ -1458,12 +1545,16 @@ export const PlayerController = {
   applyPendingAvPlayAudioTrackSelection() {
     const pendingIndex = Number(this.pendingAvPlayAudioTrackIndex);
     const desiredIndex = Number(this.desiredAvPlayAudioTrackIndex);
-    const desiredActive = Number.isFinite(desiredIndex)
-      && desiredIndex >= 0
-      && Date.now() < Number(this.desiredAvPlayAudioTrackUntil || 0);
-    const targetIndex = Number.isFinite(pendingIndex) && pendingIndex >= 0
-      ? pendingIndex
-      : (desiredActive ? desiredIndex : -1);
+    const desiredActive =
+      Number.isFinite(desiredIndex) &&
+      desiredIndex >= 0 &&
+      Date.now() < Number(this.desiredAvPlayAudioTrackUntil || 0);
+    const targetIndex =
+      Number.isFinite(pendingIndex) && pendingIndex >= 0
+        ? pendingIndex
+        : desiredActive
+          ? desiredIndex
+          : -1;
     const canonicalIndex = this.resolveAvPlayAudioTrackIndex(targetIndex);
     if (!this.isUsingAvPlay() || !Number.isFinite(canonicalIndex) || canonicalIndex < 0) {
       return false;
@@ -1482,7 +1573,11 @@ export const PlayerController = {
     try {
       if (!this.retryAvPlayAudioTrackSelection(canonicalIndex, { nudge: true })) {
         const selectionIndex = this.getAvPlayAudioTrackSelectionIndex(canonicalIndex);
-        if (!this.trySelectAvPlayAudioTrackIndex(selectionIndex, { nudge: state === "PLAYING" || state === "PAUSED" })) {
+        if (
+          !this.trySelectAvPlayAudioTrackIndex(selectionIndex, {
+            nudge: state === "PLAYING" || state === "PAUSED"
+          })
+        ) {
           throw new Error("setSelectTrack failed");
         }
       }
@@ -1506,7 +1601,10 @@ export const PlayerController = {
       return;
     }
     try {
-      const currentMs = Math.max(0, Number(avplay.getCurrentTime?.() || this.avplayCurrentTimeMs || 0));
+      const currentMs = Math.max(
+        0,
+        Number(avplay.getCurrentTime?.() || this.avplayCurrentTimeMs || 0)
+      );
       if (Number.isFinite(currentMs) && currentMs > 0) {
         avplay.seekTo(Math.max(0, currentMs - 1));
       }
@@ -1597,9 +1695,9 @@ export const PlayerController = {
     [350, 1000].forEach((delayMs) => {
       setTimeout(() => {
         if (
-          !this.isUsingAvPlay()
-          || selectionToken !== Number(this.avplaySubtitleSelectionToken || 0)
-          || canonicalIndex !== Number(this.desiredAvPlaySubtitleTrackIndex)
+          !this.isUsingAvPlay() ||
+          selectionToken !== Number(this.avplaySubtitleSelectionToken || 0) ||
+          canonicalIndex !== Number(this.desiredAvPlaySubtitleTrackIndex)
         ) {
           return;
         }
@@ -1614,12 +1712,16 @@ export const PlayerController = {
   applyPendingAvPlaySubtitleTrackSelection() {
     const pendingIndex = Number(this.pendingAvPlaySubtitleTrackIndex);
     const desiredIndex = Number(this.desiredAvPlaySubtitleTrackIndex);
-    const desiredActive = Number.isFinite(desiredIndex)
-      && desiredIndex >= 0
-      && Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0);
-    const targetIndex = Number.isFinite(pendingIndex) && pendingIndex >= 0
-      ? pendingIndex
-      : (desiredActive ? desiredIndex : -1);
+    const desiredActive =
+      Number.isFinite(desiredIndex) &&
+      desiredIndex >= 0 &&
+      Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0);
+    const targetIndex =
+      Number.isFinite(pendingIndex) && pendingIndex >= 0
+        ? pendingIndex
+        : desiredActive
+          ? desiredIndex
+          : -1;
     const canonicalIndex = this.resolveAvPlaySubtitleTrackIndex(targetIndex);
     if (!this.isUsingAvPlay() || !Number.isFinite(canonicalIndex) || canonicalIndex < 0) {
       return false;
@@ -1696,22 +1798,20 @@ export const PlayerController = {
     const pendingIndex = Number(this.pendingAvPlaySubtitleTrackIndex);
     const desiredIndex = Number(this.desiredAvPlaySubtitleTrackIndex);
     return (
-      (Number.isFinite(selectedIndex) && selectedIndex >= 0)
-      || (Number.isFinite(pendingIndex) && pendingIndex >= 0)
-      || (
-        Number.isFinite(desiredIndex)
-        && desiredIndex >= 0
-        && Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0)
-      )
+      (Number.isFinite(selectedIndex) && selectedIndex >= 0) ||
+      (Number.isFinite(pendingIndex) && pendingIndex >= 0) ||
+      (Number.isFinite(desiredIndex) &&
+        desiredIndex >= 0 &&
+        Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0))
     );
   },
 
   shouldRenderAvPlaySubtitleCallbacksInHtml() {
     if (
-      !Platform.isTizen()
-      || !this.isUsingAvPlay()
-      || this.avplaySubtitlesSilent
-      || String(this.avplayExternalSubtitlePath || "").trim()
+      !Platform.isTizen() ||
+      !this.isUsingAvPlay() ||
+      this.avplaySubtitlesSilent ||
+      String(this.avplayExternalSubtitlePath || "").trim()
     ) {
       return false;
     }
@@ -1753,11 +1853,13 @@ export const PlayerController = {
     } catch (_) {
       streams = [];
     }
-    const videoTrack = streams.find((track) => this.normalizeAvPlayTrackType(track?.type) === "VIDEO") || null;
+    const videoTrack =
+      streams.find((track) => this.normalizeAvPlayTrackType(track?.type) === "VIDEO") || null;
     if (!videoTrack) {
       return null;
     }
-    const extraInfo = this.parseAvPlayExtraInfo(videoTrack.extra_info || videoTrack.extraInfo || null) || {};
+    const extraInfo =
+      this.parseAvPlayExtraInfo(videoTrack.extra_info || videoTrack.extraInfo || null) || {};
     const widthCandidates = [
       videoTrack.width,
       videoTrack.Width,
@@ -1776,15 +1878,17 @@ export const PlayerController = {
       extraInfo.videoHeight,
       extraInfo.video_height
     ];
-    let width = widthCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
-    let height = heightCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
+    let width =
+      widthCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
+    let height =
+      heightCandidates.map(Number).find((value) => Number.isFinite(value) && value > 0) || 0;
     if (!width || !height) {
       const resolutionText = String(
-        videoTrack.resolution
-        || videoTrack.Resolution
-        || extraInfo.resolution
-        || extraInfo.Resolution
-        || ""
+        videoTrack.resolution ||
+          videoTrack.Resolution ||
+          extraInfo.resolution ||
+          extraInfo.Resolution ||
+          ""
       );
       const match = resolutionText.match(/(\d{2,5})\s*[xX]\s*(\d{2,5})/);
       if (match) {
@@ -1800,7 +1904,11 @@ export const PlayerController = {
     if (!errorText) {
       return 4;
     }
-    if (errorText.includes("network") || errorText.includes("connection") || errorText.includes("timeout")) {
+    if (
+      errorText.includes("network") ||
+      errorText.includes("connection") ||
+      errorText.includes("timeout")
+    ) {
       return 2;
     }
     if (errorText.includes("decode")) {
@@ -1810,12 +1918,18 @@ export const PlayerController = {
   },
 
   getPlayerViewportSize() {
-    const playerRect = this.video?.parentElement?.getBoundingClientRect?.()
-      || document.getElementById("player")?.getBoundingClientRect?.()
-      || null;
+    const playerRect =
+      this.video?.parentElement?.getBoundingClientRect?.() ||
+      document.getElementById("player")?.getBoundingClientRect?.() ||
+      null;
     const playerWidth = Number(playerRect?.width || 0);
     const playerHeight = Number(playerRect?.height || 0);
-    if (Number.isFinite(playerWidth) && playerWidth > 0 && Number.isFinite(playerHeight) && playerHeight > 0) {
+    if (
+      Number.isFinite(playerWidth) &&
+      playerWidth > 0 &&
+      Number.isFinite(playerHeight) &&
+      playerHeight > 0
+    ) {
       return {
         width: Math.max(1, Math.round(playerWidth)),
         height: Math.max(1, Math.round(playerHeight))
@@ -1829,10 +1943,12 @@ export const PlayerController = {
     const visualViewportHeight = Number(globalThis.visualViewport?.height || 0);
     const screenWidth = Number(globalThis.screen?.width || 0);
     const screenHeight = Number(globalThis.screen?.height || 0);
-    const width = [windowWidth, documentWidth, visualViewportWidth, screenWidth]
-      .find((value) => Number.isFinite(value) && value > 0);
-    const height = [windowHeight, documentHeight, visualViewportHeight, screenHeight]
-      .find((value) => Number.isFinite(value) && value > 0);
+    const width = [windowWidth, documentWidth, visualViewportWidth, screenWidth].find(
+      (value) => Number.isFinite(value) && value > 0
+    );
+    const height = [windowHeight, documentHeight, visualViewportHeight, screenHeight].find(
+      (value) => Number.isFinite(value) && value > 0
+    );
     return {
       width: Math.max(1, Math.round(width || 1920)),
       height: Math.max(1, Math.round(height || 1080))
@@ -1845,10 +1961,12 @@ export const PlayerController = {
     const documentHeight = Number(document.documentElement?.clientHeight || 0);
     const windowWidth = Number(window.innerWidth || 0);
     const windowHeight = Number(window.innerHeight || 0);
-    const widthCandidates = [playerSize.width, documentWidth, windowWidth]
-      .filter((value) => Number.isFinite(value) && value > 0);
-    const heightCandidates = [playerSize.height, documentHeight, windowHeight]
-      .filter((value) => Number.isFinite(value) && value > 0);
+    const widthCandidates = [playerSize.width, documentWidth, windowWidth].filter(
+      (value) => Number.isFinite(value) && value > 0
+    );
+    const heightCandidates = [playerSize.height, documentHeight, windowHeight].filter(
+      (value) => Number.isFinite(value) && value > 0
+    );
     return {
       width: Math.max(1, Math.round(widthCandidates[0] || 1920)),
       height: Math.max(1, Math.round(heightCandidates[0] || 1080))
@@ -1984,10 +2102,18 @@ export const PlayerController = {
     }
 
     const headers = requestHeaders && typeof requestHeaders === "object" ? requestHeaders : {};
-    const cookieHeader = Object.entries(headers)
-      .find(([key]) => String(key || "").trim().toLowerCase() === "cookie")?.[1];
-    const userAgentHeader = Object.entries(headers)
-      .find(([key]) => String(key || "").trim().toLowerCase() === "user-agent")?.[1];
+    const cookieHeader = Object.entries(headers).find(
+      ([key]) =>
+        String(key || "")
+          .trim()
+          .toLowerCase() === "cookie"
+    )?.[1];
+    const userAgentHeader = Object.entries(headers).find(
+      ([key]) =>
+        String(key || "")
+          .trim()
+          .toLowerCase() === "user-agent"
+    )?.[1];
 
     try {
       if (cookieHeader) {
@@ -2034,7 +2160,9 @@ export const PlayerController = {
       avplay.open(this.avplayUrl);
       this.configureAvPlayForSource(requestHeaders);
     } catch (error) {
-      this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
+      this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(
+        error?.name || error?.message || error
+      );
       this.teardownAvPlay();
       this.playbackEngine = "none";
       return false;
@@ -2080,7 +2208,10 @@ export const PlayerController = {
           this.refreshAvPlayTimeline();
           const completedDurationMs = Number(this.avplayDurationMs || 0);
           if (Number.isFinite(completedDurationMs) && completedDurationMs > 0) {
-            this.avplayCurrentTimeMs = Math.max(Number(this.avplayCurrentTimeMs || 0), completedDurationMs);
+            this.avplayCurrentTimeMs = Math.max(
+              Number(this.avplayCurrentTimeMs || 0),
+              completedDurationMs
+            );
           }
           this.emitVideoEvent("ended", { playbackEngine: this.playbackEngine });
           try {
@@ -2204,11 +2335,11 @@ export const PlayerController = {
       const currentSeconds = Number(video?.currentTime || 0);
       const ranges = video?.buffered;
       if (
-        !ranges
-        || !Number.isFinite(durationSeconds)
-        || durationSeconds <= 0
-        || !Number.isFinite(currentSeconds)
-        || currentSeconds < 0
+        !ranges ||
+        !Number.isFinite(durationSeconds) ||
+        durationSeconds <= 0 ||
+        !Number.isFinite(currentSeconds) ||
+        currentSeconds < 0
       ) {
         return null;
       }
@@ -2221,12 +2352,12 @@ export const PlayerController = {
         const startSeconds = Number(ranges.start(index));
         const endSeconds = Number(ranges.end(index));
         if (
-          Number.isFinite(startSeconds)
-          && Number.isFinite(endSeconds)
-          && startSeconds >= 0
-          && endSeconds >= startSeconds
-          && startSeconds <= currentSeconds
-          && endSeconds >= currentSeconds
+          Number.isFinite(startSeconds) &&
+          Number.isFinite(endSeconds) &&
+          startSeconds >= 0 &&
+          endSeconds >= startSeconds &&
+          startSeconds <= currentSeconds &&
+          endSeconds >= currentSeconds
         ) {
           return Math.max(0, Math.min(endSeconds, durationSeconds));
         }
@@ -2309,7 +2440,9 @@ export const PlayerController = {
   },
 
   forceAvPlayFallbackForCurrentSource(reason = "fallback") {
-    const url = String(this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || "").trim();
+    const url = String(
+      this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || ""
+    ).trim();
     if (!url || this.avplayFallbackAttempts.has(url) || !this.canUseAvPlay()) {
       return false;
     }
@@ -2360,11 +2493,15 @@ export const PlayerController = {
   },
 
   isLivePlaybackItemType(itemType = this.currentItemType) {
-    const normalized = String(itemType || "").trim().toLowerCase();
-    return normalized === "channel"
-      || normalized === "live"
-      || normalized === "tvchannel"
-      || normalized === "stream";
+    const normalized = String(itemType || "")
+      .trim()
+      .toLowerCase();
+    return (
+      normalized === "channel" ||
+      normalized === "live" ||
+      normalized === "tvchannel" ||
+      normalized === "stream"
+    );
   },
 
   getPlaybackEngineCandidates(url, sourceType = null, itemType = this.currentItemType) {
@@ -2464,7 +2601,11 @@ export const PlayerController = {
     return candidates;
   },
 
-  getAlternativePlaybackEngine(url = this.currentPlaybackUrl, sourceType = this.currentPlaybackMediaSourceType, itemType = this.currentItemType) {
+  getAlternativePlaybackEngine(
+    url = this.currentPlaybackUrl,
+    sourceType = this.currentPlaybackMediaSourceType,
+    itemType = this.currentItemType
+  ) {
     const normalizedUrl = String(url || "").trim();
     if (!normalizedUrl) {
       return null;
@@ -2472,7 +2613,11 @@ export const PlayerController = {
     const attemptedEngines = this.getAttemptedPlaybackEngines(normalizedUrl);
     const currentEngine = String(this.playbackEngine || "").trim();
     const candidates = this.getPlaybackEngineCandidates(normalizedUrl, sourceType, itemType);
-    return candidates.find((candidate) => candidate !== currentEngine && !attemptedEngines.has(candidate)) || null;
+    return (
+      candidates.find(
+        (candidate) => candidate !== currentEngine && !attemptedEngines.has(candidate)
+      ) || null
+    );
   },
 
   isEngineFsPlaybackUrl(url = "") {
@@ -2493,12 +2638,18 @@ export const PlayerController = {
       smoothStreaming: supports("application/vnd.ms-sstr+xml"),
       mp4: supports("video/mp4"),
       mp4H264: supports('video/mp4; codecs="avc1.4d401f,mp4a.40.2"'),
-      mp4Hevc: supports('video/mp4; codecs="hvc1.1.6.L93.B0,mp4a.40.2"') || supports('video/mp4; codecs="hev1.1.6.L93.B0,mp4a.40.2"'),
-      mp4HevcMain10: supports('video/mp4; codecs="hvc1.2.4.L153.B0,mp4a.40.2"') || supports('video/mp4; codecs="hev1.2.4.L153.B0,mp4a.40.2"'),
+      mp4Hevc:
+        supports('video/mp4; codecs="hvc1.1.6.L93.B0,mp4a.40.2"') ||
+        supports('video/mp4; codecs="hev1.1.6.L93.B0,mp4a.40.2"'),
+      mp4HevcMain10:
+        supports('video/mp4; codecs="hvc1.2.4.L153.B0,mp4a.40.2"') ||
+        supports('video/mp4; codecs="hev1.2.4.L153.B0,mp4a.40.2"'),
       mp4Av1: supports('video/mp4; codecs="av01.0.08M.08,mp4a.40.2"'),
       webmVp9: supports('video/webm; codecs="vp9,opus"'),
       webm: supports("video/webm"),
-      mkvH264: supports('video/x-matroska; codecs="avc1.4d401f,mp4a.40.2"') || supports("video/x-matroska"),
+      mkvH264:
+        supports('video/x-matroska; codecs="avc1.4d401f,mp4a.40.2"') ||
+        supports("video/x-matroska"),
       quicktime: supports("video/quicktime"),
       mpegTs: supports("video/mp2t"),
       audioAac: supports('audio/mp4; codecs="mp4a.40.2"'),
@@ -2506,7 +2657,9 @@ export const PlayerController = {
       audioFlac: supports("audio/flac"),
       audioAc3: supports('audio/mp4; codecs="ac-3"') || supports('audio/mp4; codecs="dac3"'),
       audioEac3: supports('audio/mp4; codecs="ec-3"') || supports('audio/mp4; codecs="dec3"'),
-      dolbyVision: supports('video/mp4; codecs="dvh1.05.06,ec-3"') || supports('video/mp4; codecs="dvhe.05.06,ec-3"')
+      dolbyVision:
+        supports('video/mp4; codecs="dvh1.05.06,ec-3"') ||
+        supports('video/mp4; codecs="dvhe.05.06,ec-3"')
     };
     capabilities.hdrLikely = capabilities.mp4HevcMain10 || capabilities.mp4Av1;
     capabilities.atmosLikely = capabilities.audioEac3;
@@ -2547,12 +2700,11 @@ export const PlayerController = {
 
   applyNativeSource(url, mimeType = null, engineName = "native-file") {
     const normalizedMimeType = this.normalizeMimeType(mimeType);
-    const sourceMimeType = Platform.isWebOS() && (
-      this.isEngineFsPlaybackUrl(url)
-      || normalizedMimeType === "video/x-matroska"
-    )
-      ? null
-      : mimeType;
+    const sourceMimeType =
+      Platform.isWebOS() &&
+      (this.isEngineFsPlaybackUrl(url) || normalizedMimeType === "video/x-matroska")
+        ? null
+        : mimeType;
     if (!nativeVideoEngine.load(this.video, url, sourceMimeType)) {
       return false;
     }
@@ -2583,7 +2735,9 @@ export const PlayerController = {
   },
 
   shouldForwardHeaderToHls(name) {
-    const lower = String(name || "").trim().toLowerCase();
+    const lower = String(name || "")
+      .trim()
+      .toLowerCase();
     if (!lower) {
       return false;
     }
@@ -2665,7 +2819,7 @@ export const PlayerController = {
     candidates.forEach((level, index) => {
       const height = Number(level?.height || 0);
       const bitrate = Number(level?.bitrate || level?.attrs?.BANDWIDTH || 0);
-      const score = (height * 1000000000) + bitrate;
+      const score = height * 1000000000 + bitrate;
       if (score > selectedScore) {
         selectedScore = score;
         selectedIndex = index;
@@ -2820,14 +2974,16 @@ export const PlayerController = {
       Hls.Events.SUBTITLE_TRACKS_UPDATED,
       Hls.Events.SUBTITLE_TRACK_SWITCH,
       Hls.Events.SUBTITLE_TRACK_LOADED
-    ].filter(Boolean).forEach((eventName) => {
-      hls.on(eventName, () => {
-        if (!this.isPlaybackRequestActive(playToken, url)) {
-          return;
-        }
-        this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+    ]
+      .filter(Boolean)
+      .forEach((eventName) => {
+        hls.on(eventName, () => {
+          if (!this.isPlaybackRequestActive(playToken, url)) {
+            return;
+          }
+          this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+        });
       });
-    });
 
     this.video.removeAttribute("src");
     hls.attachMedia(this.video);
@@ -2875,15 +3031,20 @@ export const PlayerController = {
           return;
         }
         const errorText = String(
-          event?.error?.message
-          || event?.event?.message
-          || event?.message
-          || ""
+          event?.error?.message || event?.event?.message || event?.message || ""
         ).toLowerCase();
         let mediaErrorCode = 4;
-        if (errorText.includes("network") || errorText.includes("download") || errorText.includes("manifest")) {
+        if (
+          errorText.includes("network") ||
+          errorText.includes("download") ||
+          errorText.includes("manifest")
+        ) {
           mediaErrorCode = 2;
-        } else if (errorText.includes("decode") || errorText.includes("mediasource") || errorText.includes("append")) {
+        } else if (
+          errorText.includes("decode") ||
+          errorText.includes("mediasource") ||
+          errorText.includes("append")
+        ) {
           mediaErrorCode = 3;
         }
         this.lastPlaybackErrorCode = mediaErrorCode;
@@ -2954,7 +3115,10 @@ export const PlayerController = {
     }
     const currentId = String(current?.id ?? "");
     const currentLang = String(current?.lang ?? "");
-    return tracks.findIndex((track) => String(track?.id ?? "") === currentId && String(track?.language ?? "") === currentLang);
+    return tracks.findIndex(
+      (track) =>
+        String(track?.id ?? "") === currentId && String(track?.language ?? "") === currentLang
+    );
   },
 
   setDashAudioTrack(index) {
@@ -3007,7 +3171,10 @@ export const PlayerController = {
     }
     const currentId = String(current?.id ?? "");
     const currentLang = String(current?.lang ?? "");
-    return tracks.findIndex((track) => String(track?.id ?? "") === currentId && String(track?.language ?? "") === currentLang);
+    return tracks.findIndex(
+      (track) =>
+        String(track?.id ?? "") === currentId && String(track?.language ?? "") === currentLang
+    );
   },
 
   setDashTextTrack(index) {
@@ -3259,9 +3426,8 @@ export const PlayerController = {
 
     const targetIndex = Number(trackIndex);
     const selectedIndex = Number(selectedTrackIndex);
-    const storedSelectedIndex = Number.isFinite(selectedIndex) && selectedIndex >= 0
-      ? selectedIndex
-      : targetIndex;
+    const storedSelectedIndex =
+      Number.isFinite(selectedIndex) && selectedIndex >= 0 ? selectedIndex : targetIndex;
     if (!Number.isFinite(targetIndex) || targetIndex < 0) {
       this.selectedWebOsEmbeddedAudioTrackIndex = -1;
       return false;
@@ -3305,7 +3471,8 @@ export const PlayerController = {
       return false;
     }
     const targetIndex = Number(index);
-    const textTrackList = this.video.textTracks || this.video.webkitTextTracks || this.video.mozTextTracks || null;
+    const textTrackList =
+      this.video.textTracks || this.video.webkitTextTracks || this.video.mozTextTracks || null;
     let tracks = [];
     if (textTrackList) {
       try {
@@ -3416,9 +3583,8 @@ export const PlayerController = {
 
     const targetIndex = Number(trackIndex);
     const selectedIndex = Number(selectedTrackIndex);
-    const storedSelectedIndex = Number.isFinite(selectedIndex) && selectedIndex >= 0
-      ? selectedIndex
-      : targetIndex;
+    const storedSelectedIndex =
+      Number.isFinite(selectedIndex) && selectedIndex >= 0 ? selectedIndex : targetIndex;
     if (!Number.isFinite(targetIndex) || targetIndex < -1) {
       return false;
     }
@@ -3471,19 +3637,29 @@ export const PlayerController = {
       return true;
     }
 
-    this.waitForNativeMediaId().then((resolvedMediaId) => {
-      if (Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== (targetIndex < 0 ? -1 : storedSelectedIndex)) {
-        return;
-      }
-      applySelection(resolvedMediaId);
-    }).catch(() => {
-      // Ignore media-id lookup failures.
-    });
+    this.waitForNativeMediaId()
+      .then((resolvedMediaId) => {
+        if (
+          Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !==
+          (targetIndex < 0 ? -1 : storedSelectedIndex)
+        ) {
+          return;
+        }
+        applySelection(resolvedMediaId);
+      })
+      .catch(() => {
+        // Ignore media-id lookup failures.
+      });
 
     return true;
   },
 
-  attemptVideoPlay({ warningLabel = "Playback start rejected", onRejected = null, beforePlay = null, playToken = null } = {}) {
+  attemptVideoPlay({
+    warningLabel = "Playback start rejected",
+    onRejected = null,
+    beforePlay = null,
+    playToken = null
+  } = {}) {
     if (!this.video) {
       return;
     }
@@ -3552,7 +3728,10 @@ export const PlayerController = {
     if (!normalizedSourceType) {
       return;
     }
-    if (this.isLikelyHlsMimeType(normalizedSourceType) || this.isLikelyDashMimeType(normalizedSourceType)) {
+    if (
+      this.isLikelyHlsMimeType(normalizedSourceType) ||
+      this.isLikelyDashMimeType(normalizedSourceType)
+    ) {
       await loadStreamingLibs();
     }
   },
@@ -3578,9 +3757,8 @@ export const PlayerController = {
       this.syncWebOsPlaybackKeepAwake();
       const context = this.createProgressContext();
       const durationMs = Math.floor(this.getDurationSeconds() * 1000);
-      const completedMs = durationMs > 0
-        ? durationMs
-        : Math.floor(this.getCurrentTimeSeconds() * 1000);
+      const completedMs =
+        durationMs > 0 ? durationMs : Math.floor(this.getCurrentTimeSeconds() * 1000);
       this.flushProgress(completedMs, durationMs > 0 ? durationMs : completedMs, false, context);
     });
 
@@ -3611,32 +3789,38 @@ export const PlayerController = {
     });
 
     this.video.addEventListener("playing", () => {
-      const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks;
+      const audioTrackList =
+        this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks;
       const audioTrackCount = Number(audioTrackList?.length || 0);
-      const probeUrl = String(this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || "").trim();
+      const probeUrl = String(
+        this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || ""
+      ).trim();
       const isDirectFile = this.isLikelyDirectFileUrl(probeUrl);
       if (
-        this.isUsingNativePlayback()
-        && isDirectFile
-        && audioTrackCount <= 0
-        && Platform.isWebOS()
-        && this.canUseAvPlay()
+        this.isUsingNativePlayback() &&
+        isDirectFile &&
+        audioTrackCount <= 0 &&
+        Platform.isWebOS() &&
+        this.canUseAvPlay()
       ) {
         this.forceAvPlayFallbackForCurrentSource("native_playing_no_audio_tracks");
       }
     });
 
     this.video.addEventListener("loadedmetadata", () => {
-      const audioTrackList = this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks;
+      const audioTrackList =
+        this.video?.audioTracks || this.video?.webkitAudioTracks || this.video?.mozAudioTracks;
       const audioTrackCount = Number(audioTrackList?.length || 0);
-      const probeUrl = String(this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || "").trim();
+      const probeUrl = String(
+        this.currentPlaybackUrl || this.video?.currentSrc || this.video?.src || ""
+      ).trim();
       const isDirectFile = this.isLikelyDirectFileUrl(probeUrl);
       if (
-        this.isUsingNativePlayback()
-        && isDirectFile
-        && audioTrackCount <= 0
-        && Platform.isWebOS()
-        && this.canUseAvPlay()
+        this.isUsingNativePlayback() &&
+        isDirectFile &&
+        audioTrackCount <= 0 &&
+        Platform.isWebOS() &&
+        this.canUseAvPlay()
       ) {
         this.forceAvPlayFallbackForCurrentSource("native_no_audio_tracks");
       }
@@ -3658,7 +3842,24 @@ export const PlayerController = {
     }
   },
 
-  async play(url, { itemId = null, itemType = "movie", videoId = null, season = null, episode = null, title = null, poster = null, background = null, episodeTitle = null, requestHeaders = {}, mediaSourceType = null, forceEngine = null, streamIdentity = null } = {}) {
+  async play(
+    url,
+    {
+      itemId = null,
+      itemType = "movie",
+      videoId = null,
+      season = null,
+      episode = null,
+      title = null,
+      poster = null,
+      background = null,
+      episodeTitle = null,
+      requestHeaders = {},
+      mediaSourceType = null,
+      forceEngine = null,
+      streamIdentity = null
+    } = {}
+  ) {
     if (!this.video) return;
 
     const requestedUrl = String(url || "").trim();
@@ -3688,7 +3889,10 @@ export const PlayerController = {
     this.currentPlaybackMediaSourceType = this.resolveRuntimeSourceType(mediaSourceType);
     this.lastPlaybackErrorCode = 0;
 
-    const sourceType = this.currentPlaybackMediaSourceType || this.resolveRuntimeSourceType(this.guessMediaMimeType(url)) || null;
+    const sourceType =
+      this.currentPlaybackMediaSourceType ||
+      this.resolveRuntimeSourceType(this.guessMediaMimeType(url)) ||
+      null;
     const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType, itemType);
     await this.ensureAdaptiveLibrariesForSource(sourceType, preferredEngine);
     if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
@@ -3699,9 +3903,10 @@ export const PlayerController = {
       const isEngineFsUrl = /\/([0-9a-f]{40})\/\d+(?:\/|$)/i.test(parsedUrl.pathname);
       if (isEngineFsUrl) {
         const host = parsedUrl.hostname;
-        const baseUrlKind = host === "127.0.0.1" || host === "localhost" || host === "::1"
-          ? "local-service"
-          : "public-service";
+        const baseUrlKind =
+          host === "127.0.0.1" || host === "localhost" || host === "::1"
+            ? "local-service"
+            : "public-service";
         logEngineFsDebug("PlayerController: EngineFS playback selected", {
           baseUrlKind,
           playbackUrl: String(url || ""),
@@ -3807,8 +4012,8 @@ export const PlayerController = {
       });
     } else {
       const isWebOsEngineFsPlayback = Platform.isWebOS() && this.isEngineFsPlaybackUrl(url);
-      const isWebOsMatroskaPlayback = Platform.isWebOS()
-        && this.normalizeMimeType(sourceType) === "video/x-matroska";
+      const isWebOsMatroskaPlayback =
+        Platform.isWebOS() && this.normalizeMimeType(sourceType) === "video/x-matroska";
       const shouldStageWebOsNativePlayback = isWebOsEngineFsPlayback || isWebOsMatroskaPlayback;
       if (shouldStageWebOsNativePlayback) {
         // Match Stremio's webOS startup order: src -> mediaId -> load -> play.
@@ -3823,11 +4028,13 @@ export const PlayerController = {
       this.attemptVideoPlay({
         warningLabel: "Playback start rejected",
         playToken,
-        beforePlay: shouldStageWebOsNativePlayback
-          ? null
-          : () => this.waitForNativeMediaId(),
+        beforePlay: shouldStageWebOsNativePlayback ? null : () => this.waitForNativeMediaId(),
         onRejected: (error) => {
-          if (!this.isUnsupportedSourceError(error) || !this.canUseAvPlay() || !this.isLikelyDirectFileUrl(url)) {
+          if (
+            !this.isUnsupportedSourceError(error) ||
+            !this.canUseAvPlay() ||
+            !this.isLikelyDirectFileUrl(url)
+          ) {
             return false;
           }
           const fallbackStarted = this.playWithAvPlay(url, requestHeaders, sourceType, playToken);
@@ -3916,7 +4123,9 @@ export const PlayerController = {
           this.applyPendingAvPlaySubtitleTrackSelection();
         }, 300);
       } catch (error) {
-        this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(error?.name || error?.message || error);
+        this.lastPlaybackErrorCode = this.mapAvPlayErrorToMediaCode(
+          error?.name || error?.message || error
+        );
         console.warn("Playback resume rejected", error);
       }
       return;
@@ -4044,7 +4253,10 @@ export const PlayerController = {
     this.lastProgressSnapshot = {
       key: this.buildProgressSnapshotKey(active),
       positionMs: Math.max(0, Math.trunc(safePosition)),
-      durationMs: Number.isFinite(safeDuration) && safeDuration > 0 ? Math.max(0, Math.trunc(safeDuration)) : 0,
+      durationMs:
+        Number.isFinite(safeDuration) && safeDuration > 0
+          ? Math.max(0, Math.trunc(safeDuration))
+          : 0,
       updatedAt: Date.now()
     };
   },
@@ -4070,27 +4282,31 @@ export const PlayerController = {
     const snapshot = this.getRecordedProgressSnapshot(context);
     const currentPositionMs = Math.floor(this.getCurrentTimeSeconds() * 1000);
     const currentDurationMs = Math.floor(this.getDurationSeconds() * 1000);
-    const positionMs = Number.isFinite(currentPositionMs) && currentPositionMs > 0
-      ? currentPositionMs
-      : Number(snapshot?.positionMs || 0);
-    const durationMs = Number.isFinite(currentDurationMs) && currentDurationMs > 0
-      ? currentDurationMs
-      : Number(snapshot?.durationMs || 0);
+    const positionMs =
+      Number.isFinite(currentPositionMs) && currentPositionMs > 0
+        ? currentPositionMs
+        : Number(snapshot?.positionMs || 0);
+    const durationMs =
+      Number.isFinite(currentDurationMs) && currentDurationMs > 0
+        ? currentDurationMs
+        : Number(snapshot?.durationMs || 0);
 
-    await this.flushProgress(
-      positionMs,
-      durationMs,
-      false,
-      context,
-      { allowCloudSync: allowCloudSync && !forceCloudSync }
-    );
+    await this.flushProgress(positionMs, durationMs, false, context, {
+      allowCloudSync: allowCloudSync && !forceCloudSync
+    });
     if (forceCloudSync) {
       await this.pushProgressIfDue(true);
     }
     return true;
   },
 
-  async flushProgress(positionMs, durationMs, clear = false, context = null, { allowCloudSync = true } = {}) {
+  async flushProgress(
+    positionMs,
+    durationMs,
+    clear = false,
+    context = null,
+    { allowCloudSync = true } = {}
+  ) {
     const active = context || this.createProgressContext();
     if (!active?.itemId) {
       return;
@@ -4099,9 +4315,9 @@ export const PlayerController = {
     const safePosition = Number(positionMs || 0);
     const safeDuration = Number(durationMs || 0);
     const hasFiniteDuration = Number.isFinite(safeDuration) && safeDuration > 0;
-    const hasReachedMinimumSyncPosition = Number.isFinite(safePosition)
-      && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
-    const isCompleted = hasFiniteDuration && safePosition / safeDuration >= 0.90;
+    const hasReachedMinimumSyncPosition =
+      Number.isFinite(safePosition) && safePosition >= MIN_PROGRESS_SYNC_DURATION_MS;
+    const isCompleted = hasFiniteDuration && safePosition / safeDuration >= 0.9;
     if (safePosition > 0) {
       this.recordProgressSnapshot(safePosition, safeDuration, active);
     }
@@ -4137,19 +4353,25 @@ export const PlayerController = {
           poster: active.poster || null,
           background: active.background || null,
           episodeTitle: active.episodeTitle || null,
-          positionMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : Math.max(0, Math.trunc(safePosition)),
-          durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : Math.max(0, Math.trunc(safePosition))
+          positionMs: hasFiniteDuration
+            ? Math.max(0, Math.trunc(safeDuration))
+            : Math.max(0, Math.trunc(safePosition)),
+          durationMs: hasFiniteDuration
+            ? Math.max(0, Math.trunc(safeDuration))
+            : Math.max(0, Math.trunc(safePosition))
         });
         if (watchedSeriesReconciliationService.isSeriesType(active.itemType)) {
-          void watchedSeriesReconciliationService.reconcile(active.itemId, active.itemType, {
-            title: active.title || active.itemId,
-            completedEpisode: {
-              season: active.season,
-              episode: active.episode
-            }
-          }).catch((error) => {
-            console.warn("Series watched reconciliation failed", error);
-          });
+          void watchedSeriesReconciliationService
+            .reconcile(active.itemId, active.itemType, {
+              title: active.title || active.itemId,
+              completedEpisode: {
+                season: active.season,
+                episode: active.episode
+              }
+            })
+            .catch((error) => {
+              console.warn("Series watched reconciliation failed", error);
+            });
         }
       } else {
         await watchProgressRepository.removeProgress(active.itemId, active.videoId || null);
@@ -4188,7 +4410,7 @@ export const PlayerController = {
 
   pushProgressIfDue(force = false) {
     const now = Date.now();
-    if (!force && (now - Number(this.lastProgressPushAt || 0)) < 30000) {
+    if (!force && now - Number(this.lastProgressPushAt || 0) < 30000) {
       return Promise.resolve(false);
     }
     this.lastProgressPushAt = now;
@@ -4197,5 +4419,4 @@ export const PlayerController = {
       return false;
     });
   }
-
 };

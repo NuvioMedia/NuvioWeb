@@ -30,6 +30,10 @@ const DEFAULTS = {
   },
   audioAmplificationDb: 0,
   persistAudioAmplification: false,
+  // Device-specific override for rooted webOS TVs (e.g. dts_restore on LG C5).
+  // When enabled, DTS/TrueHD audio tracks stay selectable despite the EDID-based
+  // codec gate. Local-only: intentionally not synced to other profiles/devices.
+  forceDtsTrueHdAudio: false,
   // Auto stream selection (matches the Android TV app). When the mode is not
   // MANUAL, pressing play auto-selects a stream and plays it after a countdown.
   streamAutoPlayMode: "MANUAL",
@@ -44,12 +48,16 @@ const STREAM_AUTO_PLAY_SOURCES = ["ALL_SOURCES", "INSTALLED_ADDONS_ONLY", "ENABL
 const NEXT_EPISODE_THRESHOLD_MODES = ["PERCENTAGE", "MINUTES_BEFORE_END"];
 
 function normalizeStreamAutoPlayMode(value) {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   return STREAM_AUTO_PLAY_MODES.includes(normalized) ? normalized : "MANUAL";
 }
 
 function normalizeStreamAutoPlaySource(value) {
-  const normalized = String(value || "").trim().toUpperCase();
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
   return STREAM_AUTO_PLAY_SOURCES.includes(normalized) ? normalized : "ALL_SOURCES";
 }
 
@@ -62,8 +70,12 @@ function normalizeStreamAutoPlayTimeout(value) {
 }
 
 function normalizeNextEpisodeThresholdMode(value) {
-  const normalized = String(value || "").trim().toUpperCase();
-  return NEXT_EPISODE_THRESHOLD_MODES.includes(normalized) ? normalized : DEFAULTS.nextEpisodeThresholdMode;
+  const normalized = String(value || "")
+    .trim()
+    .toUpperCase();
+  return NEXT_EPISODE_THRESHOLD_MODES.includes(normalized)
+    ? normalized
+    : DEFAULTS.nextEpisodeThresholdMode;
 }
 
 function normalizeHalfStep(value, min, max, fallback) {
@@ -138,7 +150,9 @@ function normalizePlayerSettings(settings = {}) {
     subtitleStyle.secondaryPreferredLanguage ?? persistentSettings.secondarySubtitleLanguage,
     DEFAULTS.subtitleStyle.secondaryPreferredLanguage
   );
-  let useForcedSubtitles = Boolean(subtitleStyle.useForcedSubtitles ?? persistentSettings.useForcedSubtitles);
+  let useForcedSubtitles = Boolean(
+    subtitleStyle.useForcedSubtitles ?? persistentSettings.useForcedSubtitles
+  );
 
   if (preferredLanguage === "forced") {
     useForcedSubtitles = true;
@@ -158,14 +172,20 @@ function normalizePlayerSettings(settings = {}) {
   return {
     ...DEFAULTS,
     ...persistentSettings,
-    streamAutoPlayMode: normalizeStreamAutoPlayMode(persistentSettings.streamAutoPlayMode ?? DEFAULTS.streamAutoPlayMode),
-    streamAutoPlaySource: normalizeStreamAutoPlaySource(persistentSettings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource),
+    streamAutoPlayMode: normalizeStreamAutoPlayMode(
+      persistentSettings.streamAutoPlayMode ?? DEFAULTS.streamAutoPlayMode
+    ),
+    streamAutoPlaySource: normalizeStreamAutoPlaySource(
+      persistentSettings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource
+    ),
     streamAutoPlayRegex: String(persistentSettings.streamAutoPlayRegex ?? "").slice(0, 500),
     streamAutoPlayPreferBingeGroupForNextEpisode: Boolean(
       persistentSettings.streamAutoPlayPreferBingeGroupForNextEpisode ??
       DEFAULTS.streamAutoPlayPreferBingeGroupForNextEpisode
     ),
-    streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(persistentSettings.streamAutoPlayTimeoutSeconds),
+    streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(
+      persistentSettings.streamAutoPlayTimeoutSeconds
+    ),
     nextEpisodeThresholdMode: normalizeNextEpisodeThresholdMode(
       persistentSettings.nextEpisodeThresholdMode ?? DEFAULTS.nextEpisodeThresholdMode
     ),
@@ -176,7 +196,8 @@ function normalizePlayerSettings(settings = {}) {
       DEFAULTS.nextEpisodeThresholdPercent
     ),
     nextEpisodeThresholdMinutesBeforeEnd: normalizeHalfStep(
-      persistentSettings.nextEpisodeThresholdMinutesBeforeEnd ?? DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd,
+      persistentSettings.nextEpisodeThresholdMinutesBeforeEnd ??
+        DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd,
       0,
       3.5,
       DEFAULTS.nextEpisodeThresholdMinutesBeforeEnd
