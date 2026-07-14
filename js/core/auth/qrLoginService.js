@@ -1,4 +1,4 @@
-import { SUPABASE_URL, SUPABASE_ANON_KEY, TV_LOGIN_REDIRECT_BASE_URL } from "../../config.js";
+import { SUPABASE_URL, SUPABASE_ANON_KEY, TV_LOGIN_WEB_BASE_URL } from "../../config.js";
 import { Environment } from "../../platform/environment.js";
 import { SessionStore } from "../storage/sessionStore.js";
 import { AuthManager } from "./authManager.js";
@@ -72,8 +72,8 @@ function generateDeviceNonce() {
 }
 
 function resolveRedirectBaseUrl() {
-  if (TV_LOGIN_REDIRECT_BASE_URL) {
-    return TV_LOGIN_REDIRECT_BASE_URL;
+  if (TV_LOGIN_WEB_BASE_URL) {
+    return TV_LOGIN_WEB_BASE_URL;
   }
   if (typeof window !== "undefined") {
     const protocol = String(window.location?.protocol || "");
@@ -81,7 +81,7 @@ function resolveRedirectBaseUrl() {
       return window.location.origin;
     }
   }
-  return TV_LOGIN_REDIRECT_BASE_URL;
+  return TV_LOGIN_WEB_BASE_URL;
 }
 
 function extractOrigin(url) {

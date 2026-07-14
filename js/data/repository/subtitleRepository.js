@@ -154,8 +154,9 @@ class SubtitleRepository {
       candidates.push(normalized);
     };
 
-    if (String(type || "").toLowerCase() === "series") {
+    if (String(type || "").toLowerCase() === "series" && String(videoId || "").trim()) {
       push(videoId);
+      return candidates;
     }
     (ids || []).forEach(push);
     return candidates;

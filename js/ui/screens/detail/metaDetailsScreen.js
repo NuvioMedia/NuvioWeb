@@ -1645,6 +1645,37 @@ export const MetaDetailsScreen = {
           { status: "error", message: "timeout" }
         );
         if (sourceResult.status === "success") {
+          const sourceMeta = sourceResult.data || {};
+          if (!sourceMeta.background) {
+            const ownerResult = await withTimeout(globalResultPromise, 2200, {
+              status: "error",
+              message: "timeout"
+            });
+            if (ownerResult.status === "success") {
+              const ownerMeta = ownerResult.data || {};
+              return {
+                status: "success",
+                data: {
+                  ...ownerMeta,
+                  ...sourceMeta,
+                  id: sourceMeta.id || ownerMeta.id || sourceItemId,
+                  type: sourceMeta.type || ownerMeta.type || sourceItemType,
+                  poster: sourceMeta.poster || ownerMeta.poster || null,
+                  background: sourceMeta.background || ownerMeta.background || null,
+                  logo: sourceMeta.logo || ownerMeta.logo || null,
+                  description: sourceMeta.description || ownerMeta.description || "",
+                  genres:
+                    Array.isArray(sourceMeta.genres) && sourceMeta.genres.length
+                      ? sourceMeta.genres
+                      : ownerMeta.genres || [],
+                  videos:
+                    Array.isArray(sourceMeta.videos) && sourceMeta.videos.length
+                      ? sourceMeta.videos
+                      : ownerMeta.videos || []
+                }
+              };
+            }
+          }
           return sourceResult;
         }
       }

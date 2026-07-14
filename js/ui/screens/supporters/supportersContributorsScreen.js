@@ -2,17 +2,35 @@ import { ScreenUtils } from "../../navigation/screen.js";
 import { Router } from "../../navigation/router.js";
 import { Platform } from "../../../platform/index.js";
 import { I18n } from "../../../i18n/index.js";
-import { DONATIONS_BASE_URL, DONATIONS_DONATE_URL } from "../../../config.js";
+import {
+  DONATIONS_BASE_URL,
+  DONATIONS_DONATE_URL,
+  SPONSOR_NAMES,
+  UNIQUE_CONTRIBUTIONS_BASE_URL
+} from "../../../config.js";
 import { QrCodeGenerator } from "../../../core/qr/qrCodeGenerator.js";
+import {
+  normalizeContributors,
+  normalizeSupporterDonations,
+  parseSponsorNames,
+  parseTimestamp
+} from "./supportersData.js";
 import {
   bindSettingsScrollIndicators,
   scrollSettingsContentItem,
   settingsScrollIndicatorMarkup
 } from "../settings/settingsScreen.js";
 
-const TABS = ["supporters", "sponsors"];
-const DEFAULT_TAB = "supporters";
+const TABS = ["supporters", "sponsors", "contributors"];
+const DEFAULT_TAB = "contributors";
 const DEFAULT_DONATE_URL = "https://ko-fi.com/tapframe";
+
+const CONTRIBUTOR_SUPPORT_LINKS = {
+  skoruppa: { kofiUrl: "https://ko-fi.com/skoruppa" },
+  crisszollo: { kofiUrl: "https://ko-fi.com/crisszollo" },
+  whitegiso: { kofiUrl: "https://ko-fi.com/whitegiso" },
+  edoedac0: { kofiUrl: "https://ko-fi.com/edoedac" }
+};
 
 function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
@@ -33,6 +51,11 @@ function normalizeBaseUrl(value) {
     .replace(/\/+$/, "");
 }
 
+function uniqueContributionsUrl(value) {
+  const baseUrl = normalizeBaseUrl(value);
+  return baseUrl ? `${baseUrl}/api/unique-contributions` : "";
+}
+
 async function requestJson(url, errorMessage) {
   const response = await fetch(url, {
     headers: { Accept: "application/json" }
@@ -41,11 +64,6 @@ async function requestJson(url, errorMessage) {
     throw new Error(`${errorMessage}: ${response.status}`);
   }
   return await response.json();
-}
-
-function parseTimestamp(rawDate) {
-  const timestamp = Date.parse(String(rawDate || ""));
-  return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
 }
 
 function formatDonationDate(rawDate) {
@@ -71,6 +89,25 @@ function initialsForName(name) {
       .charAt(0)
       .toUpperCase() || "?"
   );
+}
+
+function contributorLogin(contributor) {
+  return String(contributor?.githubLogin || contributor?.name || "").trim();
+}
+
+function contributorRoleLabel(login) {
+  switch (String(login || "").toLowerCase()) {
+    case "milicevicivan":
+      return t("contributor_role_translator", {}, "Translator");
+    case "tapframe":
+      return t("contributor_role_maintainer", {}, "Maintainer");
+    default:
+      return null;
+  }
+}
+
+function contributorSupportLink(login) {
+  return CONTRIBUTOR_SUPPORT_LINKS[String(login || "").toLowerCase()] || null;
 }
 
 function focusNode(node) {
@@ -141,56 +178,37 @@ async function loadSupporters() {
     throw new Error(t("supporters_error_load", {}, "Unable to load supporters."));
   }
   const data = await requestJson(
-    `${baseUrl}/api/donations?limit=200`,
+    `${baseUrl}/api/donations?view=recent`,
     t("supporters_error_api_http", {}, "Donations API error")
   );
-  return (Array.isArray(data?.donations) ? data.donations : [])
-    .map((donation, index) => {
-      const name = String(donation?.name || "").trim();
-      const date = String(donation?.date || "").trim();
-      if (!name || !date) return null;
-      return {
-        id: `${name}|${date}#${index}`,
-        name,
-        date,
-        message: String(donation?.message || "").trim(),
-        sortTimestamp: parseTimestamp(date)
-      };
-    })
-    .filter(Boolean)
-    .sort((left, right) => right.sortTimestamp - left.sortTimestamp);
+  return normalizeSupporterDonations(data?.donations);
 }
 
 async function loadSponsors() {
-  const baseUrl = normalizeBaseUrl(DONATIONS_BASE_URL);
-  if (!baseUrl) {
+  if (!SPONSOR_NAMES) {
     throw new Error(t("sponsors_error_load", {}, "Unable to load sponsors."));
   }
+  return parseSponsorNames(SPONSOR_NAMES);
+}
+
+async function loadContributors() {
+  const url = uniqueContributionsUrl(UNIQUE_CONTRIBUTIONS_BASE_URL);
+  if (!url) {
+    throw new Error(
+      t("contributors_error_api_not_configured", {}, "Contributors API is not configured.")
+    );
+  }
   const data = await requestJson(
-    `${baseUrl}/api/sponsors`,
-    t("sponsors_error_api_http", {}, "Sponsors API error")
+    url,
+    t("contributors_error_api_http", {}, "Contributors API error")
   );
-  return (Array.isArray(data?.sponsors) ? data.sponsors : [])
-    .map((sponsor, index) => {
-      const name = String(sponsor?.name || "").trim();
-      const createdAt = String(sponsor?.createdAt || "").trim();
-      if (!name || !createdAt) return null;
-      return {
-        id: String(sponsor?.id || `${name}|${index}`).trim(),
-        name,
-        channelUrl: String(sponsor?.channelUrl || "").trim(),
-        createdAt,
-        sortTimestamp: parseTimestamp(createdAt)
-      };
-    })
-    .filter(Boolean)
-    .sort((left, right) => right.sortTimestamp - left.sortTimestamp);
+  return normalizeContributors(data?.contributors);
 }
 
 export const SupportersContributorsScreen = {
   container: null,
   selectedTab: DEFAULT_TAB,
-  focusKey: "tab:supporters",
+  focusKey: "tab:contributors",
   showDonateQr: false,
   dialog: null,
   routeEnterPending: false,
@@ -203,7 +221,8 @@ export const SupportersContributorsScreen = {
     if (this.state) return;
     this.state = {
       supporters: { loading: false, loaded: false, items: [], error: null },
-      sponsors: { loading: false, loaded: false, items: [], error: null }
+      sponsors: { loading: false, loaded: false, items: [], error: null },
+      contributors: { loading: false, loaded: false, items: [], error: null }
     };
   },
 
@@ -228,6 +247,7 @@ export const SupportersContributorsScreen = {
     }
     await this.render();
     void this.loadTabIfNeeded(this.selectedTab);
+    void this.loadTabIfNeeded("supporters");
   },
 
   cleanup() {
@@ -253,7 +273,12 @@ export const SupportersContributorsScreen = {
     tabState.error = null;
     await this.render();
     try {
-      const items = tab === "supporters" ? await loadSupporters() : await loadSponsors();
+      const items =
+        tab === "supporters"
+          ? await loadSupporters()
+          : tab === "sponsors"
+            ? await loadSponsors()
+            : await loadContributors();
       tabState.items = items;
       tabState.loaded = true;
       tabState.error = null;
@@ -280,12 +305,12 @@ export const SupportersContributorsScreen = {
   renderBrand() {
     const donateUrl = String(DONATIONS_DONATE_URL || DEFAULT_DONATE_URL).trim();
     return `
-      <section class="supporters-brand-card${this.showDonateQr ? " is-flipped" : ""}" aria-label="${escapeHtml(t("supporters_tab", {}, "Supporters"))}">
+      <section class="supporters-brand-card${this.showDonateQr ? " is-flipped" : ""}" aria-label="${escapeHtml(t("supporters_contributors_title", {}, "Supporters & Contributors"))}">
         <div class="supporters-brand-face supporters-brand-front">
           <div class="supporters-brand-copy">
             <img class="supporters-brand-logo" src="assets/brand/app_logo_wordmark.png" alt="Nuvio" />
             <div class="supporters-brand-heading-group">
-              <h1 class="supporters-title">${escapeHtml(t("supporters_tab", {}, "Supporters"))}</h1>
+              <h1 class="supporters-title">${escapeHtml(t("supporters_contributors_title", {}, "Supporters & Contributors"))}</h1>
               <p class="supporters-subtitle">${escapeHtml(t("supporters_contributors_supporters_copy", {}, "The people helping keep Nuvio online and in active development."))}</p>
             </div>
             <p class="supporters-primary-copy">${escapeHtml(t("supporters_contributors_supporters_copy", {}, "Supporters and donators help keep the project moving, fund infrastructure, and make room for ambitious features."))}</p>
@@ -312,7 +337,8 @@ export const SupportersContributorsScreen = {
   renderTabs() {
     const labels = {
       supporters: t("supporters_tab", {}, "Supporters"),
-      sponsors: t("sponsors_tab", {}, "Sponsors")
+      sponsors: t("sponsors_tab", {}, "Sponsors"),
+      contributors: t("contributors_tab", {}, "Contributors")
     };
     return `
       <div class="supporters-tabs" role="tablist">
@@ -340,15 +366,21 @@ export const SupportersContributorsScreen = {
       error: null
     };
     if (tabState.loading) {
-      const loading = this.selectedTab === "supporters"
-        ? t("supporters_loading", {}, "Loading supporters...")
-        : t("sponsors_loading", {}, "Loading sponsors...");
+      const loading =
+        this.selectedTab === "supporters"
+          ? t("supporters_loading", {}, "Loading supporters...")
+          : this.selectedTab === "sponsors"
+            ? t("sponsors_loading", {}, "Loading sponsors...")
+            : t("contributors_loading", {}, "Loading GitHub contributors...");
       return `<div class="supporters-status">${escapeHtml(loading)}</div>`;
     }
     if (tabState.error) {
-      const title = this.selectedTab === "supporters"
-        ? t("supporters_error_title", {}, "Couldn't load supporters")
-        : t("sponsors_error_title", {}, "Couldn't load sponsors");
+      const title =
+        this.selectedTab === "supporters"
+          ? t("supporters_error_title", {}, "Couldn't load supporters")
+          : this.selectedTab === "sponsors"
+            ? t("sponsors_error_title", {}, "Couldn't load sponsors")
+            : t("contributors_error_title", {}, "Couldn't load contributors");
       return `
         <div class="supporters-error-state">
           <h2>${escapeHtml(title)}</h2>
@@ -360,9 +392,12 @@ export const SupportersContributorsScreen = {
       `;
     }
     if (tabState.loaded && !tabState.items.length) {
-      const empty = this.selectedTab === "supporters"
-        ? t("supporters_empty", {}, "No supporters found yet.")
-        : t("sponsors_empty", {}, "No sponsors found yet.");
+      const empty =
+        this.selectedTab === "supporters"
+          ? t("supporters_empty", {}, "No supporters found yet.")
+          : this.selectedTab === "sponsors"
+            ? t("sponsors_empty", {}, "No sponsors found yet.")
+            : t("contributors_empty", {}, "No contributors found yet.");
       return `<div class="supporters-status">${escapeHtml(empty)}</div>`;
     }
     return `
@@ -376,6 +411,7 @@ export const SupportersContributorsScreen = {
   },
 
   renderCard(item, index) {
+    if (this.selectedTab === "contributors") return this.renderContributorCard(item, index);
     if (this.selectedTab === "sponsors") return this.renderSponsorCard(item, index);
     return this.renderSupporterCard(item, index);
   },
@@ -422,11 +458,41 @@ export const SupportersContributorsScreen = {
     `;
   },
 
+  renderContributorCard(contributor, index) {
+    const login = contributorLogin(contributor);
+    const role = contributorRoleLabel(login);
+    return `
+      <article class="supporters-person-card supporters-focusable focusable"
+               data-focus-key="item:contributors:${index}"
+               data-action="openItem"
+               data-tab="contributors"
+               data-item-index="${index}">
+        <span class="supporters-avatar supporters-avatar-image">
+          ${
+            contributor.avatarUrl
+              ? `<img src="${escapeHtml(contributor.avatarUrl)}" alt="${escapeHtml(contributor.name)}" loading="lazy" decoding="async" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" />`
+              : ""
+          }
+          <span${contributor.avatarUrl ? " hidden" : ""}>${escapeHtml(initialsForName(contributor.name))}</span>
+        </span>
+        <div class="supporters-card-copy">
+          <div class="supporters-card-title-row">
+            <h3>${escapeHtml(contributor.name)}</h3>
+            ${role ? `<span class="supporters-role-badge">${escapeHtml(role)}</span>` : ""}
+          </div>
+          <p>${escapeHtml(t("contributors_total_contributions", [contributor.totalContributions], `${contributor.totalContributions} total contributions`))}</p>
+        </div>
+        ${this.renderExternalIcon()}
+      </article>
+    `;
+  },
+
   renderDialog() {
     if (!this.dialog) return "";
     const item = this.dialog.item;
     if (!item) return "";
     const type = this.dialog.type;
+    if (type === "contributors") return this.renderContributorDialog(item);
     if (type === "sponsors") return this.renderSponsorDialog(item);
     return this.renderSupporterDialog(item);
   },
@@ -477,6 +543,40 @@ export const SupportersContributorsScreen = {
       `,
       actions: `
         <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openSponsor"${sponsor.channelUrl ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(t("sponsors_open_channel", {}, "Open sponsor channel"))}</button>
+        <button class="supporters-dialog-button focusable" data-focus-key="dialog:close" data-action="closeDialog">${escapeHtml(t("action_close", {}, "Close"))}</button>
+      `
+    });
+  },
+
+  renderContributorDialog(contributor) {
+    const login = contributorLogin(contributor);
+    const role = contributorRoleLabel(login);
+    const supportLink = contributorSupportLink(login);
+    const subtitle = t(
+      "contributors_total_contributions",
+      [contributor.totalContributions],
+      `${contributor.totalContributions} total contributions`
+    );
+    return this.renderDialogShell({
+      title: contributor.name,
+      subtitle,
+      body: `
+        <div class="supporters-dialog-person-row">
+          <span class="supporters-avatar supporters-avatar-image large">
+            ${contributor.avatarUrl ? `<img src="${escapeHtml(contributor.avatarUrl)}" alt="${escapeHtml(contributor.name)}" onerror="this.hidden=true;this.nextElementSibling.hidden=false;" />` : ""}
+            <span${contributor.avatarUrl ? " hidden" : ""}>${escapeHtml(initialsForName(contributor.name))}</span>
+          </span>
+          <div>
+            ${role ? `<span class="supporters-role-badge">${escapeHtml(role)}</span>` : ""}
+            <small>${escapeHtml(contributor.profileUrl || t("contributors_profile_unavailable", {}, "GitHub profile link unavailable."))}</small>
+            ${supportLink?.kofiUrl ? `<small>${escapeHtml(supportLink.kofiUrl)}</small>` : ""}
+          </div>
+        </div>
+        ${this.dialog.showSupportQr && supportLink?.kofiUrl ? `<canvas class="supporters-dialog-qr" data-qr-content="${escapeHtml(supportLink.kofiUrl)}" aria-label="${escapeHtml(t("cd_contributor_qr", {}, "Contributor support QR code"))}"></canvas>` : ""}
+      `,
+      actions: `
+        <button class="supporters-dialog-button primary focusable" data-focus-key="dialog:primary" data-action="openGithub"${contributor.profileUrl ? "" : ' disabled aria-disabled="true"'}>${escapeHtml(t("contributors_open_github", {}, "Open GitHub Profile"))}</button>
+        ${supportLink?.kofiUrl ? `<button class="supporters-dialog-button focusable" data-focus-key="dialog:kofi" data-action="toggleContributorQr">${escapeHtml(t(this.dialog.showSupportQr ? "contributors_hide_kofi_qr" : "contributors_show_kofi_qr", {}, this.dialog.showSupportQr ? "Hide Ko-fi QR" : "Show Ko-fi QR"))}</button>` : ""}
         <button class="supporters-dialog-button focusable" data-focus-key="dialog:close" data-action="closeDialog">${escapeHtml(t("action_close", {}, "Close"))}</button>
       `
     });
@@ -673,12 +773,25 @@ export const SupportersContributorsScreen = {
       await this.render();
       return true;
     }
+    if (action === "toggleContributorQr") {
+      if (this.dialog) {
+        this.dialog.showSupportQr = !this.dialog.showSupportQr;
+        this.focusKey = "dialog:kofi";
+        await this.render();
+      }
+      return true;
+    }
     if (action === "openDonations") {
       window.open?.(normalizeBaseUrl(DONATIONS_BASE_URL), "_blank");
       return true;
     }
     if (action === "openSponsor") {
       const url = this.dialog?.item?.channelUrl;
+      if (url) window.open?.(url, "_blank");
+      return true;
+    }
+    if (action === "openGithub") {
+      const url = this.dialog?.item?.profileUrl;
       if (url) window.open?.(url, "_blank");
       return true;
     }

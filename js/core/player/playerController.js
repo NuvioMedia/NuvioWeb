@@ -1213,13 +1213,8 @@ export const PlayerController = {
       });
       return false;
     }
-    try {
-      avplay.setSilentSubtitle?.(true);
-      this.avplaySubtitlesSilent = false;
-    } catch (_) {
-      this.avplaySubtitlesSilent = false;
-      // The logical track stays active even when silent native rendering is unavailable.
-    }
+    this.avplaySubtitlesSilent = false;
+    this.ensureAvPlayHtmlSubtitleRendering();
     try {
       logTizenAvPlayDebug("Tizen AVPlay setSelectTrack(TEXT)", {
         state,
@@ -1235,12 +1230,7 @@ export const PlayerController = {
       });
       return false;
     }
-    try {
-      avplay.setSilentSubtitle?.(true);
-      this.avplaySubtitlesSilent = false;
-    } catch (_) {
-      this.avplaySubtitlesSilent = false;
-    }
+    this.ensureAvPlayHtmlSubtitleRendering();
     if (nudge) {
       this.nudgeAvPlayAfterTrackSwitch();
     }
@@ -1562,6 +1552,7 @@ export const PlayerController = {
       return false;
     }
 
+    this.clearAvPlayExternalSubtitlePath();
     this.desiredAvPlaySubtitleTrackIndex = canonicalIndex;
     this.desiredAvPlaySubtitleTrackUntil = Date.now() + 5000;
     const state = this.getAvPlayState();
@@ -1580,6 +1571,7 @@ export const PlayerController = {
       this.selectedAvPlaySubtitleTrackIndex = canonicalIndex;
       this.avplaySubtitlesSilent = false;
       this.selectedWebOsEmbeddedSubtitleTrackIndex = -1;
+      this.ensureAvPlayHtmlSubtitleRendering();
       this.emitVideoEvent("avplaytrackschanged", { playbackEngine: this.playbackEngine });
       return true;
     }
@@ -1712,6 +1704,41 @@ export const PlayerController = {
         && Date.now() < Number(this.desiredAvPlaySubtitleTrackUntil || 0)
       )
     );
+  },
+
+  shouldRenderAvPlaySubtitleCallbacksInHtml() {
+    if (
+      !Platform.isTizen()
+      || !this.isUsingAvPlay()
+      || this.avplaySubtitlesSilent
+      || String(this.avplayExternalSubtitlePath || "").trim()
+    ) {
+      return false;
+    }
+    return [
+      this.selectedAvPlaySubtitleTrackIndex,
+      this.pendingAvPlaySubtitleTrackIndex,
+      this.desiredAvPlaySubtitleTrackIndex
+    ].some((trackIndex) => Number.isFinite(Number(trackIndex)) && Number(trackIndex) >= 0);
+  },
+
+  ensureAvPlayHtmlSubtitleRendering() {
+    if (!this.shouldRenderAvPlaySubtitleCallbacksInHtml()) {
+      return false;
+    }
+    const avplay = this.getAvPlay();
+    if (!avplay || typeof avplay.setSilentSubtitle !== "function") {
+      return false;
+    }
+    try {
+      // AVPlay owns track decoding, while Nuvio owns the single visible renderer.
+      // Reassert this invariant because some Samsung firmwares restore native
+      // subtitles after track, playback-state, or display-rectangle changes.
+      avplay.setSilentSubtitle(true);
+      return true;
+    } catch (_) {
+      return false;
+    }
   },
 
   getAvPlayVideoDimensions() {
@@ -1884,25 +1911,7 @@ export const PlayerController = {
     } catch (_) {
       // Ignore display-method failures.
     }
-    const hasInternalSubtitleTrack = [
-      this.selectedAvPlaySubtitleTrackIndex,
-      this.pendingAvPlaySubtitleTrackIndex,
-      this.desiredAvPlaySubtitleTrackIndex
-    ].some((trackIndex) => Number.isFinite(Number(trackIndex)) && Number(trackIndex) >= 0);
-    if (
-      Platform.isTizen()
-      && hasInternalSubtitleTrack
-      && !this.avplaySubtitlesSilent
-      && !String(this.avplayExternalSubtitlePath || "").trim()
-    ) {
-      try {
-        // Display updates can restore Samsung's native subtitle renderer.
-        // Keep it hidden while onsubtitlechange feeds Nuvio's styled overlay.
-        avplay.setSilentSubtitle?.(true);
-      } catch (_) {
-        // Keep playback working on AVPlay builds without silent subtitles.
-      }
-    }
+    this.ensureAvPlayHtmlSubtitleRendering();
   },
 
   reapplyTizenAvPlayDisplayRect(delayMs = 0) {
@@ -2048,6 +2057,7 @@ export const PlayerController = {
           }
           this.avplayReady = true;
           this.reapplyAvPlayPlaybackRate();
+          this.ensureAvPlayHtmlSubtitleRendering();
           this.emitVideoEvent("canplay", { playbackEngine: this.playbackEngine });
         },
         oncurrentplaytime: (currentTimeMs) => {
@@ -2083,6 +2093,7 @@ export const PlayerController = {
           if (!this.isPlaybackRequestActive(playToken, url)) {
             return;
           }
+          this.ensureAvPlayHtmlSubtitleRendering();
           this.emitVideoEvent("avplaysubtitlechange", {
             playbackEngine: this.playbackEngine,
             duration,

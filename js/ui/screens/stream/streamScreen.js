@@ -1356,11 +1356,25 @@ export const StreamScreen = {
       return;
     }
     const identity = String(this.params?.resumeStreamIdentity || "").trim();
-    if (!identity || !this.streams.length) {
+    const preferredStreamId = String(this.params?.preferredStreamId || "").trim();
+    const canReusePreferredStream = Boolean(
+      this.params?.continueWatchingBackHome && !this.params?.startFromBeginning && preferredStreamId
+    );
+    if ((!identity && !canReusePreferredStream) || !this.streams.length) {
       return;
     }
     this.autoResumeAttempted = true;
-    const match = this.streams.find((stream) => streamMergeKey(stream) === identity);
+    const identityMatch = identity
+      ? this.streams.find((stream) => streamMergeKey(stream) === identity)
+      : null;
+    // Stream preferences are stored per profile and per video. They are the
+    // Web equivalent of Android's local stream-link cache and remain available
+    // even when the selected progress source cannot carry stream metadata.
+    const match =
+      identityMatch ||
+      (canReusePreferredStream
+        ? this.streams.find((stream) => String(stream?.id || "") === preferredStreamId)
+        : null);
     if (match?.id) {
       void this.playStream(match.id);
     }

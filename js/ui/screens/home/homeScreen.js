@@ -108,6 +108,8 @@ export { escapeAttribute, escapeHtml, formatCatalogRowTitle } from "./homeUtils.
 /** @typedef {import("./homeTypes.js").HomeMediaSourceLike} HomeMediaSourceLike */
 /** @typedef {import("./homeTypes.js").HomeHeroDisplay} HomeHeroDisplay */
 
+const MODERN_SIDEBAR_PILL_AUTO_COLLAPSE_MS = 4000;
+
 function homePerfNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
     ? performance.now()
@@ -4294,7 +4296,8 @@ export const HomeScreen = {
       imdbId: normalized.imdbId || null,
       tmdbId: normalized.tmdbId || null,
       traktId: normalized.traktId || null,
-      fallbackTitle: normalized.title || normalized.contentId || "Untitled"
+      fallbackTitle: normalized.title || normalized.contentId || "Untitled",
+      returnHomeOnBack: true
     });
     return true;
   },
@@ -4608,56 +4611,98 @@ export const HomeScreen = {
         if (!latestHero || buildHeroIdentity(latestHero) !== scheduledHeroIdentity) {
           return;
         }
-        this.heroItem = shouldEnrichModernHero(latestHero) ? { ...latestHero, heroMetaEnriching: true } : latestHero;
+        if (shouldEnrichModernHero(latestHero)) {
+          void this.enrichCurrentHeroAsync(latestHero, focusToken, { deferCommit: true });
+          return;
+        }
+        this.heroItem = latestHero;
         const matchedIndex = this.heroCandidates.findIndex((item) => String(item?.id || "") === String(latestHero.id || ""));
         if (matchedIndex >= 0) {
           this.heroIndex = matchedIndex;
         }
         this.applyHeroToDom();
-        if (shouldEnrichModernHero(latestHero)) {
-          void this.enrichCurrentHeroAsync(latestHero, focusToken);
-        }
       });
     }, delay);
   },
 
-  async enrichCurrentHeroAsync(hero, focusToken = Number(this.heroFocusToken || 0)) {
+  async enrichCurrentHeroAsync(hero, focusToken = Number(this.heroFocusToken || 0), options = {}) {
     if (!hero || !hero.id || hero.heroSource === "continueWatching" || hero.heroSource === "collection") {
       return;
     }
     const itemId = String(hero.id);
     const itemType = String(hero.type || hero.apiType || "movie");
+    const heroIdentity = buildHeroIdentity(hero);
+    const deferCommit = Boolean(options?.deferCommit);
     const token = (this.heroEnrichmentToken = (Number(this.heroEnrichmentToken || 0) + 1));
+    const canCommitHero = () => {
+      if (Number(this.heroEnrichmentToken) !== token) {
+        return false;
+      }
+      if (Number(this.heroFocusToken || 0) !== Number(focusToken || 0)) {
+        return false;
+      }
+      if (!deferCommit) {
+        return String(this.heroItem?.id || "") === itemId;
+      }
+      if (Router.getCurrent() !== "home") {
+        return false;
+      }
+      const focusedHero = this.getNodeHeroSource(this.getCurrentFocusedNode());
+      return buildHeroIdentity(focusedHero) === heroIdentity;
+    };
+    const commitHero = async (resolvedHero, { merge = false } = {}) => {
+      if (deferCommit) {
+        const display = buildModernHeroPresentation(resolvedHero);
+        await Promise.all([
+          preloadImageSource(display?.backdrop),
+          preloadImageSource(display?.logo)
+        ]);
+      }
+      if (!canCommitHero()) {
+        return false;
+      }
+      this.heroItem = resolvedHero;
+      const matchedIndex = (this.heroCandidates || []).findIndex((item) => String(item?.id || "") === itemId);
+      if (matchedIndex >= 0) {
+        this.heroIndex = matchedIndex;
+      }
+      if (merge) {
+        this.mergeHeroIntoCatalogState(itemId, resolvedHero);
+      }
+      this.applyHeroToDom();
+      return true;
+    };
     const mdbImdbRatingPromise = withTimeout(
       mdbListRepository.getImdbRatingForItem(itemId, itemType),
       3500,
       null
-    );
+    ).catch(() => null);
     try {
       const result = await Promise.race([
         metaRepository.getMetaFromAllAddons(itemType, itemId),
         new Promise((_, reject) => setTimeout(() => reject(new Error("hero-enrich-timeout")), 4000))
       ]);
-      if (Number(this.heroEnrichmentToken) !== token) {
-        return;
-      }
-      if (Number(this.heroFocusToken || 0) !== Number(focusToken || 0)) {
-        return;
-      }
-      if (String(this.heroItem?.id || "") !== itemId) {
+      if (!canCommitHero()) {
         return;
       }
       if (result?.status !== "success" || !result.data) {
-        this.heroItem = { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
-        this.applyHeroToDom();
+        const fallbackHero = {
+          ...(deferCommit ? hero : this.heroItem),
+          heroMetaEnriched: true,
+          heroMetaEnriching: false
+        };
+        await commitHero(fallbackHero);
         return;
       }
       const meta = result.data;
       const enrichedImdb = resolveImdbRating(meta);
-      const mdbImdbRating = await mdbImdbRatingPromise.catch(() => null);
+      const mdbImdbRating = await mdbImdbRatingPromise;
+      if (!canCommitHero()) {
+        return;
+      }
       const enrichedRuntime = parseRuntimeMinutes(meta.runtimeMinutes ?? meta.runtime);
       const mergedHero = {
-        ...this.heroItem,
+        ...(deferCommit ? hero : this.heroItem),
         heroMetaEnriched: true,
         heroMetaEnriching: false,
         ...(mdbImdbRating != null
@@ -4673,13 +4718,15 @@ export const HomeScreen = {
         ...(meta.logo ? { logo: meta.logo } : {}),
         ...(meta.background ? { background: meta.background } : {})
       };
-      this.heroItem = mergedHero;
-      this.mergeHeroIntoCatalogState(itemId, mergedHero);
-      this.applyHeroToDom();
+      await commitHero(mergedHero, { merge: true });
     } catch (_e) {
-      if (String(this.heroItem?.id || "") === itemId) {
-        this.heroItem = { ...this.heroItem, heroMetaEnriched: true, heroMetaEnriching: false };
-        this.applyHeroToDom();
+      if (canCommitHero()) {
+        const fallbackHero = {
+          ...(deferCommit ? hero : this.heroItem),
+          heroMetaEnriched: true,
+          heroMetaEnriching: false
+        };
+        await commitHero(fallbackHero);
       }
     }
   },
@@ -5095,7 +5142,8 @@ export const HomeScreen = {
   },
 
   collapseFocusedPoster(node = this.expandedPosterNode, options = {}) {
-    const instant = Boolean(options?.instant);
+    // Avoid overlapping flex-size transitions that leave stale poster layers on Tizen.
+    const instant = Boolean(options?.instant || Platform.isTizen());
     const excludeNode = options?.excludeNode instanceof HTMLElement ? options.excludeNode : null;
     const targets = new Set();
     if (node instanceof HTMLElement && node !== excludeNode) {
@@ -5512,9 +5560,50 @@ export const HomeScreen = {
     this.collapseFocusedPoster();
   },
 
+  cancelModernSidebarPillAutoCollapse() {
+    if (!this.modernSidebarPillAutoCollapseTimer) {
+      return;
+    }
+    clearTimeout(this.modernSidebarPillAutoCollapseTimer);
+    this.modernSidebarPillAutoCollapseTimer = null;
+  },
+
+  scheduleModernSidebarPillAutoCollapse({ restart = false } = {}) {
+    const shouldSchedule = Boolean(
+      this.layoutPrefs?.modernSidebar &&
+      !this.sidebarExpanded &&
+      !this.pillIconOnly &&
+      Router.getCurrent() === "home"
+    );
+    if (!shouldSchedule) {
+      this.cancelModernSidebarPillAutoCollapse();
+      return;
+    }
+    if (this.modernSidebarPillAutoCollapseTimer && !restart) {
+      return;
+    }
+    this.cancelModernSidebarPillAutoCollapse();
+    this.modernSidebarPillAutoCollapseTimer = setTimeout(() => {
+      this.modernSidebarPillAutoCollapseTimer = null;
+      const shell = this.container?.querySelector(".modern-sidebar-shell");
+      if (
+        Router.getCurrent() !== "home" ||
+        !this.layoutPrefs?.modernSidebar ||
+        this.sidebarExpanded ||
+        !shell ||
+        shell.classList.contains("keep-pill-expanded")
+      ) {
+        return;
+      }
+      this.pillIconOnly = true;
+      setModernSidebarPillIconOnly(this.container, true);
+    }, MODERN_SIDEBAR_PILL_AUTO_COLLAPSE_MS);
+  },
+
   openSidebar({ openedByBack = false } = {}) {
     this.sidebarOpenedByBack = Boolean(openedByBack);
     if (this.layoutPrefs?.modernSidebar) {
+      this.cancelModernSidebarPillAutoCollapse();
       if (this.sidebarExpanded) {
         return true;
       }
@@ -5544,6 +5633,7 @@ export const HomeScreen = {
         : (this.navModel?.rows?.[0]?.[0] || null);
       this.sidebarExpanded = false;
       setModernSidebarExpanded(this.container, false);
+      this.scheduleModernSidebarPillAutoCollapse({ restart: true });
       const current = this.getCurrentFocusedNode() || null;
       return this.focusNode(current, target, "right") || true;
     }
@@ -6702,6 +6792,7 @@ export const HomeScreen = {
     this.sidebarExpanded = false;
     this.sidebarOpenedByBack = false;
     this.pillIconOnly = false;
+    this.cancelModernSidebarPillAutoCollapse();
     this.homeRouteEnterPending = !(navigationContext?.isBackNavigation || returnFocusState?.layoutMode);
     this.destroyHomeHoldDialog();
     this.unlockHomeHoldFocus();
@@ -6748,6 +6839,70 @@ export const HomeScreen = {
         [returnFocusState.layoutMode]: returnFocusState
       };
     }
+
+    const canResumePreservedTizenHome = Boolean(
+      Platform.isTizen() &&
+      navigationContext?.isBackNavigation &&
+      this.homeDomPreserved &&
+      this.hasLoadedOnce &&
+      Array.isArray(this.rows) &&
+      this.rows.length &&
+      this.container?.childNodes?.length &&
+      String(this.renderedLayoutMode || "") === String(this.layoutMode || "")
+    );
+    if (canResumePreservedTizenHome) {
+      this.homeDomPreserved = false;
+      this.container.style.removeProperty("visibility");
+      this.container.style.removeProperty("pointer-events");
+      setModernSidebarPillIconOnly(this.container, false);
+      this.scheduleModernSidebarPillAutoCollapse();
+      this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+      this.bindHomeViewportEvents();
+      if (this.layoutMode === "modern") {
+        this.setupModernTrackScrollPagination();
+      }
+      const restoredFocus = this.restoreFocusState(returnFocusState);
+      if (restoredFocus) {
+        this.isRestoringFocusFromBack = false;
+      } else {
+        ScreenUtils.setInitialFocus(this.container, this.getInitialFocusSelector());
+      }
+      this.syncFocusedCollectionCardState();
+      if (this.layoutMode === "grid") {
+        this.setupGridStickyHeader(
+          Boolean(this.layoutPrefs?.heroSectionEnabled) && Boolean(this.heroItem)
+        );
+      }
+      this.startHeroRotation();
+      this.homeRouteEnterPending = false;
+      this.pendingCollectionRouteReturnAnimation = false;
+      this.ensureHomeTruncationObservers();
+      this.scheduleHomeTruncationUpdate();
+      this.scheduleHomeLazyImageHydration();
+      this.scheduleReturnFocusRestore();
+      this.loadData({
+        background: true,
+        preserveReturnState: true
+      }).catch((error) => {
+        console.warn("Home background refresh failed", error);
+      });
+      logHomePerf("mount", {
+        ms: Number((homePerfNow() - mountStart).toFixed(2)),
+        route: "home",
+        background: true,
+        layoutMode: String(this.layoutMode || ""),
+        mode: "resume"
+      });
+      return;
+    }
+    this.homeDomPreserved = false;
+    this.container.style.removeProperty("position");
+    this.container.style.removeProperty("top");
+    this.container.style.removeProperty("right");
+    this.container.style.removeProperty("bottom");
+    this.container.style.removeProperty("left");
+    this.container.style.removeProperty("visibility");
+    this.container.style.removeProperty("pointer-events");
 
     if (this.hasLoadedOnce && Array.isArray(this.rows) && this.rows.length) {
       this.homeLoadToken = (this.homeLoadToken || 0) + 1;
@@ -7514,6 +7669,7 @@ export const HomeScreen = {
       onSelectedAction: () => this.closeSidebarToContent(),
       onExpandSidebar: () => this.openSidebar()
     });
+    this.scheduleModernSidebarPillAutoCollapse();
 
     this.buildNavigationModel();
     this.bindHomeViewportEvents();
@@ -8452,10 +8608,13 @@ export const HomeScreen = {
     if (this.layoutPrefs?.modernSidebar && !this.sidebarExpanded) {
       if (code === 40) {
         this.pillIconOnly = true;
+        this.cancelModernSidebarPillAutoCollapse();
         setModernSidebarPillIconOnly(this.container, true);
       } else if (code === 38) {
+        const wasIconOnly = Boolean(this.pillIconOnly);
         this.pillIconOnly = false;
         setModernSidebarPillIconOnly(this.container, false);
+        this.scheduleModernSidebarPillAutoCollapse({ restart: wasIconOnly });
       }
     }
     if (this.layoutMode === "modern" && [37, 38, 39, 40].includes(code)) {
@@ -8748,6 +8907,7 @@ export const HomeScreen = {
   },
 
   cleanup() {
+    this.cancelModernSidebarPillAutoCollapse();
     this.cancelPendingContinueWatchingEnter();
     this.cancelPendingContinueWatchingHold();
     this.suppressHoldMenuEnterUntilKeyUp = false;
@@ -8795,6 +8955,35 @@ export const HomeScreen = {
     }
     this.cachedModernPortraitPosterMetrics = null;
     this.cachedModernLandscapePosterMetrics = null;
-    ScreenUtils.hide(this.container);
+    const preserveRenderedTizenHome = Boolean(
+      Platform.isTizen() &&
+      this.hasLoadedOnce &&
+      Array.isArray(this.rows) &&
+      this.rows.length &&
+      this.container?.childNodes?.length
+    );
+    if (preserveRenderedTizenHome) {
+      // Keep layout alive while another screen is shown. Re-displaying a large
+      // Tizen catalog after display:none can itself force an expensive full
+      // layout before the first Home frame is painted.
+      this.container.style.position = "absolute";
+      this.container.style.top = "0";
+      this.container.style.right = "0";
+      this.container.style.bottom = "0";
+      this.container.style.left = "0";
+      this.container.style.visibility = "hidden";
+      this.container.style.pointerEvents = "none";
+      this.homeDomPreserved = true;
+    } else {
+      this.homeDomPreserved = false;
+      this.container.style.removeProperty("position");
+      this.container.style.removeProperty("top");
+      this.container.style.removeProperty("right");
+      this.container.style.removeProperty("bottom");
+      this.container.style.removeProperty("left");
+      this.container.style.removeProperty("visibility");
+      this.container.style.removeProperty("pointer-events");
+      ScreenUtils.hide(this.container);
+    }
   }
 };

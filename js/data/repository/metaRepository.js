@@ -52,8 +52,8 @@ class MetaRepository {
   }
 
   async getMetaFromAllAddons(type, id) {
-    const requestedType = this.inferCanonicalType(String(type || "").trim(), id);
-    const inferredType = requestedType;
+    const requestedType = String(type || "").trim();
+    const inferredType = this.inferCanonicalType(requestedType, id);
     const cacheKey = `all:${requestedType}:${inferredType}:${String(id || "").trim()}`;
     if (this.metaCache.has(cacheKey)) {
       return { status: "success", data: this.metaCache.get(cacheKey) };
@@ -65,9 +65,6 @@ class MetaRepository {
 
     const request = (async () => {
       const addons = await addonRepository.getInstalledAddons();
-      const metaAddons = addons.filter((addon) =>
-        (addon.resources || []).some((resource) => resource?.name === "meta")
-      );
       const candidates = [];
       const seenCandidates = new Set();
       const addCandidate = (addon, candidateType) => {
@@ -83,26 +80,61 @@ class MetaRepository {
         candidates.push({ addon, type: cleanType });
       };
 
+      // Prefer addons whose explicit idPrefixes identify them as the owner.
+      // This also safely recovers `tv` when a secondary catalog forwarded a
+      // broader row type such as `channel`.
       addons.forEach((addon) => {
-        if (this.supportsMetaType(addon, requestedType)) {
-          addCandidate(addon, requestedType);
+        const hasMatchingPrefix = (addon?.resources || []).some((resource) => {
+          if (String(resource?.name || "").toLowerCase() !== "meta") {
+            return false;
+          }
+          return (
+            addonRepository.getResourceIdPrefixes(addon, resource).length > 0 &&
+            addonRepository.resourceSupportsId(addon, resource, id, {
+              caseInsensitive: true
+            })
+          );
+        });
+        if (!hasMatchingPrefix) {
+          return;
+        }
+        const ownerType = addonRepository.resolveResourceRequestType(
+          addon,
+          "meta",
+          requestedType,
+          id,
+          { allowIdTypeFallback: true, caseInsensitive: true }
+        );
+        if (ownerType) {
+          addCandidate(addon, ownerType);
+        }
+      });
+
+      addons.forEach((addon) => {
+        const candidateType = addonRepository.resolveResourceRequestType(
+          addon,
+          "meta",
+          requestedType,
+          id,
+          { caseInsensitive: true }
+        );
+        if (candidateType) {
+          addCandidate(addon, candidateType);
         }
       });
       if (inferredType.toLowerCase() !== requestedType.toLowerCase()) {
         addons.forEach((addon) => {
-          if (this.supportsMetaType(addon, inferredType)) {
-            addCandidate(addon, inferredType);
+          const candidateType = addonRepository.resolveResourceRequestType(
+            addon,
+            "meta",
+            inferredType,
+            id,
+            { caseInsensitive: true }
+          );
+          if (candidateType) {
+            addCandidate(addon, candidateType);
           }
         });
-      }
-      const topMetaAddon = metaAddons[0];
-      if (topMetaAddon) {
-        const fallbackType = this.supportsMetaType(topMetaAddon, requestedType)
-          ? requestedType
-          : this.supportsMetaType(topMetaAddon, inferredType)
-            ? inferredType
-            : inferredType || requestedType;
-        addCandidate(topMetaAddon, fallbackType);
       }
 
       for (const { addon, type: candidateType } of candidates) {
@@ -133,43 +165,17 @@ class MetaRepository {
     return `${basePath}/meta/${this.encode(type)}/${this.encode(id)}.json${baseQuery}`;
   }
 
-  supportsMetaType(addon, type) {
-    const targetType = String(type || "")
-      .trim()
-      .toLowerCase();
-    if (!targetType) {
-      return false;
-    }
-    return (addon?.resources || []).some((resource) => {
-      if (resource?.name !== "meta") {
-        return false;
-      }
-      const types = Array.isArray(resource.types)
-        ? resource.types
-            .map((value) =>
-              String(value || "")
-                .trim()
-                .toLowerCase()
-            )
-            .filter(Boolean)
-        : [];
-      return !types.length || types.includes(targetType);
-    });
-  }
-
   inferCanonicalType(type, id) {
     const normalizedType = String(type || "").trim();
     const lowerType = normalizedType.toLowerCase();
-    if (lowerType === "tv") {
-      return "series";
-    }
-    const known = new Set(["movie", "series", "channel", "anime"]);
+    const known = new Set(["movie", "series", "channel", "tv", "anime"]);
     if (known.has(lowerType)) {
       return normalizedType;
     }
     const normalizedId = String(id || "").toLowerCase();
     if (normalizedId.includes(":movie:")) return "movie";
     if (normalizedId.includes(":series:")) return "series";
+    if (normalizedId.includes(":tv:")) return "tv";
     if (normalizedId.includes(":anime:")) return "anime";
     return normalizedType;
   }

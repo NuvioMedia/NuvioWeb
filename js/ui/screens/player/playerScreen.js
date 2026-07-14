@@ -2006,6 +2006,7 @@ export const PlayerScreen = {
   async mount(params = {}) {
     this.container = document.getElementById("player");
     this.container.style.display = "block";
+    this.container.classList.toggle("player-platform-webos", Environment.isWebOS());
     const mountToken = Number(this.playerMountToken || 0) + 1;
     this.playerMountToken = mountToken;
     this.playerRouteActive = true;
@@ -6627,11 +6628,15 @@ export const PlayerScreen = {
     const verticalOffset = splitSubtitleVerticalOffset(style.verticalOffset);
     const subtitleColor = String(style.textColor || "#FFFFFF");
     const outlineColor = String(style.outlineColor || "#000000");
-    const subtitleFontWeight = style.bold ? "800" : "500";
+    const subtitleFontWeight = style.bold ? "800" : (Environment.isWebOS() ? "400" : "500");
     const boldShadow = style.bold
       ? `0.45px 0 0 ${subtitleColor}, -0.45px 0 0 ${subtitleColor}, 0 0.45px 0 ${subtitleColor}, 0 -0.45px 0 ${subtitleColor}`
       : "";
-    const outlineShadow = style.outlineEnabled ? `0 0 2px ${outlineColor}, 0 0 4px ${outlineColor}` : "";
+    const outlineShadow = style.outlineEnabled
+      ? (Environment.isWebOS()
+        ? `-2px -2px 0 ${outlineColor}, 0 -2px 0 ${outlineColor}, 2px -2px 0 ${outlineColor}, -2px 0 0 ${outlineColor}, 2px 0 0 ${outlineColor}, -2px 2px 0 ${outlineColor}, 0 2px 0 ${outlineColor}, 2px 2px 0 ${outlineColor}`
+        : `0 0 2px ${outlineColor}, 0 0 4px ${outlineColor}`)
+      : "";
     const subtitleShadow = [outlineShadow, boldShadow].filter(Boolean).join(", ") || "none";
     const subtitleFontSize = normalizeSubtitleFontSize(style.fontSize);
     const htmlSubtitleFontSize = formatHtmlSubtitleFontSize(subtitleFontSize);
@@ -10990,12 +10995,13 @@ export const PlayerScreen = {
     ) {
       return;
     }
-    const subtitleOutputActive = typeof PlayerController.hasActiveAvPlaySubtitleOutput === "function"
-      ? PlayerController.hasActiveAvPlaySubtitleOutput()
+    const subtitleOutputActive = typeof PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml === "function"
+      ? PlayerController.shouldRenderAvPlaySubtitleCallbacksInHtml()
       : Number(this.selectedSubtitleTrackIndex) >= 0;
     if (!subtitleOutputActive) {
       return;
     }
+    PlayerController.ensureAvPlayHtmlSubtitleRendering?.();
     if (this.avPlaySubtitleOverlayTimer) {
       clearTimeout(this.avPlaySubtitleOverlayTimer);
       this.avPlaySubtitleOverlayTimer = null;
@@ -11437,7 +11443,6 @@ export const PlayerScreen = {
       if (this.subtitles.length) {
         return this.subtitles.map((subtitle, index) => {
           const subtitleId = subtitle.id || subtitle.url || `subtitle-${index}`;
-          const absoluteIndex = builtInBoundary + index;
           const display = formatSubtitleTrackDisplay(subtitle, index);
           return {
             id: `subtitle-addon-fallback-${subtitleId}`,
@@ -11448,8 +11453,7 @@ export const PlayerScreen = {
             languageLabel: display.languageLabel,
             track: subtitle,
             isForced: isForcedSubtitleTrack(subtitle),
-            selected: this.selectedAddonSubtitleId === subtitleId
-              || (this.selectedAddonSubtitleId == null && absoluteIndex === this.selectedSubtitleTrackIndex),
+            selected: this.selectedAddonSubtitleId === subtitleId,
             trackIndex: null,
             subtitleIndex: index,
             fallbackAddonSubtitle: true
@@ -12143,13 +12147,14 @@ export const PlayerScreen = {
 
     const preferredOption = this.findStartupPreferredAudioOption(preferredTargets);
     if (!preferredOption?.entry || !Number.isFinite(preferredOption.entryIndex)) {
-      const retryingTizenAvPlay = this.scheduleStartupAudioPreferenceRetry();
-      if (retryingTizenAvPlay) {
-        return false;
+      if (isStillLoading) {
+        const retryingTrackDiscovery = this.scheduleStartupAudioPreferenceRetry();
+        if (retryingTrackDiscovery || this.isAudioPreferenceDiscoveryPending()) {
+          return false;
+        }
       }
-      if (!isStillLoading) {
-        this.startupAudioPreferenceApplied = true;
-      }
+      this.clearStartupAudioPreferenceRetry();
+      this.startupAudioPreferenceApplied = true;
       return false;
     }
 
@@ -12729,6 +12734,7 @@ export const PlayerScreen = {
         ? PlayerController.setAvPlayExternalSubtitle(subtitle.url)
         : false;
       if (applied || fallbackApplied) {
+        this.clearHtmlSubtitleOverlay();
         this.selectedAddonSubtitleId = subtitleId;
         this.selectedSubtitleTrackIndex = -1;
         this.selectedEmbeddedSubtitleTrackIndex = -1;
@@ -12854,7 +12860,6 @@ export const PlayerScreen = {
           <div class="player-dialog-item focusable${item.selected ? " selected" : ""}${this.subtitleFocusedRail === "language" && index === this.subtitleLanguageRailIndex ? " focused" : ""}" data-subtitle-rail="language" data-subtitle-index="${index}">
               <div class="player-dialog-item-main">${escapeHtml(item.label)}${item.count > 0 ? `<span class="player-subtitle-language-count">${item.count}</span>` : ""}</div>
               <div class="player-dialog-item-sub">${item.key === SUBTITLE_LANGUAGE_OFF_KEY && subtitleLoadingVisible ? escapeHtml(t("subtitle_loading_builtin", {}, "Loading subtitle tracks...")) : ""}</div>
-              <div class="player-dialog-item-check">${item.selected ? "&#10003;" : ""}</div>
             </div>
           `).join("")}
         </div>

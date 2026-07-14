@@ -3,16 +3,18 @@ import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 
 export const ENV_PROPERTY_KEYS = [
-  "SUPABASE_URL",
-  "SUPABASE_ANON_KEY",
-  "TV_LOGIN_REDIRECT_BASE_URL",
+  "NUVIO_SUPABASE_URL",
+  "NUVIO_SUPABASE_ANON_KEY",
+  "TV_LOGIN_WEB_BASE_URL",
   "YOUTUBE_PROXY_URL",
   "PARENTAL_GUIDE_API_URL",
   "INTRODB_API_URL",
   "IMDB_RATINGS_API_BASE_URL",
   "AVATAR_PUBLIC_BASE_URL",
+  "UNIQUE_CONTRIBUTIONS_BASE_URL",
   "DONATIONS_BASE_URL",
   "DONATIONS_DONATE_URL",
+  "SPONSOR_NAMES",
   "TMDB_API_KEY",
   "TRAKT_CLIENT_ID",
   "TRAKT_CLIENT_SECRET",
@@ -21,16 +23,18 @@ export const ENV_PROPERTY_KEYS = [
 ];
 
 const DEFAULT_ENV_VALUES = {
-  SUPABASE_URL: "",
-  SUPABASE_ANON_KEY: "",
-  TV_LOGIN_REDIRECT_BASE_URL: "",
+  NUVIO_SUPABASE_URL: "",
+  NUVIO_SUPABASE_ANON_KEY: "",
+  TV_LOGIN_WEB_BASE_URL: "",
   YOUTUBE_PROXY_URL: "youtube-proxy.html",
   PARENTAL_GUIDE_API_URL: "",
   INTRODB_API_URL: "https://api.introdb.app/",
   IMDB_RATINGS_API_BASE_URL: "",
   AVATAR_PUBLIC_BASE_URL: "",
+  UNIQUE_CONTRIBUTIONS_BASE_URL: "",
   DONATIONS_BASE_URL: "",
   DONATIONS_DONATE_URL: "",
+  SPONSOR_NAMES: "ragmehos.",
   TMDB_API_KEY: "",
   TRAKT_CLIENT_ID: "",
   TRAKT_CLIENT_SECRET: "",
@@ -86,10 +90,9 @@ export function normalizeEnvProperties(properties = {}) {
       ? properties[key]
       : DEFAULT_ENV_VALUES[key];
     const normalizedValue = String(rawValue ?? "");
-    env[key] =
-      key === "INTRODB_API_URL" && !normalizedValue.trim()
-        ? DEFAULT_ENV_VALUES.INTRODB_API_URL
-        : normalizedValue;
+    const shouldUseDefault =
+      (key === "INTRODB_API_URL" || key === "SPONSOR_NAMES") && !normalizedValue.trim();
+    env[key] = shouldUseDefault ? DEFAULT_ENV_VALUES[key] : normalizedValue;
   });
   return env;
 }

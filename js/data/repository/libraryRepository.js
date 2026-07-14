@@ -4,7 +4,7 @@ import { ProfileManager } from "../../core/profile/profileManager.js";
 import { LocalStore } from "../../core/storage/localStore.js";
 import { savedLibraryRepository } from "./savedLibraryRepository.js";
 import { metaRepository } from "./metaRepository.js";
-import { TraktAuthService } from "./traktAuthService.js";
+import { requestJson, TraktAuthService } from "./traktAuthService.js";
 import { TraktLibrarySourceMode, TraktSettingsStore } from "../local/traktSettingsStore.js";
 
 export const LibrarySourceMode = {
@@ -35,7 +35,9 @@ export const LibraryListType = {
 const REMOTE_STORE_KEY = "libraryTraktState";
 const WATCHLIST_KEY = "watchlist";
 const PERSONAL_KEY_PREFIX = "personal:";
-const REMOTE_LIST_LIMIT = 24;
+const TRAKT_PAGE_LIMIT = 100;
+const TRAKT_LIST_FETCH_CONCURRENCY = 3;
+const TRAKT_LIBRARY_CACHE_TTL_MS = 60 * 1000;
 const META_TIMEOUT_MS = 2200;
 const META_BATCH_SIZE = 6;
 const VALID_POSTER_SHAPES = new Set(["POSTER", "LANDSCAPE", "SQUARE"]);
@@ -137,6 +139,7 @@ async function resolveRemoteStoreKey() {
 function createEmptyRemoteState() {
   return {
     nextListId: 1,
+    syncedAt: 0,
     watchlist: [],
     lists: [],
     listItems: {}
@@ -146,6 +149,7 @@ function createEmptyRemoteState() {
 function cloneState(state) {
   return {
     nextListId: Number(state?.nextListId || 1),
+    syncedAt: Number(state?.syncedAt || 0),
     watchlist: Array.isArray(state?.watchlist)
       ? state.watchlist.map((entry) => ({ ...entry }))
       : [],
@@ -204,24 +208,29 @@ function normalizeSavedItem(item = {}) {
     imdbRating: item.imdbRating == null ? null : Number(item.imdbRating),
     genres: Array.isArray(item.genres) ? item.genres : [],
     addonBaseUrl: item.addonBaseUrl || null,
+    imdbId: item.imdbId || null,
+    tmdbId: item.tmdbId == null ? null : Number(item.tmdbId),
+    traktId: item.traktId == null ? null : Number(item.traktId),
+    year: item.year == null ? null : Number(item.year),
     updatedAt: Number(item.updatedAt || item.listedAt || Date.now())
   };
 }
 
 function normalizePosterShape(value) {
-  const shape = String(value || "").trim().toUpperCase();
+  const shape = String(value || "")
+    .trim()
+    .toUpperCase();
   return VALID_POSTER_SHAPES.has(shape) ? shape : "POSTER";
 }
 
 function toSavedItemFromTraktWatchlist(entry) {
   if (!entry) return null;
-  const tmdbId = entry.tmdbId;
-  const itemId = tmdbId
-    ? `tmdb:${tmdbId}`
-    : entry.traktId
-      ? `trakt:${entry.traktId}`
-      : entry.imdbId
-        ? `imdb:${entry.imdbId}`
+  const itemId = entry.imdbId
+    ? String(entry.imdbId)
+    : entry.tmdbId
+      ? `tmdb:${entry.tmdbId}`
+      : entry.traktId
+        ? `trakt:${entry.traktId}`
         : null;
   if (!itemId) return null;
   const listedAtMs = entry.addedAt ? new Date(entry.addedAt).getTime() : Date.now();
@@ -229,50 +238,15 @@ function toSavedItemFromTraktWatchlist(entry) {
     itemType: entry.type === "show" ? "series" : entry.type || "movie",
     itemId,
     imdbId: entry.imdbId || null,
+    tmdbId: entry.tmdbId || null,
+    traktId: entry.traktId || null,
     title: entry.title || "",
     year: entry.year || null,
+    releaseInfo: entry.year ? String(entry.year) : "",
     posterUrl: "",
     updatedAt: listedAtMs,
     listedAt: listedAtMs
   };
-}
-
-function getLibraryItemContentType(item) {
-  return String(item.contentType || item.itemType || item.type || "movie");
-}
-
-function getLibraryItemContentId(item) {
-  return String(item.contentId || item.itemId || item.id || "");
-}
-
-async function batchEnrichLibraryItems(items) {
-  if (!items.length) return items;
-  const now = Date.now();
-  const results = [];
-  for (const item of items) {
-    const contentType = getLibraryItemContentType(item);
-    const rawContentId = getLibraryItemContentId(item);
-    if (!rawContentId) {
-      results.push(item);
-      continue;
-    }
-    const lookupId = item.imdbId || rawContentId;
-    const cacheKey = `${contentType}:${lookupId}`;
-    const cached = enrichedLibraryMetaCache.get(cacheKey);
-    let meta = null;
-    if (cached && now - cached.timestamp < ENRICHED_LIBRARY_META_CACHE_TTL_MS) {
-      meta = cached.meta;
-    } else {
-      const canonicalType = contentType === "show" ? "series" : contentType;
-      const result = await metaRepository
-        .getMetaFromAllAddons(canonicalType, lookupId)
-        .catch(() => null);
-      meta = result?.status === "success" ? result.data : null;
-      enrichedLibraryMetaCache.set(cacheKey, { meta, timestamp: now });
-    }
-    results.push(meta ? { ...item, enrichedMeta: meta } : item);
-  }
-  return results;
 }
 
 function toRemoteListItem(item = {}, extra = {}) {
@@ -310,6 +284,10 @@ function mergeItemIntoMap(target, listKey, baseItem, listedAt, traktRank) {
         ? baseItem.genres
         : existing?.genres || [],
     addonBaseUrl: baseItem.addonBaseUrl || existing?.addonBaseUrl || null,
+    imdbId: baseItem.imdbId || existing?.imdbId || null,
+    tmdbId: baseItem.tmdbId ?? existing?.tmdbId ?? null,
+    traktId: baseItem.traktId ?? existing?.traktId ?? null,
+    year: baseItem.year ?? existing?.year ?? null,
     listKeys: nextListKeys,
     listedAt: Number(listedAt || existing?.listedAt || Date.now()),
     traktRank: traktRank == null ? (existing?.traktRank ?? null) : Number(traktRank),
@@ -409,7 +387,7 @@ function buildPersonalListTab(list = {}) {
 
 async function getRemotePersonalTabs() {
   const state = await readRemoteState();
-  return state.lists.map((entry) => buildPersonalListTab(entry)).slice(0, REMOTE_LIST_LIMIT);
+  return state.lists.map((entry) => buildPersonalListTab(entry));
 }
 
 async function getLocalEntries({ hydrate = true } = {}) {
@@ -495,7 +473,210 @@ function removePersonalItem(state, listKey, item) {
   return nextState;
 }
 
+function traktErrorMessage(payload, fallback, status) {
+  const message =
+    payload && typeof payload === "object"
+      ? payload.message || payload.error_description || payload.error
+      : null;
+  return String(message || `${fallback} (${status})`);
+}
+
+async function authorizedTraktRequest(path, options = {}) {
+  const token = await TraktAuthService.getValidAccessToken();
+  if (!token) {
+    throw new Error("Trakt authentication required");
+  }
+  const { response, payload } = await requestJson(path, {
+    ...options,
+    authorization: `Bearer ${token}`
+  });
+  if (!response.ok) {
+    throw new Error(
+      traktErrorMessage(payload, options.errorMessage || "Trakt request failed", response.status)
+    );
+  }
+  return { response, payload };
+}
+
+function toPersonalList(raw = {}) {
+  const traktListId = raw.ids?.trakt;
+  const slug = raw.ids?.slug || null;
+  const pathId = traktListId == null ? slug : String(traktListId);
+  if (!pathId) return null;
+  return {
+    key: `${PERSONAL_KEY_PREFIX}${pathId}`,
+    title: String(raw.name || "Untitled"),
+    description: raw.description || null,
+    privacy: raw.privacy || LibraryListPrivacy.PRIVATE,
+    traktListId: traktListId == null ? null : String(traktListId),
+    slug,
+    sortBy: raw.sort_by || null,
+    sortHow: raw.sort_how || null
+  };
+}
+
+function bestTraktImage(images = {}, kind) {
+  const candidates = images?.[kind];
+  if (Array.isArray(candidates)) {
+    return candidates.find((entry) => typeof entry === "string") || null;
+  }
+  if (typeof candidates === "string") return candidates;
+  if (candidates && typeof candidates === "object") {
+    return candidates.full || candidates.medium || candidates.thumb || null;
+  }
+  return null;
+}
+
+function toSavedItemFromTraktList(entry) {
+  const media = entry?.movie || entry?.show;
+  const type = entry?.movie ? "movie" : entry?.show ? "series" : null;
+  if (!media || !type) return null;
+  const ids = media.ids || {};
+  const contentId = ids.imdb
+    ? String(ids.imdb)
+    : ids.tmdb != null
+      ? `tmdb:${ids.tmdb}`
+      : ids.trakt != null
+        ? `trakt:${ids.trakt}`
+        : null;
+  if (!contentId) return null;
+  const listedAt = Date.parse(entry.listed_at || "") || Date.now();
+  return {
+    contentId,
+    contentType: type,
+    title: String(media.title || contentId),
+    poster: bestTraktImage(media.images, "poster"),
+    background: bestTraktImage(media.images, "fanart"),
+    description: media.overview || "",
+    releaseInfo: media.year == null ? "" : String(media.year),
+    imdbRating: media.rating == null ? null : Number(media.rating),
+    genres: Array.isArray(media.genres) ? media.genres : [],
+    imdbId: ids.imdb || null,
+    tmdbId: ids.tmdb == null ? null : Number(ids.tmdb),
+    traktId: ids.trakt == null ? null : Number(ids.trakt),
+    year: media.year == null ? null : Number(media.year),
+    updatedAt: listedAt,
+    listedAt,
+    traktRank: entry.rank == null ? null : Number(entry.rank)
+  };
+}
+
+async function fetchAllTraktPages(pathForPage) {
+  const items = [];
+  let page = 1;
+  while (true) {
+    const { response, payload } = await authorizedTraktRequest(pathForPage(page), {
+      errorMessage: "Could not load Trakt list items"
+    });
+    if (!Array.isArray(payload)) break;
+    items.push(...payload);
+    const pageCount = Math.max(
+      1,
+      Number(response.headers.get("X-Pagination-Page-Count") || 1) || 1
+    );
+    if (page >= pageCount) break;
+    page += 1;
+  }
+  return items;
+}
+
+async function fetchTraktListItems(list) {
+  const listId = list.traktListId || list.slug || list.key.replace(PERSONAL_KEY_PREFIX, "");
+  const query = (page) => {
+    const params = new URLSearchParams({
+      extended: "full,images",
+      page: String(page),
+      limit: String(TRAKT_PAGE_LIMIT)
+    });
+    if (list.sortBy) params.set("sort_by", list.sortBy);
+    if (list.sortHow) params.set("sort_how", list.sortHow);
+    return params.toString();
+  };
+  const [movies, shows] = await Promise.all(
+    ["movie", "show"].map((type) =>
+      fetchAllTraktPages(
+        (page) => `/users/me/lists/${encodeURIComponent(listId)}/items/${type}?${query(page)}`
+      )
+    )
+  );
+  return [...movies, ...shows].map(toSavedItemFromTraktList).filter(Boolean);
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < items.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await mapper(items[index], index);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, () => worker()));
+  return results;
+}
+
+async function fetchTraktPersonalState() {
+  const { payload } = await authorizedTraktRequest("/users/me/lists", {
+    errorMessage: "Could not load Trakt personal lists"
+  });
+  const lists = (Array.isArray(payload) ? payload : [])
+    .filter((list) => String(list?.type || "personal").toLowerCase() === "personal")
+    .map(toPersonalList)
+    .filter(Boolean);
+  const itemGroups = await mapWithConcurrency(
+    lists,
+    TRAKT_LIST_FETCH_CONCURRENCY,
+    fetchTraktListItems
+  );
+  return { lists, itemGroups };
+}
+
+function resolveTraktIds(item = {}) {
+  const rawId = String(item.itemId || item.id || item.contentId || "").trim();
+  const prefixed = rawId.match(/^(imdb|tmdb|trakt):(.+)$/i);
+  const ids = {
+    imdb: item.imdbId || (prefixed?.[1].toLowerCase() === "imdb" ? prefixed[2] : null),
+    tmdb: item.tmdbId ?? (prefixed?.[1].toLowerCase() === "tmdb" ? Number(prefixed[2]) : null),
+    trakt: item.traktId ?? (prefixed?.[1].toLowerCase() === "trakt" ? Number(prefixed[2]) : null)
+  };
+  if (!ids.imdb && /^tt\d+$/i.test(rawId)) ids.imdb = rawId;
+  if (!ids.imdb && !Number.isFinite(ids.tmdb) && !Number.isFinite(ids.trakt)) {
+    throw new Error("This item has no Trakt-compatible ID");
+  }
+  return Object.fromEntries(
+    Object.entries(ids).filter(([, value]) => value != null && value !== "")
+  );
+}
+
+function buildTraktMutationBody(item) {
+  const type = String(item.itemType || item.type || "movie").toLowerCase();
+  const entry = {
+    title: item.title || item.name || undefined,
+    year: item.year == null ? undefined : Number(item.year),
+    ids: resolveTraktIds(item)
+  };
+  return type === "movie" ? { movies: [entry] } : { shows: [entry] };
+}
+
 class LibraryRepository {
+  constructor() {
+    this.traktRefreshPromise = null;
+  }
+
+  async ensureFreshTraktState() {
+    const state = await readRemoteState();
+    if (Date.now() - state.syncedAt <= TRAKT_LIBRARY_CACHE_TTL_MS) {
+      return;
+    }
+    if (!this.traktRefreshPromise) {
+      this.traktRefreshPromise = this.refreshNow().finally(() => {
+        this.traktRefreshPromise = null;
+      });
+    }
+    await this.traktRefreshPromise;
+  }
+
   async getSourceMode() {
     const selectedMode = TraktSettingsStore.get().librarySourceMode;
     if (selectedMode !== TraktLibrarySourceMode.TRAKT) {
@@ -513,6 +694,7 @@ class LibraryRepository {
     if (resolvedSourceMode === LibrarySourceMode.LOCAL) {
       return [];
     }
+    await this.ensureFreshTraktState();
     const personalTabs = await getRemotePersonalTabs();
     return [
       {
@@ -532,6 +714,9 @@ class LibraryRepository {
 
   async getItems({ hydrate = true, sourceMode = null } = {}) {
     const resolvedSourceMode = sourceMode || (await this.getSourceMode());
+    if (resolvedSourceMode === LibrarySourceMode.TRAKT) {
+      await this.ensureFreshTraktState();
+    }
     return resolvedSourceMode === LibrarySourceMode.TRAKT
       ? getRemoteEntries({ hydrate })
       : getLocalEntries({ hydrate });
@@ -573,7 +758,15 @@ class LibraryRepository {
       if (before === after) {
         continue;
       }
+      const body = buildTraktMutationBody(item);
       if (listKey === WATCHLIST_KEY) {
+        await authorizedTraktRequest(after ? "/sync/watchlist" : "/sync/watchlist/remove", {
+          method: "POST",
+          body,
+          errorMessage: after
+            ? "Could not add item to Trakt watchlist"
+            : "Could not remove item from Trakt watchlist"
+        });
         remoteState.watchlist = after
           ? [
               toRemoteListItem(item, { listedAt: Date.now() }),
@@ -596,43 +789,60 @@ class LibraryRepository {
             );
         continue;
       }
+      const listId = String(listKey).replace(PERSONAL_KEY_PREFIX, "");
+      await authorizedTraktRequest(
+        `/users/me/lists/${encodeURIComponent(listId)}/items${after ? "" : "/remove"}`,
+        {
+          method: "POST",
+          body,
+          errorMessage: after
+            ? "Could not add item to Trakt list"
+            : "Could not remove item from Trakt list"
+        }
+      );
       remoteState = after
         ? upsertPersonalItem(remoteState, listKey, item)
         : removePersonalItem(remoteState, listKey, item);
     }
 
     await writeRemoteState(remoteState);
-
-    if (AuthManager.isAuthenticated) {
-      try {
-        await SavedLibrarySyncService.push();
-      } catch (error) {
-        console.warn("LibraryRepository applyMembershipChanges push failed", error);
-      }
-    }
   }
 
   async createPersonalList(name, description, privacy) {
-    const state = await readRemoteState();
-    const nextId = Number(state.nextListId || 1);
-    const listKey = `${PERSONAL_KEY_PREFIX}${nextId}`;
-    state.nextListId = nextId + 1;
-    state.lists = [
-      ...state.lists,
-      {
-        key: listKey,
-        title: String(name || "Untitled"),
+    const { payload } = await authorizedTraktRequest("/users/me/lists", {
+      method: "POST",
+      body: {
+        name: String(name || "Untitled"),
         description: description || null,
-        privacy: privacy || LibraryListPrivacy.PRIVATE,
-        traktListId: String(nextId)
-      }
-    ];
-    state.listItems[listKey] = state.listItems[listKey] || [];
+        privacy: privacy || LibraryListPrivacy.PRIVATE
+      },
+      errorMessage: "Could not create Trakt list"
+    });
+    const created = toPersonalList(payload);
+    if (!created) {
+      throw new Error("Trakt returned an invalid list");
+    }
+    const state = await readRemoteState();
+    state.lists = [...state.lists.filter((list) => list.key !== created.key), created];
+    state.listItems[created.key] = state.listItems[created.key] || [];
     await writeRemoteState(state);
-    return listKey;
+    return created.key;
   }
 
   async updatePersonalList(listId, name, description, privacy) {
+    const { payload } = await authorizedTraktRequest(
+      `/users/me/lists/${encodeURIComponent(String(listId))}`,
+      {
+        method: "PUT",
+        body: {
+          name: String(name || "Untitled"),
+          description: description || null,
+          privacy: privacy || LibraryListPrivacy.PRIVATE
+        },
+        errorMessage: "Could not update Trakt list"
+      }
+    );
+    const updated = toPersonalList(payload);
     const state = await readRemoteState();
     state.lists = state.lists.map((list) => {
       if (
@@ -642,15 +852,21 @@ class LibraryRepository {
       }
       return {
         ...list,
-        title: String(name || list.title || "Untitled"),
-        description: description || null,
-        privacy: privacy || list.privacy || LibraryListPrivacy.PRIVATE
+        ...(updated || {}),
+        key: list.key,
+        title: String(updated?.title || name || list.title || "Untitled"),
+        description: updated?.description ?? description ?? null,
+        privacy: updated?.privacy || privacy || list.privacy || LibraryListPrivacy.PRIVATE
       };
     });
     await writeRemoteState(state);
   }
 
   async deletePersonalList(listId) {
+    await authorizedTraktRequest(`/users/me/lists/${encodeURIComponent(String(listId))}`, {
+      method: "DELETE",
+      errorMessage: "Could not delete Trakt list"
+    });
     const state = await readRemoteState();
     const match = state.lists.find((list) => {
       return (
@@ -666,6 +882,15 @@ class LibraryRepository {
   }
 
   async reorderPersonalLists(orderedListIds = []) {
+    const rank = orderedListIds
+      .map((id) => Number(String(id).replace(PERSONAL_KEY_PREFIX, "")))
+      .filter((id) => Number.isFinite(id) && id > 0);
+    if (!rank.length) return;
+    await authorizedTraktRequest("/users/me/lists/reorder", {
+      method: "POST",
+      body: { rank },
+      errorMessage: "Could not reorder Trakt lists"
+    });
     const state = await readRemoteState();
     const byId = new Map(
       state.lists.map((list) => [
@@ -688,17 +913,22 @@ class LibraryRepository {
     if (sourceMode === LibrarySourceMode.TRAKT) {
       if (!TraktAuthService.isAuthenticated()) return false;
       try {
-        const watchlistItems = await TraktAuthService.fetchWatchlist({
-          limit: 200
-        });
+        const [watchlistItems, personal] = await Promise.all([
+          TraktAuthService.fetchWatchlist({ limit: 200 }),
+          fetchTraktPersonalState()
+        ]);
         const rawItems = watchlistItems.map(toSavedItemFromTraktWatchlist).filter(Boolean);
-        const enrichedItems = await batchEnrichLibraryItems(rawItems);
         const state = createEmptyRemoteState();
-        state.watchlist = enrichedItems;
+        state.syncedAt = Date.now();
+        state.watchlist = rawItems;
+        state.lists = personal.lists;
+        personal.lists.forEach((list, index) => {
+          state.listItems[list.key] = personal.itemGroups[index] || [];
+        });
         await writeRemoteState(state);
         return true;
       } catch (error) {
-        console.warn("[LIB] Trakt watchlist fetch failed", error);
+        console.warn("[LIB] Trakt library fetch failed", error);
         return false;
       }
     }

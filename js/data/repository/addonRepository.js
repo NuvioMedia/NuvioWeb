@@ -573,6 +573,99 @@ class AddonRepository {
       .filter(Boolean);
   }
 
+  getResourceTypes(resource = {}) {
+    return (Array.isArray(resource?.types) ? resource.types : [])
+      .map((type) => String(type || "").trim())
+      .filter(Boolean);
+  }
+
+  getResourceIdPrefixes(addon = {}, resource = {}) {
+    const prefixes =
+      Array.isArray(resource?.idPrefixes) && resource.idPrefixes.length
+        ? resource.idPrefixes
+        : Array.isArray(addon?.idPrefixes)
+          ? addon.idPrefixes
+          : [];
+    return prefixes.map((prefix) => String(prefix || "").trim()).filter(Boolean);
+  }
+
+  resourceSupportsType(resource = {}, type = "") {
+    const targetType = String(type || "").trim().toLowerCase();
+    if (!targetType) {
+      return false;
+    }
+    const types = this.getResourceTypes(resource).map((resourceType) =>
+      resourceType.toLowerCase()
+    );
+    return !types.length || types.includes(targetType);
+  }
+
+  resourceSupportsId(addon = {}, resource = {}, id = "", options = {}) {
+    const prefixes = this.getResourceIdPrefixes(addon, resource);
+    if (!prefixes.length) {
+      return true;
+    }
+    const rawId = String(id || "");
+    if (options?.caseInsensitive) {
+      const normalizedId = rawId.toLowerCase();
+      return prefixes.some((prefix) => normalizedId.startsWith(prefix.toLowerCase()));
+    }
+    return prefixes.some((prefix) => rawId.startsWith(prefix));
+  }
+
+  resolveResourceRequestType(
+    addon = {},
+    resourceName = "",
+    requestedType = "",
+    id = "",
+    options = {}
+  ) {
+    const targetResource = String(resourceName || "").trim().toLowerCase();
+    const cleanRequestedType = String(requestedType || "").trim();
+    const resources = (addon?.resources || []).filter(
+      (resource) =>
+        String(resource?.name || "").trim().toLowerCase() === targetResource &&
+        this.resourceSupportsId(addon, resource, id, options)
+    );
+    if (!resources.length) {
+      return "";
+    }
+    if (
+      cleanRequestedType &&
+      resources.some((resource) => this.resourceSupportsType(resource, cleanRequestedType))
+    ) {
+      return cleanRequestedType;
+    }
+    if (!options?.allowIdTypeFallback) {
+      return "";
+    }
+
+    // A matching ID prefix is strong ownership evidence. Recover a mismatched
+    // catalog type only when the owning resource declares one unambiguous type.
+    const recoveredTypes = [];
+    resources.forEach((resource) => {
+      if (!this.getResourceIdPrefixes(addon, resource).length) {
+        return;
+      }
+      const resourceTypes = this.getResourceTypes(resource);
+      const candidateTypes = resourceTypes.length
+        ? resourceTypes
+        : Array.isArray(addon?.rawTypes)
+          ? addon.rawTypes
+          : addon?.types || [];
+      candidateTypes.forEach((type) => {
+        const cleanType = String(type || "").trim();
+        if (
+          cleanType &&
+          !recoveredTypes.some((existing) => existing.toLowerCase() === cleanType.toLowerCase())
+        ) {
+          recoveredTypes.push(cleanType);
+        }
+      });
+    });
+    return recoveredTypes.length === 1 ? recoveredTypes[0] : "";
+  }
+
   normalizeCinemetaUrl(url) {
     return String(url || "").replace(
       /https?:\/\/cinemeta-v3\.strem\.io/i,

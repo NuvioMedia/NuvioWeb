@@ -63,6 +63,31 @@ function itemsByProgressKey(items = []) {
   return new Map(normalizeProgressItems(items).map((item) => [progressKey(item), item]));
 }
 
+// Supabase stores the portable progress fields only. Keep device-local metadata
+// when the matching remote row wins a merge, just as Android preserves display
+// metadata while merging watch progress. streamIdentity is also local-only and
+// is what Continue Watching uses to reopen the source selected for this item.
+function preserveLocalProgressMetadata(progress, localItem) {
+  if (!progress || !localItem) {
+    return progress;
+  }
+  const localTitle = String(localItem.title || "").trim();
+  const localStreamIdentity = String(localItem.streamIdentity || "").trim();
+  return {
+    ...progress,
+    ...(localTitle ? { title: localItem.title } : {}),
+    ...(localItem.poster ? { poster: localItem.poster } : {}),
+    ...(localItem.background ? { background: localItem.background } : {}),
+    ...(localItem.logo ? { logo: localItem.logo } : {}),
+    ...(localItem.episodeTitle ? { episodeTitle: localItem.episodeTitle } : {}),
+    ...(localItem.imdbId ? { imdbId: localItem.imdbId } : {}),
+    ...(localItem.tmdbId ? { tmdbId: localItem.tmdbId } : {}),
+    ...(localItem.traktId ? { traktId: localItem.traktId } : {}),
+    ...(localItem.year ? { year: localItem.year } : {}),
+    ...(localStreamIdentity ? { streamIdentity: localItem.streamIdentity } : {})
+  };
+}
+
 function readSyncState() {
   const state = LocalStore.get(SYNC_STATE_KEY, {});
   return state && typeof state === "object" ? state : {};
@@ -107,14 +132,14 @@ function mergeProgressItems(localItems = [], remoteItems = [], baselineItems = [
         return;
       }
       if (remoteChanged && !localChanged) {
-        merged.push(remoteItem);
+        merged.push(preserveLocalProgressMetadata(remoteItem, localItem));
         return;
       }
-      merged.push(
+      const winner =
         Number(localItem.updatedAt || 0) > Number(remoteItem.updatedAt || 0)
           ? localItem
-          : remoteItem
-      );
+          : remoteItem;
+      merged.push(preserveLocalProgressMetadata(winner, localItem));
       return;
     }
 

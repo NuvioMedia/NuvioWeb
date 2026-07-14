@@ -63,6 +63,7 @@ export const Router = {
   currentParams: {},
   stack: [],
   historyInitialized: false,
+  webOsHomeBackGuardInitialized: false,
   popstateBound: false,
   suppressPopstateUntil: 0,
   skipConsumeNextPopstate: false,
@@ -367,6 +368,17 @@ export const Router = {
         } else {
           window.history.pushState(state, "");
         }
+      }
+      // webOS handles the remote Back button through the History API by
+      // default. Keep one Home entry available so overlays can consume Back
+      // before the platform treats it as a request to exit the app.
+      if (
+        Platform.isWebOS() &&
+        this.current === "home" &&
+        !this.webOsHomeBackGuardInitialized
+      ) {
+        window.history.pushState(state, "");
+        this.webOsHomeBackGuardInitialized = true;
       }
     }
     this.persistWebOsResumeRoute(this.current, this.currentParams);

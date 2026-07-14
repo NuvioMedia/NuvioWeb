@@ -42,49 +42,6 @@ class StreamRepository {
       }
     };
 
-    const supportsResourceType = (resource, type) => {
-      const targetType = String(type || "")
-        .trim()
-        .toLowerCase();
-      const types = Array.isArray(resource?.types)
-        ? resource.types
-            .map((resourceType) =>
-              String(resourceType || "")
-                .trim()
-                .toLowerCase()
-            )
-            .filter(Boolean)
-        : [];
-      return !types.length || types.includes(targetType);
-    };
-
-    const supportsResourceId = (addon, resource, id) => {
-      const prefixes = (Array.isArray(resource?.idPrefixes) && resource.idPrefixes.length
-        ? resource.idPrefixes
-        : Array.isArray(addon?.idPrefixes) && addon.idPrefixes.length
-          ? addon.idPrefixes
-          : [])
-        .map((prefix) => String(prefix || ""))
-        .filter(Boolean);
-      return !prefixes.length || prefixes.some((prefix) => String(id || "").startsWith(prefix));
-    };
-
-    const supportsStreamType = (addon) =>
-      (addon?.resources || []).some((resource) => {
-        if (resource.name !== "stream") {
-          return false;
-        }
-        return supportsResourceType(resource, type) && supportsResourceId(addon, resource, videoId);
-      });
-
-    const supportsMetaType = (addon) =>
-      (addon?.resources || []).some((resource) => {
-        if (resource.name !== "meta") {
-          return false;
-        }
-        return supportsResourceType(resource, type) && supportsResourceId(addon, resource, videoId);
-      });
-
     const notifyAddon = (addon, orderIndex) => {
       if (!onAddon || !addon) {
         return;
@@ -110,8 +67,25 @@ class StreamRepository {
 
     const addonTasks = installedAddons.map(async (addon) => {
       try {
-        const canStream = supportsStreamType(addon);
-        const canMeta = supportsMetaType(addon);
+        // Secondary/aggregator catalogs sometimes expose a channel row while
+        // the original addon owns the ID under `tv`. Exact type remains the
+        // default; an explicit, unambiguous idPrefix may recover the owner type.
+        const streamRequestType = addonRepository.resolveResourceRequestType(
+          addon,
+          "stream",
+          type,
+          videoId,
+          { allowIdTypeFallback: true }
+        );
+        const metaRequestType = addonRepository.resolveResourceRequestType(
+          addon,
+          "meta",
+          type,
+          videoId,
+          { allowIdTypeFallback: true }
+        );
+        const canStream = Boolean(streamRequestType);
+        const canMeta = Boolean(metaRequestType);
         // Meta-only stream discovery is a compatibility path for debrid cloud
         // items, which are exposed through the `other` type. Regular movie/series
         // metadata addons must not be queried as stream sources.
@@ -128,7 +102,11 @@ class StreamRepository {
         let addonStreams = [];
         let streamRequestSucceeded = false;
         if (canStream) {
-          const streamsResult = await this.getStreamsFromAddon(addon.baseUrl, type, videoId);
+          const streamsResult = await this.getStreamsFromAddon(
+            addon.baseUrl,
+            streamRequestType,
+            videoId
+          );
           if (streamsResult.status === "success") {
             streamRequestSucceeded = true;
             if (streamsResult.data.length) {
@@ -144,7 +122,11 @@ class StreamRepository {
           addonStreams.length === 0 &&
           ((canStream && streamRequestSucceeded) || canTryMetaOnlyStreams)
         ) {
-          addonStreams = await this.fetchInlineStreamsFromMeta(addon, type, videoId);
+          addonStreams = await this.fetchInlineStreamsFromMeta(
+            addon,
+            canStream ? streamRequestType : metaRequestType,
+            videoId
+          );
         }
         if (addonStreams.length === 0) {
           return null;
