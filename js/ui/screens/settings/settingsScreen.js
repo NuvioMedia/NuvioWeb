@@ -1701,7 +1701,7 @@ function getVisibleSections(model) {
     if (section.hideFromNav) {
       return false;
     }
-    if (section.id === "account" || section.id === "profiles" || section.id === "trakt") {
+    if (section.id === "account" || section.id === "trakt") {
       return isPrimaryProfileActive;
     }
     return true;
@@ -2894,12 +2894,15 @@ export const SettingsScreen = {
   },
 
   renderProfilesSection(model) {
-    this.actionMap.set("profiles:manage", () =>
-      Router.navigate("profileSelection", {
-        mode: "management",
-        returnRoute: "settings"
-      })
-    );
+    const isPrimaryProfileActive = String(model?.activeProfileId || "1") === "1";
+    if (isPrimaryProfileActive) {
+      this.actionMap.set("profiles:manage", () =>
+        Router.navigate("profileSelection", {
+          mode: "management",
+          returnRoute: "settings"
+        })
+      );
+    }
     this.actionMap.set("profiles:rememberLast", () => {
       ProfileManager.setRememberLastProfileEnabled(!ProfileManager.isRememberLastProfileEnabled());
     });
@@ -2908,13 +2911,17 @@ export const SettingsScreen = {
       ${this.renderSectionHeader(SECTION_META.find((item) => item.id === "profiles"))}
       <div class="settings-group-card settings-profile-card">
         <div class="settings-stack">
-          ${this.renderActionRow({
-            focusKey: "profiles:manage",
-            title: t("profile_manage_button", {}, "Manage Profiles"),
-            subtitle: "",
-            icon: null,
-            classes: "settings-profile-manage-row"
-          })}
+          ${
+            isPrimaryProfileActive
+              ? this.renderActionRow({
+                  focusKey: "profiles:manage",
+                  title: t("profile_manage_button", {}, "Manage Profiles"),
+                  subtitle: "",
+                  icon: null,
+                  classes: "settings-profile-manage-row"
+                })
+              : ""
+          }
           ${this.renderToggleRow({
             focusKey: "profiles:rememberLast",
             title: t("settings.profiles.rememberLast.title", {}, "Remember Last Profile"),

@@ -4559,6 +4559,7 @@ export const HomeScreen = {
     const currentHeroIdentity = buildHeroIdentity(this.heroItem);
     const nextHeroIdentity = buildHeroIdentity(hero);
     if (currentHeroIdentity === nextHeroIdentity && !this.heroItem?.heroMetaEnriching && !shouldEnrichModernHero(hero)) {
+      this.syncCollectionHeroMedia(hero);
       return;
     }
     this.cancelPendingHeroFocus();
@@ -4807,6 +4808,13 @@ export const HomeScreen = {
     return Boolean(this.resolveCollectionFolderTargetFromNode(node));
   },
 
+  shouldPreserveCollectionHeroMedia(node) {
+    if (!this.isCollectionFolderNode(node)) {
+      return false;
+    }
+    return Boolean(firstNonEmpty(this.getNodeHeroSource(node)?.heroVideoUrl));
+  },
+
   hydrateCollectionFocusGif(node, active = false) {
     const gifNode = node?.querySelector?.(".home-poster-focus-gif") || null;
     if (!(gifNode instanceof HTMLImageElement)) {
@@ -4851,8 +4859,10 @@ export const HomeScreen = {
       }
       return;
     }
-    if (this.collectionHeroMediaKey === playbackKey && heroLayer.classList.contains("is-active")) {
-      heroMedia.classList.add("trailer-active");
+    if (this.collectionHeroMediaKey === playbackKey && heroLayer.querySelector("video")) {
+      if (heroLayer.classList.contains("is-active")) {
+        heroMedia.classList.add("trailer-active");
+      }
       return;
     }
     this.collectionHeroMediaKey = playbackKey;
@@ -5142,8 +5152,9 @@ export const HomeScreen = {
   },
 
   collapseFocusedPoster(node = this.expandedPosterNode, options = {}) {
-    // Avoid overlapping flex-size transitions that leave stale poster layers on Tizen.
-    const instant = Boolean(options?.instant || Platform.isTizen());
+    // Avoid overlapping flex-size transitions that leave stale poster layers on TV runtimes.
+    const instant = Boolean(options?.instant || Platform.isTizen() || Platform.isWebOS());
+    const preserveHeroMedia = Boolean(options?.preserveHeroMedia);
     const excludeNode = options?.excludeNode instanceof HTMLElement ? options.excludeNode : null;
     const targets = new Set();
     if (node instanceof HTMLElement && node !== excludeNode) {
@@ -5179,10 +5190,12 @@ export const HomeScreen = {
         });
       }
     });
-    const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
-    this.clearTrailerLayer(heroLayer);
-    this.container?.querySelector(".home-modern-hero-media")?.classList.remove("trailer-active");
-    this.heroTrailerPlaybackState = null;
+    if (!preserveHeroMedia) {
+      const heroLayer = this.container?.querySelector(".home-hero-trailer-layer");
+      this.clearTrailerLayer(heroLayer);
+      this.container?.querySelector(".home-modern-hero-media")?.classList.remove("trailer-active");
+      this.heroTrailerPlaybackState = null;
+    }
     if (!this.expandedPosterNode?.isConnected || !this.expandedPosterNode?.classList?.contains("is-expanded")) {
       this.expandedPosterNode = null;
     }
@@ -5253,7 +5266,10 @@ export const HomeScreen = {
       return;
     }
     if (this.isCollectionFolderNode(node)) {
-      this.collapseFocusedPoster(this.expandedPosterNode, { instant: true });
+      this.collapseFocusedPoster(this.expandedPosterNode, {
+        instant: true,
+        preserveHeroMedia: this.shouldPreserveCollectionHeroMedia(node)
+      });
       await new Promise((resolve) => {
         setTimeout(resolve, 140);
       });
@@ -5477,6 +5493,15 @@ export const HomeScreen = {
       return;
     }
     this.cancelFocusedPosterFlow();
+    if (this.isCollectionFolderNode(node)) {
+      this.clearFocusedPosterFlowState();
+      this.collapseFocusedPoster(this.expandedPosterNode, {
+        instant: true,
+        preserveHeroMedia: this.shouldPreserveCollectionHeroMedia(node)
+      });
+      this.hydrateCollectionFocusGif(node, true);
+      return;
+    }
     const prefs = this.layoutPrefs || {};
     const { shouldExpand, shouldPreviewTrailer, trailerTarget } = this.getFocusedPosterFlowConfig(prefs);
     const shouldRun = Boolean(shouldExpand || shouldPreviewTrailer);
@@ -5553,7 +5578,9 @@ export const HomeScreen = {
     this.cancelFocusedPosterFlow();
     this.clearFocusedPosterFlowState();
     if (this.isModernPosterNode(node)) {
-      this.collapseFocusedPoster(node);
+      this.collapseFocusedPoster(node, {
+        preserveHeroMedia: this.shouldPreserveCollectionHeroMedia(node)
+      });
       this.scheduleFocusedPosterFlow(node);
       return;
     }

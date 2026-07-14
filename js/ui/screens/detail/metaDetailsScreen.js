@@ -5840,6 +5840,7 @@ export const MetaDetailsScreen = {
     if (
       !this.trailerSource ||
       this.isTrailerPlaying ||
+      this.params?.autoOpenContinueWatching ||
       this.pendingEpisodeSelection ||
       this.pendingMovieSelection ||
       this.shouldSuppressTrailerAutoplay() ||
