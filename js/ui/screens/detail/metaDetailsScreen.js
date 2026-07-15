@@ -2337,6 +2337,11 @@ export const MetaDetailsScreen = {
     this.navigateToStreamScreenForMovie(extraParams);
   },
 
+  getStreamNavigationOptions() {
+    // Continue Watching mounts Detail only to resolve the Stream target.
+    return this.params?.autoOpenContinueWatching ? { skipStackPush: true } : {};
+  },
+
   navigateBackFromDetail() {
     if (this.params?.returnHomeOnBack) {
       Router.navigate(
@@ -6850,11 +6855,20 @@ export const MetaDetailsScreen = {
       this.closeEpisodeStreamChooser();
       return true;
     }
-    if (this.isLoadingDetail) {
-      Router.navigate("home");
+    if (this.navigateBackFromDetail()) {
       return true;
     }
-    if (this.navigateBackFromDetail()) {
+    if (this.isLoadingDetail) {
+      // Loading details must use the same Tizen Back contract as loaded ones.
+      Router.navigate(
+        "home",
+        {},
+        {
+          isBackNavigation: true,
+          skipStackPush: true,
+          replaceHistory: true
+        }
+      );
       return true;
     }
     return false;
@@ -6976,7 +6990,7 @@ export const MetaDetailsScreen = {
       nextEpisodeTitle: nextEpisode?.title || "",
       nextEpisodeReleased: nextEpisode?.released || "",
       ...extraParams
-    });
+    }, this.getStreamNavigationOptions());
   },
 
   navigateToStreamScreenForMovie(extraParams = {}) {
@@ -7013,7 +7027,7 @@ export const MetaDetailsScreen = {
         StreamPreferencesStore.get(this.params?.itemId, this.params?.itemId) || null,
       episodes: [],
       ...extraParams
-    });
+    }, this.getStreamNavigationOptions());
   },
 
   playMovieFromSelectedStream(streamId) {

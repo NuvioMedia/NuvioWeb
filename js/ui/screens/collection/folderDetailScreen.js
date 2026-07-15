@@ -31,7 +31,7 @@ import {
 
 const TMDB_API_URL = "https://api.themoviedb.org/3";
 const TMDB_POSTER_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w342";
-const TMDB_BACKDROP_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w780";
+const TMDB_BACKDROP_IMAGE_BASE_URL = "https://image.tmdb.org/t/p/w1280";
 const TRAKT_PAGE_SIZE = 50;
 const STREAMING_NETWORK_PRESETS = new Map([
   ["netflix", { title: "Netflix", tmdbId: 213 }],

@@ -4914,6 +4914,7 @@ export const PlayerScreen = {
       });
       return;
     }
+    PlayerController.setStartupPresentationAudioMuted?.(true);
     return Promise.resolve(PlayerController.play(playbackUrl, context)).catch((error) => {
       if (!this.isActiveMountToken(mountToken) || this.isExternalFrameMode()) {
         return;
@@ -7271,20 +7272,20 @@ export const PlayerScreen = {
         && (!this.currentEngineFsStream || this.isEngineFsStartupReady())
       ) {
         this.setLoadingLogoFillTarget(1);
-        this.markPlaybackPresentedAfterAdvance();
+        const playbackPresented = this.markPlaybackPresentedAfterAdvance();
         this.updateLoadingVisibility();
-        this.scheduleLoadingCompletionCheck(180);
+        this.scheduleLoadingCompletionCheck(playbackPresented ? 0 : 180);
       }
       if (this.currentEngineFsStream && !this.hasPresentedPlaybackFrame && this.isEngineFsStartupReady()) {
         this.setLoadingLogoFillTarget(1);
-        this.markPlaybackPresentedAfterAdvance();
+        const playbackPresented = this.markPlaybackPresentedAfterAdvance();
         this.updateLoadingVisibility();
-        this.scheduleLoadingCompletionCheck(180);
+        this.scheduleLoadingCompletionCheck(playbackPresented ? 0 : 180);
       }
       if (this.loadingVisible && !this.hasPresentedPlaybackFrame) {
-        this.markPlaybackPresentedAfterAdvance();
+        const playbackPresented = this.markPlaybackPresentedAfterAdvance();
         this.updateLoadingVisibility();
-        this.scheduleLoadingCompletionCheck(120);
+        this.scheduleLoadingCompletionCheck(playbackPresented ? 0 : 120);
       }
       this.markPlaybackProgress();
       this.attemptPendingPlaybackRestore();
@@ -8069,7 +8070,7 @@ export const PlayerScreen = {
       this.startupTrackPreferenceReady = true;
       this.refreshTrackDialogs();
     }
-    this.setLoadingLogoFillTarget(1);
+    this.setLoadingLogoFillTarget(1, { immediate: true });
     if (this.isStartupGateReleaseReady()) {
       this.releaseStartupAudioGate();
     }
@@ -8084,6 +8085,17 @@ export const PlayerScreen = {
       && !this.pendingPlaybackRestore
       && !this.startupAudioGateActive
     );
+  },
+
+  presentStartedPlayback() {
+    const overlay = this.uiRefs?.loadingOverlay;
+    overlay?.classList.add("playback-ready");
+    this.loadingVisible = false;
+    this.updateLoadingVisibility();
+    PlayerController.setStartupPresentationAudioMuted?.(false);
+    setTimeout(() => overlay?.classList.remove("playback-ready"), 250);
+    this.updateUiTick();
+    setTimeout(() => this.maybeShowParentalGuideOverlay(), 80);
   },
 
   isStartupGateReleaseReady() {
@@ -8136,10 +8148,7 @@ export const PlayerScreen = {
       if (fillProgress >= 1 && !this.isPlaybackStartupSettled()) {
         this.markPlaybackPresentedAfterAdvance();
         if (this.isStartupLogoDismissReady()) {
-          this.loadingVisible = false;
-          this.updateLoadingVisibility();
-          this.updateUiTick();
-          setTimeout(() => this.maybeShowParentalGuideOverlay(), 80);
+          this.presentStartedPlayback();
           return;
         }
         this.updateUiTick();
@@ -8166,10 +8175,7 @@ export const PlayerScreen = {
         this.scheduleLoadingCompletionCheck(120, { force: true });
         return;
       }
-      this.loadingVisible = false;
-      this.updateLoadingVisibility();
-      this.updateUiTick();
-      setTimeout(() => this.maybeShowParentalGuideOverlay(), 80);
+      this.presentStartedPlayback();
     }, Math.max(0, Number(delayMs || 0)));
   },
 

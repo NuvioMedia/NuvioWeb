@@ -1110,6 +1110,9 @@ function buildProgressStatus(item) {
   }
   const effectivePositionMs = Math.max(0, Math.min(durationMs, positionMs));
   const remainingMinutes = Math.max(1, Math.floor(Math.max(0, durationMs - effectivePositionMs) / 60000));
+  if (remainingMinutes < 60) {
+    return t("home.timeLeft", { minutes: remainingMinutes }, "{{minutes}}m left");
+  }
   const remainingLabel = formatDurationMinutes(remainingMinutes);
   return t("home.timeLeftDuration", { time: remainingLabel }, "{{time}} left");
 }

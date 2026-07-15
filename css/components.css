@@ -10980,6 +10980,10 @@ html.legacy-webos .debug-console-log-frame {
   pointer-events: none;
 }
 
+.player-loading-overlay.playback-ready {
+  transition: none;
+}
+
 .player-loading-spinner {
   position: fixed;
   top: 0;

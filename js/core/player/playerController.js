@@ -126,6 +126,8 @@ export const PlayerController = {
   avplayDisplayMethod: "PLAYER_DISPLAY_MODE_FULL_SCREEN",
   startupAudioGateActive: false,
   startupAudioGatePausesNativePlayback: true,
+  startupPresentationAudioMuted: false,
+  avplayPresentationAudioDisabled: false,
   desiredPlaybackRate: 1,
   appliedAvPlayPlaybackRate: 1,
 
@@ -568,7 +570,7 @@ export const PlayerController = {
       return;
     }
     try {
-      const gated = Boolean(this.startupAudioGateActive);
+      const gated = Boolean(this.startupAudioGateActive || this.startupPresentationAudioMuted);
       this.video.muted = gated;
       this.video.defaultMuted = gated;
       if (!gated && (!Number.isFinite(Number(this.video.volume)) || Number(this.video.volume) <= 0)) {
@@ -577,6 +579,47 @@ export const PlayerController = {
     } catch (_) {
       // Ignore unsupported volume/mute operations.
     }
+  },
+
+  applyStartupPresentationAudioMuteToAvPlay() {
+    const avplay = this.getAvPlay();
+    if (!avplay || !this.isUsingAvPlay()) {
+      return false;
+    }
+    if (this.startupPresentationAudioMuted) {
+      if (this.avplayPresentationAudioDisabled) {
+        return true;
+      }
+      if (typeof avplay.disableAudioStream !== "function") {
+        return false;
+      }
+      try {
+        avplay.disableAudioStream();
+        this.avplayPresentationAudioDisabled = true;
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+    if (!this.avplayPresentationAudioDisabled) {
+      return true;
+    }
+    if (typeof avplay.enableAudioStream !== "function") {
+      return false;
+    }
+    try {
+      avplay.enableAudioStream();
+      this.avplayPresentationAudioDisabled = false;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  },
+
+  setStartupPresentationAudioMuted(muted) {
+    this.startupPresentationAudioMuted = Boolean(muted);
+    this.applyStartupAudioGateToVideo();
+    this.applyStartupPresentationAudioMuteToAvPlay();
   },
 
   pauseNativePlaybackForStartupGate() {
@@ -680,6 +723,7 @@ export const PlayerController = {
       return false;
     }
     try {
+      this.applyStartupPresentationAudioMuteToAvPlay();
       avplay.play?.();
       this.isPlaying = true;
       this.syncWebOsPlaybackKeepAwake();
@@ -2009,6 +2053,13 @@ export const PlayerController = {
 
     this.stopAvPlayTickTimer();
     if (avplay) {
+      if (this.avplayPresentationAudioDisabled && !this.startupPresentationAudioMuted) {
+        try {
+          avplay.enableAudioStream?.();
+        } catch (_) {
+          // Ignore audio restoration failures while closing AVPlay.
+        }
+      }
       try {
         avplay.setListener?.({});
       } catch (_) {
@@ -2051,6 +2102,7 @@ export const PlayerController = {
     this.avplayEnded = false;
     this.avplayCurrentTimeMs = 0;
     this.avplayDurationMs = 0;
+    this.avplayPresentationAudioDisabled = false;
     this.appliedAvPlayPlaybackRate = 1;
   },
 
@@ -2146,6 +2198,7 @@ export const PlayerController = {
             this.avplayCurrentTimeMs = value;
           }
           this.applyAvPlayExternalSubtitleDelay();
+          this.emitVideoEvent("timeupdate", { playbackEngine: this.playbackEngine });
         },
         onstreamcompleted: () => {
           if (!this.isPlaybackRequestActive(playToken, url)) {
@@ -4016,6 +4069,7 @@ export const PlayerController = {
     if (!this.video) return;
 
     this.playRequestToken = Number(this.playRequestToken || 0) + 1;
+    this.setStartupPresentationAudioMuted(false);
     const flushPromise = flushProgress
       ? this.flushCurrentProgress({ forceCloudSync, allowCloudSync })
       : Promise.resolve(false);

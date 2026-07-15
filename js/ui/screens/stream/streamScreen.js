@@ -983,11 +983,27 @@ export const StreamScreen = {
     if (!itemId) {
       return false;
     }
+    const itemType = normalizeType(this.params?.itemType);
+    const isSeries = itemType === "series" || itemType === "tv";
+    if (this.params?.continueWatchingBackHome && !isSeries) {
+      // Android returns movies opened from Continue Watching straight Home;
+      // only episodic content reconstructs a Detail route on Back.
+      void Router.navigate(
+        "home",
+        {},
+        {
+          skipStackPush: true,
+          replaceHistory: true,
+          isBackNavigation: true
+        }
+      );
+      return true;
+    }
     void Router.navigate(
       "detail",
       {
         itemId,
-        itemType: normalizeType(this.params?.itemType),
+        itemType,
         imdbId: this.params?.imdbId || null,
         tmdbId: this.params?.tmdbId || null,
         traktId: this.params?.traktId || null,

@@ -7,7 +7,8 @@ import { TMDB_API_KEY } from "../../config.js";
 const TMDB_BASE_URL = "https://api.themoviedb.org/3";
 const TMDB_IMAGE_SIZES = {
   poster: "w342",
-  backdrop: "w780",
+  // Match Android TV: hero backdrops need enough source pixels for a 1080p TV.
+  backdrop: "w1280",
   logo: "w300",
   still: "w300"
 };

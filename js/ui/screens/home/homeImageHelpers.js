@@ -1,5 +1,16 @@
 import { uniqueNonEmptyValues } from "./homeUtils.js";
 
+function normalizeHeroBackdropSource(source) {
+  const value = String(source || "").trim();
+  if (!value) {
+    return "";
+  }
+  // Continue Watching artwork is cached for up to 14 days. Upgrade only the
+  // old TMDB backdrop size so existing installs benefit without flushing the
+  // rest of the cache or increasing poster/episode-thumbnail payloads.
+  return value.replace(/(\/t\/p\/)w780\//i, "$1w1280/");
+}
+
 /**
  * Builds the ordered list of image candidates used by hero, poster and continue-watching cards.
  * @param {import("./homeTypes.js").HomeMediaSourceLike | null | undefined} item
@@ -7,10 +18,10 @@ import { uniqueNonEmptyValues } from "./homeUtils.js";
  */
 export function buildHeroBackdropSources(item = null) {
   return uniqueNonEmptyValues([
-    item?.background,
-    item?.backdrop,
-    item?.backdropUrl,
-    item?.landscapePoster,
+    normalizeHeroBackdropSource(item?.background),
+    normalizeHeroBackdropSource(item?.backdrop),
+    normalizeHeroBackdropSource(item?.backdropUrl),
+    normalizeHeroBackdropSource(item?.landscapePoster),
     item?.poster,
     item?.thumbnail,
     item?.episodeThumbnail
