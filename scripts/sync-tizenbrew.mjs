@@ -9,56 +9,6 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
 const tizenIconSource = path.join(rootDir, "assets", "images", "tizenIcon.png");
-const flexGapDetectionScript = `  <script>
-    (function detectLegacyFeatureSupport() {
-      var root = document.documentElement;
-      function removeClass(name) {
-        root.className = (" " + root.className + " ")
-          .replace(new RegExp(" " + name + " ", "g"), " ")
-          .replace(/^\\s+|\\s+$/g, "");
-      }
-      function supports(prop, value) {
-        var css = window.CSS;
-        return Boolean(css && typeof css.supports === "function" && css.supports(prop, value));
-      }
-      try {
-        var test = document.createElement("div");
-        var child = document.createElement("div");
-        test.style.position = "absolute";
-        test.style.left = "-9999px";
-        test.style.top = "-9999px";
-        test.style.display = "flex";
-        test.style.flexDirection = "column";
-        test.style.rowGap = "1px";
-        child.style.height = "1px";
-        test.appendChild(child.cloneNode());
-        test.appendChild(child.cloneNode());
-        root.appendChild(test);
-        if (test.scrollHeight === 3) {
-          removeClass("no-flex-gap");
-        }
-        root.removeChild(test);
-      } catch (error) {
-        removeClass("no-flex-gap");
-      }
-      if (supports("display", "grid")) {
-        removeClass("no-css-grid");
-      }
-      if (supports("--nuvio-probe", "0")) {
-        removeClass("no-css-vars");
-      }
-      if (supports("font-size", "clamp(1px, 2px, 3px)")) {
-        removeClass("no-css-math");
-      }
-      if (supports("aspect-ratio", "1 / 1")) {
-        removeClass("no-aspect-ratio");
-      }
-      if (supports("backdrop-filter", "blur(1px)") || supports("-webkit-backdrop-filter", "blur(1px)")) {
-        removeClass("no-backdrop-filter");
-      }
-    })();
-  </script>
-`;
 
 function fail(message) {
   throw new Error(
@@ -172,13 +122,14 @@ async function syncBuild(targetAppDir, envSourcePath) {
 
 function buildIndexHtml() {
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-grid no-css-vars no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
-${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
+  <script src="assets/runtime/legacy-features.js"></script>
+  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/themes.css" />
@@ -231,7 +182,6 @@ function loadScript(src) {
 }
 
 loadScript("nuvio.env.js");
-loadScript("js/runtime/polyfills.js");
 loadScript("js/runtime/env.js");
 loadScript("assets/libs/qrcode-generator.js");
 loadScript("app.bundle.js");

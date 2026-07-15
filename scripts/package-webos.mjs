@@ -3,8 +3,8 @@ import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { transformAsync } from "@babel/core";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { compatibilityPolicy } from "./compatibilityPolicy.mjs";
 import { runWebOsToolsBinary } from "./aresCli.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,84 +15,11 @@ const cacheDir = path.join(rootDir, ".cache");
 const stagingDir = path.join(cacheDir, "webos-package");
 const appStageDir = path.join(stagingDir, "app");
 const serviceStageDir = path.join(stagingDir, "space.nuvio.webos.service");
-const serviceTempBundlePath = path.join(stagingDir, "__webos-service.bundle.js");
 
 const appName = "Nuvio TV";
 const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceSourceDir = path.join(rootDir, "services", "webos");
 const webOsRuntimeScriptPath = "assets/libs/webOSTV.js";
-const webOsLegacyPreloadScript = `  <script>
-    if (typeof Object.assign !== "function") {
-      Object.assign = function assign(target) {
-        if (target == null) {
-          throw new TypeError("Cannot convert undefined or null to object");
-        }
-        var output = Object(target);
-        for (var index = 1; index < arguments.length; index += 1) {
-          var source = arguments[index];
-          if (source == null) {
-            continue;
-          }
-          for (var key in source) {
-            if (Object.prototype.hasOwnProperty.call(source, key)) {
-              output[key] = source[key];
-            }
-          }
-        }
-        return output;
-      };
-    }
-  </script>`;
-const flexGapDetectionScript = `  <script>
-    (function detectLegacyFeatureSupport() {
-      var root = document.documentElement;
-      function removeClass(name) {
-        root.className = (" " + root.className + " ")
-          .replace(new RegExp(" " + name + " ", "g"), " ")
-          .replace(/^\\s+|\\s+$/g, "");
-      }
-      function supports(prop, value) {
-        var css = window.CSS;
-        return Boolean(css && typeof css.supports === "function" && css.supports(prop, value));
-      }
-      try {
-        var test = document.createElement("div");
-        var child = document.createElement("div");
-        test.style.position = "absolute";
-        test.style.left = "-9999px";
-        test.style.top = "-9999px";
-        test.style.display = "flex";
-        test.style.flexDirection = "column";
-        test.style.rowGap = "1px";
-        child.style.height = "1px";
-        test.appendChild(child.cloneNode());
-        test.appendChild(child.cloneNode());
-        root.appendChild(test);
-        if (test.scrollHeight === 3) {
-          removeClass("no-flex-gap");
-        }
-        root.removeChild(test);
-      } catch (error) {
-        removeClass("no-flex-gap");
-      }
-      if (supports("display", "grid")) {
-        removeClass("no-css-grid");
-      }
-      if (supports("--nuvio-probe", "0")) {
-        removeClass("no-css-vars");
-      }
-      if (supports("font-size", "clamp(1px, 2px, 3px)")) {
-        removeClass("no-css-math");
-      }
-      if (supports("aspect-ratio", "1 / 1")) {
-        removeClass("no-aspect-ratio");
-      }
-      if (supports("backdrop-filter", "blur(1px)") || supports("-webkit-backdrop-filter", "blur(1px)")) {
-        removeClass("no-backdrop-filter");
-      }
-    })();
-  </script>
-`;
 
 async function assertDistExists() {
   try {
@@ -125,13 +52,14 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
 
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-grid no-css-vars no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
-${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
+  <script src="assets/runtime/legacy-features.js"></script>
+  <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
   <link rel="stylesheet" href="css/themes.css" />
@@ -139,7 +67,6 @@ ${flexGapDetectionScript}  <link rel="stylesheet" href="css/base.css" />
 <body>
   <script src="boot-guard.js"></script>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
-${webOsLegacyPreloadScript}
   <script src="nuvio.env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
 ${webOsScriptTag}  <script defer src="app.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
@@ -205,24 +132,14 @@ async function stageService() {
 
   await build({
     entryPoints: [path.join(webOsServiceSourceDir, "src", "index.js")],
-    outfile: serviceTempBundlePath,
+    outfile: path.join(serviceStageDir, "src", "index.js"),
     bundle: true,
     platform: "node",
     format: "cjs",
-    target: ["es2015"],
+    target: [`node${compatibilityPolicy.webOsServiceNodeVersion}`],
     external: ["webos-service"],
     logLevel: "silent"
   });
-
-  const bundledCode = await readFile(serviceTempBundlePath, "utf8");
-  const babelResult = await transformAsync(bundledCode, {
-    presets: [["@babel/preset-env", { targets: "ie 11" }]],
-    comments: false,
-    compact: false
-  });
-
-  await writeFile(path.join(serviceStageDir, "src", "index.js"), babelResult.code, "utf8");
-  await rm(serviceTempBundlePath, { force: true });
 }
 
 async function packageWebOs() {

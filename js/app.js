@@ -1,9 +1,5 @@
 import "./core/diagnostics/consoleDebugBuffer.js";
 import "./runtime/polyfills.js";
-import "core-js/stable/url";
-import "core-js/stable/url-search-params";
-import "intersection-observer";
-import "whatwg-fetch";
 import { detailWatchedEnrichmentService } from "./data/repository/detailWatchedEnrichmentService.js";
 import { Router } from "./ui/navigation/router.js";
 import { FocusEngine } from "./ui/navigation/focusEngine.js";
@@ -90,81 +86,13 @@ function isLowEndDevice() {
   return lowCpu || lowMem;
 }
 
-function supportsFlexGap() {
-  if (typeof document === "undefined" || !document.body) {
-    return true;
-  }
-
-  const flex = document.createElement("div");
-  flex.style.display = "flex";
-  flex.style.flexDirection = "column";
-  flex.style.rowGap = "1px";
-  flex.style.position = "absolute";
-  flex.style.top = "-9999px";
-  flex.style.left = "-9999px";
-  flex.appendChild(document.createElement("div"));
-  flex.appendChild(document.createElement("div"));
-  document.body.appendChild(flex);
-  const supported = flex.scrollHeight === 1;
-  document.body.removeChild(flex);
-  return supported;
-}
-
-function supportsAspectRatio() {
-  const css = globalThis.CSS;
-  if (!css || typeof css.supports !== "function") {
-    return false;
-  }
-  return css.supports("aspect-ratio", "1 / 1");
-}
-
-function supportsCssGrid() {
-  const css = globalThis.CSS;
-  if (!css || typeof css.supports !== "function") {
-    return false;
-  }
-  return css.supports("display", "grid");
-}
-
-function supportsCssVars() {
-  const css = globalThis.CSS;
-  if (!css || typeof css.supports !== "function") {
-    return false;
-  }
-  return css.supports("--nuvio-probe", "0");
-}
-
-function supportsCssMath() {
-  const css = globalThis.CSS;
-  if (!css || typeof css.supports !== "function") {
-    return false;
-  }
-  return css.supports("font-size", "clamp(1px, 2px, 3px)");
-}
-
-function supportsBackdropFilter() {
-  const css = globalThis.CSS;
-  if (!css || typeof css.supports !== "function") {
-    return false;
-  }
-  return (
-    css.supports("backdrop-filter", "blur(1px)") ||
-    css.supports("-webkit-backdrop-filter", "blur(1px)")
-  );
-}
-
 function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
   const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
   const legacyWebOs = Platform.isWebOS() && (webOsMajorVersion === 0 || webOsMajorVersion <= 6);
   const legacyWebOs38 = Platform.isWebOS() && webOsMajorVersion > 0 && webOsMajorVersion <= 3;
   const legacyTizen = Platform.isTizen();
-  const flexGapUnsupported = !supportsFlexGap();
-  const aspectRatioUnsupported = !supportsAspectRatio();
-  const cssGridUnsupported = !supportsCssGrid();
-  const cssVarsUnsupported = !supportsCssVars();
-  const cssMathUnsupported = !supportsCssMath();
-  const backdropFilterUnsupported = !supportsBackdropFilter();
+  const rootClasses = document.documentElement.classList;
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
   document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
@@ -173,18 +101,14 @@ function applyPerformanceMode() {
   document.body.classList.toggle("legacy-webos38", legacyWebOs38);
   document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
   document.body.classList.toggle("legacy-tizen", legacyTizen);
-  document.documentElement.classList.toggle("no-flex-gap", flexGapUnsupported);
-  document.body.classList.toggle("no-flex-gap", flexGapUnsupported);
-  document.documentElement.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
-  document.body.classList.toggle("no-aspect-ratio", aspectRatioUnsupported);
-  document.documentElement.classList.toggle("no-css-grid", cssGridUnsupported);
-  document.body.classList.toggle("no-css-grid", cssGridUnsupported);
-  document.documentElement.classList.toggle("no-css-vars", cssVarsUnsupported);
-  document.body.classList.toggle("no-css-vars", cssVarsUnsupported);
-  document.documentElement.classList.toggle("no-css-math", cssMathUnsupported);
-  document.body.classList.toggle("no-css-math", cssMathUnsupported);
-  document.documentElement.classList.toggle("no-backdrop-filter", backdropFilterUnsupported);
-  document.body.classList.toggle("no-backdrop-filter", backdropFilterUnsupported);
+  [
+    "no-flex-gap",
+    "no-aspect-ratio",
+    "no-css-math",
+    "no-backdrop-filter"
+  ].forEach((className) => {
+    document.body.classList.toggle(className, rootClasses.contains(className));
+  });
 }
 
 function isAddonRemoteMode() {

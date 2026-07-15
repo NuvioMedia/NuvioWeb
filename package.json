@@ -25,13 +25,6 @@
     "sync:tizenbrew": "node ./scripts/sync-tizenbrew.mjs"
   },
   "devDependencies": {
-    "@babel/core": "^7.29.0",
-    "@babel/plugin-transform-nullish-coalescing-operator": "^7.28.6",
-    "@babel/plugin-transform-optional-chaining": "^7.28.6",
-    "@babel/plugin-transform-regenerator": "^7.29.0",
-    "@babel/plugin-transform-runtime": "^7.29.0",
-    "@babel/preset-env": "^7.29.2",
-    "@babel/runtime": "^7.29.2",
     "@csstools/postcss-global-data": "^4.0.0",
     "@eslint/js": "^9.39.4",
     "@webos-tools/cli": "^3.2.4",
@@ -43,13 +36,10 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.5.0",
     "postcss": "^8.5.9",
-    "postcss-custom-properties": "^15.0.1",
     "prettier": "^3.8.4"
   },
   "dependencies": {
-    "intersection-observer": "^0.12.2",
     "jszip": "^3.10.1",
-    "libbitsub": "^1.10.1",
-    "whatwg-fetch": "^3.6.20"
+    "libbitsub": "^1.10.1"
   }
 }

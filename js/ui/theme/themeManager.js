@@ -7,7 +7,7 @@ const FONT_STACKS = {
   OPEN_SANS: '"Open Sans", "Segoe UI", Arial, sans-serif'
 };
 
-// Cached once at module load. Chrome 38 / legacy webOS 3.x lack CSS.supports → false.
+// Cached once at module load so the theme can retain its capability fallback.
 const SUPPORTS_CSS_VARS =
   typeof window !== "undefined" &&
   !!window.CSS &&
@@ -48,8 +48,7 @@ export function buildLegacyThemeCss(colorMap) {
 
     // 2. Full-screen shells (AMOLED: bg → true black)
     `.home-shell, .home-sidebar, .home-main, .profile-screen, .search-screen-shell,` +
-      ` .discover-shell, .library-shell, .no-css-vars .home-shell,` +
-      ` .no-css-vars .home-sidebar, .no-css-vars .home-main { background: ${bg}; }`,
+      ` .discover-shell, .library-shell { background: ${bg}; }`,
 
     // 3. Elevated surfaces (cards, dialogs, panels)
     `.account-info, .sync-card, .status-card, .profile-editor-panel,` +
