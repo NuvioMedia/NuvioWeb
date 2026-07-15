@@ -160,6 +160,16 @@ export const Router = {
         }
         return;
       }
+      if (this.consumeRouteReturnBackGuard()) {
+        // A physical Tizen Back can also move browser history after its key
+        // event has already completed an in-app route return. Keep that late
+        // popstate on the restored screen instead of letting Home consume it
+        // as a second Back and open the sidebar.
+        if (window?.history && typeof window.history.pushState === "function") {
+          window.history.pushState({ route: this.current, params: this.currentParams }, "");
+        }
+        return;
+      }
       const shouldSkipConsume = Boolean(this.skipConsumeNextPopstate);
       this.skipConsumeNextPopstate = false;
       const state = event?.state || null;
@@ -241,8 +251,9 @@ export const Router = {
       this.routeReturnBackGuardUntil = 0;
       return false;
     }
-    this.routeReturnBackGuardActive = false;
-    this.routeReturnBackGuardUntil = 0;
+    // Treat this as a short guard window, not a one-shot flag. Samsung can
+    // report one physical Back through more than one key/history event; all
+    // copies that reach the newly restored route must be consumed.
     return true;
   },
 
