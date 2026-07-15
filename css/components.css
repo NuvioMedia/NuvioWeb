@@ -19491,20 +19491,20 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .legacy-webos .stream-route-stream-badge {
-  min-height: 20px;
-  padding: 0 6px;
-  border-radius: 5px;
-  font-size: 12px;
+  min-height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 15px;
 }
 
 .legacy-webos .stream-route-stream-badge.image {
-  min-width: 34px;
-  max-width: 90px;
+  min-width: 42px;
+  max-width: 116px;
 }
 
 .legacy-webos .stream-route-stream-badge.image img {
-  max-height: 16px;
-  max-width: 82px;
+  max-height: 21px;
+  max-width: 106px;
 }
 
 .legacy-webos .stream-route-card-line {
@@ -19670,16 +19670,16 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .stream-route-stream-badge {
-  min-height: 22px;
-  padding: 0 7px;
-  border-radius: 6px;
+  min-height: 30px;
+  padding: 0 9px;
+  border-radius: 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
-  font-size: 14px;
+  font-size: 17px;
   line-height: 1;
   font-weight: 500;
   white-space: nowrap;
@@ -19688,9 +19688,9 @@ html.no-css-grid .cast-detail-meta {
 }
 
 .stream-route-stream-badge.image {
-  padding: 2px 5px;
-  min-width: 38px;
-  max-width: 104px;
+  padding: 3px 7px;
+  min-width: 48px;
+  max-width: 132px;
   line-height: 0;
   overflow: hidden;
   background: transparent;
@@ -19698,18 +19698,18 @@ html.no-css-grid .cast-detail-meta {
 
 .stream-route-stream-badge.image img {
   display: block;
-  max-height: 18px;
-  max-width: 96px;
+  max-height: 24px;
+  max-width: 118px;
   object-fit: contain;
 }
 
 .stream-route-stream-badge.size {
-  min-height: 22px;
-  padding: 0 7px;
+  min-height: 30px;
+  padding: 0 9px;
   border-color: #0a0c0c;
   background: #0a0c0c;
   color: #ffffff;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 500;
 }
 
