@@ -4540,6 +4540,10 @@ export const SettingsScreen = {
       StreamBadgeSettingsStore.setShowFileSizeBadges(!badgeSettings.showFileSizeBadges);
     });
 
+    this.actionMap.set("streams:toggle:addonLogo", () => {
+      StreamBadgeSettingsStore.setShowAddonLogo(!badgeSettings.showAddonLogo);
+    });
+
     const badgePlacement =
       String(badgeSettings.badgePlacement || "BOTTOM")
         .trim()
@@ -4664,6 +4668,16 @@ export const SettingsScreen = {
               "Show file size badges in stream results and player source panels."
             ),
             checked: badgeSettings.showFileSizeBadges !== false
+          })}
+          ${this.renderToggleRow({
+            focusKey: "streams:toggle:addonLogo",
+            title: t("settings_stream_addon_logo_title", {}, "Addon logo"),
+            subtitle: t(
+              "settings_stream_addon_logo_description",
+              {},
+              "Show addon logo and name next to stream sources."
+            ),
+            checked: badgeSettings.showAddonLogo === true
           })}
           ${this.renderActionRow({
             focusKey: "streams:badgePlacement",

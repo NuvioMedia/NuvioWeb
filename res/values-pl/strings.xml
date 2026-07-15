@@ -2497,4 +2497,6 @@
     <string name="player.audio.unsupported">Nieobsługiwane</string>
     <string name="player.audio.unsupportedCodec">Kodek nie jest obsługiwany przez to urządzenie</string>
     <string name="player.audio.noSupportedTracks">Brak dostępnych obsługiwanych ścieżek audio</string>
+    <string name="settings_stream_addon_logo_title">Logo dodatku</string>
+    <string name="settings_stream_addon_logo_description">Pokazuj logo i nazwę dodatku obok źródeł.</string>
 </resources>

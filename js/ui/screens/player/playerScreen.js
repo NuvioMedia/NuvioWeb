@@ -14074,7 +14074,10 @@ export const PlayerScreen = {
   },
 
   async preloadPlayerSourceLogos(streams = this.getFilteredSources()) {
-    if (!Environment.isWebOS()) {
+    if (
+      StreamBadgeSettingsStore.snapshot().showAddonLogo !== true ||
+      !Environment.isWebOS()
+    ) {
       return;
     }
     try {
@@ -14116,6 +14119,7 @@ export const PlayerScreen = {
     const filters = this.getSourceFilters();
     const filtered = this.getFilteredSources();
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
+    const showAddonLogo = badgeSettings.showAddonLogo === true;
     const badgePlacement = resolvePlayerSourceBadgePlacement(badgeSettings);
     this.ensureSourcesFocus();
 
@@ -14157,20 +14161,32 @@ export const PlayerScreen = {
             const badges = renderPlayerSourceBadges(stream, badgeSettings);
             const topBadges = badgePlacement === "TOP" ? badges : "";
             const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
-            const addonLogoUrl = getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender());
+            const addonLogoUrl = showAddonLogo
+              ? getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender())
+              : "";
+            const playingMarker = isCurrent
+              ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>`
+              : "";
+            const sourceTitle = `<div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>`;
+            const mainTitle = !showAddonLogo && playingMarker
+              ? `<div class="player-source-title-row">${sourceTitle}${playingMarker}</div>`
+              : sourceTitle;
+            const sourceSide = showAddonLogo
+              ? `<div class="player-source-side">
+                  ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
+                  <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
+                  ${playingMarker}
+                </div>`
+              : "";
             return `
-              <article class="player-source-card focusable${focused ? " focused" : ""}${isCurrent ? " selected" : ""}" data-sources-zone="list" data-sources-index="${index}">
+              <article class="player-source-card${sourceSide ? "" : " no-side"} focusable${focused ? " focused" : ""}${isCurrent ? " selected" : ""}" data-sources-zone="list" data-sources-index="${index}">
                 <div class="player-source-main">
                   ${topBadges}
-                  <div class="player-source-title">${escapeHtml(stream.label || "Stream")}</div>
+                  ${mainTitle}
                   <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
                   ${bottomBadges}
                 </div>
-                <div class="player-source-side">
-                  ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
-                  <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
-                  ${isCurrent ? `<div class="player-source-playing">${escapeHtml(t("sources_playing", {}, "Playing"))}</div>` : ""}
-                </div>
+                ${sourceSide}
               </article>
             `;
           }).join("")}
@@ -15057,6 +15073,7 @@ export const PlayerScreen = {
     const streams = this.getFilteredEpisodePanelStreams();
     const focus = this.episodePanelStreamFocus || { zone: "actions", index: 0 };
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
+    const showAddonLogo = badgeSettings.showAddonLogo === true;
     const badgePlacement = resolvePlayerSourceBadgePlacement(badgeSettings);
     const episodeCode = episodeDisplayCode(selectedEpisode);
     const episodeTitle = String(
@@ -15122,9 +15139,17 @@ export const PlayerScreen = {
                   const badges = renderPlayerSourceBadges(stream, badgeSettings);
                   const topBadges = badgePlacement === "TOP" ? badges : "";
                   const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
-                  const addonLogoUrl = getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender());
+                  const addonLogoUrl = showAddonLogo
+                    ? getPlayerSourceLogoDisplayUrl(stream.addonLogo, () => this.scheduleSourceLogoRender())
+                    : "";
+                  const sourceSide = showAddonLogo
+                    ? `<div class="player-source-side">
+                        ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
+                        <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
+                      </div>`
+                    : "";
                   return `
-                    <article class="player-source-card player-episode-stream-card focusable${focused ? " focused" : ""}"
+                    <article class="player-source-card player-episode-stream-card${sourceSide ? "" : " no-side"} focusable${focused ? " focused" : ""}"
                              data-episode-stream-index="${index}">
                       <div class="player-source-main">
                         ${topBadges}
@@ -15132,10 +15157,7 @@ export const PlayerScreen = {
                         <div class="player-source-desc">${escapeHtml(stream.description || stream.addonName || "")}</div>
                         ${bottomBadges}
                       </div>
-                      <div class="player-source-side">
-                        ${addonLogoUrl ? `<img class="player-source-logo" src="${escapeAttribute(addonLogoUrl)}" alt="" decoding="async" loading="lazy" referrerpolicy="no-referrer" />` : ""}
-                        <div class="player-source-addon">${escapeHtml(stream.addonName || t("nav_addons", {}, "Addon"))}</div>
-                      </div>
+                      ${sourceSide}
                     </article>
                   `;
                 })

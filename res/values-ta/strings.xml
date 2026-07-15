@@ -2085,4 +2085,6 @@
     <string name="player.audio.unsupported">ஆதரிக்கப்படவில்லை</string>
     <string name="player.audio.unsupportedCodec">இந்தச் சாதனம் இந்த கோடெக்கை ஆதரிக்கவில்லை</string>
     <string name="player.audio.noSupportedTracks">ஆதரிக்கப்படும் ஆடியோ தடங்கள் எதுவும் இல்லை</string>
+    <string name="settings_stream_addon_logo_title">துணை நிரல் லோகோ</string>
+    <string name="settings_stream_addon_logo_description">ஸ்ட்ரீம் மூலங்களுக்கு அருகில் துணை நிரல் லோகோ மற்றும் பெயரைக் காட்டு.</string>
 </resources>

@@ -2612,4 +2612,6 @@
     <string name="player.audio.unsupported">Não suportado</string>
     <string name="player.audio.unsupportedCodec">Codec não suportado por este dispositivo</string>
     <string name="player.audio.noSupportedTracks">Nenhuma faixa de áudio suportada disponível</string>
+    <string name="settings_stream_addon_logo_title">Logótipo do addon</string>
+    <string name="settings_stream_addon_logo_description">Mostra o logótipo e o nome do addon junto das fontes de stream.</string>
 </resources>

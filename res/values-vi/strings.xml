@@ -933,4 +933,6 @@
     <string name="player.audio.unsupported">Không được hỗ trợ</string>
     <string name="player.audio.unsupportedCodec">Thiết bị này không hỗ trợ codec</string>
     <string name="player.audio.noSupportedTracks">Không có bản âm thanh được hỗ trợ</string>
+    <string name="settings_stream_addon_logo_title">Biểu tượng addon</string>
+    <string name="settings_stream_addon_logo_description">Hiển thị biểu tượng và tên addon bên cạnh mỗi nguồn phát</string>
 </resources>

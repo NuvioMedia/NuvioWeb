@@ -950,4 +950,6 @@
     <string name="player.audio.unsupported">לא נתמך</string>
     <string name="player.audio.unsupportedCodec">רכיב ה-Codec אינו נתמך במכשיר זה</string>
     <string name="player.audio.noSupportedTracks">אין רצועות שמע נתמכות זמינות</string>
+    <string name="settings_stream_addon_logo_title">לוגו התוסף</string>
+    <string name="settings_stream_addon_logo_description">הצגת הלוגו ושם התוסף לצד מקורות הסטרימינג.</string>
 </resources>

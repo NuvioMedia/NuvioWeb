@@ -1034,4 +1034,6 @@
     <string name="player.audio.unsupported">Ikke støttet</string>
     <string name="player.audio.unsupportedCodec">Kodeken støttes ikke av denne enheten</string>
     <string name="player.audio.noSupportedTracks">Ingen støttede lydspor er tilgjengelige</string>
+    <string name="settings_stream_addon_logo_title">Tilleggslogo</string>
+    <string name="settings_stream_addon_logo_description">Vis logoen og navnet til tillegget ved siden av strømmekildene.</string>
 </resources>

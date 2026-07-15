@@ -2203,4 +2203,6 @@
     <string name="player.audio.unsupported">Ni podprto</string>
     <string name="player.audio.unsupportedCodec">Ta naprava ne podpira kodeka</string>
     <string name="player.audio.noSupportedTracks">Na voljo ni podprtih zvočnih sledi</string>
+    <string name="settings_stream_addon_logo_title">Logotip dodatka</string>
+    <string name="settings_stream_addon_logo_description">Prikaži logotip in ime dodatka ob virih pretočnega predvajanja.</string>
 </resources>

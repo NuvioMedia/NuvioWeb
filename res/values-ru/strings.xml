@@ -2354,4 +2354,6 @@
     <string name="player.audio.unsupported">Не поддерживается</string>
     <string name="player.audio.unsupportedCodec">Кодек не поддерживается этим устройством</string>
     <string name="player.audio.noSupportedTracks">Нет доступных поддерживаемых аудиодорожек</string>
+    <string name="settings_stream_addon_logo_title">Логотип дополнения</string>
+    <string name="settings_stream_addon_logo_description">Показывать логотип и название дополнения рядом с источниками потоков.</string>
 </resources>

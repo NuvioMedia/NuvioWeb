@@ -13109,6 +13109,11 @@ html.legacy-webos .debug-console-log-frame {
   gap: 12px;
 }
 
+.player-source-card.no-side {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
 .player-source-card.focused {
   border-color: var(--player-focus-ring);
   background: var(--player-focus-background);
@@ -13121,6 +13126,21 @@ html.legacy-webos .debug-console-log-frame {
 
 .player-source-main {
   min-width: 0;
+}
+
+.player-source-title-row {
+  display: flex;
+  align-items: center;
+}
+
+.player-source-title-row .player-source-title {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.player-source-title-row .player-source-playing {
+  flex: 0 0 auto;
+  margin-left: 8px;
 }
 
 .player-source-title {

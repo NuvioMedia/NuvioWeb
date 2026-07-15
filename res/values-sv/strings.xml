@@ -1419,4 +1419,6 @@
     <string name="player.audio.unsupported">Stöds inte</string>
     <string name="player.audio.unsupportedCodec">Kodeken stöds inte av den här enheten</string>
     <string name="player.audio.noSupportedTracks">Inga ljudspår som stöds är tillgängliga</string>
+    <string name="settings_stream_addon_logo_title">Tilläggslogotyp</string>
+    <string name="settings_stream_addon_logo_description">Visa tilläggets logotyp och namn bredvid strömkällor.</string>
 </resources>

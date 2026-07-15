@@ -1473,6 +1473,7 @@ const FEATURE_ADAPTERS = {
       return {
         stream_badge_rules: rules.imports.length ? JSON.stringify(rules) : "",
         show_file_size_badges: settings.showFileSizeBadges !== false,
+        show_addon_logo: settings.showAddonLogo !== false,
         stream_badge_placement: settings.badgePlacement === "TOP" ? "TOP" : "BOTTOM"
       };
     },
@@ -1481,6 +1482,7 @@ const FEATURE_ADAPTERS = {
       const projected = {};
       projected.stream_badge_rules = String(raw.stream_badge_rules || "").trim();
       projected.show_file_size_badges = booleanFromAnyKey(raw, ["show_file_size_badges"]) ?? true;
+      projected.show_addon_logo = booleanFromAnyKey(raw, ["show_addon_logo"]) ?? true;
       projected.stream_badge_placement =
         String(raw.stream_badge_placement || raw.badge_placement || raw.badgePlacement || "")
           .trim()
@@ -1501,6 +1503,9 @@ const FEATURE_ADAPTERS = {
       }
       if (booleanOrNull(raw.show_file_size_badges) != null) {
         partial.showFileSizeBadges = Boolean(raw.show_file_size_badges);
+      }
+      if (booleanOrNull(raw.show_addon_logo) != null) {
+        partial.showAddonLogo = Boolean(raw.show_addon_logo);
       }
       const badgePlacement = String(
         raw.stream_badge_placement ?? raw.badge_placement ?? raw.badgePlacement ?? ""

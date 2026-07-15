@@ -2256,4 +2256,6 @@
     <string name="player.audio.unsupported">No compatible</string>
     <string name="player.audio.unsupportedCodec">Códec no compatible con este dispositivo</string>
     <string name="player.audio.noSupportedTracks">No hay pistas de audio compatibles disponibles</string>
+    <string name="settings_stream_addon_logo_title">Logotipo del complemento</string>
+    <string name="settings_stream_addon_logo_description">Muestra el logotipo y el nombre del complemento junto a las fuentes de transmisión.</string>
 </resources>

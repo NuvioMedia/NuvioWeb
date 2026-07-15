@@ -1807,4 +1807,6 @@
     <string name="player.audio.unsupported">Nepodporováno</string>
     <string name="player.audio.unsupportedCodec">Tento kodek zařízení nepodporuje</string>
     <string name="player.audio.noSupportedTracks">Nejsou k dispozici žádné podporované zvukové stopy</string>
+    <string name="settings_stream_addon_logo_title">Logo doplňku</string>
+    <string name="settings_stream_addon_logo_description">Zobrazovat logo a název doplňku vedle zdrojů streamů.</string>
 </resources>

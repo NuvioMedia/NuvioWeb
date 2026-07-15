@@ -2519,4 +2519,6 @@
     <string name="player.audio.unsupported">Non pris en charge</string>
     <string name="player.audio.unsupportedCodec">Codec non pris en charge par cet appareil</string>
     <string name="player.audio.noSupportedTracks">Aucune piste audio prise en charge disponible</string>
+    <string name="settings_stream_addon_logo_title">Logo de l’addon</string>
+    <string name="settings_stream_addon_logo_description">Affiche le logo et le nom de l’addon à côté des sources de streams.</string>
 </resources>
