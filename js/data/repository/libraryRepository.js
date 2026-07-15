@@ -301,6 +301,7 @@ async function hydrateEntries(entries, { onBatch = null, shouldContinue = null }
     listKeys: [...entry.listKeys],
     listMeta: { ...(entry.listMeta || {}) }
   }));
+  let hasPendingChanges = false;
 
   for (let index = 0; index < nextEntries.length; index += META_BATCH_SIZE) {
     if (shouldContinue && !shouldContinue()) {
@@ -363,8 +364,13 @@ async function hydrateEntries(entries, { onBatch = null, shouldContinue = null }
             ]);
       })
     );
-    if (didChange && (!shouldContinue || shouldContinue())) {
+    hasPendingChanges = hasPendingChanges || didChange;
+    const processedCount = Math.min(index + META_BATCH_SIZE, nextEntries.length);
+    const shouldNotify =
+      processedCount === nextEntries.length || processedCount % (META_BATCH_SIZE * 4) === 0;
+    if (hasPendingChanges && shouldNotify && (!shouldContinue || shouldContinue())) {
       onBatch?.(nextEntries);
+      hasPendingChanges = false;
     }
   }
 

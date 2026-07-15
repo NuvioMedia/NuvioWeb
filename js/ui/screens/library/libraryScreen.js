@@ -233,6 +233,7 @@ export const LibraryScreen = {
     this.pendingPosterOptionsFocusKey = "";
     this.pendingPosterHoldTarget = null;
     this.pendingPosterHoldTimer = null;
+    this.gridRows = [];
     this.lastPrivacyFocus = "private";
     this.partialContentRefresh = null;
 
@@ -528,6 +529,7 @@ export const LibraryScreen = {
       contentMount.outerHTML = this.renderLibraryContentArea(state);
     }
 
+    this.buildGridRows();
     ScreenUtils.indexFocusables(this.container);
     bindRootSidebarEvents(this.container, {
       currentRoute: "library",
@@ -810,6 +812,7 @@ export const LibraryScreen = {
     `;
     this.libraryRouteEnterPending = false;
 
+    this.buildGridRows();
     ScreenUtils.indexFocusables(this.container);
     bindRootSidebarEvents(this.container, {
       currentRoute: "library",
@@ -1126,17 +1129,18 @@ export const LibraryScreen = {
     return remembered || findNearestNodeByCenterX(referenceNode, cards) || cards[0] || null;
   },
 
+  buildGridRows() {
+    const cards = Array.from(
+      this.container?.querySelectorAll(".library-grid-card.focusable") || []
+    );
+    this.gridRows = cards.length ? groupNodesByRow(cards) : [];
+  },
+
   resolveRelativeGridNode(current, direction) {
     if (!current || !current.matches?.(".library-grid-card.focusable")) {
       return null;
     }
-    const cards = Array.from(
-      this.container?.querySelectorAll(".library-grid-card.focusable") || []
-    );
-    if (!cards.length) {
-      return null;
-    }
-    const rows = groupNodesByRow(cards);
+    const rows = this.gridRows || [];
     if (!rows.length) {
       return null;
     }
@@ -1184,14 +1188,7 @@ export const LibraryScreen = {
     if (!node?.matches?.(".library-grid-card.focusable")) {
       return false;
     }
-    const cards = Array.from(
-      this.container?.querySelectorAll(".library-grid-card.focusable") || []
-    );
-    if (!cards.length) {
-      return false;
-    }
-    const rows = groupNodesByRow(cards);
-    return Boolean(rows[0]?.nodes?.includes(node));
+    return Boolean(this.gridRows?.[0]?.nodes?.includes(node));
   },
 
   handleActionsRowNavigation(event, current) {
@@ -1237,7 +1234,7 @@ export const LibraryScreen = {
   },
 
   handleContentRowMemoryNavigation(event, current) {
-    const state = this.controller.getState();
+    const state = this.controller.state;
     if (state.sourceMode !== "trakt" || state.expandedPicker || !current) {
       return false;
     }
@@ -1757,7 +1754,7 @@ export const LibraryScreen = {
       return;
     }
 
-    const state = this.controller.getState();
+    const state = this.controller.state;
     const code = Number(event?.keyCode || 0);
     if (this.suppressHoldMenuEnterUntilKeyUp && code === 13) {
       event?.preventDefault?.();
@@ -1888,6 +1885,7 @@ export const LibraryScreen = {
     this.posterOptionsController = null;
     this.pendingPosterOptionsFocusKey = "";
     this.suppressHoldMenuEnterUntilKeyUp = false;
+    this.gridRows = [];
     this.controller?.dispose?.();
     this.controller = null;
     ScreenUtils.hide(this.container);
