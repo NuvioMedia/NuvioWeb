@@ -757,4 +757,6 @@
     <string name="player.audio.unsupported">Neacceptat</string>
     <string name="player.audio.unsupportedCodec">Codecul nu este acceptat de acest dispozitiv</string>
     <string name="player.audio.noSupportedTracks">Nu sunt disponibile piste audio acceptate</string>
+    <string name="settings_stream_addon_logo_title">Siglă extensie</string>
+    <string name="settings_stream_addon_logo_description">Afișează sigla și numele extensiei lângă sursele fluxului.</string>
 </resources>

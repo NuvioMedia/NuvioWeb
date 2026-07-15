@@ -1223,4 +1223,6 @@
     <string name="player.audio.unsupported">非対応</string>
     <string name="player.audio.unsupportedCodec">このデバイスではコーデックがサポートされていません</string>
     <string name="player.audio.noSupportedTracks">対応している音声トラックがありません</string>
+    <string name="settings_stream_addon_logo_title">アドオンロゴ</string>
+    <string name="settings_stream_addon_logo_description">ストリームソースの横にアドオンのロゴと名前を表示します。</string>
 </resources>

@@ -13109,6 +13109,11 @@ html.legacy-webos .debug-console-log-frame {
   gap: 12px;
 }
 
+.player-source-card.no-side {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
 .player-source-card.focused {
   border-color: var(--player-focus-ring);
   background: var(--player-focus-background);

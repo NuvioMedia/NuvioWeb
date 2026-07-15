@@ -2360,4 +2360,6 @@
     <string name="player.audio.unsupported">Desteklenmiyor</string>
     <string name="player.audio.unsupportedCodec">Codec bu cihaz tarafından desteklenmiyor</string>
     <string name="player.audio.noSupportedTracks">Desteklenen ses parçası bulunmuyor</string>
+    <string name="settings_stream_addon_logo_title">Eklenti logosu</string>
+    <string name="settings_stream_addon_logo_description">Yayın kaynaklarının yanında eklenti logosunu ve adını göster.</string>
 </resources>

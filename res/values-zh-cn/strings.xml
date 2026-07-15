@@ -2173,4 +2173,6 @@
     <string name="player.audio.unsupported">不支持</string>
     <string name="player.audio.unsupportedCodec">此设备不支持该编解码器</string>
     <string name="player.audio.noSupportedTracks">没有可用的受支持音轨</string>
+    <string name="settings_stream_addon_logo_title">插件徽标</string>
+    <string name="settings_stream_addon_logo_description">在流媒体源旁显示插件徽标和名称。</string>
 </resources>

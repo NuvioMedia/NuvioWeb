@@ -2256,4 +2256,6 @@
     <string name="player.audio.unsupported">Tidak didukung</string>
     <string name="player.audio.unsupportedCodec">Codec tidak didukung oleh perangkat ini</string>
     <string name="player.audio.noSupportedTracks">Tidak ada trek audio yang didukung</string>
+    <string name="settings_stream_addon_logo_title">Logo addon</string>
+    <string name="settings_stream_addon_logo_description">Tampilkan logo dan nama addon di samping sumber streaming.</string>
 </resources>

@@ -2646,4 +2646,6 @@
     <string name="playback_net_chunk_size">Dimensione chunk</string>
     <string name="playback_net_chunk_size_sub">Dimensione di ogni chunk di download per connessione. Chunk più grandi riducono l\'overhead ma usano più memoria.</string>
     <string name="contributor_role_app_maintainer">Responsabile di questa app</string>
+    <string name="settings_stream_addon_logo_title">Logo Addon</string>
+    <string name="settings_stream_addon_logo_description">Mostra il logo e il nome dell'addon accanto alle sorgenti degli stream.</string>
 </resources>

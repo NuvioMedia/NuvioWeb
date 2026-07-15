@@ -2234,4 +2234,6 @@
     <string name="player.audio.unsupported">Δεν υποστηρίζεται</string>
     <string name="player.audio.unsupportedCodec">Ο κωδικοποιητής δεν υποστηρίζεται από αυτήν τη συσκευή</string>
     <string name="player.audio.noSupportedTracks">Δεν υπάρχουν διαθέσιμα υποστηριζόμενα κομμάτια ήχου</string>
+    <string name="settings_stream_addon_logo_title">Λογότυπο πρόσθετου</string>
+    <string name="settings_stream_addon_logo_description">Εμφάνιση λογότυπου και ονόματος πρόσθετου δίπλα στις πηγές ροής.</string>
 </resources>

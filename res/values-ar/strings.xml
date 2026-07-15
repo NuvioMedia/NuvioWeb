@@ -1361,4 +1361,6 @@
     <string name="player.audio.unsupported">غير مدعوم</string>
     <string name="player.audio.unsupportedCodec">برنامج الترميز غير مدعوم على هذا الجهاز</string>
     <string name="player.audio.noSupportedTracks">لا تتوفر مسارات صوتية مدعومة</string>
+    <string name="settings_stream_addon_logo_title">شعار الإضافة</string>
+    <string name="settings_stream_addon_logo_description">عرض شعار الإضافة واسمها بجانب مصادر البث.</string>
 </resources>

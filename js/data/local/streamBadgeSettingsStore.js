@@ -11,6 +11,7 @@ const LEGACY_DEBRID_KEY = "debridSettings";
 const DEFAULT_STREAM_BADGE_SETTINGS = {
   rules: { imports: [] },
   showFileSizeBadges: true,
+  showAddonLogo: false,
   badgePlacement: "BOTTOM"
 };
 
@@ -31,6 +32,7 @@ function normalizeStreamBadgeSettings(value = {}) {
     source.payload ??
     null;
   const showFileSizeBadges = source.showFileSizeBadges ?? source.show_file_size_badges;
+  const showAddonLogo = source.showAddonLogo ?? source.show_addon_logo;
   const badgePlacement =
     source.badgePlacement ??
     source.badge_placement ??
@@ -39,6 +41,7 @@ function normalizeStreamBadgeSettings(value = {}) {
   return {
     rules: normalizeStreamBadgeRules(rulesSource),
     showFileSizeBadges: showFileSizeBadges !== false,
+    showAddonLogo: showAddonLogo === true,
     badgePlacement: normalizeBadgePlacement(badgePlacement)
   };
 }
@@ -195,6 +198,10 @@ export const StreamBadgeSettingsStore = {
 
   setShowFileSizeBadges(enabled) {
     store.set({ showFileSizeBadges: Boolean(enabled) });
+  },
+
+  setShowAddonLogo(enabled) {
+    store.set({ showAddonLogo: Boolean(enabled) });
   },
 
   setBadgePlacement(placement) {

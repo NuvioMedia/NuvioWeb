@@ -2084,4 +2084,6 @@
     <string name="player.audio.unsupported">Nicht unterstützt</string>
     <string name="player.audio.unsupportedCodec">Codec wird von diesem Gerät nicht unterstützt</string>
     <string name="player.audio.noSupportedTracks">Keine unterstützten Audiospuren verfügbar</string>
+    <string name="settings_stream_addon_logo_title">Add-on-Logo</string>
+    <string name="settings_stream_addon_logo_description">Zeige das Logo und den Namen des Add-ons neben Stream-Quellen an.</string>
 </resources>

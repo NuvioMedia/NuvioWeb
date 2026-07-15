@@ -875,6 +875,9 @@ export const StreamScreen = {
   },
 
   areAddonLogosReady(streams = []) {
+    if (StreamBadgeSettingsStore.snapshot().showAddonLogo !== true) {
+      return true;
+    }
     return (streams || []).every((stream) => {
       const addonLogoUrl =
         normalizeAddonLogoUrl(stream?.addonLogo) ||
@@ -887,6 +890,9 @@ export const StreamScreen = {
   },
 
   requestAddonLogoPrerender(streams = []) {
+    if (StreamBadgeSettingsStore.snapshot().showAddonLogo !== true) {
+      return;
+    }
     const urls = Array.from(
       new Set(
         (streams || [])
@@ -1082,7 +1088,8 @@ export const StreamScreen = {
       this.listScrollTop = Number(restored.listScrollTop || 0);
     }
 
-    if (restored && this.streams.length) {
+    const showAddonLogo = StreamBadgeSettingsStore.snapshot().showAddonLogo === true;
+    if (restored && this.streams.length && showAddonLogo) {
       await ensureAddonLogoImageProxyReady();
       if (token !== this.loadToken || Router.getCurrent() !== "stream") {
         return;
@@ -1122,12 +1129,15 @@ export const StreamScreen = {
     if (!this.hasRenderedStreamRouteShell) {
       this.requestRender();
     }
-    await ensureAddonLogoImageProxyReady();
-    if (token !== this.loadToken) {
-      return;
-    }
     const pendingChunkTasks = new Set();
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
+    const showAddonLogo = badgeSettings.showAddonLogo === true;
+    if (showAddonLogo) {
+      await ensureAddonLogoImageProxyReady();
+      if (token !== this.loadToken) {
+        return;
+      }
+    }
 
     const upsertSourceChip = (addon, status = "loading") => {
       const name = String(addon?.displayName || addon?.name || "").trim();
@@ -1215,7 +1225,9 @@ export const StreamScreen = {
       }
       await Promise.all([
         preloadMatchedStreamBadgeImages(chunkStreams, badgeSettings),
-        preloadAddonLogoImages(chunkStreams, this.addonLogoLookup)
+        ...(showAddonLogo
+          ? [preloadAddonLogoImages(chunkStreams, this.addonLogoLookup)]
+          : [])
       ]);
       if (token !== this.loadToken) {
         return;
@@ -1294,7 +1306,9 @@ export const StreamScreen = {
       if (missingStreams.length) {
         await Promise.all([
           preloadMatchedStreamBadgeImages(missingStreams, badgeSettings),
-          preloadAddonLogoImages(missingStreams, this.addonLogoLookup)
+          ...(showAddonLogo
+            ? [preloadAddonLogoImages(missingStreams, this.addonLogoLookup)]
+            : [])
         ]);
         if (token !== this.loadToken) {
           return;
@@ -1303,7 +1317,7 @@ export const StreamScreen = {
       }
       this.scheduleDebridPreparation();
       markSuccessfulSources(this.streams.map((stream) => stream.addonName));
-      if (this.streams.length) {
+      if (this.streams.length && showAddonLogo) {
         await preloadAddonLogoImages(this.streams, this.addonLogoLookup);
       }
       this.sourceChips = this.sourceChips.map((chip) =>
@@ -2099,27 +2113,36 @@ export const StreamScreen = {
     const headline = getStreamHeadline(stream);
     const quality = getStreamQuality(stream);
     const badges = renderStreamBadges(stream, streamBadgesEnabled, badgeSettings);
+    const showAddonLogo = badgeSettings?.showAddonLogo === true;
     const badgePlacement = resolveStreamBadgePlacement(badgeSettings);
     const topBadges = badgePlacement === "TOP" ? badges : "";
     const bottomBadges = badgePlacement === "BOTTOM" ? badges : "";
     const descriptionLines = getStreamDescriptionLines(stream);
-    const addonLogoUrl =
-      normalizeAddonLogoUrl(stream.addonLogo) ||
-      resolveAddonLogo(stream.addonName, this.addonLogoLookup);
-    const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
-    let displayAddonLogoUrl = cachedAddonLogoUrl || "";
-    if (addonLogoUrl && !displayAddonLogoUrl && !hasFailedAddonLogo(addonLogoUrl)) {
-      requestAddonLogo(addonLogoUrl, () => this.requestRender({ delayMs: 160 }));
-      if (Environment.isWebOS()) {
-        displayAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
+    let addonIdentity = "";
+    if (showAddonLogo) {
+      const addonLogoUrl =
+        normalizeAddonLogoUrl(stream.addonLogo) ||
+        resolveAddonLogo(stream.addonName, this.addonLogoLookup);
+      const cachedAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
+      let displayAddonLogoUrl = cachedAddonLogoUrl || "";
+      if (addonLogoUrl && !displayAddonLogoUrl && !hasFailedAddonLogo(addonLogoUrl)) {
+        requestAddonLogo(addonLogoUrl, () => this.requestRender({ delayMs: 160 }));
+        if (Environment.isWebOS()) {
+          displayAddonLogoUrl = getCachedAddonLogoDisplayUrl(addonLogoUrl);
+        }
       }
+      const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
+      const addonLogoLoading = Environment.isWebOS() || Environment.isTizen() ? "eager" : "lazy";
+      const addonLogoDecoding = Environment.isWebOS() || Environment.isTizen() ? "sync" : "async";
+      const addonBadge = displayAddonLogoUrl
+        ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="${addonLogoDecoding}" loading="${addonLogoLoading}" referrerpolicy="no-referrer" /><span hidden>${addonBadgeLabel}</span>`
+        : `<span>${addonBadgeLabel}</span>`;
+      addonIdentity = `
+          <div class="stream-route-card-side">
+            <div class="stream-route-addon-badge">${addonBadge}</div>
+            <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
+          </div>`;
     }
-    const addonBadgeLabel = escapeHtml(getAddonBadgeLabel(stream.addonName || ""));
-    const addonLogoLoading = Environment.isWebOS() || Environment.isTizen() ? "eager" : "lazy";
-    const addonLogoDecoding = Environment.isWebOS() || Environment.isTizen() ? "sync" : "async";
-    const addonBadge = displayAddonLogoUrl
-      ? `<img src="${escapeHtml(displayAddonLogoUrl)}" alt="${escapeHtml(stream.addonName || "Addon")}" data-addon-logo="${escapeHtml(addonLogoUrl)}" decoding="${addonLogoDecoding}" loading="${addonLogoLoading}" referrerpolicy="no-referrer" /><span hidden>${addonBadgeLabel}</span>`
-      : `<span>${addonBadgeLabel}</span>`;
 
     return `
       <div class="stream-route-card-row" data-stream-row="${index}">
@@ -2135,10 +2158,7 @@ export const StreamScreen = {
             ${descriptionLines.map((line, lineIndex) => `<div class="stream-route-card-line${lineIndex > 0 ? " secondary" : ""}">${escapeHtml(line)}</div>`).join("")}
             ${bottomBadges || ""}
           </div>
-          <div class="stream-route-card-side">
-            <div class="stream-route-addon-badge">${addonBadge}</div>
-            <div class="stream-route-addon-name">${escapeHtml(stream.addonName || "Addon")}</div>
-          </div>
+          ${addonIdentity}
         </article>
       </div>
     `;
@@ -2182,7 +2202,8 @@ export const StreamScreen = {
     const hasAnyStreams = this.streams.length > 0;
     const streamBadgesEnabled = DebridSettingsStore.get().streamBadgesEnabled !== false;
     const badgeSettings = StreamBadgeSettingsStore.snapshot();
-    const addonLogosReady = !filtered.length || this.areAddonLogosReady(filtered);
+    const showAddonLogo = badgeSettings.showAddonLogo === true;
+    const addonLogosReady = !showAddonLogo || !filtered.length || this.areAddonLogosReady(filtered);
 
     let body = "";
     if (filtered.length && addonLogosReady) {
@@ -2194,7 +2215,7 @@ export const StreamScreen = {
       if (hasPendingForFilter) {
         body += this.renderLoadingCards(1);
       }
-    } else if (filtered.length) {
+    } else if (filtered.length && showAddonLogo) {
       this.requestAddonLogoPrerender(filtered);
       body = this.renderLoadingCards(Math.min(3, filtered.length));
     } else if ((this.loading && !hasAnyStreams) || hasPendingForFilter) {

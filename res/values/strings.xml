@@ -1017,6 +1017,8 @@
     <string name="settings_stream_badges_description">Show quality, HDR, codec, audio, and size chips in source results.</string>
     <string name="settings_stream_size_badges_title">Size badges</string>
     <string name="settings_stream_size_badges_description">Show file size badges in stream results and player source panels.</string>
+    <string name="settings_stream_addon_logo_title">Addon logo</string>
+    <string name="settings_stream_addon_logo_description">Show addon logo and name next to stream sources.</string>
     <string name="settings_stream_badge_position_title">Badge position</string>
     <string name="settings_stream_badge_position_description">Choose whether Fusion and size badges appear above or below stream cards.</string>
     <string name="settings_stream_badge_position_dialog_title">Badge position</string>

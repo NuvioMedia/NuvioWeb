@@ -913,4 +913,6 @@
     <string name="player.audio.unsupported">Niet ondersteund</string>
     <string name="player.audio.unsupportedCodec">Codec wordt niet ondersteund door dit apparaat</string>
     <string name="player.audio.noSupportedTracks">Geen ondersteunde audiotracks beschikbaar</string>
+    <string name="settings_stream_addon_logo_title">Addon-logo</string>
+    <string name="settings_stream_addon_logo_description">Toon addon-logo en -naam naast streambronnen.</string>
 </resources>

@@ -1043,4 +1043,6 @@
     <string name="player.audio.unsupported">समर्थित नहीं</string>
     <string name="player.audio.unsupportedCodec">यह डिवाइस इस कोडेक का समर्थन नहीं करता</string>
     <string name="player.audio.noSupportedTracks">कोई समर्थित ऑडियो ट्रैक उपलब्ध नहीं है</string>
+    <string name="settings_stream_addon_logo_title">ऐड-ऑन लोगो</string>
+    <string name="settings_stream_addon_logo_description">स्ट्रीम स्रोतों के आगे ऐड-ऑन का लोगो और नाम दिखाएँ।</string>
 </resources>
