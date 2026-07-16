@@ -74,18 +74,9 @@ function resolveDistPathForRootFile(rootFilePath) {
 async function resolveRequestFile(pathname) {
   const rootPath = resolveRequestPath(pathname);
   const rootStat = await stat(rootPath).catch(() => null);
-
-  if (!String(pathname || "").startsWith("/css/")) {
-    return { filePath: rootPath, fileStat: rootStat };
-  }
-
   const distPath = resolveDistPathForRootFile(rootPath);
   const distStat = distPath ? await stat(distPath).catch(() => null) : null;
-  if (!distStat?.isFile()) {
-    return { filePath: rootPath, fileStat: rootStat };
-  }
-
-  if (!rootStat?.isFile() || distStat.mtimeMs >= rootStat.mtimeMs) {
+  if (distStat?.isFile()) {
     return { filePath: distPath, fileStat: distStat };
   }
 

@@ -2,21 +2,18 @@ import { cp, mkdir, readFile, rm, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { transformAsync } from "@babel/core";
 import postcssGlobalData from "@csstools/postcss-global-data";
 import postcss from "postcss";
 import cssnano from "cssnano";
 import autoprefixer from "autoprefixer";
-import postcssCustomProperties from "postcss-custom-properties";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { compatibilityPolicy } from "./compatibilityPolicy.mjs";
 import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
-const cacheDir = path.join(rootDir, ".cache");
 const bundleFileName = "app.bundle.js";
-const tempBundlePath = path.join(cacheDir, "__app.bundle.build.js");
 const requireConfiguredRuntimeEnv = /^(1|true|yes|on)$/i.test(
   String(process.env.NUVIO_REQUIRE_LOCAL_PROPERTIES || "")
 );
@@ -282,64 +279,6 @@ function unsupportedSelectorFallbackPlugin() {
 
 unsupportedSelectorFallbackPlugin.postcss = true;
 
-function gridFallbackPlugin() {
-  return {
-    postcssPlugin: "nuvio-grid-fallback",
-    Rule(rule) {
-      if (!rule.selector) {
-        return;
-      }
-
-      let displayGrid = false;
-      let rowGap = null;
-      let columnGap = null;
-
-      rule.walkDecls((decl) => {
-        const prop = decl.prop.toLowerCase();
-        if (prop === "display" && /\bgrid\b/.test(decl.value)) {
-          displayGrid = true;
-          return;
-        }
-        if (prop === "gap") {
-          const values = splitTopLevelSpaces(decl.value).map(toLegacyLengthValue);
-          rowGap = values[0] || "0";
-          columnGap = values[1] || rowGap;
-          return;
-        }
-        if (prop === "row-gap") {
-          rowGap = toLegacyLengthValue(decl.value);
-          return;
-        }
-        if (prop === "column-gap") {
-          columnGap = toLegacyLengthValue(decl.value);
-        }
-      });
-
-      if (!displayGrid) {
-        return;
-      }
-
-      rowGap ||= "0";
-      columnGap ||= "0";
-      const scopedSelectors = rule.selectors.map((selector) => `html.no-css-grid ${selector}`);
-      const fallback = postcss.rule({ selectors: scopedSelectors });
-      fallback.append({ prop: "display", value: "flex" });
-      fallback.append({ prop: "flex-wrap", value: "wrap" });
-
-      const childFallback = postcss.rule({
-        selectors: scopedSelectors.map((selector) => `${selector} > *`)
-      });
-      childFallback.append({ prop: "margin-right", value: columnGap });
-      childFallback.append({ prop: "margin-bottom", value: rowGap });
-
-      rule.after(childFallback);
-      rule.after(fallback);
-    }
-  };
-}
-
-gridFallbackPlugin.postcss = true;
-
 function flexGapFallbackPlugin() {
   return {
     postcssPlugin: "nuvio-flex-gap-fallback",
@@ -443,11 +382,12 @@ async function buildCSS() {
     const css = await readFile(cssPath, "utf8");
     const result = await postcss([
       postcssGlobalData({ files: [path.join(cssDir, "base.css")] }),
-      postcssCustomProperties({ preserve: true }),
-      autoprefixer({ overrideBrowserslist: ["Chrome 38"], grid: "autoplace" }),
+      autoprefixer({
+        overrideBrowserslist: [`Chrome ${compatibilityPolicy.chromiumVersion}`],
+        grid: "autoplace"
+      }),
       legacyDeclarationFallbackPlugin(),
       unsupportedSelectorFallbackPlugin(),
-      gridFallbackPlugin(),
       flexGapFallbackPlugin(),
       cssnano()
     ]).process(css, { from: cssPath, to: outPath });
@@ -489,69 +429,19 @@ async function buildBundle() {
   const { version } = await readAppMetadata();
 
   console.log("starting bundle build...");
-  await mkdir(cacheDir, { recursive: true });
-
-  // create a temporary bundle for babel to process
   await build({
     entryPoints: [path.join(rootDir, "js/app.js")],
-    outfile: tempBundlePath,
-    bundle: true,
-    format: "iife",
-    target: ["es2015"],
-    define: {
-      "process.env.NODE_ENV": '"production"',
-      __NUVIO_APP_VERSION__: JSON.stringify(version)
-    }
-  });
-
-  console.log("applying Babel transpilation...");
-  const bundledCode = await readFile(tempBundlePath, "utf8");
-  const babelResult = await transformAsync(bundledCode, {
-    presets: [
-      [
-        "@babel/preset-env",
-        {
-          targets: "chrome 38",
-          useBuiltIns: "entry",
-          corejs: 3
-        }
-      ]
-    ],
-    plugins: [
-      // babel plugins
-      "@babel/plugin-transform-runtime",
-      "@babel/plugin-transform-optional-chaining",
-      "@babel/plugin-transform-nullish-coalescing-operator"
-    ],
-    compact: !debugBundle,
-    minified: !debugBundle,
-    sourceMaps: debugBundle
-  });
-
-  // save result back to the temporary bundle file (which will be the input for esbuild)
-  await writeFile(tempBundlePath, babelResult.code, "utf8");
-
-  // flattening
-  // babel introduces some helper functions that are not tree-shakeable, so we need to bundle again with esbuild to flatten everything into a single file and remove any remaining unused code
-  console.log("finalizing bundle with esbuild...");
-  await build({
-    entryPoints: [tempBundlePath],
     outfile: path.join(distDir, bundleFileName),
     bundle: true,
     minify: !debugBundle,
     format: "iife",
     sourcemap: debugBundle,
-    target: ["es5"],
-    supported: {
-      arrow: false,
-      "const-and-let": false,
-      "template-literal": false,
-      "object-extensions": false
+    target: [`chrome${compatibilityPolicy.chromiumVersion}`],
+    define: {
+      "process.env.NODE_ENV": '"production"',
+      __NUVIO_APP_VERSION__: JSON.stringify(version)
     }
   });
-
-  await cp(path.join(distDir, bundleFileName), path.join(rootDir, bundleFileName));
-  await rm(tempBundlePath).catch(() => {});
   console.log("bundle build complete");
 }
 async function runBuild() {
