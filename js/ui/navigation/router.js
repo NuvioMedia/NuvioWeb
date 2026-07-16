@@ -160,6 +160,7 @@ export const Router = {
         }
         return;
       }
+      const state = event?.state || null;
       if (this.consumeRouteReturnBackGuard()) {
         // A physical Tizen Back can also move browser history after its key
         // event has already completed an in-app route return. Keep that late
@@ -170,9 +171,15 @@ export const Router = {
         }
         return;
       }
+      if (Platform.isTizen() && this.current === "home" && state?.route === "home") {
+        // A native history event can arrive after the timed route-return guard
+        // has expired. Home is already restored, so forwarding this redundant
+        // transition would make Home consume it as another Back and open the
+        // sidebar.
+        return;
+      }
       const shouldSkipConsume = Boolean(this.skipConsumeNextPopstate);
       this.skipConsumeNextPopstate = false;
-      const state = event?.state || null;
       const currentScreen = this.getCurrentScreen();
       const shouldLetPlayerReturnToStream = this.current === "player"
         && state?.route === "stream"
