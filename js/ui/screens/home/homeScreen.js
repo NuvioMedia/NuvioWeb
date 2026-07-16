@@ -130,6 +130,21 @@ function t(key, params = {}, fallback = key) {
   return I18n.t(key, params, { fallback });
 }
 
+function getDirectionFromKeyCode(keyCode) {
+  switch (Number(keyCode || 0)) {
+    case 37:
+      return "left";
+    case 38:
+      return "up";
+    case 39:
+      return "right";
+    case 40:
+      return "down";
+    default:
+      return null;
+  }
+}
+
 async function getLocalSidebarProfileState() {
   const activeProfileId = String(ProfileManager.getActiveProfileId() || "");
   const profiles = await ProfileManager.getProfiles();
@@ -2656,17 +2671,16 @@ export const HomeScreen = {
       ? Math.max(0, container.scrollHeight - container.clientHeight)
       : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const key = axis === "y" ? "y" : "x";
     const startValue = Number(container[property] || 0);
     if (Math.abs(startValue - nextValue) <= 1) {
       container[property] = nextValue;
       return;
     }
-
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     const effectiveDuration = Math.max(0, Number(duration || 0));
     const springMap = this.springScrollAnimations || (this.springScrollAnimations = new WeakMap());
     const springState = springMap.get(container);
-    const key = axis === "y" ? "y" : "x";
     if (springState?.[key]?.raf) {
       cancelAnimationFrame(springState[key].raf);
       springState[key] = null;
@@ -2713,6 +2727,7 @@ export const HomeScreen = {
       ? Math.max(0, container.scrollHeight - container.clientHeight)
       : Math.max(0, container.scrollWidth - container.clientWidth);
     const nextValue = Math.max(0, Math.min(max, Math.round(targetValue)));
+    const key = axis === "y" ? "y" : "x";
     const prefersReducedMotion = globalThis?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
     if (prefersReducedMotion) {
       container[property] = nextValue;
@@ -2721,7 +2736,6 @@ export const HomeScreen = {
 
     const tweenMap = this.scrollAnimations || (this.scrollAnimations = new WeakMap());
     const tweenState = tweenMap.get(container);
-    const key = axis === "y" ? "y" : "x";
     if (tweenState?.[key]) {
       cancelAnimationFrame(tweenState[key]);
       tweenState[key] = null;
@@ -2835,6 +2849,9 @@ export const HomeScreen = {
       return false;
     }
     if (this.modernCameraFollowTimer) {
+      return true;
+    }
+    if (this.modernVerticalFastScrollState) {
       return true;
     }
     return this.isScrollAnimationActive(this.modernCameraFollowLastVerticalContainer, "y")
@@ -3114,7 +3131,12 @@ export const HomeScreen = {
     return !this.isPerformanceConstrained();
   },
 
-  getDirectionalRepeatThrottleMs() {
+  getDirectionalRepeatThrottleMs(direction = null) {
+    if (!Platform.isBrowser()) {
+      return direction === "up" || direction === "down"
+        ? MODERN_HOME_CONSTANTS.verticalKeyRepeatThrottleMs
+        : MODERN_HOME_CONSTANTS.keyRepeatThrottleMs;
+    }
     if (this.isLegacyTvRuntime()) {
       return Math.max(MODERN_HOME_CONSTANTS.keyRepeatThrottleMs, 120);
     }
@@ -6097,6 +6119,7 @@ export const HomeScreen = {
     this.modernVerticalFastScrollState = null;
     if (land && state?.direction) {
       this.landModernVerticalFastScroll(state.direction);
+      this.scheduleHomeLazyImageHydration(this.getCurrentFocusedNode());
     }
   },
 
@@ -6118,6 +6141,11 @@ export const HomeScreen = {
       return false;
     }
     this.cancelModernCameraFollow({ stopAnimations: true });
+    if (this._mainVertRaf) {
+      cancelAnimationFrame(this._mainVertRaf);
+      this._mainVertRaf = null;
+    }
+    this.cancelScrollAnimation(main, "y");
     if (!this.canModernFastScroll(main, direction)) {
       this.endModernVerticalFastScroll({ land: true });
       return true;
@@ -6129,6 +6157,14 @@ export const HomeScreen = {
       return true;
     }
     this.endModernVerticalFastScroll({ land: false });
+    if (this.homeViewportFocusSyncTimer) {
+      clearTimeout(this.homeViewportFocusSyncTimer);
+      this.homeViewportFocusSyncTimer = null;
+    }
+    if (this.homeLazyImageHydrationRaf) {
+      cancelAnimationFrame(this.homeLazyImageHydrationRaf);
+      this.homeLazyImageHydrationRaf = 0;
+    }
 
     const state = {
       container: main,
@@ -6232,11 +6268,12 @@ export const HomeScreen = {
         if (delta <= 1) {
           return;
         }
-        if (this.isPerformanceConstrained()) {
+        if (Platform.isBrowser() && this.isPerformanceConstrained()) {
           this.cancelScrollAnimation(next.container, "y");
           next.container.scrollTop = Math.round(Number(next.value || 0));
           return;
         }
+        this.modernCameraFollowLastVerticalContainer = next.container;
         this.animateSpringScroll(next.container, "y", next.value);
       });
       return;
@@ -6330,6 +6367,7 @@ export const HomeScreen = {
           next.container.scrollLeft = Math.round(Number(next.value || 0));
           return;
         }
+        this.modernCameraFollowLastHorizontalContainer = next.container;
         this.animateSpringScroll(next.container, "x", next.value);
       });
       return;
@@ -6423,6 +6461,7 @@ export const HomeScreen = {
           this.ensureMainVerticalVisibility(target, direction, current, scrollAdjustments.vertical);
         }
       }
+      this.scheduleModernTrackPaginationForFocus(target);
       if (shouldDeferFocusEffects) {
         this.cancelPendingHeroFocus();
         this.cancelFocusedPosterFlow();
@@ -6569,11 +6608,7 @@ export const HomeScreen = {
 
   handleHomeDpad(event) {
     const keyCode = Number(event?.keyCode || 0);
-    const direction = keyCode === 38 ? "up"
-      : keyCode === 40 ? "down"
-        : keyCode === 37 ? "left"
-          : keyCode === 39 ? "right"
-            : null;
+    const direction = getDirectionFromKeyCode(keyCode);
     if (!direction) {
       return false;
     }
@@ -6582,6 +6617,20 @@ export const HomeScreen = {
     if (!nav) {
       return false;
     }
+
+    const activeFastScroll = this.modernVerticalFastScrollState || null;
+    const requestedFastScrollDirection = direction === "down" ? 1 : direction === "up" ? -1 : 0;
+    if (
+      activeFastScroll
+      && (
+        direction === "left"
+        || direction === "right"
+        || (!event?.repeat && requestedFastScrollDirection !== activeFastScroll.direction)
+      )
+    ) {
+      this.endModernVerticalFastScroll({ land: true });
+    }
+
     let current = this.getCurrentFocusedNode()
       || this.container?.querySelector(".focusable")
       || null;
@@ -6605,15 +6654,27 @@ export const HomeScreen = {
       repeat: Boolean(event?.repeat)
     };
 
-    if (event?.repeat) {
+    if (
+      inputMeta.repeat
+      && this.layoutMode === "modern"
+      && !isSidebar
+      && (direction === "up" || direction === "down")
+      && this.startModernVerticalFastScroll(direction === "down" ? 1 : -1)
+    ) {
+      return true;
+    }
+
+    if (inputMeta.repeat) {
       const now = Date.now();
-      const repeatThrottleMs = this.getDirectionalRepeatThrottleMs();
-      if (Number(this.lastDirectionalKeyAt || 0) > 0 &&
-        (now - Number(this.lastDirectionalKeyAt || 0)) < repeatThrottleMs
+      const repeatThrottleMs = this.getDirectionalRepeatThrottleMs(direction);
+      const repeatTimes = this.lastDirectionalKeyAtByDirection || (this.lastDirectionalKeyAtByDirection = {});
+      const lastDirectionalKeyAt = Number(repeatTimes[direction] || 0);
+      if (lastDirectionalKeyAt > 0 &&
+        (now - lastDirectionalKeyAt) < repeatThrottleMs
       ) {
         return true;
       }
-      this.lastDirectionalKeyAt = now;
+      repeatTimes[direction] = now;
     }
 
     if (!isSidebar && current.classList.contains("home-hero-card") && (direction === "left" || direction === "right")) {
@@ -6665,9 +6726,6 @@ export const HomeScreen = {
     }
 
     if (direction === "up" || direction === "down") {
-      if (this.layoutMode === "modern" && event?.repeat && this.startModernVerticalFastScroll(direction === "down" ? 1 : -1)) {
-        return true;
-      }
       const delta = direction === "up" ? -1 : 1;
       const targetRow = row + delta;
       const targetRowNodes = nav.rows[targetRow] || null;
@@ -7698,7 +7756,6 @@ export const HomeScreen = {
     } else if (this.layoutMode === "modern") {
       this.applyCachedModernPortraitPosterMetrics(this.container.querySelector(".home-screen-shell.home-layout-modern:not(.home-modern-landscape-posters)"));
     }
-
     bindRootSidebarEvents(this.container, {
       currentRoute: "home",
       onSelectedAction: () => this.closeSidebarToContent(),
@@ -7821,6 +7878,9 @@ export const HomeScreen = {
   scheduleHomeLazyImageHydration(anchorNode = null) {
     if (anchorNode instanceof HTMLElement) {
       this.pendingHomeLazyImageAnchor = anchorNode;
+    }
+    if (this.modernVerticalFastScrollState) {
+      return;
     }
     if (this.homeLazyImageHydrationRaf) {
       return;
@@ -8701,6 +8761,16 @@ export const HomeScreen = {
       return true;
     }
     const keyCode = Number(event?.keyCode || 0);
+    const direction = getDirectionFromKeyCode(keyCode);
+    if (direction && this.lastDirectionalKeyAtByDirection) {
+      delete this.lastDirectionalKeyAtByDirection[direction];
+    }
+    if ((direction === "up" || direction === "down") && this.modernVerticalFastScrollState) {
+      const releasedDirection = direction === "down" ? 1 : -1;
+      if (this.modernVerticalFastScrollState.direction === releasedDirection) {
+        this.endModernVerticalFastScroll({ land: true });
+      }
+    }
     if ((keyCode === 37 || keyCode === 39) && this.layoutMode === "modern") {
       const current = this.getCurrentFocusedNode();
       if (this.shouldUseImmediateHorizontalScrollForNode(current)) {
@@ -8774,6 +8844,21 @@ export const HomeScreen = {
   // Matches ATV ModernHomeRows.kt: fires when lastVisible >= total - 4 AND hasMore
   // ---------------------------------------------------------------------------
 
+  scheduleModernTrackPaginationForFocus(target) {
+    if (this.layoutMode !== "modern" || !target?.matches?.(".home-poster-card.focusable")) {
+      return;
+    }
+    const itemIndex = Number(target.dataset.navCol || -1);
+    if (itemIndex < 0) {
+      return;
+    }
+    const track = target.closest(".home-track");
+    this._trackScrollHandlers?.get?.(track)?.requestAhead?.({
+      focusedIndex: itemIndex,
+      focusedNode: target
+    });
+  },
+
   setupModernTrackScrollPagination() {
     this.teardownModernTrackScrollPagination();
     if (this.layoutMode !== "modern" || !this.container) {
@@ -8789,7 +8874,18 @@ export const HomeScreen = {
       if (!rowKey || this._trackScrollHandlers.has(track)) {
         return;
       }
-      const runPagination = () => {
+      let duplicatePageRetryCount = 0;
+      const scheduleLiveTrackCatchUp = (delayMs = 0) => {
+        setTimeout(() => {
+          if (Router.getCurrent() !== "home") {
+            return;
+          }
+          const liveTrack = this.getNavigationRowSection(rowKey)
+            ?.querySelector?.(".home-track") || null;
+          this._trackScrollHandlers?.get?.(liveTrack)?.requestAhead?.();
+        }, Math.max(0, Number(delayMs || 0)));
+      };
+      const runPagination = ({ assumeNearEnd = false } = {}) => {
         if (this._trackPaginationInFlight?.has(rowKey)) {
           return;
         }
@@ -8798,14 +8894,16 @@ export const HomeScreen = {
         if (!totalVisible) {
           return;
         }
-        // Estimate card width from first real card or fallback to CSS variable
-        const firstCard = cards[0];
-        const cardWidth = firstCard ? firstCard.offsetWidth : 212;
-        const gapApprox = 24; // --home-poster-gap
-        const nearEndThreshold = (cardWidth + gapApprox) * 4;
-        const distanceFromEnd = track.scrollWidth - (track.scrollLeft + track.clientWidth);
-        if (distanceFromEnd > nearEndThreshold) {
-          return;
+        if (!assumeNearEnd) {
+          // Estimate card width from first real card or fallback to CSS variable
+          const firstCard = cards[0];
+          const cardWidth = firstCard ? firstCard.offsetWidth : 212;
+          const gapApprox = 24; // --home-poster-gap
+          const nearEndThreshold = (cardWidth + gapApprox) * 4;
+          const distanceFromEnd = track.scrollWidth - (track.scrollLeft + track.clientWidth);
+          if (distanceFromEnd > nearEndThreshold) {
+            return;
+          }
         }
         // Find row data with hasMore
         const rowData = (this.rows || []).find((row) => buildModernRowKey(row) === rowKey);
@@ -8814,14 +8912,15 @@ export const HomeScreen = {
           return;
         }
         const rowPayload = rowResult.data;
-        if (!rowPayload?.hasMore) {
-          return;
-        }
         const currentItems = Array.isArray(rowPayload.items) ? rowPayload.items : [];
         const rowIndex = (this.rows || []).indexOf(rowData);
         const layoutPrefs = this.layoutPrefs || {};
         const showPosterLabels = Boolean(layoutPrefs.showPosterLabels !== false);
         const preferLandscape = Boolean(layoutPrefs.modernLandscapePosters);
+        const chunkSize = Math.max(
+          1,
+          Number(this.getRowItemLimit?.() || HOME_MAX_ITEMS_PER_ROW_DEFAULT)
+        );
         const appendItemsToTrack = (itemsToAppend = [], startIndex = 0) => {
           if (!itemsToAppend.length || !track.isConnected) {
             return false;
@@ -8837,7 +8936,7 @@ export const HomeScreen = {
               "modern",
               false,
               preferLandscape,
-              false,
+              true,
               this.watchedTitleIds
             )
           ).join("");
@@ -8845,14 +8944,37 @@ export const HomeScreen = {
             return false;
           }
           const frag = document.createRange().createContextualFragment(newMarkup);
-          this.invalidateNavigationModel();
+          const appendedCards = Array.from(frag.querySelectorAll(".home-content-card.focusable"));
+          const navigationRowIndex = (this.navModel?.rows || [])
+            .findIndex((rowNodes) => rowNodes[0]?.closest?.(".home-track") === track);
+          appendedCards.forEach((card, index) => {
+            card.dataset.navZone = "main";
+            card.dataset.navRow = String(Math.max(0, navigationRowIndex));
+            card.dataset.navCol = String(startIndex + index);
+            card.dataset.navRowKey = rowKey;
+          });
           track.appendChild(frag);
-          this.buildNavigationModel();
+          if (navigationRowIndex >= 0 && this.navModel?.rows?.[navigationRowIndex]) {
+            this.navModel.rows[navigationRowIndex].push(...appendedCards);
+            this.navModel.rowNodesByRowKey?.set?.(rowKey, this.navModel.rows[navigationRowIndex]);
+          } else {
+            this.invalidateNavigationModel();
+            this.buildNavigationModel();
+          }
+          this.scheduleHomeLazyImageHydration(this.getCurrentFocusedNode());
           return true;
         };
         if (totalVisible < currentItems.length) {
-          const chunkSize = Math.max(1, Number(this.getRowItemLimit?.() || HOME_MAX_ITEMS_PER_ROW_DEFAULT));
-          appendItemsToTrack(currentItems.slice(totalVisible, totalVisible + chunkSize), totalVisible);
+          this._trackPaginationInFlight = this._trackPaginationInFlight || new Set();
+          this._trackPaginationInFlight.add(rowKey);
+          appendItemsToTrack(
+            currentItems.slice(totalVisible, totalVisible + chunkSize),
+            totalVisible
+          );
+          this._trackPaginationInFlight.delete(rowKey);
+          return;
+        }
+        if (!rowPayload?.hasMore) {
           return;
         }
         const storedNextSkip = Number(rowPayload.nextSkip);
@@ -8862,6 +8984,7 @@ export const HomeScreen = {
         this._trackPaginationInFlight = this._trackPaginationInFlight || new Set();
         this._trackPaginationInFlight.add(rowKey);
         const token = this.homeLoadToken;
+        let shouldRequestAnotherPage = false;
         catalogRepository.getCatalog({
           addonBaseUrl: rowData.addonBaseUrl || "",
           addonId: rowData.addonId || "",
@@ -8875,9 +8998,15 @@ export const HomeScreen = {
           if (token !== this.homeLoadToken || result?.status !== "success") {
             return;
           }
+          const liveRowData = (this.rows || [])
+            .find((candidate) => buildModernRowKey(candidate) === rowKey) || rowData;
+          const liveRowPayload = liveRowData?.result?.data || rowPayload;
+          const latestItems = Array.isArray(liveRowPayload?.items)
+            ? liveRowPayload.items
+            : currentItems;
           const incomingItems = Array.isArray(result.data?.items) ? result.data.items : [];
           const seenIds = new Set(
-            currentItems
+            latestItems
               .map((item) => String(item?.id || "").trim())
               .filter(Boolean)
           );
@@ -8894,36 +9023,123 @@ export const HomeScreen = {
           });
           if (!incomingItems.length) {
             // Mark hasMore=false so we stop trying
-            if (rowData?.result?.data) {
-              rowData.result.data.hasMore = false;
+            if (liveRowPayload) {
+              liveRowPayload.hasMore = false;
             }
+            duplicatePageRetryCount = 0;
             return;
           }
           const nextSkip = skip + incomingItems.length;
-          const startIndex = currentItems.length;
-          appendItemsToTrack(newItems, startIndex);
+          const startIndex = latestItems.length;
           // Update in-memory row data
-          if (rowData?.result?.data) {
-            rowData.result.data.items = [...currentItems, ...newItems];
-            rowData.result.data.hasMore = result.data?.hasMore ?? newItems.length > 0;
-            rowData.result.data.currentPage = result.data?.currentPage ?? rowData.result.data.currentPage;
-            rowData.result.data.nextSkip = nextSkip;
+          if (liveRowPayload) {
+            liveRowPayload.items = [...latestItems, ...newItems];
+            liveRowPayload.hasMore = result.data?.hasMore ?? newItems.length > 0;
+            liveRowPayload.currentPage = result.data?.currentPage ?? liveRowPayload.currentPage;
+            liveRowPayload.nextSkip = nextSkip;
           }
+          const didAppend = appendItemsToTrack(
+            newItems.slice(0, chunkSize),
+            startIndex
+          );
+          if (didAppend) {
+            duplicatePageRetryCount = 0;
+          } else if (liveRowPayload?.hasMore) {
+            duplicatePageRetryCount += 1;
+            shouldRequestAnotherPage = duplicatePageRetryCount <= 2;
+          }
+          return didAppend;
         }).catch((err) => {
           console.warn("Home track pagination failed for", rowKey, err);
         }).finally(() => {
-          this._trackPaginationInFlight?.delete(rowKey);
+          if (token === this.homeLoadToken) {
+            this._trackPaginationInFlight?.delete(rowKey);
+            if (!track.isConnected) {
+              scheduleLiveTrackCatchUp();
+            } else if (shouldRequestAnotherPage) {
+              scheduleLiveTrackCatchUp(MODERN_HOME_CONSTANTS.trackPaginationPrefetchDelayMs);
+            }
+          }
         });
       };
-      let scrollRaf = 0;
-      const handler = () => {
-        if (scrollRaf) {
+      let scrollTimer = 0;
+      let prefetchTimer = 0;
+      let pendingPrefetchContext = null;
+      let measuredTrackWidth = 0;
+      let visibleCardCount = 1;
+      const runWhenIdle = () => {
+        scrollTimer = 0;
+        if (!track.isConnected || Router.getCurrent() !== "home") {
           return;
         }
-        scrollRaf = requestAnimationFrame(() => {
-          scrollRaf = 0;
-          runPagination();
-        });
+        if (
+          this.modernVerticalFastScrollState
+          || this.isScrollAnimationActive(track, "x")
+          || this.isScrollAnimationActive(this.modernCameraFollowLastVerticalContainer, "y")
+        ) {
+          scrollTimer = setTimeout(runWhenIdle, 32);
+          return;
+        }
+        runPagination();
+      };
+      const handler = () => {
+        if (scrollTimer) {
+          clearTimeout(scrollTimer);
+        }
+        scrollTimer = setTimeout(runWhenIdle, MODERN_HOME_CONSTANTS.trackPaginationIdleMs);
+      };
+      handler.requestAhead = (context = null) => {
+        if (context?.focusedNode?.isConnected && Number(context?.focusedIndex) >= 0) {
+          pendingPrefetchContext = context;
+        }
+        if (prefetchTimer) {
+          return;
+        }
+        prefetchTimer = setTimeout(() => {
+          prefetchTimer = 0;
+          if (!track.isConnected || Router.getCurrent() !== "home") {
+            pendingPrefetchContext = null;
+            return;
+          }
+          const requestContext = pendingPrefetchContext;
+          pendingPrefetchContext = null;
+          if (requestContext?.focusedNode?.isConnected) {
+            const cards = track.querySelectorAll(
+              ".home-content-card:not(.home-poster-card-loading)"
+            );
+            const mountedCount = cards.length;
+            const trackWidth = Number(track.clientWidth || 0);
+            if (trackWidth !== measuredTrackWidth) {
+              const cardWidth = Number(requestContext.focusedNode.offsetWidth || 0);
+              const styles = globalThis.getComputedStyle?.(track);
+              const gap = Number.parseFloat(styles?.columnGap || styles?.gap || "0") || 0;
+              const stride = Math.max(1, cardWidth + gap);
+              visibleCardCount = Math.max(1, Math.ceil(trackWidth / stride));
+              measuredTrackWidth = trackWidth;
+            }
+            const projectedLastVisible = Number(requestContext.focusedIndex)
+              + visibleCardCount - 1;
+            const loadAheadStart = Math.max(
+              0,
+              mountedCount - MODERN_HOME_CONSTANTS.trackPaginationLoadAheadItems
+            );
+            if (projectedLastVisible < loadAheadStart) {
+              return;
+            }
+          }
+          runPagination({ assumeNearEnd: true });
+        }, MODERN_HOME_CONSTANTS.trackPaginationPrefetchDelayMs);
+      };
+      handler.cancelPending = () => {
+        if (scrollTimer) {
+          clearTimeout(scrollTimer);
+          scrollTimer = 0;
+        }
+        if (prefetchTimer) {
+          clearTimeout(prefetchTimer);
+          prefetchTimer = 0;
+        }
+        pendingPrefetchContext = null;
       };
       this._trackScrollHandlers.set(track, handler);
       track.addEventListener("scroll", handler, { passive: true });
@@ -8936,9 +9152,9 @@ export const HomeScreen = {
     }
     this._trackScrollHandlers.forEach((handler, track) => {
       track.removeEventListener("scroll", handler);
+      handler.cancelPending?.();
     });
     this._trackScrollHandlers.clear();
-    this._trackPaginationInFlight?.clear();
   },
 
   cleanup() {
@@ -8953,6 +9169,7 @@ export const HomeScreen = {
     this.posterListPicker = null;
     this.persistCurrentFocusState();
     this.homeLoadToken = (this.homeLoadToken || 0) + 1;
+    this._trackPaginationInFlight?.clear();
     this.cancelScheduledRender();
     this.cancelModernCameraFollow({ stopAnimations: true });
     this.endModernVerticalFastScroll({ land: false });
@@ -8980,6 +9197,7 @@ export const HomeScreen = {
       this.homeLazyImageHydrationRaf = 0;
     }
     this.pendingHomeLazyImageAnchor = null;
+    this.lastDirectionalKeyAtByDirection = {};
     this.homeTruncationScope = null;
     if (this.boundHomeEventContainer) {
       this.boundHomeEventContainer.removeEventListener("focusin", this.boundHomeFocusInHandler);
