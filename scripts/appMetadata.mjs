@@ -6,8 +6,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const packageJsonPath = path.join(rootDir, "package.json");
 const versionManagedJsonPaths = [
-  path.join(rootDir, "appinfo.json"),
-  path.join(rootDir, "services", "webos", "package.json")
+  path.join(rootDir, "appinfo.json")
 ];
 
 async function readJson(filePath) {

@@ -1045,4 +1045,6 @@
     <string name="player.audio.noSupportedTracks">कोई समर्थित ऑडियो ट्रैक उपलब्ध नहीं है</string>
     <string name="settings_stream_addon_logo_title">ऐड-ऑन लोगो</string>
     <string name="settings_stream_addon_logo_description">स्ट्रीम स्रोतों के आगे ऐड-ऑन का लोगो और नाम दिखाएँ।</string>
+    <string name="autoplay_reuse_binge_group">बिंज ग्रुप का फिर से उपयोग करें</string>
+    <string name="autoplay_reuse_binge_group_sub">सत्रों के बीच अंतिम बिंज ग्रुप को याद रखें और फिर उपयोग करें (देखना जारी रखें, विवरण आदि)।</string>
 </resources>

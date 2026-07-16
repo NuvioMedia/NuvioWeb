@@ -106,10 +106,8 @@ async function stageApp() {
 }
 
 async function stageService() {
-  const { version } = await readAppMetadata();
   const packageJsonPath = path.join(webOsServiceSourceDir, "package.json");
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
-  packageJson.version = version;
 
   await mkdir(path.join(serviceStageDir, "src"), { recursive: true });
   await mkdir(path.join(serviceStageDir, "runtime"), { recursive: true });

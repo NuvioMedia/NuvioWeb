@@ -254,8 +254,13 @@ function selectBestResumeProgress(items = [], contentIds = [], target = {}) {
   if (!candidates.length) {
     return null;
   }
+  const hasExplicitTarget = Boolean(String(target?.videoId || "").trim())
+    || (Number(target?.season || 0) > 0 && Number(target?.episode || 0) > 0);
   const targeted = candidates.filter((item) => matchesResumeTarget(item, target));
-  const pool = targeted.length ? targeted : candidates;
+  const pool = hasExplicitTarget ? targeted : candidates;
+  if (!pool.length) {
+    return null;
+  }
   return (
     pool
       .slice()

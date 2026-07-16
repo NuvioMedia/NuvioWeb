@@ -2087,4 +2087,6 @@
     <string name="player.audio.noSupportedTracks">ஆதரிக்கப்படும் ஆடியோ தடங்கள் எதுவும் இல்லை</string>
     <string name="settings_stream_addon_logo_title">துணை நிரல் லோகோ</string>
     <string name="settings_stream_addon_logo_description">ஸ்ட்ரீம் மூலங்களுக்கு அருகில் துணை நிரல் லோகோ மற்றும் பெயரைக் காட்டு.</string>
+    <string name="autoplay_reuse_binge_group">பிஞ்ச் குழுவை மீண்டும் பயன்படுத்து</string>
+    <string name="autoplay_reuse_binge_group_sub">அமர்வுகளுக்கு இடையில் கடைசி பிஞ்ச் குழுவை நினைவில் வைத்து மீண்டும் பயன்படுத்து (தொடர்ந்து பார்க்க, விவரங்கள் போன்றவை).</string>
 </resources>

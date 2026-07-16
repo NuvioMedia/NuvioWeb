@@ -5,6 +5,7 @@ import { addonRepository } from "../../../data/repository/addonRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
 import { isWatchProgressInProgress } from "../../../domain/model/watchProgress.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
 import {
   selectAutoPlayStream,
   isAutoPlayEffectivelyEnabled
@@ -1062,15 +1063,35 @@ export const StreamScreen = {
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
     this.autoResumeAttempted = false;
+    const playerSettings = PlayerSettingsStore.get();
+    const reusableStream = playerSettings.streamReuseLastLinkEnabled
+      ? StreamPreferencesStore.getValid(
+          this.params?.itemId,
+          this.params?.videoId || this.params?.itemId,
+          Number(playerSettings.streamReuseLastLinkCacheHours || 24) * 60 * 60 * 1000
+        )
+      : null;
     this.autoResumeUiActive = Boolean(
       !navigationContext?.isBackNavigation &&
       this.params?.continueWatchingBackHome &&
-      !this.params?.startFromBeginning &&
+      !this.params?.manualSelection &&
+      reusableStream?.streamId &&
       (String(this.params?.resumeStreamIdentity || "").trim() ||
         String(this.params?.preferredStreamId || "").trim())
     );
     this.autoPlayAttempted = false;
     this.cancelAutoPlayCountdown();
+    this.cancelAutoPlaySelectionWait();
+    const autoPlayWaitSeconds = Math.max(0, Math.trunc(Number(playerSettings.streamAutoPlayTimeoutSeconds || 0)));
+    this.autoPlaySelectionReady = autoPlayWaitSeconds === 0;
+    if (autoPlayWaitSeconds > 0 && autoPlayWaitSeconds !== 2147483647) {
+      this.autoPlaySelectionWaitTimer = setTimeout(() => {
+        this.autoPlaySelectionWaitTimer = null;
+        this.autoPlaySelectionReady = true;
+        this.maybeAutoResumeStream();
+        this.maybeAutoPlayStream();
+      }, autoPlayWaitSeconds * 1000);
+    }
     this.webOsNativePlayerAppId = "";
     this.nativePlayerPendingStreamId = "";
     this.nativePlayerRequestToken = 0;
@@ -1268,6 +1289,8 @@ export const StreamScreen = {
         this.focusState = { zone: "card", row: 0, action: "play" };
       }
       this.requestRender({ delayMs: 120 });
+      this.maybeAutoResumeStream();
+      this.maybeAutoPlayStream();
     };
 
     const queueChunkGroups = (groups = []) => {
@@ -1370,8 +1393,8 @@ export const StreamScreen = {
       }
       this.requestRender();
       this.scheduleErrorChipCleanup();
-      this.maybeAutoResumeStream();
-      this.maybeAutoPlayStream();
+      this.maybeAutoResumeStream({ allLoaded: true });
+      this.maybeAutoPlayStream({ allLoaded: true });
     } catch (error) {
       if (token !== this.loadToken) {
         return;
@@ -1389,14 +1412,22 @@ export const StreamScreen = {
 
   // Continue Watching can pass the identity of the stream that was playing.
   // If that same source shows up again, resume it directly.
-  maybeAutoResumeStream() {
+  maybeAutoResumeStream({ allLoaded = false } = {}) {
     if (this.autoResumeAttempted) {
       return;
     }
-    const identity = String(this.params?.resumeStreamIdentity || "").trim();
-    const preferredStreamId = String(this.params?.preferredStreamId || "").trim();
+    const settings = PlayerSettingsStore.get();
+    const reusableStream = settings.streamReuseLastLinkEnabled
+      ? StreamPreferencesStore.getValid(
+          this.params?.itemId,
+          this.params?.videoId || this.params?.itemId,
+          Number(settings.streamReuseLastLinkCacheHours || 24) * 60 * 60 * 1000
+        )
+      : null;
+    const identity = reusableStream ? String(this.params?.resumeStreamIdentity || "").trim() : "";
+    const preferredStreamId = String(reusableStream?.streamId || "").trim();
     const canReusePreferredStream = Boolean(
-      this.params?.continueWatchingBackHome && !this.params?.startFromBeginning && preferredStreamId
+      this.params?.continueWatchingBackHome && !this.params?.manualSelection && preferredStreamId
     );
     if (!identity && !canReusePreferredStream) {
       this.autoResumeUiActive = false;
@@ -1410,7 +1441,6 @@ export const StreamScreen = {
       }
       return;
     }
-    this.autoResumeAttempted = true;
     const identityMatch = identity
       ? this.streams.find((stream) => streamMergeKey(stream) === identity)
       : null;
@@ -1423,16 +1453,21 @@ export const StreamScreen = {
         ? this.streams.find((stream) => String(stream?.id || "") === preferredStreamId)
         : null);
     if (match?.id) {
+      this.autoResumeAttempted = true;
       void this.playStream(match.id);
+      return;
+    }
+    if (!allLoaded && this.loading) {
       return;
     }
     // The remembered source is no longer available. Fall back to the normal
     // source panel instead of leaving the direct-resume loading state visible.
+    this.autoResumeAttempted = true;
     this.autoResumeUiActive = false;
     this.requestRender({ delayMs: 0 });
   },
 
-  maybeAutoPlayStream() {
+  maybeAutoPlayStream({ allLoaded = false } = {}) {
     if (this.autoResumeUiActive || this.autoPlayAttempted || this.autoPlayCountdown) {
       return;
     }
@@ -1441,25 +1476,58 @@ export const StreamScreen = {
       return;
     }
     const settings = PlayerSettingsStore.get();
-    if (!isAutoPlayEffectivelyEnabled(settings)) {
+    if (this.params?.manualSelection) {
       return;
     }
-    this.autoPlayAttempted = true;
+    if (!allLoaded && !this.autoPlaySelectionReady) {
+      return;
+    }
+    const savedPreference = settings.streamAutoPlayPreferBingeGroupForNextEpisode &&
+      settings.streamAutoPlayReuseBingeGroup
+      ? StreamPreferencesStore.getEntry(
+          this.params?.itemId,
+          this.params?.videoId || this.params?.itemId
+        )
+      : null;
+    const preferredBingeGroup = String(savedPreference?.bingeGroup || "").trim();
+    const reusePersistedBingeGroup = Boolean(
+      preferredBingeGroup && String(settings.streamAutoPlayMode || "MANUAL").toUpperCase() === "MANUAL"
+    );
+    if (!reusePersistedBingeGroup && !isAutoPlayEffectivelyEnabled(settings)) {
+      return;
+    }
     const installedAddonNames = new Set(
       (addonRepository.getCachedInstalledAddons() || [])
         .map((addon) => String(addon?.displayName || addon?.name || "").trim())
         .filter(Boolean)
     );
     const selected = selectAutoPlayStream(this.getFilteredStreams(), {
-      mode: settings.streamAutoPlayMode,
+      mode: reusePersistedBingeGroup ? "FIRST_STREAM" : settings.streamAutoPlayMode,
       source: settings.streamAutoPlaySource,
       regexPattern: settings.streamAutoPlayRegex,
-      installedAddonNames
+      installedAddonNames,
+      selectedAddons: settings.streamAutoPlaySelectedAddons,
+      selectedPlugins: settings.streamAutoPlaySelectedPlugins,
+      preferredBingeGroup,
+      preferBingeGroupInSelection: Boolean(preferredBingeGroup),
+      bingeGroupOnly: reusePersistedBingeGroup
     });
     if (!selected?.id) {
+      if (allLoaded) {
+        this.autoPlayAttempted = true;
+      }
       return;
     }
-    this.startAutoPlayCountdown(selected, Number(settings.streamAutoPlayTimeoutSeconds || 0));
+    this.autoPlayAttempted = true;
+    this.cancelAutoPlaySelectionWait();
+    void this.playStream(selected.id);
+  },
+
+  cancelAutoPlaySelectionWait() {
+    if (this.autoPlaySelectionWaitTimer) {
+      clearTimeout(this.autoPlaySelectionWaitTimer);
+      this.autoPlaySelectionWaitTimer = null;
+    }
   },
 
   startAutoPlayCountdown(stream, seconds) {
@@ -2378,6 +2446,7 @@ export const StreamScreen = {
 
   async playStream(streamId) {
     this.cancelAutoPlayCountdown();
+    this.cancelAutoPlaySelectionWait();
     const filtered = this.getFilteredStreams();
     const selected = filtered.find((stream) => stream.id === streamId) || filtered[0];
     if (!selected) {
@@ -2676,6 +2745,7 @@ export const StreamScreen = {
 
   cleanup() {
     this.cancelAutoPlayCountdown();
+    this.cancelAutoPlaySelectionWait();
     this.loadToken = (this.loadToken || 0) + 1;
     this.playResolveToken = Number(this.playResolveToken || 0) + 1;
     this.nativePlayerRequestToken = Number(this.nativePlayerRequestToken || 0) + 1;

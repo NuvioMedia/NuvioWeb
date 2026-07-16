@@ -2329,6 +2329,7 @@ export const MetaDetailsScreen = {
         ? 0
         : Number(this.params?.resumeDurationMs || this.resumeProgress?.durationMs || 0) || 0,
       startFromBeginning: routeStartFromBeginning,
+      manualSelection: Boolean(this.params?.manualSelection),
       returnToDetail: true,
       continueWatchingBackHome: true,
       resumeStreamIdentity: this.params?.resumeStreamIdentity || null

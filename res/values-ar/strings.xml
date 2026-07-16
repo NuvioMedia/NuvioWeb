@@ -1363,4 +1363,6 @@
     <string name="player.audio.noSupportedTracks">لا تتوفر مسارات صوتية مدعومة</string>
     <string name="settings_stream_addon_logo_title">شعار الإضافة</string>
     <string name="settings_stream_addon_logo_description">عرض شعار الإضافة واسمها بجانب مصادر البث.</string>
+    <string name="autoplay_reuse_binge_group">حفظ مجموعة المشاهدة المتتالية</string>
+    <string name="autoplay_reuse_binge_group_sub">حفظ واستخدام آخر مجموعة مشاهدة تلقائية عبر الجلسات (متابعة المشاهدة، التفاصيل، إلخ).</string>
 </resources>

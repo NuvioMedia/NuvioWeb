@@ -910,6 +910,12 @@ const FEATURE_ADAPTERS = {
         stream_auto_play_prefer_bingegroup_next_episode: Boolean(
           settings.streamAutoPlayPreferBingeGroupForNextEpisode
         ),
+        stream_auto_play_reuse_binge_group: Boolean(settings.streamAutoPlayReuseBingeGroup),
+        stream_reuse_last_link_enabled: Boolean(settings.streamReuseLastLinkEnabled),
+        stream_reuse_last_link_cache_hours: Math.min(
+          168,
+          Math.max(1, Math.trunc(Number(settings.streamReuseLastLinkCacheHours ?? 24) || 24))
+        ),
         still_watching_enabled: Boolean(settings.stillWatchingEnabled),
         still_watching_episode_threshold: normalizeStillWatchingThresholdForSync(
           settings.stillWatchingEpisodeThreshold
@@ -931,6 +937,12 @@ const FEATURE_ADAPTERS = {
         ),
         stream_auto_play_mode: String(settings.streamAutoPlayMode || "MANUAL"),
         stream_auto_play_source: String(settings.streamAutoPlaySource || "ALL_SOURCES"),
+        stream_auto_play_selected_addons: Array.isArray(settings.streamAutoPlaySelectedAddons)
+          ? settings.streamAutoPlaySelectedAddons
+          : [],
+        stream_auto_play_selected_plugins: Array.isArray(settings.streamAutoPlaySelectedPlugins)
+          ? settings.streamAutoPlaySelectedPlugins
+          : [],
         stream_auto_play_regex: String(settings.streamAutoPlayRegex || ""),
         stream_auto_play_timeout_seconds: Math.max(
           0,
@@ -966,6 +978,8 @@ const FEATURE_ADAPTERS = {
         "skip_intro_enabled",
         "stream_auto_play_next_episode_enabled",
         "stream_auto_play_prefer_bingegroup_next_episode",
+        "stream_auto_play_reuse_binge_group",
+        "stream_reuse_last_link_enabled",
         "still_watching_enabled"
       ].forEach((key) => {
         if (booleanOrNull(raw[key]) != null) {
@@ -998,6 +1012,17 @@ const FEATURE_ADAPTERS = {
           Math.trunc(Number(raw.stream_auto_play_timeout_seconds))
         );
       }
+      if (numberOrNull(raw.stream_reuse_last_link_cache_hours) != null) {
+        projected.stream_reuse_last_link_cache_hours = Math.min(
+          168,
+          Math.max(1, Math.trunc(Number(raw.stream_reuse_last_link_cache_hours)))
+        );
+      }
+      ["stream_auto_play_selected_addons", "stream_auto_play_selected_plugins"].forEach((key) => {
+        if (Array.isArray(raw[key])) {
+          projected[key] = raw[key].map((entry) => String(entry || "").trim()).filter(Boolean);
+        }
+      });
       if (numberOrNull(raw.still_watching_episode_threshold) != null) {
         projected.still_watching_episode_threshold = normalizeStillWatchingThresholdForSync(
           raw.still_watching_episode_threshold
@@ -1142,11 +1167,29 @@ const FEATURE_ADAPTERS = {
       if (raw.stream_auto_play_source != null) {
         partial.streamAutoPlaySource = String(raw.stream_auto_play_source);
       }
+      if (Array.isArray(raw.stream_auto_play_selected_addons)) {
+        partial.streamAutoPlaySelectedAddons = raw.stream_auto_play_selected_addons;
+      }
+      if (Array.isArray(raw.stream_auto_play_selected_plugins)) {
+        partial.streamAutoPlaySelectedPlugins = raw.stream_auto_play_selected_plugins;
+      }
       if (raw.stream_auto_play_regex != null) {
         partial.streamAutoPlayRegex = String(raw.stream_auto_play_regex);
       }
       if (numberOrNull(raw.stream_auto_play_timeout_seconds) != null) {
         partial.streamAutoPlayTimeoutSeconds = Math.max(0, Math.trunc(Number(raw.stream_auto_play_timeout_seconds)));
+      }
+      if (booleanOrNull(raw.stream_auto_play_reuse_binge_group) != null) {
+        partial.streamAutoPlayReuseBingeGroup = Boolean(raw.stream_auto_play_reuse_binge_group);
+      }
+      if (booleanOrNull(raw.stream_reuse_last_link_enabled) != null) {
+        partial.streamReuseLastLinkEnabled = Boolean(raw.stream_reuse_last_link_enabled);
+      }
+      if (numberOrNull(raw.stream_reuse_last_link_cache_hours) != null) {
+        partial.streamReuseLastLinkCacheHours = Math.min(
+          168,
+          Math.max(1, Math.trunc(Number(raw.stream_reuse_last_link_cache_hours)))
+        );
       }
       if (Object.keys(subtitleStyle).length) {
         partial.subtitleStyle = subtitleStyle;

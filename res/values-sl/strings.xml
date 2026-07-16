@@ -2205,4 +2205,6 @@
     <string name="player.audio.noSupportedTracks">Na voljo ni podprtih zvočnih sledi</string>
     <string name="settings_stream_addon_logo_title">Logotip dodatka</string>
     <string name="settings_stream_addon_logo_description">Prikaži logotip in ime dodatka ob virih pretočnega predvajanja.</string>
+    <string name="autoplay_reuse_binge_group">Ponovno uporabi Binge skupino</string>
+    <string name="autoplay_reuse_binge_group_sub">Zapomni si in ponovno uporabi zadnjo skupino med sejami (Nadaljuj ogled, Podrobnosti itd.).</string>
 </resources>

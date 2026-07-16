@@ -1036,4 +1036,6 @@
     <string name="player.audio.noSupportedTracks">Ingen støttede lydspor er tilgjengelige</string>
     <string name="settings_stream_addon_logo_title">Tilleggslogo</string>
     <string name="settings_stream_addon_logo_description">Vis logoen og navnet til tillegget ved siden av strømmekildene.</string>
+    <string name="autoplay_reuse_binge_group">Bruk bingegruppe på nytt</string>
+    <string name="autoplay_reuse_binge_group_sub">Husk og bruk den siste bingegruppen på nytt mellom økter (Fortsett å se, Detaljer osv.).</string>
 </resources>

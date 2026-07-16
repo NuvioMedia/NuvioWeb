@@ -1278,10 +1278,35 @@ function buildCompleteContinueWatchingDisplay(items = []) {
     .filter((item) => item?.contentId);
 }
 
+function hasContinueWatchingHeroMetadata(item = {}) {
+  const normalized = normalizeContinueWatchingItem(item);
+  if (!normalized) {
+    return false;
+  }
+  const hasDescription = Boolean(firstNonEmpty(normalized.description, normalized.episodeDescription));
+  const hasDetails = Boolean(
+    resolveImdbRating(normalized)
+    || normalized.genres?.length
+    || firstNonEmpty(
+      normalized.releaseInfo,
+      normalized.ageRating,
+      normalized.status,
+      normalized.language,
+      normalized.country
+    )
+    || Number(normalized.runtimeMinutes || 0) > 0
+  );
+  return hasDescription && hasDetails;
+}
+
 function needsContinueWatchingMetadataRefresh(items = []) {
   return (items || []).some((item) => {
     const normalized = normalizeContinueWatchingItem(item);
-    return normalized?.contentId && (isRawContinueWatchingTitle(normalized) || !hasContinueWatchingArtwork(normalized));
+    return normalized?.contentId && (
+      isRawContinueWatchingTitle(normalized)
+      || !hasContinueWatchingArtwork(normalized)
+      || (!normalized.continueWatchingMetaResolved && !hasContinueWatchingHeroMetadata(normalized))
+    );
   });
 }
 
@@ -1390,7 +1415,8 @@ function saveContinueWatchingEnrichment(item = {}) {
     language: normalized.language,
     country: normalized.country,
     episodeTitle: normalized.episodeTitle,
-    episodeDescription: normalized.episodeDescription
+    episodeDescription: normalized.episodeDescription,
+    continueWatchingMetaResolved: true
   };
   const enrichmentCacheLimit = Platform.isTizen() || Platform.isWebOS() ? 50 : 200;
   const entries = Object.entries(cache)
@@ -1449,6 +1475,16 @@ function buildContinueWatchingSignature(items = []) {
         normalized.logo || "",
         normalized.episodeTitle || "",
         normalized.episodeThumbnail || "",
+        normalized.description || normalized.episodeDescription || "",
+        resolveImdbRating(normalized) || "",
+        (normalized.genres || []).join(","),
+        normalized.releaseInfo || "",
+        normalized.runtimeMinutes || "",
+        normalized.ageRating || "",
+        normalized.status || "",
+        normalized.language || "",
+        normalized.country || "",
+        normalized.continueWatchingMetaResolved ? "resolved" : "",
         position,
         duration,
         normalized.progressStatus || "",
@@ -1893,7 +1929,8 @@ function continueWatchingStreamParams(item, options = {}) {
     resumeProgressPercent: options.startOver ? null : (normalized.progressPercent ?? null),
     resumeDurationMs: options.startOver ? 0 : (Number(normalized.durationMs || 0) || 0),
     resumeStreamIdentity: options.startOver ? null : (normalized.streamIdentity || null),
-    startFromBeginning: Boolean(options.startOver)
+    startFromBeginning: Boolean(options.startOver),
+    manualSelection: Boolean(options.manualSelection)
   };
 }
 
@@ -4296,6 +4333,7 @@ export const HomeScreen = {
       resumeProgressPercent: params.resumeProgressPercent ?? null,
       resumeDurationMs: Number(params.resumeDurationMs || 0) || 0,
       startFromBeginning: Boolean(params.startFromBeginning),
+      manualSelection: Boolean(params.manualSelection),
       resumeVideoId: normalized.videoId || null,
       resumeSeason: normalized.season ?? null,
       resumeEpisode: normalized.episode ?? null,
@@ -4437,7 +4475,7 @@ export const HomeScreen = {
       return this.openContinueWatchingFromItem(item, { startOver: true });
     }
     if (option.action === "playManually") {
-      return this.openContinueWatchingFromItem(item, { startOver: true });
+      return this.openContinueWatchingFromItem(item, { manualSelection: true });
     }
     if (option.action === "details") {
       return this.openContinueWatchingDetails(item);
@@ -8496,7 +8534,8 @@ export const HomeScreen = {
               language: firstNonEmpty(enrichedMeta.language),
               country: firstNonEmpty(enrichedMeta.country),
               episodeTitle: firstNonEmpty(episodeEntry?.title, item.episodeTitle, item.subtitle),
-              episodeDescription: firstNonEmpty(episodeEntry?.overview, item.episodeDescription, item.episode_description)
+              episodeDescription: firstNonEmpty(episodeEntry?.overview, item.episodeDescription, item.episode_description),
+              continueWatchingMetaResolved: true
             };
             saveContinueWatchingEnrichment(enriched);
             return enriched;

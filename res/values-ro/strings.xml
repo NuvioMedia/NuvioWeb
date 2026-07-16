@@ -759,4 +759,12 @@
     <string name="player.audio.noSupportedTracks">Nu sunt disponibile piste audio acceptate</string>
     <string name="settings_stream_addon_logo_title">Siglă extensie</string>
     <string name="settings_stream_addon_logo_description">Afișează sigla și numele extensiei lângă sursele fluxului.</string>
+    <string name="autoplay_prefer_binge_group">Preferă grupul de vizionare continuă (episodul următor)</string>
+    <string name="autoplay_prefer_binge_group_sub">Încearcă mai întâi același profil de sursă (același addon/grup de calitate), înaintea regulilor normale de redare automată.</string>
+    <string name="autoplay_reuse_binge_group">Refolosește grupul de vizionare continuă</string>
+    <string name="autoplay_reuse_binge_group_sub">Memorează și refolosește ultimul grup între sesiuni (Continuă vizionarea, Detalii etc.).</string>
+    <string name="autoplay_timeout_title">Timp limită pentru selectarea sursei</string>
+    <string name="autoplay_timeout_sub">Timp de așteptare pentru addonuri înainte de selectare.</string>
+    <string name="autoplay_timeout_instant">Instantaneu</string>
+    <string name="autoplay_timeout_unlimited">Nelimitat</string>
 </resources>

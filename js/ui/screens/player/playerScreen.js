@@ -2074,7 +2074,10 @@ export const PlayerScreen = {
       const prefContentId = String(params?.itemId || "").trim();
       const prefVideoId = String(params?.videoId || params?.itemId || "").trim();
       if (playingStreamCandidate?.id && prefContentId) {
-        StreamPreferencesStore.set(prefContentId, prefVideoId, playingStreamCandidate.id);
+        StreamPreferencesStore.set(prefContentId, prefVideoId, playingStreamCandidate.id, {
+          bingeGroup: playingStreamCandidate?.behaviorHints?.bingeGroup ||
+            playingStreamCandidate?.raw?.behaviorHints?.bingeGroup || ""
+        });
       }
     }
     this.activePlaybackSourceContext = this.getPlaybackSourceContext(
@@ -6322,6 +6325,8 @@ export const PlayerScreen = {
         : String(settings.streamAutoPlaySource || "ALL_SOURCES"),
       regexPattern: shouldAutoSelectInManualMode ? "" : String(settings.streamAutoPlayRegex || ""),
       installedAddonNames,
+      selectedAddons: shouldAutoSelectInManualMode ? [] : settings.streamAutoPlaySelectedAddons,
+      selectedPlugins: shouldAutoSelectInManualMode ? [] : settings.streamAutoPlaySelectedPlugins,
       preferredBingeGroup: preferBingeGroup ? this.getCurrentStreamBingeGroup() : "",
       preferBingeGroupInSelection: preferBingeGroup,
       bingeGroupOnly: Boolean(options.bingeGroupOnly || bingeGroupOnlyManualMode)
@@ -6380,7 +6385,7 @@ export const PlayerScreen = {
     };
 
     const timeoutSeconds = Math.max(0, Math.trunc(Number(settings.streamAutoPlayTimeoutSeconds || 0)));
-    if (timeoutSeconds > 0) {
+    if (timeoutSeconds > 0 && timeoutSeconds !== 2147483647) {
       selectionTimer = setTimeout(() => {
         timeoutElapsed = true;
         if (latestStreams.length) {

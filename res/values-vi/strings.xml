@@ -935,4 +935,10 @@
     <string name="player.audio.noSupportedTracks">Không có bản âm thanh được hỗ trợ</string>
     <string name="settings_stream_addon_logo_title">Biểu tượng addon</string>
     <string name="settings_stream_addon_logo_description">Hiển thị biểu tượng và tên addon bên cạnh mỗi nguồn phát</string>
+    <string name="autoplay_reuse_binge_group">Dùng lại nhóm xem liên tục</string>
+    <string name="autoplay_reuse_binge_group_sub">Ghi nhớ và dùng lại nhóm xem liên tục gần nhất giữa các phiên (Tiếp tục xem, Chi tiết, v.v.).</string>
+    <string name="autoplay_timeout_title">Thời gian chờ chọn nguồn</string>
+    <string name="autoplay_timeout_sub">Thời gian chờ addon trước khi chọn.</string>
+    <string name="autoplay_timeout_instant">Ngay lập tức</string>
+    <string name="autoplay_timeout_unlimited">Không giới hạn</string>
 </resources>

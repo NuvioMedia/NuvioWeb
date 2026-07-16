@@ -952,4 +952,6 @@
     <string name="player.audio.noSupportedTracks">אין רצועות שמע נתמכות זמינות</string>
     <string name="settings_stream_addon_logo_title">לוגו התוסף</string>
     <string name="settings_stream_addon_logo_description">הצגת הלוגו ושם התוסף לצד מקורות הסטרימינג.</string>
+    <string name="autoplay_reuse_binge_group">שימוש חוזר בקבוצת Binge</string>
+    <string name="autoplay_reuse_binge_group_sub">זכור והשתמש שוב בקבוצת ה-Binge האחרונה בין הפעלות (המשך צפייה, פרטים וכו׳).</string>
 </resources>

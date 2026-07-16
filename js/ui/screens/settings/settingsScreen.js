@@ -303,28 +303,46 @@ const PREFERRED_PLAYBACK_LANGUAGE_OPTIONS = [
 ];
 
 const STREAM_AUTOPLAY_MODE_OPTIONS = [
-  { id: "MANUAL", label: "Off (choose manually)" },
-  { id: "FIRST_STREAM", label: "First stream" },
-  { id: "REGEX_MATCH", label: "Regex match" }
+  { id: "MANUAL", labelKey: "autoplay_mode_manual", captionKey: "autoplay_mode_manual_desc", label: "Manual (choose stream)" },
+  { id: "FIRST_STREAM", labelKey: "autoplay_mode_first", captionKey: "autoplay_mode_first_desc", label: "Auto-play first source" },
+  { id: "REGEX_MATCH", labelKey: "autoplay_mode_regex", captionKey: "autoplay_mode_regex_desc", label: "Auto-play regex match" }
 ];
 
 const STREAM_AUTOPLAY_SOURCE_OPTIONS = [
-  { id: "ALL_SOURCES", label: "All sources" },
-  { id: "INSTALLED_ADDONS_ONLY", label: "Installed addons only" },
-  { id: "ENABLED_PLUGINS_ONLY", label: "Plugins only" }
+  { id: "ALL_SOURCES", labelKey: "autoplay_scope_all", captionKey: "autoplay_scope_all_desc", label: "All sources" },
+  { id: "INSTALLED_ADDONS_ONLY", labelKey: "autoplay_scope_addons", captionKey: "autoplay_scope_addons_desc", label: "Installed addons only" },
+  { id: "ENABLED_PLUGINS_ONLY", labelKey: "autoplay_scope_plugins", captionKey: "autoplay_scope_plugins_desc", label: "Enabled plugins only" }
 ];
 
-const STREAM_AUTOPLAY_TIMEOUT_OPTIONS = [
-  { id: 0, label: "Instant" },
-  { id: 3, label: "3 seconds" },
-  { id: 5, label: "5 seconds" },
-  { id: 10, label: "10 seconds" },
-  { id: 15, label: "15 seconds" }
-];
+const STREAM_AUTOPLAY_TIMEOUT_OPTIONS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30]
+  .map((seconds) => ({
+    id: seconds,
+    labelKey: seconds === 0 ? "autoplay_timeout_instant" : null,
+    label: seconds === 0 ? "Instant" : `${seconds}s`
+  }))
+  .concat([{ id: 2147483647, labelKey: "autoplay_timeout_unlimited", label: "Unlimited" }]);
+
+const STREAM_REUSE_CACHE_HOURS_OPTIONS = [1, 2, 3, 6, 12, 24, 48, 72, 168].map((hours) => ({
+  id: hours,
+  label: ""
+}));
 
 function labelForOptionId(options, id, fallback) {
   const match = options.find((option) => String(option.id) === String(id));
-  return match ? match.label : fallback;
+  return match ? translateOptionLabel(match, fallback) : fallback;
+}
+
+function formatReuseCacheDuration(hoursValue) {
+  const hours = Math.min(168, Math.max(1, Math.trunc(Number(hoursValue) || 24)));
+  if (hours < 24) {
+    return `${hours}h`;
+  }
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  if (!remainingHours) {
+    return `${days}d`;
+  }
+  return `${days}d ${remainingHours}h`;
 }
 
 // Subtitle appearance options, kept in sync with the in-player subtitle style
@@ -4833,6 +4851,30 @@ export const SettingsScreen = {
           !PlayerSettingsStore.get().streamAutoPlayPreferBingeGroupForNextEpisode
       });
     });
+    this.actionMap.set("playback:reuseBingeGroup", () => {
+      PlayerSettingsStore.set({
+        streamAutoPlayReuseBingeGroup: !PlayerSettingsStore.get().streamAutoPlayReuseBingeGroup
+      });
+    });
+    this.actionMap.set("playback:reuseLastLink", () => {
+      PlayerSettingsStore.set({
+        streamReuseLastLinkEnabled: !PlayerSettingsStore.get().streamReuseLastLinkEnabled
+      });
+    });
+    this.actionMap.set("playback:reuseLastLinkCache", () => {
+      this.openOptionDialog({
+        title: t("autoplay_last_link_cache", {}, "Last Link Cache Duration"),
+        options: STREAM_REUSE_CACHE_HOURS_OPTIONS.map((option) => ({
+          ...option,
+          label: formatReuseCacheDuration(option.id)
+        })),
+        selectedId: PlayerSettingsStore.get().streamReuseLastLinkCacheHours,
+        returnFocusKey: "playback:reuseLastLinkCache",
+        onSelect: (option) => {
+          PlayerSettingsStore.set({ streamReuseLastLinkCacheHours: Number(option.id) });
+        }
+      });
+    });
     this.actionMap.set("playback:trailer", () => {
       PlayerSettingsStore.set({ trailerAutoplay: !PlayerSettingsStore.get().trailerAutoplay });
     });
@@ -4903,7 +4945,7 @@ export const SettingsScreen = {
     });
     this.actionMap.set("playback:autoStreamMode", () => {
       this.openOptionDialog({
-        title: t("settings.playback.autoStream.title", {}, "Auto Stream Selection"),
+        title: t("autoplay_stream_selection", {}, "Auto Stream Selection"),
         options: STREAM_AUTOPLAY_MODE_OPTIONS,
         selectedId: PlayerSettingsStore.get().streamAutoPlayMode,
         returnFocusKey: "playback:autoStreamMode",
@@ -4914,7 +4956,7 @@ export const SettingsScreen = {
     });
     this.actionMap.set("playback:autoStreamTimeout", () => {
       this.openOptionDialog({
-        title: t("settings.playback.autoStreamTimeout.title", {}, "Auto-play countdown"),
+        title: t("autoplay_timeout_title", {}, "Stream Selection Timeout"),
         options: STREAM_AUTOPLAY_TIMEOUT_OPTIONS,
         selectedId: PlayerSettingsStore.get().streamAutoPlayTimeoutSeconds,
         returnFocusKey: "playback:autoStreamTimeout",
@@ -4925,7 +4967,7 @@ export const SettingsScreen = {
     });
     this.actionMap.set("playback:autoStreamSource", () => {
       this.openOptionDialog({
-        title: t("settings.playback.autoStreamSource.title", {}, "Auto-play source"),
+        title: t("autoplay_scope", {}, "Auto-play Source Scope"),
         options: STREAM_AUTOPLAY_SOURCE_OPTIONS,
         selectedId: PlayerSettingsStore.get().streamAutoPlaySource,
         returnFocusKey: "playback:autoStreamSource",
@@ -4936,13 +4978,41 @@ export const SettingsScreen = {
     });
     this.actionMap.set("playback:autoStreamRegex", () => {
       this.openTextDialog({
-        title: t("settings.playback.autoStreamRegex.title", {}, "Auto-play regex"),
+        title: t("autoplay_regex_title", {}, "Regex Pattern"),
         value: PlayerSettingsStore.get().streamAutoPlayRegex || "",
         returnFocusKey: "playback:autoStreamRegex",
         onSubmit: (value) => {
           PlayerSettingsStore.set({ streamAutoPlayRegex: String(value || "").trim() });
           return true;
         }
+      });
+    });
+    this.actionMap.set("playback:autoStreamAddons", async () => {
+      const addons = await addonRepository.getInstalledAddons().catch(() => []);
+      const options = addons
+        .map((addon) => String(addon?.displayName || addon?.name || "").trim())
+        .filter(Boolean)
+        .map((name) => ({ id: name, label: name }));
+      this.openMultiChoiceDialog({
+        title: t("autoplay_allowed_addons", {}, "Allowed Addons"),
+        options,
+        selectedIds: PlayerSettingsStore.get().streamAutoPlaySelectedAddons,
+        returnFocusKey: "playback:autoStreamAddons",
+        onToggle: (selectedIds) => PlayerSettingsStore.set({ streamAutoPlaySelectedAddons: selectedIds })
+      });
+    });
+    this.actionMap.set("playback:autoStreamPlugins", () => {
+      const options = PluginManager.listPluginSources()
+        .filter((source) => source?.enabled !== false)
+        .map((source) => String(source?.name || "").trim())
+        .filter(Boolean)
+        .map((name) => ({ id: name, label: name }));
+      this.openMultiChoiceDialog({
+        title: t("autoplay_allowed_plugins", {}, "Allowed Plugins"),
+        options,
+        selectedIds: PlayerSettingsStore.get().streamAutoPlaySelectedPlugins,
+        returnFocusKey: "playback:autoStreamPlugins",
+        onToggle: (selectedIds) => PlayerSettingsStore.set({ streamAutoPlaySelectedPlugins: selectedIds })
       });
     });
     this.actionMap.set("playback:audioLanguage", () => {
@@ -5109,10 +5179,16 @@ export const SettingsScreen = {
         })}
         ${this.renderToggleRow({
           focusKey: "playback:preferBingeGroup",
-          title: t("settings.playback.preferBingeGroup.title", {}, "Prefer Binge Group (Next Episode)"),
-          subtitle: t("settings.playback.preferBingeGroup.subtitle", {}, "Try the same source profile first before normal auto-play rules."),
+          title: t("autoplay_prefer_binge_group", {}, "Prefer Binge Group (Next Episode)"),
+          subtitle: t("autoplay_prefer_binge_group_sub", {}, "Try the same source profile first before normal auto-play rules."),
           checked: Boolean(model.player.streamAutoPlayPreferBingeGroupForNextEpisode)
         })}
+        ${Boolean(model.player.streamAutoPlayPreferBingeGroupForNextEpisode) ? this.renderToggleRow({
+          focusKey: "playback:reuseBingeGroup",
+          title: t("autoplay_reuse_binge_group", {}, "Reuse Binge Group"),
+          subtitle: t("autoplay_reuse_binge_group_sub", {}, "Remember and reuse the last binge group across sessions."),
+          checked: Boolean(model.player.streamAutoPlayReuseBingeGroup)
+        }) : ""}
         ${this.renderToggleRow({
           focusKey: "playback:skipIntro",
           title: t("settings.playback.skipIntro.title", {}, "Skip Intro"),
@@ -5157,30 +5233,61 @@ export const SettingsScreen = {
           value: String(model.player.stillWatchingEpisodeThreshold ?? 3)
         }) : ""}
         ` : ""}
+        ${this.renderToggleRow({
+          focusKey: "playback:reuseLastLink",
+          title: t("autoplay_reuse_last_link", {}, "Reuse Last Link"),
+          subtitle: t("autoplay_reuse_last_link_sub", {}, "Auto-play your last working stream for this same movie or episode while the cache is valid."),
+          checked: Boolean(model.player.streamReuseLastLinkEnabled)
+        })}
+        ${Boolean(model.player.streamReuseLastLinkEnabled) ? this.renderActionRow({
+          focusKey: "playback:reuseLastLinkCache",
+          title: t("autoplay_last_link_cache", {}, "Last Link Cache Duration"),
+          subtitle: t("autoplay_reuse_last_link_sub", {}, "Auto-play your last working stream while the cache is valid."),
+          value: formatReuseCacheDuration(model.player.streamReuseLastLinkCacheHours)
+        }) : ""}
         ${this.renderActionRow({
           focusKey: "playback:autoStreamMode",
-          title: t("settings.playback.autoStream.title", {}, "Auto Stream Selection"),
-          subtitle: t("settings.playback.autoStream.subtitle", {}, "Automatically play a stream when you press play"),
-          value: labelForOptionId(STREAM_AUTOPLAY_MODE_OPTIONS, model.player.streamAutoPlayMode, "Off (choose manually)")
+          title: t("autoplay_stream_selection", {}, "Auto Stream Selection"),
+          subtitle: translateOptionCaption(
+            STREAM_AUTOPLAY_MODE_OPTIONS.find((option) => String(option.id) === String(model.player.streamAutoPlayMode)),
+            t("autoplay_mode_manual_desc", {}, "Always show the source list and let me choose.")
+          ),
+          value: labelForOptionId(STREAM_AUTOPLAY_MODE_OPTIONS, model.player.streamAutoPlayMode, "Manual (choose stream)")
+        })}
+        ${this.renderActionRow({
+          focusKey: "playback:autoStreamTimeout",
+          title: t("autoplay_timeout_title", {}, "Stream Selection Timeout"),
+          subtitle: t("autoplay_timeout_sub", {}, "Wait time for addons before selecting."),
+          value: labelForOptionId(STREAM_AUTOPLAY_TIMEOUT_OPTIONS, model.player.streamAutoPlayTimeoutSeconds, `${model.player.streamAutoPlayTimeoutSeconds}s`)
         })}
         ${String(model.player.streamAutoPlayMode || "MANUAL") !== "MANUAL" ? `
         ${this.renderActionRow({
-          focusKey: "playback:autoStreamTimeout",
-          title: t("settings.playback.autoStreamTimeout.title", {}, "Auto-play countdown"),
-          subtitle: t("settings.playback.autoStreamTimeout.subtitle", {}, "How long to wait before playing the selected stream"),
-          value: labelForOptionId(STREAM_AUTOPLAY_TIMEOUT_OPTIONS, model.player.streamAutoPlayTimeoutSeconds, `${model.player.streamAutoPlayTimeoutSeconds}s`)
-        })}
-        ${this.renderActionRow({
           focusKey: "playback:autoStreamSource",
-          title: t("settings.playback.autoStreamSource.title", {}, "Auto-play source"),
-          subtitle: t("settings.playback.autoStreamSource.subtitle", {}, "Which sources auto-play can pick from"),
+          title: t("autoplay_scope", {}, "Auto-play Source Scope"),
+          subtitle: labelForOptionId(STREAM_AUTOPLAY_SOURCE_OPTIONS, model.player.streamAutoPlaySource, "All sources"),
           value: labelForOptionId(STREAM_AUTOPLAY_SOURCE_OPTIONS, model.player.streamAutoPlaySource, "All sources")
-        })}` : ""}
+        })}
+        ${String(model.player.streamAutoPlaySource || "ALL_SOURCES") !== "ENABLED_PLUGINS_ONLY" ? this.renderActionRow({
+          focusKey: "playback:autoStreamAddons",
+          title: t("autoplay_allowed_addons", {}, "Allowed Addons"),
+          subtitle: t("autoplay_scope_addons_desc", {}, "Auto-play only considers selected installed addons."),
+          value: model.player.streamAutoPlaySelectedAddons?.length
+            ? String(model.player.streamAutoPlaySelectedAddons.length)
+            : t("autoplay_all_addons", {}, "All installed addons")
+        }) : ""}
+        ${String(model.player.streamAutoPlaySource || "ALL_SOURCES") !== "INSTALLED_ADDONS_ONLY" ? this.renderActionRow({
+          focusKey: "playback:autoStreamPlugins",
+          title: t("autoplay_allowed_plugins", {}, "Allowed Plugins"),
+          subtitle: t("autoplay_scope_plugins_desc", {}, "Auto-play only considers selected enabled plugins."),
+          value: model.player.streamAutoPlaySelectedPlugins?.length
+            ? String(model.player.streamAutoPlaySelectedPlugins.length)
+            : t("autoplay_all_plugins", {}, "All enabled plugins")
+        }) : ""}` : ""}
         ${String(model.player.streamAutoPlayMode || "MANUAL") === "REGEX_MATCH" ? `
         ${this.renderActionRow({
           focusKey: "playback:autoStreamRegex",
-          title: t("settings.playback.autoStreamRegex.title", {}, "Auto-play regex"),
-          subtitle: t("settings.playback.autoStreamRegex.subtitle", {}, "Play the first stream whose details match this pattern"),
+          title: t("autoplay_regex_title", {}, "Regex Pattern"),
+          subtitle: t("autoplay_regex_matches", {}, "Matches stream name, title, description, addon and URL."),
           value: String(model.player.streamAutoPlayRegex || "").trim() || t("common.notSet", {}, "Not set")
         })}` : ""}
       </div>

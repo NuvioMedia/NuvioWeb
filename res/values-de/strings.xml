@@ -2086,4 +2086,6 @@
     <string name="player.audio.noSupportedTracks">Keine unterstützten Audiospuren verfügbar</string>
     <string name="settings_stream_addon_logo_title">Add-on-Logo</string>
     <string name="settings_stream_addon_logo_description">Zeige das Logo und den Namen des Add-ons neben Stream-Quellen an.</string>
+    <string name="autoplay_reuse_binge_group">Binge-Gruppe wiederverwenden</string>
+    <string name="autoplay_reuse_binge_group_sub">Die letzte Binge-Gruppe sitzungsübergreifend speichern und wiederverwenden (Weiterschauen, Details usw.).</string>
 </resources>

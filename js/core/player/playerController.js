@@ -2037,6 +2037,14 @@ export const PlayerController = {
     this.stopAvPlayTickTimer();
     if (avplay) {
       try {
+        // Clear Samsung's native subtitle plane while AVPlay is still in a
+        // state where setSilentSubtitle() is valid. Otherwise a corrupted
+        // subtitle surface can remain visible after the player DOM is gone.
+        avplay.setSilentSubtitle?.(true);
+      } catch (_) {
+        // Continue with stop/close even when the firmware rejects the toggle.
+      }
+      try {
         avplay.setListener?.({});
       } catch (_) {
         // Ignore listener reset failures.

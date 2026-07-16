@@ -37,13 +37,20 @@ const DEFAULTS = {
   // MANUAL, pressing play auto-selects a stream and plays it after a countdown.
   streamAutoPlayMode: "MANUAL",
   streamAutoPlaySource: "ALL_SOURCES",
+  streamAutoPlaySelectedAddons: [],
+  streamAutoPlaySelectedPlugins: [],
   streamAutoPlayRegex: "",
   streamAutoPlayPreferBingeGroupForNextEpisode: true,
+  streamAutoPlayReuseBingeGroup: true,
+  streamReuseLastLinkEnabled: false,
+  streamReuseLastLinkCacheHours: 24,
   streamAutoPlayTimeoutSeconds: 3
 };
 
 const STREAM_AUTO_PLAY_MODES = ["MANUAL", "FIRST_STREAM", "REGEX_MATCH"];
 const STREAM_AUTO_PLAY_SOURCES = ["ALL_SOURCES", "INSTALLED_ADDONS_ONLY", "ENABLED_PLUGINS_ONLY"];
+const STREAM_AUTO_PLAY_TIMEOUT_UNLIMITED = 2147483647;
+const STREAM_AUTO_PLAY_TIMEOUT_VALUES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 25, 30, STREAM_AUTO_PLAY_TIMEOUT_UNLIMITED];
 const NEXT_EPISODE_THRESHOLD_MODES = ["PERCENTAGE", "MINUTES_BEFORE_END"];
 
 function normalizeStreamAutoPlayMode(value) {
@@ -58,10 +65,31 @@ function normalizeStreamAutoPlaySource(value) {
 
 function normalizeStreamAutoPlayTimeout(value) {
   const seconds = Math.trunc(Number(value));
-  if (!Number.isFinite(seconds) || seconds < 0) {
+  if (!Number.isFinite(seconds)) {
     return DEFAULTS.streamAutoPlayTimeoutSeconds;
   }
-  return Math.min(60, seconds);
+  if (seconds === 11 || seconds === STREAM_AUTO_PLAY_TIMEOUT_UNLIMITED) {
+    return STREAM_AUTO_PLAY_TIMEOUT_UNLIMITED;
+  }
+  return STREAM_AUTO_PLAY_TIMEOUT_VALUES
+    .filter((entry) => entry !== STREAM_AUTO_PLAY_TIMEOUT_UNLIMITED)
+    .reduce((closest, entry) => (
+      Math.abs(entry - seconds) < Math.abs(closest - seconds) ? entry : closest
+    ), DEFAULTS.streamAutoPlayTimeoutSeconds);
+}
+
+function normalizeStringList(value) {
+  return [...new Set((Array.isArray(value) ? value : [])
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean))];
+}
+
+function normalizeReuseLastLinkCacheHours(value) {
+  const hours = Math.trunc(Number(value));
+  if (!Number.isFinite(hours)) {
+    return DEFAULTS.streamReuseLastLinkCacheHours;
+  }
+  return Math.min(168, Math.max(1, hours));
 }
 
 function normalizeNextEpisodeThresholdMode(value) {
@@ -163,10 +191,21 @@ function normalizePlayerSettings(settings = {}) {
     ...persistentSettings,
     streamAutoPlayMode: normalizeStreamAutoPlayMode(persistentSettings.streamAutoPlayMode ?? DEFAULTS.streamAutoPlayMode),
     streamAutoPlaySource: normalizeStreamAutoPlaySource(persistentSettings.streamAutoPlaySource ?? DEFAULTS.streamAutoPlaySource),
+    streamAutoPlaySelectedAddons: normalizeStringList(persistentSettings.streamAutoPlaySelectedAddons),
+    streamAutoPlaySelectedPlugins: normalizeStringList(persistentSettings.streamAutoPlaySelectedPlugins),
     streamAutoPlayRegex: String(persistentSettings.streamAutoPlayRegex ?? "").slice(0, 500),
     streamAutoPlayPreferBingeGroupForNextEpisode: Boolean(
       persistentSettings.streamAutoPlayPreferBingeGroupForNextEpisode ??
       DEFAULTS.streamAutoPlayPreferBingeGroupForNextEpisode
+    ),
+    streamAutoPlayReuseBingeGroup: Boolean(
+      persistentSettings.streamAutoPlayReuseBingeGroup ?? DEFAULTS.streamAutoPlayReuseBingeGroup
+    ),
+    streamReuseLastLinkEnabled: Boolean(
+      persistentSettings.streamReuseLastLinkEnabled ?? DEFAULTS.streamReuseLastLinkEnabled
+    ),
+    streamReuseLastLinkCacheHours: normalizeReuseLastLinkCacheHours(
+      persistentSettings.streamReuseLastLinkCacheHours
     ),
     streamAutoPlayTimeoutSeconds: normalizeStreamAutoPlayTimeout(persistentSettings.streamAutoPlayTimeoutSeconds),
     nextEpisodeThresholdMode: normalizeNextEpisodeThresholdMode(

@@ -915,4 +915,12 @@
     <string name="player.audio.noSupportedTracks">Geen ondersteunde audiotracks beschikbaar</string>
     <string name="settings_stream_addon_logo_title">Addon-logo</string>
     <string name="settings_stream_addon_logo_description">Toon addon-logo en -naam naast streambronnen.</string>
+    <string name="autoplay_prefer_binge_group">Binge-groep verkiezen (volgende aflevering)</string>
+    <string name="autoplay_prefer_binge_group_sub">Probeer eerst hetzelfde bronprofiel (dezelfde addon/kwaliteitsgroep) vóór de normale regels voor automatisch afspelen.</string>
+    <string name="autoplay_reuse_binge_group">Binge-groep hergebruiken</string>
+    <string name="autoplay_reuse_binge_group_sub">Onthoud en hergebruik de laatste binge-groep tussen sessies (Verder kijken, Details enz.).</string>
+    <string name="autoplay_timeout_title">Time-out voor bronselectie</string>
+    <string name="autoplay_timeout_sub">Wachttijd voor addons vóór de selectie.</string>
+    <string name="autoplay_timeout_instant">Direct</string>
+    <string name="autoplay_timeout_unlimited">Onbeperkt</string>
 </resources>

@@ -1001,4 +1001,10 @@
     <string name="player.audio.noSupportedTracks">Nincs elérhető támogatott hangsáv</string>
     <string name="settings_stream_addon_logo_title">Kiegészítő logója</string>
     <string name="settings_stream_addon_logo_description">A kiegészítő logójának és nevének megjelenítése a stream források mellett.</string>
+    <string name="autoplay_reuse_binge_group">Binge csoport újrafelhasználása</string>
+    <string name="autoplay_reuse_binge_group_sub">Az utolsó binge csoport megjegyzése és újrafelhasználása a munkamenetek között (Megtekintés folytatása, Részletek stb.).</string>
+    <string name="autoplay_timeout_title">Forrásválasztási időkorlát</string>
+    <string name="autoplay_timeout_sub">Várakozási idő a bővítményekre a kiválasztás előtt.</string>
+    <string name="autoplay_timeout_instant">Azonnal</string>
+    <string name="autoplay_timeout_unlimited">Korlátlan</string>
 </resources>

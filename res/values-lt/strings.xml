@@ -923,4 +923,6 @@ Klaida: Bandomoji simuliuojama klaida — tai nėra tikras gedimas. Šaltinis gr
     <string name="player.audio.noSupportedTracks">Nėra palaikomų garso takelių</string>
     <string name="settings_stream_addon_logo_title">Priedo logotipas</string>
     <string name="settings_stream_addon_logo_description">Rodyti priedo logotipą ir pavadinimą šalia srauto šaltinių.</string>
+    <string name="autoplay_reuse_binge_group">Pakartotinai naudoti „Binge“ grupę</string>
+    <string name="autoplay_reuse_binge_group_sub">Įsiminti ir pakartotinai naudoti paskutinę grupę tarp seansų (Tęsti žiūrėjimą, Išsami informacija ir kt.).</string>
 </resources>

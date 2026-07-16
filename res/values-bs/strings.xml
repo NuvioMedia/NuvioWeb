@@ -1373,4 +1373,6 @@
     <string name="player.audio.noSupportedTracks">Nema dostupnih podržanih audio zapisa</string>
     <string name="settings_stream_addon_logo_title">Logotip dodatka</string>
     <string name="settings_stream_addon_logo_description">Prikaži logotip i naziv dodatka pored izvora streama.</string>
+    <string name="autoplay_reuse_binge_group">Ponovo koristi Binge grupu</string>
+    <string name="autoplay_reuse_binge_group_sub">Zapamti i ponovo koristi zadnju Binge grupu između sesija (Nastavi gledati, Detalji itd.).</string>
 </resources>

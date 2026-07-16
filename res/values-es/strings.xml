@@ -1088,4 +1088,12 @@
     <string name="player.audio.noSupportedTracks">No hay pistas de audio compatibles disponibles</string>
     <string name="settings_stream_addon_logo_title">Logotipo del complemento</string>
     <string name="settings_stream_addon_logo_description">Muestra el logotipo y el nombre del complemento junto a las fuentes de transmisión.</string>
+    <string name="autoplay_prefer_binge_group">Preferir grupo de reproducción continua (siguiente episodio)</string>
+    <string name="autoplay_prefer_binge_group_sub">Probar primero el mismo perfil de fuente (mismo addon/grupo de calidad) antes de las reglas normales de reproducción automática.</string>
+    <string name="autoplay_reuse_binge_group">Reutilizar grupo de reproducción continua</string>
+    <string name="autoplay_reuse_binge_group_sub">Recordar y reutilizar el último grupo entre sesiones (Seguir viendo, Detalles, etc.).</string>
+    <string name="autoplay_timeout_title">Tiempo límite de selección de fuente</string>
+    <string name="autoplay_timeout_sub">Tiempo de espera para los addons antes de seleccionar.</string>
+    <string name="autoplay_timeout_instant">Instantáneo</string>
+    <string name="autoplay_timeout_unlimited">Ilimitado</string>
 </resources>
