@@ -2481,6 +2481,7 @@ export const PlayerScreen = {
       title: this.params.playerTitle || this.params.itemTitle || null,
       poster: this.params.poster || null,
       background: this.params.playerBackdropUrl || this.params.backdrop || this.params.poster || null,
+      logo: this.params.playerLogoUrl || this.params.logo || null,
       episodeTitle: this.params.episodeTitle || this.params.playerSubtitle || null,
       requestHeaders,
       mediaSourceType,
@@ -12300,6 +12301,16 @@ export const PlayerScreen = {
         if (forcedInternal) return forcedInternal;
         const forcedAddon = findMatch(target, { sourceType: "addon", forced: true });
         if (forcedAddon) return forcedAddon;
+        if (Environment.isWebOS()) {
+          // webOS can omit the container forced flag exposed by Android's
+          // ExoPlayer. Only fall back when one internal language match exists,
+          // so an unmarked forced track remains deterministic and addon/full
+          // subtitle choices are not guessed between multiple candidates.
+          const internalMatches = options.filter((entry) => (
+            entry.sourceType === "internal" && matchTarget(entry, target)
+          ));
+          if (internalMatches.length === 1) return internalMatches[0];
+        }
         continue;
       }
 

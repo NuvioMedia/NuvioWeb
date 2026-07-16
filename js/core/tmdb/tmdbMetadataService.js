@@ -10,7 +10,8 @@ const TMDB_IMAGE_SIZES = {
   // Match Android TV: hero backdrops need enough source pixels for a 1080p TV.
   backdrop: "w1280",
   logo: "w300",
-  still: "w300"
+  // Match Android TV: episode cards are wider than 300px on the TV layout.
+  still: "w500"
 };
 const TMDB_TRAILER_FALLBACK_LANGUAGE = "en-US";
 

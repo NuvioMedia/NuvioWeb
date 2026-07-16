@@ -30,8 +30,12 @@ function logTizenAvPlayDebug(...args) {
   }
 }
 
-function isValidAvPlayTrackSelectionState(state) {
-  return state === "READY" || state === "PLAYING" || state === "PAUSED";
+function isValidAvPlayAudioTrackSelectionState(state) {
+  return state === "PLAYING";
+}
+
+function isValidAvPlaySubtitleTrackSelectionState(state) {
+  return state === "PLAYING" || state === "PAUSED";
 }
 
 function isValidAvPlayPlaybackSpeedState(state) {
@@ -132,7 +136,6 @@ export const PlayerController = {
   startupAudioGateActive: false,
   startupAudioGatePausesNativePlayback: true,
   startupPresentationAudioMuted: false,
-  avplayPresentationAudioDisabled: false,
   desiredPlaybackRate: 1,
   appliedAvPlayPlaybackRate: 1,
 
@@ -586,45 +589,9 @@ export const PlayerController = {
     }
   },
 
-  applyStartupPresentationAudioMuteToAvPlay() {
-    const avplay = this.getAvPlay();
-    if (!avplay || !this.isUsingAvPlay()) {
-      return false;
-    }
-    if (this.startupPresentationAudioMuted) {
-      if (this.avplayPresentationAudioDisabled) {
-        return true;
-      }
-      if (typeof avplay.disableAudioStream !== "function") {
-        return false;
-      }
-      try {
-        avplay.disableAudioStream();
-        this.avplayPresentationAudioDisabled = true;
-        return true;
-      } catch (_) {
-        return false;
-      }
-    }
-    if (!this.avplayPresentationAudioDisabled) {
-      return true;
-    }
-    if (typeof avplay.enableAudioStream !== "function") {
-      return false;
-    }
-    try {
-      avplay.enableAudioStream();
-      this.avplayPresentationAudioDisabled = false;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  },
-
   setStartupPresentationAudioMuted(muted) {
     this.startupPresentationAudioMuted = Boolean(muted);
     this.applyStartupAudioGateToVideo();
-    this.applyStartupPresentationAudioMuteToAvPlay();
   },
 
   pauseNativePlaybackForStartupGate() {
@@ -728,7 +695,6 @@ export const PlayerController = {
       return false;
     }
     try {
-      this.applyStartupPresentationAudioMuteToAvPlay();
       avplay.play?.();
       this.isPlaying = true;
       this.syncWebOsPlaybackKeepAwake();
@@ -1165,7 +1131,7 @@ export const PlayerController = {
       return false;
     }
     const state = this.getAvPlayState();
-    if (!isValidAvPlayTrackSelectionState(state)) {
+    if (!isValidAvPlayAudioTrackSelectionState(state)) {
       logTizenAvPlayDebug("Tizen AVPlay audio selection deferred; invalid state", {
         state,
         targetIndex
@@ -1298,7 +1264,7 @@ export const PlayerController = {
       return false;
     }
     const state = this.getAvPlayState();
-    if (!isValidAvPlayTrackSelectionState(state)) {
+    if (!isValidAvPlaySubtitleTrackSelectionState(state)) {
       logTizenAvPlayDebug("Tizen AVPlay subtitle selection deferred; invalid state", {
         state,
         targetIndex
@@ -1494,8 +1460,8 @@ export const PlayerController = {
     this.desiredAvPlayAudioTrackIndex = targetIndex;
     this.desiredAvPlayAudioTrackUntil = Date.now() + 5000;
     const state = this.getAvPlayState();
-    const canApplyNow = isValidAvPlayTrackSelectionState(state);
-    const shouldDeferUntilPlay = state === "PAUSED";
+    const canApplyNow = isValidAvPlayAudioTrackSelectionState(state);
+    const shouldDeferUntilPlay = !canApplyNow;
     logTizenAvPlayDebug("Tizen AVPlay audio track requested", {
       state,
       uiTrackIndex: Number(trackIndex),
@@ -1569,7 +1535,7 @@ export const PlayerController = {
     }
 
     const state = this.getAvPlayState();
-    if (state && !isValidAvPlayTrackSelectionState(state)) {
+    if (state && !isValidAvPlayAudioTrackSelectionState(state)) {
       return false;
     }
 
@@ -1652,8 +1618,8 @@ export const PlayerController = {
     this.desiredAvPlaySubtitleTrackIndex = canonicalIndex;
     this.desiredAvPlaySubtitleTrackUntil = Date.now() + 5000;
     const state = this.getAvPlayState();
-    const canApplyNow = isValidAvPlayTrackSelectionState(state);
-    const shouldDeferUntilPlay = state === "PAUSED";
+    const canApplyNow = isValidAvPlaySubtitleTrackSelectionState(state);
+    const shouldDeferUntilPlay = !canApplyNow;
     logTizenAvPlayDebug("Tizen AVPlay subtitle track requested", {
       state,
       uiTrackIndex: targetIndex,
@@ -1721,7 +1687,7 @@ export const PlayerController = {
     }
 
     const state = this.getAvPlayState();
-    if (state && !isValidAvPlayTrackSelectionState(state)) {
+    if (state && !isValidAvPlaySubtitleTrackSelectionState(state)) {
       return false;
     }
 
@@ -2070,13 +2036,6 @@ export const PlayerController = {
 
     this.stopAvPlayTickTimer();
     if (avplay) {
-      if (this.avplayPresentationAudioDisabled && !this.startupPresentationAudioMuted) {
-        try {
-          avplay.enableAudioStream?.();
-        } catch (_) {
-          // Ignore audio restoration failures while closing AVPlay.
-        }
-      }
       try {
         avplay.setListener?.({});
       } catch (_) {
@@ -2120,7 +2079,6 @@ export const PlayerController = {
     this.avplayEnded = false;
     this.avplayCurrentTimeMs = 0;
     this.avplayDurationMs = 0;
-    this.avplayPresentationAudioDisabled = false;
     this.appliedAvPlayPlaybackRate = 1;
   },
 
@@ -4285,6 +4243,7 @@ export const PlayerController = {
           title: active.title || null,
           poster: active.poster || null,
           background: active.background || null,
+          logo: active.logo || null,
           episodeTitle: active.episodeTitle || null,
           positionMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : Math.max(0, Math.trunc(safePosition)),
           durationMs: hasFiniteDuration ? Math.max(0, Math.trunc(safeDuration)) : Math.max(0, Math.trunc(safePosition))
@@ -4322,6 +4281,7 @@ export const PlayerController = {
       title: active.title || null,
       poster: active.poster || null,
       background: active.background || null,
+      logo: active.logo || null,
       episodeTitle: active.episodeTitle || null,
       // Persist the stream identity so Continue Watching can resume the same
       // source instead of reopening the stream picker.

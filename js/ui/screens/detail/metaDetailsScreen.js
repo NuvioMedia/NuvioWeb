@@ -1557,7 +1557,13 @@ export const MetaDetailsScreen = {
     this.restoredTrackScrollLeftByKey = {};
     this.bindTrailerProxyMessaging();
 
-    if (this.hydrateFromRouteState(navigationContext?.restoredState || null, params)) {
+    // Route snapshots preserve focus and scroll when navigating Back. A fresh
+    // entry from Home must reload metadata instead of reviving a stale detail
+    // snapshot captured before playback/background enrichment completed.
+    const restoredRouteState = navigationContext?.isBackNavigation
+      ? navigationContext?.restoredState || null
+      : null;
+    if (this.hydrateFromRouteState(restoredRouteState, params)) {
       this.isLoadingDetail = false;
       this.render(this.meta, this.pendingFocusRestore);
       const refreshToken = this.detailLoadToken;
@@ -6959,6 +6965,14 @@ export const MetaDetailsScreen = {
     const tmdbId = resolveMetaTmdbId(this.meta, this.params);
     const traktId = resolveMetaTraktId(this.meta, this.params);
     const contentLanguage = resolveMetaOriginalLanguage(this.meta, this.params);
+    const resumeVideoId = String(this.params?.resumeVideoId || "").trim();
+    const isContinueWatchingTarget = Boolean(
+      this.params?.fromContinueWatching &&
+      (resumeVideoId
+        ? resumeVideoId === String(episode.id || "")
+        : Number(this.params?.resumeSeason || 0) === Number(episode.season || 0) &&
+          Number(this.params?.resumeEpisode || 0) === Number(episode.episode || 0))
+    );
     this.stopTrailerPlaybackForNavigation();
     Router.navigate("stream", {
       itemId: this.params?.itemId || null,
@@ -6989,6 +7003,10 @@ export const MetaDetailsScreen = {
       nextEpisodeEpisode: nextEpisode?.episode ?? null,
       nextEpisodeTitle: nextEpisode?.title || "",
       nextEpisodeReleased: nextEpisode?.released || "",
+      continueWatchingBackHome: isContinueWatchingTarget,
+      resumeStreamIdentity: isContinueWatchingTarget
+        ? this.params?.resumeStreamIdentity || null
+        : null,
       ...extraParams
     }, this.getStreamNavigationOptions());
   },

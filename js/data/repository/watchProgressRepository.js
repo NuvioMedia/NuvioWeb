@@ -179,29 +179,32 @@ function filterForSelectedContinueWatchingSource(items = []) {
 }
 
 function deduplicateInProgress(items = []) {
-  const seriesItems = [];
   const nonSeriesItems = [];
-
-  items.forEach((item) => {
-    if (isSeriesType(item?.contentType)) {
-      seriesItems.push(item);
-      return;
-    }
-    nonSeriesItems.push(item);
-  });
-
   const latestSeriesItems = [];
   const seenContentIds = new Set();
-  seriesItems
+
+  (Array.isArray(items) ? items : [])
     .slice()
     .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
     .forEach((item) => {
+      if (!isSeriesType(item?.contentType)) {
+        if (shouldTreatAsInProgressForContinueWatching(item)) {
+          nonSeriesItems.push(item);
+        }
+        return;
+      }
+
       const contentId = String(item?.contentId || "").trim();
       if (!contentId || seenContentIds.has(contentId)) {
         return;
       }
       seenContentIds.add(contentId);
-      latestSeriesItems.push(item);
+      // Decide Continue Watching eligibility only after selecting the newest
+      // episode state for the series. Otherwise a completed episode is removed
+      // first and an older partial record can reappear beside the real Next Up.
+      if (shouldTreatAsInProgressForContinueWatching(item)) {
+        latestSeriesItems.push(item);
+      }
     });
 
   return [...nonSeriesItems, ...latestSeriesItems].sort(
@@ -576,9 +579,7 @@ class WatchProgressRepository {
       .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
       .slice(0, 300);
 
-    const inProgressOnly = deduplicateInProgress(
-      recentItems.filter((item) => shouldTreatAsInProgressForContinueWatching(item))
-    );
+    const inProgressOnly = deduplicateInProgress(recentItems);
 
     const enrichedItems = await batchEnrichProgressItems(inProgressOnly.slice(0, limit));
     return enrichedItems;

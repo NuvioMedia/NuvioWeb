@@ -4322,7 +4322,12 @@ export const HomeScreen = {
       tmdbId: normalized.tmdbId || null,
       traktId: normalized.traktId || null,
       fallbackTitle: normalized.title || normalized.contentId || "Untitled",
-      returnHomeOnBack: true
+      fromContinueWatching: true,
+      returnHomeOnBack: true,
+      resumeVideoId: normalized.videoId || null,
+      resumeSeason: normalized.season ?? null,
+      resumeEpisode: normalized.episode ?? null,
+      resumeStreamIdentity: normalized.streamIdentity || null
     });
     return true;
   },
@@ -7117,6 +7122,14 @@ export const HomeScreen = {
         });
     });
 
+    // Seed missing order keys from manifest order before progressive requests
+    // can add rows in network-completion order.
+    HomeCatalogStore.ensureOrderKeys(
+      catalogDescriptors.map((catalog) =>
+        buildCatalogOrderKey(catalog.addonId, catalog.type, catalog.catalogId)
+      )
+    );
+
     const initialCatalogLoad = this.getInitialCatalogLoadCount();
     const initialDescriptors = catalogDescriptors.slice(0, initialCatalogLoad);
     const deferredDescriptors = catalogDescriptors.slice(initialCatalogLoad);
@@ -8916,7 +8929,7 @@ export const HomeScreen = {
         const rowIndex = (this.rows || []).indexOf(rowData);
         const layoutPrefs = this.layoutPrefs || {};
         const showPosterLabels = Boolean(layoutPrefs.showPosterLabels !== false);
-        const preferLandscape = Boolean(layoutPrefs.modernLandscapePosters);
+        const preferLandscape = Boolean(layoutPrefs.modernLandscapePostersEnabled);
         const chunkSize = Math.max(
           1,
           Number(this.getRowItemLimit?.() || HOME_MAX_ITEMS_PER_ROW_DEFAULT)

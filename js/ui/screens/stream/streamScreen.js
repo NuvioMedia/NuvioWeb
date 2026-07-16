@@ -1062,6 +1062,13 @@ export const StreamScreen = {
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
     this.autoResumeAttempted = false;
+    this.autoResumeUiActive = Boolean(
+      !navigationContext?.isBackNavigation &&
+      this.params?.continueWatchingBackHome &&
+      !this.params?.startFromBeginning &&
+      (String(this.params?.resumeStreamIdentity || "").trim() ||
+        String(this.params?.preferredStreamId || "").trim())
+    );
     this.autoPlayAttempted = false;
     this.cancelAutoPlayCountdown();
     this.webOsNativePlayerAppId = "";
@@ -1370,6 +1377,7 @@ export const StreamScreen = {
         return;
       }
       this.loading = false;
+      this.autoResumeUiActive = false;
       this.error = error?.message || "Failed to load streams.";
       this.sourceChips = this.sourceChips.map((chip) =>
         chip.status === "loading" ? { ...chip, status: "error" } : chip
@@ -1390,7 +1398,16 @@ export const StreamScreen = {
     const canReusePreferredStream = Boolean(
       this.params?.continueWatchingBackHome && !this.params?.startFromBeginning && preferredStreamId
     );
-    if ((!identity && !canReusePreferredStream) || !this.streams.length) {
+    if (!identity && !canReusePreferredStream) {
+      this.autoResumeUiActive = false;
+      return;
+    }
+    if (!this.streams.length) {
+      if (!this.loading) {
+        this.autoResumeAttempted = true;
+        this.autoResumeUiActive = false;
+        this.requestRender({ delayMs: 0 });
+      }
       return;
     }
     this.autoResumeAttempted = true;
@@ -1407,11 +1424,16 @@ export const StreamScreen = {
         : null);
     if (match?.id) {
       void this.playStream(match.id);
+      return;
     }
+    // The remembered source is no longer available. Fall back to the normal
+    // source panel instead of leaving the direct-resume loading state visible.
+    this.autoResumeUiActive = false;
+    this.requestRender({ delayMs: 0 });
   },
 
   maybeAutoPlayStream() {
-    if (this.autoPlayAttempted || this.autoPlayCountdown) {
+    if (this.autoResumeUiActive || this.autoPlayAttempted || this.autoPlayCountdown) {
       return;
     }
     // Resume already navigated away, or there is nothing to play.
@@ -1497,6 +1519,24 @@ export const StreamScreen = {
           <div class="stream-route-autoplay-name">${escapeHtml(label)}</div>
           <div class="stream-route-autoplay-count">${escapeHtml(t("stream_autoplay_countdown", [secondsLeft], `Starting in ${secondsLeft}s`))}</div>
           <div class="stream-route-autoplay-hint">${escapeHtml(t("stream_autoplay_hint", {}, "Press OK to play now, or any key to choose manually"))}</div>
+        </div>
+      </div>`;
+  },
+
+  renderContinueWatchingResumeOverlay() {
+    if (!this.autoResumeUiActive) {
+      return "";
+    }
+    const title = String(
+      this.params?.episodeTitle || this.params?.itemTitle || this.params?.playerTitle || ""
+    ).trim();
+    return `
+      <div class="stream-route-autoplay">
+        <div class="stream-route-autoplay-card">
+          <div class="stream-route-autoplay-title">${escapeHtml(
+            t("stream_finding_source", {}, "Finding stream source")
+          )}</div>
+          ${title ? `<div class="stream-route-autoplay-name">${escapeHtml(title)}</div>` : ""}
         </div>
       </div>`;
   },
@@ -2242,12 +2282,9 @@ export const StreamScreen = {
       body = `<div class="stream-route-empty">No sources found for this filter.</div>`;
     }
 
-    this.container.innerHTML = `
-      <div class="stream-route-shell${shellStableClass}">
-        <div class="stream-route-backdrop"${backdrop ? ` style="background-image:url('${String(backdrop).replace(/'/g, "%27")}')"` : ""}></div>
-        <div class="stream-route-backdrop-dim"></div>
-        <div class="stream-route-left-gradient"></div>
-        <div class="stream-route-right-gradient"></div>
+    const routeContent = this.autoResumeUiActive
+      ? ""
+      : `
         <div class="stream-route-content">
           <section class="stream-route-left">
             <div class="stream-route-left-inner">
@@ -2267,7 +2304,16 @@ export const StreamScreen = {
               </div>
             </div>
           </section>
-        </div>
+        </div>`;
+
+    this.container.innerHTML = `
+      <div class="stream-route-shell${shellStableClass}">
+        <div class="stream-route-backdrop"${backdrop ? ` style="background-image:url('${String(backdrop).replace(/'/g, "%27")}')"` : ""}></div>
+        <div class="stream-route-backdrop-dim"></div>
+        <div class="stream-route-left-gradient"></div>
+        <div class="stream-route-right-gradient"></div>
+        ${routeContent}
+        ${this.renderContinueWatchingResumeOverlay()}
         ${this.renderAutoPlayOverlay()}
       </div>
     `;
