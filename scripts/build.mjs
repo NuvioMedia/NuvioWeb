@@ -462,6 +462,24 @@ async function runBuild() {
       cp(path.join(rootDir, "boot-guard.js"), path.join(distDir, "boot-guard.js")),
       cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"))
     ]);
+    await Promise.all([
+      cp(
+        path.join(rootDir, "node_modules", "hls.js", "dist", "hls.min.js"),
+        path.join(distDir, "assets", "libs", "hls.min.js")
+      ),
+      cp(
+        path.join(rootDir, "node_modules", "hls.js", "LICENSE"),
+        path.join(distDir, "assets", "libs", "hls.js.LICENSE")
+      ),
+      cp(
+        path.join(rootDir, "node_modules", "dashjs", "dist", "dash.all.min.js"),
+        path.join(distDir, "assets", "libs", "dash.all.min.js")
+      ),
+      cp(
+        path.join(rootDir, "node_modules", "dashjs", "LICENSE.md"),
+        path.join(distDir, "assets", "libs", "dashjs.LICENSE.md")
+      )
+    ]);
     await cp(
       path.join(rootDir, "node_modules", "libbitsub", "pkg", "libbitsub_bg.wasm"),
       path.join(distDir, "assets", "libs", "libbitsub_bg.wasm")
