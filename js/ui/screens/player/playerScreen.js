@@ -15989,6 +15989,14 @@ export const PlayerScreen = {
       return this.navigateBackToStreamScreen();
     }
 
+    // Match Android TV: when the on screen controls are showing, Back hides
+    // them and keeps the video playing. The player only leaves on a Back press
+    // once the controls are already hidden.
+    if (this.controlsVisible && !this.nextEpisodeBackExitArmed) {
+      this.setControlsVisible(false, { focus: false });
+      return true;
+    }
+
     this.nextEpisodeBackExitArmed = false;
     return this.navigateBackToStreamScreen();
   },
