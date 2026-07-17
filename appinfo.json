@@ -16,7 +16,7 @@
   "handlesRelaunch": true,
   "resolution": "1920x1080",
   "transparent": false,
-  "requiredVersion": "5.0.0",
+  "requiredVersion": "4.0.0",
   "services": ["space.nuvio.webos.service"],
   "requiredPermissions": ["internet", "media.operation", "media.query"]
 }

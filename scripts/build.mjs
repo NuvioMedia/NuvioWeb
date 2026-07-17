@@ -369,6 +369,64 @@ function flexGapFallbackPlugin() {
 
 flexGapFallbackPlugin.postcss = true;
 
+function gridFallbackPlugin() {
+  return {
+    postcssPlugin: "nuvio-grid-fallback",
+    Rule(rule) {
+      if (!rule.selector) {
+        return;
+      }
+
+      let displayGrid = false;
+      let rowGap = null;
+      let columnGap = null;
+
+      rule.walkDecls((decl) => {
+        const prop = decl.prop.toLowerCase();
+        if (prop === "display" && /\bgrid\b/.test(decl.value)) {
+          displayGrid = true;
+          return;
+        }
+        if (prop === "gap") {
+          const values = splitTopLevelSpaces(decl.value).map(toLegacyLengthValue);
+          rowGap = values[0] || "0";
+          columnGap = values[1] || rowGap;
+          return;
+        }
+        if (prop === "row-gap") {
+          rowGap = toLegacyLengthValue(decl.value);
+          return;
+        }
+        if (prop === "column-gap") {
+          columnGap = toLegacyLengthValue(decl.value);
+        }
+      });
+
+      if (!displayGrid) {
+        return;
+      }
+
+      rowGap = rowGap || "0";
+      columnGap = columnGap || "0";
+      const scopedSelectors = rule.selectors.map((selector) => `html.no-css-grid ${selector}`);
+      const fallback = postcss.rule({ selectors: scopedSelectors });
+      fallback.append({ prop: "display", value: "flex" });
+      fallback.append({ prop: "flex-wrap", value: "wrap" });
+
+      const childFallback = postcss.rule({
+        selectors: scopedSelectors.map((selector) => `${selector} > *`)
+      });
+      childFallback.append({ prop: "margin-right", value: columnGap });
+      childFallback.append({ prop: "margin-bottom", value: rowGap });
+
+      rule.after(childFallback);
+      rule.after(fallback);
+    }
+  };
+}
+
+gridFallbackPlugin.postcss = true;
+
 async function buildCSS() {
   console.log("processing CSS with PostCSS (legacy support)...");
   const cssDir = path.join(rootDir, "css");
@@ -389,6 +447,7 @@ async function buildCSS() {
       legacyDeclarationFallbackPlugin(),
       unsupportedSelectorFallbackPlugin(),
       flexGapFallbackPlugin(),
+      gridFallbackPlugin(),
       cssnano()
     ]).process(css, { from: cssPath, to: outPath });
 

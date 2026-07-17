@@ -1152,7 +1152,7 @@ function stripTraktSpoilerMarkup(value = "") {
 }
 
 function containsTraktInlineSpoiler(value = "") {
-  return /\[spoiler\].*?\[\/spoiler\]/is.test(String(value || ""));
+  return /\[spoiler\][\s\S]*?\[\/spoiler\]/i.test(String(value || ""));
 }
 
 function formatEpisodeCardDate(value = "") {

@@ -52,7 +52,7 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
 
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -134,7 +134,7 @@ async function stageService() {
     bundle: true,
     platform: "node",
     format: "cjs",
-    target: [`node${compatibilityPolicy.webOsServiceNodeVersion}`],
+    target: [compatibilityPolicy.webOsServiceEsbuildTarget || `node${compatibilityPolicy.webOsServiceNodeVersion}`],
     external: ["webos-service"],
     logLevel: "silent"
   });
