@@ -1062,7 +1062,11 @@ export const StreamScreen = {
     this.addonLogoLookup = {};
     this.addonFilter = "all";
     this.hasRenderedStreamRouteShell = false;
-    this.autoResumeAttempted = false;
+    // Returning here from the player is a back navigation, not a fresh open, so
+    // do not auto-resume or auto-play again. Otherwise exiting the player drops
+    // back onto the stream list and immediately relaunches, looping forever.
+    const returningFromPlayer = Boolean(navigationContext?.isBackNavigation);
+    this.autoResumeAttempted = returningFromPlayer;
     const playerSettings = PlayerSettingsStore.get();
     const reusableStream = playerSettings.streamReuseLastLinkEnabled
       ? StreamPreferencesStore.getValid(
@@ -1079,7 +1083,7 @@ export const StreamScreen = {
       (String(this.params?.resumeStreamIdentity || "").trim() ||
         String(this.params?.preferredStreamId || "").trim())
     );
-    this.autoPlayAttempted = false;
+    this.autoPlayAttempted = returningFromPlayer;
     this.cancelAutoPlayCountdown();
     this.cancelAutoPlaySelectionWait();
     const autoPlayWaitSeconds = Math.max(0, Math.trunc(Number(playerSettings.streamAutoPlayTimeoutSeconds || 0)));
