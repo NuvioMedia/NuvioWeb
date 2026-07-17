@@ -8341,6 +8341,7 @@ export const HomeScreen = {
         return null;
       }
 
+
       let meta = null;
       try {
         meta = await this.fetchMetaForContinueWatching(contentType, contentId, CW_NEXT_UP_META_TIMEOUT_MS);
@@ -8349,7 +8350,11 @@ export const HomeScreen = {
       }
 
       if (!meta) {
-        return null;
+        meta = {
+          id: contentId,
+          type: contentType,
+          name: progressEntry.title || prettyId(contentId)
+        };
       }
       meta = await this.enrichContinueWatchingMetaWithTmdb(meta, {
         contentId,
@@ -9350,3 +9355,5 @@ export const HomeScreen = {
     }
   }
 };
+window.HomeScreen = HomeScreen;
+
