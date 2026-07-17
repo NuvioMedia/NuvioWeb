@@ -8440,25 +8440,39 @@ export const HomeScreen = {
             )
           : new Map();
       const videos =
-        episodeMap.size && Array.isArray(meta.videos)
-          ? meta.videos.map((video) => {
-              const key =
-                Number(video?.season || 0) > 0 && Number(video?.episode || 0) > 0
-                  ? `${Number(video.season)}:${Number(video.episode)}`
-                  : "";
-              const episode = key ? episodeMap.get(key) : null;
-              if (!episode) {
-                return video;
-              }
-              return {
-                ...video,
-                title: episode.title || video.title,
-                overview: episode.overview || video.overview,
-                released: settings.useReleaseDates ? episode.airDate || video.released : video.released,
-                thumbnail: episode.thumbnail || video.thumbnail,
-                runtime: episode.runtime || video.runtime
-              };
-            })
+        episodeMap.size
+          ? (Array.isArray(meta.videos) && meta.videos.length
+            ? meta.videos.map((video) => {
+                const key =
+                  Number(video?.season || 0) > 0 && Number(video?.episode || 0) > 0
+                    ? `${Number(video.season)}:${Number(video.episode)}`
+                    : "";
+                const episode = key ? episodeMap.get(key) : null;
+                if (!episode) {
+                  return video;
+                }
+                return {
+                  ...video,
+                  title: episode.title || video.title,
+                  overview: episode.overview || video.overview,
+                  released: settings.useReleaseDates ? episode.airDate || video.released : video.released,
+                  thumbnail: episode.thumbnail || video.thumbnail,
+                  runtime: episode.runtime || video.runtime
+                };
+              })
+            : Array.from(episodeMap.values()).map((episode) => {
+                const [seasonStr, episodeStr] = episode.key.split(":");
+                return {
+                  id: `${tmdbId}:${seasonStr}:${episodeStr}`,
+                  season: Number(seasonStr),
+                  episode: Number(episodeStr),
+                  title: episode.title,
+                  overview: episode.overview,
+                  released: episode.airDate,
+                  thumbnail: episode.thumbnail,
+                  runtime: episode.runtime
+                };
+              }))
           : meta.videos;
       return {
         ...meta,
@@ -8497,13 +8511,19 @@ export const HomeScreen = {
           return cachedItem;
         }
         try {
-          const meta = await this.fetchMetaForContinueWatching(
+          let meta = await this.fetchMetaForContinueWatching(
             item.contentType || "movie",
             item.contentId,
             options?.metaTimeoutMs || 1800
           );
-          if (meta) {
-            const enrichedMeta = await this.enrichContinueWatchingMetaWithTmdb(meta, item);
+          if (!meta) {
+            meta = {
+              id: item.contentId,
+              type: item.contentType || "movie",
+              name: item.title || prettyId(item.contentId)
+            };
+          }
+          const enrichedMeta = await this.enrichContinueWatchingMetaWithTmdb(meta, item);
             const episodeEntry = findEpisodeEntry(enrichedMeta.videos, item.season, item.episode);
             const runtimeMinutes = parseRuntimeMinutes(
               episodeEntry?.runtimeMinutes
@@ -8539,7 +8559,6 @@ export const HomeScreen = {
             };
             saveContinueWatchingEnrichment(enriched);
             return enriched;
-          }
         } catch (error) {
           console.warn("Continue watching enrichment failed", error);
         }
