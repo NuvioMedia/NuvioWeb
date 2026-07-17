@@ -143,7 +143,6 @@ function loadScript(src) {
 }
 
 loadScript("nuvio.env.js");
-loadScript("assets/libs/qrcode-generator.js");
 loadScript("app.bundle.js");
 `;
 }

@@ -39,7 +39,10 @@
     "prettier": "^3.8.4"
   },
   "dependencies": {
+    "dashjs": "^4.7.4",
+    "hls.js": "^1.5.20",
     "jszip": "^3.10.1",
-    "libbitsub": "^1.10.1"
+    "libbitsub": "^1.10.1",
+    "qr": "^0.6.0"
   }
 }

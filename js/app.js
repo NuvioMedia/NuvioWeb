@@ -13,7 +13,6 @@ import { ThemeManager } from "./ui/theme/themeManager.js";
 import { renderAppShell } from "./bootstrap/renderAppShell.js";
 import { renderAddonRemotePage } from "./bootstrap/renderAddonRemotePage.js";
 import { preloadStreamBadgeImages } from "./ui/screens/stream/streamScreen.js";
-import { warmStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
@@ -336,7 +335,6 @@ async function bootstrapApp() {
 
   ThemeManager.apply();
   I18n.apply();
-  warmStreamingLibs({ delayMs: 1400 });
 
   markBootStage("Restoring session");
   AuthManager.subscribe((state) => {

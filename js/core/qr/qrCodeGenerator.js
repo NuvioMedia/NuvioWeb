@@ -1,39 +1,35 @@
-// js/core/qr/qrCodeGenerator.js
+import encodeQR from "qr";
 
 export const QrCodeGenerator = {
   generate(canvas, content, size = 512) {
-    const qr = qrcode(0, "M");
-    qr.addData(content);
-    qr.make();
+    const matrix = encodeQR(content, "raw", { ecc: "medium", border: 4 });
 
     const ctx = canvas.getContext("2d");
 
     canvas.width = size;
     canvas.height = size;
 
-    // === 1️⃣ Sfondo bianco arrotondato ===
     const cornerRadius = size * 0.06;
 
     ctx.clearRect(0, 0, size, size);
+    ctx.save();
+    this.roundRect(ctx, 0, 0, size, size, cornerRadius);
+    ctx.clip();
 
     ctx.fillStyle = "#ffffff";
-    this.roundRect(ctx, 0, 0, size, size, cornerRadius);
-    ctx.fill();
+    ctx.fillRect(0, 0, size, size);
 
-    // Match Android's ZXing output by preserving a quiet zone around the code.
-    const moduleCount = qr.getModuleCount();
-    const quietZoneModules = 4;
-    const totalModules = moduleCount + quietZoneModules * 2;
-    const moduleSize = size / totalModules;
+    const moduleCount = matrix.length;
+    const moduleSize = size / moduleCount;
     const moduleRadius = moduleSize * 0.08;
 
     ctx.fillStyle = "#000000";
 
     for (let row = 0; row < moduleCount; row++) {
       for (let col = 0; col < moduleCount; col++) {
-        if (qr.isDark(row, col)) {
-          const x = (col + quietZoneModules) * moduleSize;
-          const y = (row + quietZoneModules) * moduleSize;
+        if (matrix[row][col]) {
+          const x = col * moduleSize;
+          const y = row * moduleSize;
 
           this.roundRect(ctx, x, y, moduleSize, moduleSize, moduleRadius);
 
@@ -41,17 +37,6 @@ export const QrCodeGenerator = {
         }
       }
     }
-
-    // === 3️⃣ Clip finale arrotondato ===
-    const imageData = ctx.getImageData(0, 0, size, size);
-
-    ctx.clearRect(0, 0, size, size);
-
-    ctx.save();
-    this.roundRect(ctx, 0, 0, size, size, cornerRadius);
-    ctx.clip();
-
-    ctx.putImageData(imageData, 0, 0);
     ctx.restore();
   },
 

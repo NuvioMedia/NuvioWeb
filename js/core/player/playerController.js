@@ -13,7 +13,6 @@ import {
 } from "../../platform/webos/webosAudioCapabilities.js";
 import { WebOsLunaService } from "../../platform/webos/webosLunaService.js";
 import { WebOSPlayerExtensions } from "../../platform/webos/webosPlayerExtensions.js";
-import { loadStreamingLibs } from "../../runtime/loadStreamingLibs.js";
 
 const MIN_PROGRESS_SYNC_DURATION_MS = 1000;
 const WEBOS_AUDIO_TRACK_SELECTION_TIMEOUT_MS = 4000;
@@ -3657,20 +3656,6 @@ export const PlayerController = {
     return "native-file";
   },
 
-  async ensureAdaptiveLibrariesForSource(sourceType, playbackEngine = null) {
-    const normalizedEngine = String(playbackEngine || "").trim();
-    if (Platform.isTizen() && normalizedEngine !== "hls.js" && normalizedEngine !== "dash.js") {
-      return;
-    }
-    const normalizedSourceType = String(sourceType || "").trim();
-    if (!normalizedSourceType) {
-      return;
-    }
-    if (this.isLikelyHlsMimeType(normalizedSourceType) || this.isLikelyDashMimeType(normalizedSourceType)) {
-      await loadStreamingLibs();
-    }
-  },
-
   init() {
     this.video = document.getElementById("videoPlayer");
     Platform.prepareVideoElement(this.video);
@@ -3804,10 +3789,6 @@ export const PlayerController = {
 
     const sourceType = this.currentPlaybackMediaSourceType || this.resolveRuntimeSourceType(this.guessMediaMimeType(url)) || null;
     const preferredEngine = forceEngine || this.choosePlaybackEngine(url, sourceType, itemType);
-    await this.ensureAdaptiveLibrariesForSource(sourceType, preferredEngine);
-    if (!this.isPlaybackRequestActive(playToken, requestedUrl)) {
-      return;
-    }
     try {
       const parsedUrl = new URL(String(url || ""));
       const isEngineFsUrl = /\/([0-9a-f]{40})\/\d+(?:\/|$)/i.test(parsedUrl.pathname);

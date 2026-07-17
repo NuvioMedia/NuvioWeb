@@ -1,24 +1,15 @@
-function getHlsConstructor() {
-  return globalThis.Hls || null;
-}
+import Hls from "hls.js";
 
 export const hlsJsEngine = {
-  name: "hls.js",
-
   isSupported() {
-    const Hls = getHlsConstructor();
-    return Boolean(Hls && typeof Hls.isSupported === "function" && Hls.isSupported());
+    return Hls.isSupported();
   },
 
   getConstructor() {
-    return getHlsConstructor();
+    return Hls;
   },
 
   create(config) {
-    const Hls = getHlsConstructor();
-    if (!Hls) {
-      return null;
-    }
     return new Hls(config);
   },
 

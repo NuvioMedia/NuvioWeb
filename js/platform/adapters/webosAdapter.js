@@ -4,6 +4,8 @@ import {
   isWebOsCompanionServiceAvailable,
   requestWebOsCompanionService
 } from "../webos/webosCompanionService.js";
+import { hlsJsEngine } from "../../core/player/engines/hlsJsEngine.js";
+import { dashJsEngine } from "../../core/player/engines/dashJsEngine.js";
 
 function getAvplayApi() {
   const webapis = globalThis.webapis;
@@ -50,8 +52,8 @@ export const webosAdapter = {
 
   getCapabilities() {
     return {
-      hlsJs: Boolean(globalThis.Hls?.isSupported?.()),
-      dashJs: Boolean(globalThis.dashjs?.MediaPlayer),
+      hlsJs: hlsJsEngine.isSupported(),
+      dashJs: dashJsEngine.isSupported(),
       nativeVideo: true,
       webosAvplay: false,
       tizenAvplay: false

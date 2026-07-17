@@ -1,4 +1,6 @@
 import { isBackEvent, normalizeKeyEvent } from "../sharedKeys.js";
+import { hlsJsEngine } from "../../core/player/engines/hlsJsEngine.js";
+import { dashJsEngine } from "../../core/player/engines/dashJsEngine.js";
 
 export const browserAdapter = {
   name: "browser",
@@ -27,8 +29,8 @@ export const browserAdapter = {
 
   getCapabilities() {
     return {
-      hlsJs: Boolean(globalThis.Hls?.isSupported?.()),
-      dashJs: Boolean(globalThis.dashjs?.MediaPlayer),
+      hlsJs: hlsJsEngine.isSupported(),
+      dashJs: dashJsEngine.isSupported(),
       nativeVideo: true,
       webosAvplay: false,
       tizenAvplay: false
