@@ -28,3 +28,34 @@ export function parseVttCueLayout(timingLine) {
     align: align === "start" || align === "end" || align === "center" ? align : "center"
   };
 }
+
+export function buildHtmlSubtitleCue(cue, originalState = null, text = null) {
+  if (!cue || typeof cue !== "object") {
+    return null;
+  }
+  const source = originalState && typeof originalState === "object" ? originalState : cue;
+  const start = Number(source.startTime);
+  const end = Number(source.endTime);
+  const normalizedText = String(text == null ? cue.text || "" : text).trim();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start || !normalizedText) {
+    return null;
+  }
+
+  const snapToLines = source.snapToLines;
+  const rawLine = Number(source.line);
+  const line = snapToLines === false && Number.isFinite(rawLine)
+    ? Math.min(100, Math.max(0, rawLine))
+    : null;
+  const rawAlign = String(cue.align || source.align || "").toLowerCase();
+  const align = rawAlign === "left"
+    ? "start"
+    : (rawAlign === "right" ? "end" : rawAlign);
+
+  return {
+    start,
+    end,
+    text: normalizedText,
+    line,
+    align: align === "start" || align === "end" || align === "center" ? align : "center"
+  };
+}

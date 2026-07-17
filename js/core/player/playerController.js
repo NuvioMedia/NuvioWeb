@@ -114,6 +114,7 @@ export const PlayerController = {
   currentPlaybackHeaders: {},
   currentPlaybackMediaSourceType: null,
   lastProgressSnapshot: null,
+  lastKnownDurationSeconds: 0,
   avplayFallbackAttempts: new Set(),
   playbackEngineAttempts: new Map(),
   playRequestToken: 0,
@@ -2297,11 +2298,20 @@ export const PlayerController = {
   },
 
   getDurationSeconds() {
+    let durationSeconds = 0;
     if (this.isUsingAvPlay()) {
       this.refreshAvPlayTimeline();
-      return Math.max(0, Number(this.avplayDurationMs || 0) / 1000);
+      durationSeconds = Number(this.avplayDurationMs || 0) / 1000;
+    } else {
+      durationSeconds = Number(this.video?.duration || 0);
     }
-    return Math.max(0, Number(this.video?.duration || 0));
+    if (
+      Number.isFinite(durationSeconds)
+      && durationSeconds > Number(this.lastKnownDurationSeconds || 0)
+    ) {
+      this.lastKnownDurationSeconds = durationSeconds;
+    }
+    return Math.max(0, Number(this.lastKnownDurationSeconds || 0));
   },
 
   getBufferedTimeSeconds() {
@@ -3523,6 +3533,42 @@ export const PlayerController = {
     return true;
   },
 
+  setWebOsEmbeddedSubtitleNativeVisibility(enabled, selectedTrackIndex = this.selectedWebOsEmbeddedSubtitleTrackIndex) {
+    if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
+      return Promise.resolve(false);
+    }
+    const expectedSelectedIndex = Number(selectedTrackIndex);
+    if (
+      !Number.isFinite(expectedSelectedIndex)
+      || expectedSelectedIndex < 0
+      || Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== expectedSelectedIndex
+    ) {
+      return Promise.resolve(false);
+    }
+
+    const applyVisibility = (mediaId) => {
+      if (
+        !mediaId
+        || Number(this.selectedWebOsEmbeddedSubtitleTrackIndex) !== expectedSelectedIndex
+      ) {
+        return false;
+      }
+      return this.requestWebOsMediaCommand("setSubtitleEnable", {
+        mediaId,
+        enable: Boolean(enabled)
+      }).then(() => true).catch(() => false);
+    };
+
+    const mediaId = this.syncNativeMediaId();
+    if (mediaId) {
+      return Promise.resolve(applyVisibility(mediaId));
+    }
+
+    return this.waitForNativeMediaId()
+      .then(applyVisibility)
+      .catch(() => false);
+  },
+
   setWebOsEmbeddedSubtitleTrack(trackIndex, selectedTrackIndex = trackIndex) {
     if (!Platform.isWebOS() || !this.video || !this.isUsingNativePlayback()) {
       return false;
@@ -3784,6 +3830,11 @@ export const PlayerController = {
       return;
     }
 
+    // Duration can temporarily regress while webOS tears down or restages its
+    // native media pipeline. Keep the maximum duration for this playback only,
+    // matching Android TV's lastKnownDuration contract.
+    this.lastKnownDurationSeconds = 0;
+    this.lastProgressSnapshot = null;
     this.playbackSessionActive = true;
     this.applyStartupAudioGateToVideo();
 
@@ -4108,6 +4159,7 @@ export const PlayerController = {
     this.currentPlaybackUrl = "";
     this.currentPlaybackHeaders = {};
     this.currentPlaybackMediaSourceType = null;
+    this.lastKnownDurationSeconds = 0;
     this.playbackEngine = "none";
     this.lastPlaybackErrorCode = 0;
     this.clearPlaybackEngineAttempts();

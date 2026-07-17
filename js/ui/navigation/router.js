@@ -183,6 +183,7 @@ export const Router = {
       const currentScreen = this.getCurrentScreen();
       const shouldLetPlayerReturnToStream = this.current === "player"
         && state?.route === "stream"
+        && currentScreen?.shouldReturnToStreamOnBack?.() !== false
         && !currentScreen?.hasBackDismissableOverlay?.();
       const consumeResult = !shouldSkipConsume && !shouldLetPlayerReturnToStream
         ? currentScreen?.consumeBackRequest?.()

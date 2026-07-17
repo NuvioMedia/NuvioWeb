@@ -1112,7 +1112,11 @@ export const StreamScreen = {
       void this.detectWebOsNativePlayerApp();
     }
 
+    // Match Android TV: restore the selected source only when returning from
+    // playback. A fresh open of the same item must start from the first source
+    // instead of inheriting an old list scroll/focus snapshot.
     const restored =
+      navigationContext?.isBackNavigation &&
       navigationContext?.restoredState && typeof navigationContext.restoredState === "object"
         ? navigationContext.restoredState
         : null;

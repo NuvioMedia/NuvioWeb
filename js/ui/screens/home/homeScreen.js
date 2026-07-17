@@ -109,6 +109,7 @@ export { escapeAttribute, escapeHtml, formatCatalogRowTitle } from "./homeUtils.
 /** @typedef {import("./homeTypes.js").HomeHeroDisplay} HomeHeroDisplay */
 
 const MODERN_SIDEBAR_PILL_AUTO_COLLAPSE_MS = 4000;
+const CW_RELEASE_ALERT_MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
 function homePerfNow() {
   return typeof performance !== "undefined" && typeof performance.now === "function"
@@ -1018,16 +1019,8 @@ function findEpisodeEntry(videos = [], season = null, episode = null) {
 }
 
 function hasEpisodeAiredForContinueWatching(released) {
-  const raw = String(released || "").trim();
-  if (!raw) {
-    return true;
-  }
-  const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || raw;
-  const parsedTime = Date.parse(datePortion);
-  if (!Number.isFinite(parsedTime)) {
-    return true;
-  }
-  return parsedTime <= Date.now();
+  const parsedTime = parseEpisodeReleaseDateForContinueWatching(released);
+  return parsedTime == null || parsedTime <= Date.now();
 }
 
 function parseEpisodeReleaseDateForContinueWatching(released) {
@@ -1035,13 +1028,41 @@ function parseEpisodeReleaseDateForContinueWatching(released) {
   if (!raw) {
     return null;
   }
-  const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || raw;
-  const parsedTime = Date.parse(datePortion);
+  const exactTime = Date.parse(raw);
+  if (Number.isFinite(exactTime)) {
+    return exactTime;
+  }
+  const datePortion = raw.match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0];
+  const parsedTime = datePortion ? Date.parse(datePortion) : NaN;
   return Number.isFinite(parsedTime) ? parsedTime : null;
 }
 
+function resolveNextUpReleaseState(item = {}) {
+  const releaseTimestamp = parseEpisodeReleaseDateForContinueWatching(item?.released);
+  const seedUpdatedAt = Number(item?.seedUpdatedAt ?? item?.updatedAt ?? 0) || 0;
+  const hasAired = releaseTimestamp == null
+    ? item?.hasAired !== false
+    : releaseTimestamp <= Date.now();
+  const isReleaseAlert = Boolean(
+    hasAired
+    && releaseTimestamp != null
+    && releaseTimestamp > seedUpdatedAt
+    && (Date.now() - releaseTimestamp) < CW_RELEASE_ALERT_MAX_AGE_MS
+  );
+  const seedSeason = Number(item?.seedSeason || 0);
+  const nextSeason = Number(item?.season || 0);
+
+  return {
+    hasAired,
+    releaseTimestamp,
+    isReleaseAlert,
+    isNewSeasonRelease: Boolean(isReleaseAlert && seedSeason > 0 && nextSeason > 0 && nextSeason !== seedSeason),
+    sortTimestamp: isReleaseAlert ? releaseTimestamp : seedUpdatedAt
+  };
+}
+
 function continueWatchingSortTimestamp(item = {}) {
-  return Number(item?.updatedAt || item?.watchedAt || 0);
+  return Number(item?.sortTimestamp || item?.updatedAt || item?.watchedAt || 0);
 }
 
 function nextUpReleaseTimestamp(item = {}) {
@@ -1108,6 +1129,11 @@ function shouldShowNextUpEpisodeForContinueWatching(candidate = {}, anchorSeason
 
 function buildProgressStatus(item) {
   if (item?.isNextUp) {
+    if (item?.isReleaseAlert) {
+      return item?.isNewSeasonRelease
+        ? t("cw_new_season", {}, "New Season")
+        : t("cw_new_episode", {}, "New Episode");
+    }
     return t("home.continueStatusNextUp", {}, "Next Up");
   }
   const durationMs = continueWatchingDurationMs(item);
@@ -1196,8 +1222,10 @@ function normalizeContinueWatchingItem(item) {
   const title = firstNonEmpty(item.title, item.name, prettyId(item.contentId));
   const type = String(item.contentType || item.type || "movie").trim() || "movie";
   const isSeries = isSeriesTypeForContinueWatching(type);
+  const releaseState = item?.isNextUp ? resolveNextUpReleaseState(item) : null;
+  const resolvedItem = releaseState ? { ...item, ...releaseState } : item;
   return {
-    ...item,
+    ...resolvedItem,
     heroSource: "continueWatching",
     id: String(item.contentId || item.id || "").trim(),
     contentId: String(item.contentId || item.id || "").trim(),
@@ -1231,8 +1259,8 @@ function normalizeContinueWatchingItem(item) {
     status: firstNonEmpty(item.status),
     language: firstNonEmpty(item.language),
     country: firstNonEmpty(item.country),
-    progressStatus: buildProgressStatus(item),
-    progressFraction: buildProgressFraction(item),
+    progressStatus: buildProgressStatus(resolvedItem),
+    progressFraction: buildProgressFraction(resolvedItem),
     episodeCode: isSeries ? formatEpisodeCode(item.season, item.episode) : "",
     episodeTitle: isSeries ? firstNonEmpty(item.episodeTitle, item.subtitle) : ""
   };
@@ -8338,6 +8366,13 @@ export const HomeScreen = {
         return null;
       }
       const hasAired = hasEpisodeAiredForContinueWatching(nextEpisode.released);
+      const releaseState = resolveNextUpReleaseState({
+        released: nextEpisode.released,
+        hasAired,
+        seedUpdatedAt: progressEntry?.updatedAt,
+        seedSeason: progressEntry?.season,
+        season: nextEpisode.season
+      });
 
       return {
         contentId,
@@ -8349,8 +8384,10 @@ export const HomeScreen = {
         positionMs: 0,
         durationMs: 0,
         updatedAt: Number(progressEntry?.updatedAt || Date.now()),
+        seedUpdatedAt: Number(progressEntry?.updatedAt || 0) || 0,
+        seedSeason: Number(progressEntry?.season || 0) || null,
         isNextUp: true,
-        hasAired,
+        ...releaseState,
         title: meta.name || prettyId(contentId),
         landscapePoster: firstNonEmpty(meta.landscapePoster, meta.thumbnail, meta.backdrop, meta.background, nextEpisode.thumbnail, meta.poster),
         episodeThumbnail: firstNonEmpty(nextEpisode.thumbnail),
