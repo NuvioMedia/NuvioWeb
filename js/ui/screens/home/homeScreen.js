@@ -8341,7 +8341,6 @@ export const HomeScreen = {
         return null;
       }
 
-
       let meta = null;
       try {
         meta = await this.fetchMetaForContinueWatching(contentType, contentId, CW_NEXT_UP_META_TIMEOUT_MS);
@@ -9355,5 +9354,3 @@ export const HomeScreen = {
     }
   }
 };
-window.HomeScreen = HomeScreen;
-

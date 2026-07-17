@@ -473,5 +473,3 @@ export const Router = {
     return this.routes[this.current] || null;
   }
 };
-window.Router = Router;
-
