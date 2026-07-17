@@ -974,6 +974,27 @@ export const LibraryScreen = {
       return;
     }
     const state = this.controller.getState();
+
+    // When the sidebar is the active focus zone, keep focus there across
+    // re-renders (e.g. a background library sync) instead of snapping back to
+    // the last content item, which visually collapses the open sidebar.
+    const sidebarActive =
+      this.focusZone === "sidebar" &&
+      !state.listEditorState &&
+      !state.showDeleteConfirm &&
+      !state.showManageDialog &&
+      !state.expandedPicker;
+    if (sidebarActive) {
+      const sidebarNode =
+        getRootSidebarSelectedNode(this.container, this.layoutPrefs) ||
+        getRootSidebarNodes(this.container, this.layoutPrefs)[0] ||
+        null;
+      if (sidebarNode) {
+        this.setFocusedNode(sidebarNode);
+        return;
+      }
+    }
+
     let selector = null;
 
     if (state.listEditorState) {
