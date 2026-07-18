@@ -3699,7 +3699,7 @@ export const MetaDetailsScreen = {
         this.episodeThumbObserver = new IntersectionObserver(
           (entries) => {
             entries.forEach((entry) => {
-              if (entry.isIntersecting) {
+              if (entry.isIntersecting || entry.intersectionRatio > 0) {
                 this.applyEpisodeThumb(entry.target);
                 try { this.episodeThumbObserver.unobserve(entry.target); } catch (_) {}
               }

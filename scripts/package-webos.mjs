@@ -134,7 +134,7 @@ async function stageService() {
     bundle: true,
     platform: "node",
     format: "cjs",
-    target: [compatibilityPolicy.webOsServiceEsbuildTarget || `node${compatibilityPolicy.webOsServiceNodeVersion}`],
+    target: [`node${compatibilityPolicy.webOsServiceNodeVersion}`],
     external: ["webos-service"],
     logLevel: "silent"
   });

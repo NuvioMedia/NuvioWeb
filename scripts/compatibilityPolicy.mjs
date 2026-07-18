@@ -6,8 +6,5 @@ export const compatibilityPolicy = Object.freeze({
   tizenRequiredVersion: "5.0",
   // esbuild + autoprefixer baseline. Chromium 53 is webOS 4.x (2018-2019).
   chromiumVersion: 53,
-  // webOS 4/5 JS services historically run Node 0.12-era engines; esbuild
-  // es2015 is enough to downlevel async without Babel.
-  webOsServiceNodeVersion: 8,
-  webOsServiceEsbuildTarget: "es2015"
+  webOsServiceNodeVersion: 6
 });

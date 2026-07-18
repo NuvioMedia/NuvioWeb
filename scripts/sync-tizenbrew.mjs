@@ -122,7 +122,7 @@ async function syncBuild(targetAppDir, envSourcePath) {
 
 function buildIndexHtml() {
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
