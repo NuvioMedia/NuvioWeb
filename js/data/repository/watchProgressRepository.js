@@ -171,11 +171,23 @@ function selectedContinueWatchingSource() {
 function filterForSelectedContinueWatchingSource(items = []) {
   const useTrakt = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
   const all = Array.isArray(items) ? items : [];
-  return all.filter((item) =>
-    useTrakt
-      ? isTraktProgressItem(item) || !isTraktCompatibleContentId(item?.contentId)
-      : !isTraktProgressItem(item)
+  if (!useTrakt) {
+    return all.filter((item) => !isTraktProgressItem(item));
+  }
+
+  const traktCompatibleIdsOnTrakt = new Set(
+    all.filter((item) => isTraktProgressItem(item)).map((item) => String(item.contentId))
   );
+
+  return all.filter((item) => {
+    if (isTraktProgressItem(item)) {
+      return true;
+    }
+    if (!isTraktCompatibleContentId(item?.contentId)) {
+      return true;
+    }
+    return !traktCompatibleIdsOnTrakt.has(String(item.contentId));
+  });
 }
 
 function deduplicateInProgress(items = []) {
