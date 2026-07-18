@@ -1,4 +1,3 @@
-import "core-js/stable/global-this";
 import "core-js/stable/object/from-entries";
 import "core-js/stable/object/entries";
 import "core-js/stable/object/values";
@@ -11,7 +10,6 @@ import "core-js/stable/string/pad-start";
 import "core-js/stable/string/pad-end";
 import "core-js/stable/string/trim-start";
 import "core-js/stable/string/trim-end";
-import "core-js/stable/url";
 import "core-js/stable/url-search-params";
 
 // Chromium 53 accepts only a boolean for scrollIntoView; object options throw.
