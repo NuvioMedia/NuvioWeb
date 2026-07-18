@@ -1,4 +1,4 @@
-import scrollIntoView from "scroll-into-view-if-needed";
+import scrollIntoView from "../../ui/navigation/scrollIntoView.js";
 import { Router } from "../../ui/navigation/router.js";
 import { MAX_PROFILES, ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";

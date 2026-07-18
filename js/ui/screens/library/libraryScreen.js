@@ -1,4 +1,4 @@
-import scrollIntoView from "scroll-into-view-if-needed";
+import scrollIntoView from "../../navigation/scrollIntoView.js";
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { Environment } from "../../../platform/environment.js";

@@ -105,11 +105,11 @@ function createShell() {
           text-transform: uppercase;
         }
         .addon-remote-add {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) auto;
+          display: flex;
           gap: 10px;
         }
         .addon-remote-input {
+          flex: 1 1 0;
           width: 100%;
           min-width: 0;
           border: 1px solid rgba(255, 255, 255, 0.14);

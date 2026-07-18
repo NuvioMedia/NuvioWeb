@@ -1,4 +1,4 @@
-import scrollIntoView from "scroll-into-view-if-needed";
+import scrollIntoView from "../../navigation/scrollIntoView.js";
 import { PlayerController } from "../../../core/player/playerController.js";
 import {
   audioTrackLabelConflictsWithCodec,

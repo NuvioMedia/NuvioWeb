@@ -164,15 +164,13 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
 
   return `<!DOCTYPE html>
-<html lang="en" class="no-css-grid no-css-math">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
   <script src="assets/runtime/modernizr.js"></script>
-  <script src="assets/runtime/legacy-features.js"></script>
-  <link rel="stylesheet" href="css/legacy.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
@@ -192,15 +190,13 @@ ${webOsScriptTag}  <script defer src="app.bundle.js" onerror="window.NuvioBootGu
 
 function buildTizenIndexHtml() {
   return `<!DOCTYPE html>
-<html lang="en" class="no-css-math">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
   <script src="assets/runtime/modernizr.js"></script>
-  <script src="assets/runtime/legacy-features.js"></script>
-  <link rel="stylesheet" href="css/legacy.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
