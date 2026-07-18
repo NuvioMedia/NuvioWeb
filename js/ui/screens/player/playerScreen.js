@@ -2597,8 +2597,17 @@ export const PlayerScreen = {
 
   buildScrobbleContext() {
     const identity = this.buildPlaybackIdentityContext();
-    const currentSec = this.getPlaybackCurrentSeconds();
-    const durationSec = this.getPlaybackDurationSeconds();
+    let currentSec = this.getPlaybackCurrentSeconds();
+    let durationSec = this.getPlaybackDurationSeconds();
+    if (currentSec <= 0 || durationSec <= 0) {
+      const snapshot = typeof PlayerController.getRecordedProgressSnapshot === "function"
+        ? PlayerController.getRecordedProgressSnapshot()
+        : null;
+      if (snapshot && snapshot.positionMs > 0 && snapshot.durationMs > 0) {
+        currentSec = snapshot.positionMs / 1000;
+        durationSec = snapshot.durationMs / 1000;
+      }
+    }
     const progress =
       durationSec > 0 ? Math.min(100, (currentSec / durationSec) * 100) : 0;
     return {
