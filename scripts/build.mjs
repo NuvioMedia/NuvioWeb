@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, transform } from "esbuild";
 import coreJsBuilder from "core-js-builder";
-import flexGapPolyfill from "flex-gap-polyfill";
 import postcss from "postcss";
 import postcssPresetEnv from "postcss-preset-env";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
@@ -171,7 +170,6 @@ async function buildCSS() {
 
     const css = await readFile(cssPath, "utf8");
     const result = await postcss([
-      flexGapPolyfill(),
       postcssPresetEnv({
         browsers: `Chrome ${compatibilityPolicy.chromiumVersion}`
       }),

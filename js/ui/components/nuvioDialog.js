@@ -12,7 +12,7 @@
  *   Border:           1dp   = 2px, color #333333
  *   Background:       #1A1A1A (BackgroundElevated)
  *   Scrim:            rgba(0,0,0,0.72)
- *   Column gap:       16dp  = 32px
+ *   Column spacing:   16dp  = 32px
  *   Title:            titleLarge → 20sp=40px, Medium(500), TextPrimary=#FFFFFF
  *   Subtitle:         bodyMedium → 14sp=28px, Normal(400), TextSecondary=#B3B3B3
  *

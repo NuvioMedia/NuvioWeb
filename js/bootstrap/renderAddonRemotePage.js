@@ -106,7 +106,9 @@ function createShell() {
         }
         .addon-remote-add {
           display: flex;
-          gap: 10px;
+        }
+        .addon-remote-add > * + * {
+          margin-left: 10px;
         }
         .addon-remote-input {
           flex: 1 1 0;
@@ -131,21 +133,27 @@ function createShell() {
         .addon-remote-list {
           display: flex;
           flex-direction: column;
-          gap: 12px;
+        }
+        .addon-remote-list > * + * {
+          margin-top: 12px;
         }
         .addon-remote-card {
           display: flex;
-          gap: 12px;
           align-items: center;
           padding: 14px;
           border-radius: 20px;
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid rgba(255, 255, 255, 0.06);
         }
+        .addon-remote-card > * + * {
+          margin-left: 12px;
+        }
         .addon-remote-order {
           display: flex;
           flex-direction: column;
-          gap: 6px;
+        }
+        .addon-remote-order > * + * {
+          margin-top: 6px;
         }
         .addon-remote-copy {
           min-width: 0;
@@ -168,8 +176,10 @@ function createShell() {
         }
         .addon-remote-actions {
           display: flex;
-          gap: 8px;
           align-items: center;
+        }
+        .addon-remote-actions > * + * {
+          margin-left: 8px;
         }
         .addon-remote-btn {
           border: 1px solid rgba(255, 255, 255, 0.18);

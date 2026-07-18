@@ -49,7 +49,7 @@ const EPISODE_VIRTUALIZATION_THRESHOLD = 72;
 const EPISODE_VIRTUALIZATION_MIN_WINDOW = 20;
 const EPISODE_VIRTUALIZATION_OVERSCAN = 8;
 const EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH = 540;
-const EPISODE_VIRTUALIZATION_DEFAULT_GAP = 34;
+const EPISODE_VIRTUALIZATION_DEFAULT_SPACING = 34;
 const EPISODE_HOLD_REPEAT_INITIAL_DELAY_MS = 170;
 const EPISODE_HOLD_REPEAT_MIN_INTERVAL_MS = 24;
 const EPISODE_HOLD_REPEAT_MAX_INTERVAL_MS = 140;
@@ -3549,21 +3549,25 @@ export const MetaDetailsScreen = {
       sampleWindow && typeof getComputedStyle === "function"
         ? getComputedStyle(sampleWindow)
         : null;
-    const rawGap = Number.parseFloat(
-      windowStyle?.gap || windowStyle?.columnGap || trackStyle?.gap || trackStyle?.columnGap || "0"
+    const rawSpacing = Number.parseFloat(
+      windowStyle?.getPropertyValue("--episode-track-spacing") ||
+        trackStyle?.getPropertyValue("--episode-track-spacing") ||
+        "0"
     );
-    const gap =
-      Number.isFinite(rawGap) && rawGap >= 0 ? rawGap : EPISODE_VIRTUALIZATION_DEFAULT_GAP;
+    const spacing =
+      Number.isFinite(rawSpacing) && rawSpacing >= 0
+        ? rawSpacing
+        : EPISODE_VIRTUALIZATION_DEFAULT_SPACING;
     const measuredWidth = Number(sampleCard?.getBoundingClientRect?.().width || 0);
     const cardWidth =
       measuredWidth > 0
         ? measuredWidth
         : cachedMetrics?.cardWidth || EPISODE_VIRTUALIZATION_DEFAULT_CARD_WIDTH;
-    const stride = Math.max(1, cardWidth + gap);
+    const stride = Math.max(1, cardWidth + spacing);
     this.episodeVirtualMetrics = {
       season,
       cardWidth,
-      gap,
+      spacing,
       stride,
       viewportWidth
     };
@@ -3585,7 +3589,7 @@ export const MetaDetailsScreen = {
         start: 0,
         end: total - 1,
         cardWidth: metrics.cardWidth,
-        gap: metrics.gap,
+        spacing: metrics.spacing,
         stride: metrics.stride,
         leftSpacer: 0,
         rightSpacer: 0,
@@ -3617,7 +3621,7 @@ export const MetaDetailsScreen = {
       start,
       end,
       cardWidth: metrics.cardWidth,
-      gap: metrics.gap,
+      spacing: metrics.spacing,
       stride: metrics.stride,
       leftSpacer: start * metrics.stride,
       rightSpacer: Math.max(0, (total - end - 1) * metrics.stride),
@@ -3740,7 +3744,7 @@ export const MetaDetailsScreen = {
     }
     return `
       <div class="series-episode-track-spacer" aria-hidden="true" style="flex-basis:${Math.max(0, windowState.leftSpacer)}px"></div>
-      <div class="series-episode-track-window" style="--episode-track-gap:${windowState.gap}px">
+      <div class="series-episode-track-window" style="--episode-track-spacing:${windowState.spacing}px">
         ${cards}
       </div>
       <div class="series-episode-track-spacer" aria-hidden="true" style="flex-basis:${Math.max(0, windowState.rightSpacer)}px"></div>

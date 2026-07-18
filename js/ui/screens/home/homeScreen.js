@@ -9201,8 +9201,9 @@ export const HomeScreen = {
             if (trackWidth !== measuredTrackWidth) {
               const cardWidth = Number(requestContext.focusedNode.offsetWidth || 0);
               const styles = globalThis.getComputedStyle?.(track);
-              const gap = Number.parseFloat(styles?.columnGap || styles?.gap || "0") || 0;
-              const stride = Math.max(1, cardWidth + gap);
+              const spacing =
+                Number.parseFloat(styles?.getPropertyValue("--home-track-gap") || "0") || 0;
+              const stride = Math.max(1, cardWidth + spacing);
               visibleCardCount = Math.max(1, Math.ceil(trackWidth / stride));
               measuredTrackWidth = trackWidth;
             }
