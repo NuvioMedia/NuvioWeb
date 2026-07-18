@@ -1,3 +1,4 @@
+import scrollIntoView from "scroll-into-view-if-needed";
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { Environment } from "../../../platform/environment.js";
@@ -71,18 +72,14 @@ function selectorValue(value) {
 }
 
 function scrollIntoNearestView(node) {
-  if (!node || typeof node.scrollIntoView !== "function") {
+  if (!node) {
     return;
   }
-  try {
-    node.scrollIntoView({
-      behavior: "auto",
-      block: "nearest",
-      inline: "nearest"
-    });
-  } catch (_) {
-    node.scrollIntoView();
-  }
+  scrollIntoView(node, {
+    behavior: "auto",
+    block: "nearest",
+    inline: "nearest"
+  });
 }
 
 function findNearestNodeByCenterX(referenceNode, nodes = []) {

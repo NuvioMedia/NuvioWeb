@@ -1,4 +1,5 @@
-﻿import { Router } from "../../navigation/router.js";
+﻿import scrollIntoView from "scroll-into-view-if-needed";
+import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
@@ -7390,7 +7391,7 @@ export const MetaDetailsScreen = {
         }
       }
     } else if (typeof target.scrollIntoView === "function") {
-      target.scrollIntoView({ block: "nearest", inline: "nearest" });
+      scrollIntoView(target, { block: "nearest", inline: "nearest" });
     }
     if (!preserveVerticalScroll) {
       this.syncDetailScrollBounds(target);

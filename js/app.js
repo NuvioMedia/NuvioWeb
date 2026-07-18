@@ -1,4 +1,3 @@
-import "./runtime/polyfills.js";
 import "./core/diagnostics/consoleDebugBuffer.js";
 import { detailWatchedEnrichmentService } from "./data/repository/detailWatchedEnrichmentService.js";
 import { Router } from "./ui/navigation/router.js";
@@ -17,18 +16,6 @@ import { warmStreamingLibs } from "./runtime/loadStreamingLibs.js";
 import { Platform } from "./platform/index.js";
 import { LocalStore } from "./core/storage/localStore.js";
 import { I18n } from "./i18n/index.js";
-
-(function applyLegacyPatches() {
-  const originalGetElementById = document.getElementById;
-  document.getElementById = function (id) {
-    if (id === undefined || id === null || id === "") return null;
-    return originalGetElementById.call(document, id);
-  };
-
-  if (typeof Node === "undefined") {
-    globalThis.Node = { ELEMENT_NODE: 1 };
-  }
-})();
 
 const GUEST_QR_BYPASS_KEY = "skipAuthQrGate";
 const SIGNED_OUT_ALLOWED_ROUTES = new Set(["trakt"]);
@@ -101,12 +88,7 @@ function applyPerformanceMode() {
   document.body.classList.toggle("legacy-webos38", legacyWebOs38);
   document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
   document.body.classList.toggle("legacy-tizen", legacyTizen);
-  [
-    "no-flex-gap",
-    "no-aspect-ratio",
-    "no-css-math",
-    "no-backdrop-filter"
-  ].forEach((className) => {
+  ["no-css-math"].forEach((className) => {
     document.body.classList.toggle(className, rootClasses.contains(className));
   });
 }

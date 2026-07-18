@@ -4,7 +4,7 @@ export const compatibilityPolicy = Object.freeze({
   webOsSupportYear: 2018,
   webOsRequiredVersion: "4.0.0",
   tizenRequiredVersion: "5.0",
-  // esbuild + autoprefixer baseline. Chromium 53 is webOS 4.x (2018-2019).
+  // esbuild + PostCSS baseline. Chromium 53 is webOS 4.x (2018-2019).
   chromiumVersion: 53,
   webOsServiceNodeVersion: 6
 });

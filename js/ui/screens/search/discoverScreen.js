@@ -1,3 +1,4 @@
+import scrollIntoView from "scroll-into-view-if-needed";
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
@@ -1161,7 +1162,7 @@ export const DiscoverScreen = {
     const menu = this.container?.querySelector(".library-picker.open .library-picker-menu");
     const option = menu?.querySelector(".library-picker-option.focused");
     if (menu && option) {
-      option.scrollIntoView({ block: "nearest" });
+      scrollIntoView(option, { block: "nearest" });
     }
   },
 

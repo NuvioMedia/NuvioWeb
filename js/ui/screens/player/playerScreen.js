@@ -1,3 +1,4 @@
+import scrollIntoView from "scroll-into-view-if-needed";
 import { PlayerController } from "../../../core/player/playerController.js";
 import {
   audioTrackLabelConflictsWithCodec,
@@ -14437,7 +14438,7 @@ export const PlayerScreen = {
 
     const focusedCard = panel.querySelector(".player-source-card.focused");
     if (focusedCard) {
-      focusedCard.scrollIntoView({ block: "nearest", inline: "nearest" });
+      scrollIntoView(focusedCard, { block: "nearest", inline: "nearest" });
     }
   },
 

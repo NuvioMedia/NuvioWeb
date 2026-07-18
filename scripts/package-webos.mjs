@@ -2,8 +2,8 @@ import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { constants as fsConstants } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { buildWebOsService } from "./build-webos-service.mjs";
 import { compatibilityPolicy } from "./compatibilityPolicy.mjs";
 import { runWebOsToolsBinary } from "./aresCli.mjs";
 
@@ -52,13 +52,15 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
 
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-css-grid no-css-math">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
+  <script src="assets/runtime/modernizr.js"></script>
   <script src="assets/runtime/legacy-features.js"></script>
+  <link rel="stylesheet" href="css/legacy.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
@@ -66,6 +68,7 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
 </head>
 <body>
   <script src="boot-guard.js"></script>
+  <script src="core-js.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
   <script src="nuvio.env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
@@ -106,37 +109,10 @@ async function stageApp() {
 }
 
 async function stageService() {
-  const packageJsonPath = path.join(webOsServiceSourceDir, "package.json");
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8"));
-
-  await mkdir(path.join(serviceStageDir, "src"), { recursive: true });
-  await mkdir(path.join(serviceStageDir, "runtime"), { recursive: true });
-
-  await Promise.all([
-    writeFile(
-      path.join(serviceStageDir, "package.json"),
-      `${JSON.stringify(packageJson, null, 2)}\n`,
-      "utf8"
-    ),
-    cp(
-      path.join(webOsServiceSourceDir, "services.json"),
-      path.join(serviceStageDir, "services.json")
-    ),
-    cp(
-      path.join(webOsServiceSourceDir, "runtime", "media-http.cjs"),
-      path.join(serviceStageDir, "runtime", "media-http.cjs")
-    )
-  ]);
-
-  await build({
-    entryPoints: [path.join(webOsServiceSourceDir, "src", "index.js")],
-    outfile: path.join(serviceStageDir, "src", "index.js"),
-    bundle: true,
-    platform: "node",
-    format: "cjs",
-    target: [`node${compatibilityPolicy.webOsServiceNodeVersion}`],
-    external: ["webos-service"],
-    logLevel: "silent"
+  await buildWebOsService({
+    sourceDir: webOsServiceSourceDir,
+    targetDir: serviceStageDir,
+    nodeVersion: compatibilityPolicy.webOsServiceNodeVersion
   });
 }
 

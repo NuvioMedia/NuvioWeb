@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { constants as fsConstants } from "node:fs";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
+import { buildWebOsService } from "./build-webos-service.mjs";
 import { compatibilityPolicy } from "./compatibilityPolicy.mjs";
 import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
 
@@ -11,7 +12,6 @@ const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const appName = "Nuvio TV";
 const webOsRuntimeScriptPath = "assets/libs/webOSTV.js";
-const legacyWebOsServiceSourceDirName = "space.nuvio.webos.service";
 const webOsServiceSourceDirName = "webos";
 const webOsServiceId = "space.nuvio.webos.service";
 const webOsServiceDirName = webOsServiceId;
@@ -127,29 +127,6 @@ async function syncFolder(targetDir, folderName) {
   await cp(path.join(distDir, folderName), path.join(targetDir, folderName), { recursive: true });
 }
 
-async function syncServiceFolder(
-  targetDir,
-  serviceDirName,
-  { targetServiceDirName = serviceDirName } = {}
-) {
-  const targetServicesDir = path.join(targetDir, "services");
-  await mkdir(targetServicesDir, { recursive: true });
-  await rm(path.join(targetServicesDir, legacyWebOsServiceSourceDirName), {
-    recursive: true,
-    force: true
-  });
-  await rm(path.join(targetServicesDir, webOsServiceSourceDirName), {
-    recursive: true,
-    force: true
-  });
-  await rm(path.join(targetServicesDir, webOsServiceDirName), { recursive: true, force: true });
-  await cp(
-    path.join(rootDir, "services", serviceDirName),
-    path.join(targetServicesDir, targetServiceDirName),
-    { recursive: true }
-  );
-}
-
 async function syncBuild(targetDir) {
   await mkdir(targetDir, { recursive: true });
   await Promise.all([
@@ -159,6 +136,7 @@ async function syncBuild(targetDir) {
   ]);
 
   await cp(path.join(distDir, "app.bundle.js"), path.join(targetDir, "app.bundle.js"));
+  await cp(path.join(distDir, "core-js.bundle.js"), path.join(targetDir, "core-js.bundle.js"));
   await cp(path.join(distDir, "boot-guard.js"), path.join(targetDir, "boot-guard.js"));
   await cp(path.join(distDir, "youtube-proxy.html"), path.join(targetDir, "youtube-proxy.html"));
   try {
@@ -186,13 +164,15 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
   const webOsScriptTag = webOsScriptPath ? `  <script src="${webOsScriptPath}"></script>\n` : "";
 
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-css-grid no-css-math">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
+  <script src="assets/runtime/modernizr.js"></script>
   <script src="assets/runtime/legacy-features.js"></script>
+  <link rel="stylesheet" href="css/legacy.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
@@ -200,6 +180,7 @@ function buildWebOsIndexHtml({ webOsScriptPath = "" } = {}) {
 </head>
 <body>
   <script src="boot-guard.js"></script>
+  <script src="core-js.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
   <script>window.__NUVIO_PLATFORM__ = "webos";</script>
   <script src="nuvio.env.js"></script>
   <script src="assets/libs/qrcode-generator.js"></script>
@@ -211,13 +192,15 @@ ${webOsScriptTag}  <script defer src="app.bundle.js" onerror="window.NuvioBootGu
 
 function buildTizenIndexHtml() {
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-css-math">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
+  <script src="assets/runtime/modernizr.js"></script>
   <script src="assets/runtime/legacy-features.js"></script>
+  <link rel="stylesheet" href="css/legacy.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
@@ -225,6 +208,7 @@ function buildTizenIndexHtml() {
 </head>
 <body>
   <script src="boot-guard.js"></script>
+  <script src="core-js.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
   <script defer src="main.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
 </body>
 </html>
@@ -346,26 +330,12 @@ async function updateWebOsMetadata(targetDir) {
 }
 
 async function syncWebOsCompanionFiles(targetDir) {
-  await syncServiceFolder(targetDir, webOsServiceSourceDirName, {
-    targetServiceDirName: webOsServiceDirName
-  });
-
   const serviceDir = path.join(targetDir, "services", webOsServiceDirName);
-  const filesToRewrite = [
-    path.join(serviceDir, "package.json"),
-    path.join(serviceDir, "services.json"),
-    path.join(serviceDir, "src", "serverHost.js")
-  ];
-
-  await Promise.all(
-    filesToRewrite.map(async (filePath) => {
-      const current = await readTextFile(filePath, `Expected webOS service file at ${filePath}.`);
-      await writeTextFile(
-        filePath,
-        current.replaceAll(legacyWebOsServiceSourceDirName, webOsServiceId)
-      );
-    })
-  );
+  await buildWebOsService({
+    sourceDir: path.join(rootDir, "services", webOsServiceSourceDirName),
+    targetDir: serviceDir,
+    nodeVersion: compatibilityPolicy.webOsServiceNodeVersion
+  });
 }
 
 async function syncTizenEngineFsService(targetDir) {

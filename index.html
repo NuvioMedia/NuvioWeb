@@ -1,8 +1,5 @@
 <!doctype html>
-<html
-  lang="en"
-  class="no-flex-gap no-css-grid no-css-math no-backdrop-filter no-aspect-ratio"
->
+<html lang="en" class="no-css-grid no-css-math">
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
@@ -10,6 +7,7 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
+    <script src="assets/runtime/modernizr.js"></script>
     <script src="assets/runtime/legacy-features.js"></script>
     <script>
       (function configureTizenLaunch() {
@@ -50,6 +48,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Nuvio TV</title>
 
+    <link rel="stylesheet" href="css/legacy.css?v=20260718" />
     <link rel="stylesheet" href="css/base.css?v=20260509s" />
     <link rel="stylesheet" href="css/layout.css?v=20260509s" />
     <link rel="stylesheet" href="css/components.css?v=20260531supporters2" />
@@ -57,6 +56,10 @@
   </head>
   <body>
     <script src="boot-guard.js"></script>
+    <script
+      src="core-js.bundle.js"
+      onerror="window.NuvioBootGuard && window.NuvioBootGuard.scriptFailed(this.src)"
+    ></script>
     <script src="nuvio.env.js"></script>
 
     <script src="assets/libs/qrcode-generator.js"></script>

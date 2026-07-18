@@ -1,3 +1,4 @@
+import scrollIntoView from "scroll-into-view-if-needed";
 import { Router } from "../../ui/navigation/router.js";
 import { MAX_PROFILES, ProfileManager } from "../../core/profile/profileManager.js";
 import { ProfileSyncService } from "../../core/profile/profileSyncService.js";
@@ -915,7 +916,7 @@ export const ProfileSelectionScreen = {
     }
 
     if (category) {
-      node.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      scrollIntoView(node, { block: "nearest", inline: "nearest", behavior: "smooth" });
     }
   },
 

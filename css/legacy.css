@@ -1,0 +1,174 @@
+/* Generic Grid fallback for Chromium 53. Modern Grid declarations in the
+   later component stylesheet override these rules where Grid is supported. */
+html.no-css-grid .qr-layout,
+html.no-css-grid .profile-pin-keypad,
+html.no-css-grid .profile-editor-avatar-grid,
+html.no-css-grid .search-header,
+html.no-css-grid .discover-filters,
+html.no-css-grid .discover-grid,
+html.no-css-grid .library-grid,
+html.no-css-grid .home-screen-shell.home-layout-grid .home-grid-track,
+html.no-css-grid .settings-workspace,
+html.no-css-grid .supporters-route-content,
+html.no-css-grid .supporters-tabs,
+html.no-css-grid .settings-trakt-panel,
+html.no-css-grid .settings-trakt-stats-row,
+html.no-css-grid .settings-trakt-grid-dialog .settings-dialog-list,
+html.no-css-grid .settings-layout-grid,
+html.no-css-grid .settings-layout-preview-grid-canvas,
+html.no-css-grid .settings-plugin-builder-row,
+html.no-css-grid .settings-text-dialog-actions,
+html.no-css-grid .debug-console-header,
+html.no-css-grid .addons-install-row,
+html.no-css-grid .addons-large-row,
+html.no-css-grid .player-dialog-item,
+html.no-css-grid .player-source-card,
+html.no-css-grid .player-subtitle-overlay-grid,
+html.no-css-grid .player-audio-overlay-grid,
+html.no-css-grid .series-stream-panel,
+html.no-css-grid .stream-route-content,
+html.no-css-grid .cast-detail-hero-content,
+html.no-css-grid .seeall-grid {
+  display: flex;
+  flex-wrap: wrap;
+  --legacy-grid-row-gap: 0;
+  --legacy-grid-column-gap: 0;
+}
+
+html.no-css-grid .qr-layout,
+html.no-css-grid .settings-trakt-panel {
+  --legacy-grid-row-gap: 36px;
+  --legacy-grid-column-gap: 36px;
+}
+
+html.no-css-grid .profile-pin-keypad {
+  --legacy-grid-row-gap: 14px;
+  --legacy-grid-column-gap: 14px;
+}
+
+html.no-css-grid .profile-editor-avatar-grid,
+html.no-css-grid .settings-layout-grid,
+html.no-css-grid .addons-install-row,
+html.no-css-grid .player-audio-overlay-grid {
+  --legacy-grid-row-gap: 24px;
+  --legacy-grid-column-gap: 24px;
+}
+
+html.no-css-grid .library-grid,
+html.no-css-grid .addons-large-row {
+  --legacy-grid-row-gap: 32px;
+  --legacy-grid-column-gap: 24px;
+}
+
+html.no-css-grid .addons-large-row {
+  --legacy-grid-column-gap: 32px;
+}
+
+html.no-css-grid .search-header {
+  --legacy-grid-row-gap: 24px;
+  --legacy-grid-column-gap: 24px;
+}
+
+html.no-css-grid .settings-workspace {
+  --legacy-grid-row-gap: 32px;
+  --legacy-grid-column-gap: 32px;
+}
+
+html.no-css-grid .discover-filters {
+  --legacy-grid-row-gap: 16px;
+  --legacy-grid-column-gap: 16px;
+}
+
+html.no-css-grid .discover-grid {
+  --legacy-grid-row-gap: 16px;
+  --legacy-grid-column-gap: 10px;
+}
+
+html.no-css-grid .home-screen-shell.home-layout-grid .home-grid-track,
+html.no-css-grid .settings-text-dialog-actions,
+html.no-css-grid .player-source-card {
+  --legacy-grid-row-gap: 12px;
+  --legacy-grid-column-gap: 12px;
+}
+
+html.no-css-grid .home-screen-shell.home-layout-grid .home-grid-track {
+  --legacy-grid-row-gap: 16px;
+}
+
+html.no-css-grid .supporters-route-content {
+  --legacy-grid-row-gap: 48px;
+  --legacy-grid-column-gap: 48px;
+}
+
+html.no-css-grid .supporters-tabs {
+  --legacy-grid-row-gap: 24px;
+  --legacy-grid-column-gap: 24px;
+}
+
+html.no-css-grid .settings-layout-preview-grid-canvas {
+  --legacy-grid-row-gap: var(--settings-layout-grid-gap);
+  --legacy-grid-column-gap: var(--settings-layout-grid-gap);
+}
+
+html.no-css-grid .settings-plugin-builder-row {
+  --legacy-grid-row-gap: 18px;
+  --legacy-grid-column-gap: 18px;
+}
+
+html.no-css-grid .player-dialog-item {
+  --legacy-grid-column-gap: 12px;
+}
+
+html.no-css-grid .debug-console-header {
+  --legacy-grid-row-gap: 28px;
+  --legacy-grid-column-gap: 28px;
+}
+
+html.no-css-grid .player-subtitle-overlay-grid {
+  --legacy-grid-row-gap: 14px;
+  --legacy-grid-column-gap: 14px;
+}
+
+html.no-css-grid .series-stream-panel,
+html.no-css-grid .cast-detail-hero-content {
+  --legacy-grid-row-gap: 20px;
+  --legacy-grid-column-gap: 20px;
+}
+
+html.no-css-grid .seeall-grid {
+  --legacy-grid-row-gap: 20px;
+  --legacy-grid-column-gap: 16px;
+}
+
+html.no-css-grid .qr-layout > *,
+html.no-css-grid .profile-pin-keypad > *,
+html.no-css-grid .profile-editor-avatar-grid > *,
+html.no-css-grid .search-header > *,
+html.no-css-grid .discover-filters > *,
+html.no-css-grid .discover-grid > *,
+html.no-css-grid .library-grid > *,
+html.no-css-grid .home-screen-shell.home-layout-grid .home-grid-track > *,
+html.no-css-grid .settings-workspace > *,
+html.no-css-grid .supporters-route-content > *,
+html.no-css-grid .supporters-tabs > *,
+html.no-css-grid .settings-trakt-panel > *,
+html.no-css-grid .settings-trakt-stats-row > *,
+html.no-css-grid .settings-trakt-grid-dialog .settings-dialog-list > *,
+html.no-css-grid .settings-layout-grid > *,
+html.no-css-grid .settings-layout-preview-grid-canvas > *,
+html.no-css-grid .settings-plugin-builder-row > *,
+html.no-css-grid .settings-text-dialog-actions > *,
+html.no-css-grid .debug-console-header > *,
+html.no-css-grid .addons-install-row > *,
+html.no-css-grid .addons-large-row > *,
+html.no-css-grid .player-dialog-item > *,
+html.no-css-grid .player-source-card > *,
+html.no-css-grid .player-subtitle-overlay-grid > *,
+html.no-css-grid .player-audio-overlay-grid > *,
+html.no-css-grid .series-stream-panel > *,
+html.no-css-grid .stream-route-content > *,
+html.no-css-grid .cast-detail-hero-content > *,
+html.no-css-grid .seeall-grid > * {
+  margin-right: var(--legacy-grid-column-gap);
+  margin-bottom: var(--legacy-grid-row-gap);
+}

@@ -1,25 +1,6 @@
 (function installNuvioBootGuard(window, document) {
   "use strict";
 
-  if (typeof window.globalThis === "undefined") {
-    window.globalThis = window;
-  }
-
-  if (typeof Object.getOwnPropertyDescriptors !== "function") {
-    Object.getOwnPropertyDescriptors = function getOwnPropertyDescriptors(source) {
-      var object = Object(source);
-      var descriptors = {};
-      var keys = Object.getOwnPropertyNames(object);
-      if (typeof Object.getOwnPropertySymbols === "function") {
-        keys = keys.concat(Object.getOwnPropertySymbols(object));
-      }
-      keys.forEach(function addDescriptor(key) {
-        descriptors[key] = Object.getOwnPropertyDescriptor(object, key);
-      });
-      return descriptors;
-    };
-  }
-
   if (window.NuvioBootGuard) {
     return;
   }

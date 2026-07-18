@@ -1,11 +1,12 @@
 import { cp, mkdir, readFile, rm, writeFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { build } from "esbuild";
-import postcssGlobalData from "@csstools/postcss-global-data";
+import { build, transform } from "esbuild";
+import coreJsBuilder from "core-js-builder";
+import flexGapPolyfill from "flex-gap-polyfill";
+import modernizr from "modernizr";
 import postcss from "postcss";
-import cssnano from "cssnano";
-import autoprefixer from "autoprefixer";
+import postcssPresetEnv from "postcss-preset-env";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
 import { compatibilityPolicy } from "./compatibilityPolicy.mjs";
 import { writeRuntimeEnvScriptFile } from "./envProperties.mjs";
@@ -14,53 +15,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const distDir = path.join(rootDir, "dist");
 const bundleFileName = "app.bundle.js";
+const coreJsBundleFileName = "core-js.bundle.js";
 const requireConfiguredRuntimeEnv = /^(1|true|yes|on)$/i.test(
   String(process.env.NUVIO_REQUIRE_LOCAL_PROPERTIES || "")
 );
 const debugBundle = /^(1|true|yes|on)$/i.test(String(process.env.NUVIO_DEBUG_BUNDLE || ""));
+const coreJsModules = ["core-js/stable"];
 const legacyViewport = {
   width: 1920,
   height: 1080,
   remPx: 20
 };
-const rgbVariableFallbacks = {
-  "--bg-color-rgb": "13 13 13",
-  "--bg-elevated-rgb": "26 26 26",
-  "--card-bg-rgb": "34 34 34",
-  "--secondary-color-rgb": "245 245 245",
-  "--focus-color-rgb": "255 255 255"
-};
-
-function splitTopLevelSpaces(value) {
-  const parts = [];
-  let current = "";
-  let depth = 0;
-
-  for (const char of value) {
-    if (char === "(") {
-      depth += 1;
-    } else if (char === ")") {
-      depth = Math.max(0, depth - 1);
-    }
-
-    if (/\s/.test(char) && depth === 0) {
-      if (current.trim()) {
-        parts.push(current.trim());
-        current = "";
-      }
-      continue;
-    }
-
-    current += char;
-  }
-
-  if (current.trim()) {
-    parts.push(current.trim());
-  }
-
-  return parts;
-}
-
 function splitFunctionArgs(value) {
   const args = [];
   let current = "";
@@ -178,72 +143,11 @@ function chooseStaticMathFallback(fn, args) {
   return args[2] || args[1] || args[0] || "";
 }
 
-function splitRgbChannels(channels) {
-  const parts = String(channels || "")
-    .trim()
-    .split(/\s+/)
-    .map((part) => Number(part));
-  if (parts.length < 3 || parts.some((part) => !Number.isFinite(part))) {
-    return null;
-  }
-  return parts.slice(0, 3);
-}
-
-function toLegacyColorValue(value) {
-  let result = String(value || "");
-
-  result = result.replace(
-    /\brgba?\(\s*var\((--[\w-]+)\)\s*\/\s*([^)]+?)\s*\)/g,
-    (match, variableName, alpha) => {
-      const channels = splitRgbChannels(rgbVariableFallbacks[variableName]);
-      if (!channels) {
-        return match;
-      }
-      return `rgba(${channels[0]}, ${channels[1]}, ${channels[2]}, ${alpha.trim()})`;
-    }
-  );
-
-  result = result.replace(
-    /\brgba?\(\s*(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s+(-?\d*\.?\d+)\s*\/\s*([^)]+?)\s*\)/g,
-    (_match, red, green, blue, alpha) => `rgba(${red}, ${green}, ${blue}, ${alpha.trim()})`
-  );
-
-  return result;
-}
-
-function insertInsetFallbacks(decl) {
-  if (decl.prop.toLowerCase() !== "inset") {
-    return;
-  }
-
-  const values = splitTopLevelSpaces(decl.value);
-  if (!values.length || values.length > 4) {
-    return;
-  }
-
-  const top = values[0];
-  const right = values[1] || top;
-  const bottom = values[2] || top;
-  const left = values[3] || right;
-  const fallbacks = [
-    ["top", top],
-    ["right", right],
-    ["bottom", bottom],
-    ["left", left]
-  ];
-
-  for (const [prop, value] of fallbacks) {
-    decl.cloneBefore({ prop, value });
-  }
-}
-
 function legacyDeclarationFallbackPlugin() {
   return {
     postcssPlugin: "nuvio-legacy-declaration-fallbacks",
     Declaration(decl) {
-      insertInsetFallbacks(decl);
-
-      const legacyValue = toLegacyColorValue(toLegacyLengthValue(decl.value));
+      const legacyValue = toLegacyLengthValue(decl.value);
       if (legacyValue && legacyValue !== decl.value) {
         const previous = decl.prev();
         if (!previous || previous.type !== "decl" || previous.prop !== decl.prop || previous.value !== legacyValue) {
@@ -256,179 +160,8 @@ function legacyDeclarationFallbackPlugin() {
 
 legacyDeclarationFallbackPlugin.postcss = true;
 
-function unsupportedSelectorFallbackPlugin() {
-  return {
-    postcssPlugin: "nuvio-unsupported-selector-fallbacks",
-    Rule(rule) {
-      if (!rule.selector || !rule.selectors?.length) {
-        return;
-      }
-
-      const safeSelectors = rule.selectors.filter(
-        (selector) => !selector.includes(":focus-visible") && !selector.includes(":has(")
-      );
-      if (!safeSelectors.length || safeSelectors.length === rule.selectors.length) {
-        return;
-      }
-
-      const fallback = rule.clone({ selectors: safeSelectors });
-      rule.before(fallback);
-    }
-  };
-}
-
-unsupportedSelectorFallbackPlugin.postcss = true;
-
-function flexGapFallbackPlugin() {
-  return {
-    postcssPlugin: "nuvio-flex-gap-fallback",
-    Rule(rule) {
-      if (!rule.selector || rule.parent?.type === "atrule" && /keyframes$/i.test(rule.parent.name)) {
-        return;
-      }
-
-      let displayFlex = false;
-      let rowGap = null;
-      let columnGap = null;
-      let flexDirection = "row";
-      let flexWrap = "nowrap";
-
-      rule.walkDecls((decl) => {
-        const prop = decl.prop.toLowerCase();
-        if (prop === "display" && /\b(?:inline-)?flex\b/.test(decl.value)) {
-          displayFlex = true;
-          return;
-        }
-
-        if (prop === "flex-direction") {
-          flexDirection = decl.value.toLowerCase();
-          return;
-        }
-
-        if (prop === "flex-wrap") {
-          flexWrap = decl.value.toLowerCase();
-          return;
-        }
-
-        if (prop === "flex-flow") {
-          const value = decl.value.toLowerCase();
-          if (value.includes("column")) {
-            flexDirection = "column";
-          }
-          if (value.includes("wrap")) {
-            flexWrap = "wrap";
-          }
-          return;
-        }
-
-        if (prop === "gap") {
-          const values = splitTopLevelSpaces(decl.value).map(toLegacyLengthValue);
-          rowGap = values[0] || "0";
-          columnGap = values[1] || rowGap;
-          return;
-        }
-
-        if (prop === "row-gap") {
-          rowGap = toLegacyLengthValue(decl.value);
-          return;
-        }
-
-        if (prop === "column-gap") {
-          columnGap = toLegacyLengthValue(decl.value);
-        }
-      });
-
-      if (!displayFlex || (!rowGap && !columnGap)) {
-        return;
-      }
-
-      rowGap ||= "0";
-      columnGap ||= "0";
-
-      const scopedSelectors = rule.selectors.map((selector) => `html.no-flex-gap ${selector}`);
-      const isColumnDirection = flexDirection.includes("column");
-      const wraps = flexWrap.includes("wrap") && !flexWrap.includes("nowrap");
-      const childFallback = postcss.rule({
-        selectors: scopedSelectors.map((selector) => `${selector} > * + *`)
-      });
-
-      if (isColumnDirection) {
-        childFallback.append({ prop: "margin-top", value: rowGap });
-      } else if (wraps) {
-        childFallback.selectors = scopedSelectors.map((selector) => `${selector} > *`);
-        childFallback.append({ prop: "margin-right", value: columnGap });
-        childFallback.append({ prop: "margin-bottom", value: rowGap });
-      } else {
-        childFallback.append({ prop: "margin-left", value: columnGap });
-      }
-
-      rule.after(childFallback);
-    }
-  };
-}
-
-flexGapFallbackPlugin.postcss = true;
-
-function gridFallbackPlugin() {
-  return {
-    postcssPlugin: "nuvio-grid-fallback",
-    Rule(rule) {
-      if (!rule.selector) {
-        return;
-      }
-
-      let displayGrid = false;
-      let rowGap = null;
-      let columnGap = null;
-
-      rule.walkDecls((decl) => {
-        const prop = decl.prop.toLowerCase();
-        if (prop === "display" && /\bgrid\b/.test(decl.value)) {
-          displayGrid = true;
-          return;
-        }
-        if (prop === "gap") {
-          const values = splitTopLevelSpaces(decl.value).map(toLegacyLengthValue);
-          rowGap = values[0] || "0";
-          columnGap = values[1] || rowGap;
-          return;
-        }
-        if (prop === "row-gap") {
-          rowGap = toLegacyLengthValue(decl.value);
-          return;
-        }
-        if (prop === "column-gap") {
-          columnGap = toLegacyLengthValue(decl.value);
-        }
-      });
-
-      if (!displayGrid) {
-        return;
-      }
-
-      rowGap = rowGap || "0";
-      columnGap = columnGap || "0";
-      const scopedSelectors = rule.selectors.map((selector) => `html.no-css-grid ${selector}`);
-      const fallback = postcss.rule({ selectors: scopedSelectors });
-      fallback.append({ prop: "display", value: "flex" });
-      fallback.append({ prop: "flex-wrap", value: "wrap" });
-
-      const childFallback = postcss.rule({
-        selectors: scopedSelectors.map((selector) => `${selector} > *`)
-      });
-      childFallback.append({ prop: "margin-right", value: columnGap });
-      childFallback.append({ prop: "margin-bottom", value: rowGap });
-
-      rule.after(childFallback);
-      rule.after(fallback);
-    }
-  };
-}
-
-gridFallbackPlugin.postcss = true;
-
 async function buildCSS() {
-  console.log("processing CSS with PostCSS (legacy support)...");
+  console.log("processing CSS for Chrome 53...");
   const cssDir = path.join(rootDir, "css");
   const files = await readdir(cssDir);
   const cssFiles = files.filter((f) => f.endsWith(".css"));
@@ -439,20 +172,22 @@ async function buildCSS() {
 
     const css = await readFile(cssPath, "utf8");
     const result = await postcss([
-      postcssGlobalData({ files: [path.join(cssDir, "base.css")] }),
-      autoprefixer({
-        overrideBrowserslist: [`Chrome ${compatibilityPolicy.chromiumVersion}`],
-        grid: "autoplace"
+      flexGapPolyfill({ flexGapNotSupported: "html.no-flexgap" }),
+      postcssPresetEnv({
+        browsers: `Chrome ${compatibilityPolicy.chromiumVersion}`
       }),
-      legacyDeclarationFallbackPlugin(),
-      unsupportedSelectorFallbackPlugin(),
-      flexGapFallbackPlugin(),
-      gridFallbackPlugin(),
-      cssnano()
+      legacyDeclarationFallbackPlugin()
     ]).process(css, { from: cssPath, to: outPath });
 
+    const minified = await transform(result.css, {
+      loader: "css",
+      minify: true,
+      target: [`chrome${compatibilityPolicy.chromiumVersion}`],
+      legalComments: "none"
+    });
+
     await mkdir(path.dirname(outPath), { recursive: true });
-    await writeFile(outPath, result.css);
+    await writeFile(outPath, minified.code);
   }
 }
 
@@ -484,11 +219,49 @@ async function copyOptionalRootFile(fileName, { fallback = null, defaultContents
   return "generated-default";
 }
 
+async function buildCompatibilityAssets() {
+  console.log("building compatibility assets...");
+  const coreJsEntry = await coreJsBuilder({
+    modules: coreJsModules,
+    targets: { chrome: String(compatibilityPolicy.chromiumVersion) },
+    format: "esm"
+  });
+  const coreJsResult = await build({
+    stdin: { contents: coreJsEntry, resolveDir: rootDir, sourcefile: "core-js.generated.js" },
+    outfile: path.join(distDir, coreJsBundleFileName),
+    bundle: true,
+    minify: !debugBundle,
+    format: "iife",
+    sourcemap: debugBundle,
+    target: [`chrome${compatibilityPolicy.chromiumVersion}`],
+    metafile: true
+  });
+  if (!Object.keys(coreJsResult.metafile.inputs).some((input) => input.includes("node_modules/core-js/"))) {
+    throw new Error("Generated core-js bundle contains no core-js modules.");
+  }
+
+  const modernizrSource = await new Promise((resolve, reject) => {
+    modernizr.build(
+      {
+        classPrefix: "",
+        enableClasses: true,
+        enableJSClass: false,
+        usePrefixes: true,
+        minify: true,
+        options: ["setClasses"],
+        "feature-detects": ["css/flexgap"]
+      },
+      (result) => (result instanceof Error ? reject(result) : resolve(result))
+    );
+  });
+  await writeFile(path.join(distDir, "assets", "runtime", "modernizr.js"), modernizrSource);
+}
+
 async function buildBundle() {
   const { version } = await readAppMetadata();
 
   console.log("starting bundle build...");
-  await build({
+  const result = await build({
     entryPoints: [path.join(rootDir, "js/app.js")],
     outfile: path.join(distDir, bundleFileName),
     bundle: true,
@@ -496,11 +269,15 @@ async function buildBundle() {
     format: "iife",
     sourcemap: debugBundle,
     target: [`chrome${compatibilityPolicy.chromiumVersion}`],
+    metafile: true,
     define: {
       "process.env.NODE_ENV": '"production"',
       __NUVIO_APP_VERSION__: JSON.stringify(version)
     }
   });
+  if (Object.keys(result.metafile.inputs).some((input) => input.includes("node_modules/core-js/"))) {
+    throw new Error("Application bundle must not contain core-js modules.");
+  }
   console.log("bundle build complete");
 }
 async function runBuild() {
@@ -521,6 +298,7 @@ async function runBuild() {
       cp(path.join(rootDir, "boot-guard.js"), path.join(distDir, "boot-guard.js")),
       cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"))
     ]);
+    await buildCompatibilityAssets();
     await cp(
       path.join(rootDir, "node_modules", "libbitsub", "pkg", "libbitsub_bg.wasm"),
       path.join(distDir, "assets", "libs", "libbitsub_bg.wasm")

@@ -1,3 +1,4 @@
+import scrollIntoView from "scroll-into-view-if-needed";
 import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { addonRepository } from "../../../data/repository/addonRepository.js";
@@ -1398,17 +1399,13 @@ function isSettingsActivateEvent(event) {
 }
 
 function scrollIntoNearestView(node) {
-  if (!node || typeof node.scrollIntoView !== "function") {
+  if (!node) {
     return;
   }
-  try {
-    node.scrollIntoView({
-      block: "nearest",
-      inline: "nearest"
-    });
-  } catch (_) {
-    node.scrollIntoView();
-  }
+  scrollIntoView(node, {
+    block: "nearest",
+    inline: "nearest"
+  });
 }
 
 function getScrollMax(node, axis = "y") {

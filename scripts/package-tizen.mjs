@@ -81,13 +81,15 @@ function buildConfigXml({ appId, packageId, version }) {
 
 function buildIndexHtml() {
   return `<!DOCTYPE html>
-<html lang="en" class="no-flex-gap no-css-math no-backdrop-filter no-aspect-ratio">
+<html lang="en" class="no-css-math">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${appName}</title>
+  <script src="assets/runtime/modernizr.js"></script>
   <script src="assets/runtime/legacy-features.js"></script>
+  <link rel="stylesheet" href="css/legacy.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />
   <link rel="stylesheet" href="css/components.css" />
@@ -95,6 +97,7 @@ function buildIndexHtml() {
 </head>
 <body>
   <script src="boot-guard.js"></script>
+  <script src="core-js.bundle.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
   <script defer src="main.js" onerror="window.NuvioBootGuard &amp;&amp; window.NuvioBootGuard.scriptFailed(this.src)"></script>
 </body>
 </html>
@@ -181,6 +184,7 @@ async function stagePackage({ appId, packageId, version, envSourcePath }) {
     copyDistFolder("css"),
     copyDistFolder("res"),
     cp(path.join(distDir, "app.bundle.js"), path.join(stagingDir, "app.bundle.js")),
+    cp(path.join(distDir, "core-js.bundle.js"), path.join(stagingDir, "core-js.bundle.js")),
     cp(path.join(distDir, "boot-guard.js"), path.join(stagingDir, "boot-guard.js")),
     cp(path.join(distDir, "youtube-proxy.html"), path.join(stagingDir, "youtube-proxy.html")),
     cp(path.join(rootDir, "assets", "images", "tizenIcon.png"), path.join(stagingDir, "icon.png")),
