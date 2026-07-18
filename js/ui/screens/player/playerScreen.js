@@ -16675,7 +16675,11 @@ export const PlayerScreen = {
       PlayerController.video.removeEventListener("ended", this.endedHandler);
       this.endedHandler = null;
     }
-    TraktScrobbleService.cancel();
+    if (TraktScrobbleService.isEnabled()) {
+      TraktScrobbleService.stop(this.buildScrobbleContext());
+    } else {
+      TraktScrobbleService.cancel();
+    }
     this.unbindPlayerExitCleanup();
     this.releaseCurrentEngineFsStreamBestEffort("player-cleanup", {
       removeTorrent: true,
