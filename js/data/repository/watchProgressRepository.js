@@ -178,6 +178,12 @@ function filterForSelectedContinueWatchingSource(items = []) {
   const traktCompatibleIdsOnTrakt = new Set(
     all.filter((item) => isTraktProgressItem(item)).map((item) => String(item.contentId))
   );
+  const traktImdbIdsOnTrakt = new Set(
+    all
+      .filter((item) => isTraktProgressItem(item))
+      .map((item) => String(item.imdbId || item.contentId || ""))
+      .filter((id) => id.startsWith("tt"))
+  );
 
   return all.filter((item) => {
     if (isTraktProgressItem(item)) {
@@ -186,6 +192,10 @@ function filterForSelectedContinueWatchingSource(items = []) {
     if (!isTraktCompatibleContentId(item?.contentId)) {
       return true;
     }
+    const imdb = String(item.imdbId || item.contentId || "");
+    if (imdb.startsWith("tt") && traktImdbIdsOnTrakt.has(imdb)) {
+      return false;
+    }
     return !traktCompatibleIdsOnTrakt.has(String(item.contentId));
   });
 }
@@ -193,24 +203,32 @@ function filterForSelectedContinueWatchingSource(items = []) {
 function deduplicateInProgress(items = []) {
   const nonSeriesItems = [];
   const latestSeriesItems = [];
-  const seenContentIds = new Set();
+  const seenKeys = new Set();
+  const seenMovieKeys = new Set();
 
   (Array.isArray(items) ? items : [])
     .slice()
     .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
     .forEach((item) => {
+      const contentId = String(item?.contentId || "").trim();
+      const imdbId = String(item?.imdbId || "").trim();
+      const key = (imdbId && imdbId.startsWith("tt")) ? imdbId : contentId;
+
       if (!isSeriesType(item?.contentType)) {
+        if (!key || seenMovieKeys.has(key)) {
+          return;
+        }
+        seenMovieKeys.add(key);
         if (shouldTreatAsInProgressForContinueWatching(item)) {
           nonSeriesItems.push(item);
         }
         return;
       }
 
-      const contentId = String(item?.contentId || "").trim();
-      if (!contentId || seenContentIds.has(contentId)) {
+      if (!key || seenKeys.has(key)) {
         return;
       }
-      seenContentIds.add(contentId);
+      seenKeys.add(key);
       // Decide Continue Watching eligibility only after selecting the newest
       // episode state for the series. Otherwise a completed episode is removed
       // first and an older partial record can reappear beside the real Next Up.
