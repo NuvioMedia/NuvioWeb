@@ -5886,7 +5886,6 @@ button:focus {
   --home-row-gap: 24px;
   --home-track-end: 104px;
   --home-continue-track-end: 104px;
-  --modern-track-peek-extension: 104px;
   --modern-rows-viewport-height: 52%;
   --modern-rows-viewport-padding-bottom: 52vh;
   --modern-rows-page-height: 56vh;
@@ -6380,7 +6379,7 @@ button:focus {
 }
 
 .home-screen-shell.home-layout-modern .home-row-head {
-  margin-bottom: 14px;
+  padding-bottom: 14px;
 }
 
 .home-screen-shell.home-layout-modern .home-row-title {
@@ -6391,8 +6390,7 @@ button:focus {
 
 .home-screen-shell.home-layout-modern .home-track {
   --home-track-gap: 24px;
-  margin-left: calc(var(--modern-track-peek-extension) * -1);
-  padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
+  padding-left: var(--home-content-start);
   padding-right: 52px;
   padding-bottom: 0;
   align-items: flex-end;
@@ -12016,14 +12014,6 @@ html.legacy-webos .debug-console-log-frame {
   color: #000000;
 }
 
-.no-flex-gap .player-pause-overlay-content > * + * {
-  margin-top: 14px;
-}
-
-.no-flex-gap .player-pause-cast-chip + .player-pause-cast-chip {
-  margin-left: 14px;
-}
-
 .legacy-tizen .player-pause-overlay,
 .tizen-tv .player-pause-overlay {
   top: 0;
@@ -17576,14 +17566,6 @@ html.legacy-webos .debug-console-log-frame {
   margin-top: 16px;
 }
 
-.no-flex-gap .player-episode-stream-actions > * {
-  margin-right: 12px;
-}
-
-.no-flex-gap .player-episode-stream-actions > *:last-child {
-  margin-right: 0;
-}
-
 .player-episode-stream-meta {
   min-width: 0;
   overflow: hidden;
@@ -17603,14 +17585,6 @@ html.legacy-webos .debug-console-log-frame {
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
-}
-
-.no-flex-gap .player-episode-stream-filters > * {
-  margin-right: 12px;
-}
-
-.no-flex-gap .player-episode-stream-filters > *:last-child {
-  margin-right: 0;
 }
 
 .player-episode-stream-filters::-webkit-scrollbar,
@@ -17710,107 +17684,6 @@ html.legacy-webos .debug-console-log-frame {
   margin-right: 0;
 }
 
-.no-flex-gap .home-track > .home-content-card,
-.no-flex-gap .home-modern-row .home-track > .home-content-card {
-  margin-right: 20px;
-}
-
-.no-flex-gap .home-screen-shell.home-layout-modern .home-track > .home-content-card {
-  margin-right: 24px;
-}
-
-.no-flex-gap .home-track > .home-content-card:last-child,
-.no-flex-gap .home-modern-row .home-track > .home-content-card:last-child,
-.no-flex-gap .home-screen-shell.home-layout-modern .home-track > .home-content-card:last-child {
-  margin-right: 0;
-}
-
-.no-flex-gap .series-detail-actions > *,
-.no-flex-gap .detail-ratings-row > *,
-.no-flex-gap .detail-meta-row > *,
-.no-flex-gap .series-season-row > *,
-.no-flex-gap .series-episode-track > *,
-.no-flex-gap .movie-cast-track > *,
-.no-flex-gap .series-cast-track > *,
-.no-flex-gap .series-rating-seasons > *,
-.no-flex-gap .series-episode-ratings-grid > *,
-.no-flex-gap .detail-company-track > *,
-.no-flex-gap .detail-morelike-track > *,
-.no-flex-gap .detail-comments-modes > *,
-.no-flex-gap .detail-comments-track > * {
-  margin-right: 24px;
-}
-
-.no-flex-gap .series-detail-actions > * {
-  margin-right: 20px;
-}
-
-.no-flex-gap .series-season-row > * {
-  margin-right: 24px;
-}
-
-.no-flex-gap .series-episode-track > * {
-  margin-right: 40px;
-}
-
-.no-flex-gap .movie-cast-track > *,
-.no-flex-gap .series-cast-track > * {
-  margin-right: 16px;
-}
-
-.no-flex-gap .detail-meta-row > * {
-  margin-bottom: 8px;
-}
-
-.no-flex-gap .series-detail-actions > *:last-child,
-.no-flex-gap .detail-ratings-row > *:last-child,
-.no-flex-gap .detail-meta-row > *:last-child,
-.no-flex-gap .series-season-row > *:last-child,
-.no-flex-gap .series-episode-track > *:last-child,
-.no-flex-gap .movie-cast-track > *:last-child,
-.no-flex-gap .series-cast-track > *:last-child,
-.no-flex-gap .series-rating-seasons > *:last-child,
-.no-flex-gap .series-episode-ratings-grid > *:last-child,
-.no-flex-gap .detail-company-track > *:last-child,
-.no-flex-gap .detail-morelike-track > *:last-child,
-.no-flex-gap .detail-comments-modes > *:last-child,
-.no-flex-gap .detail-comments-track > *:last-child {
-  margin-right: 0;
-}
-
-.no-flex-gap .series-primary-btn > *,
-.no-flex-gap .detail-rating-item > *,
-.no-flex-gap .series-imdb-badge > *,
-.no-flex-gap .detail-meta-badge > *,
-.no-flex-gap .series-episode-runtime > *,
-.no-flex-gap .detail-comments-heading > * {
-  margin-right: 8px;
-}
-
-.no-flex-gap .series-primary-btn > *:last-child,
-.no-flex-gap .detail-rating-item > *:last-child,
-.no-flex-gap .series-imdb-badge > *:last-child,
-.no-flex-gap .detail-meta-badge > *:last-child,
-.no-flex-gap .series-episode-runtime > *:last-child,
-.no-flex-gap .detail-comments-heading > *:last-child {
-  margin-right: 0;
-}
-
-.no-flex-gap .detail-meta-stack > * + *,
-.no-flex-gap .series-episode-copy > * + *,
-.no-flex-gap .detail-comments-heading + *,
-.no-flex-gap .detail-trailer-controls-bottom > * + * {
-  margin-top: 12px;
-}
-
-.no-flex-gap .cast-credit-track > * {
-  margin-right: 14px;
-}
-
-.no-flex-gap .cast-credit-track > *:last-child {
-  margin-right: 0;
-}
-
 @supports (aspect-ratio: 1 / 1) {
   .home-content-card .content-poster,
   .home-screen-shell .home-poster-frame,
@@ -17899,296 +17772,6 @@ html.legacy-webos .debug-console-log-frame {
 
 /* Chromium 68 and older ignore flex gap. Keep these source-level fallbacks
    scoped to legacy feature classes so modern Chromium keeps the authored UI. */
-.no-flex-gap .profile-grid > * {
-  margin-right: 56px;
-  margin-bottom: 56px;
-}
-
-.no-flex-gap .home-nav-list > * + * {
-  margin-top: var(--legacy-sidebar-item-gap);
-}
-
-.no-flex-gap .home-sidebar.content-expanded .home-nav-item > * + * {
-  margin-left: 16px;
-}
-
-.no-flex-gap .home-profile-pill > * + * {
-  margin-left: 10px;
-}
-
-.no-flex-gap .modern-sidebar-nav-list > * + * {
-  margin-top: var(--modern-sidebar-list-gap);
-}
-
-.no-flex-gap .modern-sidebar-profile > * + * {
-  margin-left: 36px;
-}
-
-.no-flex-gap .modern-sidebar-nav-item > * + * {
-  margin-left: var(--modern-sidebar-button-gap);
-}
-
-.no-flex-gap .modern-sidebar-pill > * + * {
-  margin-left: 1px;
-}
-
-.no-flex-gap .modern-sidebar-pill-chip > * + * {
-  margin-left: var(--modern-sidebar-pill-chip-gap);
-}
-
-.no-flex-gap .search-sidebar > * + *,
-.no-flex-gap .settings-sidebar > * + * {
-  margin-top: 28px;
-}
-
-.no-flex-gap .search-sidebar > * + * {
-  margin-top: 16px;
-}
-
-.no-flex-gap .library-actions-row > * + *,
-.no-flex-gap .library-picker-row > .library-picker + .library-picker {
-  margin-left: 24px;
-}
-
-.no-flex-gap .search-results-track > * + * {
-  margin-left: 16px;
-}
-
-.no-flex-gap .settings-theme-row > * + * {
-  margin-left: 20px;
-}
-
-.no-flex-gap .search-seeall-inner > * + * {
-  margin-top: 14px;
-}
-
-.no-flex-gap .discover-content > * + *,
-.no-flex-gap .settings-account-list > * + *,
-.no-flex-gap .settings-trakt-header-row + *,
-.no-flex-gap .settings-trakt-footer-row + * {
-  margin-top: 12px;
-}
-
-.no-flex-gap .discover-hero > * + *,
-.no-flex-gap .settings-action-row > * + *,
-.no-flex-gap .settings-collapsible-trigger > * + *,
-.no-flex-gap .settings-subsection-card .settings-action-row > * + * {
-  margin-left: 24px;
-}
-
-.no-flex-gap .discover-hero-copy > * + *,
-.no-flex-gap .discover-loading-state > * + *,
-.no-flex-gap .discover-empty-state > * + *,
-.no-flex-gap .settings-collapsible > * + *,
-.no-flex-gap .settings-trakt-scroll-area > * + *,
-.no-flex-gap .settings-trakt-options-stack > * + *,
-.no-flex-gap .settings-stream-badge-preview-section > * + * {
-  margin-top: 8px;
-}
-
-.no-flex-gap .discover-meta-line > *,
-.no-flex-gap .settings-profile-summary > * {
-  margin-right: 8px;
-  margin-bottom: 8px;
-}
-
-.no-flex-gap .settings-profile-summary > * {
-  margin-right: 12px;
-  margin-bottom: 12px;
-}
-
-.no-flex-gap .discover-results-head > * + *,
-.no-flex-gap .settings-account-signout-button > * + *,
-.no-flex-gap .settings-row-tail > * + *,
-.no-flex-gap .settings-collapsible-trigger .settings-row-tail > * + *,
-.no-flex-gap .settings-subsection-card .settings-row-tail > * + *,
-.no-flex-gap .settings-plugin-repo-card > * + * {
-  margin-left: 20px;
-}
-
-.no-flex-gap .library-picker-groups > .library-picker-row + .library-picker-row,
-.no-flex-gap .settings-stack > * + *,
-.no-flex-gap .settings-subsection-card .settings-stack > * + *,
-.no-flex-gap .settings-appearance-group-card > * + * {
-  margin-top: 20px;
-}
-
-.no-flex-gap .library-picker-anchor > .library-picker-icon,
-.no-flex-gap .settings-account-action-button > * + * {
-  margin-left: 24px;
-}
-
-.no-flex-gap .library-picker-copy > * + *,
-.no-flex-gap .settings-row-copy > * + *,
-.no-flex-gap .settings-collapsible-trigger .settings-row-copy > * + *,
-.no-flex-gap .settings-subsection-card .settings-row-copy > * + * {
-  margin-top: 4px;
-}
-
-.no-flex-gap .library-dialog-field > * + *,
-.no-flex-gap .settings-account-status-card > * + *,
-.no-flex-gap .settings-language-option-meta > * + * {
-  margin-top: 16px;
-}
-
-.no-flex-gap .settings-account-status-card > * + *,
-.no-flex-gap .settings-language-option-meta > * + * {
-  margin-top: 0;
-}
-
-.no-flex-gap .settings-account-status-card > * + * {
-  margin-left: 16px;
-}
-
-.no-flex-gap .settings-language-option-meta > * + * {
-  margin-left: 12px;
-}
-
-.no-flex-gap .library-grid-card > * + * {
-  margin-top: 16px;
-}
-
-.no-flex-gap .settings-layout-card > * + *,
-.no-flex-gap .settings-dialog-list > * + * {
-  margin-top: 12px;
-}
-
-.no-flex-gap .library-empty-state > * + * {
-  margin-top: 18px;
-}
-
-.no-flex-gap .library-loading-state > * + *,
-.no-flex-gap .library-manage-stack > * + *,
-.no-flex-gap .library-dialog-title + *,
-.no-flex-gap .settings-dialog > * + * {
-  margin-top: 28px;
-}
-
-.no-flex-gap .library-delete-dialog > * + * {
-  margin-top: 32px;
-}
-
-.no-flex-gap .library-manage-list > * + *,
-.no-flex-gap .library-manage-actions-row > * + *,
-.no-flex-gap .library-dialog-actions > * + *,
-.no-flex-gap .library-privacy-row > * + * {
-  margin-left: 20px;
-}
-
-.no-flex-gap .library-manage-list > * + *,
-.no-flex-gap .library-dialog-actions.stacked > * + *,
-.no-flex-gap .library-dialog-field > * + *,
-.no-flex-gap .settings-content > * + * {
-  margin-left: 0;
-  margin-top: 20px;
-}
-
-.no-flex-gap .settings-plugin-repo-list > * + * {
-  margin-top: 14px;
-}
-
-.no-flex-gap .settings-content > * + * {
-  margin-top: 24px;
-}
-
-.no-flex-gap .settings-content-header > * + * {
-  margin-top: 12px;
-}
-
-.no-flex-gap .settings-group-heading > * + *,
-.no-flex-gap .settings-plugin-repo-copy > * + * {
-  margin-top: 6px;
-}
-
-.no-flex-gap .settings-nav-leading > * + *,
-.no-flex-gap .settings-nav-label-wrap > * + * {
-  margin-left: 20px;
-}
-
-.no-flex-gap .settings-nav-label-wrap > * + * {
-  margin-left: 12px;
-}
-
-.no-flex-gap .settings-account-button-copy > * + *,
-.no-flex-gap .settings-account-stat > * + *,
-.no-flex-gap .settings-trakt-stat > * + * {
-  margin-top: 2px;
-}
-
-.no-flex-gap .settings-account-sync-overview > * + * {
-  margin-top: 12px;
-}
-
-.no-flex-gap .settings-theme-card > * + * {
-  margin-top: 16px;
-}
-
-.no-flex-gap .settings-layout-preview-placeholder > * + * {
-  margin-top: 16px;
-}
-
-.no-flex-gap .settings-layout-placeholder-bars > * + * {
-  margin-left: 12px;
-}
-
-.no-flex-gap .profile-editor-header > * + * {
-  margin-left: 56px;
-}
-
-.no-flex-gap .profile-editor-heading-stack > * + * {
-  margin-top: 4px;
-}
-
-.no-flex-gap .profile-editor-preview > * + * {
-  margin-top: 36px;
-}
-
-.no-flex-gap .profile-editor-avatar-pane > * + * {
-  margin-top: 24px;
-}
-
-.no-flex-gap .profile-editor-category-row > * {
-  margin-right: 16px;
-  margin-bottom: 16px;
-}
-
-.no-flex-gap .nuvio-dialog-panel > * + *,
-.no-flex-gap .nuvio-dialog-actions > * + * {
-  margin-top: 32px;
-}
-
-.no-flex-gap .poster-list-picker-actions > * + * {
-  margin-top: 20px;
-}
-
-.no-flex-gap .nuvio-dialog-button.poster-list-picker-list-button > * + * {
-  margin-left: 14px;
-}
-
-.no-flex-gap .settings-profile-pill > * + *,
-.no-flex-gap .settings-plugin-repo-actions > * + * {
-  margin-left: 10px;
-}
-
-@media (max-height: 820px), (max-width: 1280px) {
-  .no-flex-gap .profile-grid > * {
-    margin-right: 44px;
-    margin-bottom: 44px;
-  }
-}
-
-.no-flex-gap .settings-plugin-builder > * + *,
-.no-flex-gap .settings-plugin-provider-heading {
-  margin-top: 18px;
-}
-
-.no-flex-gap .settings-plugin-add > * + * {
-  margin-left: 14px;
-}
-
-.no-flex-gap .settings-dialog > * + * {
-  margin-top: 32px;
-}
 
 @supports not (font-size: clamp(1px, 2px, 3px)) {
   .home-screen-shell.home-layout-modern .home-hero,
@@ -18595,7 +18178,6 @@ html.legacy-webos .debug-console-log-frame {
   --home-content-start: 128px;
   --home-track-end: 128px;
   --home-continue-track-end: 128px;
-  --modern-track-peek-extension: 72px;
   --modern-hero-copy-top-safe: 56px;
   --modern-hero-copy-right: 72px;
 }
@@ -18606,8 +18188,7 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .legacy-tizen .home-screen-shell.home-layout-modern .home-track {
-  margin-left: calc(var(--modern-track-peek-extension) * -1);
-  padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
+  padding-left: var(--home-content-start);
   padding-right: var(--home-track-end);
 }
 

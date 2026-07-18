@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 import { build, transform } from "esbuild";
 import coreJsBuilder from "core-js-builder";
 import flexGapPolyfill from "flex-gap-polyfill";
-import modernizr from "modernizr";
 import postcss from "postcss";
 import postcssPresetEnv from "postcss-preset-env";
 import { readAppMetadata, syncVersionFiles } from "./appMetadata.mjs";
@@ -161,7 +160,7 @@ function legacyDeclarationFallbackPlugin() {
 legacyDeclarationFallbackPlugin.postcss = true;
 
 async function buildCSS() {
-  console.log("processing CSS for Chrome 53...");
+  console.log("processing CSS for legacy browsers..");
   const cssDir = path.join(rootDir, "css");
   const files = await readdir(cssDir);
   const cssFiles = files.filter((f) => f.endsWith(".css"));
@@ -172,7 +171,7 @@ async function buildCSS() {
 
     const css = await readFile(cssPath, "utf8");
     const result = await postcss([
-      flexGapPolyfill({ flexGapNotSupported: "html.no-flexgap" }),
+      flexGapPolyfill(),
       postcssPresetEnv({
         browsers: `Chrome ${compatibilityPolicy.chromiumVersion}`
       }),
@@ -219,8 +218,8 @@ async function copyOptionalRootFile(fileName, { fallback = null, defaultContents
   return "generated-default";
 }
 
-async function buildCompatibilityAssets() {
-  console.log("building compatibility assets...");
+async function buildCoreJsBundle() {
+  console.log("building core-js bundle...");
   const coreJsEntry = await coreJsBuilder({
     modules: coreJsModules,
     targets: { chrome: String(compatibilityPolicy.chromiumVersion) },
@@ -239,22 +238,6 @@ async function buildCompatibilityAssets() {
   if (!Object.keys(coreJsResult.metafile.inputs).some((input) => input.includes("node_modules/core-js/"))) {
     throw new Error("Generated core-js bundle contains no core-js modules.");
   }
-
-  const modernizrSource = await new Promise((resolve, reject) => {
-    modernizr.build(
-      {
-        classPrefix: "",
-        enableClasses: true,
-        enableJSClass: false,
-        usePrefixes: true,
-        minify: true,
-        options: ["setClasses"],
-        "feature-detects": ["css/flexgap"]
-      },
-      (result) => (result instanceof Error ? reject(result) : resolve(result))
-    );
-  });
-  await writeFile(path.join(distDir, "assets", "runtime", "modernizr.js"), modernizrSource);
 }
 
 async function buildBundle() {
@@ -298,7 +281,7 @@ async function runBuild() {
       cp(path.join(rootDir, "boot-guard.js"), path.join(distDir, "boot-guard.js")),
       cp(path.join(rootDir, "docs", "youtube-proxy.html"), path.join(distDir, "youtube-proxy.html"))
     ]);
-    await buildCompatibilityAssets();
+    await buildCoreJsBundle();
     await cp(
       path.join(rootDir, "node_modules", "libbitsub", "pkg", "libbitsub_bg.wasm"),
       path.join(distDir, "assets", "libs", "libbitsub_bg.wasm")
