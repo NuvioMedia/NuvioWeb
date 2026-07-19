@@ -122,8 +122,7 @@ export const PluginScreen = {
     if (!container || !target) {
       return;
     }
-    const anchor =
-      target.closest(".addons-installed-card, .addons-large-row, .addons-install-card") || target;
+    const anchor = target.closest(".addons-large-row") || target;
     const pad = 56;
     const containerRect = container.getBoundingClientRect();
     const anchorRect = anchor.getBoundingClientRect();
