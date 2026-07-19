@@ -168,6 +168,14 @@ function selectedContinueWatchingSource() {
     : WatchProgressSource.NUVIO_SYNC;
 }
 
+function selectedLocalProgressSource() {
+  // Playback is recorded locally even when Trakt owns Continue Watching.
+  // Keep that fresh state in the selected source until Trakt catches up.
+  return selectedContinueWatchingSource() === WatchProgressSource.TRAKT
+    ? "trakt_local"
+    : WatchProgressSource.NUVIO_SYNC;
+}
+
 function filterForSelectedContinueWatchingSource(items = []) {
   const useTrakt = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
   const all = Array.isArray(items) ? items : [];
@@ -511,6 +519,7 @@ class WatchProgressRepository {
     WatchProgressStore.upsert(
       {
         ...progress,
+        source: String(progress?.source || "").trim() || selectedLocalProgressSource(),
         updatedAt: progress.updatedAt || Date.now()
       },
       activeProfileId()
