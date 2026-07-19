@@ -75,11 +75,8 @@ function isLowEndDevice() {
 
 function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
-  const legacyTizen = Platform.isTizen();
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
-  document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
-  document.body.classList.toggle("legacy-tizen", legacyTizen);
 }
 
 function isAddonRemoteMode() {

@@ -10388,7 +10388,7 @@ button:focus {
 /* Older Tizen/webOS flex engines can expand the nested flex item to its
    content height, leaving nothing for scrollTop to move. Give the log viewport
    a physical height while preserving the normal flexible layout elsewhere. */
-html.legacy-tizen .debug-console-log-frame {
+html.tizen-tv .debug-console-log-frame {
   flex: 0 0 auto;
   height: calc(100vh - 232px);
   min-height: 240px;
@@ -12694,7 +12694,6 @@ html.legacy-tizen .debug-console-log-frame {
   color: #000000;
 }
 
-.legacy-tizen .player-pause-overlay,
 .tizen-tv .player-pause-overlay {
   top: 0;
   right: 0;
@@ -12706,7 +12705,6 @@ html.legacy-tizen .debug-console-log-frame {
   max-height: 100vh;
 }
 
-.legacy-tizen .player-pause-overlay-shade,
 .tizen-tv .player-pause-overlay-shade {
   top: 0;
   right: 0;
@@ -12718,7 +12716,6 @@ html.legacy-tizen .debug-console-log-frame {
   -webkit-backdrop-filter: none;
 }
 
-.legacy-tizen .player-pause-overlay-top,
 .tizen-tv .player-pause-overlay-top {
   top: 34px;
   right: 42px;
@@ -12728,7 +12725,6 @@ html.legacy-tizen .debug-console-log-frame {
   text-align: right;
 }
 
-.legacy-tizen .player-pause-overlay-clock,
 .tizen-tv .player-pause-overlay-clock {
   display: block;
   font-size: 36px;
@@ -12736,7 +12732,6 @@ html.legacy-tizen .debug-console-log-frame {
   font-weight: 600;
 }
 
-.legacy-tizen .player-pause-overlay-ends-at,
 .tizen-tv .player-pause-overlay-ends-at {
   display: block;
   margin-top: 4px;
@@ -12744,7 +12739,6 @@ html.legacy-tizen .debug-console-log-frame {
   line-height: 20px;
 }
 
-.legacy-tizen .player-pause-overlay-content,
 .tizen-tv .player-pause-overlay-content {
   left: 56px;
   right: 56px;
@@ -12757,25 +12751,21 @@ html.legacy-tizen .debug-console-log-frame {
   overflow: hidden;
 }
 
-.legacy-tizen .player-pause-overlay-content > * + *,
 .tizen-tv .player-pause-overlay-content > * + * {
   margin-top: 12px;
 }
 
-.legacy-tizen .player-pause-kicker,
 .tizen-tv .player-pause-kicker {
   font-size: 16px;
   line-height: 22px;
 }
 
-.legacy-tizen .player-pause-logo,
 .tizen-tv .player-pause-logo {
   display: block;
   max-width: 480px;
   max-height: 96px;
 }
 
-.legacy-tizen .player-pause-title,
 .tizen-tv .player-pause-title {
   font-size: 52px;
   line-height: 60px;
@@ -12783,20 +12773,17 @@ html.legacy-tizen .debug-console-log-frame {
   max-width: 1180px;
 }
 
-.legacy-tizen .player-pause-meta-line,
 .tizen-tv .player-pause-meta-line {
   font-size: 20px;
   line-height: 28px;
 }
 
-.legacy-tizen .player-pause-episode-title,
 .tizen-tv .player-pause-episode-title {
   font-size: 32px;
   line-height: 40px;
   max-width: 1180px;
 }
 
-.legacy-tizen .player-pause-description,
 .tizen-tv .player-pause-description {
   max-width: 1180px;
   max-height: 112px;
@@ -12805,19 +12792,16 @@ html.legacy-tizen .debug-console-log-frame {
   -webkit-line-clamp: 4;
 }
 
-.legacy-tizen .player-pause-cast-section,
 .tizen-tv .player-pause-cast-section {
   margin-top: 18px;
   max-width: 1180px;
 }
 
-.legacy-tizen .player-pause-cast-label,
 .tizen-tv .player-pause-cast-label {
   font-size: 16px;
   line-height: 22px;
 }
 
-.legacy-tizen .player-pause-cast-row,
 .tizen-tv .player-pause-cast-row {
   display: block;
   margin-top: 10px;
@@ -12827,7 +12811,6 @@ html.legacy-tizen .debug-console-log-frame {
   overflow: hidden;
 }
 
-.legacy-tizen .player-pause-cast-chip,
 .tizen-tv .player-pause-cast-chip {
   display: inline-flex;
   height: 44px;
@@ -12841,12 +12824,10 @@ html.legacy-tizen .debug-console-log-frame {
   line-height: 20px;
 }
 
-.legacy-tizen .player-still-watching-actions > * + *,
 .tizen-tv .player-still-watching-actions > * + * {
   margin-left: 12px;
 }
 
-.legacy-tizen .player-still-watching-btn,
 .tizen-tv .player-still-watching-btn {
   min-height: 48px;
   padding: 0 18px;
@@ -12855,19 +12836,16 @@ html.legacy-tizen .debug-console-log-frame {
 }
 
 @media (max-width: 1366px), (max-height: 760px) {
-  .legacy-tizen .player-pause-overlay-top,
   .tizen-tv .player-pause-overlay-top {
     top: 24px;
     right: 32px;
   }
 
-  .legacy-tizen .player-pause-overlay-clock,
   .tizen-tv .player-pause-overlay-clock {
     font-size: 30px;
     line-height: 36px;
   }
 
-  .legacy-tizen .player-pause-overlay-content,
   .tizen-tv .player-pause-overlay-content {
     left: 40px;
     right: 40px;
@@ -12878,19 +12856,16 @@ html.legacy-tizen .debug-console-log-frame {
     max-height: calc(100vh - 116px);
   }
 
-  .legacy-tizen .player-pause-title,
   .tizen-tv .player-pause-title {
     font-size: 40px;
     line-height: 48px;
   }
 
-  .legacy-tizen .player-pause-episode-title,
   .tizen-tv .player-pause-episode-title {
     font-size: 26px;
     line-height: 34px;
   }
 
-  .legacy-tizen .player-pause-description,
   .tizen-tv .player-pause-description {
     max-height: 96px;
     font-size: 19px;
@@ -12898,7 +12873,6 @@ html.legacy-tizen .debug-console-log-frame {
     -webkit-line-clamp: 4;
   }
 
-  .legacy-tizen .player-pause-cast-section,
   .tizen-tv .player-pause-cast-section {
     margin-top: 12px;
   }
@@ -18455,7 +18429,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern {
+.tizen-tv .home-screen-shell.home-layout-modern {
   --home-content-start: 128px;
   --home-track-end: 128px;
   --home-continue-track-end: 128px;
@@ -18463,44 +18437,44 @@ html.legacy-tizen .debug-console-log-frame {
   --modern-hero-copy-right: 72px;
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-rows-viewport {
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-rows-viewport {
   bottom: 28px;
   height: calc(var(--modern-rows-viewport-height) - 28px);
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-track {
+.tizen-tv .home-screen-shell.home-layout-modern .home-track {
   padding-left: var(--home-content-start);
   padding-right: var(--home-track-end);
 }
 
-.legacy-tizen .player-subtitle-modal,
-.legacy-tizen .player-audio-modal {
+.tizen-tv .player-subtitle-modal,
+.tizen-tv .player-audio-modal {
   left: 96px;
   bottom: 72px;
   width: calc(100vw - 192px);
   max-height: calc(100vh - 144px);
 }
 
-.legacy-tizen .player-subtitle-modal {
+.tizen-tv .player-subtitle-modal {
   height: calc(100vh - 144px);
 }
 
-.legacy-tizen .player-subtitle-overlay-grid {
+.tizen-tv .player-subtitle-overlay-grid {
   height: auto;
   min-height: 0;
 }
 
-.legacy-tizen .series-detail-shell:not(.detail-trailer-active) .detail-hero-body {
+.tizen-tv .series-detail-shell:not(.detail-trailer-active) .detail-hero-body {
   max-height: none;
   overflow: visible;
 }
 
-.legacy-tizen .series-detail-vignette {
+.tizen-tv .series-detail-vignette {
   background: rgba(0, 0, 0, 0.34);
 }
 
-.legacy-tizen .series-detail-vignette::before,
-.legacy-tizen .series-detail-vignette::after {
+.tizen-tv .series-detail-vignette::before,
+.tizen-tv .series-detail-vignette::after {
   content: "";
   position: absolute;
   top: 0;
@@ -18511,7 +18485,7 @@ html.legacy-tizen .debug-console-log-frame {
   pointer-events: none;
 }
 
-.legacy-tizen .series-detail-vignette::before {
+.tizen-tv .series-detail-vignette::before {
   background: linear-gradient(
     90deg,
     rgba(6, 9, 14, 0.98) 0%,
@@ -18522,7 +18496,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .series-detail-vignette::after {
+.tizen-tv .series-detail-vignette::after {
   background: linear-gradient(
     180deg,
     rgba(0, 0, 0, 0.24) 0%,
@@ -18531,7 +18505,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .series-detail-description {
+.tizen-tv .series-detail-description {
   display: block;
   max-height: 150px;
   -webkit-line-clamp: initial;
@@ -18544,39 +18518,39 @@ html.legacy-tizen .debug-console-log-frame {
 /* webOS 6.x can mis-bound nested flex/vh layouts on LG TVs. Keep the stream
    picker on absolute coordinates so the results list has a real viewport. */
 
-.legacy-tizen .stream-route-shell {
+.tizen-tv .stream-route-shell {
   width: 1920px;
   height: 1080px;
 }
 
-.legacy-tizen .stream-route-backdrop {
+.tizen-tv .stream-route-backdrop {
   transform: none !important;
 }
 
-.legacy-tizen .stream-route-content {
+.tizen-tv .stream-route-content {
   display: -webkit-box;
   display: flex;
   padding: 56px 64px;
 }
 
-.legacy-tizen .stream-route-left {
+.tizen-tv .stream-route-left {
   width: 560px;
   flex: 0 0 560px;
   padding-right: 44px;
 }
 
-.legacy-tizen .stream-route-left-inner {
+.tizen-tv .stream-route-left-inner {
   width: 420px;
   max-width: 420px;
 }
 
-.legacy-tizen .stream-route-logo {
+.tizen-tv .stream-route-logo {
   width: 420px;
   max-width: 420px;
   max-height: 150px;
 }
 
-.legacy-tizen .stream-route-right {
+.tizen-tv .stream-route-right {
   width: 1232px;
   flex: 0 0 1232px;
   max-width: 1232px;
@@ -18585,12 +18559,12 @@ html.legacy-tizen .debug-console-log-frame {
   overflow: hidden;
 }
 
-.legacy-tizen .stream-route-chip-wrap {
+.tizen-tv .stream-route-chip-wrap {
   height: 78px;
   margin-bottom: 20px;
 }
 
-.legacy-tizen .stream-route-panel-shell {
+.tizen-tv .stream-route-panel-shell {
   opacity: 1 !important;
   transform: none !important;
   animation: none !important;
@@ -18601,7 +18575,7 @@ html.legacy-tizen .debug-console-log-frame {
   -webkit-box-flex: 1;
 }
 
-.legacy-tizen .stream-route-list {
+.tizen-tv .stream-route-list {
   height: 100%;
   max-height: 100%;
   min-height: 0;
@@ -18611,8 +18585,8 @@ html.legacy-tizen .debug-console-log-frame {
   will-change: auto;
 }
 
-.legacy-tizen .stream-route-card,
-.legacy-tizen .stream-route-card.focused {
+.tizen-tv .stream-route-card,
+.tizen-tv .stream-route-card.focused {
   transform: none !important;
 }
 
@@ -20407,12 +20381,12 @@ html.legacy-tizen .debug-console-log-frame {
 /* Final legacy-TV overrides. On older Chromium/WebKit, declarations such as
   rgba(var(--color-rgb), alpha) can become invalid only after var() is
    resolved; that also discards earlier declarations from the same cascade. */
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-copy {
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-copy {
   top: 0;
   bottom: 52vh;
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
   width: 45%;
   right: auto;
   background: linear-gradient(
@@ -20425,7 +20399,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
+.tizen-tv .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
   background: linear-gradient(
     180deg,
     rgba(13, 13, 13, 0) 0%,
@@ -20436,7 +20410,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen
+.tizen-tv
   .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
   .home-modern-hero-media {
   right: 0;
@@ -20445,7 +20419,7 @@ html.legacy-tizen .debug-console-log-frame {
   min-height: 0;
 }
 
-.legacy-tizen
+.tizen-tv
   .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
   .home-modern-hero-media::before {
   width: 65%;
@@ -20460,7 +20434,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen
+.tizen-tv
   .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
   .home-modern-hero-media::after {
   background: linear-gradient(
@@ -20473,11 +20447,11 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .stream-route-backdrop-dim {
+.tizen-tv .stream-route-backdrop-dim {
   background: rgba(13, 13, 13, 0.24);
 }
 
-.legacy-tizen .stream-route-left-gradient {
+.tizen-tv .stream-route-left-gradient {
   background: linear-gradient(
     90deg,
     rgba(13, 13, 13, 1) 0%,
@@ -20489,7 +20463,7 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .stream-route-right-gradient {
+.tizen-tv .stream-route-right-gradient {
   background: linear-gradient(
     270deg,
     rgba(13, 13, 13, 1) 0%,
@@ -20501,17 +20475,17 @@ html.legacy-tizen .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .stream-route-panel-shell {
+.tizen-tv .stream-route-panel-shell {
   background: rgba(26, 26, 26, 0.82) !important;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.legacy-tizen .stream-route-card,
-.legacy-tizen .stream-route-card.focused {
+.tizen-tv .stream-route-card,
+.tizen-tv .stream-route-card.focused {
   background: #222222 !important;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-.legacy-tizen .stream-route-card.focused {
+.tizen-tv .stream-route-card.focused {
   border-color: var(--secondary-color);
 }

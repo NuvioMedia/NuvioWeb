@@ -464,13 +464,7 @@ export const PlayerController = {
     }
 
     try {
-      const event = typeof CustomEvent === "function"
-        ? new CustomEvent(eventName, { detail: detail || null })
-        : (() => {
-          const legacyEvent = document.createEvent("CustomEvent");
-          legacyEvent.initCustomEvent(eventName, false, false, detail || null);
-          return legacyEvent;
-        })();
+      const event = new CustomEvent(eventName, { detail: detail || null });
       this.video.dispatchEvent(event);
     } catch (_) {
       // Ignore synthetic event failures.
