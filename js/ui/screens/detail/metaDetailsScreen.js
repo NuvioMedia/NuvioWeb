@@ -2801,7 +2801,7 @@ export const MetaDetailsScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="series-detail-shell${this.getTrailerShellStateClasses()}">
+      <div class="series-detail-shell tv-route-shell${this.getTrailerShellStateClasses()}">
         <div class="series-detail-backdrop" data-backdrop-url="${escapeAttribute(backdrop || "")}"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="detail-trailer-loading-spinner" aria-hidden="true"><div class="player-loading-spinner-ring"></div></div>
@@ -2811,10 +2811,10 @@ export const MetaDetailsScreen = {
         <div class="series-detail-content">
           <div id="detailHeroSection">${heroMarkup}</div>
           <div id="detailSeasonRowMount">
-            <div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
+            <div class="series-season-row tv-horizontal-track" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>
           </div>
           <div id="detailEpisodeTrackMount">
-            <div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
+            <div class="series-episode-track tv-horizontal-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>
           </div>
           <div id="detailInsightSectionMount">${this.renderSeriesInsightSection()}</div>
           <div id="detailCommentsSectionMount">${this.renderStandaloneCommentsSection()}</div>
@@ -3122,7 +3122,7 @@ export const MetaDetailsScreen = {
     const heroMarkup = this.renderMovieHeroMarkup(meta);
 
     this.container.innerHTML = `
-      <div class="series-detail-shell movie-detail-shell${this.getTrailerShellStateClasses()}">
+        <div class="series-detail-shell movie-detail-shell tv-route-shell${this.getTrailerShellStateClasses()}">
         <div class="series-detail-backdrop" data-backdrop-url="${escapeAttribute(backdrop || "")}"${backdrop ? ` style="background-image:url('${backdrop.replace(/'/g, "%27")}')"` : ""}></div>
         <div class="detail-trailer-layer"></div>
         <div class="detail-trailer-loading-spinner" aria-hidden="true"><div class="player-loading-spinner-ring"></div></div>
@@ -3237,12 +3237,12 @@ export const MetaDetailsScreen = {
 
     const seasonMount = this.container.querySelector("#detailSeasonRowMount");
     if (isSeries && seasonMount) {
-      seasonMount.innerHTML = `<div class="series-season-row" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>`;
+      seasonMount.innerHTML = `<div class="series-season-row tv-horizontal-track" data-scroll-key="season-tabs">${this.renderSeasonButtons()}</div>`;
     }
 
     const episodeMount = this.container.querySelector("#detailEpisodeTrackMount");
     if (isSeries && episodeMount) {
-      episodeMount.innerHTML = `<div class="series-episode-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>`;
+      episodeMount.innerHTML = `<div class="series-episode-track tv-horizontal-track" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards()}</div>`;
     }
 
     const insightMount = this.container.querySelector("#detailInsightSectionMount");
@@ -3366,7 +3366,7 @@ export const MetaDetailsScreen = {
   renderPeopleTabs(kind, activeTab, items = []) {
     const normalized = items.filter(([, label]) => Boolean(label));
     return `
-      <div class="series-insight-tabs" data-scroll-key="people-tabs:${kind}">
+      <div class="series-insight-tabs tv-horizontal-track" data-scroll-key="people-tabs:${kind}">
         ${normalized
           .map(
             ([tab, label], index) => `
@@ -3385,7 +3385,10 @@ export const MetaDetailsScreen = {
     if (!Array.isArray(this.castItems) || !this.castItems.length) {
       return `<div class="series-insight-empty">No cast information.</div>`;
     }
-    const className = kind === "movie" ? "movie-cast-track" : "series-cast-track";
+    const className =
+      kind === "movie"
+        ? "movie-cast-track tv-horizontal-track"
+        : "series-cast-track tv-horizontal-track";
     const cards = this.castItems
       .slice(0, 18)
       .map(
@@ -3442,9 +3445,9 @@ export const MetaDetailsScreen = {
           .join("")
       : `<div class="series-insight-empty">${escapeHtml(t("detail.noEpisodeRatings", {}, "No episode ratings in this season."))}</div>`;
     return `
-      <div class="series-rating-seasons" data-scroll-key="rating-seasons">${seasonButtons}</div>
+      <div class="series-rating-seasons tv-horizontal-track" data-scroll-key="rating-seasons">${seasonButtons}</div>
       <div class="series-rating-summary">${escapeHtml(t("detail.seasonSummary", { season: this.selectedRatingSeason, count: ratings.length }, "Season {{season}} • {{count}} episodes"))}</div>
-      <div class="series-episode-ratings-grid" data-scroll-key="rating-chips:${this.selectedRatingSeason}">${chips}</div>
+      <div class="series-episode-ratings-grid tv-horizontal-track" data-scroll-key="rating-chips:${this.selectedRatingSeason}">${chips}</div>
     `;
   },
 
@@ -3761,7 +3764,7 @@ export const MetaDetailsScreen = {
     }
     const focusRestore = focusRestoreOverride || this.captureDetailFocus();
     this.captureRenderedChromeState();
-    episodeMount.innerHTML = `<div class="series-episode-track${this.getSelectedSeasonEpisodes().length > EPISODE_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards(preferredIndex)}</div>`;
+    episodeMount.innerHTML = `<div class="series-episode-track tv-horizontal-track${this.getSelectedSeasonEpisodes().length > EPISODE_VIRTUALIZATION_THRESHOLD ? " is-virtualized" : ""}" data-scroll-key="episodes:${this.selectedSeason || 1}">${this.renderEpisodeCards(preferredIndex)}</div>`;
     ScreenUtils.indexFocusables(this.container);
     this.pendingFocusRestore = focusRestore;
     this.bindDetailChrome();
@@ -5198,7 +5201,7 @@ export const MetaDetailsScreen = {
       `;
       })
       .join("");
-    return `<div class="detail-morelike-track detail-trailer-track" data-scroll-key="trailer:${escapeHtml(kind)}">${cards}</div>`;
+    return `<div class="detail-morelike-track detail-trailer-track tv-horizontal-track" data-scroll-key="trailer:${escapeHtml(kind)}">${cards}</div>`;
   },
 
   renderCommentsSection() {
@@ -5325,7 +5328,7 @@ export const MetaDetailsScreen = {
     `;
       })
       .join("");
-    return `<div class="detail-morelike-track" data-scroll-key="${escapeHtml(railKey)}">${cards}</div>`;
+    return `<div class="detail-morelike-track tv-horizontal-track" data-scroll-key="${escapeHtml(railKey)}">${cards}</div>`;
   },
 
   renderMoreLikeCards() {
@@ -5369,7 +5372,7 @@ export const MetaDetailsScreen = {
     return `
       <section class="detail-company-section">
         <h3 class="detail-company-title">${escapeHtml(title)}</h3>
-        <div class="detail-company-track" data-scroll-key="company:${escapeHtml(String(title || "").toLowerCase())}">${logos}</div>
+        <div class="detail-company-track tv-horizontal-track" data-scroll-key="company:${escapeHtml(String(title || "").toLowerCase())}">${logos}</div>
       </section>
     `;
   },

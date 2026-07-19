@@ -316,7 +316,7 @@ export const LibraryScreen = {
 
   renderLoading() {
     this.container.innerHTML = `
-      <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}">
+      <div class="home-shell library-shell tv-route-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}">
         ${this.renderSidebar()}
         <main class="home-main library-main">
           <section class="library-loading-state">
@@ -788,7 +788,7 @@ export const LibraryScreen = {
     }
 
     this.container.innerHTML = `
-      <div class="home-shell library-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}" style="${escapeHtml(libraryStyle)}">
+      <div class="home-shell library-shell tv-route-shell${this.libraryRouteEnterPending ? " library-route-enter" : ""}" style="${escapeHtml(libraryStyle)}">
         ${this.renderSidebar()}
         <main class="home-main library-main">
           <section class="library-page">

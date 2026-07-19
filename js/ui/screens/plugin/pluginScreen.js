@@ -210,7 +210,7 @@ export const PluginScreen = {
 
     const enterClass = this.pluginRouteEnterPending ? " nuvio-route-slide-enter" : "";
     this.container.innerHTML = `
-      <div class="addons-shell addons-route-shell">
+      <div class="addons-shell addons-route-shell tv-route-shell">
         <div class="addons-route-content${enterClass}">
           <main class="home-main addons-main addons-main-centered">
             <div class="addons-panel addons-panel-centered">

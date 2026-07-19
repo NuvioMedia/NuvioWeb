@@ -22,7 +22,7 @@ export const AuthQrSignInScreen = {
     ScreenUtils.show(this.container);
 
     this.container.innerHTML = `
-      <div class="qr-layout">
+      <div class="qr-layout tv-route-shell">
         <section class="qr-left-panel">
           <div class="qr-brand-lockup">
             <img src="assets/brand/app_logo_wordmark.png" class="qr-logo" alt="Nuvio" />

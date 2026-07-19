@@ -2031,7 +2031,7 @@ export const SettingsScreen = {
       return;
     }
     this.container.innerHTML = `
-      <div class="home-shell settings-shell">
+      <div class="home-shell settings-shell tv-route-shell">
         <div class="settings-root-sidebar-slot" data-settings-root-sidebar></div>
         <div class="settings-workspace">
           <div class="settings-sidebar-frame">

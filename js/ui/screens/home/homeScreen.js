@@ -7812,7 +7812,7 @@ export const HomeScreen = {
     );
 
     this.container.innerHTML = `
-      <div class="home-shell home-screen-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
+      <div class="home-shell home-screen-shell tv-route-shell ${layoutClass}"${sizingStyle ? ` style="${escapeAttribute(sizingStyle)}"` : ""}>
         ${renderRootSidebar({
       selectedRoute: "home",
       profile: this.sidebarProfile,

@@ -127,7 +127,7 @@ export const TraktScreen = Object.assign(Object.create(SettingsScreen), {
       : rawPanelHtml.replace("settings-slide-panel ", "");
     this.actionMap.set("trakt:back", () => Router.back());
     this.container.innerHTML = `
-      <div class="trakt-route-shell${this.traktRouteEnterPending ? " trakt-route-enter" : ""}">
+      <div class="trakt-route-shell tv-route-shell${this.traktRouteEnterPending ? " trakt-route-enter" : ""}">
         <div class="trakt-route-content">
           ${panelHtml}
         </div>

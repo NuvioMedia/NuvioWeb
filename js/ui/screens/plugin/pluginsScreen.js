@@ -26,7 +26,7 @@ export const PluginsScreen = {
   async render() {
     const enterClass = this.routeEnterPending ? " nuvio-route-slide-enter" : "";
     this.container.innerHTML = `
-      <div class="plugins-route-shell">
+      <div class="plugins-route-shell tv-route-shell">
         <div class="plugins-route-content${enterClass}">
           <header class="settings-content-header">
             <h1 class="settings-title">${escapeHtml(t("plugin_title", {}, "Plugins"))}</h1>

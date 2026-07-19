@@ -1432,7 +1432,7 @@ export const DiscoverScreen = {
     this.discoverRouteEnterPending = false;
 
     this.container.innerHTML = `
-      <div class="home-shell search-screen-shell discover-shell">
+      <div class="home-shell search-screen-shell discover-shell tv-route-shell">
         <main class="home-main discover-main${enterClass}">
           <div class="seeall-shell discover-seeall-shell">
             <header class="seeall-header discover-header">

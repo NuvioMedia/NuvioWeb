@@ -462,7 +462,7 @@ export const ProfileSelectionScreen = {
     const compactGridScreenClass = totalItems >= 6 ? " profile-screen-compact-grid" : "";
 
     this.container.innerHTML = `
-      <div class="profile-screen${pinScreenPhaseClass}${compactGridScreenClass}">
+      <div class="profile-screen tv-route-shell${pinScreenPhaseClass}${compactGridScreenClass}">
         <div class="profile-main-layer"${isPinActive ? ' aria-hidden="true"' : ""}>
           <img src="assets/brand/app_logo_wordmark.png" class="profile-logo" alt="Nuvio"/>
 

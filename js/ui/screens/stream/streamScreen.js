@@ -2376,7 +2376,7 @@ export const StreamScreen = {
         </div>`;
 
     this.container.innerHTML = `
-      <div class="stream-route-shell${shellStableClass}">
+      <div class="stream-route-shell tv-route-shell${shellStableClass}">
         <div class="stream-route-backdrop"${backdrop ? ` style="background-image:url('${String(backdrop).replace(/'/g, "%27")}')"` : ""}></div>
         <div class="stream-route-backdrop-dim"></div>
         <div class="stream-route-left-gradient"></div>

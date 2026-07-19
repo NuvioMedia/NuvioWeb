@@ -522,7 +522,7 @@ export const SearchScreen = {
 
   renderLoading() {
     this.container.innerHTML = `
-      <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
+      <div class="home-shell search-screen-shell tv-route-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
         ${renderRootSidebar({
           selectedRoute: "search",
           profile: this.sidebarProfile,
@@ -847,7 +847,7 @@ export const SearchScreen = {
     this.cancelScheduledRender();
     const queryText = this.query || "";
     this.container.innerHTML = `
-      <div class="home-shell search-screen-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
+      <div class="home-shell search-screen-shell tv-route-shell${this.searchRouteEnterPending ? " search-route-enter" : ""}">
         ${renderRootSidebar({
           selectedRoute: "search",
           profile: this.sidebarProfile,

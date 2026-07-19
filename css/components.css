@@ -24,6 +24,21 @@ button:focus {
   color: var(--error-color);
 }
 
+.tv-horizontal-track {
+  display: flex;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tv-horizontal-track::-webkit-scrollbar {
+  display: none;
+}
+
+.tv-route-shell {
+  width: 100vw;
+  height: 100vh;
+}
+
 .icon-img {
   width: 22px;
   height: 22px;
@@ -35,8 +50,6 @@ button:focus {
 .qr-layout {
   display: flex;
   align-items: stretch;
-  width: 100vw;
-  height: 100vh;
   padding: 28px 48px;
   box-sizing: border-box;
   background: var(--bg-color);
@@ -446,8 +459,6 @@ button:focus {
 }
 
 .profile-screen {
-  width: 100vw;
-  height: 100vh;
   box-sizing: border-box;
   background: var(--bg-color);
   position: relative;
@@ -1957,7 +1968,7 @@ button:focus {
   transform: none;
 }
 
-/* ─── Legacy profile-specific dialog aliases (kept for compat) ─── */
+/* Profile-specific dialog components. */
 .profile-dialog {
   width: min(92vw, 500px);
   padding: 34px 34px 28px;
@@ -2081,8 +2092,6 @@ button:focus {
 
 .home-shell {
   display: flex;
-  width: 100vw;
-  height: 100vh;
   /* ATV sidebar tokens use dp; web TV canvas doubles them for 1920px. */
   /* ATV legacyCollapsedWidth 72dp -> 144px */
   --legacy-sidebar-rail-width: 144px;
@@ -2958,8 +2967,6 @@ button:focus {
 }
 
 .search-screen-shell {
-  width: 100vw;
-  height: 100vh;
   display: flex;
   background: var(--bg-color);
   color: var(--text-color);
@@ -3181,8 +3188,6 @@ button:focus {
 }
 
 .discover-shell {
-  width: 100vw;
-  height: 100vh;
   display: flex;
   background: var(--bg-color);
   color: var(--text-color);
@@ -7447,8 +7452,6 @@ button:focus {
 }
 
 .trakt-route-shell {
-  width: 100vw;
-  height: 100vh;
   padding: min(2.92vw, 56px) min(5vw, 96px); /* ATV 28dp/48dp -> 56px/96px */
   background: var(--bg-color);
   overflow: hidden;
@@ -7648,8 +7651,6 @@ button:focus {
 }
 
 .supporters-route-shell {
-  width: 100vw;
-  height: 100vh;
   padding: min(2.92vw, 56px) min(3.75vw, 72px); /* ATV 28dp/36dp -> 56px/72px */
   background: var(--bg-color);
   color: var(--text-color);
@@ -10615,8 +10616,6 @@ html.tizen-tv .debug-console-log-frame {
 
 .addons-route-shell,
 .plugins-route-shell {
-  width: 100vw;
-  height: 100vh;
   padding: min(2.92vw, 56px) min(5vw, 96px); /* ATV 28dp/48dp -> 56px/96px */
   background: var(--bg-color);
   color: var(--text-color);
@@ -14886,52 +14885,8 @@ html.tizen-tv .debug-console-log-frame {
   }
 }
 
-.series-detail-shell {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-}
-
-.series-detail-backdrop {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  background: #0a0d12 center center / cover no-repeat;
-}
-
-.series-detail-vignette {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  inset: 0;
-  background:
-    linear-gradient(
-      90deg,
-      rgba(4, 7, 11, 0.92) 0%,
-      rgba(8, 12, 17, 0.68) 44%,
-      rgba(8, 12, 17, 0.34) 67%,
-      rgba(8, 12, 17, 0.18) 100%
-    ),
-    linear-gradient(180deg, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.82));
-}
-
 .series-detail-content {
-  position: relative;
-  z-index: 1;
   max-width: calc(100vw - 32px);
-  height: 100vh;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 30px 32px 120px;
-  box-sizing: border-box;
 }
 
 .series-detail-content::-webkit-scrollbar {
@@ -14975,20 +14930,6 @@ html.tizen-tv .debug-console-log-frame {
   pointer-events: auto;
 }
 
-.series-primary-btn {
-  height: 66px;
-  padding: 0 28px;
-  border-radius: 999px;
-  font-size: 34px;
-  font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-}
-
-.series-primary-btn > * + * {
-  margin-left: 12px;
-}
-
 .series-circle-btn {
   width: 66px;
   height: 66px;
@@ -15028,12 +14969,6 @@ html.tizen-tv .debug-console-log-frame {
   font-size: 38px;
   line-height: 1.32;
   color: rgba(240, 246, 252, 0.92);
-}
-
-.series-detail-support {
-  margin: 0 0 10px;
-  font-size: 30px;
-  color: rgba(237, 244, 251, 0.74);
 }
 
 .series-detail-meta {
@@ -15078,7 +15013,6 @@ html.tizen-tv .debug-console-log-frame {
 }
 
 .series-season-row {
-  display: flex;
   align-items: center;
   margin-bottom: 14px;
 }
@@ -15103,10 +15037,6 @@ html.tizen-tv .debug-console-log-frame {
   white-space: nowrap;
 }
 
-.series-season-btn.selected {
-  background: rgba(255, 255, 255, 0.2);
-}
-
 .series-season-btn.focused {
   transform: none;
   border-color: #fff;
@@ -15121,7 +15051,6 @@ html.tizen-tv .debug-console-log-frame {
   padding-bottom: 12px;
   padding-left: 0;
   padding-right: 16px;
-  scrollbar-width: none;
 }
 
 .series-episode-track > * + * {
@@ -15144,10 +15073,6 @@ html.tizen-tv .debug-console-log-frame {
 .series-episode-track-spacer {
   flex: 0 0 auto;
   height: 1px;
-}
-
-.series-episode-track::-webkit-scrollbar {
-  display: none;
 }
 
 .series-episode-card {
@@ -15451,10 +15376,6 @@ html.tizen-tv .debug-console-log-frame {
   max-width: 1080px;
 }
 
-.movie-cast-section {
-  margin-top: 34px;
-}
-
 .movie-cast-heading {
   margin: 0 0 14px;
   font-size: 46px;
@@ -15462,33 +15383,19 @@ html.tizen-tv .debug-console-log-frame {
 }
 
 .movie-cast-track {
-  display: flex;
-  overflow-x: auto;
   padding-bottom: 10px;
-  scrollbar-width: none;
 }
 
 .movie-cast-track > * + * {
   margin-left: 18px;
 }
 
-.movie-cast-track::-webkit-scrollbar {
-  display: none;
-}
-
 .series-cast-track {
-  display: flex;
-  overflow-x: auto;
   padding-bottom: 10px;
-  scrollbar-width: none;
 }
 
 .series-cast-track > * + * {
   margin-left: 18px;
-}
-
-.series-cast-track::-webkit-scrollbar {
-  display: none;
 }
 
 .movie-cast-card {
@@ -15517,31 +15424,10 @@ html.tizen-tv .debug-console-log-frame {
   margin-bottom: 10px;
 }
 
-.movie-cast-name {
-  font-size: 36px;
-  font-weight: 700;
-  line-height: 1.15;
-}
-
-.movie-cast-role {
-  margin-top: 4px;
-  font-size: 30px;
-  color: rgba(229, 237, 246, 0.72);
-  line-height: 1.2;
-}
-
-.series-insight-section {
-  margin-top: 24px;
-}
-
 .series-insight-tabs {
   display: flex;
   align-items: center;
   margin-bottom: 14px;
-}
-
-.series-insight-tabs > * + * {
-  margin-left: 10px;
 }
 
 .series-insight-tab {
@@ -15579,43 +15465,9 @@ html.tizen-tv .debug-console-log-frame {
   margin-bottom: 12px;
 }
 
-.series-rating-seasons > * + * {
-  margin-left: 10px;
-}
-
-.series-rating-season {
-  min-width: 50px;
-  height: 38px;
-  border-radius: 999px;
-  border: none;
-  background: rgba(255, 255, 255, 0.14);
-  color: rgba(241, 247, 254, 0.95);
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.series-rating-season.selected {
-  background: rgba(255, 255, 255, 0.28);
-}
-
 .series-rating-season.focused {
   transform: none;
   border: 2px solid rgba(245, 249, 255, 0.95);
-}
-
-.series-episode-ratings-grid {
-  display: flex;
-  overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: none;
-}
-
-.series-episode-ratings-grid > * + * {
-  margin-left: 10px;
-}
-
-.series-episode-ratings-grid::-webkit-scrollbar {
-  display: none;
 }
 
 .series-episode-rating-chip {
@@ -15674,14 +15526,6 @@ html.tizen-tv .debug-console-log-frame {
   line-height: 1.05;
 }
 
-.movie-ratings-row {
-  display: flex;
-}
-
-.movie-ratings-row > * + * {
-  margin-left: 16px;
-}
-
 .movie-rating-card {
   width: 160px;
   height: 120px;
@@ -15710,30 +15554,11 @@ html.tizen-tv .debug-console-log-frame {
   line-height: 1;
 }
 
-.detail-company-section {
-  margin-top: 20px;
-}
-
 .detail-company-title {
   margin: 0 0 10px;
   font-size: 28px;
   font-weight: 700;
   color: var(--detail-text-primary);
-}
-
-.detail-company-track {
-  display: flex;
-  overflow-x: auto;
-  padding-bottom: 8px;
-  scrollbar-width: none;
-}
-
-.detail-company-track > * + * {
-  margin-left: 12px;
-}
-
-.detail-company-track::-webkit-scrollbar {
-  display: none;
 }
 
 .detail-company-card {
@@ -15772,19 +15597,8 @@ html.tizen-tv .debug-console-log-frame {
   font-weight: 700;
 }
 
-.detail-morelike-track {
-  display: flex;
-  overflow-x: auto;
-  padding-bottom: 12px;
-  scrollbar-width: none;
-}
-
 .detail-morelike-track > * + * {
   margin-left: 14px;
-}
-
-.detail-morelike-track::-webkit-scrollbar {
-  display: none;
 }
 
 .detail-morelike-card {
@@ -15796,34 +15610,10 @@ html.tizen-tv .debug-console-log-frame {
   box-sizing: border-box;
 }
 
-.detail-morelike-card.focused {
-  transform: none;
-  border-color: var(--focus-color);
-  box-shadow: 0 0 0 3px rgba(var(--focus-color-rgb), 0.24);
-}
-
 .detail-morelike-poster {
   height: 300px;
   border-radius: 12px;
   background: var(--detail-bg-card) center center / cover no-repeat;
-}
-
-.detail-morelike-name {
-  margin-top: 8px;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1.2;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.detail-morelike-type {
-  margin-top: 4px;
-  font-size: 14px;
-  color: var(--detail-text-secondary);
 }
 
 .series-detail-shell {
@@ -15838,8 +15628,6 @@ html.tizen-tv .debug-console-log-frame {
   --detail-focus-fill: var(--secondary-color);
   --detail-focus-text: var(--on-secondary);
   position: relative;
-  width: 100vw;
-  height: 100vh;
   overflow: hidden;
   background: var(--detail-bg);
 }
@@ -16211,12 +15999,6 @@ html.tizen-tv .debug-console-log-frame {
     margin-bottom 600ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.detail-trailer-autoplay .series-detail-logo {
-  max-width: min(28vw, 380px);
-  max-height: clamp(72px, 6vh, 96px);
-  margin-bottom: 24px;
-}
-
 .series-detail-title {
   margin: 0 0 12px;
   font-size: var(--tv-title-text);
@@ -16263,10 +16045,6 @@ html.tizen-tv .debug-console-log-frame {
   transition: opacity 400ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.series-detail-actions > * + * {
-  margin-left: clamp(14px, 1vw, 20px);
-}
-
 .detail-trailer-active .detail-hero-body {
   max-height: 0;
   opacity: 0;
@@ -16306,10 +16084,6 @@ html.tizen-tv .debug-console-log-frame {
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-}
-
-.series-primary-btn > * + * {
-  margin-left: 10px;
 }
 
 .series-secondary-btn {
@@ -16383,11 +16157,6 @@ html.tizen-tv .debug-console-log-frame {
   display: block;
 }
 
-.series-primary-btn .series-btn-svg {
-  width: 36px;
-  height: 36px;
-}
-
 .series-primary-btn.focused {
   background: #ffffff;
   color: #000000;
@@ -16448,10 +16217,6 @@ html.tizen-tv .debug-console-log-frame {
 .series-circle-btn.is-selected.focused {
   background: #ffffff;
   color: #000000;
-}
-
-.detail-morelike-card.focused {
-  transform: scale(1.02);
 }
 
 .movie-cast-card.focused,
@@ -16641,25 +16406,8 @@ html.tizen-tv .debug-console-log-frame {
 
 .series-season-row {
   margin-bottom: 0;
-  overflow-x: auto;
   padding-top: clamp(26px, 2vw, 36px);
   padding-bottom: 10px;
-}
-
-.series-season-row > * + * {
-  margin-left: clamp(12px, 1vw, 18px);
-}
-
-.series-season-row::-webkit-scrollbar,
-.series-insight-tabs::-webkit-scrollbar,
-.series-rating-seasons::-webkit-scrollbar,
-.movie-cast-track::-webkit-scrollbar,
-.series-cast-track::-webkit-scrollbar,
-.detail-company-track::-webkit-scrollbar,
-.detail-morelike-track::-webkit-scrollbar,
-.series-episode-track::-webkit-scrollbar,
-.series-episode-ratings-grid::-webkit-scrollbar {
-  display: none;
 }
 
 .series-season-btn {
@@ -16687,14 +16435,6 @@ html.tizen-tv .debug-console-log-frame {
   background: var(--detail-focus-fill);
   border-color: transparent;
   color: var(--detail-focus-text);
-}
-
-.series-episode-track {
-  padding: clamp(22px, 1.8vw, 32px) var(--tv-safe-gutter-wide);
-}
-
-.series-episode-track > * + * {
-  margin-left: clamp(24px, 1.6vw, 34px);
 }
 
 .series-episode-card {
@@ -16787,10 +16527,6 @@ html.tizen-tv .debug-console-log-frame {
   flex-direction: column;
 }
 
-.series-episode-copy > * + * {
-  margin-top: 8px;
-}
-
 .series-episode-badge {
   position: static;
   display: inline-flex;
@@ -16832,18 +16568,10 @@ html.tizen-tv .debug-console-log-frame {
   color: var(--detail-text-secondary);
 }
 
-.series-episode-meta > * + * {
-  margin-left: 14px;
-}
-
 .series-episode-runtime {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
-}
-
-.series-episode-runtime > * + * {
-  margin-left: 4px;
 }
 
 .series-episode-runtime-icon {
@@ -16872,11 +16600,6 @@ html.tizen-tv .debug-console-log-frame {
 
 .series-episode-meta .series-imdb-badge > * + * {
   margin-left: 4px;
-}
-
-.series-episode-meta .series-imdb-badge img {
-  width: 28px;
-  height: 14px;
 }
 
 .series-episode-progress {
@@ -16943,11 +16666,9 @@ html.tizen-tv .debug-console-log-frame {
 }
 
 .series-insight-tabs {
-  display: flex;
   align-items: center;
   margin-bottom: 0;
   padding-top: 24px;
-  overflow-x: auto;
 }
 
 .series-insight-tabs > * + * {
@@ -16989,17 +16710,6 @@ html.tizen-tv .debug-console-log-frame {
 
 .movie-cast-section {
   margin-top: 0;
-}
-
-.movie-cast-track,
-.series-cast-track {
-  padding-top: 12px;
-  padding-bottom: 16px;
-}
-
-.movie-cast-track > * + *,
-.series-cast-track > * + * {
-  margin-left: 16px;
 }
 
 .movie-cast-card {
@@ -17143,14 +16853,8 @@ html.tizen-tv .debug-console-log-frame {
 }
 
 .detail-company-track {
-  display: flex;
-  overflow-x: auto;
   padding-top: 12px;
   padding-bottom: 12px;
-}
-
-.detail-company-track > * + * {
-  margin-left: 24px;
 }
 
 .detail-company-card {
@@ -17169,11 +16873,6 @@ html.tizen-tv .debug-console-log-frame {
   transform: scale(1.03);
 }
 
-.detail-company-card img {
-  max-width: 100%;
-  max-height: 72px;
-}
-
 .detail-company-card span {
   font-size: var(--tv-caption-text);
   line-height: 1.35;
@@ -17181,13 +16880,8 @@ html.tizen-tv .debug-console-log-frame {
 }
 
 .detail-morelike-track {
-  overflow-x: auto;
   padding-top: 8px;
   padding-bottom: 8px;
-}
-
-.detail-morelike-track > * + * {
-  margin-left: clamp(22px, 1.5vw, 32px);
 }
 
 .detail-morelike-card {
@@ -17391,8 +17085,6 @@ html.tizen-tv .debug-console-log-frame {
 
 .stream-route-shell {
   position: relative;
-  width: 100vw;
-  height: 100vh;
   overflow: hidden;
   background: var(--bg-color);
   color: var(--text-color);
