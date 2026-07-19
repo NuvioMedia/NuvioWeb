@@ -3,9 +3,9 @@ import { watchedItemsRepository } from "../../data/repository/watchedItemsReposi
 import { watchedSeriesReconciliationService } from "../../data/repository/watchedSeriesReconciliationService.js";
 import { Platform } from "../../platform/index.js";
 import { WatchProgressSyncService } from "../profile/watchProgressSyncService.js";
+import Hls from "hls.js";
+import dashjs from "dashjs";
 import { nativeVideoEngine } from "./engines/nativeVideoEngine.js";
-import { hlsJsEngine } from "./engines/hlsJsEngine.js";
-import { dashJsEngine } from "./engines/dashJsEngine.js";
 import { resolvePlatformAvplayEngine } from "./engines/platformAvplayEngine.js";
 import {
   applyWebOsAudioCodecOverrides,
@@ -285,11 +285,15 @@ export const PlayerController = {
   },
 
   canUseHlsJs() {
-    return hlsJsEngine.isSupported();
+    return Hls.isSupported();
   },
 
   canUseDashJs() {
-    return dashJsEngine.isSupported();
+    try {
+      return typeof dashjs.MediaPlayer().create === "function";
+    } catch (_) {
+      return false;
+    }
   },
 
   canPlayNatively(mimeType) {
@@ -2813,16 +2817,9 @@ export const PlayerController = {
       return false;
     }
 
-    const Hls = hlsJsEngine.getConstructor();
-    if (!Hls) {
-      return false;
-    }
     this.teardownHlsInstance();
     this.teardownDashInstance();
-    const hls = hlsJsEngine.create(this.buildHlsConfig(requestHeaders));
-    if (!hls) {
-      return false;
-    }
+    const hls = new Hls(this.buildHlsConfig(requestHeaders));
     this.hlsInstance = hls;
     this.playbackEngine = "hls.js";
     let networkRecoveryAttempts = 0;
@@ -2960,10 +2957,7 @@ export const PlayerController = {
 
     let player = null;
     try {
-      player = dashJsEngine.createPlayer();
-      if (!player) {
-        return false;
-      }
+      player = dashjs.MediaPlayer().create();
       const isWebOs = Platform.isWebOS();
       player.updateSettings?.({
         streaming: {
@@ -2976,7 +2970,7 @@ export const PlayerController = {
         }
       });
       player.initialize(this.video, url, true);
-      const dashEvents = dashJsEngine.getEvents();
+      const dashEvents = dashjs.MediaPlayer.events;
       const emitTracksChanged = () => {
         if (!this.isPlaybackRequestActive(playToken, url)) {
           return;
@@ -3172,35 +3166,74 @@ export const PlayerController = {
   },
 
   getHlsAudioTracks() {
-    return hlsJsEngine.getAudioTracks(this.hlsInstance);
+    return (this.hlsInstance?.audioTracks || []).filter(Boolean);
   },
 
   getSelectedHlsAudioTrackIndex() {
-    return hlsJsEngine.getSelectedAudioTrackIndex(this.hlsInstance);
+    const selectedIndex = Number(this.hlsInstance?.audioTrack);
+    return Number.isFinite(selectedIndex) && selectedIndex >= 0 ? selectedIndex : -1;
   },
 
   setHlsAudioTrack(index) {
-    const applied = hlsJsEngine.setAudioTrack(this.hlsInstance, index);
-    if (applied) {
-      this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+    const targetIndex = Number(index);
+    const hls = this.hlsInstance;
+    if (!hls || !Number.isFinite(targetIndex) || targetIndex < 0 || targetIndex >= this.getHlsAudioTracks().length) {
+      return false;
     }
-    return applied;
+    try {
+      if ("nextAudioTrack" in hls) {
+        hls.nextAudioTrack = targetIndex;
+      }
+      hls.audioTrack = targetIndex;
+      try {
+        hls.startLoad?.();
+      } catch (_) {
+        // The track switch itself has already been requested.
+      }
+      this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+      return true;
+    } catch (_) {
+      return false;
+    }
   },
 
   getHlsSubtitleTracks() {
-    return hlsJsEngine.getSubtitleTracks(this.hlsInstance);
+    return (this.hlsInstance?.subtitleTracks || []).filter(Boolean);
   },
 
   getSelectedHlsSubtitleTrackIndex() {
-    return hlsJsEngine.getSelectedSubtitleTrackIndex(this.hlsInstance);
+    const selectedIndex = Number(this.hlsInstance?.subtitleTrack);
+    return Number.isFinite(selectedIndex) && selectedIndex >= 0 ? selectedIndex : -1;
   },
 
   setHlsSubtitleTrack(index) {
-    const applied = hlsJsEngine.setSubtitleTrack(this.hlsInstance, index);
-    if (applied) {
-      this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+    const targetIndex = Number(index);
+    const hls = this.hlsInstance;
+    if (!hls || !Number.isFinite(targetIndex) || targetIndex < -1 || targetIndex >= this.getHlsSubtitleTracks().length) {
+      return false;
     }
-    return applied;
+    try {
+      if (targetIndex < 0) {
+        if ("subtitleDisplay" in hls) {
+          hls.subtitleDisplay = false;
+        }
+        hls.subtitleTrack = -1;
+      } else {
+        if ("subtitleDisplay" in hls) {
+          hls.subtitleDisplay = true;
+        }
+        hls.subtitleTrack = targetIndex;
+        try {
+          hls.startLoad?.();
+        } catch (_) {
+          // The track switch itself has already been requested.
+        }
+      }
+      this.emitVideoEvent("hlstrackschanged", { playbackEngine: "hls.js" });
+      return true;
+    } catch (_) {
+      return false;
+    }
   },
 
   normalizePlaybackRate(speed = 1) {

@@ -1,6 +1,4 @@
 import { normalizeKeyEvent, isBackEvent } from "../sharedKeys.js";
-import { hlsJsEngine } from "../../core/player/engines/hlsJsEngine.js";
-import { dashJsEngine } from "../../core/player/engines/dashJsEngine.js";
 
 function getAvplayApi() {
   const webapis = globalThis.webapis;
@@ -108,8 +106,6 @@ export const tizenAdapter = {
 
   getCapabilities() {
     return {
-      hlsJs: hlsJsEngine.isSupported(),
-      dashJs: dashJsEngine.isSupported(),
       nativeVideo: true,
       webosAvplay: false,
       tizenAvplay: Boolean(getAvplayApi())
