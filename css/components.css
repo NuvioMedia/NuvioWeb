@@ -6196,6 +6196,7 @@ button:focus {
   --home-row-gap: 24px;
   --home-track-end: 104px;
   --home-continue-track-end: 104px;
+  --modern-track-peek-extension: 104px;
   --modern-rows-viewport-height: 52%;
   --modern-rows-viewport-padding-bottom: 52vh;
   --modern-rows-page-height: 56vh;
@@ -6450,8 +6451,8 @@ button:focus {
   overflow: hidden;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-copy > * + * {
-  margin-top: 16px;
+.home-screen-shell.home-layout-modern .home-modern-hero-copy > *:not(:last-child) {
+  margin-bottom: 16px;
 }
 
 .home-screen-shell.home-layout-modern
@@ -6535,31 +6536,20 @@ button:focus {
   transition: opacity 480ms ease;
 }
 
-.home-screen-shell.home-layout-modern .home-modern-hero-meta-line,
-.home-screen-shell.home-layout-modern .home-modern-hero-secondary {
-  margin-top: -14px;
-  margin-left: -14px;
-}
-
-.home-screen-shell.home-layout-modern .home-modern-hero-meta-line > *,
-.home-screen-shell.home-layout-modern .home-modern-hero-secondary > * {
-  margin-top: 14px;
-  margin-left: 14px;
-}
-
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line {
   align-items: center;
   flex-wrap: nowrap;
-  margin-top: 0;
-  margin-left: 0;
-}
-
-.home-screen-shell.home-layout-modern .home-modern-hero-meta-line > * {
-  margin-top: 0;
-  margin-left: 0;
 }
 
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-line > * + * {
+  margin-left: 14px;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-secondary {
+  align-items: center;
+}
+
+.home-screen-shell.home-layout-modern .home-modern-hero-secondary > * + * {
   margin-left: 14px;
 }
 
@@ -6590,7 +6580,6 @@ button:focus {
 .home-screen-shell.home-layout-modern .home-modern-hero-meta-group-trailing {
   flex: 1 1 auto;
   justify-content: flex-start;
-  margin-left: 0;
   text-align: left;
 }
 
@@ -6716,10 +6705,6 @@ button:focus {
   margin-top: 24px;
 }
 
-.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-rows-scroll > * + * {
-  margin-left: 24px;
-}
-
 .home-screen-shell.home-layout-modern .home-modern-catalogs {
   display: flex;
   flex-direction: column;
@@ -6727,10 +6712,6 @@ button:focus {
 
 .home-screen-shell.home-layout-modern .home-modern-catalogs > * + * {
   margin-top: 24px;
-}
-
-.home-screen-shell.home-layout-modern.home-modern-landscape-posters .home-modern-catalogs > * + * {
-  margin-left: 24px;
 }
 
 .home-screen-shell.home-layout-modern .home-row {
@@ -6752,7 +6733,7 @@ button:focus {
 }
 
 .home-screen-shell.home-layout-modern .home-row-head {
-  padding-bottom: 14px;
+  margin-bottom: 14px;
 }
 
 .home-screen-shell.home-layout-modern .home-row-title {
@@ -6763,7 +6744,8 @@ button:focus {
 
 .home-screen-shell.home-layout-modern .home-track {
   --home-track-gap: 24px;
-  padding-left: var(--home-content-start);
+  margin-left: calc(var(--modern-track-peek-extension) * -1);
+  padding-left: calc(var(--home-content-start) + var(--modern-track-peek-extension));
   padding-right: 52px;
   padding-bottom: 0;
   align-items: flex-end;
@@ -10406,8 +10388,7 @@ button:focus {
 /* Older Tizen/webOS flex engines can expand the nested flex item to its
    content height, leaving nothing for scrollTop to move. Give the log viewport
    a physical height while preserving the normal flexible layout elsewhere. */
-html.legacy-tizen .debug-console-log-frame,
-html.legacy-webos .debug-console-log-frame {
+html.legacy-tizen .debug-console-log-frame {
   flex: 0 0 auto;
   height: calc(100vh - 232px);
   min-height: 240px;
@@ -17549,7 +17530,7 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .stream-route-left {
-  flex: 2 1 320px;
+  flex: 0 0 40%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -17974,380 +17955,6 @@ html.legacy-webos .debug-console-log-frame {
   overflow: hidden;
 }
 
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-card {
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media {
-  top: 0;
-  right: -56px;
-  width: 74vw;
-  height: 62vh;
-  min-height: 520px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media::before,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media::after,
-.legacy-webos
-  .home-screen-shell.home-layout-modern
-  .home-modern-hero-media
-  .home-hero-backdrop-wrap,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop,
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-trailer-layer,
-.legacy-webos
-  .home-screen-shell.home-layout-modern
-  .home-hero-trailer-layer
-  .home-inline-trailer-frame,
-.legacy-webos
-  .home-screen-shell.home-layout-modern
-  .home-hero-trailer-layer
-  .home-inline-trailer-video {
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: 0;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-copy {
-  left: 104px;
-  top: 40px;
-  right: 52px;
-  bottom: 60vh;
-  width: 640px;
-  max-width: 640px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-copy > * + * {
-  margin-left: 16px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-logo {
-  width: 440px;
-  max-width: 440px;
-  height: 200px;
-  max-height: 200px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-title-text {
-  max-width: 640px;
-  font-size: 76px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-meta-line,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-secondary,
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-description {
-  width: 560px;
-  max-width: 560px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-meta-line {
-  font-size: 21px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-secondary {
-  font-size: 18px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-hero-description {
-  font-size: 22px;
-}
-
-.legacy-webos #player,
-.legacy-webos #videoPlayer,
-.legacy-webos .player-ui-root {
-  width: 100vw;
-  height: 100vh;
-  max-width: 100vw;
-  max-height: 100vh;
-}
-
-.legacy-webos .player-controls-overlay {
-  padding: 48px;
-  box-sizing: border-box;
-}
-
-.legacy-webos .player-clock {
-  font-size: 26px; /* ATV 13sp -> 26px */
-}
-
-.legacy-webos .player-ends-at {
-  font-size: 20px; /* ATV 10sp -> 20px */
-}
-
-.legacy-webos .player-control-label,
-.legacy-webos .player-skip-intro-label,
-.legacy-webos .player-next-episode-pill,
-.legacy-webos .player-next-episode-pill-text {
-  font-size: 16px;
-}
-
-.legacy-webos .player-controls-bottom {
-  padding-top: 84px;
-}
-
-.legacy-webos .player-controls-bottom > * + * {
-  margin-left: 16px;
-}
-
-.legacy-webos .player-title {
-  font-size: 50px;
-}
-
-.legacy-webos .player-subtitle {
-  font-size: 30px;
-}
-
-.legacy-webos .player-meta-tertiary,
-.legacy-webos .player-control-btn,
-.legacy-webos .player-seek-direction,
-.legacy-webos .player-seek-preview {
-  font-size: 20px;
-}
-
-.legacy-webos .player-controls-row {
-  margin-top: 24px;
-}
-
-.legacy-webos .player-controls-row > * + * {
-  margin-left: 32px;
-}
-
-.legacy-webos .player-control-buttons > * + * {
-  margin-left: 16px;
-}
-
-.legacy-webos .player-control-btn {
-  width: 68px;
-  min-width: 68px;
-  height: 68px;
-}
-
-.legacy-webos .player-control-icon {
-  width: 34px;
-  height: 34px;
-}
-
-.legacy-webos .player-time-label {
-  font-size: 24px;
-}
-
-.legacy-webos .player-seek-overlay {
-  left: 48px;
-  right: 48px;
-  bottom: 40px;
-}
-
-.legacy-webos .player-seek-overlay-bottom > * + * {
-  margin-left: 16px;
-}
-
-.legacy-webos .player-skip-intro {
-  left: 64px;
-  bottom: 60px;
-}
-
-.legacy-webos .player-skip-intro.is-raised {
-  bottom: var(--player-action-controls-open-bottom);
-}
-
-.legacy-webos .player-skip-intro-btn {
-  min-width: 0;
-  min-height: 0;
-  padding: 0;
-  border: none;
-  appearance: none;
-  -webkit-appearance: none;
-  border-radius: 24px;
-  background: rgba(30, 30, 30, 0.85);
-  color: #fff;
-  box-shadow: none;
-  position: relative;
-  overflow: hidden;
-  display: inline-flex;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: flex-start;
-}
-
-.legacy-webos .player-skip-intro-content {
-  display: inline-flex;
-  align-items: center;
-  padding: 24px 36px;
-  min-width: 0;
-}
-
-.legacy-webos .player-skip-intro-content > * + * {
-  margin-left: 16px;
-}
-
-.legacy-webos .player-skip-intro-icon {
-  width: 40px;
-  height: 40px;
-}
-
-.legacy-webos .player-skip-intro-label {
-  font-size: 28px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.legacy-webos .player-skip-intro-progress {
-  height: 4px;
-}
-
-.legacy-webos .player-skip-intro-progress-track,
-.legacy-webos .player-skip-intro-progress-fill {
-  position: absolute;
-  inset: 0;
-}
-
-.legacy-webos .player-skip-intro-progress-track {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.legacy-webos .player-skip-intro-progress-fill {
-  width: 100%;
-  transform: scaleX(0);
-  transform-origin: left center;
-  background: rgba(30, 30, 30, 0.85);
-  will-change: transform;
-}
-
-.legacy-webos .player-skip-intro-btn.is-selected,
-.legacy-webos .player-skip-intro-btn.focused,
-.legacy-webos .player-skip-intro-btn:focus,
-.legacy-webos .player-skip-intro:focus-within .player-skip-intro-btn {
-  background: var(--secondary-color) !important;
-  color: var(--on-secondary) !important;
-  box-shadow: none;
-}
-
-.legacy-webos .player-next-episode-card {
-  right: 48px;
-  bottom: 40px;
-  width: 560px;
-}
-
-.legacy-webos #playerUiRoot.controls-visible .player-next-episode-card {
-  bottom: var(--player-action-controls-open-bottom);
-}
-
-.legacy-webos .player-next-episode-card-inner {
-  padding: 16px;
-  border-radius: 22px;
-}
-
-.legacy-webos .player-next-episode-card-inner > * + * {
-  margin-left: 18px;
-}
-
-.legacy-webos .player-next-episode-thumb-wrap {
-  width: 160px;
-  min-width: 160px;
-  height: 90px;
-  border-radius: 14px;
-}
-
-.legacy-webos .player-next-episode-kicker {
-  font-size: 16px;
-}
-
-.legacy-webos .player-next-episode-title {
-  font-size: 22px;
-}
-
-.legacy-webos .player-next-episode-status {
-  font-size: 14px;
-}
-
-.legacy-webos .player-episode-panel {
-  width: 760px;
-  padding: 36px;
-  border-radius: 28px 0 0 28px;
-}
-
-.legacy-webos .player-episode-panel-header > * + * {
-  margin-left: 24px;
-}
-
-.legacy-webos .player-episode-panel-title {
-  font-size: 44px;
-}
-
-.legacy-webos .player-episode-close-btn {
-  height: 64px;
-  padding: 0 24px;
-  border-radius: 20px;
-  font-size: 22px;
-}
-
-.legacy-webos .player-episode-season-tabs {
-  margin-top: 24px;
-  padding: 8px 12px;
-}
-
-.legacy-webos .player-episode-season-tabs > * + * {
-  margin-left: 18px;
-}
-
-.legacy-webos .player-episode-season-tab {
-  height: 62px;
-  padding: 0 26px;
-  font-size: 22px;
-  border-radius: 999px;
-}
-
-.legacy-webos .player-episode-list {
-  margin-top: 24px;
-  padding: 8px 12px 16px;
-}
-
-.legacy-webos .player-episode-item {
-  padding: 16px;
-  margin-bottom: 18px;
-  border-radius: 26px;
-}
-
-.legacy-webos .player-episode-item > * + * {
-  margin-left: 20px;
-}
-
-.legacy-webos .player-episode-thumb-wrap {
-  width: 208px;
-  min-width: 208px;
-  height: 144px;
-  border-radius: 20px;
-}
-
-.legacy-webos .player-episode-item-title {
-  font-size: 27px;
-}
-
-.legacy-webos .player-episode-date,
-.legacy-webos .player-episode-item-subtitle {
-  font-size: 20px;
-}
-
-.legacy-webos .player-episode-code {
-  left: 12px;
-  bottom: 12px;
-  padding: 6px 12px;
-  border-radius: 10px;
-  font-size: 20px;
-}
-
-.legacy-webos .player-episode-current {
-  width: 36px;
-  height: 36px;
-  right: 10px;
-  top: 10px;
-  font-size: 22px;
-}
-
 /* Player episode management mirrors the Android TV 520dp side panel.
    Keep these values in CSS pixels: TV browsers already expose a TV-sized
    viewport, so the previous 2x conversion made the panel and cards oversized. */
@@ -18356,8 +17963,7 @@ html.legacy-webos .debug-console-log-frame {
   transition: opacity 120ms ease;
 }
 
-.player-episode-panel,
-.legacy-webos .player-episode-panel {
+.player-episode-panel {
   top: 0;
   right: 0;
   width: 520px;
@@ -18381,20 +17987,17 @@ html.legacy-webos .debug-console-log-frame {
   transform: translateX(100%);
 }
 
-.player-episode-panel-header > * + *,
-.legacy-webos .player-episode-panel-header > * + * {
+.player-episode-panel-header > * + * {
   margin-left: 12px;
 }
 
-.player-episode-panel-title,
-.legacy-webos .player-episode-panel-title {
+.player-episode-panel-title {
   font-size: 24px;
   line-height: 32px;
   font-weight: 600;
 }
 
 .player-episode-close-btn,
-.legacy-webos .player-episode-close-btn,
 .player-episode-stream-action {
   min-width: 0;
   height: 40px;
@@ -18409,7 +18012,6 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .player-episode-close-btn.focused,
-.legacy-webos .player-episode-close-btn.focused,
 .player-episode-stream-action.focused {
   border-color: var(--player-focus-ring);
   background: var(--player-focus-background);
@@ -18417,19 +18019,16 @@ html.legacy-webos .debug-console-log-frame {
   box-shadow: none;
 }
 
-.player-episode-season-tabs,
-.legacy-webos .player-episode-season-tabs {
+.player-episode-season-tabs {
   margin-top: 16px;
   padding: 4px;
 }
 
-.player-episode-season-tabs > * + *,
-.legacy-webos .player-episode-season-tabs > * + * {
+.player-episode-season-tabs > * + * {
   margin-left: 12px;
 }
 
 .player-episode-season-tab,
-.legacy-webos .player-episode-season-tab,
 .player-episode-stream-filter {
   height: 40px;
   padding: 0 20px;
@@ -18443,7 +18042,6 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .player-episode-season-tab.selected,
-.legacy-webos .player-episode-season-tab.selected,
 .player-episode-stream-filter.selected {
   border-color: transparent;
   background: #f5f5f5;
@@ -18452,8 +18050,6 @@ html.legacy-webos .debug-console-log-frame {
 
 .player-episode-season-tab.focused,
 .player-episode-season-tab.selected.focused,
-.legacy-webos .player-episode-season-tab.focused,
-.legacy-webos .player-episode-season-tab.selected.focused,
 .player-episode-stream-filter.focused,
 .player-episode-stream-filter.selected.focused {
   border: 2px solid var(--player-focus-ring);
@@ -18462,8 +18058,7 @@ html.legacy-webos .debug-console-log-frame {
   box-shadow: none;
 }
 
-.player-episode-list,
-.legacy-webos .player-episode-list {
+.player-episode-list {
   margin-top: 16px;
   padding: 4px 4px 16px;
 }
@@ -18472,8 +18067,7 @@ html.legacy-webos .debug-console-log-frame {
   margin-top: 12px;
 }
 
-.player-episode-item,
-.legacy-webos .player-episode-item {
+.player-episode-item {
   padding: 10px;
   margin-bottom: 12px;
   border: 2px solid transparent;
@@ -18481,8 +18075,7 @@ html.legacy-webos .debug-console-log-frame {
   background: var(--player-background-card);
 }
 
-.player-episode-item > * + *,
-.legacy-webos .player-episode-item > * + * {
+.player-episode-item > * + * {
   margin-left: 14px;
 }
 
@@ -18498,16 +18091,14 @@ html.legacy-webos .debug-console-log-frame {
   transform: scale(1.01);
 }
 
-.player-episode-thumb-wrap,
-.legacy-webos .player-episode-thumb-wrap {
+.player-episode-thumb-wrap {
   width: 130px;
   min-width: 130px;
   height: 90px;
   border-radius: 12px;
 }
 
-.player-episode-code,
-.legacy-webos .player-episode-code {
+.player-episode-code {
   left: 8px;
   bottom: 8px;
   padding: 4px 8px;
@@ -18516,8 +18107,7 @@ html.legacy-webos .debug-console-log-frame {
   line-height: 16px;
 }
 
-.player-episode-current,
-.legacy-webos .player-episode-current {
+.player-episode-current {
   top: 6px;
   right: 6px;
   width: 22px;
@@ -18529,8 +18119,7 @@ html.legacy-webos .debug-console-log-frame {
   margin-top: 4px;
 }
 
-.player-episode-item-title,
-.legacy-webos .player-episode-item-title {
+.player-episode-item-title {
   overflow: hidden;
   font-size: 16px;
   line-height: 24px;
@@ -18540,9 +18129,7 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .player-episode-date,
-.player-episode-item-subtitle,
-.legacy-webos .player-episode-date,
-.legacy-webos .player-episode-item-subtitle {
+.player-episode-item-subtitle {
   display: -webkit-box;
   overflow: hidden;
   margin-top: 0;
@@ -18552,8 +18139,7 @@ html.legacy-webos .debug-console-log-frame {
   text-overflow: ellipsis;
 }
 
-.player-episode-item-subtitle,
-.legacy-webos .player-episode-item-subtitle {
+.player-episode-item-subtitle {
   -webkit-line-clamp: 2;
   line-clamp: 2;
 }
@@ -18611,8 +18197,7 @@ html.legacy-webos .debug-console-log-frame {
   scrollbar-width: none;
 }
 
-.player-episode-stream-card,
-.legacy-webos .player-episode-stream-card {
+.player-episode-stream-card {
   padding: 16px;
   margin-bottom: 8px;
   border: 1px solid transparent;
@@ -18620,13 +18205,11 @@ html.legacy-webos .debug-console-log-frame {
   background: var(--player-background-elevated);
 }
 
-.player-episode-stream-card > * + *,
-.legacy-webos .player-episode-stream-card > * + * {
+.player-episode-stream-card > * + * {
   margin-left: 16px;
 }
 
-.player-episode-stream-card.focused,
-.legacy-webos .player-episode-stream-card.focused {
+.player-episode-stream-card.focused {
   border: 2px solid var(--player-focus-ring);
   background: var(--player-background-elevated);
   transform: scale(1.04);
@@ -18664,33 +18247,6 @@ html.legacy-webos .debug-console-log-frame {
   font-size: 16px;
   line-height: 24px;
   text-align: center;
-}
-
-.legacy-webos .home-track > .home-content-card,
-.legacy-webos .home-modern-row .home-track > .home-content-card {
-  margin-right: 20px;
-}
-
-.legacy-webos .home-screen-shell.home-layout-modern .home-track > .home-content-card {
-  margin-right: 24px;
-}
-
-.legacy-webos .home-track > .home-content-card:last-child,
-.legacy-webos .home-modern-row .home-track > .home-content-card:last-child,
-.legacy-webos .home-screen-shell.home-layout-modern .home-track > .home-content-card:last-child {
-  margin-right: 0;
-}
-
-.legacy-webos .player-control-buttons > .player-control-btn,
-.legacy-webos .player-next-episode-card-inner > *,
-.legacy-webos .player-seek-overlay-bottom > * {
-  margin-right: 16px;
-}
-
-.legacy-webos .player-control-buttons > .player-control-btn:last-child,
-.legacy-webos .player-next-episode-card-inner > *:last-child,
-.legacy-webos .player-seek-overlay-bottom > *:last-child {
-  margin-right: 0;
 }
 
 @supports (aspect-ratio: 1 / 1) {
@@ -18776,304 +18332,6 @@ html.legacy-webos .debug-console-log-frame {
     background: rgba(var(--bg-elevated-rgb), 0.22);
     backdrop-filter: blur(2px);
     -webkit-backdrop-filter: blur(2px);
-  }
-}
-
-/* Legacy browser fallbacks for CSS features beyond the Chromium 53 baseline. */
-
-@supports not (font-size: clamp(1px, 2px, 3px)) {
-  .home-screen-shell.home-layout-modern .home-hero,
-  .home-screen-shell.home-layout-modern .home-modern-hero-card {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-media {
-    top: 0;
-    right: -56px;
-    width: 74vw;
-    height: 62vh;
-    min-height: 520px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-media::before,
-  .home-screen-shell.home-layout-modern .home-modern-hero-media::after,
-  .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop-wrap,
-  .home-screen-shell.home-layout-modern .home-modern-hero-media .home-hero-backdrop,
-  .home-screen-shell.home-layout-modern .home-hero-trailer-layer,
-  .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-frame,
-  .home-screen-shell.home-layout-modern .home-hero-trailer-layer .home-inline-trailer-video {
-    top: 0;
-    right: 0;
-    bottom: 0;
-    left: 0;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-copy {
-    left: 104px;
-    top: 40px;
-    right: 52px;
-    bottom: 60vh;
-    width: 640px;
-    max-width: 640px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-copy > * + * {
-    margin-top: 16px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-hero-logo {
-    width: 440px;
-    max-width: 440px;
-    height: 200px;
-    max-height: 200px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-hero-title-text {
-    max-width: 640px;
-    font-size: 76px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-meta-line,
-  .home-screen-shell.home-layout-modern .home-modern-hero-secondary,
-  .home-screen-shell.home-layout-modern .home-hero-description {
-    width: 560px;
-    max-width: 560px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-meta-line {
-    font-size: 21px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-modern-hero-secondary {
-    font-size: 18px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-hero-description {
-    font-size: 22px;
-  }
-
-  .player-controls-overlay {
-    padding: 48px;
-    box-sizing: border-box;
-  }
-
-  .player-clock {
-    font-size: 26px; /* ATV 13sp -> 26px */
-  }
-
-  .player-ends-at {
-    font-size: 20px; /* ATV 10sp -> 20px */
-  }
-
-  .player-control-label,
-  .player-skip-intro-label,
-  .player-next-episode-pill,
-  .player-next-episode-pill-text {
-    font-size: 16px;
-  }
-
-  .player-controls-bottom {
-    padding-top: 84px;
-  }
-
-  .player-controls-bottom > * + * {
-    margin-top: 16px;
-  }
-
-  .player-title {
-    font-size: 50px;
-  }
-
-  .player-subtitle {
-    font-size: 30px;
-  }
-
-  .player-meta-tertiary,
-  .player-control-btn,
-  .player-seek-direction,
-  .player-seek-preview {
-    font-size: 20px;
-  }
-
-  .player-controls-row {
-    margin-top: 24px;
-  }
-
-  .player-controls-row > * + * {
-    margin-left: 32px;
-  }
-
-  .player-control-buttons > * + * {
-    margin-left: 16px;
-  }
-
-  .player-control-btn {
-    width: 68px;
-    min-width: 68px;
-    height: 68px;
-  }
-
-  .player-control-icon {
-    width: 34px;
-    height: 34px;
-  }
-
-  .player-time-label {
-    font-size: 24px;
-  }
-
-  .player-seek-overlay {
-    left: 48px;
-    right: 48px;
-    bottom: 40px;
-  }
-
-  .player-seek-overlay-bottom > * + * {
-    margin-left: 16px;
-  }
-
-  .player-skip-intro {
-    left: 64px;
-    bottom: 60px;
-  }
-
-  .player-skip-intro.is-raised {
-    bottom: var(--player-action-controls-open-bottom);
-  }
-
-  .player-skip-intro-btn {
-    min-width: 0;
-    min-height: 0;
-    padding: 0;
-    border: none;
-    appearance: none;
-    -webkit-appearance: none;
-    border-radius: 24px;
-    background: rgba(30, 30, 30, 0.85);
-    color: #fff;
-    box-shadow: none;
-    position: relative;
-    overflow: hidden;
-    display: inline-flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-  }
-
-  .player-skip-intro-content {
-    display: inline-flex;
-    align-items: center;
-    padding: 24px 36px;
-    min-width: 0;
-  }
-
-  .player-skip-intro-content > * + * {
-    margin-left: 16px;
-  }
-
-  .player-skip-intro-icon {
-    width: 40px;
-    height: 40px;
-  }
-
-  .player-skip-intro-label {
-    font-size: 28px;
-    font-weight: 500;
-    line-height: 1;
-  }
-
-  .player-skip-intro-progress {
-    height: 4px;
-  }
-
-  .player-skip-intro-progress-track,
-  .player-skip-intro-progress-fill {
-    position: absolute;
-    inset: 0;
-  }
-
-  .player-skip-intro-progress-track {
-    background: rgba(255, 255, 255, 0.15);
-  }
-
-  .player-skip-intro-progress-fill {
-    width: 100%;
-    transform: scaleX(0);
-    transform-origin: left center;
-    background: rgba(30, 30, 30, 0.85);
-    will-change: transform;
-  }
-
-  .player-skip-intro-btn.focused,
-  .player-skip-intro-btn:focus,
-  .player-skip-intro:focus-within .player-skip-intro-btn {
-    background: var(--secondary-color) !important;
-    color: var(--on-secondary) !important;
-    box-shadow: none;
-  }
-
-  .player-next-episode-card {
-    right: 48px;
-    bottom: 40px;
-    width: 560px;
-  }
-
-  #playerUiRoot.controls-visible .player-next-episode-card {
-    bottom: var(--player-action-controls-open-bottom);
-  }
-
-  .player-next-episode-card-inner {
-    padding: 16px;
-    border-radius: 22px;
-  }
-
-  .player-next-episode-card-inner > * + * {
-    margin-left: 18px;
-  }
-
-  .player-next-episode-thumb-wrap {
-    width: 160px;
-    min-width: 160px;
-    height: 90px;
-    border-radius: 14px;
-  }
-
-  .player-next-episode-kicker {
-    font-size: 16px;
-  }
-
-  .player-next-episode-title {
-    font-size: 22px;
-  }
-
-  .home-track > .home-content-card,
-  .home-modern-row .home-track > .home-content-card {
-    margin-right: 20px;
-  }
-
-  .home-screen-shell.home-layout-modern .home-track > .home-content-card {
-    margin-right: 24px;
-  }
-
-  .home-track > .home-content-card:last-child,
-  .home-modern-row .home-track > .home-content-card:last-child,
-  .home-screen-shell.home-layout-modern .home-track > .home-content-card:last-child {
-    margin-right: 0;
-  }
-
-  .player-control-buttons > .player-control-btn,
-  .player-next-episode-card-inner > *,
-  .player-seek-overlay-bottom > * {
-    margin-right: 16px;
-  }
-
-  .player-control-buttons > .player-control-btn:last-child,
-  .player-next-episode-card-inner > *:last-child,
-  .player-seek-overlay-bottom > *:last-child {
-    margin-right: 0;
   }
 }
 
@@ -19283,238 +18541,8 @@ html.legacy-webos .debug-console-log-frame {
   text-overflow: clip;
 }
 
-.legacy-webos .stream-route-shell {
-  width: 100%;
-  height: 100%;
-}
-
-.legacy-webos .stream-route-backdrop {
-  transform: none !important;
-}
-
-.legacy-webos .stream-route-panel-shell {
-  opacity: 1 !important;
-  transform: none !important;
-  animation: none !important;
-  overflow: visible;
-}
-
-.legacy-webos .stream-route-list {
-  -webkit-overflow-scrolling: auto;
-  transform: none !important;
-  will-change: auto;
-}
-
-.legacy-webos .stream-route-card,
-.legacy-webos .stream-route-card.focused {
-  transform: none !important;
-}
-
 /* webOS 6.x can mis-bound nested flex/vh layouts on LG TVs. Keep the stream
    picker on absolute coordinates so the results list has a real viewport. */
-.legacy-webos .stream-route-shell {
-  position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: auto;
-  height: auto;
-}
-
-.legacy-webos .stream-route-content {
-  display: block;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  padding: 0;
-}
-
-.legacy-webos .stream-route-left {
-  position: absolute;
-  left: 56px;
-  top: 48px;
-  bottom: 48px;
-  width: 438px;
-  padding: 0 34px 0 0;
-}
-
-.legacy-webos .stream-route-left-inner {
-  width: 360px;
-  max-width: 360px;
-}
-
-.legacy-webos .stream-route-logo {
-  width: 360px;
-  max-width: 360px;
-  max-height: 128px;
-}
-
-.legacy-webos .stream-route-right {
-  position: absolute;
-  left: 540px;
-  top: 48px;
-  right: 56px;
-  bottom: 48px;
-  width: auto;
-  max-width: none;
-  height: auto;
-  overflow: hidden;
-}
-
-.legacy-webos .stream-route-chip-wrap {
-  position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  height: 64px;
-  margin-bottom: 0;
-}
-
-.legacy-webos .stream-route-chip-track {
-  padding: 4px 6px;
-}
-
-.legacy-webos .stream-route-chip-track > * + * {
-  margin-left: 12px;
-}
-
-.legacy-webos .stream-route-chip {
-  min-height: 52px;
-  padding: 0 26px;
-  font-size: 18px;
-}
-
-.legacy-webos .stream-route-panel-shell {
-  position: absolute;
-  left: 0;
-  top: 84px;
-  right: 0;
-  bottom: 0;
-  border-radius: 16px;
-  height: auto;
-  overflow: hidden;
-  padding: 14px 14px 16px;
-}
-
-.legacy-webos .stream-route-panel {
-  position: absolute;
-  left: 14px;
-  top: 14px;
-  right: 14px;
-  bottom: 16px;
-  height: auto;
-  overflow: hidden;
-}
-
-.legacy-webos .stream-route-list {
-  position: absolute;
-  left: 0;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  height: auto;
-  max-height: none;
-  overflow-y: auto;
-  padding: 4px 6px 8px;
-  scroll-padding-top: 4px;
-  scroll-padding-bottom: 8px;
-}
-
-.legacy-webos .stream-route-list.manual-scroll {
-  overflow: hidden;
-}
-
-.legacy-webos .stream-route-list.manual-scroll > * {
-  transform: translateY(var(--stream-route-manual-scroll, 0));
-}
-
-.legacy-webos .stream-route-card-row {
-  margin-bottom: 10px;
-}
-
-.legacy-webos .stream-route-card-row > * + * {
-  margin-left: 10px;
-}
-
-.legacy-webos .stream-route-card {
-  min-height: 0;
-  padding: 16px 20px;
-  border-radius: 14px;
-  align-items: flex-start;
-}
-
-.legacy-webos .stream-route-card > * + * {
-  margin-left: 18px;
-}
-
-.legacy-webos .stream-route-card-heading {
-  font-size: 22px;
-  line-height: 28px;
-}
-
-.legacy-webos .stream-route-card-quality {
-  margin-top: 5px;
-  font-size: 19px;
-  line-height: 24px;
-}
-
-.legacy-webos .stream-route-card-badges {
-  margin: 6px 0 5px;
-}
-
-.legacy-webos .stream-route-card-badges > * + * {
-  margin-left: 4px;
-}
-
-.legacy-webos .stream-route-stream-badge {
-  min-height: 26px;
-  padding: 0 8px;
-  border-radius: 6px;
-  font-size: 15px;
-}
-
-.legacy-webos .stream-route-stream-badge.image {
-  min-width: 42px;
-  max-width: 116px;
-}
-
-.legacy-webos .stream-route-stream-badge.image img {
-  max-height: 21px;
-  max-width: 106px;
-}
-
-.legacy-webos .stream-route-card-line {
-  margin-top: 3px;
-  font-size: 16px;
-  line-height: 20px;
-  -webkit-line-clamp: 1;
-  line-clamp: 1;
-}
-
-.legacy-webos .stream-route-card-line.secondary {
-  margin-top: 2px;
-}
-
-.legacy-webos .stream-route-card-side {
-  width: 132px;
-  flex-basis: 132px;
-}
-
-.legacy-webos .stream-route-card-side > * + * {
-  margin-left: 8px;
-}
-
-.legacy-webos .stream-route-addon-badge {
-  width: 50px;
-  height: 50px;
-}
-
-.legacy-webos .stream-route-addon-name {
-  font-size: 14px;
-  line-height: 18px;
-}
 
 .legacy-tizen .stream-route-shell {
   width: 1920px;
@@ -19599,11 +18627,6 @@ html.legacy-webos .debug-console-log-frame {
 
 /* webOS 4 parses CSS variables but not rgb(var(...) / alpha). Without this
    final override, that invalid computed value turns stream cards transparent. */
-.legacy-webos .stream-route-card,
-.legacy-webos .stream-route-card.focused {
-  background: #222222 !important;
-  background: var(--card-bg) !important;
-}
 
 .stream-route-card.skeleton {
   display: block;
@@ -19641,13 +18664,7 @@ html.legacy-webos .debug-console-log-frame {
   max-width: 100%;
 }
 
-.stream-route-card-badges {
-  margin-top: -6px;
-  margin-left: -6px;
-}
-
-.stream-route-card-badges > * {
-  margin-top: 6px;
+.stream-route-card-badges > .stream-route-stream-badge + .stream-route-stream-badge {
   margin-left: 6px;
 }
 
@@ -19760,13 +18777,7 @@ html.legacy-webos .debug-console-log-frame {
   flex-wrap: wrap;
 }
 
-.stream-route-card-meta {
-  margin-top: -16px;
-  margin-left: -16px;
-}
-
-.stream-route-card-meta > * {
-  margin-top: 16px;
+.stream-route-card-meta > * + * {
   margin-left: 16px;
 }
 
@@ -21396,14 +20407,12 @@ html.legacy-webos .debug-console-log-frame {
 /* Final legacy-TV overrides. On older Chromium/WebKit, declarations such as
   rgba(var(--color-rgb), alpha) can become invalid only after var() is
    resolved; that also discards earlier declarations from the same cascade. */
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-copy,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-copy {
+.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-copy {
   top: 0;
   bottom: 52vh;
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::before,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
+.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::before {
   width: 45%;
   right: auto;
   background: linear-gradient(
@@ -21416,8 +20425,7 @@ html.legacy-webos .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::after,
-.legacy-webos .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
+.legacy-tizen .home-screen-shell.home-layout-modern .home-modern-hero-media::after {
   background: linear-gradient(
     180deg,
     rgba(13, 13, 13, 0) 0%,
@@ -21430,9 +20438,6 @@ html.legacy-webos .debug-console-log-frame {
 
 .legacy-tizen
   .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
-  .home-modern-hero-media,
-.legacy-webos
-  .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
   .home-modern-hero-media {
   right: 0;
   width: 100%;
@@ -21441,9 +20446,6 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .legacy-tizen
-  .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
-  .home-modern-hero-media::before,
-.legacy-webos
   .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
   .home-modern-hero-media::before {
   width: 65%;
@@ -21460,9 +20462,6 @@ html.legacy-webos .debug-console-log-frame {
 
 .legacy-tizen
   .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
-  .home-modern-hero-media::after,
-.legacy-webos
-  .home-screen-shell.home-layout-modern.home-modern-fullscreen-backdrop
   .home-modern-hero-media::after {
   background: linear-gradient(
     180deg,
@@ -21474,13 +20473,11 @@ html.legacy-webos .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .stream-route-backdrop-dim,
-.legacy-webos .stream-route-backdrop-dim {
+.legacy-tizen .stream-route-backdrop-dim {
   background: rgba(13, 13, 13, 0.24);
 }
 
-.legacy-tizen .stream-route-left-gradient,
-.legacy-webos .stream-route-left-gradient {
+.legacy-tizen .stream-route-left-gradient {
   background: linear-gradient(
     90deg,
     rgba(13, 13, 13, 1) 0%,
@@ -21492,8 +20489,7 @@ html.legacy-webos .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .stream-route-right-gradient,
-.legacy-webos .stream-route-right-gradient {
+.legacy-tizen .stream-route-right-gradient {
   background: linear-gradient(
     270deg,
     rgba(13, 13, 13, 1) 0%,
@@ -21505,21 +20501,17 @@ html.legacy-webos .debug-console-log-frame {
   );
 }
 
-.legacy-tizen .stream-route-panel-shell,
-.legacy-webos .stream-route-panel-shell {
+.legacy-tizen .stream-route-panel-shell {
   background: rgba(26, 26, 26, 0.82) !important;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .legacy-tizen .stream-route-card,
-.legacy-webos .stream-route-card,
-.legacy-tizen .stream-route-card.focused,
-.legacy-webos .stream-route-card.focused {
+.legacy-tizen .stream-route-card.focused {
   background: #222222 !important;
   border-color: rgba(255, 255, 255, 0.12);
 }
 
-.legacy-tizen .stream-route-card.focused,
-.legacy-webos .stream-route-card.focused {
+.legacy-tizen .stream-route-card.focused {
   border-color: var(--secondary-color);
 }

@@ -1753,13 +1753,6 @@ export const StreamScreen = {
     return this.focusElement(target);
   },
 
-  isLegacyWebOsRoute() {
-    return Boolean(
-      document.documentElement?.classList?.contains("legacy-webos") ||
-        document.body?.classList?.contains("legacy-webos")
-    );
-  },
-
   shouldUseManualListScroll(listNode) {
     if (!listNode || !Environment.isWebOS()) {
       return false;
@@ -1834,7 +1827,7 @@ export const StreamScreen = {
     }
     const applied = Number(listNode.scrollTop || 0);
     if (
-      this.isLegacyWebOsRoute() &&
+      Environment.isWebOS() &&
       maxScrollTop > 0 &&
       normalized > 0 &&
       Math.abs(applied - normalized) > 2

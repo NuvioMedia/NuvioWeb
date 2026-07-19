@@ -75,16 +75,9 @@ function isLowEndDevice() {
 
 function applyPerformanceMode() {
   const constrained = Platform.isWebOS() || Platform.isTizen() || isLowEndDevice();
-  const webOsMajorVersion = Platform.isWebOS() ? Number(Platform.getWebOsMajorVersion() || 0) : 0;
-  const legacyWebOs = Platform.isWebOS() && (webOsMajorVersion === 0 || webOsMajorVersion <= 6);
-  const legacyWebOs38 = Platform.isWebOS() && webOsMajorVersion > 0 && webOsMajorVersion <= 3;
   const legacyTizen = Platform.isTizen();
   document.documentElement.classList.toggle("performance-constrained", constrained);
   document.body.classList.toggle("performance-constrained", constrained);
-  document.documentElement.classList.toggle("legacy-webos", legacyWebOs);
-  document.body.classList.toggle("legacy-webos", legacyWebOs);
-  document.documentElement.classList.toggle("legacy-webos38", legacyWebOs38);
-  document.body.classList.toggle("legacy-webos38", legacyWebOs38);
   document.documentElement.classList.toggle("legacy-tizen", legacyTizen);
   document.body.classList.toggle("legacy-tizen", legacyTizen);
 }
