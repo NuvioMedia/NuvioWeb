@@ -10889,9 +10889,10 @@ html.legacy-webos .debug-console-log-frame {
 
 .player-html-subtitle-default {
   right: 5vw;
-  bottom: calc(8vh + var(--player-subtitle-offset));
+  bottom: 8vh;
   left: 5vw;
   align-items: center;
+  transform: translateY(var(--player-subtitle-offset));
 }
 
 .player-html-subtitle-default.player-html-subtitle-align-start {

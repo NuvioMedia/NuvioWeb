@@ -377,6 +377,7 @@ function shouldEnrichModernHero(hero) {
 }
 
 const HERO_IMAGE_PRELOAD_CACHE_LIMIT = 32;
+const HERO_IMAGE_PRELOAD_TIMEOUT_MS = 1500;
 const heroImagePreloadCache = new Map();
 
 function preloadImageSource(src) {
@@ -400,8 +401,11 @@ function preloadImageSource(src) {
         return;
       }
       settled = true;
+      clearTimeout(timeoutId);
       resolve(Boolean(loaded));
     };
+    // Older TV engines can leave image requests pending without load/error.
+    const timeoutId = setTimeout(() => finish(false), HERO_IMAGE_PRELOAD_TIMEOUT_MS);
     image.onload = () => finish(true);
     image.onerror = () => finish(false);
     image.decoding = "async";
@@ -412,8 +416,13 @@ function preloadImageSource(src) {
   });
   heroImagePreloadCache.set(normalized, preload);
   preload.then((loaded) => {
-    if (!loaded && heroImagePreloadCache.get(normalized) === preload) {
-      heroImagePreloadCache.delete(normalized);
+    if (!loaded) {
+      // Let the immediate DOM swap reuse the settled failure before allowing retries.
+      setTimeout(() => {
+        if (heroImagePreloadCache.get(normalized) === preload) {
+          heroImagePreloadCache.delete(normalized);
+        }
+      }, 0);
     }
   });
   return preload;

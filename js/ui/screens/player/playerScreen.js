@@ -45,6 +45,7 @@ import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingSe
 import { TizenEngineFsService } from "../../../platform/tizen/tizenEngineFsService.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
+import { TrackPreferencesStore } from "../../../data/local/trackPreferencesStore.js";
 import {
   shouldEnterStillWatchingPrompt,
   shouldShowNextEpisodeCard as shouldShowNextEpisodeCardRule
@@ -2035,6 +2036,8 @@ export const PlayerScreen = {
     this.playerMountToken = mountToken;
     this.playerRouteActive = true;
     this.params = params;
+    this.trackPreferenceContentId = this.getTrackPreferenceContentId();
+    this.rememberedAudioTrackPreference = TrackPreferencesStore.getAudio(this.trackPreferenceContentId);
     if (Environment.isWebOS()) {
       const legacyForceAll = Boolean(PlayerSettingsStore.get().forceDtsTrueHdAudio);
       const audioCompatibility = WebOsAudioCompatibilityStore.get({ legacyForceAll });
@@ -2595,6 +2598,117 @@ export const PlayerScreen = {
     };
   },
 
+  getTrackPreferenceContentId() {
+    const identity = this.buildPlaybackIdentityContext();
+    const itemId = String(this.params?.itemId || "").trim();
+    if (itemId) {
+      return itemId;
+    }
+    if (identity.imdbId) {
+      return identity.imdbId;
+    }
+    if (identity.tmdbId) {
+      return `tmdb:${identity.itemType}:${identity.tmdbId}`;
+    }
+    if (identity.traktId) {
+      return `trakt:${identity.itemType}:${identity.traktId}`;
+    }
+    return "";
+  },
+
+  getAudioTrackPreference(entry = {}) {
+    const track = entry?.track || {};
+    const sourceTrackId = Number(track?.sourceTrackId);
+    const trackId = [
+      track?.trackId,
+      Number.isFinite(sourceTrackId) && sourceTrackId >= 0 ? sourceTrackId : null,
+      track?.raw?.id,
+      track?.id,
+      entry?.manifestAudioTrackId
+    ]
+      .map((value) => cleanDisplayText(value))
+      .find(Boolean) || "";
+    const name = [track?.name, track?.label, track?.title, entry?.label]
+      .map((value) => cleanDisplayText(value))
+      .find(Boolean) || "";
+    return {
+      language: inferAudioTrackLanguageKey(track, entry),
+      name,
+      trackId
+    };
+  },
+
+  rememberAudioTrackSelection(preference = null) {
+    if (!preference || !this.trackPreferenceContentId) {
+      return;
+    }
+    TrackPreferencesStore.setAudio(this.trackPreferenceContentId, preference);
+    this.rememberedAudioTrackPreference = { ...preference };
+  },
+
+  findRememberedAudioOption(preference = this.rememberedAudioTrackPreference) {
+    if (!preference) {
+      return null;
+    }
+    const options = this.collectAudioOptionItems().filter((option) => option.supported);
+    const targetId = normalizeComparableText(preference.trackId || "");
+    const targetName = normalizeComparableText(preference.name || "");
+    const targetLanguage = normalizeTrackLanguageCode(preference.language || "")
+      || normalizeComparableText(preference.language || "");
+    const describe = (option) => {
+      const current = this.getAudioTrackPreference(option.entry);
+      return {
+        id: normalizeComparableText(current.trackId || ""),
+        name: normalizeComparableText(current.name || ""),
+        language: normalizeTrackLanguageCode(current.language || "")
+          || normalizeComparableText(current.language || "")
+      };
+    };
+    const languageMatchesExactly = (current) => !targetLanguage || current.language === targetLanguage;
+    const nameMatches = (current) => !targetName
+      || current.name === targetName
+      || current.name.includes(targetName);
+
+    if (targetId) {
+      const exactId = options.find((option) => {
+        const current = describe(option);
+        return current.id === targetId
+          && languageMatchesExactly(current)
+          && nameMatches(current);
+      });
+      if (exactId) {
+        return exactId;
+      }
+    }
+
+    if (targetName) {
+      const exactName = options.find((option) => {
+        const current = describe(option);
+        return current.name === targetName && languageMatchesExactly(current);
+      });
+      if (exactName) {
+        return exactName;
+      }
+      const containedName = options.find((option) => {
+        const current = describe(option);
+        return current.name.includes(targetName) && languageMatchesExactly(current);
+      });
+      if (containedName) {
+        return containedName;
+      }
+    }
+
+    if (!targetLanguage) {
+      return null;
+    }
+    const exactLanguage = options.find((option) => describe(option).language === targetLanguage);
+    if (exactLanguage) {
+      return exactLanguage;
+    }
+    const targetBase = targetLanguage.split("-")[0];
+    return options.find((option) => describe(option).language.split("-")[0] === targetBase) || null;
+  },
+
   buildScrobbleContext() {
     const identity = this.buildPlaybackIdentityContext();
     const currentSec = this.getPlaybackCurrentSeconds();
@@ -2874,6 +2988,12 @@ export const PlayerScreen = {
     target.style.setProperty("background-color", background, "important");
     target.style.setProperty("color", color, "important");
     target.style.setProperty("box-shadow", "none", "important");
+
+    const icon = target.querySelector(".player-skip-intro-icon");
+    const label = target.querySelector(".player-skip-intro-label");
+    icon?.style.setProperty("color", color, "important");
+    label?.style.setProperty("color", color, "important");
+    label?.style.setProperty("-webkit-text-fill-color", color, "important");
   },
 
   isSkipIntroButtonFocusable() {
@@ -6723,7 +6843,7 @@ export const PlayerScreen = {
     uiRoot.style.setProperty("--player-html-subtitle-font-size", htmlSubtitleFontSize);
     uiRoot.style.setProperty("--player-subtitle-font-weight", subtitleFontWeight);
     uiRoot.style.setProperty("--player-subtitle-shadow", subtitleShadow);
-    uiRoot.style.setProperty("--player-subtitle-offset", `${(verticalOffset.residualOffset * -2).toFixed(2)}vh`);
+    uiRoot.style.setProperty("--player-subtitle-offset", `${(verticalOffset.value * -2).toFixed(2)}vh`);
     video.style.setProperty("--player-subtitle-color", String(style.textColor || "#FFFFFF"));
     video.style.setProperty("--player-subtitle-outline-color", outlineColor);
     video.style.setProperty("--player-subtitle-font-size", `${subtitleFontSize}%`);
@@ -7569,7 +7689,9 @@ export const PlayerScreen = {
         this.pendingWebOsAudioSelection = {
           ...detail,
           entryId: samePendingSelection ? existingPending.entryId : "",
-          automaticFallback: samePendingSelection ? Boolean(existingPending.automaticFallback) : false
+          automaticFallback: samePendingSelection ? Boolean(existingPending.automaticFallback) : false,
+          rememberSelection: samePendingSelection ? Boolean(existingPending.rememberSelection) : false,
+          trackPreference: samePendingSelection ? existingPending.trackPreference : null
         };
         this.invalidateTrackDialogCaches();
         this.renderAudioDialog();
@@ -7587,6 +7709,9 @@ export const PlayerScreen = {
         }
         this.pendingWebOsAudioSelection = null;
         this.failedAutomaticAudioFallbackEntryId = "";
+        if (samePendingSelection && existingPending.rememberSelection) {
+          this.rememberAudioTrackSelection(existingPending.trackPreference);
+        }
         if (shouldReapplyStartupSubtitlePreference) {
           this.startupSubtitlePreferenceApplied = false;
         }
@@ -12393,13 +12518,48 @@ export const PlayerScreen = {
     }
 
     const preferredTargets = this.getStartupPreferredAudioLanguageTargets();
+    const isStillLoading = this.isAudioPreferenceDiscoveryPending();
+    const matchedRememberedOption = this.findRememberedAudioOption();
+    const rememberedOption = isStillLoading && matchedRememberedOption?.entry?.implicitAudioTrack
+      ? null
+      : matchedRememberedOption;
+    if (rememberedOption?.entry && Number.isFinite(rememberedOption.entryIndex)) {
+      if (rememberedOption.selected) {
+        this.clearStartupAudioPreferenceRetry();
+        this.startupAudioPreferenceApplied = true;
+        return true;
+      }
+      this.startupAudioPreferenceApplying = true;
+      try {
+        this.applyAudioTrack(rememberedOption.entryIndex);
+      } finally {
+        this.startupAudioPreferenceApplying = false;
+      }
+      if (Environment.isWebOS() && this.pendingWebOsAudioSelection) {
+        this.startupAudioPreferenceApplied = false;
+        this.scheduleStartupAudioPreferenceRetry();
+        return false;
+      }
+      if (this.findRememberedAudioOption()?.selected) {
+        this.clearStartupAudioPreferenceRetry();
+        this.startupAudioPreferenceApplied = true;
+        return true;
+      }
+      if (this.scheduleStartupAudioPreferenceRetry()) {
+        return false;
+      }
+    } else if (this.rememberedAudioTrackPreference && isStillLoading) {
+      const retryingTrackDiscovery = this.scheduleStartupAudioPreferenceRetry();
+      if (retryingTrackDiscovery || this.isAudioPreferenceDiscoveryPending()) {
+        return false;
+      }
+    }
     if (!preferredTargets.length) {
       this.clearStartupAudioPreferenceRetry();
       this.startupAudioPreferenceApplied = true;
       return true;
     }
 
-    const isStillLoading = this.isAudioPreferenceDiscoveryPending();
     const selectedOption = this.collectAudioOptionItems().find((entry) => entry.selected);
     if (
       selectedOption?.supported
@@ -13702,7 +13862,7 @@ export const PlayerScreen = {
     this.resetControlsAutoHide();
   },
 
-  applyAudioTrack(index, { automaticFallback = false } = {}) {
+  applyAudioTrack(index, { automaticFallback = false, rememberSelection = false } = {}) {
     const entries = this.getAudioEntries();
     const selectedEntry = entries[index] || null;
     if (!selectedEntry) {
@@ -13726,6 +13886,9 @@ export const PlayerScreen = {
         : false;
       if (applied) {
         this.selectedAudioTrackIndex = selectedEntry.avplayAudioTrackIndex;
+        if (rememberSelection) {
+          this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+        }
         this.invalidateTrackDialogCaches();
         this.refreshTrackDialogs();
       }
@@ -13738,6 +13901,9 @@ export const PlayerScreen = {
         : false;
       if (applied) {
         this.selectedAudioTrackIndex = selectedEntry.dashAudioTrackIndex;
+        if (rememberSelection) {
+          this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+        }
         this.invalidateTrackDialogCaches();
         this.refreshTrackDialogs();
       }
@@ -13750,6 +13916,9 @@ export const PlayerScreen = {
         : false;
       if (applied) {
         this.selectedAudioTrackIndex = selectedEntry.hlsAudioTrackIndex;
+        if (rememberSelection) {
+          this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+        }
         this.invalidateTrackDialogCaches();
         this.refreshTrackDialogs();
       }
@@ -13758,6 +13927,9 @@ export const PlayerScreen = {
 
     if (selectedEntry.manifestAudioTrackId) {
       this.applyManifestTrackSelection({ audioTrackId: selectedEntry.manifestAudioTrackId });
+      if (rememberSelection) {
+        this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+      }
       this.invalidateTrackDialogCaches();
       this.renderControlButtons();
       this.renderAudioDialog();
@@ -13791,7 +13963,9 @@ export const PlayerScreen = {
           targetTrackIndex,
           selectedTrackIndex: selectedEntry.embeddedAudioTrackIndex,
           entryId: selectedEntry.id || "",
-          automaticFallback: Boolean(automaticFallback)
+          automaticFallback: Boolean(automaticFallback),
+          rememberSelection: Boolean(rememberSelection),
+          trackPreference: this.getAudioTrackPreference(selectedEntry)
         };
         applied = typeof PlayerController.setWebOsEmbeddedAudioTrack === "function"
           ? PlayerController.setWebOsEmbeddedAudioTrack(targetTrackIndex, selectedEntry.embeddedAudioTrackIndex)
@@ -13805,6 +13979,9 @@ export const PlayerScreen = {
         }
         this.selectedEmbeddedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
         this.selectedAudioTrackIndex = selectedEntry.embeddedAudioTrackIndex;
+        if (rememberSelection) {
+          this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+        }
         this.invalidateTrackDialogCaches();
         this.renderControlButtons();
         this.renderAudioDialog();
@@ -13828,7 +14005,9 @@ export const PlayerScreen = {
         targetTrackIndex: nativeTrackIndex,
         selectedTrackIndex: nativeTrackIndex,
         entryId: selectedEntry.id || "",
-        automaticFallback: Boolean(automaticFallback)
+        automaticFallback: Boolean(automaticFallback),
+        rememberSelection: Boolean(rememberSelection),
+        trackPreference: this.getAudioTrackPreference(selectedEntry)
       };
     }
     const appliedByController = typeof PlayerController.setNativeAudioTrack === "function"
@@ -13842,6 +14021,9 @@ export const PlayerScreen = {
       }
       this.selectedAudioTrackIndex = nativeTrackIndex;
       this.selectedEmbeddedAudioTrackIndex = -1;
+      if (rememberSelection) {
+        this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+      }
       this.invalidateTrackDialogCaches();
       this.renderControlButtons();
       this.renderAudioDialog();
@@ -13873,6 +14055,9 @@ export const PlayerScreen = {
     });
     this.selectedAudioTrackIndex = nativeTrackIndex;
     this.selectedEmbeddedAudioTrackIndex = -1;
+    if (rememberSelection) {
+      this.rememberAudioTrackSelection(this.getAudioTrackPreference(selectedEntry));
+    }
     this.invalidateTrackDialogCaches();
     this.renderControlButtons();
     this.renderAudioDialog();
@@ -14062,7 +14247,7 @@ export const PlayerScreen = {
 
     if (isSelectKeyCode(keyCode)) {
       if (this.audioFocusedColumn === "tracks") {
-        this.applyAudioTrack(this.audioDialogIndex);
+        this.applyAudioTrack(this.audioDialogIndex, { rememberSelection: true });
       } else {
         this.activateAudioControl(this.audioMixFocusIndex === 0 ? 1 : 0);
       }
@@ -16036,7 +16221,7 @@ export const PlayerScreen = {
     const audioNode = target.closest?.("[data-audio-column]");
     if (audioNode && this.audioDialogVisible) {
       if (this.audioFocusedColumn === "tracks") {
-        this.applyAudioTrack(this.audioDialogIndex);
+        this.applyAudioTrack(this.audioDialogIndex, { rememberSelection: true });
       } else {
         this.activateAudioControl(this.audioMixFocusIndex === 0 ? 1 : 0);
       }
