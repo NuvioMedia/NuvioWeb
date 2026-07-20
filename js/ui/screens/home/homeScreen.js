@@ -8187,7 +8187,12 @@ export const HomeScreen = {
     return byEpisode;
   },
 
-  async fetchMetaForContinueWatching(contentType, contentId, timeoutMs = CW_META_TIMEOUT_MS) {
+  async fetchMetaForContinueWatching(
+    contentType,
+    contentId,
+    timeoutMs = CW_META_TIMEOUT_MS,
+    alternateContentIds = []
+  ) {
     const effectiveTimeoutMs = getContinueWatchingMetaTimeout(timeoutMs);
     const normalizedType = String(contentType || "").trim().toLowerCase();
     const typeCandidates = [];
@@ -8201,10 +8206,16 @@ export const HomeScreen = {
     }
 
     const rawContentId = String(contentId || "").trim();
-    const idCandidates = [rawContentId];
-    if (rawContentId.includes(":")) {
-      idCandidates.push(rawContentId.split(":").pop());
-    }
+    const idCandidates = [];
+    [...(Array.isArray(alternateContentIds) ? alternateContentIds : [alternateContentIds]), rawContentId]
+      .map((candidate) => String(candidate || "").trim())
+      .filter(Boolean)
+      .forEach((candidate) => {
+        idCandidates.push(candidate);
+        if (candidate.includes(":")) {
+          idCandidates.push(candidate.split(":").pop());
+        }
+      });
 
     const seenTypes = new Set();
     const requests = [];
@@ -8343,7 +8354,12 @@ export const HomeScreen = {
 
       let meta = null;
       try {
-        meta = await this.fetchMetaForContinueWatching(contentType, contentId, CW_NEXT_UP_META_TIMEOUT_MS);
+        meta = await this.fetchMetaForContinueWatching(
+          contentType,
+          contentId,
+          CW_NEXT_UP_META_TIMEOUT_MS,
+          [progressEntry?.imdbId]
+        );
       } catch (error) {
         console.warn("Next up meta lookup failed", error);
       }
@@ -8443,8 +8459,12 @@ export const HomeScreen = {
     }
     const contentType = item.contentType || meta.type || "movie";
     try {
+      const explicitTmdbId = Number(item.tmdbId || 0);
+      const tmdbLookupId = explicitTmdbId > 0
+        ? `tmdb:${explicitTmdbId}`
+        : firstNonEmpty(item.imdbId, item.contentId, meta.id);
       const tmdbId = await withTimeout(
-        TmdbService.ensureTmdbId(item.contentId || meta.id, contentType),
+        TmdbService.ensureTmdbId(tmdbLookupId, contentType),
         1800,
         null
       );
@@ -8497,6 +8517,9 @@ export const HomeScreen = {
               };
             })
           : meta.videos;
+      const currentEpisode = episodeMap.get(
+        `${Number(item.season || 0)}:${Number(item.episode || 0)}`
+      );
       return {
         ...meta,
         name: settings.useBasicInfo ? enrichment.localizedTitle || meta.name : meta.name,
@@ -8518,6 +8541,22 @@ export const HomeScreen = {
           settings.useBasicInfo && typeof enrichment.rating === "number"
             ? Number(enrichment.rating.toFixed(1))
             : meta.tmdbRating,
+        episodeThumbnail:
+          settings.useArtwork
+            ? currentEpisode?.thumbnail || meta.episodeThumbnail
+            : meta.episodeThumbnail,
+        episodeTitle:
+          settings.useEpisodes
+            ? currentEpisode?.title || meta.episodeTitle
+            : meta.episodeTitle,
+        episodeDescription:
+          settings.useEpisodes
+            ? currentEpisode?.overview || meta.episodeDescription
+            : meta.episodeDescription,
+        episodeRuntime:
+          settings.useEpisodes
+            ? currentEpisode?.runtime || meta.episodeRuntime
+            : meta.episodeRuntime,
         videos
       };
     } catch (error) {
@@ -8534,16 +8573,25 @@ export const HomeScreen = {
           return cachedItem;
         }
         try {
-          const meta = await this.fetchMetaForContinueWatching(
+          let meta = await this.fetchMetaForContinueWatching(
             item.contentType || "movie",
             item.contentId,
-            options?.metaTimeoutMs || 1800
+            options?.metaTimeoutMs || 1800,
+            [item.imdbId]
           );
+          if (!meta) {
+            meta = {
+              id: item.contentId,
+              type: item.contentType || "movie",
+              name: item.title || prettyId(item.contentId)
+            };
+          }
           if (meta) {
             const enrichedMeta = await this.enrichContinueWatchingMetaWithTmdb(meta, item);
             const episodeEntry = findEpisodeEntry(enrichedMeta.videos, item.season, item.episode);
             const runtimeMinutes = parseRuntimeMinutes(
               episodeEntry?.runtimeMinutes
+              ?? enrichedMeta.episodeRuntime
               ?? enrichedMeta.runtimeMinutes
               ?? enrichedMeta.runtime
               ?? 0
@@ -8570,8 +8618,8 @@ export const HomeScreen = {
               status: firstNonEmpty(enrichedMeta.status),
               language: firstNonEmpty(enrichedMeta.language),
               country: firstNonEmpty(enrichedMeta.country),
-              episodeTitle: firstNonEmpty(episodeEntry?.title, item.episodeTitle, item.subtitle),
-              episodeDescription: firstNonEmpty(episodeEntry?.overview, item.episodeDescription, item.episode_description),
+              episodeTitle: firstNonEmpty(enrichedMeta.episodeTitle, episodeEntry?.title, item.episodeTitle, item.subtitle),
+              episodeDescription: firstNonEmpty(enrichedMeta.episodeDescription, episodeEntry?.overview, item.episodeDescription, item.episode_description),
               continueWatchingMetaResolved: true
             };
             saveContinueWatchingEnrichment(enriched);
