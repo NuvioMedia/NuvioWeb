@@ -12879,7 +12879,35 @@ export const PlayerScreen = {
     });
   },
 
-  adjustSubtitleStyleControl(controlId, delta = 0) {
+  schedulePersistPlayerPresentationSettings(delayMs = 400) {
+    clearTimeout(this.persistSettingsTimer);
+    this.persistSettingsTimer = setTimeout(() => {
+      this.persistSettingsTimer = null;
+      this.persistPlayerPresentationSettings();
+    }, delayMs);
+  },
+
+  flushPersistPlayerPresentationSettings() {
+    if (this.persistSettingsTimer) {
+      clearTimeout(this.persistSettingsTimer);
+      this.persistSettingsTimer = null;
+      this.persistPlayerPresentationSettings();
+    }
+  },
+
+  renderSubtitleStyleControlInPlace(controlId) {
+    const dialog = this.uiRefs?.subtitleDialog;
+    if (!dialog || !this.subtitleDialogVisible) return false;
+    const styleControls = this.getSubtitleStyleControls();
+    const items = controlId === "reset" ? styleControls : styleControls.filter((c) => c.id === controlId);
+    items.forEach((item) => {
+      const subNode = dialog.querySelector(`button[data-style-id="${item.id}"]`)?.closest(".player-dialog-style-item")?.querySelector(".player-dialog-item-sub");
+      if (subNode) subNode.textContent = item.value || "";
+    });
+    return items.length > 0;
+  },
+
+  adjustSubtitleStyleControl(controlId, delta = 0, { isRepeat = false } = {}) {
     const activeControl = this.getSubtitleStyleControls().find((item) => item.id === controlId);
     if (!activeControl || activeControl.disabled) {
       return false;
@@ -12891,9 +12919,6 @@ export const PlayerScreen = {
         SUBTITLE_DELAY_MIN_MS,
         SUBTITLE_DELAY_MAX_MS
       );
-      this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
-      this.renderSubtitleDialog();
-      return true;
     } else if (controlId === "fontSize") {
       style.fontSize = normalizeSubtitleFontSize(Number(style.fontSize || 100) + (delta * SUBTITLE_FONT_STEP));
     } else if (controlId === "bold" && delta !== 0) {
@@ -12912,15 +12937,16 @@ export const PlayerScreen = {
       const defaults = PlayerSettingsStore.get().subtitleStyle;
       this.subtitleDelayMs = 0;
       this.subtitleStyleSettings = { ...defaults };
-      this.persistPlayerPresentationSettings();
-      this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
-      this.renderSubtitleDialog();
-      return true;
     }
-    this.subtitleStyleSettings = style;
-    this.persistPlayerPresentationSettings();
-    this.applySubtitlePresentationSettings({ refreshTrackRendering: true });
-    this.renderSubtitleDialog();
+
+    if (controlId !== "delay" && controlId !== "reset") {
+      this.subtitleStyleSettings = style;
+    }
+    this.schedulePersistPlayerPresentationSettings();
+    this.applySubtitlePresentationSettings({ refreshTrackRendering: !isRepeat });
+    if (!this.renderSubtitleStyleControlInPlace(controlId)) {
+      this.renderSubtitleDialog();
+    }
     return true;
   },
 
@@ -12951,6 +12977,7 @@ export const PlayerScreen = {
   },
 
   closeSubtitleDialog() {
+    this.flushPersistPlayerPresentationSettings();
     this.subtitleDialogVisible = false;
     this.subtitleFocusedRail = "language";
     this.subtitleStyleControlSide = "minus";
@@ -13487,10 +13514,9 @@ export const PlayerScreen = {
         }
       } else if (this.subtitleFocusedRail === "options") {
         this.subtitleFocusedRail = "language";
-      } else {
-        return false;
+        this.renderSubtitleDialog();
+        return true;
       }
-      this.renderSubtitleDialog();
       return true;
     }
     if (keyCode === 39) {
@@ -13543,7 +13569,11 @@ export const PlayerScreen = {
         return true;
       }
       if (styleItem && !styleItem.disabled) {
-        this.adjustSubtitleStyleControl(styleItem.id, this.getSubtitleStyleControlDelta(this.subtitleStyleControlSide));
+        this.adjustSubtitleStyleControl(
+          styleItem.id,
+          this.getSubtitleStyleControlDelta(this.subtitleStyleControlSide),
+          { isRepeat: Boolean(event?.repeat) }
+        );
       }
       return true;
     }
@@ -16599,7 +16629,7 @@ export const PlayerScreen = {
         } else if (this.seekOverlayVisible) {
           this.cancelSeekPreview({ commit: false });
         }
-        this.togglePause({ focusControls: false });
+        this.togglePause({ focusControls: true });
         this.renderControlButtons();
       }
       return;
