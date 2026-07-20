@@ -45,6 +45,7 @@ import { TizenStreamingServerResolver } from "../../../core/p2p/tizenStreamingSe
 import { TizenEngineFsService } from "../../../platform/tizen/tizenEngineFsService.js";
 import { requestWebOsCompanionService, subscribeWebOsCompanionService } from "../../../platform/webos/webosCompanionService.js";
 import { StreamPreferencesStore } from "../../../data/local/streamPreferencesStore.js";
+import { AudioTrackPreferencesStore } from "../../../data/local/audioTrackPreferencesStore.js";
 import {
   shouldEnterStillWatchingPrompt,
   shouldShowNextEpisodeCard as shouldShowNextEpisodeCardRule
@@ -12387,9 +12388,98 @@ export const PlayerScreen = {
     return null;
   },
 
+  getRememberedAudioTrackForCurrentTitle() {
+    const contentId = String(this.params?.itemId || "").trim();
+    if (!contentId) {
+      return null;
+    }
+    return AudioTrackPreferencesStore.get(contentId);
+  },
+
+  rememberSelectedAudioTrack(index) {
+    const contentId = String(this.params?.itemId || "").trim();
+    if (!contentId) {
+      return;
+    }
+    const option = this.collectAudioOptionItems()[index];
+    if (!option) {
+      return;
+    }
+    AudioTrackPreferencesStore.set(contentId, {
+      languageKey: option.languageKey,
+      label: option.label
+    });
+  },
+
+  findRememberedAudioOption(options, remembered) {
+    if (!remembered) {
+      return null;
+    }
+    const supported = options.filter((option) => option.supported);
+    const rememberedLabel = normalizeComparableText(remembered.label || "");
+    if (rememberedLabel) {
+      const byName = supported.find(
+        (option) => normalizeComparableText(option.label || "") === rememberedLabel
+      );
+      if (byName) {
+        return byName;
+      }
+    }
+    const rememberedLanguage = String(remembered.languageKey || "");
+    if (rememberedLanguage) {
+      const byLanguage = supported.find((option) => option.languageKey === rememberedLanguage);
+      if (byLanguage) {
+        return byLanguage;
+      }
+    }
+    return null;
+  },
+
+  applyRememberedAudioTrackSelection() {
+    const remembered = this.getRememberedAudioTrackForCurrentTitle();
+    if (!remembered) {
+      return false;
+    }
+    const options = this.collectAudioOptionItems();
+    if (!options.length) {
+      return false;
+    }
+    const match = this.findRememberedAudioOption(options, remembered);
+    if (!match) {
+      return false;
+    }
+    if (match.selected) {
+      return true;
+    }
+    this.startupAudioPreferenceApplying = true;
+    try {
+      this.applyAudioTrack(match.entryIndex);
+    } finally {
+      this.startupAudioPreferenceApplying = false;
+    }
+    const applied = this.collectAudioOptionItems().find((entry) => entry.selected);
+    return Boolean(applied && this.findRememberedAudioOption([applied], remembered));
+  },
+
   applyStartupAudioPreference() {
     if (this.startupAudioPreferenceApplied || this.startupAudioPreferenceApplying) {
       return false;
+    }
+
+    // A track the user explicitly picked for this title in a past session takes
+    // precedence over the preferred-language default, matching Android TV. This
+    // sits on top of the normal flow: if nothing is remembered, or the
+    // remembered track is not among the available tracks, fall straight through.
+    if (this.getRememberedAudioTrackForCurrentTitle()) {
+      if (this.isAudioPreferenceDiscoveryPending()) {
+        if (this.scheduleStartupAudioPreferenceRetry()) {
+          return false;
+        }
+      } else if (this.applyRememberedAudioTrackSelection()) {
+        this.clearStartupAudioPreferenceRetry();
+        this.startupAudioPreferenceApplied = true;
+        return true;
+      }
     }
 
     const preferredTargets = this.getStartupPreferredAudioLanguageTargets();
@@ -14063,6 +14153,7 @@ export const PlayerScreen = {
     if (isSelectKeyCode(keyCode)) {
       if (this.audioFocusedColumn === "tracks") {
         this.applyAudioTrack(this.audioDialogIndex);
+        this.rememberSelectedAudioTrack(this.audioDialogIndex);
       } else {
         this.activateAudioControl(this.audioMixFocusIndex === 0 ? 1 : 0);
       }
@@ -16037,6 +16128,7 @@ export const PlayerScreen = {
     if (audioNode && this.audioDialogVisible) {
       if (this.audioFocusedColumn === "tracks") {
         this.applyAudioTrack(this.audioDialogIndex);
+        this.rememberSelectedAudioTrack(this.audioDialogIndex);
       } else {
         this.activateAudioControl(this.audioMixFocusIndex === 0 ? 1 : 0);
       }
