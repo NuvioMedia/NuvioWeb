@@ -3066,6 +3066,14 @@ export const HomeScreen = {
     return Boolean(globalThis.document?.body?.classList?.contains("performance-constrained"));
   },
 
+  // Constrained TVs (all webOS/Tizen, plus low-end) cannot afford the animated
+  // spring scroll on every focus move: each move runs a ~440ms rAF loop writing
+  // scrollTop/scrollLeft per frame, which stacks into seconds of input lag. Snap
+  // focus scrolling instead, matching the classic layout and Tizen behaviour.
+  shouldUseImmediateFocusScroll() {
+    return Boolean(Platform.isTizen() || this.isPerformanceConstrained());
+  },
+
   hasCollectionHomeRows() {
     return Array.isArray(this.collections) && this.collections.length > 0;
   },
@@ -6348,7 +6356,7 @@ export const HomeScreen = {
         if (delta <= 1) {
           return;
         }
-        if (Platform.isTizen() || (Platform.isBrowser() && this.isPerformanceConstrained())) {
+        if (this.shouldUseImmediateFocusScroll()) {
           this.cancelScrollAnimation(next.container, "y");
           next.container.scrollTop = Math.round(Number(next.value || 0));
           return;
@@ -6418,7 +6426,7 @@ export const HomeScreen = {
         cancelAnimationFrame(this._trackHorizRaf);
         this._trackHorizRaf = null;
       }
-      if (this.shouldUseImmediateHorizontalScrollForNode(target)) {
+      if (this.shouldUseImmediateHorizontalScrollForNode(target) || this.shouldUseImmediateFocusScroll()) {
         const next = this.getModernTrackAlignedScrollTarget(target, layoutAdjustment);
         if (next?.container) {
           this.cancelScrollAnimation(next.container, "x");
