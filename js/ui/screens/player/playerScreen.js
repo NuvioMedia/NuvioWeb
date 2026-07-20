@@ -2597,17 +2597,8 @@ export const PlayerScreen = {
 
   buildScrobbleContext() {
     const identity = this.buildPlaybackIdentityContext();
-    let currentSec = this.getPlaybackCurrentSeconds();
-    let durationSec = this.getPlaybackDurationSeconds();
-    if (currentSec <= 0 || durationSec <= 0) {
-      const snapshot = typeof PlayerController.getRecordedProgressSnapshot === "function"
-        ? PlayerController.getRecordedProgressSnapshot()
-        : null;
-      if (snapshot && snapshot.positionMs > 0 && snapshot.durationMs > 0) {
-        currentSec = snapshot.positionMs / 1000;
-        durationSec = snapshot.durationMs / 1000;
-      }
-    }
+    const currentSec = this.getPlaybackCurrentSeconds();
+    const durationSec = this.getPlaybackDurationSeconds();
     const progress =
       durationSec > 0 ? Math.min(100, (currentSec / durationSec) * 100) : 0;
     return {
@@ -16684,11 +16675,7 @@ export const PlayerScreen = {
       PlayerController.video.removeEventListener("ended", this.endedHandler);
       this.endedHandler = null;
     }
-    if (TraktScrobbleService.isEnabled()) {
-      TraktScrobbleService.stop(this.buildScrobbleContext());
-    } else {
-      TraktScrobbleService.cancel();
-    }
+    TraktScrobbleService.cancel();
     this.unbindPlayerExitCleanup();
     this.releaseCurrentEngineFsStreamBestEffort("player-cleanup", {
       removeTorrent: true,

@@ -168,67 +168,45 @@ function selectedContinueWatchingSource() {
     : WatchProgressSource.NUVIO_SYNC;
 }
 
+function selectedLocalProgressSource() {
+  // Playback is recorded locally even when Trakt owns Continue Watching.
+  // Keep that fresh state in the selected source until Trakt catches up.
+  return selectedContinueWatchingSource() === WatchProgressSource.TRAKT
+    ? "trakt_local"
+    : WatchProgressSource.NUVIO_SYNC;
+}
+
 function filterForSelectedContinueWatchingSource(items = []) {
   const useTrakt = selectedContinueWatchingSource() === WatchProgressSource.TRAKT;
   const all = Array.isArray(items) ? items : [];
-  if (!useTrakt) {
-    return all.filter((item) => !isTraktProgressItem(item));
-  }
-
-  const traktCompatibleIdsOnTrakt = new Set(
-    all.filter((item) => isTraktProgressItem(item)).map((item) => String(item.contentId))
+  return all.filter((item) =>
+    useTrakt
+      ? isTraktProgressItem(item) || !isTraktCompatibleContentId(item?.contentId)
+      : !isTraktProgressItem(item)
   );
-  const traktImdbIdsOnTrakt = new Set(
-    all
-      .filter((item) => isTraktProgressItem(item))
-      .map((item) => String(item.imdbId || item.contentId || ""))
-      .filter((id) => id.startsWith("tt"))
-  );
-
-  return all.filter((item) => {
-    if (isTraktProgressItem(item)) {
-      return true;
-    }
-    if (!isTraktCompatibleContentId(item?.contentId)) {
-      return true;
-    }
-    const imdb = String(item.imdbId || item.contentId || "");
-    if (imdb.startsWith("tt") && traktImdbIdsOnTrakt.has(imdb)) {
-      return false;
-    }
-    return !traktCompatibleIdsOnTrakt.has(String(item.contentId));
-  });
 }
 
 function deduplicateInProgress(items = []) {
   const nonSeriesItems = [];
   const latestSeriesItems = [];
-  const seenKeys = new Set();
-  const seenMovieKeys = new Set();
+  const seenContentIds = new Set();
 
   (Array.isArray(items) ? items : [])
     .slice()
     .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
     .forEach((item) => {
-      const contentId = String(item?.contentId || "").trim();
-      const imdbId = String(item?.imdbId || "").trim();
-      const key = (imdbId && imdbId.startsWith("tt")) ? imdbId : contentId;
-
       if (!isSeriesType(item?.contentType)) {
-        if (!key || seenMovieKeys.has(key)) {
-          return;
-        }
-        seenMovieKeys.add(key);
         if (shouldTreatAsInProgressForContinueWatching(item)) {
           nonSeriesItems.push(item);
         }
         return;
       }
 
-      if (!key || seenKeys.has(key)) {
+      const contentId = String(item?.contentId || "").trim();
+      if (!contentId || seenContentIds.has(contentId)) {
         return;
       }
-      seenKeys.add(key);
+      seenContentIds.add(contentId);
       // Decide Continue Watching eligibility only after selecting the newest
       // episode state for the series. Otherwise a completed episode is removed
       // first and an older partial record can reappear beside the real Next Up.
@@ -541,6 +519,7 @@ class WatchProgressRepository {
     WatchProgressStore.upsert(
       {
         ...progress,
+        source: String(progress?.source || "").trim() || selectedLocalProgressSource(),
         updatedAt: progress.updatedAt || Date.now()
       },
       activeProfileId()
