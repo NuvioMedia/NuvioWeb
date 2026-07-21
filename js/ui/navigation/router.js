@@ -393,7 +393,7 @@ export const Router = {
       // before the platform treats it as a request to exit the app.
       if (
         Platform.isWebOS() &&
-        this.current === "home" &&
+        (this.current === "home" || this.current === "profileSelection") &&
         !this.webOsHomeBackGuardInitialized
       ) {
         window.history.pushState(state, "");
