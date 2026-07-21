@@ -7,10 +7,8 @@ function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-function chevronSvg(open, className) {
-  const path = open
-    ? "M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z"
-    : "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
+function chevronSvg(className) {
+  const path = "M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z";
   return `
     <svg viewBox="0 0 24 24" class="${className}" aria-hidden="true" focusable="false">
       <path d="${path}" fill="currentColor" />
@@ -80,7 +78,7 @@ export function renderFilterPicker({
           <span class="${classPrefix}-title">${escapeHtml(title)}</span>
           <span class="${classPrefix}-value">${escapeHtml(value)}</span>
         </span>
-        <span class="${classPrefix}-icon">${chevronSvg(open, chevronClassName)}</span>
+        <span class="${classPrefix}-icon">${chevronSvg(chevronClassName)}</span>
       </div>
       ${
         shouldRenderMenu

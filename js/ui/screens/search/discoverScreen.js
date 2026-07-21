@@ -806,10 +806,9 @@ export const DiscoverScreen = {
 
   closePickerMenu() {
     if (!this.openPicker) return;
+    const action = actionForPickerKind(this.openPicker);
     this.openPicker = null;
-    if (!this.suppressInitialLoadingRenders) {
-      this.requestRender();
-    }
+    this.closePickerMenuInDom(action);
   },
 
   isPosterHoldTarget(node) {
@@ -1023,7 +1022,7 @@ export const DiscoverScreen = {
     this.lastFocusedDiscoverItemId = "";
     this.openPicker = null;
     if (!hasChanged) {
-      this.requestRender();
+      this.closePickerMenuInDom(this.lastFocusedAction);
       return;
     }
     if (option) {
@@ -1553,10 +1552,12 @@ export const DiscoverScreen = {
     if (Platform.isBackEvent(event)) {
       event?.preventDefault?.();
       if (this.closePosterOptionsMenu()) {
+        Router.suppressNextPopstate?.();
         return;
       }
       if (this.openPicker) {
         this.closePickerMenu();
+        Router.suppressNextPopstate?.();
         return;
       }
       await Router.back();
@@ -1609,16 +1610,9 @@ export const DiscoverScreen = {
       }
       if (isLeftKey(event) || isRightKey(event)) {
         const movingRight = isRightKey(event);
-        const action =
-          this.openPicker === "type"
-            ? "discoverFilterType"
-            : this.openPicker === "catalog"
-              ? "discoverFilterCatalog"
-              : "discoverFilterGenre";
         this.openPicker = null;
-        this.lastFocusedAction = action;
         this.moveFilterFocus(movingRight ? 1 : -1);
-        this.requestRender();
+        this.closePickerMenuInDom(this.lastFocusedAction);
         return;
       }
       return;
