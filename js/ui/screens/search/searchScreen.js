@@ -1634,6 +1634,10 @@ export const SearchScreen = {
       if (current !== input) {
         this.focusNode(current, input);
       }
+      const valueLength = String(input.value || "").length;
+      try {
+        input.setSelectionRange(valueLength, valueLength);
+      } catch (_) {}
     });
 
     input.addEventListener("keydown", async (event) => {
