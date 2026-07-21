@@ -1,4 +1,4 @@
-﻿import { Router } from "../../navigation/router.js";
+import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
@@ -6863,19 +6863,6 @@ export const MetaDetailsScreen = {
       return true;
     }
     if (this.navigateBackFromDetail()) {
-      return true;
-    }
-    if (this.isLoadingDetail) {
-      // Loading details must use the same Tizen Back contract as loaded ones.
-      Router.navigate(
-        "home",
-        {},
-        {
-          isBackNavigation: true,
-          skipStackPush: true,
-          replaceHistory: true
-        }
-      );
       return true;
     }
     return false;

@@ -356,27 +356,6 @@ export const Router = {
     this.currentParams = targetParams;
     const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
 
-    await Screen.mount(this.currentParams, navigationContext);
-    this.completeRouteReturnBackGuard(routeReturnBackGuardNavigationId);
-    logRouterPerf("navigate", {
-      ms: Number((routerPerfNow() - navigationStart).toFixed(2)),
-      route: routeName,
-      previousRoute,
-      fromHistory,
-      skipStackPush,
-      replaceHistory
-    });
-
-    // If another navigation happened while this screen was mounting, this
-    // navigation is stale and must not write an extra history entry.
-    if (this.current !== routeName || this.currentParams !== targetParams) {
-      return;
-    }
-
-    if (bootGuard && typeof bootGuard.ready === "function") {
-      bootGuard.ready();
-    }
-
     if (window?.history && typeof window.history.pushState === "function") {
       const state = { route: this.current, params: this.currentParams };
       if (!this.historyInitialized) {
@@ -401,6 +380,26 @@ export const Router = {
         this.webOsHomeBackGuardInitialized = true;
       }
     }
+
+    await Screen.mount(this.currentParams, navigationContext);
+    this.completeRouteReturnBackGuard(routeReturnBackGuardNavigationId);
+    logRouterPerf("navigate", {
+      ms: Number((routerPerfNow() - navigationStart).toFixed(2)),
+      route: routeName,
+      previousRoute,
+      fromHistory,
+      skipStackPush,
+      replaceHistory
+    });
+
+    if (this.current !== routeName || this.currentParams !== targetParams) {
+      return;
+    }
+
+    if (bootGuard && typeof bootGuard.ready === "function") {
+      bootGuard.ready();
+    }
+
     this.persistWebOsResumeRoute(this.current, this.currentParams);
   },
 
