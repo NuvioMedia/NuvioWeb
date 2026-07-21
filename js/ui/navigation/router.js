@@ -356,6 +356,27 @@ export const Router = {
     this.currentParams = targetParams;
     const navigationContext = this.resolveNavigationContext(routeName, this.currentParams, options);
 
+    await Screen.mount(this.currentParams, navigationContext);
+    this.completeRouteReturnBackGuard(routeReturnBackGuardNavigationId);
+    logRouterPerf("navigate", {
+      ms: Number((routerPerfNow() - navigationStart).toFixed(2)),
+      route: routeName,
+      previousRoute,
+      fromHistory,
+      skipStackPush,
+      replaceHistory
+    });
+
+    // If another navigation happened while this screen was mounting, this
+    // navigation is stale and must not write an extra history entry.
+    if (this.current !== routeName || this.currentParams !== targetParams) {
+      return;
+    }
+
+    if (bootGuard && typeof bootGuard.ready === "function") {
+      bootGuard.ready();
+    }
+
     if (window?.history && typeof window.history.pushState === "function") {
       const state = { route: this.current, params: this.currentParams };
       if (!this.historyInitialized) {
@@ -380,27 +401,28 @@ export const Router = {
         this.webOsHomeBackGuardInitialized = true;
       }
     }
+    this.persistWebOsResumeRoute(this.current, this.currentParams);
+  },
 
-    await Screen.mount(this.currentParams, navigationContext);
-    this.completeRouteReturnBackGuard(routeReturnBackGuardNavigationId);
-    logRouterPerf("navigate", {
-      ms: Number((routerPerfNow() - navigationStart).toFixed(2)),
-      route: routeName,
-      previousRoute,
-      fromHistory,
-      skipStackPush,
-      replaceHistory
-    });
+  async backFromPendingNavigation() {
+    const historyState = window?.history?.state || null;
+    const targetRoute = String(historyState?.route || "");
 
-    if (this.current !== routeName || this.currentParams !== targetParams) {
+    if (targetRoute && this.routes[targetRoute]) {
+      const previous = this.stack[this.stack.length - 1];
+      const previousRoute = typeof previous === "string" ? previous : previous?.route;
+      if (previousRoute === targetRoute) {
+        this.stack.pop();
+      }
+      await this.navigate(targetRoute, historyState.params || {}, {
+        fromHistory: true,
+        skipStackPush: true,
+        isBackNavigation: true
+      });
       return;
     }
 
-    if (bootGuard && typeof bootGuard.ready === "function") {
-      bootGuard.ready();
-    }
-
-    this.persistWebOsResumeRoute(this.current, this.currentParams);
+    await this.back({ skipConsume: true, skipHistory: true });
   },
 
   async back(options = {}) {
@@ -420,7 +442,12 @@ export const Router = {
       return;
     }
 
-    if (window?.history && typeof window.history.back === "function" && this.historyInitialized) {
+    if (
+      !options?.skipHistory &&
+      window?.history &&
+      typeof window.history.back === "function" &&
+      this.historyInitialized
+    ) {
       if (options?.skipConsume) {
         this.skipConsumeNextPopstate = true;
       }

@@ -1,4 +1,4 @@
-import { Router } from "../../navigation/router.js";
+﻿import { Router } from "../../navigation/router.js";
 import { ScreenUtils } from "../../navigation/screen.js";
 import { metaRepository } from "../../../data/repository/metaRepository.js";
 import { watchProgressRepository } from "../../../data/repository/watchProgressRepository.js";
@@ -6863,6 +6863,10 @@ export const MetaDetailsScreen = {
       return true;
     }
     if (this.navigateBackFromDetail()) {
+      return true;
+    }
+    if (this.isLoadingDetail) {
+      void Router.backFromPendingNavigation();
       return true;
     }
     return false;
