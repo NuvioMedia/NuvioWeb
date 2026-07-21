@@ -405,6 +405,8 @@ export const Router = {
   },
 
   async backFromPendingNavigation() {
+    // The current history entry still represents the caller until mount completes.
+    // Restore that entry in place so a fast Back neither skips it nor records a stale route.
     const historyState = window?.history?.state || null;
     const targetRoute = String(historyState?.route || "");
 
