@@ -404,6 +404,29 @@ export const Router = {
     this.persistWebOsResumeRoute(this.current, this.currentParams);
   },
 
+  async backFromPendingNavigation() {
+    // The current history entry still represents the caller until mount completes.
+    // Restore that entry in place so a fast Back neither skips it nor records a stale route.
+    const historyState = window?.history?.state || null;
+    const targetRoute = String(historyState?.route || "");
+
+    if (targetRoute && this.routes[targetRoute]) {
+      const previous = this.stack[this.stack.length - 1];
+      const previousRoute = typeof previous === "string" ? previous : previous?.route;
+      if (previousRoute === targetRoute) {
+        this.stack.pop();
+      }
+      await this.navigate(targetRoute, historyState.params || {}, {
+        fromHistory: true,
+        skipStackPush: true,
+        isBackNavigation: true
+      });
+      return;
+    }
+
+    await this.back({ skipConsume: true, skipHistory: true });
+  },
+
   async back(options = {}) {
     const currentScreen = this.getCurrentScreen();
     const consumeResult = !options?.skipConsume
@@ -421,7 +444,12 @@ export const Router = {
       return;
     }
 
-    if (window?.history && typeof window.history.back === "function" && this.historyInitialized) {
+    if (
+      !options?.skipHistory &&
+      window?.history &&
+      typeof window.history.back === "function" &&
+      this.historyInitialized
+    ) {
       if (options?.skipConsume) {
         this.skipConsumeNextPopstate = true;
       }

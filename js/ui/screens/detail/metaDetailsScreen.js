@@ -6866,16 +6866,7 @@ export const MetaDetailsScreen = {
       return true;
     }
     if (this.isLoadingDetail) {
-      // Loading details must use the same Tizen Back contract as loaded ones.
-      Router.navigate(
-        "home",
-        {},
-        {
-          isBackNavigation: true,
-          skipStackPush: true,
-          replaceHistory: true
-        }
-      );
+      void Router.backFromPendingNavigation();
       return true;
     }
     return false;
