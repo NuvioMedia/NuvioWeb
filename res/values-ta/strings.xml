@@ -143,6 +143,9 @@
     <string name="cw_min_left">%1$dm மீதம்</string>
     <string name="cw_almost_done">கிட்டத்தட்ட முடிந்தது</string>
     <string name="cw_airs_date">ஒளிபரப்பு %1$s</string>
+    <string name="cw_airs_today">இன்று ஒளிபரப்பாகும்</string>
+    <string name="cw_airs_tomorrow">நாளை ஒளிபரப்பாகும்</string>
+    <string name="cw_airs_in_days">இன்னும் %1$d நாட்களில் ஒளிபரப்பாகும்</string>
     <string name="cw_action_go_to_details">விவரங்களுக்கு செல்</string>
     <string name="cw_action_start_from_beginning">தொடக்கத்திலிருந்து தொடங்கு</string>
     <string name="cw_action_remove">நீக்கு</string>

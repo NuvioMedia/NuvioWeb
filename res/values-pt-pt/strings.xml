@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Estreia em %1$s</string>
     <string name="cw_airs_today">Estreia hoje</string>
     <string name="cw_airs_tomorrow">Estreia amanhã</string>
+    <string name="cw_airs_in_days">Estreia daqui a %1$d dias</string>
     <string name="cw_action_go_to_details">Ir para os detalhes</string>
     <string name="cw_action_start_from_beginning">Começar do início</string>
     <string name="cw_action_remove">Remover</string>

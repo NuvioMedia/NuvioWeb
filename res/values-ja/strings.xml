@@ -54,6 +54,7 @@
     <string name="cw_airs_date">%1$s 放送予定</string>
     <string name="cw_airs_today">本日放送</string>
     <string name="cw_airs_tomorrow">明日放送</string>
+    <string name="cw_airs_in_days">%1$d日後に放送</string>
     <string name="cw_action_go_to_details">詳細へ</string>
     <string name="cw_action_start_from_beginning">最初から再生</string>
     <string name="cw_action_remove">削除</string>

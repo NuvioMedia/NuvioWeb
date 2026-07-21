@@ -54,6 +54,7 @@
     <string name="cw_airs_date">Sendinger %1$s</string>
     <string name="cw_airs_today">Sendes i dag</string>
     <string name="cw_airs_tomorrow">Sendes i morgen</string>
+    <string name="cw_airs_in_days">Sendes om %1$d dager</string>
     <string name="cw_action_go_to_details">Gå til detaljer</string>
     <string name="cw_action_start_from_beginning">Start fra begynnelsen</string>
     <string name="cw_action_remove">Fjern</string>

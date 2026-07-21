@@ -54,6 +54,7 @@
     <string name="cw_airs_date">Se transmite %1$s</string>
     <string name="cw_airs_today">Se transmite hoy</string>
     <string name="cw_airs_tomorrow">Se transmite mañana</string>
+    <string name="cw_airs_in_days">Se transmite dentro de %1$d días</string>
     <string name="cw_action_go_to_details">Ir a detalles</string>
     <string name="cw_action_start_from_beginning">Empezar desde el principio</string>
     <string name="cw_action_remove">Eliminar</string>

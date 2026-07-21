@@ -17,6 +17,7 @@
     <string name="cw_airs_date">Phát sóng %1$s</string>
     <string name="cw_airs_today">Phát sóng hôm nay</string>
     <string name="cw_airs_tomorrow">Phát sóng ngày mai</string>
+    <string name="cw_airs_in_days">Phát sóng trong %1$d ngày nữa</string>
     <string name="cw_action_go_to_details">Xem chi tiết</string>
     <string name="cw_action_start_from_beginning">Xem từ đầu</string>
     <string name="cw_action_remove">Xoá</string>

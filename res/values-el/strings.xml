@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Πρεμιέρα %1$s</string>
     <string name="cw_airs_today">Πρεμιέρα σήμερα</string>
     <string name="cw_airs_tomorrow">Πρεμιέρα αύριο</string>
+    <string name="cw_airs_in_days">Πρεμιέρα σε %1$d ημέρες</string>
     <string name="cw_action_go_to_details">Μετάβαση σε λεπτομέρειες</string>
     <string name="cw_action_start_from_beginning">Έναρξη από την αρχή</string>
     <string name="cw_action_remove">Αφαίρεση</string>

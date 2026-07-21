@@ -109,6 +109,7 @@
     <string name="cw_airs_date">Выходит %1$s</string>
     <string name="cw_airs_today">Выходит сегодня</string>
     <string name="cw_airs_tomorrow">Выходит завтра</string>
+    <string name="cw_airs_in_days">Выходит через %1$d дней</string>
     <string name="cw_action_go_to_details">Перейти к деталям</string>
     <string name="cw_action_start_from_beginning">Начать сначала</string>
     <string name="cw_action_remove">Удалить</string>

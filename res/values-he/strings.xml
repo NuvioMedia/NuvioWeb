@@ -48,6 +48,7 @@
     <string name="cw_airs_date">שידור ב-%1$s</string>
     <string name="cw_airs_today">שידור היום</string>
     <string name="cw_airs_tomorrow">שידור מחר</string>
+    <string name="cw_airs_in_days">יעלה בעוד %1$d ימים</string>
     <string name="cw_action_go_to_details">עבור לפרטים</string>
     <string name="cw_action_start_from_beginning">התחל מהתחלה</string>
     <string name="cw_action_remove">הסר</string>

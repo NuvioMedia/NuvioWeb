@@ -145,6 +145,7 @@
     <string name="cw_airs_date">将于 %1$s 播出</string>
     <string name="cw_airs_today">今天播出</string>
     <string name="cw_airs_tomorrow">明天播出</string>
+    <string name="cw_airs_in_days">%1$d 天后播出</string>
     <string name="cw_action_go_to_details">查看详情</string>
     <string name="cw_action_start_from_beginning">从头开始</string>
     <string name="cw_action_remove">移除</string>

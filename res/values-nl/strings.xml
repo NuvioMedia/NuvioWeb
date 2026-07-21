@@ -17,6 +17,7 @@
     <string name="cw_airs_date">Uitgezonden op %1$s</string>
     <string name="cw_airs_today">Vandaag uitgezonden</string>
     <string name="cw_airs_tomorrow">Morgen uitgezonden</string>
+    <string name="cw_airs_in_days">Uitgezonden over %1$d dagen</string>
     <string name="cw_action_go_to_details">Ga naar details</string>
     <string name="cw_action_start_from_beginning">Start vanaf het begin</string>
     <string name="cw_action_remove">Verwijder</string>

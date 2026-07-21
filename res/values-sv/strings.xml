@@ -49,6 +49,7 @@
     <string name="cw_airs_date">Sänds %1$s</string>
     <string name="cw_airs_today">Sänds idag</string>
     <string name="cw_airs_tomorrow">Sänds imorgon</string>
+    <string name="cw_airs_in_days">Sänds om %1$d dagar</string>
     <string name="cw_action_go_to_details">Gå till detaljer</string>
     <string name="cw_action_start_from_beginning">Börja om från början</string>
     <string name="cw_action_remove">Ta bort</string>

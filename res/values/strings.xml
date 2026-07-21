@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Airs %1$s</string>
     <string name="cw_airs_today">Airs Today</string>
     <string name="cw_airs_tomorrow">Airs Tomorrow</string>
+    <string name="cw_airs_in_days">Airs in %1$d Days</string>
     <string name="cw_action_go_to_details">Go to details</string>
     <string name="cw_action_start_from_beginning">Start from beginning</string>
     <string name="cw_action_remove">Remove</string>
@@ -2223,6 +2224,7 @@
     <string name="player_error_stream_rate_limited">\n\nToo many requests to the stream source. Wait a moment and try again.</string>
     <string name="player_error_stream_unavailable">\n\nThe stream server is currently unavailable. Try a different source.</string>
     <string name="player_error_source_invalid_content">Source error: The stream source returned invalid or unplayable content. The link may have expired or the server returned an error page instead of video.\n\nTry a different source. [%1$s]</string>
+    <string name="player_error_web_headers_unsupported">This source is not compatible with this device's player because it requires special request headers. Try a different source or contact the add-on provider.</string>
     <string name="player_error_decoder">Decoder error</string>
     <string name="player_error_unsupported_format">This stream uses a format your device may not support. Try a different source. [%1$s]</string>
     <string name="player_error_initialize_failed">Failed to initialize player</string>

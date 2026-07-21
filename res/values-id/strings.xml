@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Tayang %1$s</string>
     <string name="cw_airs_today">Tayang hari ini</string>
     <string name="cw_airs_tomorrow">Tayang besok</string>
+    <string name="cw_airs_in_days">Tayang dalam %1$d hari</string>
     <string name="cw_action_go_to_details">Lihat detail</string>
     <string name="cw_action_start_from_beginning">Mulai dari awal</string>
     <string name="cw_action_remove">Hapus</string>

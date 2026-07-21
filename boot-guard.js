@@ -397,16 +397,18 @@
 
   function readWebOsInfo() {
     var palmInfo = parseJson(window.PalmSystem && window.PalmSystem.deviceInfo);
-    var platformVersion =
+    var firmwareVersion =
+      palmInfo.firmwareVersion ||
       palmInfo.platformVersion ||
       (palmInfo.platformVersionMajor
         ? String(palmInfo.platformVersionMajor) + "." + String(palmInfo.platformVersionMinor || 0)
         : "");
+    var platformVersion = palmInfo.sdkVersion || "";
     return {
       platform: "webos",
       platformVersion: platformVersion,
-      platformMajor: Number(palmInfo.platformVersionMajor || parseMajor(platformVersion)),
-      firmwareVersion: palmInfo.firmwareVersion || "",
+      platformMajor: parseMajor(platformVersion),
+      firmwareVersion: firmwareVersion,
       modelName: palmInfo.modelName || "",
       chromeMajor: parseChromeMajor()
     };
@@ -487,11 +489,16 @@
   function compatibilityDecision(info, options) {
     var minVersion = Number(options.minVersion || 0);
     var minChrome = Number(options.minChrome || 0);
-    if (info.platformMajor > 0) {
-      return info.platformMajor < minVersion ? "unsupported" : "supported";
+    var hasPlatformVersion = info.platformMajor > 0 && minVersion > 0;
+    var hasChromeVersion = info.chromeMajor > 0 && minChrome > 0;
+    if (
+      (hasPlatformVersion && info.platformMajor < minVersion) ||
+      (hasChromeVersion && info.chromeMajor < minChrome)
+    ) {
+      return "unsupported";
     }
-    if (info.chromeMajor > 0 && minChrome > 0) {
-      return info.chromeMajor < minChrome ? "unsupported" : "supported";
+    if (hasPlatformVersion || hasChromeVersion) {
+      return "supported";
     }
     return "unknown";
   }

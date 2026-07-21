@@ -109,6 +109,7 @@
     <string name="cw_airs_date">يُعرض في %1$s</string>
     <string name="cw_airs_today">يُعرض اليوم</string>
     <string name="cw_airs_tomorrow">يُعرض غداً</string>
+    <string name="cw_airs_in_days">يُعرض بعد %1$d يوم</string>
     <string name="cw_action_go_to_details">التفاصيل</string>
     <string name="cw_action_start_from_beginning">البدء من البداية</string>
     <string name="cw_action_remove">إزالة</string>

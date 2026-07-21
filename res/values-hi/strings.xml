@@ -46,6 +46,7 @@
     <string name="cw_airs_date">%1$s को प्रसारित होगा</string>
     <string name="cw_airs_today">आज प्रसारित होगा</string>
     <string name="cw_airs_tomorrow">कल प्रसारित होगा</string>
+    <string name="cw_airs_in_days">%1$d दिनों में प्रसारित होगा</string>
     <string name="cw_action_go_to_details">विवरण देखें</string>
     <string name="cw_action_start_from_beginning">शुरुआत से चलाएँ</string>
     <string name="cw_action_remove">हटाएँ</string>

@@ -109,6 +109,7 @@
     <string name="cw_airs_date">In onda il %1$s</string>
     <string name="cw_airs_today">In onda oggi</string>
     <string name="cw_airs_tomorrow">In onda domani</string>
+    <string name="cw_airs_in_days">In onda tra %1$d giorni</string>
     <string name="cw_action_go_to_details">Vai ai dettagli</string>
     <string name="cw_action_start_from_beginning">Comincia dall\'inizio</string>
     <string name="cw_action_remove">Rimuovi</string>

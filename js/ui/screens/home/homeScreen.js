@@ -1048,7 +1048,9 @@ function parseEpisodeReleaseDateForContinueWatching(released) {
 }
 
 function resolveNextUpReleaseState(item = {}) {
-  const releaseTimestamp = parseEpisodeReleaseDateForContinueWatching(item?.released);
+  const releaseTimestamp = parseEpisodeReleaseDateForContinueWatching(
+    firstNonEmpty(item?.released, item?.releaseInfo)
+  );
   const seedUpdatedAt = Number(item?.seedUpdatedAt ?? item?.updatedAt ?? 0) || 0;
   const hasAired = releaseTimestamp == null
     ? item?.hasAired !== false
@@ -1069,6 +1071,66 @@ function resolveNextUpReleaseState(item = {}) {
     isNewSeasonRelease: Boolean(isReleaseAlert && seedSeason > 0 && nextSeason > 0 && nextSeason !== seedSeason),
     sortTimestamp: isReleaseAlert ? releaseTimestamp : seedUpdatedAt
   };
+}
+
+function parseEpisodeReleaseCalendarDateForContinueWatching(released) {
+  const raw = String(released || "").trim();
+  if (!raw) {
+    return null;
+  }
+  const dateOnlyMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dateOnlyMatch) {
+    return new Date(
+      Number(dateOnlyMatch[1]),
+      Number(dateOnlyMatch[2]) - 1,
+      Number(dateOnlyMatch[3])
+    );
+  }
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed;
+  }
+  const embeddedDate = raw.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  return embeddedDate
+    ? new Date(Number(embeddedDate[1]), Number(embeddedDate[2]) - 1, Number(embeddedDate[3]))
+    : null;
+}
+
+function continueWatchingCalendarDayNumber(date) {
+  return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / (24 * 60 * 60 * 1000));
+}
+
+function buildNextUpAirDateStatus(item = {}) {
+  const releaseValue = firstNonEmpty(item?.released, item?.releaseInfo);
+  const releaseDate = parseEpisodeReleaseCalendarDateForContinueWatching(releaseValue);
+  if (!releaseDate || Number.isNaN(releaseDate.getTime())) {
+    return "";
+  }
+  const daysUntil = continueWatchingCalendarDayNumber(releaseDate)
+    - continueWatchingCalendarDayNumber(new Date());
+  if (daysUntil < 0) {
+    return "";
+  }
+  if (daysUntil === 0) {
+    return t("cw_airs_today", {}, "Airs Today");
+  }
+  if (daysUntil === 1) {
+    return t("cw_airs_tomorrow", {}, "Airs Tomorrow");
+  }
+  if (daysUntil <= 7) {
+    return t("cw_airs_in_days", [daysUntil], "Airs in %1$d Days");
+  }
+  let dateLabel = "";
+  try {
+    dateLabel = releaseDate.toLocaleDateString(I18n.getLocale(), {
+      month: "long",
+      day: "numeric",
+      year: "numeric"
+    });
+  } catch (_) {
+    dateLabel = String(releaseValue || "").match(/\b\d{4}-\d{2}-\d{2}\b/)?.[0] || "";
+  }
+  return dateLabel ? t("cw_airs_date", [dateLabel], "Airs %1$s") : "";
 }
 
 function continueWatchingSortTimestamp(item = {}) {
@@ -1143,6 +1205,9 @@ function buildProgressStatus(item) {
       return item?.isNewSeasonRelease
         ? t("cw_new_season", {}, "New Season")
         : t("cw_new_episode", {}, "New Episode");
+    }
+    if (item?.hasAired === false) {
+      return buildNextUpAirDateStatus(item) || t("cw_upcoming", {}, "Upcoming");
     }
     return t("home.continueStatusNextUp", {}, "Next Up");
   }

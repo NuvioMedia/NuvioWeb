@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Ausstrahlung am %1$s</string>
     <string name="cw_airs_today">Ausstrahlung heute</string>
     <string name="cw_airs_tomorrow">Ausstrahlung morgen</string>
+    <string name="cw_airs_in_days">Ausstrahlung in %1$d Tagen</string>
     <string name="cw_action_go_to_details">Zu den Details gehen</string>
     <string name="cw_action_start_from_beginning">Von Anfang an starten</string>
     <string name="cw_action_remove">Entfernen</string>

@@ -16,6 +16,7 @@
     <string name="cw_airs_date">Emisja %1$s</string>
     <string name="cw_airs_today">Emisja dzisiaj</string>
     <string name="cw_airs_tomorrow">Emisja jutro</string>
+    <string name="cw_airs_in_days">Emisja za %1$d dni</string>
     <string name="cw_action_go_to_details">Przejdź do szczegółów</string>
     <string name="cw_action_remove">Usuń</string>
     <string name="cw_dialog_subtitle">Wybierz co chcesz zrobić z tym elementem.</string>

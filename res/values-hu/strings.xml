@@ -49,6 +49,9 @@
     <string name="cw_min_left">%1$d perc van hátra</string>
     <string name="cw_almost_done">Mindjárt kész</string>
     <string name="cw_airs_date">Premier: %1$s</string>
+    <string name="cw_airs_today">Premier ma</string>
+    <string name="cw_airs_tomorrow">Premier holnap</string>
+    <string name="cw_airs_in_days">Premier %1$d nap múlva</string>
     <string name="cw_action_go_to_details">Részletek</string>
     <string name="cw_action_start_from_beginning">Indítás elölről</string>
     <string name="cw_action_remove">Eltávolítás</string>

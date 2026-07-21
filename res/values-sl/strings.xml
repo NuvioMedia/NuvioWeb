@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Na sporedu %1$s</string>
     <string name="cw_airs_today">Na sporedu danes</string>
     <string name="cw_airs_tomorrow">Na sporedu jutri</string>
+    <string name="cw_airs_in_days">Na sporedu čez %1$d dni</string>
     <string name="cw_action_go_to_details">Pojdi na podrobnosti</string>
     <string name="cw_action_start_from_beginning">Začni od začetka</string>
     <string name="cw_action_remove">Odstrani</string>

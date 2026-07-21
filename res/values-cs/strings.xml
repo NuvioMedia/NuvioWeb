@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Vysílá se %1$s</string>
     <string name="cw_airs_today">Vysílá se dnes</string>
     <string name="cw_airs_tomorrow">Vysílá se zítra</string>
+    <string name="cw_airs_in_days">Vysílá se za %1$d dní</string>
     <string name="cw_action_go_to_details">Přejít na podrobnosti</string>
     <string name="cw_action_start_from_beginning">Přehrát od začátku</string>
     <string name="cw_action_remove">Odebrat</string>

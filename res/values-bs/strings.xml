@@ -109,6 +109,7 @@
     <string name="cw_airs_date">Prikazuje se %1$s</string>
     <string name="cw_airs_today">Prikazuje se danas</string>
     <string name="cw_airs_tomorrow">Prikazuje se sutra</string>
+    <string name="cw_airs_in_days">Prikazuje se za %1$d dana</string>
     <string name="cw_action_go_to_details">Idi na detalje</string>
     <string name="cw_action_start_from_beginning">Počni ispočetka</string>
     <string name="cw_action_remove">Ukloni</string>

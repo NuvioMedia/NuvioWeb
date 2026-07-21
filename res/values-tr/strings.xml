@@ -145,6 +145,7 @@
     <string name="cw_airs_date">Yayın tarihi: %1$s</string>
     <string name="cw_airs_today">Bugün yayında</string>
     <string name="cw_airs_tomorrow">Yarın yayında</string>
+    <string name="cw_airs_in_days">Yayın tarihi: %1$d gün sonra</string>
     <string name="cw_action_go_to_details">Detaylara git</string>
     <string name="cw_action_start_from_beginning">Baştan başla</string>
     <string name="cw_action_remove">Kaldır</string>
