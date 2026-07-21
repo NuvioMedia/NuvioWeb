@@ -46,6 +46,11 @@ function normalizeAvPlaySubtitleRenderMode(value) {
   return String(value || "").trim().toLowerCase() === "html" ? "html" : "native";
 }
 
+function isAbsoluteLocalAvPlaySubtitlePath(value) {
+  const path = String(value || "").trim();
+  return path.startsWith("/") || /^file:\/\//i.test(path);
+}
+
 // com.webos.media exposes five discrete subtitle sizes (0=tiny, 4=largest).
 function resolveWebOsSubtitleFontSizeLevel(value) {
   const size = Number(value);
@@ -1214,25 +1219,13 @@ export const PlayerController = {
   },
 
   clearAvPlayExternalSubtitlePath() {
-    const hadExternalSubtitlePath = Boolean(String(this.avplayExternalSubtitlePath || "").trim());
     this.avplayExternalSubtitlePath = "";
     this.avplayExternalSubtitleDelayMs = 0;
     this.appliedAvPlayExternalSubtitleDelayKey = "";
-    // Internal AVPlay subtitles require no external path configuration. Avoid
-    // resetting the external-subtitle API unless Nuvio actually configured it.
-    if (!hadExternalSubtitlePath) {
-      return true;
-    }
-    const avplay = this.getAvPlay();
-    if (!avplay || typeof avplay.setExternalSubtitlePath !== "function") {
-      return false;
-    }
-    try {
-      avplay.setExternalSubtitlePath("");
-      return true;
-    } catch (_) {
-      return false;
-    }
+    // AVPlay has no documented "clear" value: the API accepts only an
+    // absolute local path. Track selection and setSilentSubtitle control the
+    // active output without sending an invalid empty path to the player.
+    return true;
   },
 
   applyAvPlaySubtitleRenderMode(renderMode = this.avplaySubtitleRenderMode) {
@@ -1725,6 +1718,12 @@ export const PlayerController = {
     this.avplaySubtitleSelectionToken = Number(this.avplaySubtitleSelectionToken || 0) + 1;
 
     const path = String(subtitleUrl || "").trim();
+    // Samsung AVPlay does not download external subtitles. Passing an HTTP(S)
+    // URL is accepted synchronously on some TVs but later aborts through the
+    // player onerror callback with PLAYER_ERROR_CONNECTION_FAILED.
+    if (Platform.isTizen() && !isAbsoluteLocalAvPlaySubtitlePath(path)) {
+      return false;
+    }
     try {
       avplay.setExternalSubtitlePath(path);
       try {
