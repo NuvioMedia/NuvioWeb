@@ -57,6 +57,13 @@ import {
   parseVttCueLayout
 } from "../../../core/player/subtitleCueLayout.js";
 import {
+  SUBTITLE_VERTICAL_OFFSET_DEFAULT,
+  SUBTITLE_VERTICAL_OFFSET_PLAYER_STEP,
+  formatSubtitleVerticalOffset,
+  normalizeSubtitleVerticalOffset,
+  splitSubtitleVerticalOffset
+} from "../../../core/player/subtitleVerticalOffset.js";
+import {
   BitmapSubtitleDecoder,
   supportsBitmapSubtitleDecoding,
   warmBitmapSubtitleDecoder
@@ -390,7 +397,7 @@ const SUBTITLE_DELAY_MIN_MS = -60000;
 const SUBTITLE_DELAY_MAX_MS = 60000;
 const SUBTITLE_DELAY_STEP_MS = 100;
 const SUBTITLE_FONT_STEP = 10;
-const SUBTITLE_VERTICAL_OFFSET_STEP = 1;
+const SUBTITLE_VERTICAL_OFFSET_STEP = SUBTITLE_VERTICAL_OFFSET_PLAYER_STEP;
 const AUDIO_AMPLIFICATION_MIN_DB = 0;
 const AUDIO_AMPLIFICATION_MAX_DB = 10;
 const PLAYER_SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
@@ -1522,15 +1529,15 @@ function formatSubtitleDelay(delayMs = 0) {
   return `${seconds >= 0 ? "+" : ""}${seconds.toFixed(3)}s`;
 }
 
-function normalizeSubtitleFontSize(value = 100) {
-  const parsed = Number(value || 100);
+function normalizeSubtitleFontSize(value = 120) {
+  const parsed = Number(value ?? 120);
   if (!Number.isFinite(parsed)) {
-    return 100;
+    return 120;
   }
   return clamp(Math.round(parsed), 50, 200);
 }
 
-function formatHtmlSubtitleFontSize(value = 100) {
+function formatHtmlSubtitleFontSize(value = 120) {
   const scale = normalizeSubtitleFontSize(value) / 100;
   const documentRef = globalThis?.document;
   const viewportHeight = Number(
@@ -1543,30 +1550,6 @@ function formatHtmlSubtitleFontSize(value = 100) {
     ? clamp(viewportHeight * 0.044, 30, 82)
     : 48;
   return `${Math.round(basePx * scale)}px`;
-}
-
-function normalizeSubtitleVerticalOffset(value = 0) {
-  const parsed = Number(value || 0);
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-  const normalized = clamp(Math.round(parsed), -12, 12);
-  return Object.is(normalized, -0) ? 0 : normalized;
-}
-
-function splitSubtitleVerticalOffset(value = 0) {
-  const normalized = normalizeSubtitleVerticalOffset(value);
-  const lineOffset = normalized < 0 ? Math.ceil(normalized) : Math.floor(normalized);
-  const residualOffset = Number((normalized - lineOffset).toFixed(2));
-  return {
-    value: normalized,
-    lineOffset,
-    residualOffset: Object.is(residualOffset, -0) ? 0 : residualOffset
-  };
-}
-
-function formatSubtitleVerticalOffset(value = 0) {
-  return String(normalizeSubtitleVerticalOffset(value));
 }
 
 function normalizeSubtitleLanguageKey(value) {
@@ -2191,6 +2174,7 @@ export const PlayerScreen = {
     this.sourceFilter = "all";
     this.sourcesFocus = { zone: "filter", index: 0 };
     this.sourceLoadToken = 0;
+    this.completedSourceRequestKey = "";
     this.streamCandidatesByVideoId = new Map();
     this.streamCandidatesLoadPromises = new Map();
 
@@ -11281,7 +11265,7 @@ export const PlayerScreen = {
     const viewportHeight = Math.max(1, Number(viewport?.height || window.innerHeight || document.documentElement?.clientHeight || 1080));
     const style = this.subtitleStyleSettings || {};
     const sizeScale = normalizeSubtitleFontSize(style.fontSize) / 100;
-    const verticalOffsetPx = normalizeSubtitleVerticalOffset(style.verticalOffset) * -0.02 * viewportHeight;
+    const verticalOffsetPx = splitSubtitleVerticalOffset(style.verticalOffset).value * -0.02 * viewportHeight;
     const mode = this.aspectModes[this.aspectModeIndex] || this.aspectModes[0];
     const rect = this.calculateAspectRect(mode.objectFit, PlayerController.video);
     const renderKey = [
@@ -12994,7 +12978,7 @@ export const PlayerScreen = {
         SUBTITLE_DELAY_MAX_MS
       );
     } else if (controlId === "fontSize") {
-      style.fontSize = normalizeSubtitleFontSize(Number(style.fontSize || 100) + (delta * SUBTITLE_FONT_STEP));
+      style.fontSize = normalizeSubtitleFontSize(Number(style.fontSize || 120) + (delta * SUBTITLE_FONT_STEP));
     } else if (controlId === "bold" && delta !== 0) {
       style.bold = !style.bold;
     } else if (controlId === "textColor" && delta !== 0) {
@@ -13006,11 +12990,23 @@ export const PlayerScreen = {
       const currentIndex = Math.max(0, SUBTITLE_OUTLINE_COLORS.indexOf(String(style.outlineColor || "#000000").toUpperCase()));
       style.outlineColor = SUBTITLE_OUTLINE_COLORS[clamp(currentIndex + delta, 0, SUBTITLE_OUTLINE_COLORS.length - 1)];
     } else if (controlId === "verticalOffset") {
-      style.verticalOffset = normalizeSubtitleVerticalOffset(Number(style.verticalOffset || 0) + (delta * SUBTITLE_VERTICAL_OFFSET_STEP));
+      style.verticalOffset = normalizeSubtitleVerticalOffset(
+        Number(style.verticalOffset ?? SUBTITLE_VERTICAL_OFFSET_DEFAULT)
+          + (delta * SUBTITLE_VERTICAL_OFFSET_STEP)
+      );
     } else if (controlId === "reset") {
-      const defaults = PlayerSettingsStore.get().subtitleStyle;
+      const defaults = PlayerSettingsStore.getDefaults().subtitleStyle;
       this.subtitleDelayMs = 0;
-      this.subtitleStyleSettings = { ...defaults };
+      this.subtitleStyleSettings = {
+        ...style,
+        fontSize: defaults.fontSize,
+        textColor: defaults.textColor,
+        bold: defaults.bold,
+        outlineEnabled: defaults.outlineEnabled,
+        outlineColor: defaults.outlineColor,
+        verticalOffset: defaults.verticalOffset,
+        verticalOffsetContract: defaults.verticalOffsetContract
+      };
     }
 
     if (controlId !== "delay" && controlId !== "reset") {
@@ -14541,9 +14537,27 @@ export const PlayerScreen = {
     this.updateModalBackdrop();
     void this.preloadPlayerSourceLogos();
 
-    if (forceReload || !this.streamCandidates.length) {
+    const sourceRequestKey = this.getSourceRequestKey();
+    // The candidates passed into the player are only a snapshot of the addons
+    // that had replied before playback started. Refresh once per video so a
+    // slower addon can still join the in-player list without a manual reload.
+    if (forceReload || !sourceRequestKey || sourceRequestKey !== this.completedSourceRequestKey) {
       this.reloadSources();
     }
+  },
+
+  getSourceRequestKey() {
+    const type = normalizeItemType(this.params?.itemType || "movie");
+    const videoId = String(this.params?.videoId || this.params?.itemId || "").trim();
+    if (!videoId) {
+      return "";
+    }
+    return [
+      type,
+      videoId,
+      this.params?.season ?? "",
+      this.params?.episode ?? ""
+    ].join("|");
   },
 
   closeSourcesPanel() {
@@ -14564,6 +14578,7 @@ export const PlayerScreen = {
     if (!videoId) {
       return;
     }
+    const sourceRequestKey = this.getSourceRequestKey();
 
     const token = this.sourceLoadToken + 1;
     this.sourceLoadToken = token;
@@ -14612,6 +14627,7 @@ export const PlayerScreen = {
       }
     } finally {
       if (token === this.sourceLoadToken) {
+        this.completedSourceRequestKey = sourceRequestKey;
         this.sourcesLoading = false;
         this.renderSourcesPanel();
         void this.preloadPlayerSourceLogos();

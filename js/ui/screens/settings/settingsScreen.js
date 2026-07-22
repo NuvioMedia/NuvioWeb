@@ -8,6 +8,12 @@ import { HomeCatalogStore } from "../../../data/local/homeCatalogStore.js";
 import { ThemeStore } from "../../../data/local/themeStore.js";
 import { ThemeManager } from "../../theme/themeManager.js";
 import { PlayerSettingsStore } from "../../../data/local/playerSettingsStore.js";
+import {
+  SUBTITLE_VERTICAL_OFFSET_DEFAULT,
+  SUBTITLE_VERTICAL_OFFSET_MAX,
+  SUBTITLE_VERTICAL_OFFSET_MIN,
+  normalizeSubtitleVerticalOffset
+} from "../../../core/player/subtitleVerticalOffset.js";
 import { TorrentSettingsStore } from "../../../data/local/torrentSettingsStore.js";
 import { WebOsAudioCompatibilityStore } from "../../../data/local/webOsAudioCompatibilityStore.js";
 import { LayoutPreferences } from "../../../data/local/layoutPreferences.js";
@@ -377,15 +383,18 @@ const SUBTITLE_SIZE_OPTIONS = [
   { id: 200, label: "200%" }
 ];
 
-const SUBTITLE_OFFSET_OPTIONS = [
-  { id: -12, label: "Lowest" },
-  { id: -8, label: "Lower" },
-  { id: -4, label: "Low" },
-  { id: 0, label: "Default" },
-  { id: 4, label: "High" },
-  { id: 8, label: "Higher" },
-  { id: 12, label: "Highest" }
-];
+const SUBTITLE_OFFSET_OPTIONS = Array.from(
+  { length: SUBTITLE_VERTICAL_OFFSET_MAX - SUBTITLE_VERTICAL_OFFSET_MIN + 1 },
+  (_, index) => {
+    const value = SUBTITLE_VERTICAL_OFFSET_MIN + index;
+    return {
+      id: value,
+      label: value === SUBTITLE_VERTICAL_OFFSET_DEFAULT
+        ? `Default (${value}%)`
+        : `${value}%`
+    };
+  }
+);
 
 const SUBTITLE_TEXT_COLOR_OPTIONS = [
   { id: "#FFFFFF", label: "White" },
@@ -411,17 +420,13 @@ function normalizeSubtitleStyleHex(value, fallback) {
 function clampSubtitleSize(value) {
   const parsed = Math.round(Number(value));
   if (!Number.isFinite(parsed)) {
-    return 100;
+    return 120;
   }
   return Math.min(200, Math.max(50, parsed));
 }
 
 function clampSubtitleOffset(value) {
-  const parsed = Math.round(Number(value));
-  if (!Number.isFinite(parsed)) {
-    return 0;
-  }
-  return Math.min(12, Math.max(-12, parsed));
+  return normalizeSubtitleVerticalOffset(value);
 }
 
 const TMDB_LANGUAGE_OPTIONS = [
@@ -5208,7 +5213,7 @@ export const SettingsScreen = {
       this.openOptionDialog({
         title: t("settings.playback.subtitleSize.title", {}, "Subtitle size"),
         options: SUBTITLE_SIZE_OPTIONS,
-        selectedId: clampSubtitleSize(PlayerSettingsStore.get().subtitleStyle?.fontSize ?? 100),
+        selectedId: clampSubtitleSize(PlayerSettingsStore.get().subtitleStyle?.fontSize ?? 120),
         returnFocusKey: "playback:subtitleSize",
         onSelect: (option) => {
           updateSubtitleStyle({ fontSize: clampSubtitleSize(option.id) });
@@ -5219,7 +5224,10 @@ export const SettingsScreen = {
       this.openOptionDialog({
         title: t("settings.playback.subtitleOffset.title", {}, "Subtitle position"),
         options: SUBTITLE_OFFSET_OPTIONS,
-        selectedId: clampSubtitleOffset(PlayerSettingsStore.get().subtitleStyle?.verticalOffset ?? 0),
+        selectedId: clampSubtitleOffset(
+          PlayerSettingsStore.get().subtitleStyle?.verticalOffset
+            ?? SUBTITLE_VERTICAL_OFFSET_DEFAULT
+        ),
         returnFocusKey: "playback:subtitleOffset",
         onSelect: (option) => {
           updateSubtitleStyle({ verticalOffset: clampSubtitleOffset(option.id) });
@@ -5488,8 +5496,8 @@ export const SettingsScreen = {
           subtitle: t("settings.playback.subtitleSize.subtitle", {}, "Text size used for subtitles during playback."),
           value: labelForOptionId(
             SUBTITLE_SIZE_OPTIONS,
-            clampSubtitleSize(model.player.subtitleStyle?.fontSize ?? 100),
-            `${clampSubtitleSize(model.player.subtitleStyle?.fontSize ?? 100)}%`
+            clampSubtitleSize(model.player.subtitleStyle?.fontSize ?? 120),
+            `${clampSubtitleSize(model.player.subtitleStyle?.fontSize ?? 120)}%`
           )
         })}
         ${this.renderActionRow({
@@ -5498,8 +5506,11 @@ export const SettingsScreen = {
           subtitle: t("settings.playback.subtitleOffset.subtitle", {}, "Move subtitles up or down on the screen."),
           value: labelForOptionId(
             SUBTITLE_OFFSET_OPTIONS,
-            clampSubtitleOffset(model.player.subtitleStyle?.verticalOffset ?? 0),
-            t("settings.playback.subtitleOffset.default", {}, "Default")
+            clampSubtitleOffset(
+              model.player.subtitleStyle?.verticalOffset
+                ?? SUBTITLE_VERTICAL_OFFSET_DEFAULT
+            ),
+            `${SUBTITLE_VERTICAL_OFFSET_DEFAULT}%`
           )
         })}
         ${this.renderToggleRow({

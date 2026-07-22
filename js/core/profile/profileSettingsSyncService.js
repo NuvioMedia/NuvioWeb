@@ -28,6 +28,7 @@ import {
   clearProfileSettingsCloudSyncPending,
   hasProfileSettingsCloudSyncPending
 } from "../../data/local/profileScopedStore.js";
+import { normalizeSubtitleVerticalOffset } from "../player/subtitleVerticalOffset.js";
 
 const PULL_RPC = "sync_pull_profile_settings_blob";
 const PUSH_RPC = "sync_push_profile_settings_blob";
@@ -888,10 +889,10 @@ const FEATURE_ADAPTERS = {
         subtitle_use_forced_subtitles: shouldUseForcedSubtitlesForAndroid(settings),
         subtitle_size: Math.min(
           200,
-          Math.max(50, Math.trunc(Number(settings.subtitleStyle?.fontSize ?? 100) || 100))
+          Math.max(50, Math.trunc(Number(settings.subtitleStyle?.fontSize ?? 120) || 120))
         ),
-        subtitle_vertical_offset: Math.trunc(
-          Number(settings.subtitleStyle?.verticalOffset ?? 0) || 0
+        subtitle_vertical_offset: normalizeSubtitleVerticalOffset(
+          settings.subtitleStyle?.verticalOffset
         ),
         subtitle_bold: Boolean(settings.subtitleStyle?.bold),
         subtitle_text_color: hexToAndroidColorInt(settings.subtitleStyle?.textColor, "#ffffff"),
@@ -988,7 +989,6 @@ const FEATURE_ADAPTERS = {
       });
       [
         "subtitle_size",
-        "subtitle_vertical_offset",
         "subtitle_text_color",
         "subtitle_outline_color",
         "audio_amplification_db"
@@ -997,6 +997,11 @@ const FEATURE_ADAPTERS = {
           projected[key] = Math.trunc(Number(raw[key]));
         }
       });
+      if (numberOrNull(raw.subtitle_vertical_offset) != null) {
+        projected.subtitle_vertical_offset = normalizeSubtitleVerticalOffset(
+          raw.subtitle_vertical_offset
+        );
+      }
       [
         "stream_auto_play_mode",
         "stream_auto_play_source",
@@ -1102,7 +1107,9 @@ const FEATURE_ADAPTERS = {
         subtitleStyle.fontSize = Math.min(200, Math.max(50, Math.trunc(Number(raw.subtitle_size))));
       }
       if (numberOrNull(raw.subtitle_vertical_offset) != null) {
-        subtitleStyle.verticalOffset = Math.trunc(Number(raw.subtitle_vertical_offset));
+        subtitleStyle.verticalOffset = normalizeSubtitleVerticalOffset(
+          raw.subtitle_vertical_offset
+        );
       }
       if (booleanOrNull(raw.subtitle_bold) != null) {
         subtitleStyle.bold = Boolean(raw.subtitle_bold);

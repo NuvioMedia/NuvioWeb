@@ -1,4 +1,9 @@
 import { createProfileScopedStore } from "./profileScopedStore.js";
+import {
+  SUBTITLE_VERTICAL_OFFSET_CONTRACT,
+  SUBTITLE_VERTICAL_OFFSET_DEFAULT,
+  normalizeSubtitleVerticalOffset
+} from "../../core/player/subtitleVerticalOffset.js";
 
 const KEY = "playerSettings";
 
@@ -17,12 +22,13 @@ const DEFAULTS = {
   stillWatchingEpisodeThreshold: 3,
   subtitleRenderMode: "native",
   subtitleStyle: {
-    fontSize: 100,
+    fontSize: 120,
     textColor: "#FFFFFF",
     bold: false,
     outlineEnabled: true,
     outlineColor: "#000000",
-    verticalOffset: 0,
+    verticalOffset: SUBTITLE_VERTICAL_OFFSET_DEFAULT,
+    verticalOffsetContract: SUBTITLE_VERTICAL_OFFSET_CONTRACT,
     preferredLanguage: "off",
     secondaryPreferredLanguage: "off",
     useForcedSubtitles: false,
@@ -154,12 +160,22 @@ function normalizeSelectableSubtitleLanguageCode(language, fallback = "off") {
   }
 }
 
-function normalizePlayerSettings(settings = {}) {
+export function normalizePlayerSettings(settings = {}) {
   const { subtitleDelayMs: _ignoredSubtitleDelayMs, ...persistentSettings } = settings || {};
   const subtitleStyle = {
     ...DEFAULTS.subtitleStyle,
     ...(persistentSettings.subtitleStyle || {})
   };
+  const storedOffsetContract = String(
+    persistentSettings.subtitleStyle?.verticalOffsetContract || ""
+  );
+  const storedOffset = persistentSettings.subtitleStyle?.verticalOffset;
+  subtitleStyle.verticalOffset = normalizeSubtitleVerticalOffset(
+    storedOffsetContract === SUBTITLE_VERTICAL_OFFSET_CONTRACT
+      ? storedOffset
+      : (Number(storedOffset) === 0 ? SUBTITLE_VERTICAL_OFFSET_DEFAULT : storedOffset)
+  );
+  subtitleStyle.verticalOffsetContract = SUBTITLE_VERTICAL_OFFSET_CONTRACT;
   let preferredLanguage = normalizeSelectableSubtitleLanguageCode(
     subtitleStyle.preferredLanguage ?? persistentSettings.subtitleLanguage,
     DEFAULTS.subtitleStyle.preferredLanguage
@@ -257,6 +273,10 @@ const store = createProfileScopedStore({
 });
 
 export const PlayerSettingsStore = {
+  getDefaults() {
+    return normalizePlayerSettings({});
+  },
+
   getForProfile(profileId) {
     return store.getForProfile(profileId);
   },

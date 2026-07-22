@@ -502,192 +502,6 @@ function getStreamDescriptionLines(stream = {}) {
     .slice(0, 12);
 }
 
-function normalizeBadgeText(value = "") {
-  return String(value || "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function toBadgeArray(value) {
-  return Array.isArray(value)
-    ? value.map(normalizeBadgeText).filter(Boolean)
-    : [normalizeBadgeText(value)].filter(Boolean);
-}
-
-function parsedStreamDetails(stream = {}) {
-  const resolve = stream.clientResolve || stream.raw?.clientResolve || {};
-  const raw = resolve.stream?.raw || {};
-  return raw.parsed || {};
-}
-
-function normalizeCodecBadge(value = "") {
-  const normalized = normalizeBadgeText(value)
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
-  if (!normalized) return "";
-  if (normalized === "av1") return "AV1";
-  if (["hevc", "h265", "x265"].includes(normalized)) return "HEVC";
-  if (["avc", "h264", "x264"].includes(normalized)) return "AVC";
-  return normalizeBadgeText(value).toUpperCase();
-}
-
-const LANGUAGE_BADGE_ALIASES = {
-  en: "🇬🇧",
-  eng: "🇬🇧",
-  english: "🇬🇧",
-  hi: "🇮🇳",
-  hin: "🇮🇳",
-  hindi: "🇮🇳",
-  it: "🇮🇹",
-  ita: "🇮🇹",
-  italian: "🇮🇹",
-  es: "🇪🇸",
-  spa: "🇪🇸",
-  spanish: "🇪🇸",
-  fr: "🇫🇷",
-  fra: "🇫🇷",
-  fre: "🇫🇷",
-  french: "🇫🇷",
-  de: "🇩🇪",
-  deu: "🇩🇪",
-  ger: "🇩🇪",
-  german: "🇩🇪",
-  pt: "🇵🇹",
-  por: "🇵🇹",
-  portuguese: "🇵🇹",
-  "pt-br": "🇧🇷",
-  ptbr: "🇧🇷",
-  br: "🇧🇷",
-  brazilian: "🇧🇷",
-  "brazilian portuguese": "🇧🇷",
-  pl: "🇵🇱",
-  polish: "🇵🇱",
-  cs: "🇨🇿",
-  czech: "🇨🇿",
-  la: "LAT",
-  latino: "LAT",
-  ja: "🇯🇵",
-  jpn: "🇯🇵",
-  japanese: "🇯🇵",
-  ko: "🇰🇷",
-  kor: "🇰🇷",
-  korean: "🇰🇷",
-  zh: "🇨🇳",
-  chinese: "🇨🇳",
-  multi: "Multi"
-};
-
-function languageBadge(value = "") {
-  const text = normalizeBadgeText(value);
-  const normalized = text.toLowerCase();
-  const compact = normalized.replace(/[^a-z0-9]/g, "");
-  return LANGUAGE_BADGE_ALIASES[normalized] || LANGUAGE_BADGE_ALIASES[compact] || text;
-}
-
-function fallbackLanguagesFromText(text = "") {
-  const value = String(text || "");
-  const matches = [];
-  const pushMatch = (label) => {
-    if (label && !matches.includes(label)) {
-      matches.push(label);
-    }
-  };
-  if (/(^|[^a-z0-9])(pt[\s._-]?br|brazilian[\s._-]?portuguese)([^a-z0-9]|$)/i.test(value))
-    pushMatch("pt-br");
-  if (/(^|[^a-z0-9])(en|eng|english)([^a-z0-9]|$)/i.test(value)) pushMatch("en");
-  if (/(^|[^a-z0-9])(pt|por|portuguese)([^a-z0-9]|$)/i.test(value) && !matches.includes("pt-br"))
-    pushMatch("pt");
-  if (/(^|[^a-z0-9])(it|ita|italian)([^a-z0-9]|$)/i.test(value)) pushMatch("it");
-  if (/(^|[^a-z0-9])(es|spa|spanish)([^a-z0-9]|$)/i.test(value)) pushMatch("es");
-  if (/(^|[^a-z0-9])(fr|fra|fre|french)([^a-z0-9]|$)/i.test(value)) pushMatch("fr");
-  if (/(^|[^a-z0-9])(de|deu|ger|german)([^a-z0-9]|$)/i.test(value)) pushMatch("de");
-  if (/(^|[^a-z0-9])(multi|multilang|multi[\s._-]?audio)([^a-z0-9]|$)/i.test(value))
-    pushMatch("multi");
-  return matches;
-}
-
-function fallbackPresentationFromText(stream = {}) {
-  const parsed = parsedStreamDetails(stream);
-  const text = [
-    stream.name,
-    stream.title,
-    stream.description,
-    stream.behaviorHints?.filename,
-    stream.sourceType,
-    ...(Array.isArray(parsed.languages) ? parsed.languages : [])
-  ]
-    .filter(Boolean)
-    .join(" ");
-  const visualTags = [];
-  if (/\b(dolby[ ._-]?vision|dovi|dv)\b/i.test(text)) visualTags.push("DV");
-  if (/\bhdr10\+|hdr10plus\b/i.test(text)) visualTags.push("HDR10+");
-  else if (/\bhdr10\b/i.test(text)) visualTags.push("HDR10");
-  else if (/\bhdr\b/i.test(text)) visualTags.push("HDR");
-  if (/\bhlg\b/i.test(text)) visualTags.push("HLG");
-  if (/\b10\s?bit\b/i.test(text)) visualTags.push("10bit");
-  if (/\bimax\b/i.test(text)) visualTags.push("IMAX");
-  const audioTags = [];
-  if (/\batmos\b/i.test(text)) audioTags.push("Atmos");
-  if (/\b(truehd|true hd)\b/i.test(text)) audioTags.push("TrueHD");
-  if (/\bdts[\s._-]?x\b/i.test(text)) audioTags.push("DTS:X");
-  if (/\bdts[\s._-]?hd\b/i.test(text)) audioTags.push("DTS-HD");
-  if (/\bddp|dd\+|dolby digital plus\b/i.test(text)) audioTags.push("DD+");
-  if (/\baac\b/i.test(text)) audioTags.push("AAC");
-  const audioChannels = [];
-  const channelMatch = text.match(/\b([257]\.1|6\.1|2\.0)\b/);
-  if (channelMatch) audioChannels.push(channelMatch[1]);
-  const codec = /\b(av1|hevc|h\.?265|x265|avc|h\.?264|x264)\b/i.exec(text)?.[1] || "";
-  return {
-    resolution: detectQuality(text),
-    quality: "",
-    visualTags,
-    encode: normalizeCodecBadge(codec),
-    audioTags,
-    audioChannels,
-    languages: fallbackLanguagesFromText(text),
-    size: stream.behaviorHints?.videoSize || 0
-  };
-}
-
-function getStreamPresentation(stream = {}) {
-  const parsed = parsedStreamDetails(stream);
-  const presentation = stream.streamPresentation || stream.raw?.streamPresentation || {};
-  const fallback = fallbackPresentationFromText(stream);
-  const visualTags = toBadgeArray(
-    presentation.visualTags?.length ? presentation.visualTags : parsed.hdr
-  );
-  const audioTags = toBadgeArray(
-    presentation.audioTags?.length ? presentation.audioTags : parsed.audio
-  );
-  const audioChannels = toBadgeArray(
-    presentation.audioChannels?.length ? presentation.audioChannels : parsed.channels
-  );
-  const languages = toBadgeArray(
-    presentation.languages?.length ? presentation.languages : parsed.languages
-  );
-  const languageEmojis = toBadgeArray(
-    presentation.languageEmojis?.length ? presentation.languageEmojis : []
-  );
-  const resolvedLanguages = languages.length ? languages : fallback.languages;
-  return {
-    resolution: presentation.resolution || parsed.resolution || fallback.resolution,
-    quality: presentation.quality || parsed.quality || fallback.quality,
-    visualTags: visualTags.length ? visualTags : fallback.visualTags,
-    encode: normalizeCodecBadge(presentation.encode || parsed.codec || fallback.encode),
-    audioTags: audioTags.length ? audioTags : fallback.audioTags,
-    audioChannels: audioChannels.length ? audioChannels : fallback.audioChannels,
-    languages: resolvedLanguages,
-    languageEmojis: languageEmojis.length
-      ? languageEmojis
-      : resolvedLanguages.map(languageBadge).filter(Boolean),
-    size: presentation.size || stream.behaviorHints?.videoSize || fallback.size,
-    indexer: presentation.indexer || parsed.indexer || "",
-    releaseGroup: presentation.releaseGroup || parsed.group || "",
-    cached: presentation.cached,
-    serviceShortName: presentation.serviceShortName || ""
-  };
-}
-
 function renderImageBadgeChip(badge = {}) {
   const imageUrl = normalizeAddonLogoUrl(badge.imageURL);
   if (!imageUrl) {
@@ -1490,6 +1304,14 @@ export const StreamScreen = {
     if (!allLoaded && !this.autoPlaySelectionReady) {
       return;
     }
+    // "Manual (choose stream)" is authoritative for a fresh stream screen.
+    // Persisted binge groups may still guide an enabled auto-play mode and the
+    // next-episode player flow, but must not turn Continue Watching or Details
+    // into an implicit auto-play entry point.
+    const autoPlayMode = String(settings.streamAutoPlayMode || "MANUAL").toUpperCase();
+    if (autoPlayMode === "MANUAL" || !isAutoPlayEffectivelyEnabled(settings)) {
+      return;
+    }
     const savedPreference = settings.streamAutoPlayPreferBingeGroupForNextEpisode &&
       settings.streamAutoPlayReuseBingeGroup
       ? StreamPreferencesStore.getEntry(
@@ -1498,27 +1320,20 @@ export const StreamScreen = {
         )
       : null;
     const preferredBingeGroup = String(savedPreference?.bingeGroup || "").trim();
-    const reusePersistedBingeGroup = Boolean(
-      preferredBingeGroup && String(settings.streamAutoPlayMode || "MANUAL").toUpperCase() === "MANUAL"
-    );
-    if (!reusePersistedBingeGroup && !isAutoPlayEffectivelyEnabled(settings)) {
-      return;
-    }
     const installedAddonNames = new Set(
       (addonRepository.getCachedInstalledAddons() || [])
         .map((addon) => String(addon?.displayName || addon?.name || "").trim())
         .filter(Boolean)
     );
     const selected = selectAutoPlayStream(this.getFilteredStreams(), {
-      mode: reusePersistedBingeGroup ? "FIRST_STREAM" : settings.streamAutoPlayMode,
+      mode: settings.streamAutoPlayMode,
       source: settings.streamAutoPlaySource,
       regexPattern: settings.streamAutoPlayRegex,
       installedAddonNames,
       selectedAddons: settings.streamAutoPlaySelectedAddons,
       selectedPlugins: settings.streamAutoPlaySelectedPlugins,
       preferredBingeGroup,
-      preferBingeGroupInSelection: Boolean(preferredBingeGroup),
-      bingeGroupOnly: reusePersistedBingeGroup
+      preferBingeGroupInSelection: Boolean(preferredBingeGroup)
     });
     if (!selected?.id) {
       if (allLoaded) {

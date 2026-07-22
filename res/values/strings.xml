@@ -1481,9 +1481,17 @@
     <string name="subtitle_section_core">Core</string>
     <string name="subtitle_section_advanced">Advanced</string>
     <string name="subtitle_font_size">Font Size</string>
+    <string name="subtitle_font_size_subtitle">Text size used for subtitles during playback.</string>
     <string name="subtitle_bold">Bold</string>
+    <string name="subtitle_bold_subtitle">Show subtitle text in bold.</string>
     <string name="subtitle_outline">Outline</string>
+    <string name="subtitle_outline_subtitle">Draw an outline around subtitle text for readability.</string>
     <string name="subtitle_bottom_offset">Bottom Offset</string>
+    <string name="subtitle_position">Subtitle Position</string>
+    <string name="subtitle_position_subtitle">Move subtitles up or down on the screen.</string>
+    <string name="subtitle_position_default">Default</string>
+    <string name="subtitle_text_color_subtitle">Color of the subtitle text.</string>
+    <string name="subtitle_outline_color_subtitle">Color of the subtitle outline.</string>
     <string name="subtitle_on">On</string>
     <string name="subtitle_off">Off</string>
     <string name="subtitle_style_title">Subtitle Style</string>

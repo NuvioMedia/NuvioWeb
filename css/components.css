@@ -10832,7 +10832,7 @@ html.legacy-webos .debug-console-log-frame {
   --player-text-tertiary: var(--text-tertiary);
   --player-subtitle-color: #ffffff;
   --player-subtitle-outline-color: #000000;
-  --player-subtitle-font-size: 100%;
+  --player-subtitle-font-size: 120%;
   --player-html-subtitle-font-size: clamp(30px, 4.4vh, 82px);
   --player-subtitle-font-weight: 500;
   --player-subtitle-shadow: 0 0 2px #000000, 0 0 4px #000000;
@@ -18913,7 +18913,7 @@ html.legacy-webos .debug-console-log-frame {
 }
 
 .legacy-tizen .player-subtitle-overlay-grid {
-  height: auto;
+  height: 0;
   min-height: 0;
 }
 
