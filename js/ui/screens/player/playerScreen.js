@@ -10360,12 +10360,30 @@ export const PlayerScreen = {
         && !this.manifestLoading
         && !shouldRetryEmbeddedTracks
         && (now - Number(this.trackDiscoveryStartedAt || 0)) >= 1200;
-      const doneByTimeout = now >= this.trackDiscoveryDeadline;
+      const trackDiscoveryElapsedMs = now - Number(this.trackDiscoveryStartedAt || 0);
+      const webOsStartupPreferenceUnresolved = Boolean(
+        Environment.isWebOS()
+        && this.startupAudioGateActive
+        && !this.startupAudioPreferenceApplied
+      );
+      const webOsStartupPreferencePending = webOsStartupPreferenceUnresolved
+        && trackDiscoveryElapsedMs < STARTUP_AUDIO_PREFERENCE_RETRY_WINDOW_MS;
+      const webOsStartupPreferenceWaitExpired = webOsStartupPreferenceUnresolved
+        && trackDiscoveryElapsedMs >= STARTUP_AUDIO_PREFERENCE_RETRY_WINDOW_MS;
+      const doneByTimeout = now >= this.trackDiscoveryDeadline
+        || webOsStartupPreferenceWaitExpired;
       this.refreshTrackDialogs();
 
-      if (doneByData || doneByIdle || doneByTimeout) {
+      // webOS can expose only its default audio track first. Keep discovery
+      // alive for the bounded startup preference window so a later complete
+      // multi-audio list can be selected before playback is released. This
+      // avoids the unsafe mid-playback selectTrack retry blocked by the gate.
+      if ((!webOsStartupPreferencePending && (doneByData || doneByIdle)) || doneByTimeout) {
         this.trackDiscoveryInProgress = false;
         this.clearTrackDiscoveryTimer();
+        if (webOsStartupPreferenceWaitExpired) {
+          this.clearStartupAudioPreferenceRetry();
+        }
         this.refreshTrackDialogs();
         return;
       }
