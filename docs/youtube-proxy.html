@@ -349,6 +349,9 @@
                 pushState(true);
               },
               onStateChange: function onStateChange(event) {
+                if (!captionsEnabled) {
+                  setCaptionsEnabled(false);
+                }
                 if (Number(event.data) === 0 && loop) {
                   event.target.seekTo(0, true);
                   event.target.playVideo();
