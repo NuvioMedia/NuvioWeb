@@ -13307,7 +13307,15 @@ export const PlayerScreen = {
           return null;
         }
         const layout = parseVttCueLayout(lines[timingIndex]);
-        return { start, end, text, line: layout.line, align: layout.align };
+        return {
+          start,
+          end,
+          text,
+          line: layout.line,
+          position: layout.position,
+          align: layout.align,
+          size: layout.size
+        };
       })
       .filter(Boolean)
       .sort((left, right) => left.start - right.start || left.end - right.end);
@@ -13820,18 +13828,10 @@ export const PlayerScreen = {
     canvas.classList.remove("hidden");
     canvas.setAttribute("aria-hidden", "false");
     this.bitmapSubtitleLastFrameKey = renderKey;
-    return true;
-  },
-
-  renderHtmlSubtitleOverlayCue(activeCues = []) {
-    const node = this.uiRefs?.htmlSubtitles || document.getElementById("playerHtmlSubtitles");
-    if (!node) {
-      return;
-    }
     const cueKey = activeCues
       .map(
         (cue) =>
-          `${cue.start}-${cue.end}-${cue.line ?? "default"}-${cue.align || "center"}-${cue.text}`
+          `${cue.start}-${cue.end}-${cue.line ?? "default"}-${cue.position ?? ""}-${cue.align || "center"}-${cue.size || ""}-${cue.text}`
       )
       .join("|");
     const hasRenderedActiveCue =
@@ -13845,52 +13845,136 @@ export const PlayerScreen = {
       return;
     }
     this.htmlSubtitleActiveCueKey = cueKey;
-    if (typeof node.replaceChildren === "function") {
-      node.replaceChildren();
-    } else {
-      node.innerHTML = "";
-    }
     if (!activeCues.length) {
+      while (node.firstChild) {
+        node.removeChild(node.firstChild);
+      }
       node.classList.add("hidden");
       node.setAttribute("aria-hidden", "true");
       return;
     }
     const cueGroups = new Map();
     activeCues.forEach((cue) => {
-      const line = cue?.line == null ? NaN : Number(cue.line);
-      const normalizedLine = Number.isFinite(line) ? clamp(line, 0, 100) : null;
+      const line =
+        cue?.renderLine == null
+          ? cue?.line == null
+            ? NaN
+            : Number(cue.line)
+          : Number(cue.renderLine);
+      const normalizedLine = Number.isFinite(line) ? clamp(line, -25, 125) : null;
       const align = ["start", "end", "center"].includes(cue?.align) ? cue.align : "center";
-      const groupKey = `${normalizedLine ?? "default"}:${align}`;
+      const rawSize = cue?.size == null ? NaN : Number(cue.size);
+      const size = Number.isFinite(rawSize) && rawSize > 0 ? clamp(rawSize, 10, 200) : null;
+      const rawPosition =
+        cue?.renderPosition == null
+          ? cue?.position == null
+            ? NaN
+            : Number(cue.position)
+          : Number(cue.renderPosition);
+      const position =
+        normalizedLine != null && Number.isFinite(rawPosition) ? clamp(rawPosition, 0, 100) : null;
+      // Key by TEXT ONLY: renderLine/renderPosition change every frame while
+      // tracking, and a layout-bearing key would respawn the node each frame.
+      const groupKey = `${cue?.text ?? ""}:${align}:${size ?? ""}`;
       if (!cueGroups.has(groupKey)) {
-        cueGroups.set(groupKey, { line: normalizedLine, align, cues: [] });
+        cueGroups.set(groupKey, {
+          line: normalizedLine,
+          align,
+          size,
+          position,
+          key: groupKey,
+          cues: []
+        });
       }
       cueGroups.get(groupKey).cues.push(cue);
     });
-    cueGroups.forEach((group) => {
-      const cueNode = document.createElement("div");
-      cueNode.className = `player-html-subtitle-cue player-html-subtitle-align-${group.align}`;
-      if (group.line == null) {
-        cueNode.classList.add("player-html-subtitle-default");
-      } else {
-        cueNode.classList.add("player-html-subtitle-positioned");
-        cueNode.style.top = `${group.line}%`;
+    // Pool keyed by group identity (text + layout): a node always tracks the
+    // same logical subtitle, so its CSS transition only ever animates the
+    // small step between adjacent slices of that same subtitle.
+    let pool = this.htmlSubtitleCueNodePool;
+    if (!(pool instanceof Map)) {
+      pool = new Map();
+      this.htmlSubtitleCueNodePool = pool;
+    }
+    const groups = Array.from(cueGroups.values());
+    for (const group of groups) {
+      let cueNode = pool.get(group.key);
+      if (!cueNode) {
+        cueNode = document.createElement("div");
+        pool.set(group.key, cueNode);
       }
-      group.cues.forEach((cue) =>
-        String(cue.text || "")
-          .split("\n")
-          .forEach((line) => {
-            const cleanLine = line.trim();
-            if (!cleanLine) {
-              return;
-            }
-            const lineNode = document.createElement("span");
-            lineNode.className = "player-html-subtitle-line";
-            lineNode.textContent = cleanLine;
-            cueNode.appendChild(lineNode);
-          })
-      );
-      if (cueNode.childNodes.length) {
+      const className = `player-html-subtitle-cue player-html-subtitle-align-${group.align}${
+        group.line == null
+          ? " player-html-subtitle-default"
+          : ` player-html-subtitle-positioned${group.position != null ? " player-html-subtitle-x-anchored" : ""}`
+      }`;
+      if (cueNode.className !== className) {
+        cueNode.className = className;
+      }
+      if (group.line == null) {
+        cueNode.style.top = "";
+        cueNode.style.left = "";
+        cueNode.style.fontSize = "";
+      } else {
+        // Write the full transform directly: transform animates on the
+        // compositor without per-frame text layout. Percent coordinates are
+        // resolved to container px once per change (not per frame).
+        const rect = node.getBoundingClientRect();
+        const width = rect.width > 0 ? rect.width : 1;
+        const height = rect.height > 0 ? rect.height : 1;
+        const xPx = ((group.position ?? 0) / 100) * width;
+        const yPx = ((group.line ?? 0) / 100) * height;
+        if (cueNode.style.top !== "0px") {
+          cueNode.style.top = "0px";
+        }
+        if (cueNode.style.left !== "0px") {
+          cueNode.style.left = "0px";
+        }
+        if (cueNode.style.right !== "auto") {
+          cueNode.style.right = "auto";
+        }
+        const anchor = group.position != null ? " translate(-50%, -50%)" : " translateY(-50%)";
+        const transformValue = `translate(${xPx}px, ${yPx}px)${anchor}`;
+        if (cueNode.style.transform !== transformValue) {
+          cueNode.style.transform = transformValue;
+        }
+        if (group.size != null) {
+          const sizeValue = `${group.size}%`;
+          if (cueNode.style.fontSize !== sizeValue) {
+            cueNode.style.fontSize = sizeValue;
+          }
+        } else if (cueNode.style.fontSize) {
+          cueNode.style.fontSize = "";
+        }
+      }
+      const textSignature = group.cues.map((cue) => String(cue.text || "")).join("\n");
+      if (cueNode.__textSignature !== textSignature) {
+        cueNode.__textSignature = textSignature;
+        while (cueNode.firstChild) {
+          cueNode.removeChild(cueNode.firstChild);
+        }
+        group.cues.forEach((cue) =>
+          String(cue.text || "")
+            .split("\n")
+            .forEach((lineText) => {
+              const cleanLine = lineText.trim();
+              if (!cleanLine) {
+                return;
+              }
+              const lineNode = document.createElement("span");
+              lineNode.className = "player-html-subtitle-line";
+              lineNode.textContent = cleanLine;
+              cueNode.appendChild(lineNode);
+            })
+        );
+      }
+      if (cueNode.parentNode !== node) {
         node.appendChild(cueNode);
+      }
+    }
+    pool.forEach((cueNode, key) => {
+      if (!cueGroups.has(key) && cueNode.parentNode === node) {
+        node.removeChild(cueNode);
       }
     });
     node.classList.remove("hidden");
@@ -13907,6 +13991,33 @@ export const PlayerScreen = {
     const activeCues = this.htmlSubtitleCues.filter(
       (cue) => subtitleTime >= cue.start && subtitleTime < cue.end
     );
+    // Tessellated \move slices are consecutive windows of one logical cue.
+    // When the active slice continues into a same-text successor, interpolate
+    // between the two slice positions so motion is sub-cell continuous per
+    // frame instead of jumping one grid cell per slice.
+    const cueSource = this.htmlSubtitleCues;
+    for (let index = 0; index < activeCues.length; index += 1) {
+      const cue = activeCues[index];
+      delete cue.renderLine;
+      delete cue.renderPosition;
+      if (cue.line == null || cue.position == null) {
+        continue;
+      }
+      const next = cueSource[cueSource.indexOf(cue) + 1];
+      if (
+        !next ||
+        next.text !== cue.text ||
+        next.line == null ||
+        next.position == null ||
+        Math.abs(next.start - cue.end) > 0.02
+      ) {
+        continue;
+      }
+      const span = Math.max(0.001, next.start - cue.start);
+      const progress = clamp((subtitleTime - cue.start) / span, 0, 1);
+      cue.renderLine = cue.line + (next.line - cue.line) * progress;
+      cue.renderPosition = cue.position + (next.position - cue.position) * progress;
+    }
     this.renderHtmlSubtitleOverlayCue(activeCues);
     return true;
   },
@@ -13919,12 +14030,23 @@ export const PlayerScreen = {
       clearTimeout(this.htmlSubtitleRenderTimer);
       this.htmlSubtitleRenderTimer = null;
     }
+    if (this.htmlSubtitleRenderFrame != null && typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(this.htmlSubtitleRenderFrame);
+      this.htmlSubtitleRenderFrame = null;
+    }
+    // Tessellated \move slices need position updates every vsync frame;
+    // timers drift against the video clock and read as judder.
     const render = () => {
       if (!this.renderHtmlSubtitleOverlayAtCurrentTime()) {
-        this.htmlSubtitleRenderTimer = null;
+        this.htmlSubtitleRenderFrame = null;
         return;
       }
-      this.htmlSubtitleRenderTimer = setTimeout(render, 120);
+      const anyTracking = (this.htmlSubtitleCues || []).some((cue) => cue.line != null);
+      if (anyTracking && typeof requestAnimationFrame === "function") {
+        this.htmlSubtitleRenderFrame = requestAnimationFrame(render);
+      } else {
+        this.htmlSubtitleRenderTimer = setTimeout(render, 120);
+      }
     };
     render();
   },

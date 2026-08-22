@@ -19,13 +19,19 @@ export function getSubtitleAssAlignmentSettings(alignment) {
 export function parseVttCueLayout(timingLine) {
   const value = String(timingLine || "");
   const lineMatch = value.match(/(?:^|\s)line:([+-]?(?:\d+(?:\.\d+)?|\.\d+))%/i);
+  const posMatch = value.match(/(?:^|\s)position:(\d+(?:\.\d+)?)%/i);
   const alignMatch = value.match(/(?:^|\s)align:(start|center|end|left|right)\b/i);
+  const sizeMatch = value.match(/(?:^|\s)size:(\d+(?:\.\d+)?)%/i);
   const rawLine = lineMatch ? Number(lineMatch[1]) : NaN;
+  const rawPos = posMatch ? Number(posMatch[1]) : NaN;
   const rawAlign = String(alignMatch?.[1] || "").toLowerCase();
+  const rawSize = sizeMatch ? Number(sizeMatch[1]) : NaN;
   const align = rawAlign === "left" ? "start" : rawAlign === "right" ? "end" : rawAlign;
   return {
     line: Number.isFinite(rawLine) ? Math.min(100, Math.max(0, rawLine)) : null,
-    align: align === "start" || align === "end" || align === "center" ? align : "center"
+    position: Number.isFinite(rawPos) ? Math.min(100, Math.max(0, rawPos)) : null,
+    align: align === "start" || align === "end" || align === "center" ? align : "center",
+    size: Number.isFinite(rawSize) && rawSize > 0 ? Math.min(200, rawSize) : null
   };
 }
 
