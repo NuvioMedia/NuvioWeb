@@ -141,12 +141,45 @@ function formatVttTimestamp(totalSeconds) {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}.${pad(milliseconds, 3)}`;
 }
 
-function sanitizeAssDialogueText(text) {
-  return String(text || "")
+function trimAssOverrideTail(text) {
+  return String(text || "").replace(/\{\s*\\[A-Za-z1-4][^}]*$/, "");
+}
+
+// Track drawing mode across blocks. Only top-level tags change the mode;
+// transform arguments are not immediate drawing commands.
+function sanitizePlainTextAssCue(text) {
+  var source = trimAssOverrideTail(text);
+  var drawing = false;
+  var output = "";
+  var offset = 0;
+  var blocks = /\{([^}]*)\}/g;
+  var match;
+  while ((match = blocks.exec(source))) {
+    if (!drawing) output += source.slice(offset, match.index);
+    var block = match[1];
+    var depth = 0;
+    for (var index = 0; index < block.length; index += 1) {
+      var character = block[index];
+      if (character === "(") depth += 1;
+      else if (character === ")") depth = Math.max(0, depth - 1);
+      else if (character === "\\" && depth === 0) {
+        var tag = block.slice(index + 1);
+        var mode = /^p(-?\d+)(?=\\|\s|$)/.exec(tag);
+        if (mode) drawing = Number(mode[1]) > 0;
+        else if (tag[0] === "r") drawing = false;
+      }
+    }
+    offset = blocks.lastIndex;
+  }
+  if (!drawing) output += source.slice(offset);
+  return output
     .replace(/\\[Nn]/g, "\n")
     .replace(/\\h/g, " ")
-    .replace(/\{[^}]*\}/g, "")
     .trim();
+}
+
+function sanitizeAssDialogueText(text) {
+  return sanitizePlainTextAssCue(text);
 }
 
 const ASS_POSITION_RE = /\\pos\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)/i;

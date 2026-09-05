@@ -36,16 +36,6 @@ function debugAssRender(stage, details = {}) {
   }
 }
 
-function hasRawAssControlText(container) {
-  const text = String(container?.textContent || "");
-  return (
-    // Require the SSA field shape so legitimate cue text that merely starts
-    /(?:^|\n)\s*(?:Dialogue|Comment)\s*:\s*(?:\d+|Marked\s*=\s*\d+)\s*,\s*\d+:\d{1,2}:\d{1,2}[.,]/i.test(
-      text
-    ) || /(?:^|\n)\s*\d+\s*,\s*\d+\s*,\s*(?:Onscreen\d*|Screen)\s*,/i.test(text)
-  );
-}
-
 export function createAssRenderer({
   body,
   video,
@@ -152,16 +142,6 @@ export function createAssRenderer({
           childCount: Number(container.childNodes?.length || 0),
           text: String(container.textContent || "").slice(0, 240)
         });
-        if (hasRawAssControlText(container)) {
-          instance.destroy?.();
-          instance = null;
-          clearContainer(container);
-          return {
-            ok: false,
-            error: "ass-renderer-raw-control-text",
-            detail: "ass.js exposed ASS control fields as visible text"
-          };
-        }
         // ass.js starts its frame loop only on a play/playing event. When a
         // subtitle is selected mid-playback the video is already playing, so
         // those events fired before this instance existed and the renderer

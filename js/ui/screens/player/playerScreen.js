@@ -15991,10 +15991,8 @@ export const PlayerScreen = {
   },
 
   /**
-   * Render a detected ASS body through ass.js. Returns { applied } —
-   * applied=true means ass.js owns this selection; applied=false means the
-   * caller must fall back, using the returned fallbackVtt (plain-text VTT
-   * converted from Dialogue events, never raw ASS text).
+   * Render ASS through ass.js. Only runtime incompatibility returns fallbackVtt;
+   * data, load and selection errors return error without switching renderers.
    */
   async applyAssSubtitleBody({ body, selectionToken, isCurrent = null }) {
     const isCurrentSelection = () =>
@@ -16018,14 +16016,19 @@ export const PlayerScreen = {
       forcePlaybackFrameLoopKick: Environment.isWebOS() && PlayerController.isPlaying
     });
     if (!renderer || typeof renderer.init !== "function") {
-      return { applied: false, fallbackVtt: convertAssBodyToVtt(body) };
+      console.warn("ASS renderer setup failed", { error: renderer?.error });
+      return { applied: false, error: renderer?.error || "ass-renderer-missing-arguments" };
     }
     this.assSubtitleRenderer = renderer;
     const result = await renderer.init();
     if (!result.ok || !isCurrentSelection()) {
-      const fallbackVtt = convertAssBodyToVtt(body);
       this.destroyAssSubtitleRenderer(renderer);
-      return { applied: false, fallbackVtt };
+      if (!isCurrentSelection()) return { applied: false, error: "ass-renderer-stale" };
+      if (result.error === "ass-renderer-unsupported") {
+        return { applied: false, fallbackVtt: convertAssBodyToVtt(body) };
+      }
+      console.warn("ASS renderer initialization failed", result);
+      return { applied: false, error: result.error || "ass-renderer-init-failed" };
     }
     renderer.setDelay(this.subtitleDelayMs);
     this.showAssSubtitleContainer();
@@ -16332,6 +16335,7 @@ export const PlayerScreen = {
           this.webOsEmbeddedTextSubtitleUsingHtml = false;
           return true;
         }
+        if (assResult.error) return false;
         if (assResult.fallbackVtt) {
           windowData.body = assResult.fallbackVtt;
         }
@@ -16962,7 +16966,8 @@ export const PlayerScreen = {
           this.renderSubtitleDialog();
           return true;
         }
-        // ass.js unavailable or stale: plain-text VTT fallback below.
+        if (assResult.error) return false;
+        // Only confirmed runtime incompatibility permits plain-text fallback.
         const fallbackCues = this.parseSubtitleCues(assResult.fallbackVtt || "");
         if (fallbackCues.length && isCurrentSelection()) {
           this.clearMountedExternalSubtitleTracks();
@@ -19477,6 +19482,7 @@ export const PlayerScreen = {
           this.renderSubtitleDialog();
           return;
         }
+        if (assResult.error) return;
         assFallbackVtt = assResult.fallbackVtt || "";
       }
     } catch (assError) {
